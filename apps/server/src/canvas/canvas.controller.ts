@@ -44,6 +44,17 @@ class GenerateImageDto {
   prompt!: string
 }
 
+class GenerateVideoDto {
+  @IsString()
+  shotId!: string
+
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  duration?: number
+}
+
 @Controller('agent/canvas')
 export class CanvasController {
   constructor(
@@ -93,6 +104,13 @@ export class CanvasController {
   @UseGuards(AuthGuard)
   async generateImage(@Body() dto: GenerateImageDto) {
     const data = await this.materialService.generateImage(dto.shotId, dto.prompt)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('material/generate-video')
+  @UseGuards(AuthGuard)
+  async generateVideo(@Body() dto: GenerateVideoDto) {
+    const data = await this.materialService.generateVideo(dto.shotId, dto.prompt, dto.duration)
     return { code: 0, message: 'ok', data }
   }
 

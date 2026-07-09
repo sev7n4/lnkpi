@@ -34,6 +34,28 @@ class GenerateAudioDto {
   voice?: string
 }
 
+class GenerateTextDto {
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+}
+
+class ImageVariationDto {
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  @IsString()
+  basePrompt?: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+}
+
 @Controller('studio')
 export class StudioController {
   constructor(@Inject(StudioService) private readonly studioService: StudioService) {}
@@ -42,6 +64,25 @@ export class StudioController {
   @UseGuards(AuthGuard)
   async list(@Req() req: { user: { sub: string } }, @Query('type') type?: string) {
     const data = await this.studioService.listGenerations(req.user.sub, type)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('text/generate')
+  @UseGuards(AuthGuard)
+  async generateText(@Req() req: { user: { sub: string } }, @Body() dto: GenerateTextDto) {
+    const data = await this.studioService.generateText(req.user.sub, dto.prompt, dto.model)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('image/variation')
+  @UseGuards(AuthGuard)
+  async imageVariation(@Req() req: { user: { sub: string } }, @Body() dto: ImageVariationDto) {
+    const data = await this.studioService.generateImageVariation(
+      req.user.sub,
+      dto.prompt,
+      dto.basePrompt,
+      dto.model,
+    )
     return { code: 0, message: 'ok', data }
   }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { VueFlow, type Node, type Edge, type Connection } from '@vue-flow/core'
+import { VueFlow, type Node, type Edge, type Connection, type NodeMouseEvent } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -12,7 +12,9 @@ import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction } from '@lnkpi/shared'
 import { api } from '@/services/api'
 import { canvasApi } from '@/services/canvas-api'
+import { studioApi } from '@/services/studio-api'
 import { useAuthStore } from '@/stores/auth'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { useShotPolling } from '@/composables/useShotPolling'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
@@ -21,6 +23,8 @@ import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
 import CanvasNodeText from '@/components/canvas/CanvasNodeText.vue'
 import CanvasNodeShot from '@/components/canvas/CanvasNodeShot.vue'
 import GenerationBar from '@/components/canvas/GenerationBar.vue'
+import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
+import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentPanel from '@/components/agent/AgentPanel.vue'
@@ -32,6 +36,7 @@ const PlayCanvasView = defineAsyncComponent(
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const canvasEditor = useCanvasEditorStore()
 const sessionId = computed(() => route.params.sessionId as string)
 
 const nodes = ref<Node[]>([])
@@ -44,6 +49,7 @@ const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
 const showStoryboard = ref(false)
 const showPublish = ref(false)
 const sessions = ref<Session[]>([])
+const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string } | null>(null)
 let nodeCounter = 0
 
 const shotPolling = useShotPolling((shots) => {
@@ -54,11 +60,12 @@ const shotPolling = useShotPolling((shots) => {
     if (shotNode) {
       shotNode.data = { ...(shotNode.data as Record<string, unknown>), status: 'generated', coverUrl: material.url }
     }
-    const imageNode = nodes.value.find((n) =>
-      n.type === 'image' && edges.value.some((e) => e.source === shot.id && e.target === n.id),
+    const mediaNode = nodes.value.find((n) =>
+      (n.type === 'image' || n.type === 'video')
+      && edges.value.some((e) => e.source === shot.id && e.target === n.id),
     )
-    if (imageNode) {
-      imageNode.data = { ...(imageNode.data as Record<string, unknown>), url: material.url, status: 'completed' }
+    if (mediaNode) {
+      mediaNode.data = { ...(mediaNode.data as Record<string, unknown>), url: material.url, status: 'completed' }
     }
   }
 })
@@ -159,12 +166,39 @@ function handleAgentActions(actions: unknown[]) {
   void saveCanvas()
 }
 
-async function handleGenerate(payload: { prompt: string }) {
+async function handleGenerate(payload: {
+  prompt: string
+  mode: 'text' | 'image' | 'video'
+  textModel: string
+  imageModel: string
+  videoModel: string
+}) {
   if (!payload.prompt.trim()) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
   }
+
+  if (payload.mode === 'text') {
+    try {
+      const { data } = await studioApi.generateText(payload.prompt, payload.textModel)
+      const record = data.data
+      let content = payload.prompt
+      if (record.metadata) {
+        try {
+          const meta = JSON.parse(record.metadata) as { text?: string }
+          content = meta.text ?? content
+        } catch { /* ignore */ }
+      }
+      addNode('text', { content })
+      await saveCanvas()
+    } catch {
+      addNode('text', { content: `（生成失败）${payload.prompt}` })
+      await saveCanvas()
+    }
+    return
+  }
+
   try {
     const shotRes = await canvasApi.createShot(sessionId.value, {
       title: payload.prompt.slice(0, 24) || '新分镜',
@@ -184,28 +218,147 @@ async function handleGenerate(payload: { prompt: string }) {
       status: 'generating',
     }, { id: shot.id, position: { x: shot.positionX, y: shot.positionY } })
 
-    const matRes = await canvasApi.generateImage(shot.id, payload.prompt)
-    const material = matRes.data.data as { id: string }
+    if (payload.mode === 'video') {
+      const matRes = await canvasApi.generateVideo(shot.id, payload.prompt)
+      const material = matRes.data.data as { id: string }
 
-    addNode('image', {
-      url: '',
-      status: 'generating',
-      prompt: payload.prompt,
-    }, { id: material.id, position: { x: shot.positionX + 280, y: shot.positionY } })
+      addNode('video', {
+        url: '',
+        status: 'generating',
+        prompt: payload.prompt,
+      }, { id: material.id, position: { x: shot.positionX + 280, y: shot.positionY } })
 
-    edges.value.push({
-      id: `e-${shot.id}-${material.id}`,
-      source: shot.id,
-      target: material.id,
-      animated: true,
-      style: { stroke: '#6366f1' },
-    })
+      edges.value.push({
+        id: `e-${shot.id}-${material.id}`,
+        source: shot.id,
+        target: material.id,
+        animated: true,
+        style: { stroke: '#6366f1' },
+      })
+    } else {
+      const matRes = await canvasApi.generateImage(shot.id, payload.prompt)
+      const material = matRes.data.data as { id: string }
+
+      addNode('image', {
+        url: '',
+        status: 'generating',
+        prompt: payload.prompt,
+      }, { id: material.id, position: { x: shot.positionX + 280, y: shot.positionY } })
+
+      edges.value.push({
+        id: `e-${shot.id}-${material.id}`,
+        source: shot.id,
+        target: material.id,
+        animated: true,
+        style: { stroke: '#6366f1' },
+      })
+    }
 
     shotPolling.start([shot.id])
     await saveCanvas()
   } catch {
     addNode('shot', { title: '新分镜', prompt: payload.prompt, status: 'draft' })
     await saveCanvas()
+  }
+}
+
+function getEventCoords(event: MouseEvent | TouchEvent) {
+  if ('clientX' in event) {
+    return { x: event.clientX, y: event.clientY }
+  }
+  const touch = event.touches[0] ?? event.changedTouches[0]
+  return { x: touch?.clientX ?? 0, y: touch?.clientY ?? 0 }
+}
+
+function findNodeById(id: string) {
+  for (const node of nodes.value) {
+    if (node.id === id) return node
+  }
+  return null
+}
+
+function removeNodeById(id: string) {
+  for (let i = nodes.value.length - 1; i >= 0; i -= 1) {
+    if (nodes.value[i]?.id === id) nodes.value.splice(i, 1)
+  }
+  for (let i = edges.value.length - 1; i >= 0; i -= 1) {
+    const edge = edges.value[i]
+    if (edge?.source === id || edge?.target === id) edges.value.splice(i, 1)
+  }
+}
+
+function onNodeContextMenu(event: NodeMouseEvent) {
+  event.event.preventDefault()
+  const { x, y } = getEventCoords(event.event)
+  contextMenu.value = {
+    x,
+    y,
+    nodeId: event.node.id,
+    nodeType: String(event.node.type),
+  }
+}
+
+function onPaneContextMenu(event: MouseEvent | TouchEvent) {
+  event.preventDefault()
+  const { x, y } = getEventCoords(event)
+  contextMenu.value = { x, y }
+}
+
+function closeContextMenu() {
+  contextMenu.value = null
+}
+
+function handleContextAction(action: string) {
+  const menu = contextMenu.value
+  contextMenu.value = null
+  if (!menu) return
+
+  if (action === 'edit-image' && menu.nodeId) {
+    const node = findNodeById(menu.nodeId)
+    if (node?.type === 'image') {
+      const data = node.data as Record<string, unknown>
+      canvasEditor.openImageEditor({
+        nodeId: node.id,
+        url: String(data.url ?? ''),
+        prompt: data.prompt as string | undefined,
+      })
+    }
+    return
+  }
+
+  if (action === 'duplicate' && menu.nodeId) {
+    const node = findNodeById(menu.nodeId)
+    if (node) {
+      addNode(String(node.type), { ...(node.data as Record<string, unknown>) }, {
+        position: { x: node.position.x + 40, y: node.position.y + 40 },
+      })
+      void saveCanvas()
+    }
+    return
+  }
+
+  if (action === 'delete' && menu.nodeId) {
+    removeNodeById(menu.nodeId)
+    void saveCanvas()
+    return
+  }
+
+  if (action === 'add-shot') {
+    addNode('shot', { title: '新分镜', prompt: '', status: 'draft' })
+    void saveCanvas()
+  }
+}
+
+function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?: string }) {
+  const node = findNodeById(payload.nodeId)
+  if (node) {
+    node.data = {
+      ...(node.data as Record<string, unknown>),
+      url: payload.url,
+      status: 'completed',
+      prompt: payload.prompt,
+    }
+    void saveCanvas()
   }
 }
 
@@ -285,7 +438,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-[calc(100vh-4rem)]">
+  <div class="flex h-[calc(100vh-4rem)]" @click="closeContextMenu">
     <!-- Left: Session Sidebar (对标 SessionSelector) -->
     <aside
       class="flex shrink-0 flex-col border-r border-white/5 bg-[#1a1a1a] transition-all"
@@ -363,6 +516,8 @@ onMounted(() => {
           fit-view-on-init
           class="canvas-flow h-full"
           @connect="onConnect"
+          @node-context-menu="onNodeContextMenu"
+          @pane-context-menu="onPaneContextMenu"
         >
           <Background pattern-color="#2a2a3a" :gap="20" />
           <Controls />
@@ -394,6 +549,16 @@ onMounted(() => {
       :session-id="sessionId"
       :default-title="sessionTitle"
       @published="loadSessions"
+    />
+    <AIImageEditor @apply="handleImageEditorApply" />
+    <CanvasContextMenu
+      v-if="contextMenu"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :node-id="contextMenu.nodeId"
+      :node-type="contextMenu.nodeType"
+      @action="handleContextAction"
+      @close="closeContextMenu"
     />
   </div>
 </template>

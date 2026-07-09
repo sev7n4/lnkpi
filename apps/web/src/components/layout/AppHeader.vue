@@ -21,9 +21,11 @@ const tabs = [
 const activeTab = computed(() => {
   if (route.path.startsWith('/community')) return '/community'
   if (route.path.startsWith('/stories')) return '/stories'
-  if (route.path.startsWith('/image-studio') || route.path.startsWith('/video-studio')
-    || route.path.startsWith('/audio-studio') || route.path.startsWith('/video-editor')
-    || route.path.startsWith('/generation-records')) return '/image-studio'
+  if (route.path.startsWith('/text-studio') || route.path.startsWith('/image-studio')
+    || route.path.startsWith('/video-studio') || route.path.startsWith('/audio-studio')
+    || route.path.startsWith('/video-editor') || route.path.startsWith('/generation-records')) {
+    return '/image-studio'
+  }
   return '/workflow'
 })
 
@@ -69,14 +71,17 @@ function navigate(path: string) {
           >
             {{ auth.user?.points ?? 0 }} 积分
           </button>
-          <div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5">
+          <button
+            class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5 transition hover:bg-white/10"
+            @click="navigate('/profile')"
+          >
             <div
               class="flex h-7 w-7 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
             >
               {{ auth.user?.nickname?.[0] ?? 'U' }}
             </div>
             <span class="text-sm text-white/80">{{ auth.user?.nickname }}</span>
-          </div>
+          </button>
           <button class="btn-ghost text-xs" @click="auth.logout()">退出</button>
         </template>
         <button v-else class="btn-ghost" @click="auth.openLogin()">登录</button>

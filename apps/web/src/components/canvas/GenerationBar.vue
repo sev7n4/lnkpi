@@ -9,7 +9,13 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  generate: [payload: { prompt: string; textModel: string; imageModel: string; videoModel: string }]
+  generate: [payload: {
+    prompt: string
+    mode: 'text' | 'image' | 'video'
+    textModel: string
+    imageModel: string
+    videoModel: string
+  }]
 }>()
 
 const prompt = ref('')
@@ -24,6 +30,7 @@ function handleSend() {
   if (!prompt.value.trim()) return
   emit('generate', {
     prompt: prompt.value,
+    mode: activeTab.value,
     textModel: textModel.value,
     imageModel: imageModel.value,
     videoModel: videoModel.value,
@@ -61,9 +68,9 @@ function toggleVoice() {
         </button>
 
         <div class="ml-auto flex items-center gap-2">
-          <ModelSelector v-model="textModel" type="text" />
-          <ModelSelector v-model="imageModel" type="image" />
-          <ModelSelector v-model="videoModel" type="video" />
+          <ModelSelector v-if="activeTab === 'text'" v-model="textModel" type="text" />
+          <ModelSelector v-if="activeTab === 'image'" v-model="imageModel" type="image" />
+          <ModelSelector v-if="activeTab === 'video'" v-model="videoModel" type="video" />
         </div>
       </div>
 

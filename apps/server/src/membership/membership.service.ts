@@ -23,10 +23,15 @@ export class MembershipService {
 
   async claimDaily(userId: string) {
     const bonus = 100
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: { points: { increment: bonus } },
-    })
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { points: { increment: bonus } },
+      }),
+      this.prisma.pointTransaction.create({
+        data: { userId, amount: bonus, reason: '每日签到' },
+      }),
+    ])
     return { points: user.points, added: bonus }
   }
 
@@ -34,13 +39,26 @@ export class MembershipService {
     const selected = PLANS.find((p) => p.id === plan)
     if (!selected || plan === 'free') throw new BadRequestException('无效套餐')
 
-    const user = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        membership: plan,
-        points: { increment: selected.points },
-      },
-    })
+    const [user] = await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          membership: plan,
+          points: { increment: selected.points },
+        },
+      }),
+      this.prisma.pointTransaction.create({
+        data: { userId, amount: selected.points, reason: `升级 ${selected.name}` },
+      }),
+    ])
     return { membership: user.membership, points: user.points, plan: selected }
+  }
+
+  async listTransactions(userId: string) {
+    return this.prisma.pointTransaction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    })
   }
 }

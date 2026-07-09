@@ -31,4 +31,5 @@ export const membershipApi = {
   getPoints: () => api.get<{ data: { points: number; membership: string } }>('/membership/points'),
   claimDaily: () => api.post<{ data: { points: number; added: number } }>('/membership/claim-daily'),
   upgrade: (plan: string) => api.post<{ data: { membership: string; points: number } }>('/membership/upgrade', { plan }),
+  transactions: () => api.get<{ data: Array<{ id: string; amount: number; reason: string; createdAt: string }> }>('/membership/transactions'),
 }

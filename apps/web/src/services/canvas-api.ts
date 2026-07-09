@@ -9,6 +9,8 @@ export const canvasApi = {
     api.post('/agent/canvas/shot/create', { sessionId, ...data }),
   generateImage: (shotId: string, prompt: string) =>
     api.post('/agent/canvas/material/generate-image', { shotId, prompt }),
+  generateVideo: (shotId: string, prompt: string, duration?: number) =>
+    api.post('/agent/canvas/material/generate-video', { shotId, prompt, duration }),
   statusBatch: (ids: string[]) =>
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),
 }

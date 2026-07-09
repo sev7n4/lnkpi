@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
-defineProps<{
-  data: { url?: string; status: string }
+const props = defineProps<{
+  id: string
+  data: { url?: string; status: string; prompt?: string }
 }>()
+
+const editor = useCanvasEditorStore()
+
+function openEdit() {
+  if (!props.data.url) return
+  editor.openImageEditor({
+    nodeId: props.id,
+    url: props.data.url,
+    prompt: props.data.prompt,
+  })
+}
 </script>
 
 <template>
@@ -11,6 +24,13 @@ defineProps<{
     <Handle type="target" :position="Position.Left" class="!bg-brand-500" />
     <div class="mb-2 flex items-center gap-2">
       <span class="rounded bg-emerald-600/30 px-2 py-0.5 text-[10px] text-emerald-300">图像</span>
+      <button
+        v-if="data.url"
+        class="ml-auto rounded px-1.5 py-0.5 text-[10px] text-white/50 hover:bg-white/5 hover:text-white/80"
+        @click.stop="openEdit"
+      >
+        编辑
+      </button>
     </div>
     <div class="aspect-square overflow-hidden rounded-lg bg-surface-elevated">
       <img v-if="data.url" :src="data.url" class="h-full w-full object-cover" />

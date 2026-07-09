@@ -38,4 +38,11 @@ export class MembershipController {
     const data = await this.membershipService.upgrade(req.user.sub, dto.plan)
     return { code: 0, message: 'ok', data }
   }
+
+  @Get('transactions')
+  @UseGuards(AuthGuard)
+  async transactions(@Req() req: { user: { sub: string } }) {
+    const data = await this.membershipService.listTransactions(req.user.sub)
+    return { code: 0, message: 'ok', data }
+  }
 }

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { createImageProvider } from '@lnkpi/agent'
+import { createImageProvider, createVideoProvider } from '@lnkpi/agent'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -12,12 +12,13 @@ export class MaterialService {
     prompt?: string
     url?: string
     status?: string
+    type?: string
   }) {
     return this.prisma.material.create({
       data: {
         id: data.id,
         shotId: data.shotId,
-        type: 'image',
+        type: data.type ?? 'image',
         prompt: data.prompt ?? '',
         url: data.url,
         thumbnail: data.url,
@@ -30,11 +31,19 @@ export class MaterialService {
     const material = await this.prisma.material.create({
       data: { shotId, type: 'image', prompt, status: 'generating' },
     })
-    this.runGeneration(material.id, prompt).catch(console.error)
+    this.runImageGeneration(material.id, prompt).catch(console.error)
     return material
   }
 
-  private async runGeneration(materialId: string, prompt: string) {
+  async generateVideo(shotId: string, prompt: string, duration = 5) {
+    const material = await this.prisma.material.create({
+      data: { shotId, type: 'video', prompt, status: 'generating' },
+    })
+    this.runVideoGeneration(material.id, prompt, duration).catch(console.error)
+    return material
+  }
+
+  private async runImageGeneration(materialId: string, prompt: string) {
     try {
       const provider = createImageProvider()
       const { url } = await provider.generate(prompt)
@@ -44,6 +53,22 @@ export class MaterialService {
       })
     } catch (err) {
       console.error('Image generation failed:', err)
+      await this.prisma.material.update({
+        where: { id: materialId },
+        data: { status: 'failed' },
+      })
+    }
+  }
+
+  private async runVideoGeneration(materialId: string, prompt: string, duration: number) {
+    try {
+      const { url } = await createVideoProvider().generate(prompt, { duration })
+      await this.prisma.material.update({
+        where: { id: materialId },
+        data: { url, thumbnail: url, status: 'completed' },
+      })
+    } catch (err) {
+      console.error('Video generation failed:', err)
       await this.prisma.material.update({
         where: { id: materialId },
         data: { status: 'failed' },

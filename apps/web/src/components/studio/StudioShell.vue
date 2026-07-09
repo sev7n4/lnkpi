@@ -2,6 +2,7 @@
 import { useRoute } from 'vue-router'
 
 const links = [
+  { label: '文本工作室', path: '/text-studio' },
   { label: '图像工作室', path: '/image-studio' },
   { label: '视频工作室', path: '/video-studio' },
   { label: '音频工作室', path: '/audio-studio' },
