@@ -46,6 +46,8 @@ export class AuthService {
         phone: user.phone,
         nickname: user.nickname,
         avatar: user.avatar ?? undefined,
+        points: user.points,
+        membership: user.membership,
         createdAt: user.createdAt.toISOString(),
       },
     }
@@ -59,6 +61,8 @@ export class AuthService {
       phone: user.phone,
       nickname: user.nickname,
       avatar: user.avatar ?? undefined,
+      points: user.points,
+      membership: user.membership,
       createdAt: user.createdAt.toISOString(),
     }
   }

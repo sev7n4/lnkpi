@@ -7,6 +7,8 @@ defineProps<{
 
 defineEmits<{
   viewProcess: [sessionId: string]
+  viewAuthor: [authorId: string]
+  viewShare: [workId: string]
 }>()
 </script>
 
@@ -31,18 +33,29 @@ defineEmits<{
       <button
         v-if="work.sessionId"
         class="absolute bottom-3 left-3 rounded-lg bg-white/10 px-3 py-1.5 text-xs backdrop-blur-sm transition hover:bg-white/20"
-        @click="$emit('viewProcess', work.sessionId!)"
+        @click.stop="$emit('viewProcess', work.sessionId!)"
       >
         查看创作过程
+      </button>
+      <button
+        class="absolute bottom-3 right-3 rounded-lg bg-black/40 px-2 py-1 text-[10px] backdrop-blur-sm transition hover:bg-black/60"
+        @click.stop="$emit('viewShare', work.id)"
+      >
+        分享
       </button>
     </div>
 
     <div class="p-4">
       <div class="mb-2 flex items-center gap-2">
-        <div class="flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]/30 text-[10px]">
+        <button
+          class="flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]/30 text-[10px] hover:bg-[#6366f1]/50"
+          @click="$emit('viewAuthor', work.authorId)"
+        >
           {{ work.authorName[0] }}
-        </div>
-        <span class="text-xs text-white/50">@{{ work.authorName }}</span>
+        </button>
+        <button class="text-xs text-white/50 hover:text-[#818cf8]" @click="$emit('viewAuthor', work.authorId)">
+          @{{ work.authorName }}
+        </button>
       </div>
       <h3 class="line-clamp-2 text-sm font-medium leading-snug">{{ work.title }}</h3>
       <div class="mt-3 flex items-center gap-4 text-xs text-white/40">

@@ -8,13 +8,15 @@ datasource db {
 }
 
 model User {
-  id        String    @id @default(cuid())
-  phone     String    @unique
-  nickname  String
-  avatar    String?
-  createdAt DateTime  @default(now())
-  sessions  Session[]
-  works     Work[]
+  id         String    @id @default(cuid())
+  phone      String    @unique
+  nickname   String
+  avatar     String?
+  points     Int       @default(1000)
+  membership String    @default("free")
+  createdAt  DateTime  @default(now())
+  sessions   Session[]
+  works      Work[]
 }
 
 model Session {

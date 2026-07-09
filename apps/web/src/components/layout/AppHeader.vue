@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
+import MembershipModal from '@/components/membership/MembershipModal.vue'
+
+const showMembership = ref(false)
 
 const route = useRoute()
 const router = useRouter()
@@ -54,6 +57,12 @@ function navigate(path: string) {
 
       <div class="flex items-center gap-3">
         <template v-if="auth.isLoggedIn">
+          <button
+            class="rounded-xl bg-[#6366f1]/20 px-3 py-1.5 text-xs text-[#818cf8] transition hover:bg-[#6366f1]/30"
+            @click="showMembership = true"
+          >
+            {{ auth.user?.points ?? 0 }} 积分
+          </button>
           <div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5">
             <div
               class="flex h-7 w-7 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
@@ -70,4 +79,5 @@ function navigate(path: string) {
   </header>
 
   <LoginDialog />
+  <MembershipModal v-model="showMembership" />
 </template>

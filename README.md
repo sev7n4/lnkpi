@@ -79,6 +79,13 @@ OPENAI_IMAGE_MODEL=dall-e-3
 3. 工具栏「发布」或 `/workflow` 页「发布作品」→ 发布到社区
 4. 刷新 `/workflow` → 新作品出现在列表
 
+## Phase 3 验收
+
+1. 作品卡片「查看创作过程」→ `/replay/:sessionId` 时间轴回放
+2. 点击作者 → `/creator/:id` 创作者主页
+3. 点击「分享」→ `/share/:id` 作品详情页
+4. Header「积分」→ 会员弹窗，可领取每日积分 / 升级套餐
+
 ## 项目结构
 
 ```

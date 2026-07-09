@@ -16,6 +16,8 @@ export interface User {
   phone: string
   nickname: string
   avatar?: string
+  points?: number
+  membership?: string
   createdAt: string
 }
 

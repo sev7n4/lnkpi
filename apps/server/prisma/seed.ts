@@ -24,7 +24,7 @@ async function main() {
   const user = await prisma.user.upsert({
     where: { phone: '13800000000' },
     update: {},
-    create: { phone: '13800000000', nickname: '演示用户' },
+    create: { phone: '13800000000', nickname: '演示用户', points: 5000, membership: 'pro' },
   })
 
   for (let i = 0; i < MOCK_TITLES.length; i++) {

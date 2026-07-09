@@ -37,11 +37,13 @@ export class WorksService {
   }
 
   async findOne(id: string) {
-    const work = await this.prisma.work.findUnique({
+    const existing = await this.prisma.work.findUnique({ where: { id } })
+    if (!existing) return null
+    const work = await this.prisma.work.update({
       where: { id },
+      data: { views: { increment: 1 } },
       include: { author: true },
     })
-    if (!work) return null
     return this.formatWork(work)
   }
 

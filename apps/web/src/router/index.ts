@@ -22,6 +22,21 @@ const router = createRouter({
       name: 'community',
       component: () => import('@/pages/CommunityPage.vue'),
     },
+    {
+      path: '/replay/:sessionId',
+      name: 'replay',
+      component: () => import('@/pages/ReplayPage.vue'),
+    },
+    {
+      path: '/creator/:id',
+      name: 'creator',
+      component: () => import('@/pages/CreatorPage.vue'),
+    },
+    {
+      path: '/share/:id',
+      name: 'share',
+      component: () => import('@/pages/SharePage.vue'),
+    },
   ],
 })
 

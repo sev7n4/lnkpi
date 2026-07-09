@@ -25,7 +25,15 @@ async function fetchWorks() {
 }
 
 function viewProcess(sessionId: string) {
-  router.push(`/workflow/${sessionId}`)
+  router.push(`/replay/${sessionId}`)
+}
+
+function viewAuthor(authorId: string) {
+  router.push(`/creator/${authorId}`)
+}
+
+function viewShare(workId: string) {
+  router.push(`/share/${workId}`)
 }
 
 onMounted(fetchWorks)
@@ -60,6 +68,8 @@ onMounted(fetchWorks)
         :key="work.id"
         :work="work"
         @view-process="viewProcess"
+        @view-author="viewAuthor"
+        @view-share="viewShare"
       />
     </div>
 
