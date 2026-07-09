@@ -11,6 +11,7 @@ import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction } from '@lnkpi/shared'
 import { api } from '@/services/api'
+import { canvasApi } from '@/services/canvas-api'
 import { useAuthStore } from '@/stores/auth'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { useShotPolling } from '@/composables/useShotPolling'
@@ -20,6 +21,8 @@ import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
 import CanvasNodeText from '@/components/canvas/CanvasNodeText.vue'
 import CanvasNodeShot from '@/components/canvas/CanvasNodeShot.vue'
 import GenerationBar from '@/components/canvas/GenerationBar.vue'
+import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
+import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentPanel from '@/components/agent/AgentPanel.vue'
 
 const PlayCanvasView = defineAsyncComponent(
@@ -38,6 +41,8 @@ const saving = ref(false)
 const showSessions = ref(true)
 const showAgent = ref(true)
 const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
+const showStoryboard = ref(false)
+const showPublish = ref(false)
 const sessions = ref<Session[]>([])
 let nodeCounter = 0
 
@@ -90,6 +95,24 @@ const playCanvasNodes = computed((): Array<{ id: string; type: string; position:
   })),
 )
 
+const storyboardShots = computed((): StoryboardShot[] => {
+  const out: StoryboardShot[] = []
+  let order = 0
+  for (const n of nodes.value) {
+    if (n.type !== 'shot') continue
+    const data = n.data as Record<string, unknown>
+    out.push({
+      id: n.id,
+      title: String(data.title ?? '未命名分镜'),
+      prompt: data.prompt as string | undefined,
+      status: data.status as string | undefined,
+      coverUrl: data.coverUrl as string | undefined,
+      order: order++,
+    })
+  }
+  return out
+})
+
 const nodeTypes = {
   prompt: CanvasNodePrompt,
   image: CanvasNodeImage,
@@ -108,14 +131,20 @@ function onConnect(connection: Connection) {
   })
 }
 
-function addNode(type: string, data: Record<string, unknown> = {}) {
+function addNode(
+  type: string,
+  data: Record<string, unknown> = {},
+  opts?: { id?: string; position?: { x: number; y: number } },
+) {
   nodeCounter++
+  const id = opts?.id ?? `${type}-${nodeCounter}`
   nodes.value.push({
-    id: `${type}-${nodeCounter}`,
+    id,
     type,
-    position: { x: 200 + nodeCounter * 60, y: 150 + nodeCounter * 40 },
+    position: opts?.position ?? { x: 200 + nodeCounter * 60, y: 150 + nodeCounter * 40 },
     data,
   })
+  return id
 }
 
 function handleAgentActions(actions: unknown[]) {
@@ -130,8 +159,62 @@ function handleAgentActions(actions: unknown[]) {
   void saveCanvas()
 }
 
-function handleGenerate(payload: { prompt: string }) {
-  addNode('shot', { title: '新分镜', prompt: payload.prompt, status: 'draft' })
+async function handleGenerate(payload: { prompt: string }) {
+  if (!payload.prompt.trim()) return
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  try {
+    const shotRes = await canvasApi.createShot(sessionId.value, {
+      title: payload.prompt.slice(0, 24) || '新分镜',
+      prompt: payload.prompt,
+    })
+    const shot = shotRes.data.data as {
+      id: string
+      title: string
+      prompt: string
+      positionX: number
+      positionY: number
+    }
+
+    addNode('shot', {
+      title: shot.title,
+      prompt: shot.prompt,
+      status: 'generating',
+    }, { id: shot.id, position: { x: shot.positionX, y: shot.positionY } })
+
+    const matRes = await canvasApi.generateImage(shot.id, payload.prompt)
+    const material = matRes.data.data as { id: string }
+
+    addNode('image', {
+      url: '',
+      status: 'generating',
+      prompt: payload.prompt,
+    }, { id: material.id, position: { x: shot.positionX + 280, y: shot.positionY } })
+
+    edges.value.push({
+      id: `e-${shot.id}-${material.id}`,
+      source: shot.id,
+      target: material.id,
+      animated: true,
+      style: { stroke: '#6366f1' },
+    })
+
+    shotPolling.start([shot.id])
+    await saveCanvas()
+  } catch {
+    addNode('shot', { title: '新分镜', prompt: payload.prompt, status: 'draft' })
+    await saveCanvas()
+  }
+}
+
+function openPublish() {
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  showPublish.value = true
 }
 
 async function saveCanvas() {
@@ -257,6 +340,8 @@ onMounted(() => {
           />
         </div>
         <div class="flex items-center gap-1.5">
+          <button class="btn-ghost px-2 py-1 text-xs" @click="showStoryboard = true">分镜</button>
+          <button class="btn-ghost px-2 py-1 text-xs" @click="openPublish">发布</button>
           <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('shot', { title: '新分镜', prompt: '', status: 'draft' })">+ 分镜</button>
           <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('image', { url: '', status: 'idle' })">+ 图像</button>
           <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('video', { url: '', status: 'idle' })">+ 视频</button>
@@ -299,6 +384,17 @@ onMounted(() => {
         @canvas-actions="handleAgentActions"
       />
     </aside>
+
+    <StoryboardDialog
+      v-model="showStoryboard"
+      :shots="storyboardShots"
+    />
+    <PublishNeoTVDialog
+      v-model="showPublish"
+      :session-id="sessionId"
+      :default-title="sessionTitle"
+      @published="loadSessions"
+    />
   </div>
 </template>
 

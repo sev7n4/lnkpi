@@ -72,6 +72,13 @@ OPENAI_IMAGE_MODEL=dall-e-3
 
 无 `OPENAI_API_KEY` 时使用 RuleBasedAgent + Unsplash 占位图，功能仍可验收。
 
+## Phase 2 验收 (M4)
+
+1. 画布底部生成栏输入 prompt → 自动创建分镜 + 异步生成图像
+2. 工具栏「分镜」→ 打开分镜面板浏览所有 shot
+3. 工具栏「发布」或 `/workflow` 页「发布作品」→ 发布到社区
+4. 刷新 `/workflow` → 新作品出现在列表
+
 ## 项目结构
 
 ```

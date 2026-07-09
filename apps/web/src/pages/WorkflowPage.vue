@@ -10,6 +10,8 @@ import WorkCard from '@/components/works/WorkCard.vue'
 import CreativeLauncher from '@/components/workflow/CreativeLauncher.vue'
 import CarouselBanner from '@/components/workflow/CarouselBanner.vue'
 import CategoryTabs from '@/components/workflow/CategoryTabs.vue'
+import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
+import type { Session } from '@lnkpi/shared'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -19,6 +21,8 @@ const prompt = ref('')
 const works = ref<Work[]>([])
 const activeCategory = ref('全部')
 const loading = ref(false)
+const showPublish = ref(false)
+const userSessions = ref<Session[]>([])
 const greeting = getGreeting()
 
 function getGreeting() {
@@ -95,6 +99,24 @@ function onCategoryChange(cat: string) {
   fetchWorks()
 }
 
+async function openPublish() {
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  try {
+    const { data } = await api.get<{ data: Session[] }>('/sessions')
+    userSessions.value = data.data
+    if (!userSessions.value.length) {
+      await createCanvas()
+      return
+    }
+    showPublish.value = true
+  } catch {
+    auth.openLogin()
+  }
+}
+
 onMounted(fetchWorks)
 </script>
 
@@ -125,7 +147,7 @@ onMounted(fetchWorks)
           :model-value="activeCategory"
           @update:model-value="onCategoryChange"
         />
-        <button class="btn-ghost text-sm">发布作品</button>
+        <button class="btn-ghost text-sm" @click="openPublish">发布作品</button>
       </div>
 
       <div v-if="loading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -141,5 +163,12 @@ onMounted(fetchWorks)
         />
       </div>
     </section>
+
+    <PublishNeoTVDialog
+      v-model="showPublish"
+      :sessions="userSessions"
+      :default-title="prompt || userSessions[0]?.title"
+      @published="fetchWorks"
+    />
   </div>
 </template>

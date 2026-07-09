@@ -7,16 +7,16 @@
 | 模块 | NeoWOW 对应 | 超创平台状态 | 优先级 |
 |------|------------|-------------|--------|
 | 创作启动器 | `/workflow` `/neo-tv` | ✅ MVP 已实现 | P0 |
-| 无限画布 | `WorkflowCanvas` `/canvas-editor` | 🟡 基础节点，待增强 | P0 |
-| 会话管理 | `SessionSelector` | 🟡 API 已有，UI 待补 | P0 |
+| 无限画布 | `WorkflowCanvas` `/canvas-editor` | 🟡 Vue Flow + PlayCanvas POC | P0 |
+| 会话管理 | `SessionSelector` | ✅ 侧边栏 + API | P0 |
 | 用户认证 | `LoginDialog` 手机验证码 | ✅ MVP 已实现 | P0 |
 | 社区作品流 | `NeoTV` / `WorksGridList` | ✅ MVP 已实现 | P0 |
 | AI 文本生成 | `TextModelSelector` | ⬜ 待实现 | P1 |
-| AI 图像生成 | `ImageModelSelector` + `AIImageEditor` | ⬜ 待实现 | P1 |
-| AI 视频生成 | `VideoModelSelector` + `VideoSettingsSelector` | ⬜ 待实现 | P1 |
-| 语音输入 | `VoiceInput` | ⬜ 待实现 | P1 |
-| 分镜面板 | `StoryboardDialog` | ⬜ 待实现 | P1 |
-| 发布作品 | `PublishNeoTVDialog` | ⬜ 待实现 | P1 |
+| AI 图像生成 | `ImageModelSelector` + `AIImageEditor` | 🟡 生成栏 + Canvas API | P1 |
+| AI 视频生成 | `VideoModelSelector` + `VideoSettingsSelector` | 🟡 占位节点 | P1 |
+| 语音输入 | `VoiceInput` | ✅ Web Speech API | P1 |
+| 分镜面板 | `StoryboardDialog` | ✅ 已实现 | P1 |
+| 发布作品 | `PublishNeoTVDialog` | ✅ 已实现 | P1 |
 | 积分/会员 | `PointsBillSection` / `UnifiedMembershipModal` | ⬜ 待实现 | P2 |
 | 图像工作室 | `/image-studio` | ⬜ 待实现 | P2 |
 | 视频工作室 | `/video-studio` | ⬜ 待实现 | P2 |
@@ -80,14 +80,15 @@
 - [x] 基础无限画布
 - [x] 手机验证码登录
 - [x] 会话 CRUD API
-- [ ] GitHub 仓库
+- [x] GitHub 仓库
 
 ### Phase 2 — AI 生成能力
-- [ ] 接入 OpenAI 兼容 API（文本/图像）
-- [ ] 画布节点生成流水线
-- [ ] 模型选择器 UI
-- [ ] 语音输入
-- [ ] 分镜面板
+- [x] 接入 OpenAI 兼容 API（文本/图像）
+- [x] 画布节点生成流水线
+- [x] 模型选择器 UI
+- [x] 语音输入
+- [x] 分镜面板
+- [x] 发布作品到社区
 
 ### Phase 3 — 社区与商业化
 - [ ] 发布作品到超创站
