@@ -18,14 +18,54 @@ model User {
 }
 
 model Session {
-  id         String   @id @default(cuid())
-  title      String   @default("未命名画布")
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  canvasData String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  works      Work[]
+  id            String         @id @default(cuid())
+  title         String         @default("未命名画布")
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  canvasData    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  works         Work[]
+  shots         Shot[]
+  agentMessages AgentMessage[]
+}
+
+model Shot {
+  id        String     @id @default(cuid())
+  sessionId String
+  session   Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title     String     @default("未命名分镜")
+  prompt    String     @default("")
+  order     Int        @default(0)
+  status    String     @default("draft")
+  positionX Float      @default(0)
+  positionY Float      @default(0)
+  materials Material[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Material {
+  id        String   @id @default(cuid())
+  shotId    String
+  shot      Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  type      String   @default("image")
+  url       String?
+  thumbnail String?
+  prompt    String?
+  status    String   @default("idle")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+model AgentMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String
+  content   String
+  toolCalls String?
+  createdAt DateTime @default(now())
 }
 
 model Work {

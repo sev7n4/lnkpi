@@ -5,10 +5,15 @@ import type { Work } from '@lnkpi/shared'
 import { WORK_CATEGORIES } from '@lnkpi/shared'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { useSessionRedirect } from '@/composables/useSessionRedirect'
 import WorkCard from '@/components/works/WorkCard.vue'
+import CreativeLauncher from '@/components/workflow/CreativeLauncher.vue'
+import CarouselBanner from '@/components/workflow/CarouselBanner.vue'
+import CategoryTabs from '@/components/workflow/CategoryTabs.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
+useSessionRedirect()
 
 const prompt = ref('')
 const works = ref<Work[]>([])
@@ -85,6 +90,11 @@ function viewProcess(sessionId: string) {
   router.push(`/workflow/${sessionId}`)
 }
 
+function onCategoryChange(cat: string) {
+  activeCategory.value = cat
+  fetchWorks()
+}
+
 onMounted(fetchWorks)
 </script>
 
@@ -96,54 +106,30 @@ onMounted(fetchWorks)
       </h1>
 
       <div class="mx-auto mt-8 max-w-2xl">
-        <div class="glass-panel p-2">
-          <div class="flex flex-col gap-2 sm:flex-row">
-            <input
-              v-model="prompt"
-              class="input-field flex-1 border-0 bg-transparent"
-              placeholder="说说你的创意，超创帮你在画布上实现 …"
-              @keydown.enter="createCanvas"
-            />
-            <div class="flex gap-2">
-              <button class="btn-ghost shrink-0">告诉我你的想法</button>
-              <button class="btn-primary shrink-0" @click="createCanvas">
-                创建画布
-              </button>
-            </div>
-          </div>
-        </div>
+        <CreativeLauncher
+          v-model="prompt"
+          @create="createCanvas"
+          @guide="createCanvas"
+        />
       </div>
     </section>
 
     <section class="mb-10">
-      <div class="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-r from-brand-900/40 to-surface-card">
-        <div class="flex min-h-[200px] items-center justify-center p-8">
-          <div class="text-center">
-            <p class="text-sm uppercase tracking-widest text-brand-400">沉浸式创作</p>
-            <p class="mt-2 font-display text-2xl font-semibold">AI 无限画布 · 图像 · 视频 · 漫剧</p>
-          </div>
-        </div>
-      </div>
+      <CarouselBanner />
     </section>
 
     <section>
       <div class="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="cat in WORK_CATEGORIES"
-            :key="cat"
-            class="rounded-full px-4 py-1.5 text-sm transition"
-            :class="activeCategory === cat ? 'bg-brand-600 text-white' : 'bg-white/5 text-white/60 hover:text-white'"
-            @click="activeCategory = cat; fetchWorks()"
-          >
-            {{ cat }}
-          </button>
-        </div>
+        <CategoryTabs
+          :categories="WORK_CATEGORIES"
+          :model-value="activeCategory"
+          @update:model-value="onCategoryChange"
+        />
         <button class="btn-ghost text-sm">发布作品</button>
       </div>
 
       <div v-if="loading" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <div v-for="i in 8" :key="i" class="aspect-video animate-pulse rounded-2xl bg-surface-card" />
+        <div v-for="i in 8" :key="i" class="aspect-video animate-pulse rounded-2xl bg-[#1a1a1a]" />
       </div>
 
       <div v-else class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

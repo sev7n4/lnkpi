@@ -1,0 +1,16 @@
+:root {
+  --neo-bg: #141414;
+  --neo-surface-card: #1a1a1a;
+  --neo-surface-elevated: #242424;
+  --neo-border: rgba(255, 255, 255, 0.08);
+  --neo-accent: #6366f1;
+  --neo-accent-hover: #818cf8;
+  --neo-text-primary: #ffffff;
+  --neo-text-secondary: rgba(255, 255, 255, 0.6);
+  --neo-text-muted: rgba(255, 255, 255, 0.4);
+  --neo-sidebar-width: 240px;
+  --neo-agent-panel-width: 320px;
+  --neo-header-height: 64px;
+  --neo-radius-md: 12px;
+  --neo-radius-lg: 16px;
+}

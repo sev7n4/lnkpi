@@ -35,7 +35,7 @@ function toggleVoice() {
 </script>
 
 <template>
-  <div class="border-t border-white/5 bg-surface-card/95 backdrop-blur-xl">
+  <div class="border-t border-white/5 bg-[#1a1a1a]/95 backdrop-blur-xl">
     <div class="mx-auto max-w-4xl p-4">
       <!-- Model tabs -->
       <div class="mb-3 flex items-center gap-2">
@@ -43,7 +43,7 @@ function toggleVoice() {
           v-for="tab in (['text', 'image', 'video'] as const)"
           :key="tab"
           class="rounded-lg px-3 py-1 text-xs transition"
-          :class="activeTab === tab ? 'bg-brand-600/30 text-brand-300' : 'text-white/40 hover:text-white/70'"
+          :class="activeTab === tab ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/40 hover:text-white/70'"
           @click="activeTab = tab"
         >
           {{ tab === 'text' ? '文本' : tab === 'image' ? '图像' : '视频' }}

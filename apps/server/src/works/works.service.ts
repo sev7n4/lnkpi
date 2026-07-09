@@ -1,9 +1,9 @@
-import { Injectable } from '@nestjs/common'
+import { Inject, Injectable } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
 export class WorksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async findAll(params: { category?: string; search?: string; page?: number; pageSize?: number }) {
     const page = params.page || 1

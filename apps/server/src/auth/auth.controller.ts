@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Post, Req, UseGuards, Inject } from '@nestjs/common'
 import { IsString, Length, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
 import { AuthGuard } from './auth.guard'
@@ -21,23 +21,23 @@ class LoginDto {
 
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
   @Post('send-code')
   sendCode(@Body() dto: SendCodeDto) {
-    return this.auth.sendCode(dto.phone)
+    return this.authService.sendCode(dto.phone)
   }
 
   @Post('login')
   async login(@Body() dto: LoginDto) {
-    const data = await this.auth.login(dto.phone, dto.code)
+    const data = await this.authService.login(dto.phone, dto.code)
     return { code: 0, message: 'ok', data }
   }
 
   @Get('profile')
   @UseGuards(AuthGuard)
   async profile(@Req() req: { user: { sub: string } }) {
-    const data = await this.auth.getProfile(req.user.sub)
+    const data = await this.authService.getProfile(req.user.sub)
     return { code: 0, message: 'ok', data }
   }
 }

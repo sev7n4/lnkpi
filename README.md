@@ -1,57 +1,83 @@
 # 超创平台 (lnkpi)
 
-> AI 无限画布创作工作流平台 — 对标 NeoWOW 产品能力，优先复刻核心功能，后续按自有路线迭代。
+> AI 无限画布创作工作流平台 — 深度对标 NeoWOW，AI Native Agent 全面驱动画布。
+
+## 核心架构
+
+```
+用户自然语言 → Agent 对话 (SSE) → Canvas Tools → 画布实时更新
+                     ↓
+              OpenAI / 规则引擎
+                     ↓
+         create_shot / generate_image / generate_video / ...
+```
 
 ## 功能概览
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| 创作启动器 | ✅ | 问候语、创意输入、创建画布、作品瀑布流 |
-| 超创站 | ✅ | 社区作品浏览与搜索 |
-| 无限画布 | ✅ | 节点式工作流（提示词/图像/视频/文本） |
-| 底部生成栏 | ✅ | 多模型选择、语音输入、一键生成 |
-| 会话管理 | ✅ | 多画布会话切换 |
-| 手机登录 | ✅ | 验证码登录（开发模式固定 123456） |
-| AI 生成 | 🟡 | 模拟生成，待接入真实 API |
-| 分镜/发布/会员 | ⬜ | Phase 2-3，见 [产品对标文档](./docs/PRODUCT_CAPABILITY_MAP.md) |
+| 模块 | 状态 | 对标 NeoWOW |
+|------|------|------------|
+| 创作启动器 | ✅ | `/workflow` |
+| 无限画布 + 分镜节点 | ✅ | `WorkflowCanvas` |
+| **Agent 驱动画布** | ✅ | `/agent/chat/conversation` |
+| Canvas API (6 端点) | ✅ | `/agent/canvas/*` |
+| 图像生成 Provider | ✅ | OpenAI / Placeholder 降级 |
+| Shot/Material 持久化 | ✅ | Prisma + 轮询 |
+| Agent 工具链 (8 tools) | ✅ | Canvas Domain API |
+| SSE 流式对话 | ✅ | 流式 Agent 回复 |
+| 三栏布局 (会话/画布/Agent) | ✅ | SessionSelector + Canvas + Chat |
+| 底部生成栏 + 模型选择 | ✅ | GenerationBar |
+| 手机验证码登录 | ✅ | LoginDialog |
+| 社区作品流 | ✅ | NeoTV |
 
 ## 技术栈
 
-- **前端**: Vue 3 + TypeScript + Vite + Tailwind CSS + Vue Flow
-- **后端**: NestJS + Prisma + SQLite
-- **包管理**: pnpm monorepo
+- **前端**: Vue 3 + TypeScript + Vite + Tailwind + Vue Flow
+- **Agent**: `@lnkpi/agent` — 原生 Tool-Calling Agent 框架
+- **后端**: NestJS + Prisma + SQLite + SSE
+- **对标调研**: [NeoWOW 深度调研](./docs/NEOWOW_RESEARCH.md)
 
 ## 快速开始
 
 ```bash
-# 安装依赖
 pnpm install
-
-# 初始化数据库 & 种子数据
 pnpm --filter @lnkpi/server db:push
 pnpm --filter @lnkpi/server db:seed
-
-# 启动开发服务（前端 + 后端）
 pnpm dev
 ```
 
 - 前端: http://localhost:5173
-- 后端 API: http://localhost:3001/api
+- 后端: http://localhost:3001/api
+- 开发验证码: `123456`
+
+## Agent 配置
+
+```bash
+# .env — 配置后自动切换为 OpenAI Agent（否则使用规则引擎）
+OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4o
+OPENAI_IMAGE_MODEL=dall-e-3
+```
+
+## Agent Native 验收 (M2)
+
+1. 登录：`13800000000` / 验证码 `123456`
+2. 打开 `/workflow`，输入创意创建画布
+3. 在 Agent 面板输入「创作赛博朋克城市夜景」→ 应出现分镜 + 图像节点
+4. 刷新页面 → 节点持久化保留
+5. Canvas API 测试：`bash apps/server/scripts/test-canvas-api.sh`
+
+无 `OPENAI_API_KEY` 时使用 RuleBasedAgent + Unsplash 占位图，功能仍可验收。
 
 ## 项目结构
 
 ```
 lnkpi/
-├── apps/
-│   ├── web/          # Vue 3 前端
-│   └── server/       # NestJS 后端
-├── packages/
-│   └── shared/       # 共享类型与常量
+├── apps/web/              # Vue 3 前端
+├── apps/server/           # NestJS 后端 (/agent/* API)
+├── packages/agent/        # AI Native Agent 框架 + Canvas Tools
+├── packages/shared/       # 共享类型 (Shot/Material/CanvasAction)
 └── docs/
-    └── PRODUCT_CAPABILITY_MAP.md  # NeoWOW 能力对标
+    ├── NEOWOW_RESEARCH.md          # 竞品深度调研
+    └── PRODUCT_CAPABILITY_MAP.md   # 能力对标路线图
 ```
-
-## 开发说明
-
-- 开发环境验证码固定为 `123456`
-- 详细的产品能力对标与分阶段计划见 [docs/PRODUCT_CAPABILITY_MAP.md](./docs/PRODUCT_CAPABILITY_MAP.md)

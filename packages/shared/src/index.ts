@@ -1,6 +1,6 @@
 export type WorkType = 'canvas' | 'shortfilm'
 
-export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group'
+export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
@@ -131,3 +131,66 @@ export const VIDEO_MODELS: AIModel[] = [
   { id: 'runway-gen3', name: 'Runway Gen-3', provider: 'Runway', type: 'video' },
   { id: 'pika-v2', name: 'Pika V2', provider: 'Pika', type: 'video' },
 ]
+
+// --- Shot/Material 模型（对标 NeoWOW Canvas Domain）---
+
+export type ShotStatus = 'draft' | 'generating' | 'generated' | 'failed'
+export type MaterialType = 'image' | 'video' | 'audio'
+export type MaterialStatus = 'idle' | 'generating' | 'completed' | 'failed'
+
+export interface Material {
+  id: string
+  shotId: string
+  type: MaterialType
+  url?: string
+  thumbnail?: string
+  prompt?: string
+  status: MaterialStatus
+  order: number
+}
+
+export interface Shot {
+  id: string
+  sessionId: string
+  title: string
+  prompt: string
+  order: number
+  status: ShotStatus
+  position: { x: number; y: number }
+  materials: Material[]
+}
+
+// --- Agent 驱动画布 ---
+
+export type CanvasActionType = 'add_node' | 'update_node' | 'remove_node' | 'add_edge' | 'remove_edge' | 'set_viewport'
+
+export interface CanvasAction {
+  type: CanvasActionType
+  payload: {
+    id?: string
+    nodeType?: NodeType
+    position?: { x: number; y: number }
+    data?: Record<string, unknown>
+    source?: string
+    target?: string
+    parentShotId?: string
+    viewport?: { x: number; y: number; zoom: number }
+  }
+}
+
+export interface AgentChatMessage {
+  id: string
+  sessionId: string
+  role: 'user' | 'assistant' | 'system' | 'tool'
+  content: string
+  toolCalls?: string
+  createdAt: string
+}
+
+export interface CapabilityItem {
+  id: string
+  name: string
+  type: GenerationType
+  provider: string
+  description?: string
+}

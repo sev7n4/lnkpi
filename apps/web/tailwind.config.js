@@ -5,22 +5,16 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#8b5cf6',
-          600: '#7c3aed',
-          700: '#6d28d9',
-          800: '#5b21b6',
-          900: '#4c1d95',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#6366f1',
+          700: '#4f46e5',
         },
         surface: {
-          DEFAULT: '#0f0f14',
-          card: '#16161f',
-          elevated: '#1e1e2a',
-          border: '#2a2a3a',
+          DEFAULT: '#141414',
+          card: '#1a1a1a',
+          elevated: '#242424',
+          border: 'rgba(255,255,255,0.08)',
         },
       },
       fontFamily: {
@@ -28,7 +22,7 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
       backgroundImage: {
-        'hero-gradient': 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(124,58,237,0.3), transparent)',
+        'hero-gradient': 'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99,102,241,0.25), transparent)',
       },
     },
   },

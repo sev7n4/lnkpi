@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { VueFlow, type Node, type Edge, type Connection, type NodeTypesObject } from '@vue-flow/core'
+import { VueFlow, type Node, type Edge, type Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
@@ -9,14 +9,18 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
-import type { Session } from '@lnkpi/shared'
+import type { Session, CanvasAction } from '@lnkpi/shared'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
+import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
+import { useShotPolling } from '@/composables/useShotPolling'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
 import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
 import CanvasNodeText from '@/components/canvas/CanvasNodeText.vue'
+import CanvasNodeShot from '@/components/canvas/CanvasNodeShot.vue'
 import GenerationBar from '@/components/canvas/GenerationBar.vue'
+import AgentPanel from '@/components/agent/AgentPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,15 +31,44 @@ const nodes = ref<Node[]>([])
 const edges = ref<Edge[]>([])
 const sessionTitle = ref('未命名画布')
 const saving = ref(false)
-const showSessions = ref(false)
+const showSessions = ref(true)
+const showAgent = ref(true)
 const sessions = ref<Session[]>([])
 let nodeCounter = 0
+
+const shotPolling = useShotPolling((shots) => {
+  for (const shot of shots) {
+    const material = shot.materials.find((m) => m.status === 'completed' && m.url)
+    if (!material) continue
+    const shotNode = nodes.value.find((n) => n.id === shot.id)
+    if (shotNode) {
+      shotNode.data = { ...(shotNode.data as Record<string, unknown>), status: 'generated', coverUrl: material.url }
+    }
+    const imageNode = nodes.value.find((n) =>
+      n.type === 'image' && edges.value.some((e) => e.source === shot.id && e.target === n.id),
+    )
+    if (imageNode) {
+      imageNode.data = { ...(imageNode.data as Record<string, unknown>), url: material.url, status: 'completed' }
+    }
+  }
+})
+
+function startPollingForGeneratingShots() {
+  const generatingIds: string[] = []
+  for (const n of nodes.value) {
+    if (n.type === 'shot' && (n.data as Record<string, unknown>).status === 'generating') {
+      generatingIds.push(n.id)
+    }
+  }
+  if (generatingIds.length) shotPolling.start(generatingIds)
+}
 
 const nodeTypes = {
   prompt: CanvasNodePrompt,
   image: CanvasNodeImage,
   video: CanvasNodeVideo,
   text: CanvasNodeText,
+  shot: CanvasNodeShot,
 }
 
 function onConnect(connection: Connection) {
@@ -58,12 +91,31 @@ function addNode(type: string, data: Record<string, unknown> = {}) {
   })
 }
 
+function handleAgentActions(actions: unknown[]) {
+  const result = applyActionsToFlow(
+    nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
+    edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
+    actions as CanvasAction[],
+  )
+  nodes.value = result.nodes as unknown as Node[]
+  edges.value = result.edges as unknown as Edge[]
+  startPollingForGeneratingShots()
+  void saveCanvas()
+}
+
+function handleGenerate(payload: { prompt: string }) {
+  addNode('shot', { title: '新分镜', prompt: payload.prompt, status: 'draft' })
+}
+
 async function saveCanvas() {
   saving.value = true
   try {
     await api.put(`/sessions/${sessionId.value}`, {
       title: sessionTitle.value,
-      canvasData: { nodes: nodes.value, edges: edges.value },
+      canvasData: flowToCanvasData(
+        nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
+        edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
+      ),
     })
   } catch {
     // demo mode
@@ -112,21 +164,8 @@ async function loadSessions() {
   }
 }
 
-function handleGenerate(payload: { prompt: string }) {
-  addNode('image', { url: '', status: 'generating', prompt: payload.prompt })
-  const node = nodes.value[nodes.value.length - 1]
-  setTimeout(() => {
-    node.data = {
-      ...node.data,
-      status: 'completed',
-      url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=512&q=80',
-    }
-  }, 2000)
-}
-
 function switchSession(id: string) {
   router.push(`/workflow/${id}`)
-  showSessions.value = false
 }
 
 onMounted(() => {
@@ -137,59 +176,59 @@ onMounted(() => {
 
 <template>
   <div class="flex h-[calc(100vh-4rem)]">
-    <!-- Session Sidebar -->
+    <!-- Left: Session Sidebar (对标 SessionSelector) -->
     <aside
-      class="flex w-64 shrink-0 flex-col border-r border-white/5 bg-surface-card transition-all"
-      :class="showSessions ? '' : 'w-0 overflow-hidden border-0'"
+      class="flex shrink-0 flex-col border-r border-white/5 bg-[#1a1a1a] transition-all"
+      :class="showSessions ? 'w-[240px]' : 'w-0 overflow-hidden'"
     >
       <div class="flex items-center justify-between border-b border-white/5 p-3">
         <span class="text-xs font-medium text-white/60">我的画布</span>
-        <button class="text-xs text-brand-400" @click="router.push('/workflow')">+ 新建</button>
+        <button class="text-xs text-[#818cf8] hover:text-[#6366f1]" @click="router.push('/workflow')">+ 新建</button>
       </div>
       <div class="flex-1 overflow-y-auto p-2">
         <button
           v-for="s in sessions"
           :key="s.id"
           class="mb-1 w-full rounded-lg px-3 py-2 text-left text-xs transition hover:bg-white/5"
-          :class="s.id === sessionId ? 'bg-brand-600/20 text-brand-300' : 'text-white/60'"
+          :class="s.id === sessionId ? 'bg-[#6366f1]/20 text-[#818cf8]' : 'text-white/60'"
           @click="switchSession(s.id)"
         >
           {{ s.title }}
         </button>
+        <p v-if="!sessions.length" class="px-3 py-4 text-center text-[10px] text-white/30">
+          登录后查看画布列表
+        </p>
       </div>
     </aside>
 
-    <div class="flex flex-1 flex-col">
-      <!-- Toolbar -->
-      <div class="flex items-center justify-between border-b border-white/5 bg-surface-card px-4 py-2">
-        <div class="flex items-center gap-3">
-          <button class="btn-ghost text-xs" @click="router.push('/workflow')">← 返回</button>
-          <button class="btn-ghost text-xs" @click="showSessions = !showSessions">会话</button>
+    <!-- Center: Canvas + Generation Bar -->
+    <div class="flex min-w-0 flex-1 flex-col">
+      <div class="flex items-center justify-between border-b border-white/5 bg-[#1a1a1a] px-4 py-2">
+        <div class="flex items-center gap-2">
+          <button class="btn-ghost px-2 py-1 text-xs" @click="router.push('/workflow')">←</button>
+          <button class="btn-ghost px-2 py-1 text-xs" @click="showSessions = !showSessions">会话</button>
+          <button class="btn-ghost px-2 py-1 text-xs" @click="showAgent = !showAgent">Agent</button>
           <input
             v-model="sessionTitle"
             class="rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none hover:border-white/10 focus:border-brand-500/50"
           />
         </div>
-
-        <div class="flex items-center gap-2">
-          <button class="btn-ghost text-xs" @click="addNode('prompt', { prompt: '' })">+ 提示词</button>
-          <button class="btn-ghost text-xs" @click="addNode('image', { url: '', status: 'idle' })">+ 图像</button>
-          <button class="btn-ghost text-xs" @click="addNode('video', { url: '', status: 'idle' })">+ 视频</button>
-          <button class="btn-ghost text-xs" @click="addNode('text', { content: '文本节点' })">+ 文本</button>
-          <button class="btn-ghost text-xs">分镜</button>
-          <button class="btn-primary text-xs" :disabled="saving" @click="saveCanvas">
-            {{ saving ? '保存中...' : '保存' }}
+        <div class="flex items-center gap-1.5">
+          <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('shot', { title: '新分镜', prompt: '', status: 'draft' })">+ 分镜</button>
+          <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('image', { url: '', status: 'idle' })">+ 图像</button>
+          <button class="btn-ghost px-2 py-1 text-xs" @click="addNode('video', { url: '', status: 'idle' })">+ 视频</button>
+          <button class="btn-primary px-3 py-1 text-xs" :disabled="saving" @click="saveCanvas">
+            {{ saving ? '...' : '保存' }}
           </button>
         </div>
       </div>
 
-      <!-- Canvas -->
       <div class="relative flex-1">
         <VueFlow
           v-model:nodes="nodes"
           v-model:edges="edges"
-          :node-types="(nodeTypes as NodeTypesObject)"
-          :default-viewport="{ zoom: 1, x: 0, y: 0 }"
+          :node-types="nodeTypes as any"
+          :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
           :min-zoom="0.1"
           :max-zoom="2"
           fit-view-on-init
@@ -202,15 +241,25 @@ onMounted(() => {
         </VueFlow>
       </div>
 
-      <!-- Generation Bar (对标 NeoWOW 底部生成栏) -->
       <GenerationBar @generate="handleGenerate" />
     </div>
+
+    <!-- Right: Agent Panel (对标 NeoWOW Agent 对话区) -->
+    <aside
+      class="shrink-0 transition-all"
+      :class="showAgent ? 'w-[320px]' : 'w-0 overflow-hidden'"
+    >
+      <AgentPanel
+        :session-id="sessionId"
+        @canvas-actions="handleAgentActions"
+      />
+    </aside>
   </div>
 </template>
 
 <style scoped>
 .canvas-flow {
-  background: #0a0a0f;
+  background: #141414;
 }
 
 :deep(.vue-flow__controls) {

@@ -11,8 +11,10 @@ defineEmits<{
 </script>
 
 <template>
-  <article class="group overflow-hidden rounded-2xl border border-white/5 bg-surface-card transition hover:border-brand-500/30 hover:shadow-lg hover:shadow-brand-500/5">
-    <div class="relative aspect-video overflow-hidden bg-surface-elevated">
+  <article
+    class="group overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] transition hover:border-[#6366f1]/30 hover:shadow-lg hover:shadow-[#6366f1]/5"
+  >
+    <div class="relative aspect-video overflow-hidden bg-[#242424]">
       <img
         :src="work.coverUrl"
         :alt="work.title"
@@ -37,7 +39,7 @@ defineEmits<{
 
     <div class="p-4">
       <div class="mb-2 flex items-center gap-2">
-        <div class="flex h-6 w-6 items-center justify-center rounded-full bg-brand-600/30 text-[10px]">
+        <div class="flex h-6 w-6 items-center justify-center rounded-full bg-[#6366f1]/30 text-[10px]">
           {{ work.authorName[0] }}
         </div>
         <span class="text-xs text-white/50">@{{ work.authorName }}</span>

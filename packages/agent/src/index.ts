@@ -1,0 +1,6 @@
+export { CanvasAgent, RuleBasedAgent, OpenAIAgent } from './agent'
+export { CANVAS_TOOLS } from './tools/canvas-tools'
+export { CanvasToolExecutor, applyCanvasActions } from './tools/executor'
+export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } from './tools/image-provider'
+export type { ImageProvider } from './tools/image-provider'
+export type { AgentStreamEvent, AgentMessage, AgentToolCall, AgentContext, AgentToolDefinition } from './types'

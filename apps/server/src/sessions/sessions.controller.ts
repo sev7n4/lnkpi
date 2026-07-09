@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
 import { IsOptional, IsString } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { SessionsService } from './sessions.service'
@@ -24,25 +24,25 @@ class UpdateSessionDto {
 
 @Controller('sessions')
 export class SessionsController {
-  constructor(private sessions: SessionsService) {}
+  constructor(@Inject(SessionsService) private readonly sessionsService: SessionsService) {}
 
   @Post()
   @UseGuards(AuthGuard)
   async create(@Req() req: { user: { sub: string } }, @Body() dto: CreateSessionDto) {
-    const data = await this.sessions.create(req.user.sub, dto.title, dto.prompt)
+    const data = await this.sessionsService.create(req.user.sub, dto.title, dto.prompt)
     return { code: 0, message: 'ok', data }
   }
 
   @Get()
   @UseGuards(AuthGuard)
   async findAll(@Req() req: { user: { sub: string } }) {
-    const data = await this.sessions.findAll(req.user.sub)
+    const data = await this.sessionsService.findAll(req.user.sub)
     return { code: 0, message: 'ok', data }
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string) {
-    const data = await this.sessions.findOne(id)
+    const data = await this.sessionsService.findOne(id)
     return { code: 0, message: 'ok', data }
   }
 
@@ -53,14 +53,14 @@ export class SessionsController {
     @Req() req: { user: { sub: string } },
     @Body() dto: UpdateSessionDto,
   ) {
-    const data = await this.sessions.update(id, req.user.sub, dto)
+    const data = await this.sessionsService.update(id, req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 
   @Delete(':id')
   @UseGuards(AuthGuard)
   async remove(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
-    const data = await this.sessions.remove(id, req.user.sub)
+    const data = await this.sessionsService.remove(id, req.user.sub)
     return { code: 0, message: 'ok', data }
   }
 }

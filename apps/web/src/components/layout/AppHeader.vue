@@ -24,11 +24,16 @@ function navigate(path: string) {
 </script>
 
 <template>
-  <header class="sticky top-0 z-50 border-b border-white/5 bg-surface/80 backdrop-blur-xl">
-    <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+  <header
+    class="sticky top-0 z-50 border-b border-white/5 bg-[#141414]/95 backdrop-blur-xl"
+    style="height: var(--neo-header-height)"
+  >
+    <div class="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
       <div class="flex items-center gap-8">
         <button class="flex items-center gap-2" @click="navigate('/workflow')">
-          <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 font-display text-sm font-bold">
+          <div
+            class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366f1] to-[#4f46e5] font-display text-sm font-bold"
+          >
             超
           </div>
           <span class="font-display text-lg font-semibold tracking-tight">超创平台</span>
@@ -50,7 +55,9 @@ function navigate(path: string) {
       <div class="flex items-center gap-3">
         <template v-if="auth.isLoggedIn">
           <div class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5">
-            <div class="flex h-7 w-7 items-center justify-center rounded-full bg-brand-600 text-xs font-medium">
+            <div
+              class="flex h-7 w-7 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
+            >
               {{ auth.user?.nickname?.[0] ?? 'U' }}
             </div>
             <span class="text-sm text-white/80">{{ auth.user?.nickname }}</span>
