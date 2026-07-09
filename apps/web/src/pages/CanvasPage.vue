@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { VueFlow, type Node, type Edge, type Connection } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
@@ -22,6 +22,10 @@ import CanvasNodeShot from '@/components/canvas/CanvasNodeShot.vue'
 import GenerationBar from '@/components/canvas/GenerationBar.vue'
 import AgentPanel from '@/components/agent/AgentPanel.vue'
 
+const PlayCanvasView = defineAsyncComponent(
+  () => import('@/canvas/playcanvas/PlayCanvasView.vue'),
+)
+
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
@@ -33,6 +37,7 @@ const sessionTitle = ref('未命名画布')
 const saving = ref(false)
 const showSessions = ref(true)
 const showAgent = ref(true)
+const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
 const sessions = ref<Session[]>([])
 let nodeCounter = 0
 
@@ -62,6 +67,28 @@ function startPollingForGeneratingShots() {
   }
   if (generatingIds.length) shotPolling.start(generatingIds)
 }
+
+const mentionOptions = computed((): Array<{ id: string; label: string; type: string }> => {
+  const out: Array<{ id: string; label: string; type: string }> = []
+  for (const n of nodes.value) {
+    const data = n.data as Record<string, unknown>
+    out.push({
+      id: n.id,
+      label: String(data.title ?? data.prompt ?? n.id),
+      type: String(n.type ?? 'node'),
+    })
+  }
+  return out
+})
+
+const playCanvasNodes = computed((): Array<{ id: string; type: string; position: { x: number; y: number }; data: Record<string, unknown> }> =>
+  nodes.value.map((n) => ({
+    id: n.id,
+    type: String(n.type),
+    position: n.position,
+    data: n.data as Record<string, unknown>,
+  })),
+)
 
 const nodeTypes = {
   prompt: CanvasNodePrompt,
@@ -208,6 +235,22 @@ onMounted(() => {
           <button class="btn-ghost px-2 py-1 text-xs" @click="router.push('/workflow')">←</button>
           <button class="btn-ghost px-2 py-1 text-xs" @click="showSessions = !showSessions">会话</button>
           <button class="btn-ghost px-2 py-1 text-xs" @click="showAgent = !showAgent">Agent</button>
+          <div class="flex rounded-lg border border-white/10 p-0.5">
+            <button
+              class="rounded-md px-2 py-0.5 text-[10px] transition"
+              :class="canvasMode === 'vueflow' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/40'"
+              @click="canvasMode = 'vueflow'"
+            >
+              Vue Flow
+            </button>
+            <button
+              class="rounded-md px-2 py-0.5 text-[10px] transition"
+              :class="canvasMode === 'playcanvas' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/40'"
+              @click="canvasMode = 'playcanvas'"
+            >
+              PlayCanvas
+            </button>
+          </div>
           <input
             v-model="sessionTitle"
             class="rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none hover:border-white/10 focus:border-brand-500/50"
@@ -225,6 +268,7 @@ onMounted(() => {
 
       <div class="relative flex-1">
         <VueFlow
+          v-if="canvasMode === 'vueflow'"
           v-model:nodes="nodes"
           v-model:edges="edges"
           :node-types="nodeTypes as any"
@@ -232,16 +276,17 @@ onMounted(() => {
           :min-zoom="0.1"
           :max-zoom="2"
           fit-view-on-init
-          class="canvas-flow"
+          class="canvas-flow h-full"
           @connect="onConnect"
         >
           <Background pattern-color="#2a2a3a" :gap="20" />
           <Controls />
           <MiniMap :node-color="() => '#7c3aed'" mask-color="rgba(15, 15, 20, 0.8)" />
         </VueFlow>
+        <PlayCanvasView v-else class="h-full" :nodes="playCanvasNodes" />
       </div>
 
-      <GenerationBar @generate="handleGenerate" />
+      <GenerationBar :mentions="mentionOptions" @generate="handleGenerate" />
     </div>
 
     <!-- Right: Agent Panel (对标 NeoWOW Agent 对话区) -->

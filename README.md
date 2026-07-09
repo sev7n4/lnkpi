@@ -22,6 +22,9 @@
 | Canvas API (6 端点) | ✅ | `/agent/canvas/*` |
 | 图像生成 Provider | ✅ | OpenAI / Placeholder 降级 |
 | Shot/Material 持久化 | ✅ | Prisma + 轮询 |
+| PlayCanvas POC | ✅ | 3D 画布评估模式 |
+| @mention 输入 | ✅ | `MentionInput.vue` |
+| 语音输入 | ✅ | Web Speech API |
 | Agent 工具链 (8 tools) | ✅ | Canvas Domain API |
 | SSE 流式对话 | ✅ | 流式 Agent 回复 |
 | 三栏布局 (会话/画布/Agent) | ✅ | SessionSelector + Canvas + Chat |

@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ModelSelector from '@/components/canvas/ModelSelector.vue'
+import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
+import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+
+defineProps<{
+  mentions?: MentionOption[]
+}>()
 
 const emit = defineEmits<{
   generate: [payload: { prompt: string; textModel: string; imageModel: string; videoModel: string }]
@@ -11,7 +17,8 @@ const textModel = ref('gpt-4o')
 const imageModel = ref('flux-pro')
 const videoModel = ref('kling-v1')
 const activeTab = ref<'text' | 'image' | 'video'>('image')
-const recording = ref(false)
+
+const speech = useSpeechRecognition()
 
 function handleSend() {
   if (!prompt.value.trim()) return
@@ -24,12 +31,17 @@ function handleSend() {
 }
 
 function toggleVoice() {
-  recording.value = !recording.value
-  if (recording.value) {
-    setTimeout(() => {
-      recording.value = false
-      prompt.value += '（语音输入示例）'
-    }, 2000)
+  if (speech.listening.value) {
+    speech.stop()
+    return
+  }
+  const started = speech.start((text, isFinal) => {
+    if (isFinal) {
+      prompt.value = prompt.value ? `${prompt.value} ${text}` : text
+    }
+  })
+  if (!started) {
+    prompt.value += prompt.value ? ' （当前浏览器不支持语音识别）' : '（当前浏览器不支持语音识别）'
   }
 }
 </script>
@@ -37,7 +49,6 @@ function toggleVoice() {
 <template>
   <div class="border-t border-white/5 bg-[#1a1a1a]/95 backdrop-blur-xl">
     <div class="mx-auto max-w-4xl p-4">
-      <!-- Model tabs -->
       <div class="mb-3 flex items-center gap-2">
         <button
           v-for="tab in (['text', 'image', 'video'] as const)"
@@ -56,23 +67,21 @@ function toggleVoice() {
         </div>
       </div>
 
-      <!-- Input area -->
       <div class="flex items-end gap-3">
-        <div class="relative flex-1">
-          <textarea
-            v-model="prompt"
-            class="input-field min-h-[48px] resize-none pr-12"
-            rows="2"
-            placeholder="描述你想要生成的内容，@ 引用节点..."
-            @keydown.meta.enter="handleSend"
-            @keydown.ctrl.enter="handleSend"
-          />
-        </div>
+        <MentionInput
+          v-model="prompt"
+          :mentions="mentions ?? []"
+          @submit="handleSend"
+        />
 
         <button
           class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition"
-          :class="recording ? 'bg-red-500/20 text-red-400' : 'bg-white/5 text-white/60 hover:bg-white/10'"
-          title="语音输入"
+          :class="speech.listening.value
+            ? 'bg-red-500/20 text-red-400 animate-pulse'
+            : speech.supported
+              ? 'bg-white/5 text-white/60 hover:bg-white/10'
+              : 'bg-white/5 text-white/30'"
+          :title="speech.supported ? '语音输入' : '浏览器不支持语音识别'"
           @click="toggleVoice"
         >
           <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
