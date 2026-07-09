@@ -18,11 +18,11 @@
 | 分镜面板 | `StoryboardDialog` | ✅ 已实现 | P1 |
 | 发布作品 | `PublishNeoTVDialog` | ✅ 已实现 | P1 |
 | 积分/会员 | `PointsBillSection` / `UnifiedMembershipModal` | ⬜ 待实现 | P2 |
-| 图像工作室 | `/image-studio` | ⬜ 待实现 | P2 |
-| 视频工作室 | `/video-studio` | ⬜ 待实现 | P2 |
-| 音频工作室 | `/audio-studio` | ⬜ 待实现 | P2 |
-| 视频编辑器 | `/video-editor` | ⬜ 待实现 | P2 |
-| 生成记录 | `/generation-records` | ⬜ 待实现 | P2 |
+| 图像工作室 | `/image-studio` | ✅ 已实现 | P2 |
+| 视频工作室 | `/video-studio` | ✅ 已实现 | P2 |
+| 音频工作室 | `/audio-studio` | ✅ 已实现 | P2 |
+| 视频编辑器 | `/video-editor` | ✅ MVP | P2 |
+| 生成记录 | `/generation-records` | ✅ 已实现 | P2 |
 | 创作者主页 | `/creator/:id` | ⬜ 待实现 | P2 |
 | 作品分享 | `/share/:id` | ⬜ 待实现 | P2 |
 
@@ -98,6 +98,9 @@
 - [x] 作品分享页 `/share/:id`
 
 ### Phase 4 — 工作室
-- [ ] 图像/视频/音频独立工作室
-- [ ] 视频编辑器
-- [ ] 漫剧/故事模式
+- [x] 图像工作室 `/image-studio`
+- [x] 视频工作室 `/video-studio`
+- [x] 音频工作室 `/audio-studio`
+- [x] 视频编辑器 `/video-editor`
+- [x] 生成记录 `/generation-records`
+- [x] 漫剧/故事模式 `/stories`

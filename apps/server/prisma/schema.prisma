@@ -8,15 +8,45 @@ datasource db {
 }
 
 model User {
-  id         String    @id @default(cuid())
-  phone      String    @unique
+  id         String             @id @default(cuid())
+  phone      String             @unique
   nickname   String
   avatar     String?
-  points     Int       @default(1000)
-  membership String    @default("free")
-  createdAt  DateTime  @default(now())
+  points     Int                @default(1000)
+  membership String             @default("free")
+  createdAt  DateTime           @default(now())
   sessions   Session[]
   works      Work[]
+  stories    Story[]
+  generations GenerationRecord[]
+}
+
+model GenerationRecord {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  prompt    String
+  model     String?
+  url       String?
+  status    String   @default("completed")
+  metadata  String?
+  createdAt DateTime @default(now())
+}
+
+model Story {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  synopsis     String   @default("")
+  sessionId    String?
+  session      Session? @relation(fields: [sessionId], references: [id])
+  status       String   @default("draft")
+  episodeCount Int      @default(1)
+  coverUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Session {
@@ -30,6 +60,7 @@ model Session {
   works         Work[]
   shots         Shot[]
   agentMessages AgentMessage[]
+  stories       Story[]
 }
 
 model Shot {

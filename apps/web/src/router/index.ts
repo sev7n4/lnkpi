@@ -37,6 +37,36 @@ const router = createRouter({
       name: 'share',
       component: () => import('@/pages/SharePage.vue'),
     },
+    {
+      path: '/stories',
+      name: 'stories',
+      component: () => import('@/pages/StoriesPage.vue'),
+    },
+    {
+      path: '/image-studio',
+      name: 'image-studio',
+      component: () => import('@/pages/studios/ImageStudioPage.vue'),
+    },
+    {
+      path: '/video-studio',
+      name: 'video-studio',
+      component: () => import('@/pages/studios/VideoStudioPage.vue'),
+    },
+    {
+      path: '/audio-studio',
+      name: 'audio-studio',
+      component: () => import('@/pages/studios/AudioStudioPage.vue'),
+    },
+    {
+      path: '/video-editor',
+      name: 'video-editor',
+      component: () => import('@/pages/studios/VideoEditorPage.vue'),
+    },
+    {
+      path: '/generation-records',
+      name: 'generation-records',
+      component: () => import('@/pages/studios/GenerationRecordsPage.vue'),
+    },
   ],
 })
 

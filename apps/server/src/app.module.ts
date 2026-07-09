@@ -6,9 +6,11 @@ import { AgentModule } from './agent/agent.module'
 import { CanvasModule } from './canvas/canvas.module'
 import { MembershipModule } from './membership/membership.module'
 import { PrismaModule } from './prisma/prisma.module'
+import { StoriesModule } from './stories/stories.module'
+import { StudioModule } from './studio/studio.module'
 import { UsersModule } from './users/users.module'
 
 @Module({
-  imports: [PrismaModule, AuthModule, SessionsModule, WorksModule, AgentModule, CanvasModule, UsersModule, MembershipModule],
+  imports: [PrismaModule, AuthModule, SessionsModule, WorksModule, AgentModule, CanvasModule, UsersModule, MembershipModule, StudioModule, StoriesModule],
 })
 export class AppModule {}

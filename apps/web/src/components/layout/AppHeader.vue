@@ -14,10 +14,16 @@ const auth = useAuthStore()
 const tabs = [
   { label: '画布', path: '/workflow' },
   { label: '超创站', path: '/community' },
+  { label: '短片', path: '/stories' },
+  { label: '工作室', path: '/image-studio' },
 ]
 
 const activeTab = computed(() => {
   if (route.path.startsWith('/community')) return '/community'
+  if (route.path.startsWith('/stories')) return '/stories'
+  if (route.path.startsWith('/image-studio') || route.path.startsWith('/video-studio')
+    || route.path.startsWith('/audio-studio') || route.path.startsWith('/video-editor')
+    || route.path.startsWith('/generation-records')) return '/image-studio'
   return '/workflow'
 })
 
