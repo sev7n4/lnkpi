@@ -1,0 +1,17 @@
+{
+  "name": "lnkpi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "超创平台 - AI 无限画布创作工作流平台",
+  "scripts": {
+    "dev": "pnpm --parallel -r dev",
+    "dev:web": "pnpm --filter @lnkpi/web dev",
+    "dev:server": "pnpm --filter @lnkpi/server dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

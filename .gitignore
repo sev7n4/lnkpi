@@ -1,0 +1,20 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+coverage
+.turbo
+.vite
+*.tsbuildinfo
+
+# Prisma
+apps/server/prisma/*.db
+apps/server/prisma/*.db-journal
+
+# IDE
+.idea
+.vscode/*
+!.vscode/extensions.json
