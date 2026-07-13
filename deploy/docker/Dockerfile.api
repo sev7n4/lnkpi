@@ -21,11 +21,8 @@ RUN node -e "\
     fs.writeFileSync(p, JSON.stringify(j,null,2));\
   }"
 
-# 只安装 API 相关 workspace（含 devDeps 供 tsc/prisma build），跳过 apps/web
-RUN pnpm install --frozen-lockfile \
-  --filter @lnkpi/server \
-  --filter @lnkpi/agent \
-  --filter @lnkpi/shared
+# 安装除 apps/web 外全部 workspace（保留 agent/shared 的 devDeps 供 tsc build）
+RUN pnpm install --frozen-lockfile --filter '!@lnkpi/web'
 RUN pnpm --filter @lnkpi/shared build
 RUN pnpm --filter @lnkpi/agent build
 RUN node deploy/docker/patch-workspace-packages.cjs
