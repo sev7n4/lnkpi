@@ -33,7 +33,16 @@ done
 TCR_REGISTRY="$TCR_REGISTRY" TCR_NAMESPACE="$TCR_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-build
 
 echo "等待健康检查..."
-sleep 8
-curl -fsS "http://127.0.0.1:5100/api/health" | head -c 200
-echo ""
-echo "部署完成 (IMAGE_TAG=$IMAGE_TAG, registry=${IMAGE_REPO})"
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  if curl -fsS "http://127.0.0.1:5100/api/health" >/dev/null 2>&1; then
+    curl -fsS "http://127.0.0.1:5100/api/health" | head -c 200
+    echo ""
+    echo "部署完成 (IMAGE_TAG=$IMAGE_TAG, registry=${IMAGE_REPO})"
+    exit 0
+  fi
+  echo "health attempt $i failed, retry..."
+  sleep $((i <= 3 ? 5 : 10))
+done
+echo "health check failed after retries"
+docker logs lnkpi-api --tail 30 2>&1 || true
+exit 1
