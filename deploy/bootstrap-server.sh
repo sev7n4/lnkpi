@@ -10,7 +10,9 @@ sudo cp "$REPO_ROOT/deploy/docker-compose.prod.yml" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/docker-compose.prod.images.yml" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/.env.production.example" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/deploy-remote.sh" "$DEPLOY_DIR/deploy/"
+sudo cp "$REPO_ROOT/deploy/deploy-remote-build.sh" "$DEPLOY_DIR/deploy/"
 sudo chmod +x "$DEPLOY_DIR/deploy/deploy-remote.sh"
+sudo chmod +x "$DEPLOY_DIR/deploy/deploy-remote-build.sh"
 
 if [[ ! -f "$DEPLOY_DIR/.env" ]]; then
   sudo cp "$DEPLOY_DIR/deploy/.env.production.example" "$DEPLOY_DIR/.env"
@@ -23,5 +25,5 @@ if [[ ! -f "$DEPLOY_DIR/.env" ]]; then
 fi
 
 echo "初始化完成: $DEPLOY_DIR"
-echo "下一步: 配置 GitHub Secrets 后 push main 触发 deploy，或手动:"
-echo "  cd $DEPLOY_DIR && IMAGE_TAG=latest TCR_REGISTRY=... TCR_NAMESPACE=lnkpi bash deploy/deploy-remote.sh"
+echo "下一步: push main 触发 GHA deploy，或手动:"
+echo "  cd $DEPLOY_DIR && IMAGE_TAG=<git-sha> bash deploy/deploy-remote-build.sh"
