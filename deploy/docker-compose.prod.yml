@@ -2,7 +2,11 @@
 # 本地调试:
 #   cp deploy/.env.production.example .env
 #   docker compose -f deploy/docker-compose.prod.yml up -d --build
-# 服务器（TCR 镜像）:
+# 服务器（CVM 本地 build，推荐）:
+#   export IMAGE_TAG=<git-sha> LNKPI_API_IMAGE=lnkpi-api:<git-sha>
+#   docker compose -f deploy/docker-compose.prod.yml build api
+#   docker compose -f deploy/docker-compose.prod.yml up -d --no-build
+# 服务器（TCR 镜像，备选）:
 #   export IMAGE_TAG=<git-sha> TCR_REGISTRY=ccr.ccs.tencentyun.com TCR_NAMESPACE=lnkpi
 #   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.prod.images.yml pull
 #   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.prod.images.yml up -d --no-build

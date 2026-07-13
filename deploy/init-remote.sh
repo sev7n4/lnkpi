@@ -16,6 +16,7 @@ scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
   "$REPO_ROOT/deploy/docker-compose.prod.yml" \
   "$REPO_ROOT/deploy/docker-compose.prod.images.yml" \
   "$REPO_ROOT/deploy/deploy-remote.sh" \
+  "$REPO_ROOT/deploy/deploy-remote-build.sh" \
   "$REPO_ROOT/deploy/bootstrap-server.sh" \
   "${SSH_USER}@${SSH_HOST}:/tmp/lnkpi-deploy/"
 
@@ -29,6 +30,7 @@ mkdir -p /opt/lnkpi/deploy
 cp /tmp/lnkpi-deploy/* /opt/lnkpi/deploy/
 cp /tmp/lnkpi-deploy/.env.production.example /opt/lnkpi/deploy/
 chmod +x /opt/lnkpi/deploy/deploy-remote.sh
+chmod +x /opt/lnkpi/deploy/deploy-remote-build.sh
 if [ ! -f /opt/lnkpi/.env ]; then
   cp /opt/lnkpi/deploy/.env.production.example /opt/lnkpi/.env
   SECRET=$(openssl rand -hex 24)
@@ -44,5 +46,5 @@ REMOTE
 
 echo ""
 echo "✅ 服务器 /opt/lnkpi 已就绪"
-echo "下一步: 配置 GitHub Secrets + TCR 命名空间 lnkpi + Vercel"
-echo "详见 docs/DEPLOY_SETUP_WALKTHROUGH.md"
+echo "下一步: 配置 GitHub Secrets 后 push main 触发 deploy（CVM 本地 build），或手动:"
+echo "  cd /opt/lnkpi && IMAGE_TAG=<sha> bash deploy/deploy-remote-build.sh"
