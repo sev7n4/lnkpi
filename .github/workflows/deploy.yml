@@ -3,9 +3,15 @@ name: Deploy API to Tencent Cloud
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+    paths:
+      - "apps/server/**"
+      - "packages/**"
+      - "deploy/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".dockerignore"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
     inputs:
       branch:
@@ -57,6 +63,8 @@ jobs:
           context: .
           file: deploy/docker/Dockerfile.api
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/lnkpi-api:${{ env.IMAGE_TAG }}
             ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/lnkpi-api:latest

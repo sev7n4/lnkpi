@@ -54,6 +54,7 @@ jobs:
 
   docker-build:
     name: Build API Docker image
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: build
     steps:
@@ -67,6 +68,8 @@ jobs:
           context: .
           file: deploy/docker/Dockerfile.api
           push: false
+          provenance: false
+          sbom: false
           tags: lnkpi-api:ci
           cache-from: type=gha,scope=lnkpi-api
           cache-to: type=gha,scope=lnkpi-api,mode=max,ignore-error=true

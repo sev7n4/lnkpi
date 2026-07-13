@@ -1,5 +1,8 @@
 # lnkpi API（NestJS + Prisma SQLite）
 FROM node:22-bookworm-slim AS build
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
@@ -18,13 +21,16 @@ RUN node -e "\
     fs.writeFileSync(p, JSON.stringify(j,null,2));\
   }"
 
-RUN pnpm install --frozen-lockfile
+# 安装除 apps/web 外全部 workspace（保留 agent/shared 的 devDeps 供 tsc build）
+RUN pnpm install --frozen-lockfile --filter '!@lnkpi/web'
 RUN pnpm --filter @lnkpi/shared build
 RUN pnpm --filter @lnkpi/agent build
 RUN node deploy/docker/patch-workspace-packages.cjs
 WORKDIR /app/apps/server
 RUN pnpm exec prisma generate
 RUN pnpm run build
+WORKDIR /app
+RUN pnpm prune --prod
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -39,8 +45,11 @@ RUN apt-get update \
 
 COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
-COPY --from=build /app/packages /app/packages
-COPY --from=build /app/apps/server /app/apps/server
+COPY --from=build /app/packages/shared/package.json /app/packages/shared/dist ./packages/shared/
+COPY --from=build /app/packages/agent/package.json /app/packages/agent/dist ./packages/agent/
+COPY --from=build /app/apps/server/dist ./apps/server/dist
+COPY --from=build /app/apps/server/prisma ./apps/server/prisma
+COPY --from=build /app/apps/server/package.json ./apps/server/
 COPY --from=build /app/deploy/docker/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
