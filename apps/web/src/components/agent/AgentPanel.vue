@@ -2,6 +2,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
+import { apiUrl } from '@/services/api-base'
 
 const props = defineProps<{
   sessionId: string
@@ -18,7 +19,7 @@ const chatContainer = ref<HTMLElement>()
 
 async function loadHistory() {
   try {
-    const res = await fetch(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`)
+    const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
     const json = await res.json()
     if (json.data?.length) agent.loadHistory(json.data)
   } catch {
@@ -44,7 +45,7 @@ async function send() {
 
   try {
     const token = localStorage.getItem('token')
-    const res = await fetch('/api/agent/chat/conversation', {
+    const res = await fetch(apiUrl('/api/agent/chat/conversation'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

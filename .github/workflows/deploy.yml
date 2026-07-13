@@ -1,0 +1,150 @@
+name: Deploy API to Tencent Cloud
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lnkpi-deploy-production
+  cancel-in-progress: true
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+  TCR_REGISTRY: ${{ vars.TCR_REGISTRY || 'ccr.ccs.tencentyun.com' }}
+  TCR_NAMESPACE: ${{ vars.TCR_NAMESPACE || 'lnkpi' }}
+  DEPLOY_DIR: /opt/lnkpi
+  API_PORT: "5100"
+
+jobs:
+  build-push:
+    name: Build and push lnkpi-api
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Validate TCR credentials
+        run: |
+          if [[ -z "${{ secrets.TCR_USERNAME }}" || -z "${{ secrets.TCR_PASSWORD }}" ]]; then
+            echo "::error::Missing TCR_USERNAME or TCR_PASSWORD in environment production."
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to TCR
+        run: |
+          echo "${{ secrets.TCR_PASSWORD }}" | docker login "${{ env.TCR_REGISTRY }}" \
+            -u "${{ secrets.TCR_USERNAME }}" --password-stdin
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/docker/Dockerfile.api
+          push: true
+          tags: |
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/lnkpi-api:${{ env.IMAGE_TAG }}
+            ${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/lnkpi-api:latest
+          cache-from: type=gha,scope=lnkpi-api
+          cache-to: type=gha,scope=lnkpi-api,mode=max,ignore-error=true
+
+  deploy:
+    name: Deploy to Tencent Cloud CVM
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Prepare SSH key
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Sync deploy files and run remote deploy
+        run: |
+          set -euo pipefail
+          HOST="${{ env.SSH_USER }}@${{ env.SSH_HOST }}"
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "$HOST" "mkdir -p /tmp/lnkpi-deploy"
+          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key -r \
+            deploy/docker-compose.prod.yml \
+            deploy/docker-compose.prod.images.yml \
+            deploy/.env.production.example \
+            deploy/deploy-remote.sh \
+            deploy/bootstrap-server.sh \
+            "$HOST:/tmp/lnkpi-deploy/"
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "$HOST" << EOF
+          set -euo pipefail
+          sudo mkdir -p ${{ env.DEPLOY_DIR }}/deploy
+          sudo cp /tmp/lnkpi-deploy/* ${{ env.DEPLOY_DIR }}/deploy/
+          sudo chmod +x ${{ env.DEPLOY_DIR }}/deploy/deploy-remote.sh
+          if [[ ! -f ${{ env.DEPLOY_DIR }}/.env ]]; then
+            sudo cp ${{ env.DEPLOY_DIR }}/deploy/.env.production.example ${{ env.DEPLOY_DIR }}/.env
+            if command -v openssl >/dev/null 2>&1; then
+              SECRET=\$(openssl rand -hex 24)
+              sudo sed -i "s/请替换为随机长字符串/\${SECRET}/" ${{ env.DEPLOY_DIR }}/.env
+            fi
+          fi
+          echo "${{ secrets.TCR_PASSWORD }}" | sudo docker login "${{ env.TCR_REGISTRY }}" \
+            -u "${{ secrets.TCR_USERNAME }}" --password-stdin
+          cd ${{ env.DEPLOY_DIR }}
+          sudo -E env IMAGE_TAG="${{ env.IMAGE_TAG }}" TCR_REGISTRY="${{ env.TCR_REGISTRY }}" TCR_NAMESPACE="${{ env.TCR_NAMESPACE }}" \
+            bash deploy/deploy-remote.sh
+          EOF
+
+          rm -f ~/.ssh/deploy_key
+
+      - name: Verify deployment
+        run: |
+          set -euo pipefail
+          API_BASE="http://${{ env.SSH_HOST }}:${{ env.API_PORT }}"
+          OK=0
+          for i in $(seq 1 20); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "${API_BASE}/api/health" 2>/dev/null || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "Health OK: ${API_BASE}/api/health"
+              OK=1
+              break
+            fi
+            echo "Attempt $i: HTTP $CODE"
+            sleep $((i <= 5 ? 5 : 10))
+          done
+          [ "$OK" = "1" ] || exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          {
+            echo "## lnkpi API Deployment"
+            echo "| Item | Value |"
+            echo "|------|-------|"
+            echo "| Status | ${{ job.status }} |"
+            echo "| Image | \`${{ env.TCR_REGISTRY }}/${{ env.TCR_NAMESPACE }}/lnkpi-api:${{ env.IMAGE_TAG }}\` |"
+            echo "| Server | \`${{ env.SSH_HOST }}:${{ env.API_PORT }}\` |"
+            echo "| Health | \`http://${{ env.SSH_HOST }}:${{ env.API_PORT }}/api/health\` |"
+            echo ""
+            echo "Vercel 前端请设置 \`VITE_API_BASE_URL=http://${{ env.SSH_HOST }}:${{ env.API_PORT }}/api\`"
+          } >> "$GITHUB_STEP_SUMMARY"

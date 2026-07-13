@@ -9,8 +9,17 @@
   --neo-text-secondary: rgba(255, 255, 255, 0.6);
   --neo-text-muted: rgba(255, 255, 255, 0.4);
   --neo-sidebar-width: 240px;
-  --neo-agent-panel-width: 320px;
+  --neo-agent-rail-width: 56px;
+  --neo-agent-expanded-width: 392px;
   --neo-header-height: 64px;
   --neo-radius-md: 12px;
   --neo-radius-lg: 16px;
+  --neo-panel-bg-rgba: rgba(24, 24, 27, 0.92);
+  --neo-node-card-bg: rgba(40, 40, 45, 0.4);
+  --neo-node-border: rgba(255, 255, 255, 0.08);
+  --neo-glass-bg: radial-gradient(135% 135% at 30% 25%, rgba(108, 114, 140, 0.38), rgba(0, 0, 0, 0.34));
+  --neo-glass-border: rgba(255, 255, 255, 0.14);
+  --neo-glass-blur: 24px;
+  --neo-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --neo-glass-glow: 0 0 18px 1px rgba(170, 178, 205, 0.22);
 }

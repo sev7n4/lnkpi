@@ -1,38 +1,32 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
+import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 
 defineProps<{
-  data: { title?: string; prompt?: string; status?: string; coverUrl?: string }
+  selected?: boolean
+  data: { title?: string; prompt?: string; status?: string; coverUrl?: string; label?: string }
 }>()
 </script>
 
 <template>
-  <div class="w-80 rounded-xl border border-brand-500/40 bg-surface-card shadow-lg shadow-brand-500/10">
-    <Handle type="target" :position="Position.Left" class="!bg-brand-500" />
-    <div class="border-b border-white/5 p-3">
-      <div class="mb-1 flex items-center gap-2">
-        <span class="rounded bg-brand-600/30 px-2 py-0.5 text-[10px] text-brand-300">分镜</span>
-        <span
-          v-if="data.status"
-          class="rounded px-1.5 py-0.5 text-[10px]"
-          :class="{
-            'bg-yellow-600/20 text-yellow-400': data.status === 'generating',
-            'bg-green-600/20 text-green-400': data.status === 'generated',
-            'bg-white/5 text-white/40': data.status === 'draft',
-          }"
-        >
-          {{ data.status === 'generating' ? '生成中' : data.status === 'generated' ? '已完成' : '草稿' }}
-        </span>
+  <NeoBaseNode node-type="shot" :selected="selected" :data="data" :status="data.status">
+    <div class="neo-gen-card">
+      <div v-if="data.coverUrl" class="neo-gen-preview">
+        <img :src="data.coverUrl" alt="">
       </div>
-      <h4 class="text-sm font-medium">{{ data.title || '未命名分镜' }}</h4>
-      <p v-if="data.prompt" class="mt-1 line-clamp-2 text-xs text-white/50">{{ data.prompt }}</p>
+      <div
+        v-else
+        class="neo-node-placeholder"
+        :class="{ 'is-generating': data.status === 'generating' }"
+      >
+        <div class="neo-placeholder-content">
+          <svg class="neo-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="3" y1="9" x2="21" y2="9" />
+          </svg>
+          <span class="neo-placeholder-text">{{ data.title || '未命名分镜' }}</span>
+          <span v-if="data.prompt" class="line-clamp-2 max-w-[220px] text-[11px] text-white/40">{{ data.prompt }}</span>
+        </div>
+      </div>
     </div>
-    <div v-if="data.coverUrl" class="aspect-video overflow-hidden">
-      <img :src="data.coverUrl" class="h-full w-full object-cover" />
-    </div>
-    <div v-else class="flex aspect-video items-center justify-center bg-surface-elevated text-xs text-white/20">
-      等待生成素材
-    </div>
-    <Handle type="source" :position="Position.Right" class="!bg-brand-500" />
-  </div>
+  </NeoBaseNode>
 </template>

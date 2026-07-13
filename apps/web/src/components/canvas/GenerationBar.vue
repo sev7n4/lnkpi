@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ModelSelector from '@/components/canvas/ModelSelector.vue'
+import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 
 defineProps<{
   mentions?: MentionOption[]
@@ -15,6 +17,7 @@ const emit = defineEmits<{
     textModel: string
     imageModel: string
     videoModel: string
+    videoSettings?: VideoSettings
   }]
 }>()
 
@@ -22,6 +25,7 @@ const prompt = ref('')
 const textModel = ref('gpt-4o')
 const imageModel = ref('flux-pro')
 const videoModel = ref('kling-v1')
+const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 const activeTab = ref<'text' | 'image' | 'video'>('image')
 
 const speech = useSpeechRecognition()
@@ -34,6 +38,7 @@ function handleSend() {
     textModel: textModel.value,
     imageModel: imageModel.value,
     videoModel: videoModel.value,
+    videoSettings: activeTab.value === 'video' ? { ...videoSettings.value } : undefined,
   })
 }
 
@@ -70,7 +75,10 @@ function toggleVoice() {
         <div class="ml-auto flex items-center gap-2">
           <ModelSelector v-if="activeTab === 'text'" v-model="textModel" type="text" />
           <ModelSelector v-if="activeTab === 'image'" v-model="imageModel" type="image" />
-          <ModelSelector v-if="activeTab === 'video'" v-model="videoModel" type="video" />
+          <template v-if="activeTab === 'video'">
+            <ModelSelector v-model="videoModel" type="video" />
+            <VideoSettingsSelector v-model="videoSettings" />
+          </template>
         </div>
       </div>
 

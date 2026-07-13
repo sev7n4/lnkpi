@@ -37,11 +37,29 @@ export class StudioService {
     })
   }
 
-  async generateImage(userId: string, prompt: string, model?: string) {
+  async getGeneration(userId: string, id: string) {
+    const record = await this.prisma.generationRecord.findFirst({
+      where: { id, userId },
+    })
+    if (!record) {
+      throw new BadRequestException('生成记录不存在')
+    }
+    return record
+  }
+
+  async generateImage(userId: string, prompt: string, model?: string, aspectRatio = '16:9') {
     await this.consumePoints(userId, 10, '图像生成')
     const { url } = await createImageProvider().generate(prompt)
     return this.prisma.generationRecord.create({
-      data: { userId, type: 'image', prompt, model, url, status: 'completed' },
+      data: {
+        userId,
+        type: 'image',
+        prompt,
+        model,
+        url,
+        status: 'completed',
+        metadata: JSON.stringify({ aspectRatio }),
+      },
     })
   }
 
@@ -78,7 +96,12 @@ export class StudioService {
     return record
   }
 
-  async generateAudio(userId: string, text: string, voice?: string) {
+  async generateAudio(
+    userId: string,
+    text: string,
+    options: { voice?: string; emotion?: string; language?: string; speed?: number } = {},
+  ) {
+    const voice = options.voice
     await this.consumePoints(userId, 5, '音频生成')
     const { url } = await createAudioProvider().generate(text, voice)
     const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
@@ -90,7 +113,13 @@ export class StudioService {
         model: voice,
         url: storeUrl,
         status: 'completed',
-        metadata: JSON.stringify({ voice: voice ?? 'default', hasTtsData: url.startsWith('data:') }),
+        metadata: JSON.stringify({
+          voice: voice ?? 'default',
+          emotion: options.emotion ?? 'neutral',
+          language: options.language ?? 'zh',
+          speed: options.speed ?? 1,
+          hasTtsData: url.startsWith('data:'),
+        }),
       },
     })
     return { ...record, url }

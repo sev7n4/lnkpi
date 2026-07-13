@@ -1,0 +1,53 @@
+# 生产 compose — 独立网络，与 pintuotuo / aimarket 栈隔离
+# 本地调试:
+#   cp deploy/.env.production.example .env
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+# 服务器（TCR 镜像）:
+#   export IMAGE_TAG=<git-sha> TCR_REGISTRY=ccr.ccs.tencentyun.com TCR_NAMESPACE=lnkpi
+#   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.prod.images.yml pull
+#   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.prod.images.yml up -d --no-build
+
+name: lnkpi
+
+services:
+  api:
+    image: ${LNKPI_API_IMAGE:-lnkpi-api:local}
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile.api
+    container_name: lnkpi-api
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      PORT: "3001"
+      DATABASE_URL: file:/app/apps/server/data/lnkpi.db
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://127.0.0.1:5100}
+    ports:
+      - "5100:3001"
+    volumes:
+      - lnkpi-data:/app/apps/server/data
+      - lnkpi-uploads:/app/apps/server/uploads
+    networks:
+      - lnkpi
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+networks:
+  lnkpi:
+    name: lnkpi-net
+
+volumes:
+  lnkpi-data:
+  lnkpi-uploads:

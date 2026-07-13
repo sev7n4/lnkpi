@@ -35,11 +35,17 @@ export class MaterialService {
     return material
   }
 
-  async generateVideo(shotId: string, prompt: string, duration = 5) {
+  async generateVideo(
+    shotId: string,
+    prompt: string,
+    duration = 5,
+    aspectRatio = '16:9',
+    crop = 'none',
+  ) {
     const material = await this.prisma.material.create({
       data: { shotId, type: 'video', prompt, status: 'generating' },
     })
-    this.runVideoGeneration(material.id, prompt, duration).catch(console.error)
+    this.runVideoGeneration(material.id, prompt, duration, aspectRatio, crop).catch(console.error)
     return material
   }
 
@@ -60,9 +66,18 @@ export class MaterialService {
     }
   }
 
-  private async runVideoGeneration(materialId: string, prompt: string, duration: number) {
+  private async runVideoGeneration(
+    materialId: string,
+    prompt: string,
+    duration: number,
+    aspectRatio: string,
+    crop: string,
+  ) {
     try {
-      const { url } = await createVideoProvider().generate(prompt, { duration })
+      const enriched = crop !== 'none'
+        ? `${prompt} [aspect:${aspectRatio}, crop:${crop}]`
+        : `${prompt} [aspect:${aspectRatio}]`
+      const { url } = await createVideoProvider().generate(enriched, { duration, aspectRatio })
       await this.prisma.material.update({
         where: { id: materialId },
         data: { url, thumbnail: url, status: 'completed' },

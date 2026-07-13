@@ -1,4 +1,5 @@
 @import './neowow-tokens.css';
+@import './neo-node.css';
 
 @tailwind base;
 @tailwind components;

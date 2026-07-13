@@ -11,6 +11,7 @@ import CreativeLauncher from '@/components/workflow/CreativeLauncher.vue'
 import CarouselBanner from '@/components/workflow/CarouselBanner.vue'
 import CategoryTabs from '@/components/workflow/CategoryTabs.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
+import BrandLogo from '@/components/brand/BrandLogo.vue'
 import type { Session } from '@lnkpi/shared'
 
 const router = useRouter()
@@ -131,6 +132,9 @@ onMounted(fetchWorks)
 <template>
   <div class="mx-auto max-w-7xl px-6 pb-20 pt-8">
     <section class="mb-12 text-center">
+      <div class="mb-4 flex justify-center">
+        <BrandLogo size="xl" />
+      </div>
       <h1 class="font-display text-3xl font-semibold md:text-4xl">
         {{ greeting }}，今天要做点什么呢？
       </h1>

@@ -1,0 +1,52 @@
+# lnkpi API（NestJS + Prisma SQLite）
+FROM node:22-bookworm-slim AS build
+RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages ./packages
+COPY apps/server ./apps/server
+COPY deploy/docker ./deploy/docker
+
+# workspace 包以 CommonJS 编译，便于 Nest 运行时 require
+RUN node -e "\
+  const fs=require('fs');\
+  for (const p of ['packages/shared/tsconfig.json','packages/agent/tsconfig.json']) {\
+    const j=JSON.parse(fs.readFileSync(p,'utf8'));\
+    j.compilerOptions.module='CommonJS';\
+    j.compilerOptions.moduleResolution='node';\
+    fs.writeFileSync(p, JSON.stringify(j,null,2));\
+  }"
+
+RUN pnpm install --frozen-lockfile
+RUN pnpm --filter @lnkpi/shared build
+RUN pnpm --filter @lnkpi/agent build
+RUN node deploy/docker/patch-workspace-packages.cjs
+WORKDIR /app/apps/server
+RUN pnpm exec prisma generate
+RUN pnpm run build
+
+FROM node:22-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV DATABASE_URL=file:/app/apps/server/data/lnkpi.db
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /app/apps/server/data /app/apps/server/uploads
+
+COPY --from=build /app/node_modules /app/node_modules
+COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
+COPY --from=build /app/packages /app/packages
+COPY --from=build /app/apps/server /app/apps/server
+COPY --from=build /app/deploy/docker/docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+WORKDIR /app/apps/server
+EXPOSE 3001
+VOLUME ["/app/apps/server/data", "/app/apps/server/uploads"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/docker-entrypoint.sh"]

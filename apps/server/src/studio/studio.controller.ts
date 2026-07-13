@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { IsNumber, IsOptional, IsString } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { StudioService } from './studio.service'
@@ -10,6 +10,10 @@ class GenerateImageDto {
   @IsOptional()
   @IsString()
   model?: string
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
 }
 
 class GenerateVideoDto {
@@ -23,6 +27,10 @@ class GenerateVideoDto {
   @IsOptional()
   @IsNumber()
   duration?: number
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
 }
 
 class GenerateAudioDto {
@@ -32,6 +40,18 @@ class GenerateAudioDto {
   @IsOptional()
   @IsString()
   voice?: string
+
+  @IsOptional()
+  @IsString()
+  emotion?: string
+
+  @IsOptional()
+  @IsString()
+  language?: string
+
+  @IsOptional()
+  @IsNumber()
+  speed?: number
 }
 
 class GenerateTextDto {
@@ -86,24 +106,47 @@ export class StudioController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Get('generations/:id')
+  @UseGuards(AuthGuard)
+  async getGeneration(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    const data = await this.studioService.getGeneration(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('image/generate')
   @UseGuards(AuthGuard)
   async generateImage(@Req() req: { user: { sub: string } }, @Body() dto: GenerateImageDto) {
-    const data = await this.studioService.generateImage(req.user.sub, dto.prompt, dto.model)
+    const data = await this.studioService.generateImage(
+      req.user.sub,
+      dto.prompt,
+      dto.model,
+      dto.aspectRatio,
+    )
     return { code: 0, message: 'ok', data }
   }
 
   @Post('video/generate')
   @UseGuards(AuthGuard)
   async generateVideo(@Req() req: { user: { sub: string } }, @Body() dto: GenerateVideoDto) {
-    const data = await this.studioService.generateVideo(req.user.sub, dto.prompt, dto.model, dto.duration)
+    const data = await this.studioService.generateVideo(
+      req.user.sub,
+      dto.prompt,
+      dto.model,
+      dto.duration,
+      dto.aspectRatio,
+    )
     return { code: 0, message: 'ok', data }
   }
 
   @Post('audio/generate')
   @UseGuards(AuthGuard)
   async generateAudio(@Req() req: { user: { sub: string } }, @Body() dto: GenerateAudioDto) {
-    const data = await this.studioService.generateAudio(req.user.sub, dto.text, dto.voice)
+    const data = await this.studioService.generateAudio(req.user.sub, dto.text, {
+      voice: dto.voice,
+      emotion: dto.emotion,
+      language: dto.language,
+      speed: dto.speed,
+    })
     return { code: 0, message: 'ok', data }
   }
 }

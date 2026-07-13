@@ -1,0 +1,125 @@
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
+import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
+import type { MentionOption } from '@/components/canvas/MentionInput.vue'
+import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
+import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { isNodeGenerating } from '@/constants/dockStudio'
+
+const props = defineProps<{
+  node: EditableFlowNode
+  upstream: UpstreamNodeContext
+  mentions?: MentionOption[]
+  generating?: boolean
+}>()
+
+const emit = defineEmits<{
+  patch: [patch: Record<string, unknown>]
+  generate: []
+  close: []
+}>()
+
+const content = ref('')
+const textModel = ref('gpt-4o')
+
+const speech = useSpeechRecognition()
+const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const wordCount = computed(() => content.value.replace(/\s/g, '').length)
+
+function syncFromNode() {
+  const data = props.node.data ?? {}
+  content.value = String(data.content ?? data.prompt ?? '')
+  textModel.value = String(data.textModel ?? 'gpt-4o')
+}
+
+watch(() => props.node, syncFromNode, { immediate: true, deep: true })
+
+watch(
+  () => props.upstream,
+  (ctx) => {
+    if (!content.value.trim() && ctx.textPrompt) {
+      content.value = ctx.textPrompt
+      emit('patch', { content: ctx.textPrompt, prompt: ctx.textPrompt })
+    }
+  },
+  { immediate: true },
+)
+
+function onContentInput(value: string) {
+  content.value = value
+  emit('patch', { content: value, prompt: value })
+}
+
+function onOptimized(value: string) {
+  content.value = value
+  emit('patch', { content: value, prompt: value })
+}
+
+function onGenerate() {
+  emit('patch', { content: content.value, prompt: content.value, textModel: textModel.value })
+  emit('generate')
+}
+
+function toggleVoice() {
+  if (speech.listening.value) {
+    speech.stop()
+    return
+  }
+  speech.start((text, isFinal) => {
+    if (isFinal) {
+      const next = content.value ? `${content.value} ${text}` : text
+      onContentInput(next)
+    }
+  })
+}
+</script>
+
+<template>
+  <DockToolbarShell type-label="文本生成" @close="emit('close')">
+    <DockPromptSection
+      :model-value="content"
+      :mentions="mentions"
+      placeholder="输入脚本、旁白或品牌文案..."
+      @update:model-value="onContentInput"
+      @submit="onGenerate"
+    />
+
+    <div class="bottom-toolbar-actions flex-wrap">
+      <UniversalModelSelector
+        v-model="textModel"
+        type="text"
+        @update:model-value="emit('patch', { textModel: $event })"
+      />
+      <DockOptimizePrompt
+        :prompt="content"
+        optimize-style="copywriting"
+        :disabled="readonly"
+        @optimized="onOptimized"
+      />
+      <span class="text-[10px] text-white/35">{{ wordCount }} 字</span>
+
+      <button
+        type="button"
+        class="dock-icon-btn"
+        :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
+        title="语音输入"
+        :disabled="readonly"
+        @click="toggleVoice"
+      >
+        🎤
+      </button>
+
+      <DockGenerateButton
+        :generating="generating"
+        :disabled="!content.trim()"
+        label="生成文案"
+        @generate="onGenerate"
+      />
+    </div>
+  </DockToolbarShell>
+</template>

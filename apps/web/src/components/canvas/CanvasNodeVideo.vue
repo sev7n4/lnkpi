@@ -1,24 +1,41 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
+import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import { computed } from 'vue'
+import { resolveMediaUrl } from '@/services/api-base'
 
-defineProps<{
-  data: { url?: string; status: string; duration?: number }
+const props = defineProps<{
+  selected?: boolean
+  data: { url?: string; status: string; duration?: number; label?: string }
 }>()
+
+const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
 </script>
 
 <template>
-  <div class="w-72 rounded-xl border border-white/10 bg-surface-card p-3 shadow-lg">
-    <Handle type="target" :position="Position.Left" class="!bg-brand-500" />
-    <div class="mb-2 flex items-center gap-2">
-      <span class="rounded bg-orange-600/30 px-2 py-0.5 text-[10px] text-orange-300">视频</span>
-      <span v-if="data.duration" class="text-[10px] text-white/30">{{ data.duration }}s</span>
-    </div>
-    <div class="aspect-video overflow-hidden rounded-lg bg-surface-elevated">
-      <video v-if="data.url" :src="data.url" class="h-full w-full object-cover" controls />
-      <div v-else class="flex h-full items-center justify-center text-xs text-white/30">
-        {{ data.status === 'generating' ? '视频生成中...' : '等待生成' }}
+  <NeoBaseNode node-type="video" :selected="selected" :data="data" :status="data.status">
+    <div class="neo-gen-card">
+      <div v-if="data.url" class="neo-gen-preview">
+        <video :src="displayUrl" controls />
+      </div>
+      <div
+        v-else
+        class="neo-node-placeholder"
+        :class="{
+          'is-generating': data.status === 'generating',
+          'is-failed': data.status === 'failed' || data.status === 'error',
+        }"
+      >
+        <div class="neo-placeholder-content">
+          <svg class="neo-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="23 7 16 12 23 17 23 7" />
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+          </svg>
+          <span class="neo-placeholder-text">
+            {{ data.status === 'generating' ? '视频生成中...' : '等待生成' }}
+          </span>
+          <span v-if="data.duration" class="text-[11px] text-white/35">{{ data.duration }}s</span>
+        </div>
       </div>
     </div>
-    <Handle type="source" :position="Position.Right" class="!bg-brand-500" />
-  </div>
+  </NeoBaseNode>
 </template>

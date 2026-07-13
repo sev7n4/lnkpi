@@ -1,0 +1,6 @@
+# 生产镜像覆盖 — 从腾讯云 TCR 拉取（与 GHA deploy 一致）
+name: lnkpi
+
+services:
+  api:
+    image: ${TCR_REGISTRY:?set TCR_REGISTRY}/${TCR_NAMESPACE:?set TCR_NAMESPACE}/lnkpi-api:${IMAGE_TAG:?set IMAGE_TAG}

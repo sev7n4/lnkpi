@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -26,6 +26,40 @@ export class ShotService {
         positionY: data.positionY ?? 150,
         status: data.status ?? 'draft',
       },
+    })
+  }
+
+  async update(shotId: string, data: { title?: string; prompt?: string; status?: string }) {
+    const shot = await this.prisma.shot.findUnique({ where: { id: shotId } })
+    if (!shot) throw new NotFoundException('分镜不存在')
+    return this.prisma.shot.update({
+      where: { id: shotId },
+      data: {
+        ...(data.title !== undefined ? { title: data.title } : {}),
+        ...(data.prompt !== undefined ? { prompt: data.prompt } : {}),
+        ...(data.status !== undefined ? { status: data.status } : {}),
+      },
+    })
+  }
+
+  async reorder(sessionId: string, shotIds: string[]) {
+    const existing = await this.prisma.shot.findMany({ where: { sessionId } })
+    const idSet = new Set(shotIds)
+    const ordered = [
+      ...shotIds,
+      ...existing.map((s) => s.id).filter((id) => !idSet.has(id)),
+    ]
+    await this.prisma.$transaction(
+      ordered.map((id, index) =>
+        this.prisma.shot.updateMany({
+          where: { id, sessionId },
+          data: { order: index },
+        }),
+      ),
+    )
+    return this.prisma.shot.findMany({
+      where: { sessionId },
+      orderBy: { order: 'asc' },
     })
   }
 

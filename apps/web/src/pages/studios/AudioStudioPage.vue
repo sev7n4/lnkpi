@@ -4,18 +4,16 @@ import StudioShell from '@/components/studio/StudioShell.vue'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 import { useAuthStore } from '@/stores/auth'
 
+import { AUDIO_VOICE_OPTIONS, DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
+
 const auth = useAuthStore()
 const text = ref('')
-const voice = ref('female-1')
+const voice = ref(DEFAULT_AUDIO_VOICE)
 const loading = ref(false)
 const records = ref<GenerationRecord[]>([])
 const error = ref('')
 
-const voices = [
-  { id: 'female-1', label: '女声 · 温柔' },
-  { id: 'male-1', label: '男声 · 沉稳' },
-  { id: 'narrator', label: '旁白 · 磁性' },
-]
+const voices = AUDIO_VOICE_OPTIONS
 
 async function loadRecords() {
   if (!auth.isLoggedIn) return
@@ -29,7 +27,7 @@ async function generate() {
   loading.value = true
   error.value = ''
   try {
-    await studioApi.generateAudio(text.value, voice.value)
+    await studioApi.generateAudio(text.value, { voice: voice.value })
     text.value = ''
     await loadRecords()
   } catch {

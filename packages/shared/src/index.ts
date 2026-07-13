@@ -134,6 +134,39 @@ export const VIDEO_MODELS: AIModel[] = [
   { id: 'pika-v2', name: 'Pika V2', provider: 'Pika', type: 'video' },
 ]
 
+export type VideoAspectRatio = '16:9' | '9:16' | '1:1'
+export type VideoCropMode = 'none' | 'center' | 'fill'
+
+export interface VideoSettings {
+  aspectRatio: VideoAspectRatio
+  duration: 5 | 10 | 15
+  crop: VideoCropMode
+}
+
+export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: string }[] = [
+  { value: '16:9', label: '16:9 横屏' },
+  { value: '9:16', label: '9:16 竖屏' },
+  { value: '1:1', label: '1:1 方形' },
+]
+
+export const VIDEO_DURATION_OPTIONS: { value: 5 | 10 | 15; label: string }[] = [
+  { value: 5, label: '5 秒' },
+  { value: 10, label: '10 秒' },
+  { value: 15, label: '15 秒' },
+]
+
+export const VIDEO_CROP_OPTIONS: { value: VideoCropMode; label: string }[] = [
+  { value: 'none', label: '不裁剪' },
+  { value: 'center', label: '居中裁剪' },
+  { value: 'fill', label: '填充裁剪' },
+]
+
+export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
+  aspectRatio: '16:9',
+  duration: 5,
+  crop: 'none',
+}
+
 // --- Shot/Material 模型（对标 NeoWOW Canvas Domain）---
 
 export type ShotStatus = 'draft' | 'generating' | 'generated' | 'failed'

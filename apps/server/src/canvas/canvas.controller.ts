@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
-import { IsOptional, IsString } from 'class-validator'
+import { IsArray, IsOptional, IsString } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { CanvasService } from './canvas.service'
 import { MaterialService } from './material.service'
@@ -53,6 +53,40 @@ class GenerateVideoDto {
 
   @IsOptional()
   duration?: number
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  crop?: string
+}
+
+class EditShotDto {
+  @IsString()
+  shotId!: string
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  prompt?: string
+
+  @IsOptional()
+  @IsString()
+  status?: string
+}
+
+class ShotOrderDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  shotIds!: string[]
 }
 
 @Controller('agent/canvas')
@@ -100,6 +134,24 @@ export class CanvasController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Post('shot/edit')
+  @UseGuards(AuthGuard)
+  async editShot(@Body() dto: EditShotDto) {
+    const data = await this.shotService.update(dto.shotId, {
+      title: dto.title,
+      prompt: dto.prompt,
+      status: dto.status,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('shot-order')
+  @UseGuards(AuthGuard)
+  async reorderShots(@Body() dto: ShotOrderDto) {
+    const data = await this.shotService.reorder(dto.sessionId, dto.shotIds)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('material/generate-image')
   @UseGuards(AuthGuard)
   async generateImage(@Body() dto: GenerateImageDto) {
@@ -110,7 +162,13 @@ export class CanvasController {
   @Post('material/generate-video')
   @UseGuards(AuthGuard)
   async generateVideo(@Body() dto: GenerateVideoDto) {
-    const data = await this.materialService.generateVideo(dto.shotId, dto.prompt, dto.duration)
+    const data = await this.materialService.generateVideo(
+      dto.shotId,
+      dto.prompt,
+      dto.duration,
+      dto.aspectRatio,
+      dto.crop,
+    )
     return { code: 0, message: 'ok', data }
   }
 

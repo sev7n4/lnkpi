@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import BrandLogo from '@/components/brand/BrandLogo.vue'
 import LoginDialog from '@/components/auth/LoginDialog.vue'
 import MembershipModal from '@/components/membership/MembershipModal.vue'
 
@@ -42,12 +43,7 @@ function navigate(path: string) {
     <div class="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
       <div class="flex items-center gap-8">
         <button class="flex items-center gap-2" @click="navigate('/workflow')">
-          <div
-            class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#6366f1] to-[#4f46e5] font-display text-sm font-bold"
-          >
-            超
-          </div>
-          <span class="font-display text-lg font-semibold tracking-tight">超创平台</span>
+          <BrandLogo size="sm" show-name />
         </button>
 
         <nav class="hidden items-center gap-1 md:flex">

@@ -9,14 +9,14 @@ const { x, y, nodeId, nodeType } = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  action: [action: string]
+  action: [action: string, payload?: string]
   close: []
 }>()
 
 const visible = ref(true)
 
-function run(action: string) {
-  emit('action', action)
+function run(action: string, payload?: string) {
+  emit('action', action, payload)
   visible.value = false
   emit('close')
 }
@@ -36,24 +36,43 @@ function run(action: string) {
     >
       编辑图像
     </button>
+
     <button
+      v-if="nodeType === 'group'"
+      class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
+      @click="run('ungroup')"
+    >
+      解组
+    </button>
+
+    <button
+      v-if="nodeId && nodeType !== 'group'"
       class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
       @click="run('duplicate')"
     >
       复制节点
     </button>
     <button
+      v-if="nodeId"
       class="block w-full px-4 py-2 text-left text-xs text-red-400 hover:bg-white/5"
       @click="run('delete')"
     >
       删除节点
     </button>
-    <button
-      v-if="!nodeId"
-      class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
-      @click="run('add-shot')"
-    >
-      添加分镜
-    </button>
+
+    <template v-if="!nodeId">
+      <button
+        class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
+        @click="run('add-node')"
+      >
+        添加节点
+      </button>
+      <button
+        class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
+        @click="run('upload-media')"
+      >
+        上传媒体
+      </button>
+    </template>
   </div>
 </template>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import BrandLogo from '@/components/brand/BrandLogo.vue'
 
 const auth = useAuthStore()
 const phone = ref('')
@@ -48,7 +49,10 @@ async function handleLogin() {
 
 <template>
   <el-dialog v-model="visible" title="欢迎登录" width="420px" align-center>
-    <p class="mb-4 text-sm text-white/60">继续你的创作之旅</p>
+    <div class="mb-4 flex flex-col items-center gap-2">
+      <BrandLogo size="lg" />
+      <p class="text-sm text-white/60">继续你的创作之旅</p>
+    </div>
 
     <div class="space-y-4">
       <div>
