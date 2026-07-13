@@ -19,6 +19,7 @@
     "@nestjs/jwt": "^10.2.0",
     "@nestjs/platform-express": "^10.4.15",
     "@prisma/client": "^6.2.1",
+    "prisma": "^6.2.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "multer": "^2.2.0",
@@ -29,7 +30,6 @@
     "@types/express": "^5.0.0",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.5",
-    "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   }

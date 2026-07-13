@@ -1,0 +1,28 @@
+# Git / IDE
+.git
+.github
+.cursor
+.vscode
+*.md
+docs/
+
+# 前端与本地开发（API 镜像不需要）
+apps/web/
+apps/server/dist/
+apps/server/data/
+apps/server/uploads/
+apps/server/.env
+
+# 依赖与构建产物（容器内重新 install / build）
+node_modules/
+**/node_modules/
+**/dist/
+coverage/
+.turbo/
+
+# 测试与临时文件
+**/*.test.ts
+**/*.spec.ts
+**/__tests__/
+*.log
+.DS_Store
