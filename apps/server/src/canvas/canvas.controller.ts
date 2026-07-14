@@ -1,15 +1,17 @@
 import { Body, Controller, Get, Inject, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
-import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerSaveRequest,
+  VideoCompositionExportRequest,
 } from '@lnkpi/shared'
 import { AuthGuard } from '../auth/auth.guard'
 import { CanvasService } from './canvas.service'
 import { MaterialService } from './material.service'
 import { SceneComposerService } from './scene-composer.service'
 import { ShotService } from './shot.service'
+import { VideoCompositionService } from './video-composition.service'
 
 class CreateCanvasDto {
   @IsOptional()
@@ -195,6 +197,43 @@ class BatchGenerateSceneComposerDto implements SceneComposerBatchGenerateRequest
   items!: SceneComposerBatchItemDto[]
 }
 
+class VideoCompositionExportTrackDto {
+  @IsString()
+  nodeId!: string
+
+  @IsIn(['video', 'audio'])
+  type!: 'video' | 'audio'
+
+  @IsString()
+  title!: string
+
+  @IsString()
+  url!: string
+
+  @IsNumber()
+  durationSec!: number
+
+  @IsOptional()
+  startSec?: number
+}
+
+class ExportVideoCompositionDto implements VideoCompositionExportRequest {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  compositionNodeId!: string
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => VideoCompositionExportTrackDto)
+  tracks!: VideoCompositionExportTrackDto[]
+}
+
 @Controller('agent/canvas')
 export class CanvasController {
   constructor(
@@ -202,6 +241,7 @@ export class CanvasController {
     @Inject(ShotService) private readonly shotService: ShotService,
     @Inject(MaterialService) private readonly materialService: MaterialService,
     @Inject(SceneComposerService) private readonly sceneComposerService: SceneComposerService,
+    @Inject(VideoCompositionService) private readonly videoCompositionService: VideoCompositionService,
   ) {}
 
   @Get('list')
@@ -298,6 +338,16 @@ export class CanvasController {
   @UseGuards(AuthGuard)
   async batchGenerateSceneComposer(@Body() dto: BatchGenerateSceneComposerDto) {
     const data = await this.sceneComposerService.batchGenerate(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('video-composition/export')
+  @UseGuards(AuthGuard)
+  async exportVideoComposition(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ExportVideoCompositionDto,
+  ) {
+    const data = await this.videoCompositionService.exportComposition(req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 }

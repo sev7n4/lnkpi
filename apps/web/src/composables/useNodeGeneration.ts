@@ -13,6 +13,8 @@ import {
 import { parseRecordText, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
+import type { CompositionTrack } from '@/utils/compositionUpstream'
+import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
   buildBatchGenerateItems,
   expandSceneComposerGraph,
@@ -313,11 +315,49 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
   }
 
+  async function exportVideoComposition(node: EditableFlowNode, tracks: CompositionTrack[]) {
+    if (!deps.requireLogin()) return
+    const ordered = applyTrackOrder(tracks, node.data?.trackOrder as string[] | undefined)
+    const exportTracks = ordered.filter((track) => track.url.trim())
+    if (!exportTracks.length) return
+
+    generating.value = true
+    try {
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+      const { data: res } = await canvasApi.exportVideoComposition({
+        sessionId: deps.sessionId.value,
+        compositionNodeId: node.id,
+        title: String(node.data?.title ?? '视频合成'),
+        tracks: exportTracks.map((track) => ({
+          nodeId: track.nodeId,
+          type: track.type,
+          title: track.title,
+          url: track.url,
+          durationSec: track.durationSec,
+          startSec: track.startSec,
+        })),
+      })
+      const result = res.data as { url: string; durationSec: number }
+      deps.patchNodeData(node.id, {
+        url: result.url,
+        exportDurationSec: result.durationSec,
+        status: NODE_GENERATION_STATUS.completed,
+        exportedAt: new Date().toISOString(),
+      })
+      await deps.saveCanvas()
+    } catch {
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+    } finally {
+      generating.value = false
+    }
+  }
+
   return {
     generating,
     generateForNode,
     saveSceneComposer,
     expandSceneComposer,
     batchGenerateSceneComposer,
+    exportVideoComposition,
   }
 }

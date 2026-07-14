@@ -3,6 +3,7 @@ import type { VideoSettings } from '@lnkpi/shared'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerSaveRequest,
+  VideoCompositionExportRequest,
 } from '@lnkpi/shared'
 
 export const canvasApi = {
@@ -34,4 +35,6 @@ export const canvasApi = {
     api.post('/agent/canvas/scene-composer/save', payload),
   batchGenerateSceneComposer: (payload: SceneComposerBatchGenerateRequest) =>
     api.post('/agent/canvas/scene-composer/batch-generate', payload),
+  exportVideoComposition: (payload: VideoCompositionExportRequest) =>
+    api.post('/agent/canvas/video-composition/export', payload),
 }
