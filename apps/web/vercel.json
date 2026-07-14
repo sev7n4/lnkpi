@@ -4,5 +4,8 @@
   "buildCommand": "cd ../.. && pnpm --filter @lnkpi/web build",
   "outputDirectory": "dist",
   "framework": "vite",
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
