@@ -46,6 +46,7 @@ COPY --from=build /app/node_modules /app/node_modules
 COPY --from=build /app/package.json /app/pnpm-workspace.yaml ./
 COPY --from=build /app/packages /app/packages
 COPY --from=build /app/apps/server/dist ./apps/server/dist
+COPY --from=build /app/apps/server/node_modules ./apps/server/node_modules
 COPY --from=build /app/apps/server/prisma ./apps/server/prisma
 COPY --from=build /app/apps/server/package.json ./apps/server/
 RUN rm -rf /app/packages/*/src /app/apps/server/src 2>/dev/null || true
