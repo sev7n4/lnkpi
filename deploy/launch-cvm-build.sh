@@ -14,6 +14,18 @@ export IMAGE_TAG STATUS_FILE LOG_FILE
 
 rm -f "$STATUS_FILE" "$LOG_FILE" "$PID_FILE"
 
+# 终止可能卡住的旧构建，避免并发 docker build 打满 CVM
+pkill -f "deploy-remote-build.sh" 2>/dev/null || true
+sleep 1
+
+if [[ -f "$PID_FILE" ]]; then
+  OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
+  if [[ -n "$OLD_PID" ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+    echo "build already running pid=${OLD_PID}"
+    exit 0
+  fi
+fi
+
 nohup env IMAGE_TAG="$IMAGE_TAG" STATUS_FILE="$STATUS_FILE" LOG_FILE="$LOG_FILE" \
   bash deploy/deploy-remote-build.sh </dev/null >>"$LOG_FILE" 2>&1 &
 echo $! >"$PID_FILE"
