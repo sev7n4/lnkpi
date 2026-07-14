@@ -48,7 +48,11 @@ fi
 docker tag "${LNKPI_API_IMAGE}" lnkpi-api:latest
 
 log "=== Starting container ==="
-$COMPOSE up -d --no-build
+$COMPOSE up -d --no-build --force-recreate --remove-orphans
+
+log "=== Port binding ==="
+ss -tlnp | grep ':5100' || true
+docker port lnkpi-api 2>/dev/null || true
 
 log "=== Waiting for health ==="
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do

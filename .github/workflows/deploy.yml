@@ -170,12 +170,22 @@ jobs:
           }
 
           echo "=== public IP from server ==="
-          ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://${SSH_HOST}:${API_PORT}/api/health" | head -c 200
-          echo ""
+          ssh deploy-cvm "ss -tlnp | grep ':${API_PORT}' || true; docker port lnkpi-api 2>/dev/null || true"
+          if ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://${SSH_HOST}:${API_PORT}/api/health" 2>/dev/null | head -c 200; then
+            echo ""
+            echo "Public health OK (from server)"
+          else
+            echo "WARN: public IP unreachable from server (hairpin NAT may be blocked)"
+          fi
 
           echo "=== public IP from GitHub Actions ==="
-          curl -fsS --connect-timeout 5 --max-time 10 "http://${SSH_HOST}:${API_PORT}/api/health" | head -c 200
-          echo ""
+          if curl -fsS --connect-timeout 5 --max-time 10 "http://${SSH_HOST}:${API_PORT}/api/health" | head -c 200; then
+            echo ""
+            echo "Public health OK (external)"
+          else
+            echo "WARN: public IP unreachable from GitHub Actions — check security group / port conflict"
+            exit 1
+          fi
 
       - name: Cleanup SSH key
         if: always()
