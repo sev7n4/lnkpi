@@ -37,6 +37,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @HttpCode(200)
   async login(@Body() dto: LoginDto) {
     const data = await this.authService.login(dto.phone, dto.code)
     return { code: 0, message: 'ok', data }

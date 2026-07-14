@@ -45,8 +45,13 @@ async function handleSendCode() {
       countdown.value--
       if (countdown.value <= 0) clearInterval(timer)
     }, 1000)
-  } catch {
-    error.value = '验证码发送失败'
+  } catch (err) {
+    const ax = err as { code?: string; response?: { status?: number } }
+    if (ax.code === 'ECONNABORTED' || ax.response?.status === 502) {
+      error.value = '网络超时，请稍后重试（跨境链路可能较慢）'
+    } else {
+      error.value = '验证码发送失败'
+    }
   }
 }
 
@@ -57,8 +62,13 @@ async function handleLogin() {
   try {
     await auth.login(phone.value, code.value)
     visible.value = false
-  } catch {
-    error.value = '登录失败，请检查验证码'
+  } catch (err) {
+    const ax = err as { code?: string; response?: { status?: number } }
+    if (ax.code === 'ECONNABORTED' || ax.response?.status === 502) {
+      error.value = '登录超时，请重试（验证码仍为 123456）'
+    } else {
+      error.value = '登录失败，请检查验证码'
+    }
   } finally {
     loading.value = false
   }
