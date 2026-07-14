@@ -149,20 +149,33 @@ jobs:
         run: |
           set -euo pipefail
           API_PORT="${{ env.API_PORT }}"
+          SSH_HOST="${{ env.SSH_HOST }}"
           OK=0
           for i in $(seq 1 10); do
             if ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:${API_PORT}/api/health" >/tmp/lnkpi-health.json 2>/dev/null; then
-              echo "Health OK (via SSH): http://127.0.0.1:${API_PORT}/api/health"
+              echo "Health OK (localhost): http://127.0.0.1:${API_PORT}/api/health"
               head -c 200 /tmp/lnkpi-health.json
               echo ""
               OK=1
               break
             fi
-            echo "Attempt $i: health check failed"
+            echo "Attempt $i: localhost health check failed"
             sleep $((i <= 5 ? 5 : 10))
           done
           rm -f /tmp/lnkpi-health.json
-          [ "$OK" = "1" ] || exit 1
+          [ "$OK" = "1" ] || {
+            echo "=== diagnostics ==="
+            ssh deploy-cvm "docker ps -a --filter name=lnkpi-api; ss -tlnp | grep ':${API_PORT}' || true; docker logs lnkpi-api --tail 30 2>&1 || true"
+            exit 1
+          }
+
+          echo "=== public IP from server ==="
+          ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://${SSH_HOST}:${API_PORT}/api/health" | head -c 200
+          echo ""
+
+          echo "=== public IP from GitHub Actions ==="
+          curl -fsS --connect-timeout 5 --max-time 10 "http://${SSH_HOST}:${API_PORT}/api/health" | head -c 200
+          echo ""
 
       - name: Cleanup SSH key
         if: always()

@@ -29,7 +29,7 @@ services:
       DATABASE_URL: file:/app/apps/server/data/lnkpi.db
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://127.0.0.1:5100}
     ports:
-      - "5100:3001"
+      - "0.0.0.0:5100:3001"
     volumes:
       - lnkpi-data:/app/apps/server/data
       - lnkpi-uploads:/app/apps/server/uploads
