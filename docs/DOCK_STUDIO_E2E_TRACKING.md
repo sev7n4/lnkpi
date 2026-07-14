@@ -423,13 +423,13 @@ interface DockStudioEntry {
 
 | ID | 任务 | 状态 |
 |----|------|------|
-| C-1 | 加入 EDITABLE + `VideoCompositionDockPanel` | 未开始 |
-| C-2 | 读入边：收集所有 video/audio 轨 | 未开始 |
+| C-1 | 加入 EDITABLE + `VideoCompositionDockPanel` | ✅ |
+| C-2 | 读入边：收集所有 video/audio 轨 | 🟡 基础（Dock 实时展示） |
 | C-3 | 简易时间轴预览（可复用 VideoEditorPage MVP） | 未开始 |
 | C-4 | 后端：合成/export API（或 ffmpeg 任务） | 未开始 |
 
-- [ ] C-1 — VideoCompositionDockPanel
-- [ ] C-2 — 入边轨收集
+- [x] C-1 — VideoCompositionDockPanel
+- [ ] C-2 — 入边轨收集（基础展示已接入，待持久化/排序 polish）
 - [ ] C-3 — 时间轴预览 MVP
 - [ ] C-4 — 合成/export API
 
