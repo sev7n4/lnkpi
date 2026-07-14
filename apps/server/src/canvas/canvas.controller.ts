@@ -1,8 +1,14 @@
 import { Body, Controller, Get, Inject, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
-import { IsArray, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
+import type {
+  SceneComposerBatchGenerateRequest,
+  SceneComposerSaveRequest,
+} from '@lnkpi/shared'
 import { AuthGuard } from '../auth/auth.guard'
 import { CanvasService } from './canvas.service'
 import { MaterialService } from './material.service'
+import { SceneComposerService } from './scene-composer.service'
 import { ShotService } from './shot.service'
 
 class CreateCanvasDto {
@@ -89,12 +95,113 @@ class ShotOrderDto {
   shotIds!: string[]
 }
 
+class SceneComposerShotDto {
+  @IsString()
+  id!: string
+
+  @IsString()
+  title!: string
+
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  @IsString()
+  previewUrl?: string
+
+  @IsIn(['image', 'video', 'none'])
+  mediaType!: 'image' | 'video' | 'none'
+
+  @IsOptional()
+  @IsString()
+  shotNodeId?: string
+
+  @IsOptional()
+  @IsString()
+  imageNodeId?: string
+
+  @IsOptional()
+  @IsString()
+  videoNodeId?: string
+}
+
+class SceneComposerSceneDto {
+  @IsString()
+  id!: string
+
+  @IsString()
+  title!: string
+
+  @IsOptional()
+  @IsString()
+  description?: string
+
+  @IsOptional()
+  @IsString()
+  previewUrl?: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SceneComposerShotDto)
+  shots!: SceneComposerShotDto[]
+}
+
+class SaveSceneComposerDto implements SceneComposerSaveRequest {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  composerNodeId!: string
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  prompt?: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SceneComposerSceneDto)
+  scenes!: SceneComposerSceneDto[]
+}
+
+class SceneComposerBatchItemDto {
+  @IsString()
+  shotNodeId!: string
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsString()
+  prompt!: string
+
+  @IsIn(['image', 'video'])
+  mediaType!: 'image' | 'video'
+}
+
+class BatchGenerateSceneComposerDto implements SceneComposerBatchGenerateRequest {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  composerNodeId!: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SceneComposerBatchItemDto)
+  items!: SceneComposerBatchItemDto[]
+}
+
 @Controller('agent/canvas')
 export class CanvasController {
   constructor(
     @Inject(CanvasService) private readonly canvasService: CanvasService,
     @Inject(ShotService) private readonly shotService: ShotService,
     @Inject(MaterialService) private readonly materialService: MaterialService,
+    @Inject(SceneComposerService) private readonly sceneComposerService: SceneComposerService,
   ) {}
 
   @Get('list')
@@ -177,6 +284,20 @@ export class CanvasController {
   async statusBatch(@Query('ids') ids: string) {
     const idList = ids.split(',').filter(Boolean)
     const data = await this.shotService.statusBatch(idList)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('scene-composer/save')
+  @UseGuards(AuthGuard)
+  async saveSceneComposer(@Body() dto: SaveSceneComposerDto) {
+    const data = await this.sceneComposerService.save(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('scene-composer/batch-generate')
+  @UseGuards(AuthGuard)
+  async batchGenerateSceneComposer(@Body() dto: BatchGenerateSceneComposerDto) {
+    const data = await this.sceneComposerService.batchGenerate(dto)
     return { code: 0, message: 'ok', data }
   }
 }

@@ -15,6 +15,7 @@ import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasAct
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
+import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
@@ -441,7 +442,7 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
       id = addNode('audio', { url: '', status: 'idle', prompt: '' }, { position })
       break
     case 'sceneComposer':
-      id = addNode('sceneComposer', { title: '场景编排', prompt: '', status: 'draft' }, { position })
+      id = addNode('sceneComposer', createInitialSceneComposerNodeData(), { position })
       break
     case 'group':
       id = addNode('group', { title: `分组 ${countNodesByType('group') + 1}`, childIds: [] }, { position })
@@ -1077,6 +1078,27 @@ async function handleNodeGenerate() {
   await generateForNode(node)
 }
 
+async function handleSceneComposerSave() {
+  await debouncedNodePatch.flush()
+  const node = editorNode.value
+  if (!node || node.type !== 'sceneComposer') return
+  await saveSceneComposer(node)
+}
+
+async function handleSceneComposerExpand() {
+  await debouncedNodePatch.flush()
+  const node = editorNode.value
+  if (!node || node.type !== 'sceneComposer') return
+  await expandSceneComposer(node)
+}
+
+async function handleSceneComposerBatchGenerate() {
+  await debouncedNodePatch.flush()
+  const node = editorNode.value
+  if (!node || node.type !== 'sceneComposer') return
+  await batchGenerateSceneComposer(node)
+}
+
 function getEventCoords(event: MouseEvent | TouchEvent) {
   if ('clientX' in event) {
     return { x: event.clientX, y: event.clientY }
@@ -1231,7 +1253,13 @@ async function saveCanvas() {
   }
 }
 
-const { generating: nodeGenerating, generateForNode } = useNodeGeneration({
+const {
+  generating: nodeGenerating,
+  generateForNode,
+  saveSceneComposer,
+  expandSceneComposer,
+  batchGenerateSceneComposer,
+} = useNodeGeneration({
   nodes,
   edges,
   sessionId,
@@ -1248,6 +1276,10 @@ const { generating: nodeGenerating, generateForNode } = useNodeGeneration({
   },
   startShotPolling: (ids) => shotPolling.start(ids),
   startGenerationPolling: (tasks) => generationPolling.start(tasks),
+  resolveProviderModels: () => ({
+    image: getProviderConfig('image').model,
+    video: getProviderConfig('video').model,
+  }),
 })
 
 const debouncedNodePatch = useDebouncedNodePatch(
@@ -1461,6 +1493,9 @@ onMounted(() => {
           :scale="viewportSettings.bottomToolbarScale"
           @patch="patchSelectedNode"
           @generate="handleNodeGenerate"
+          @save="handleSceneComposerSave"
+          @expand="handleSceneComposerExpand"
+          @batch-generate="handleSceneComposerBatchGenerate"
           @upload="handleMediaInputUpload"
           @convert="handleMediaInputConvert"
           @close="onPaneClick"

@@ -1,5 +1,9 @@
 import { api } from './api'
 import type { VideoSettings } from '@lnkpi/shared'
+import type {
+  SceneComposerBatchGenerateRequest,
+  SceneComposerSaveRequest,
+} from '@lnkpi/shared'
 
 export const canvasApi = {
   list: () => api.get('/agent/canvas/list'),
@@ -26,4 +30,8 @@ export const canvasApi = {
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),
   optimizePrompt: (prompt: string, style?: string) =>
     api.post<{ data: { optimized: string } }>('/agent/chat/optimize-prompt', { prompt, style }),
+  saveSceneComposer: (payload: SceneComposerSaveRequest) =>
+    api.post('/agent/canvas/scene-composer/save', payload),
+  batchGenerateSceneComposer: (payload: SceneComposerBatchGenerateRequest) =>
+    api.post('/agent/canvas/scene-composer/batch-generate', payload),
 }

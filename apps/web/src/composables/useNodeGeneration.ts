@@ -13,18 +13,25 @@ import {
 import { parseRecordText, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
+import {
+  buildBatchGenerateItems,
+  expandSceneComposerGraph,
+  readSceneComposerFromNode,
+  sceneComposerToNodePatch,
+} from '@/utils/sceneComposer'
 
 export interface NodeGenerationDeps {
   nodes: Ref<EditableFlowNode[]>
   edges: Ref<CanvasEdgeLike[]>
   sessionId: Ref<string>
   patchNodeData: (id: string, patch: Record<string, unknown>) => void
-  addNode: (type: string, data: Record<string, unknown>, opts?: { id?: string; position?: { x: number; y: number } }) => void
+  addNode: (type: string, data: Record<string, unknown>, opts?: { id?: string; position?: { x: number; y: number } }) => string
   addEdge: (edge: CanvasEdgeLike & { id: string; style?: Record<string, string | number> }) => void
   saveCanvas: () => Promise<void>
   requireLogin: () => boolean
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
+  resolveProviderModels: () => { image: string; video: string }
 }
 
 function findNodeById(nodes: EditableFlowNode[], id: string) {
@@ -55,13 +62,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
   async function generateForNode(node: EditableFlowNode) {
     const data = node.data ?? {}
+    const nodeType = String(node.type)
     const upstream = resolveUpstreamContext(node.id, deps.nodes.value, deps.edges.value)
     const prompt = mergePromptWithUpstream(data, upstream)
-    if (!prompt) return
     if (!deps.requireLogin()) return
+    if (nodeType !== 'sceneComposer' && !prompt) return
 
     generating.value = true
-    const nodeType = String(node.type)
 
     try {
       if (nodeType === 'text') {
@@ -95,8 +102,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'sceneComposer') {
-        deps.patchNodeData(node.id, { prompt, status: NODE_GENERATION_STATUS.draft })
-        await deps.saveCanvas()
+        await saveSceneComposer(node)
         return
       }
 
@@ -233,8 +239,85 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     await deps.saveCanvas()
   }
 
+  async function saveSceneComposer(node: EditableFlowNode) {
+    if (!deps.requireLogin()) return
+    const payload = readSceneComposerFromNode(node)
+    const patch = sceneComposerToNodePatch(payload)
+    deps.patchNodeData(node.id, { ...patch, status: NODE_GENERATION_STATUS.draft })
+    await canvasApi.saveSceneComposer({
+      sessionId: deps.sessionId.value,
+      composerNodeId: node.id,
+      title: payload.title,
+      prompt: payload.prompt,
+      scenes: payload.scenes,
+    })
+    await deps.saveCanvas()
+  }
+
+  async function expandSceneComposer(node: EditableFlowNode) {
+    if (!deps.requireLogin()) return
+    generating.value = true
+    try {
+      const current = readSceneComposerFromNode(node)
+      const models = deps.resolveProviderModels()
+      const expanded = expandSceneComposerGraph(node, current, {
+        nodes: deps.nodes.value,
+        addNode: deps.addNode,
+        addEdge: deps.addEdge,
+        imageModel: models.image,
+        videoModel: models.video,
+      })
+      const patch = sceneComposerToNodePatch(expanded)
+      deps.patchNodeData(node.id, { ...patch, status: NODE_GENERATION_STATUS.draft })
+      await canvasApi.saveSceneComposer({
+        sessionId: deps.sessionId.value,
+        composerNodeId: node.id,
+        title: expanded.title,
+        prompt: expanded.prompt,
+        scenes: expanded.scenes,
+      })
+      await deps.saveCanvas()
+    } catch {
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+    } finally {
+      generating.value = false
+    }
+  }
+
+  async function batchGenerateSceneComposer(node: EditableFlowNode) {
+    if (!deps.requireLogin()) return
+    generating.value = true
+    try {
+      const payload = readSceneComposerFromNode(node)
+      const items = buildBatchGenerateItems(payload)
+      if (!items.length) return
+
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+      for (const item of items) {
+        deps.patchNodeData(item.shotNodeId, { status: NODE_GENERATION_STATUS.generating, prompt: item.prompt })
+      }
+
+      await canvasApi.batchGenerateSceneComposer({
+        sessionId: deps.sessionId.value,
+        composerNodeId: node.id,
+        items,
+      })
+
+      deps.startShotPolling(items.map((item) => item.shotNodeId))
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+      await deps.saveCanvas()
+    } catch {
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+    } finally {
+      generating.value = false
+    }
+  }
+
   return {
     generating,
     generateForNode,
+    saveSceneComposer,
+    expandSceneComposer,
+    batchGenerateSceneComposer,
   }
 }

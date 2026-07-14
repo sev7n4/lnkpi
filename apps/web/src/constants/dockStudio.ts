@@ -19,6 +19,7 @@ export const DOCK_PANEL_NODE_TYPES = {
   audio: 'audio',
   shot: 'shot',
   mediaInput: 'mediaInput',
+  sceneComposer: 'sceneComposer',
 } as const
 
 export type DockPanelNodeType = keyof typeof DOCK_PANEL_NODE_TYPES
