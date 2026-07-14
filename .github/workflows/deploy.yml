@@ -97,6 +97,7 @@ jobs:
           fi
           sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh
           sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote.sh
+          sudo chmod +x ${DEPLOY_DIR}/deploy/launch-cvm-build.sh
           sudo rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log
           rm -f /tmp/lnkpi-src.tgz
           EOF
@@ -112,8 +113,9 @@ jobs:
           LOG_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.log"
           PID_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.pid"
 
-          # setsid + 全量重定向，避免 docker build 日志经 SSH 回传阻塞 GHA（此前导致 90min 超时）
-          ssh -n deploy-cvm "sudo bash -c 'cd ${DEPLOY_DIR} && rm -f ${STATUS_FILE} ${LOG_FILE} ${PID_FILE} && setsid env IMAGE_TAG=${IMAGE_TAG} STATUS_FILE=${STATUS_FILE} LOG_FILE=${LOG_FILE} bash deploy/deploy-remote-build.sh </dev/null >>${LOG_FILE} 2>&1 & echo \$! > ${PID_FILE}'"
+          # 使用独立 launcher 脚本立即返回，避免 sudo bash -c 'cmd &' 等待后台任务
+          LAUNCH_OUT=$(ssh -n deploy-cvm "sudo bash ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${IMAGE_TAG}")
+          echo "${LAUNCH_OUT}"
 
           sleep 2
           PID=$(ssh deploy-cvm "sudo cat ${PID_FILE} 2>/dev/null || true")
