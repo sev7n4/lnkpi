@@ -1116,6 +1116,13 @@ async function handleSceneComposerBatchGenerate() {
   await batchGenerateSceneComposer(node)
 }
 
+async function handleVideoCompositionExport() {
+  await debouncedNodePatch.flush()
+  const node = editorNode.value
+  if (!node || node.type !== 'videoComposition') return
+  await exportVideoComposition(node, editorCompositionTracks.value)
+}
+
 function getEventCoords(event: MouseEvent | TouchEvent) {
   if ('clientX' in event) {
     return { x: event.clientX, y: event.clientY }
@@ -1276,6 +1283,7 @@ const {
   saveSceneComposer,
   expandSceneComposer,
   batchGenerateSceneComposer,
+  exportVideoComposition,
 } = useNodeGeneration({
   nodes,
   edges,
@@ -1530,6 +1538,7 @@ onMounted(() => {
           @save="handleSceneComposerSave"
           @expand="handleSceneComposerExpand"
           @batch-generate="handleSceneComposerBatchGenerate"
+          @export="handleVideoCompositionExport"
           @upload="handleMediaInputUpload"
           @convert="handleMediaInputConvert"
           @close="onPaneClick"

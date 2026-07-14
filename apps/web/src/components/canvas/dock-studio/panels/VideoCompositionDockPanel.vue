@@ -11,6 +11,7 @@ import {
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import CompositionTimelinePreview from '@/components/canvas/dock-studio/shared/CompositionTimelinePreview.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import { resolveMediaUrl } from '@/services/api-base'
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -22,6 +23,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
+  export: []
   close: []
 }>()
 
@@ -38,6 +40,12 @@ const orderedTracks = computed(() => {
 
 const videoTrackCount = computed(() => orderedTracks.value.filter((track) => track.type === 'video').length)
 const audioTrackCount = computed(() => orderedTracks.value.filter((track) => track.type === 'audio').length)
+const exportableTrackCount = computed(() => orderedTracks.value.filter((track) => track.url.trim()).length)
+const exportedUrl = computed(() => {
+  const url = String(props.node.data?.url ?? '').trim()
+  return url ? resolveMediaUrl(url) : ''
+})
+const canExport = computed(() => !locked.value && exportableTrackCount.value > 0)
 
 function syncFromNode() {
   title.value = String(props.node.data?.title ?? '视频合成')
@@ -91,6 +99,11 @@ function readSavedTracks(): CompositionTrackRecord[] {
 
     <CompositionTimelinePreview :tracks="orderedTracks" :readonly="locked" />
 
+    <div v-if="exportedUrl" class="export-preview">
+      <p class="mb-2 text-[10px] text-emerald-300/80">已导出合成视频</p>
+      <video :src="exportedUrl" class="w-full rounded-lg" controls />
+    </div>
+
     <div class="composition-track-list">
       <div v-if="!orderedTracks.length" class="composition-empty">
         <p>暂无入边素材</p>
@@ -141,17 +154,35 @@ function readSavedTracks(): CompositionTrackRecord[] {
     <div class="bottom-toolbar-actions flex-wrap">
       <button
         type="button"
-        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/40"
-        disabled
-        title="C-4 合成/export API 开发中"
+        class="rounded-lg border border-indigo-400/30 bg-indigo-500/15 px-3 py-1.5 text-xs text-indigo-100"
+        :disabled="!canExport"
+        :title="exportableTrackCount ? '使用 ffmpeg 合成并导出 MP4' : '请先连接带 URL 的素材轨'"
+        @click="emit('export')"
       >
-        导出合成（C-4 即将推出）
+        {{ generating ? '合成中…' : '导出合成' }}
       </button>
+      <a
+        v-if="exportedUrl"
+        :href="exportedUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70"
+      >
+        下载 MP4
+      </a>
     </div>
   </DockToolbarShell>
 </template>
 
 <style scoped>
+.export-preview {
+  margin-bottom: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.06);
+}
+
 .composition-track-list {
   max-height: 160px;
   margin-bottom: 8px;

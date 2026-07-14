@@ -26,6 +26,7 @@ const emit = defineEmits<{
   save: []
   expand: []
   batchGenerate: []
+  export: []
 }>()
 
 const visible = computed(() => {
@@ -72,6 +73,7 @@ const dockLocked = computed(() => {
           @save="emit('save')"
           @expand="emit('expand')"
           @batch-generate="emit('batchGenerate')"
+          @export="emit('export')"
         />
       </div>
     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import { resolveMediaUrl } from '@/services/api-base'
 
 const props = defineProps<{
   selected?: boolean
@@ -10,6 +11,7 @@ const props = defineProps<{
     clipCount?: number
     tracks?: Array<{ type?: string }>
     label?: string
+    url?: string
   }
 }>()
 
@@ -19,6 +21,10 @@ const videoCount = computed(
 const audioCount = computed(
   () => props.data.tracks?.filter((track) => track.type === 'audio').length ?? 0,
 )
+const previewUrl = computed(() => {
+  const url = String(props.data.url ?? '').trim()
+  return url ? resolveMediaUrl(url) : ''
+})
 </script>
 
 <template>
@@ -30,7 +36,14 @@ const audioCount = computed(
     :height="200"
   >
     <div class="neo-gen-card">
-      <div class="neo-node-placeholder">
+      <video
+        v-if="previewUrl"
+        :src="previewUrl"
+        class="h-full w-full object-cover"
+        muted
+        playsinline
+      />
+      <div v-else class="neo-node-placeholder">
         <div class="neo-placeholder-content">
           <svg class="neo-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="2" y="3" width="20" height="14" rx="2" />

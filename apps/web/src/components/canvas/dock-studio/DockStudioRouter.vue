@@ -32,6 +32,7 @@ const emit = defineEmits<{
   save: []
   expand: []
   batchGenerate: []
+  export: []
 }>()
 
 const nodeType = computed(() => String(props.node?.type ?? ''))
@@ -139,6 +140,7 @@ const panelBindings = {
     :readonly="dockReadonly"
     @patch="panelBindings.patch"
     @close="panelBindings.close"
+    @export="emit('export')"
   />
   <LegacyDockPanel
     v-else-if="node"

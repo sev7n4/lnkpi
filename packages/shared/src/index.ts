@@ -3,6 +3,7 @@ export type WorkType = 'canvas' | 'shortfilm'
 export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot' | 'sceneComposer'
 
 export * from './sceneComposer'
+export * from './videoComposition'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
