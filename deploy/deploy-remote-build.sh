@@ -13,7 +13,7 @@ export COMPOSE_DOCKER_CLI_BUILD=1
 COMPOSE="docker compose -f deploy/docker-compose.prod.yml"
 
 log() {
-  echo "[$(date -u +%H:%M:%S)] $*"
+  echo "[$(date -u +%H:%M:%S)] $*" >>"$LOG_FILE"
 }
 
 set_status() {
@@ -42,7 +42,7 @@ docker images lnkpi-api --format '{{.Tag}}' 2>/dev/null | while read -r tag; do
 done
 
 log "=== Building ${LNKPI_API_IMAGE} on CVM ==="
-if ! $COMPOSE build --progress=plain api 2>&1 | tee -a "$LOG_FILE"; then
+if ! $COMPOSE build --progress=plain api >>"$LOG_FILE" 2>&1; then
   on_fail
 fi
 docker tag "${LNKPI_API_IMAGE}" lnkpi-api:latest
