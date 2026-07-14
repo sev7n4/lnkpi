@@ -1,10 +1,24 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 
-defineProps<{
+const props = defineProps<{
   selected?: boolean
-  data: { title?: string; status?: string; clipCount?: number; label?: string }
+  data: {
+    title?: string
+    status?: string
+    clipCount?: number
+    tracks?: Array<{ type?: string }>
+    label?: string
+  }
 }>()
+
+const videoCount = computed(
+  () => props.data.tracks?.filter((track) => track.type === 'video').length ?? 0,
+)
+const audioCount = computed(
+  () => props.data.tracks?.filter((track) => track.type === 'audio').length ?? 0,
+)
 </script>
 
 <template>
@@ -24,7 +38,9 @@ defineProps<{
             <line x1="12" y1="17" x2="12" y2="21" />
           </svg>
           <span class="neo-placeholder-text">{{ data.title || '多轨合成' }}</span>
-          <span class="text-[11px] text-white/40">{{ data.clipCount ?? 0 }} 个片段</span>
+          <span class="text-[11px] text-indigo-200/70">
+            {{ data.clipCount ?? 0 }} 轨 · 视频 {{ videoCount }} · 音频 {{ audioCount }}
+          </span>
         </div>
       </div>
     </div>

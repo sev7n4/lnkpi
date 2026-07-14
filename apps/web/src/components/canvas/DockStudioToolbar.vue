@@ -6,10 +6,12 @@ import DockStudioRouter from '@/components/canvas/dock-studio/DockStudioRouter.v
 import { EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
 import { computed } from 'vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import type { CompositionTrack } from '@/utils/compositionUpstream'
 
 const props = defineProps<{
   node: EditableFlowNode | null
   upstream: UpstreamNodeContext
+  compositionTracks?: CompositionTrack[]
   mentions?: MentionOption[]
   generating?: boolean
   scale?: number
@@ -59,6 +61,7 @@ const dockLocked = computed(() => {
         <DockStudioRouter
           :node="node"
           :upstream="upstream"
+          :composition-tracks="compositionTracks"
           :mentions="mentions"
           :generating="generating"
           @patch="emit('patch', $event)"

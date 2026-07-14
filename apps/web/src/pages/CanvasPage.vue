@@ -16,6 +16,7 @@ import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
+import { resolveCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
@@ -311,6 +312,12 @@ const editorUpstream = computed(() => {
   return resolveUpstreamContext(node.id, nodes.value, edges.value)
 })
 
+const editorCompositionTracks = computed(() => {
+  const node = editorNode.value
+  if (!node || node.type !== 'videoComposition') return []
+  return resolveCompositionTracks(node.id, nodes.value, edges.value)
+})
+
 const multiSelectCanUngroup = computed(() => {
   if (multiSelectedIds.value.length !== 1) return false
   const node = findNodeById(multiSelectedIds.value[0])
@@ -451,7 +458,11 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
       id = addNode('mediaInput', { url: '', status: 'idle', title: '媒体输入', fileName: '' }, { position })
       break
     case 'videoComposition':
-      id = addNode('videoComposition', { title: '视频合成', clipCount: 0, status: 'draft' }, { position })
+      id = addNode(
+        'videoComposition',
+        { title: '视频合成', clipCount: 0, tracks: [], status: 'draft' },
+        { position },
+      )
       break
     case 'worldModel':
       id = addNode('worldModel', { title: '3D 世界', prompt: '', status: 'beta' }, { position })
@@ -1287,6 +1298,21 @@ const debouncedNodePatch = useDebouncedNodePatch(
   saveCanvas,
 )
 
+watch(
+  editorCompositionTracks,
+  (tracks) => {
+    const node = editorNode.value
+    if (!node || node.type !== 'videoComposition') return
+    const patch = compositionTracksToNodePatch(tracks)
+    const data = node.data ?? {}
+    const sameCount = data.clipCount === patch.clipCount
+    const sameTracks = JSON.stringify(data.tracks ?? []) === JSON.stringify(patch.tracks)
+    if (sameCount && sameTracks) return
+    debouncedNodePatch.patchNode(node.id, patch)
+  },
+  { deep: true },
+)
+
 async function loadSession() {
   try {
     const { data } = await api.get<{ data: { title: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
@@ -1488,6 +1514,7 @@ onMounted(() => {
         <DockStudioToolbar
           :node="editorNode"
           :upstream="editorUpstream"
+          :composition-tracks="editorCompositionTracks"
           :mentions="mentionOptions"
           :generating="nodeGenerating"
           :scale="viewportSettings.bottomToolbarScale"

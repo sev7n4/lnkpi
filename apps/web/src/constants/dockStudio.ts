@@ -9,6 +9,7 @@ export const EDITABLE_NODE_TYPES = new Set([
   'shot',
   'prompt',
   'mediaInput',
+  'videoComposition',
 ])
 
 /** 使用独立 Dock Panel 的节点 */
@@ -20,6 +21,7 @@ export const DOCK_PANEL_NODE_TYPES = {
   shot: 'shot',
   mediaInput: 'mediaInput',
   sceneComposer: 'sceneComposer',
+  videoComposition: 'videoComposition',
 } as const
 
 export type DockPanelNodeType = keyof typeof DOCK_PANEL_NODE_TYPES
