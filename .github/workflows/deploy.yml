@@ -18,6 +18,11 @@ on:
         description: Branch to deploy
         required: true
         default: main
+      recover_only:
+        description: Only recover CVM (cleanup + restart existing API)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -57,13 +62,37 @@ jobs:
             User ${{ env.SSH_USER }}
             IdentityFile ~/.ssh/deploy_key
             StrictHostKeyChecking no
-            ServerAliveInterval 30
-            ServerAliveCountMax 120
+            ServerAliveInterval 15
+            ServerAliveCountMax 30
             TCPKeepAlive yes
+            ConnectTimeout 30
           EOF
           chmod 600 ~/.ssh/config
 
+          cat > /tmp/lnkpi-ssh-retry.sh <<'RETRY'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          label="$1"; shift
+          for attempt in $(seq 1 8); do
+            echo "${label} attempt ${attempt}/8"
+            if "$@"; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "ERROR: ${label} failed after retries"
+          exit 1
+          RETRY
+          chmod +x /tmp/lnkpi-ssh-retry.sh
+
+      - name: Recover CVM
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+          /tmp/lnkpi-ssh-retry.sh "recover-ssh" ssh -n deploy-cvm "sudo bash -lc 'if [[ -x ${DEPLOY_DIR}/deploy/cvm-recover.sh ]]; then ${DEPLOY_DIR}/deploy/cvm-recover.sh; else pkill -f deploy-remote-build || true; docker ps; fi'"
+
       - name: Sync source to CVM
+        if: ${{ github.event.inputs.recover_only != true }}
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
@@ -75,36 +104,10 @@ jobs:
               --exclude='**/dist' \
               --exclude='.cursor' \
               --exclude='docs' \
-              -czf /tmp/lnkpi-src.tgz .
-
-          scp /tmp/lnkpi-src.tgz deploy-cvm:/tmp/lnkpi-src.tgz
-
-          ssh deploy-cvm <<EOF
-          set -euo pipefail
-          sudo mkdir -p ${DEPLOY_DIR}
-          if [[ -f ${DEPLOY_DIR}/.env ]]; then
-            sudo cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak
-          fi
-          sudo tar -xzf /tmp/lnkpi-src.tgz -C ${DEPLOY_DIR}
-          if [[ -f /tmp/lnkpi.env.bak ]]; then
-            sudo mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env
-          elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then
-            sudo cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env
-            if command -v openssl >/dev/null 2>&1; then
-              SECRET=\$(openssl rand -hex 24)
-              sudo sed -i "s/请替换为随机长字符串/\${SECRET}/" ${DEPLOY_DIR}/.env
-            fi
-          fi
-          sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh
-          sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote.sh
-          sudo chmod +x ${DEPLOY_DIR}/deploy/launch-cvm-build.sh
-          sudo rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log
-          rm -f /tmp/lnkpi-src.tgz
-          EOF
-
-          rm -f /tmp/lnkpi-src.tgz
+              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "sudo bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
 
       - name: Launch background build on CVM
+        if: ${{ github.event.inputs.recover_only != true }}
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
@@ -114,7 +117,7 @@ jobs:
           PID_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.pid"
 
           # 使用独立 launcher 脚本立即返回，避免 sudo bash -c 'cmd &' 等待后台任务
-          LAUNCH_OUT=$(ssh -n deploy-cvm "sudo bash ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${IMAGE_TAG}")
+          LAUNCH_OUT=$(/tmp/lnkpi-ssh-retry.sh "launch-ssh" ssh -n deploy-cvm "sudo bash ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${IMAGE_TAG}")
           echo "${LAUNCH_OUT}"
 
           sleep 2
@@ -127,6 +130,7 @@ jobs:
           echo "Build started on CVM (pid=${PID}, log=${LOG_FILE})"
 
       - name: Wait for CVM build
+        if: ${{ github.event.inputs.recover_only != true }}
         run: |
           set -euo pipefail
           IMAGE_TAG="${{ env.IMAGE_TAG }}"
@@ -135,7 +139,7 @@ jobs:
           OK=0
 
           for i in $(seq 1 180); do
-            STATUS=$(ssh deploy-cvm "sudo cat ${STATUS_FILE} 2>/dev/null || echo pending")
+            STATUS=$(/tmp/lnkpi-ssh-retry.sh "status-ssh" ssh -n deploy-cvm "sudo cat ${STATUS_FILE} 2>/dev/null || echo pending")
             echo "Attempt $i: status=${STATUS}"
             case "$STATUS" in
               success)
