@@ -2,8 +2,14 @@
 import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
-import type { CompositionTrack } from '@/utils/compositionUpstream'
+import type { CompositionTrack, CompositionTrackRecord } from '@/utils/compositionUpstream'
+import {
+  applyTrackOrder,
+  compositionTracksToNodePatch,
+  reorderTrackIds,
+} from '@/utils/compositionUpstream'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import CompositionTimelinePreview from '@/components/canvas/dock-studio/shared/CompositionTimelinePreview.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
 const props = defineProps<{
@@ -25,8 +31,13 @@ const locked = computed(
   () => !!props.readonly || isNodeGenerating(props.node.data?.status) || !!props.generating,
 )
 
-const videoTrackCount = computed(() => props.tracks.filter((track) => track.type === 'video').length)
-const audioTrackCount = computed(() => props.tracks.filter((track) => track.type === 'audio').length)
+const orderedTracks = computed(() => {
+  const trackOrder = props.node.data?.trackOrder as string[] | undefined
+  return applyTrackOrder(props.tracks, trackOrder)
+})
+
+const videoTrackCount = computed(() => orderedTracks.value.filter((track) => track.type === 'video').length)
+const audioTrackCount = computed(() => orderedTracks.value.filter((track) => track.type === 'audio').length)
 
 function syncFromNode() {
   title.value = String(props.node.data?.title ?? '视频合成')
@@ -37,6 +48,26 @@ watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 function onTitleInput(value: string) {
   title.value = value
   emit('patch', { title: value })
+}
+
+function moveTrack(index: number, delta: number) {
+  const ids = orderedTracks.value.map((track) => track.nodeId)
+  const nextOrder = reorderTrackIds(ids, index, index + delta)
+  emit('patch', compositionTracksToNodePatch(applyTrackOrder(props.tracks, nextOrder)))
+}
+
+function updateDuration(index: number, value: string) {
+  const sec = Number.parseFloat(value)
+  if (!Number.isFinite(sec) || sec <= 0) return
+  const tracks = orderedTracks.value.map((track, trackIndex) =>
+    trackIndex === index ? { ...track, durationSec: sec } : track,
+  )
+  emit('patch', compositionTracksToNodePatch(tracks))
+}
+
+function readSavedTracks(): CompositionTrackRecord[] {
+  const raw = props.node.data?.tracks
+  return Array.isArray(raw) ? (raw as CompositionTrackRecord[]) : []
 }
 </script>
 
@@ -51,30 +82,60 @@ function onTitleInput(value: string) {
     @close="emit('close')"
   >
     <div class="mb-2 flex flex-wrap items-center gap-2 px-1 text-[10px] text-white/45">
-      <span>{{ tracks.length }} 轨</span>
+      <span>{{ orderedTracks.length }} 轨</span>
       <span>视频 {{ videoTrackCount }}</span>
       <span>音频 {{ audioTrackCount }}</span>
-      <span v-if="!tracks.length" class="text-amber-300/80">请连接 video / audio 节点到本节点</span>
+      <span v-if="readSavedTracks().length" class="text-emerald-300/70">已持久化 {{ readSavedTracks().length }} 轨</span>
+      <span v-if="!orderedTracks.length" class="text-amber-300/80">请连接 video / audio / 媒体输入 节点</span>
     </div>
 
+    <CompositionTimelinePreview :tracks="orderedTracks" :readonly="locked" />
+
     <div class="composition-track-list">
-      <div v-if="!tracks.length" class="composition-empty">
+      <div v-if="!orderedTracks.length" class="composition-empty">
         <p>暂无入边素材</p>
-        <p class="text-white/35">从画布将视频或音频节点连线到「视频合成」节点</p>
+        <p class="text-white/35">支持 video、audio、媒体输入（视频/音频）连线</p>
       </div>
-      <div v-for="(track, index) in tracks" :key="track.nodeId" class="composition-track-row">
+      <div v-for="(track, index) in orderedTracks" :key="track.nodeId" class="composition-track-row">
         <span class="composition-track-index">{{ index + 1 }}</span>
         <span class="composition-track-type" :class="track.type">{{ track.label }}</span>
         <div class="min-w-0 flex-1">
           <p class="truncate text-[11px] text-white/80">{{ track.title }}</p>
           <p class="truncate text-[10px] text-white/35">{{ track.url || '尚无媒体 URL' }}</p>
         </div>
+        <label class="duration-input">
+          <span class="text-[10px] text-white/35">时长</span>
+          <input
+            type="number"
+            min="1"
+            step="0.5"
+            class="input-field w-14 px-2 py-1 text-[10px]"
+            :value="track.durationSec"
+            :readonly="locked"
+            @change="updateDuration(index, ($event.target as HTMLInputElement).value)"
+          >
+        </label>
+        <div class="flex flex-col gap-1">
+          <button
+            type="button"
+            class="order-btn"
+            :disabled="locked || index === 0"
+            title="上移"
+            @click="moveTrack(index, -1)"
+          >
+            ↑
+          </button>
+          <button
+            type="button"
+            class="order-btn"
+            :disabled="locked || index === orderedTracks.length - 1"
+            title="下移"
+            @click="moveTrack(index, 1)"
+          >
+            ↓
+          </button>
+        </div>
       </div>
-    </div>
-
-    <div class="composition-timeline-placeholder">
-      <span>时间轴预览</span>
-      <span class="text-white/35">（C-3 开发中）</span>
     </div>
 
     <div class="bottom-toolbar-actions flex-wrap">
@@ -84,7 +145,7 @@ function onTitleInput(value: string) {
         disabled
         title="C-4 合成/export API 开发中"
       >
-        导出合成（即将推出）
+        导出合成（C-4 即将推出）
       </button>
     </div>
   </DockToolbarShell>
@@ -144,17 +205,25 @@ function onTitleInput(value: string) {
   color: #6ee7b7;
 }
 
-.composition-timeline-placeholder {
+.duration-input {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 52px;
-  margin-bottom: 4px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
+  gap: 2px;
+}
+
+.order-btn {
+  width: 22px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.order-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>

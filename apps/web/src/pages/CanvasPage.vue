@@ -16,7 +16,7 @@ import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
-import { resolveCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
+import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
@@ -315,7 +315,13 @@ const editorUpstream = computed(() => {
 const editorCompositionTracks = computed(() => {
   const node = editorNode.value
   if (!node || node.type !== 'videoComposition') return []
-  return resolveCompositionTracks(node.id, nodes.value, edges.value)
+  const live = resolveCompositionTracks(node.id, nodes.value, edges.value)
+  const data = node.data ?? {}
+  return mergeCompositionTracks(
+    live,
+    data.tracks as import('@/utils/compositionUpstream').CompositionTrackRecord[] | undefined,
+    data.trackOrder as string[] | undefined,
+  )
 })
 
 const multiSelectCanUngroup = computed(() => {
@@ -460,7 +466,7 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
     case 'videoComposition':
       id = addNode(
         'videoComposition',
-        { title: '视频合成', clipCount: 0, tracks: [], status: 'draft' },
+        { title: '视频合成', clipCount: 0, tracks: [], trackOrder: [], status: 'draft' },
         { position },
       )
       break
@@ -1307,7 +1313,8 @@ watch(
     const data = node.data ?? {}
     const sameCount = data.clipCount === patch.clipCount
     const sameTracks = JSON.stringify(data.tracks ?? []) === JSON.stringify(patch.tracks)
-    if (sameCount && sameTracks) return
+    const sameOrder = JSON.stringify(data.trackOrder ?? []) === JSON.stringify(patch.trackOrder)
+    if (sameCount && sameTracks && sameOrder) return
     debouncedNodePatch.patchNode(node.id, patch)
   },
   { deep: true },

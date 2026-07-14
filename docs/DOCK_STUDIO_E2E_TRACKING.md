@@ -15,11 +15,11 @@
 |------|--------|------|
 | **Phase 0** 基础架构 | **100%** | P0-1 ~ P0-6 全部完成 |
 | **Phase 1** 核心生成节点 | **~92%** | text/image/video/audio/shot 主链路完成；T-5/I-6/I-7/V-6 待补 |
-| **Phase 2** 输入与编排 | **~55%** | mediaInput ✅；sceneComposer D-1~D-4 ✅；videoComposition / worldModel 未开始 |
+| **Phase 2** 输入与编排 | **~70%** | mediaInput ✅；sceneComposer D-1~D-4 ✅；videoComposition C-1~C-3 ✅；C-4 / worldModel 未开始 |
 | **Phase 3** Dock UX | **~83%** | UX-1~UX-5 ✅；UX-6 Capabilities API 未开始 |
 | **Phase 4** 后端补齐 | **~67%** | B-1/B-3/B-4/B-6 ✅；B-2 upscale、B-5 lip-sync 未开始 |
 | **里程碑 M1/M2** | **已完成** | 代码落地，`pnpm build` 通过 |
-| **里程碑 M3** | **进行中** | mediaInput + sceneComposer 已落地；composition 未开始 |
+| **里程碑 M3** | **进行中** | mediaInput + sceneComposer + videoComposition C-1~C-3 已落地；C-4 未开始 |
 | **里程碑 M4** | **未开始** | UX-6 + 后端 upscale/lip-sync/OSS STS |
 | **浏览器 E2E 手测** | **✅ 生产 P0 通过** | 2026-07-14 生产登录 + 5 类节点 Dock 验收（见 §0.4） |
 
@@ -53,7 +53,7 @@
 | shot | ✅ | ✅ | **已完成** | — |
 | mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
 | sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 生产手测 + 生成闭环 |
-| videoComposition | ❌ | ❌ | **未开始** | C-1~C-4 |
+| videoComposition | ✅ | 🟡 | **C-1~C-3 已落地** | C-4 合成/export API |
 | worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
 | prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
 
@@ -61,7 +61,7 @@
 
 1. ~~**P0 生产验收**~~：✅ 2026-07-14 已完成登录 + 5 节点 Dock 手测
 2. ~~**P1 sceneComposer**（D-1~D-4）~~ ✅ 2026-07-14 代码落地
-3. **P1 videoComposition**（C-1~C-4）或生产 sceneComposer 手测
+3. **P1 videoComposition C-4**（合成/export API）或生产 C-2/C-3 手测
 4. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
 5. **P2** worldModel / upscale / lip-sync
 
@@ -152,7 +152,7 @@ completed → 写回 url / content / coverUrl
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
 | **sceneComposer** | ✅ | 🔴 20% | ❌ 仅 draft | ❌ | **无导演台专属 Dock + 编排 API** | 未开始 |
 | **mediaInput** | ✅ | 🟢 75% | 🟡 本地 upload | ✅ | 预览+转节点已完成；OSS STS 待升级 | 基本完成 |
-| **videoComposition** | ❌ | — | ❌ | ❌ | **无 Dock、无合成 API** | 未开始 |
+| **videoComposition** | ✅ | 🟢 70% | 🟡 draft | ✅ 入边 video/audio/mediaInput | C-4 合成/export API | C-1~C-3 完成 |
 | **worldModel** | ❌ | — | ❌ | ❌ | **无 Dock、无 3D API** | 未开始 |
 | **prompt** | ✅ | 🟡 50% | ⚠️ 与 text 混用 | ❌ | Legacy 面板，是否合并进 text 待产品定稿 | 未开始 |
 | **group** | — | — | — | — | 容器节点，不需要 Dock | — |
@@ -424,13 +424,13 @@ interface DockStudioEntry {
 | ID | 任务 | 状态 |
 |----|------|------|
 | C-1 | 加入 EDITABLE + `VideoCompositionDockPanel` | ✅ |
-| C-2 | 读入边：收集所有 video/audio 轨 | 🟡 基础（Dock 实时展示） |
-| C-3 | 简易时间轴预览（可复用 VideoEditorPage MVP） | 未开始 |
+| C-2 | 读入边：收集所有 video/audio 轨 | ✅ |
+| C-3 | 简易时间轴预览（可复用 VideoEditorPage MVP） | ✅ |
 | C-4 | 后端：合成/export API（或 ffmpeg 任务） | 未开始 |
 
 - [x] C-1 — VideoCompositionDockPanel
-- [ ] C-2 — 入边轨收集（基础展示已接入，待持久化/排序 polish）
-- [ ] C-3 — 时间轴预览 MVP
+- [x] C-2 — 入边轨收集 + trackOrder/时长持久化 + mediaInput 支持
+- [x] C-3 — CompositionTimelinePreview 时间轴 MVP
 - [ ] C-4 — 合成/export API
 
 ---
@@ -553,7 +553,7 @@ Phase 0 (P0-1~P0-6)
 | **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ 待手测 |
 | **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ✅ Dock/上传入口 |
 | **sceneComposer** | 场景列表编辑；展开子图 | ✅ Dock/展开（生成待 API Key） |
-| **videoComposition** | 入边轨收集；合成/export | ☐ |
+| **videoComposition** | 入边轨收集 + 轨排序/时长持久化；时间轴预览 | ☐ C-4 export 待做 |
 
 ### 6.3 回归清单（每次大改 Dock 后跑）
 
@@ -671,6 +671,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-13 | A | P0-1~P0-6, I-1~I-5, V-1~V-5, B-6 | 图片比例未进 provider；参考图 blob | Sprint B |
 | 2026-07-13 | B | T-1~T-4, A-1~A-5, S-1~S-6, B-1, B-3 | 音频 emotion/speed 未进 TTS | Sprint C |
 | 2026-07-14 | M3 | D-1~D-4 sceneComposer | 生产手测待做 | videoComposition C-1 |
+| 2026-07-14 | M3 | C-2~C-3 videoComposition | C-4 export 未做 | 生产手测 C-2/C-3 |
 
 ---
 
