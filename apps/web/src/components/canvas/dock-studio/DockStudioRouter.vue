@@ -9,6 +9,7 @@ import VideoDockPanel from '@/components/canvas/dock-studio/panels/VideoDockPane
 import AudioDockPanel from '@/components/canvas/dock-studio/panels/AudioDockPanel.vue'
 import ShotDockPanel from '@/components/canvas/dock-studio/panels/ShotDockPanel.vue'
 import MediaInputDockPanel from '@/components/canvas/dock-studio/panels/MediaInputDockPanel.vue'
+import SceneComposerDockPanel from '@/components/canvas/dock-studio/panels/SceneComposerDockPanel.vue'
 import LegacyDockPanel from '@/components/canvas/dock-studio/panels/LegacyDockPanel.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
@@ -25,6 +26,9 @@ const emit = defineEmits<{
   close: []
   upload: [file: File]
   convert: [targetType: 'image' | 'video' | 'audio']
+  save: []
+  expand: []
+  batchGenerate: []
 }>()
 
 const nodeType = computed(() => String(props.node?.type ?? ''))
@@ -108,6 +112,19 @@ const panelBindings = {
     @patch="panelBindings.patch"
     @upload="emit('upload', $event)"
     @convert="emit('convert', $event)"
+    @close="panelBindings.close"
+  />
+  <SceneComposerDockPanel
+    v-else-if="node && nodeType === 'sceneComposer'"
+    :node="node"
+    :upstream="upstream"
+    :mentions="mentions"
+    :generating="generating"
+    :readonly="dockReadonly"
+    @patch="panelBindings.patch"
+    @save="emit('save')"
+    @expand="emit('expand')"
+    @batch-generate="emit('batchGenerate')"
     @close="panelBindings.close"
   />
   <LegacyDockPanel

@@ -18,7 +18,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
-/** Sprint B：sceneComposer / prompt 仍走 Legacy 面板 */
+/** Sprint B：prompt 仍走 Legacy 面板 */
 const legacyNode = computed(() => props.node)
 </script>
 

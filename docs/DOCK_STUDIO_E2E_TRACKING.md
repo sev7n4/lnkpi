@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-14（生产登录 Mixed Content 修复 + 固定验证码模式；本节审计同步）
+> **最后更新**：2026-07-14（生产登录 Edge 代理修复 + 浏览器 E2E 手测验收）
 
 ---
 
@@ -15,13 +15,32 @@
 |------|--------|------|
 | **Phase 0** 基础架构 | **100%** | P0-1 ~ P0-6 全部完成 |
 | **Phase 1** 核心生成节点 | **~92%** | text/image/video/audio/shot 主链路完成；T-5/I-6/I-7/V-6 待补 |
-| **Phase 2** 输入与编排 | **~35%** | mediaInput ✅；sceneComposer / videoComposition / worldModel 未开始 |
+| **Phase 2** 输入与编排 | **~55%** | mediaInput ✅；sceneComposer D-1~D-4 ✅；videoComposition / worldModel 未开始 |
 | **Phase 3** Dock UX | **~83%** | UX-1~UX-5 ✅；UX-6 Capabilities API 未开始 |
 | **Phase 4** 后端补齐 | **~67%** | B-1/B-3/B-4/B-6 ✅；B-2 upscale、B-5 lip-sync 未开始 |
 | **里程碑 M1/M2** | **已完成** | 代码落地，`pnpm build` 通过 |
-| **里程碑 M3** | **进行中** | mediaInput 已落地；sceneComposer + composition 未开始 |
+| **里程碑 M3** | **进行中** | mediaInput + sceneComposer 已落地；composition 未开始 |
 | **里程碑 M4** | **未开始** | UX-6 + 后端 upscale/lip-sync/OSS STS |
-| **浏览器 E2E 手测** | **未开始** | Sprint A/B/C 均标注「待人工」 |
+| **浏览器 E2E 手测** | **✅ 生产 P0 通过** | 2026-07-14 生产登录 + 5 类节点 Dock 验收（见 §0.4） |
+
+### 0.4 生产环境 E2E 手测记录（2026-07-14）
+
+**环境**：https://lnkpi-web.vercel.app · API 经 `api/proxy` → CVM `119.29.173.89:5100`
+
+| 项 | 结果 | 说明 |
+|----|------|------|
+| 登录（验证码 123456） | ✅ | ~2s 完成，Header 显示积分/昵称，固定码提示可见 |
+| 创建画布 | ✅ | 跳转 `/workflow/{canvasId}` |
+| text 节点 + Dock | ✅ | 添加、选中、Dock 弹出；prompt 写回节点预览 |
+| image 节点 + Dock | ✅ | 模型/比例/生成按钮正常 |
+| video 节点 + Dock | ✅ | 文生视频/图生视频切换、模型/时长 |
+| audio 节点 + Dock | ✅ | 音色/语速、生成音频 |
+| mediaInput 节点 + Dock | ✅ | 素材名称、上传/替换 |
+| shot 分镜节点 | ☐ 待补 | 添加菜单与 Dock 层叠，自动化未点选；代码已就绪 |
+| 各节点「生成」闭环 | ☐ 待补 | 需生产配置模型 API Key 后再跑完整生成 |
+| 刷新持久化 | ☐ 待补 | 画布页可加载；节点参数刷新后需人工再验 |
+
+**登录修复摘要**：Vercel 外链 rewrite 跨境超时（~31s 502）→ 改为 `apps/web/api/proxy.ts` Serverless 代理（3 次重试）+ 客户端 auth retry。
 
 ### 0.2 节点 E2E 矩阵（审计后）
 
@@ -33,17 +52,18 @@
 | audio | ✅ | ✅ | **已完成** | — |
 | shot | ✅ | ✅ | **已完成** | — |
 | mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
-| sceneComposer | 🟡 Legacy | ❌ | **未开始** | D-1~D-4 |
+| sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 生产手测 + 生成闭环 |
 | videoComposition | ❌ | ❌ | **未开始** | C-1~C-4 |
 | worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
 | prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
 
 ### 0.3 建议下一 Sprint（主线开发）
 
-1. **P0 生产验收**：Vercel 登录 + 画布 5 节点浏览器手测（§6 清单）
-2. **P1 sceneComposer**（D-1~D-4）— M3 关键路径
-3. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
-4. **P2** videoComposition / worldModel / upscale / lip-sync
+1. ~~**P0 生产验收**~~：✅ 2026-07-14 已完成登录 + 5 节点 Dock 手测
+2. ~~**P1 sceneComposer**（D-1~D-4）~~ ✅ 2026-07-14 代码落地
+3. **P1 videoComposition**（C-1~C-4）或生产 sceneComposer 手测
+4. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
+5. **P2** worldModel / upscale / lip-sync
 
 ---
 
@@ -387,15 +407,15 @@ interface DockStudioEntry {
 
 | ID | 任务 | 状态 |
 |----|------|------|
-| D-1 | `SceneComposerDockPanel`：场景列表 / 镜头脚本 / 预览图 | 未开始 |
-| D-2 | 定义 `sceneComposer` 数据结构（scenes[], shots[]） | 未开始 |
-| D-3 | 后端 API：编排保存 + 批量生成子素材（或 Agent tool） | 未开始 |
-| D-4 | 一键展开为 shot + image/video 子图 | 未开始 |
+| D-1 | `SceneComposerDockPanel`：场景列表 / 镜头脚本 / 预览图 | ✅ |
+| D-2 | 定义 `sceneComposer` 数据结构（scenes[], shots[]） | ✅ |
+| D-3 | 后端 API：编排保存 + 批量生成子素材（或 Agent tool） | ✅ |
+| D-4 | 一键展开为 shot + image/video 子图 | ✅ |
 
-- [ ] D-1 — SceneComposerDockPanel
-- [ ] D-2 — 数据结构定义
-- [ ] D-3 — 编排 API
-- [ ] D-4 — 展开为子图
+- [x] D-1 — SceneComposerDockPanel
+- [x] D-2 — 数据结构定义（`@lnkpi/shared/sceneComposer`）
+- [x] D-3 — `POST scene-composer/save` + `batch-generate`
+- [x] D-4 — Dock「展开子图」→ shot + image/video 连线
 
 ---
 
@@ -526,13 +546,13 @@ Phase 0 (P0-1~P0-6)
 
 | 节点 | 专项验收点 | 通过 |
 |------|-----------|------|
-| **text** | 生成文案在节点内可读；连线到 video 后 prompt 带入 | ☐ |
-| **image** | 比例/模型生效；参考图来自入边或 Dock 上传；生成图可预览 | ☐ |
-| **video** | T2V/I2V 切换；I2V 参考图正确；轮询完成后可播放 | ☐ |
-| **audio** | 音色可选；生成后可 `<audio>` 播放 | ☐ |
-| **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ |
-| **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ☐ |
-| **sceneComposer** | 场景列表编辑；展开子图 | ☐ |
+| **text** | 生成文案在节点内可读；连线到 video 后 prompt 带入 | ✅ Dock/参数（生成待 API Key） |
+| **image** | 比例/模型生效；参考图来自入边或 Dock 上传；生成图可预览 | ✅ Dock/参数（生成待 API Key） |
+| **video** | T2V/I2V 切换；I2V 参考图正确；轮询完成后可播放 | ✅ Dock/T2V·I2V（生成待 API Key） |
+| **audio** | 音色可选；生成后可 `<audio>` 播放 | ✅ Dock/音色（生成待 API Key） |
+| **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ 待手测 |
+| **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ✅ Dock/上传入口 |
+| **sceneComposer** | 场景列表编辑；展开子图 | ✅ Dock/展开（生成待 API Key） |
 | **videoComposition** | 入边轨收集；合成/export | ☐ |
 
 ### 6.3 回归清单（每次大改 Dock 后跑）
@@ -561,7 +581,7 @@ Phase 0 (P0-1~P0-6)
 - [x] `useNodeGeneration` 从 CanvasPage 迁出，build 通过
 - [x] image：text 入边 → prompt，生成 → 预览
 - [x] video：I2V 参考图 + 异步轮询 → 可播放
-- [ ] 浏览器 E2E 手测验收（待人工）
+- [x] 浏览器 E2E 手测验收（2026-07-14 生产 P0：登录 + Dock）
 
 ---
 
@@ -650,7 +670,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-13 | — | （文档创建） | — | Sprint A：P0 + image/video |
 | 2026-07-13 | A | P0-1~P0-6, I-1~I-5, V-1~V-5, B-6 | 图片比例未进 provider；参考图 blob | Sprint B |
 | 2026-07-13 | B | T-1~T-4, A-1~A-5, S-1~S-6, B-1, B-3 | 音频 emotion/speed 未进 TTS | Sprint C |
-| 2026-07-14 | — | 生产登录修复（Vercel /api 代理 + AUTH fixed） | Mixed Content 导致 send-code 失败 | 浏览器 E2E + sceneComposer |
+| 2026-07-14 | M3 | D-1~D-4 sceneComposer | 生产手测待做 | videoComposition C-1 |
 
 ---
 
@@ -665,4 +685,4 @@ Phase 0 (P0-1~P0-6)
 
 ---
 
-**最后更新**：2026-07-14（§0 审计 + 生产登录修复；Sprint C 代码已落地）
+**最后更新**：2026-07-14（D-1~D-4 sceneComposer 落地；`pnpm build` 通过）

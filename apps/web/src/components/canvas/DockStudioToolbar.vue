@@ -21,6 +21,9 @@ const emit = defineEmits<{
   close: []
   upload: [file: File]
   convert: [targetType: 'image' | 'video' | 'audio']
+  save: []
+  expand: []
+  batchGenerate: []
 }>()
 
 const visible = computed(() => {
@@ -63,6 +66,9 @@ const dockLocked = computed(() => {
           @close="emit('close')"
           @upload="emit('upload', $event)"
           @convert="emit('convert', $event)"
+          @save="emit('save')"
+          @expand="emit('expand')"
+          @batch-generate="emit('batchGenerate')"
         />
       </div>
     </div>

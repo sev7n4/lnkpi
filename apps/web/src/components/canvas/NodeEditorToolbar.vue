@@ -22,12 +22,9 @@ const title = ref('')
 const speech = useSpeechRecognition()
 
 const nodeType = computed(() => String(props.node?.type ?? ''))
-const visible = computed(() => props.node && (nodeType.value === 'sceneComposer' || nodeType.value === 'prompt'))
+const visible = computed(() => props.node && nodeType.value === 'prompt')
 
-const typeLabel = computed(() => {
-  if (nodeType.value === 'sceneComposer') return '导演台'
-  return '提示词'
-})
+const typeLabel = computed(() => '提示词')
 
 watch(
   () => props.node,
@@ -43,10 +40,6 @@ watch(
 function onPromptInput(value: string) {
   prompt.value = value
   emit('patch', { prompt: value })
-}
-
-function onTitleInput() {
-  emit('patch', { title: title.value })
 }
 
 function onGenerate() {
@@ -73,13 +66,6 @@ function toggleVoice() {
     <div class="bottom-toolbar-header">
       <div class="flex items-center gap-2">
         <span class="bottom-toolbar-type">{{ typeLabel }}</span>
-        <input
-          v-if="nodeType === 'sceneComposer'"
-          v-model="title"
-          class="bottom-toolbar-title-input"
-          placeholder="节点标题"
-          @input="onTitleInput"
-        >
       </div>
       <button type="button" class="bottom-toolbar-close" aria-label="关闭" @click="emit('close')">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -115,7 +101,7 @@ function toggleVoice() {
         :disabled="!prompt.trim() || generating"
         @click="onGenerate"
       >
-        {{ generating ? '保存中...' : (nodeType === 'sceneComposer' ? '保存' : '应用') }}
+        {{ generating ? '保存中...' : '应用' }}
       </button>
     </div>
   </div>
