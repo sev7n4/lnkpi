@@ -148,20 +148,20 @@ jobs:
       - name: Verify deployment
         run: |
           set -euo pipefail
-          API_BASE="http://${{ env.SSH_HOST }}:${{ env.API_PORT }}"
+          API_PORT="${{ env.API_PORT }}"
           OK=0
-          for i in $(seq 1 20); do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "${API_BASE}/api/health" 2>/dev/null || echo "000")
-            if [ "$CODE" = "200" ]; then
-              echo "Health OK: ${API_BASE}/api/health"
-              curl -fsS "${API_BASE}/api/health" | head -c 200
+          for i in $(seq 1 10); do
+            if ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:${API_PORT}/api/health" >/tmp/lnkpi-health.json 2>/dev/null; then
+              echo "Health OK (via SSH): http://127.0.0.1:${API_PORT}/api/health"
+              head -c 200 /tmp/lnkpi-health.json
               echo ""
               OK=1
               break
             fi
-            echo "Attempt $i: HTTP $CODE"
+            echo "Attempt $i: health check failed"
             sleep $((i <= 5 ? 5 : 10))
           done
+          rm -f /tmp/lnkpi-health.json
           [ "$OK" = "1" ] || exit 1
 
       - name: Cleanup SSH key
