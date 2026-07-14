@@ -14,6 +14,13 @@ export const useAuthStore = defineStore('auth', () => {
     await api.post('/auth/send-code', { phone })
   }
 
+  async function fetchAuthConfig() {
+    const { data } = await api.get<{
+      data: { smsMode: string; fixedCodeHint: string | null; message: string | null }
+    }>('/auth/config')
+    return data.data
+  }
+
   async function login(phone: string, code: string) {
     const { data } = await api.post<{ data: { token: string; user: User } }>('/auth/login', {
       phone,
@@ -41,6 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoggedIn,
     showLoginDialog,
     sendCode,
+    fetchAuthConfig,
     login,
     logout,
     openLogin,

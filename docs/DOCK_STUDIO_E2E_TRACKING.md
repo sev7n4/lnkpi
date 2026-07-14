@@ -3,7 +3,47 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **维护说明**：每完成一项任务，将 `- [ ]` 改为 `- [x]`，并更新「状态」列与「最后更新」日期。
+> **最后更新**：2026-07-14（生产登录 Mixed Content 修复 + 固定验证码模式；本节审计同步）
+
+---
+
+## 零、完成情况审计（2026-07-14）
+
+### 0.1 总体进度
+
+| 阶段 | 完成度 | 说明 |
+|------|--------|------|
+| **Phase 0** 基础架构 | **100%** | P0-1 ~ P0-6 全部完成 |
+| **Phase 1** 核心生成节点 | **~92%** | text/image/video/audio/shot 主链路完成；T-5/I-6/I-7/V-6 待补 |
+| **Phase 2** 输入与编排 | **~35%** | mediaInput ✅；sceneComposer / videoComposition / worldModel 未开始 |
+| **Phase 3** Dock UX | **~83%** | UX-1~UX-5 ✅；UX-6 Capabilities API 未开始 |
+| **Phase 4** 后端补齐 | **~67%** | B-1/B-3/B-4/B-6 ✅；B-2 upscale、B-5 lip-sync 未开始 |
+| **里程碑 M1/M2** | **已完成** | 代码落地，`pnpm build` 通过 |
+| **里程碑 M3** | **进行中** | mediaInput 已落地；sceneComposer + composition 未开始 |
+| **里程碑 M4** | **未开始** | UX-6 + 后端 upscale/lip-sync/OSS STS |
+| **浏览器 E2E 手测** | **未开始** | Sprint A/B/C 均标注「待人工」 |
+
+### 0.2 节点 E2E 矩阵（审计后）
+
+| 节点 | Dock | 生成 E2E | 状态 | 待办 |
+|------|------|----------|------|------|
+| text | ✅ | ✅ | **已完成** | T-5 txt 拖入验收 |
+| image | ✅ | ✅ | **已完成** | I-6 编辑器联动、I-7 upscale |
+| video | ✅ | ✅ | **已完成** | V-6 多选批量一致 |
+| audio | ✅ | ✅ | **已完成** | — |
+| shot | ✅ | ✅ | **已完成** | — |
+| mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
+| sceneComposer | 🟡 Legacy | ❌ | **未开始** | D-1~D-4 |
+| videoComposition | ❌ | ❌ | **未开始** | C-1~C-4 |
+| worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
+| prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
+
+### 0.3 建议下一 Sprint（主线开发）
+
+1. **P0 生产验收**：Vercel 登录 + 画布 5 节点浏览器手测（§6 清单）
+2. **P1 sceneComposer**（D-1~D-4）— M3 关键路径
+3. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
+4. **P2** videoComposition / worldModel / upscale / lip-sync
 
 ---
 
@@ -91,10 +131,10 @@ completed → 写回 url / content / coverUrl
 | **audio** | ✅ | 🟢 80% | ✅ voice+settings | ✅ 入边 text 预填 | 情感/语速存 metadata | 已完成 |
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
 | **sceneComposer** | ✅ | 🔴 20% | ❌ 仅 draft | ❌ | **无导演台专属 Dock + 编排 API** | 未开始 |
-| **mediaInput** | ❌ | — | 🟡 拖入建节点 | — | **未进 EDITABLE，无 Dock** | 未开始 |
+| **mediaInput** | ✅ | 🟢 75% | 🟡 本地 upload | ✅ | 预览+转节点已完成；OSS STS 待升级 | 基本完成 |
 | **videoComposition** | ❌ | — | ❌ | ❌ | **无 Dock、无合成 API** | 未开始 |
 | **worldModel** | ❌ | — | ❌ | ❌ | **无 Dock、无 3D API** | 未开始 |
-| **prompt** | ✅ | 🟡 50% | ⚠️ 与 text 混用 | ❌ | 是否合并进 text 待产品定稿 | 未开始 |
+| **prompt** | ✅ | 🟡 50% | ⚠️ 与 text 混用 | ❌ | Legacy 面板，是否合并进 text 待产品定稿 | 未开始 |
 | **group** | — | — | — | — | 容器节点，不需要 Dock | — |
 
 ### 2.1 架构层共性缺口（所有节点受益）
@@ -610,7 +650,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-13 | — | （文档创建） | — | Sprint A：P0 + image/video |
 | 2026-07-13 | A | P0-1~P0-6, I-1~I-5, V-1~V-5, B-6 | 图片比例未进 provider；参考图 blob | Sprint B |
 | 2026-07-13 | B | T-1~T-4, A-1~A-5, S-1~S-6, B-1, B-3 | 音频 emotion/speed 未进 TTS | Sprint C |
-| 2026-07-13 | C | M-1~M-4, UX-1~UX-5, B-4（本地） | OSS STS 未接；浏览器手测待做 | sceneComposer / M4 UX-6 |
+| 2026-07-14 | — | 生产登录修复（Vercel /api 代理 + AUTH fixed） | Mixed Content 导致 send-code 失败 | 浏览器 E2E + sceneComposer |
 
 ---
 
@@ -625,4 +665,4 @@ Phase 0 (P0-1~P0-6)
 
 ---
 
-**最后更新**：2026-07-13（Sprint C 代码落地，`pnpm build` 通过）
+**最后更新**：2026-07-14（§0 审计 + 生产登录修复；Sprint C 代码已落地）

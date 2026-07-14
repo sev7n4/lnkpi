@@ -1,7 +1,18 @@
 /** 生产/Vercel 用 VITE_API_BASE_URL；本地 dev 默认走 Vite proxy `/api` */
 export function getApiBaseUrl() {
   const configured = import.meta.env.VITE_API_BASE_URL?.trim()
-  if (configured) return configured.replace(/\/$/, '')
+  if (configured) {
+    const normalized = configured.replace(/\/$/, '')
+    // HTTPS 页面请求 HTTP API 会被浏览器 Mixed Content 拦截；改走同源 /api（Vercel rewrite → CVM）
+    if (
+      typeof window !== 'undefined' &&
+      window.location.protocol === 'https:' &&
+      /^http:\/\//i.test(normalized)
+    ) {
+      return '/api'
+    }
+    return normalized
+  }
   return '/api'
 }
 

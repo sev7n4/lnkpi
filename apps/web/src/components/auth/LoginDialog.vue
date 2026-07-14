@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 
@@ -9,6 +9,7 @@ const code = ref('')
 const countdown = ref(0)
 const loading = ref(false)
 const error = ref('')
+const authHint = ref('')
 
 const visible = computed({
   get: () => auth.showLoginDialog,
@@ -16,6 +17,23 @@ const visible = computed({
     auth.showLoginDialog = v
   },
 })
+
+watch(
+  () => auth.showLoginDialog,
+  async (open) => {
+    if (!open) return
+    error.value = ''
+    authHint.value = ''
+    try {
+      const cfg = await auth.fetchAuthConfig()
+      if (cfg.fixedCodeHint) {
+        authHint.value = `临时验证码：${cfg.fixedCodeHint}（固定码模式，未发送真实短信）`
+      }
+    } catch {
+      authHint.value = '若收不到短信，可尝试验证码 123456'
+    }
+  },
+)
 
 async function handleSendCode() {
   if (!phone.value || countdown.value > 0) return
@@ -76,6 +94,8 @@ async function handleLogin() {
           </button>
         </div>
       </div>
+
+      <p v-if="authHint" class="text-xs text-amber-400/90">{{ authHint }}</p>
 
       <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
 
