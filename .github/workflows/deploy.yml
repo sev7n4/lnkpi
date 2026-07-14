@@ -35,7 +35,7 @@ jobs:
   deploy:
     name: Build on CVM and deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     environment: production
     env:
       SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
@@ -108,9 +108,21 @@ jobs:
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
           IMAGE_TAG="${{ env.IMAGE_TAG }}"
+          STATUS_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.status"
+          LOG_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.log"
+          PID_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.pid"
 
-          ssh deploy-cvm "sudo bash -c 'cd ${DEPLOY_DIR} && nohup env IMAGE_TAG=${IMAGE_TAG} STATUS_FILE=/tmp/lnkpi-deploy-${IMAGE_TAG}.status LOG_FILE=/tmp/lnkpi-deploy-${IMAGE_TAG}.log bash deploy/deploy-remote-build.sh >> /tmp/lnkpi-deploy-${IMAGE_TAG}.log 2>&1 & echo \$! > /tmp/lnkpi-deploy-${IMAGE_TAG}.pid'"
-          echo "Build started on CVM (pid file: /tmp/lnkpi-deploy-${IMAGE_TAG}.pid)"
+          # setsid + 全量重定向，避免 docker build 日志经 SSH 回传阻塞 GHA（此前导致 90min 超时）
+          ssh -n deploy-cvm "sudo bash -c 'cd ${DEPLOY_DIR} && rm -f ${STATUS_FILE} ${LOG_FILE} ${PID_FILE} && setsid env IMAGE_TAG=${IMAGE_TAG} STATUS_FILE=${STATUS_FILE} LOG_FILE=${LOG_FILE} bash deploy/deploy-remote-build.sh </dev/null >>${LOG_FILE} 2>&1 & echo \$! > ${PID_FILE}'"
+
+          sleep 2
+          PID=$(ssh deploy-cvm "sudo cat ${PID_FILE} 2>/dev/null || true")
+          if [[ -z "${PID}" ]]; then
+            echo "ERROR: CVM build pid file missing"
+            ssh deploy-cvm "sudo tail -40 ${LOG_FILE} 2>/dev/null || true"
+            exit 1
+          fi
+          echo "Build started on CVM (pid=${PID}, log=${LOG_FILE})"
 
       - name: Wait for CVM build
         run: |
@@ -120,7 +132,7 @@ jobs:
           LOG_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.log"
           OK=0
 
-          for i in $(seq 1 120); do
+          for i in $(seq 1 180); do
             STATUS=$(ssh deploy-cvm "sudo cat ${STATUS_FILE} 2>/dev/null || echo pending")
             echo "Attempt $i: status=${STATUS}"
             case "$STATUS" in
@@ -138,7 +150,7 @@ jobs:
           done
 
           if [[ "$OK" != "1" ]]; then
-            echo "Build timed out after 60 minutes"
+            echo "Build timed out after 90 minutes"
             ssh deploy-cvm "sudo tail -80 ${LOG_FILE} 2>/dev/null || true"
             exit 1
           fi
