@@ -35,6 +35,7 @@ jobs:
   deploy:
     name: Build on CVM and deploy
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     environment: production
     env:
       SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
@@ -44,18 +45,29 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
 
-      - name: Prepare SSH key
+      - name: Prepare SSH
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           echo "${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-cvm
+            HostName ${{ env.SSH_HOST }}
+            User ${{ env.SSH_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            ServerAliveInterval 30
+            ServerAliveCountMax 120
+            TCPKeepAlive yes
+          EOF
+          chmod 600 ~/.ssh/config
 
-      - name: Sync source and build on CVM
+      - name: Sync source to CVM
         run: |
           set -euo pipefail
-          HOST="${{ env.SSH_USER }}@${{ env.SSH_HOST }}"
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+          IMAGE_TAG="${{ env.IMAGE_TAG }}"
 
           tar --exclude='.git' \
               --exclude='node_modules' \
@@ -65,9 +77,9 @@ jobs:
               --exclude='docs' \
               -czf /tmp/lnkpi-src.tgz .
 
-          scp -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key /tmp/lnkpi-src.tgz "$HOST:/tmp/lnkpi-src.tgz"
+          scp /tmp/lnkpi-src.tgz deploy-cvm:/tmp/lnkpi-src.tgz
 
-          ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key "$HOST" << EOF
+          ssh deploy-cvm <<EOF
           set -euo pipefail
           sudo mkdir -p ${DEPLOY_DIR}
           if [[ -f ${DEPLOY_DIR}/.env ]]; then
@@ -85,12 +97,53 @@ jobs:
           fi
           sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh
           sudo chmod +x ${DEPLOY_DIR}/deploy/deploy-remote.sh
-          cd ${DEPLOY_DIR}
-          sudo -E env IMAGE_TAG="${{ env.IMAGE_TAG }}" bash deploy/deploy-remote-build.sh
+          sudo rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log
           rm -f /tmp/lnkpi-src.tgz
           EOF
 
-          rm -f /tmp/lnkpi-src.tgz ~/.ssh/deploy_key
+          rm -f /tmp/lnkpi-src.tgz
+
+      - name: Launch background build on CVM
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+          IMAGE_TAG="${{ env.IMAGE_TAG }}"
+
+          ssh deploy-cvm "sudo bash -c 'cd ${DEPLOY_DIR} && nohup env IMAGE_TAG=${IMAGE_TAG} STATUS_FILE=/tmp/lnkpi-deploy-${IMAGE_TAG}.status LOG_FILE=/tmp/lnkpi-deploy-${IMAGE_TAG}.log bash deploy/deploy-remote-build.sh >> /tmp/lnkpi-deploy-${IMAGE_TAG}.log 2>&1 & echo \$! > /tmp/lnkpi-deploy-${IMAGE_TAG}.pid'"
+          echo "Build started on CVM (pid file: /tmp/lnkpi-deploy-${IMAGE_TAG}.pid)"
+
+      - name: Wait for CVM build
+        run: |
+          set -euo pipefail
+          IMAGE_TAG="${{ env.IMAGE_TAG }}"
+          STATUS_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.status"
+          LOG_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.log"
+          OK=0
+
+          for i in $(seq 1 120); do
+            STATUS=$(ssh deploy-cvm "sudo cat ${STATUS_FILE} 2>/dev/null || echo pending")
+            echo "Attempt $i: status=${STATUS}"
+            case "$STATUS" in
+              success)
+                OK=1
+                break
+                ;;
+              failed)
+                echo "=== CVM build log (tail) ==="
+                ssh deploy-cvm "sudo tail -80 ${LOG_FILE} 2>/dev/null || true"
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+
+          if [[ "$OK" != "1" ]]; then
+            echo "Build timed out after 60 minutes"
+            ssh deploy-cvm "sudo tail -80 ${LOG_FILE} 2>/dev/null || true"
+            exit 1
+          fi
+
+          echo "CVM build succeeded"
 
       - name: Verify deployment
         run: |
@@ -101,6 +154,8 @@ jobs:
             CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 --max-time 10 "${API_BASE}/api/health" 2>/dev/null || echo "000")
             if [ "$CODE" = "200" ]; then
               echo "Health OK: ${API_BASE}/api/health"
+              curl -fsS "${API_BASE}/api/health" | head -c 200
+              echo ""
               OK=1
               break
             fi
@@ -108,6 +163,10 @@ jobs:
             sleep $((i <= 5 ? 5 : 10))
           done
           [ "$OK" = "1" ] || exit 1
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
 
       - name: Deployment summary
         if: always()
