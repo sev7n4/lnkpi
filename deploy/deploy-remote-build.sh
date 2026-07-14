@@ -54,6 +54,12 @@ log "=== Port binding ==="
 ss -tlnp | grep ':5100' || true
 docker port lnkpi-api 2>/dev/null || true
 
+if command -v ufw >/dev/null 2>&1 && sudo ufw status 2>/dev/null | grep -qi active; then
+  log "=== UFW active, allowing TCP 5100 ==="
+  sudo ufw allow 5100/tcp comment 'lnkpi-api' || true
+  sudo ufw status numbered | grep 5100 || true
+fi
+
 log "=== Waiting for health ==="
 for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   if curl -fsS "http://127.0.0.1:5100/api/health" >/dev/null 2>&1; then

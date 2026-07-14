@@ -170,7 +170,7 @@ jobs:
           }
 
           echo "=== public IP from server ==="
-          ssh deploy-cvm "ss -tlnp | grep ':${API_PORT}' || true; docker port lnkpi-api 2>/dev/null || true"
+          ssh deploy-cvm "ss -tlnp | grep ':${API_PORT}' || true; docker port lnkpi-api 2>/dev/null || true; (sudo ufw status 2>/dev/null || true); (sudo iptables -S INPUT 2>/dev/null | head -15 || true)"
           if ssh deploy-cvm "curl -fsS --connect-timeout 5 --max-time 10 http://${SSH_HOST}:${API_PORT}/api/health" 2>/dev/null | head -c 200; then
             echo ""
             echo "Public health OK (from server)"
