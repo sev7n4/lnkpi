@@ -116,8 +116,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       if (nodeType === 'shot') {
         await generateShot(node, prompt, data)
       }
-    } catch {
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+    } catch (err) {
+      console.error('[NodeGeneration]', nodeType, err)
+      deps.patchNodeData(node.id, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: err instanceof Error ? err.message : '生成失败',
+      })
     } finally {
       generating.value = false
     }
