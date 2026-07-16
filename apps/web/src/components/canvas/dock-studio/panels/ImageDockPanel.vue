@@ -9,7 +9,10 @@ import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbar
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
+
+const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -25,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const prompt = ref('')
-const imageModel = ref('flux-pro')
+const imageModel = ref(getConfig('image').model)
 const imageAspect = ref<ImageAspectRatio>('16:9')
 const referenceImageUrl = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
@@ -42,7 +45,7 @@ const effectiveRefUrl = computed(() => {
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
-  imageModel.value = String(data.imageModel ?? 'flux-pro')
+  imageModel.value = String(data.imageModel ?? getConfig('image').model)
   imageAspect.value = (data.imageAspect as ImageAspectRatio | undefined) ?? '16:9'
   referenceImageUrl.value = String(data.referenceImageUrl ?? '')
 }

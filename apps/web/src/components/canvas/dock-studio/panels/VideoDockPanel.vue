@@ -13,8 +13,11 @@ import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbar
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
+
+const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -30,7 +33,7 @@ const emit = defineEmits<{
 }>()
 
 const prompt = ref('')
-const videoModel = ref('kling-v1')
+const videoModel = ref(getConfig('video').model)
 const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
@@ -50,7 +53,7 @@ const modeLabel = computed(() => (videoMode.value === 'image_to_video' ? '图生
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
-  videoModel.value = String(data.videoModel ?? 'kling-v1')
+  videoModel.value = String(data.videoModel ?? getConfig('video').model)
   if (data.videoSettings && typeof data.videoSettings === 'object') {
     videoSettings.value = { ...DEFAULT_VIDEO_SETTINGS, ...(data.videoSettings as VideoSettings) }
   }

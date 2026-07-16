@@ -16,7 +16,14 @@ const { modelsFor, loading } = useCapabilities()
 const open = ref(false)
 
 const models = computed(() => modelsFor(props.type))
-const current = computed(() => models.value.find((m) => m.id === props.modelValue) ?? models.value[0])
+const current = computed(() => {
+  const found = models.value.find((m) => m.id === props.modelValue)
+  if (found) return found
+  if (props.modelValue) {
+    return { id: props.modelValue, name: props.modelValue, provider: '自定义' }
+  }
+  return models.value[0]
+})
 
 const typeLabel = computed(() => {
   if (props.type === 'text') return '文本模型'

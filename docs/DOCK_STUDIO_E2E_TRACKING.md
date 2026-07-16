@@ -3,11 +3,11 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-14（生产登录 Edge 代理修复 + 浏览器 E2E 手测验收）
+> **最后更新**：2026-07-16（M3 export/sceneComposer 生产 API 验收；Deploy PR #11/#12；§0.5 P0 手测清单）
 
 ---
 
-## 零、完成情况审计（2026-07-14）
+## 零、完成情况审计（2026-07-16）
 
 ### 0.1 总体进度
 
@@ -15,13 +15,13 @@
 |------|--------|------|
 | **Phase 0** 基础架构 | **100%** | P0-1 ~ P0-6 全部完成 |
 | **Phase 1** 核心生成节点 | **~92%** | text/image/video/audio/shot 主链路完成；T-5/I-6/I-7/V-6 待补 |
-| **Phase 2** 输入与编排 | **~85%** | mediaInput ✅；sceneComposer D-1~D-4 ✅；videoComposition C-1~C-4 ✅；worldModel 未开始 |
-| **Phase 3** Dock UX | **~83%** | UX-1~UX-5 ✅；UX-6 Capabilities API 未开始 |
+| **Phase 2** 输入与编排 | **~90%** | mediaInput ✅；sceneComposer D-1~D-4 ✅（API 手测）；videoComposition C-1~C-4 ✅（export 生产）；worldModel 未开始 |
+| **Phase 3** Dock UX | **~88%** | UX-1~UX-5 ✅；UX-6 Capabilities **部分**（`useCapabilities` + `UniversalModelSelector` 已接，未全量替换硬编码） |
 | **Phase 4** 后端补齐 | **~67%** | B-1/B-3/B-4/B-6 ✅；B-2 upscale、B-5 lip-sync 未开始 |
-| **里程碑 M1/M2** | **已完成** | 代码落地，`pnpm build` 通过 |
-| **里程碑 M3** | **基本完成** | mediaInput + sceneComposer + videoComposition C-1~C-4 已落地 |
-| **里程碑 M4** | **未开始** | UX-6 + 后端 upscale/lip-sync/OSS STS |
-| **浏览器 E2E 手测** | **✅ 生产 P0 通过** | 2026-07-14 生产登录 + 5 类节点 Dock 验收（见 §0.4） |
+| **里程碑 M1/M2** | **已完成** | 代码落地；**真实 AI 生成**待生产 API Key |
+| **里程碑 M3** | **~90%** | 编排 + export 生产 API ✅；sceneComposer/shot **浏览器 UI** 待验 |
+| **里程碑 M4** | **未开始** | OSS STS + upscale/lip-sync + worldModel |
+| **浏览器 E2E 手测** | **🟡 部分** | 2026-07-14 Dock 壳层 ✅；2026-07-16 export/sceneComposer **API** ✅；UI 闭环 ☐（见 §0.5） |
 
 ### 0.4 生产环境 E2E 手测记录（2026-07-14）
 
@@ -40,6 +40,56 @@
 | 各节点「生成」闭环 | ☐ 待补 | 需生产配置模型 API Key 后再跑完整生成 |
 | 刷新持久化 | ☐ 待补 | 画布页可加载；节点参数刷新后需人工再验 |
 
+### 0.4b 生产环境 E2E 手测记录（2026-07-16）
+
+**环境**：https://lnkpi-web.vercel.app · API → CVM `119.29.173.89:5100` · 镜像 `lnkpi-api:396175a`
+
+| 项 | 结果 | 说明 |
+|----|------|------|
+| Deploy PR #11 | 🟡 | CVM 部署成功；GHA Wait 步骤 failure（MOTD 污染 status） |
+| Deploy PR #12 | ✅ | Recover/Sync/Build/Wait/Verify 全绿 |
+| `API_PUBLIC_URL` | ✅ | 容器 env 为公网 IP，export 不再返回 127.0.0.1 |
+| sceneComposer save | ✅ | curl `POST scene-composer/save` code=0 |
+| sceneComposer batch-generate | ✅ | 返回 materialId（占位/RuleBased 图） |
+| videoComposition export | ✅ | 公网 MP4 URL，HTTP 200 |
+| sceneComposer 展开子图 UI | ☐ | 代码 D-4 已落地，浏览器未验 |
+| videoComposition「导出合成」UI | ☐ | API 已验，Dock 按钮浏览器未验 |
+
+**一键 API 回归**：`scripts/p0-production-e2e.sh`（见 §0.5）
+
+### 0.5 P0 生产手测清单（人工 + 脚本）
+
+#### 自动化（API）
+
+```bash
+# 默认打 Vercel 生产；本地 API 可设 BASE_URL=http://127.0.0.1:5100/api
+./scripts/p0-production-e2e.sh
+```
+
+| # | 检查项 | 脚本覆盖 |
+|---|--------|---------|
+| A1 | 登录 | ✅ |
+| A2 | 创建画布 | ✅ |
+| A3 | sceneComposer save | ✅ |
+| A4 | sceneComposer batch-generate | ✅ |
+| A5 | videoComposition export + MP4 HEAD | ✅ |
+| A6 | health | ✅ |
+
+#### 浏览器 UI（约 15 分钟，需登录 13800138000 / 123456）
+
+| # | 步骤 | 预期 | 通过 |
+|---|------|------|------|
+| U1 | 创建画布 → 添加 **text** → Dock 改 prompt → 生成 | 状态 generating→completed，节点有文案 | ☐ |
+| U2 | text 连线 **video** → 选中 video → I2V 参考图带入 | Dock 见上游 prompt/参考图 | ☐ |
+| U3 | 添加 **shot** → 生成 | 子 image/video 节点或封面更新 | ☐ |
+| U4 | 添加 **导演台** → 编辑场景/镜头 → **保存编排** | 无报错，刷新后仍在 | ☐ |
+| U5 | 导演台 → **展开子图** | 画布出现 shot/image/video 子节点 | ☐ |
+| U6 | 导演台 → **批量生成素材** | 分镜 entering generating，轮询后 preview | ☐ |
+| U7 | video/audio 连线 **视频合成** → **导出合成** | Dock 出现 MP4 链接，可播放 | ☐ |
+| U8 | 改 Dock 参数 → F5 刷新 | node.data 与保存前一致 | ☐ |
+
+**阻塞真实生成**：CVM `.env` 配置 `OPENAI_API_KEY`（及视频 provider）；未配置时走 RuleBased/占位图，链路仍可验状态机。
+
 **登录修复摘要**：Vercel 外链 rewrite 跨境超时（~31s 502）→ 改为 `apps/web/api/proxy.ts` Serverless 代理（3 次重试）+ 客户端 auth retry。
 
 ### 0.2 节点 E2E 矩阵（审计后）
@@ -50,9 +100,9 @@
 | image | ✅ | ✅ | **已完成** | I-6 编辑器联动、I-7 upscale |
 | video | ✅ | ✅ | **已完成** | V-6 多选批量一致 |
 | audio | ✅ | ✅ | **已完成** | — |
-| shot | ✅ | ✅ | **已完成** | — |
+| shot | ✅ | ✅ | **代码完成** | 生产 UI 手测（§0.5 U3） |
 | mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
-| sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 浏览器 UI 手测 |
+| sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 浏览器 UI：展开子图 / 批量生成（§0.5 U4–U6） |
 | videoComposition | ✅ | 🟢 | **C-1~C-4 已落地** | — |
 | worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
 | prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
@@ -61,9 +111,10 @@
 
 1. ~~**P0 生产验收**~~：✅ 2026-07-14 已完成登录 + 5 节点 Dock 手测
 2. ~~**P1 sceneComposer**（D-1~D-4）~~ ✅ 2026-07-14 代码落地
-3. ~~**生产手测** videoComposition C-2~C-4 export~~ ✅ 2026-07-16 curl export MP4 公网 URL 可访问；或 sceneComposer 生成闭环
-4. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
-5. **P2** worldModel / upscale / lip-sync
+3. ~~**生产手测** videoComposition export~~ ✅ 2026-07-16 API；UI 见 §0.5 U7
+4. **P0 浏览器 UI**：§0.5 U1–U8 + 配置生产 AI Key
+5. **P1 polish**：I-6、UX-6 全量 Capabilities、OSS STS
+6. **P2** worldModel / upscale / lip-sync
 
 ---
 
@@ -150,7 +201,7 @@ completed → 写回 url / content / coverUrl
 | **video** | ✅ | 🟢 80% | ✅ 异步轮询 | ✅ I2V + 入边参考图 | crop 已 UI 未传 provider | 已完成 |
 | **audio** | ✅ | 🟢 80% | ✅ voice+settings | ✅ 入边 text 预填 | 情感/语速存 metadata | 已完成 |
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
-| **sceneComposer** | ✅ | 🔴 20% | ❌ 仅 draft | ❌ | **无导演台专属 Dock + 编排 API** | 未开始 |
+| **sceneComposer** | ✅ | 🟢 85% | ✅ save/batch/expand | ✅ 可接 text synopsis | 浏览器 UI 闭环待验；批量生成依赖 API Key | D-1~D-4 完成 |
 | **mediaInput** | ✅ | 🟢 75% | 🟡 本地 upload | ✅ | 预览+转节点已完成；OSS STS 待升级 | 基本完成 |
 | **videoComposition** | ✅ | 🟢 85% | ✅ export | ✅ 入边 video/audio/mediaInput | ✅ 生产 export 2026-07-16 | C-1~C-4 完成 |
 | **worldModel** | ❌ | — | ❌ | ❌ | **无 Dock、无 3D API** | 未开始 |
@@ -161,7 +212,7 @@ completed → 写回 url / content / coverUrl
 
 | # | 缺口 | 影响 | 状态 |
 |---|------|------|------|
-| G-1 | `NodeEditorToolbar.vue` 单文件承载全部类型 | text/audio/shot/image/video 已拆 Panel；Legacy 仅 sceneComposer/prompt | 进行中 |
+| G-1 | `NodeEditorToolbar.vue` 单文件承载全部类型 | 主类型已拆 Panel；Legacy 仅 **prompt** | 基本完成 |
 | G-2 | `handleNodeGenerate` 在 `CanvasPage.vue` 600+ 行，缺 `useNodeGeneration` | 已迁出至 composable | 已完成 |
 | G-3 | 上游图解析未标准化（连线 text/image → prompt/refImage） | `useUpstreamNodeContext` 已实现 | 已完成 |
 | G-4 | 视频/分镜异步轮询不统一（shot 有 polling，studio video 无） | `useGenerationPolling` + B-6 部分提前 | 已完成 |
@@ -184,7 +235,7 @@ completed → 写回 url / content / coverUrl
 | `material/upscale` | ❌ | image | 未开始 |
 | `material/lip-sync` | ❌ | video（可选） | 未开始 |
 | OSS upload / STS | 本地 `POST /api/upload` + 静态 `/api/uploads/`（非 OSS STS） | mediaInput | 部分完成 |
-| `capabilities/list` → UniversalModelSelector | 需确认完全对接 | 全部生成节点 | 未开始 |
+| `capabilities/list` → UniversalModelSelector | 🟡 部分对接（`useCapabilities` 已接，fallback 硬编码） | 全部生成节点 | 进行中 |
 | `GET /studio/generations/:id` | ✅（Sprint A 提前落地，原 B-6） | video 轮询 | 已完成 |
 
 ---
@@ -497,7 +548,7 @@ interface DockStudioEntry {
 |--------|------|-----------|---------|------|
 | **M1** | Phase 0 | 架构就绪，旧功能不退化 | 2026-07-13 | 已完成 |
 | **M2** | text/image/video/audio/shot | 5 类节点完整「选中→Dock→生成→预览」 | 2026-07-13 | 已完成（待浏览器验收） |
-| **M3** | mediaInput + sceneComposer + composition | 输入→生成→合成链路 | — | 进行中（mediaInput 已落地） |
+| **M3** | mediaInput + sceneComposer + composition | 输入→生成→合成链路 | 2026-07-16 | ~90%（export API ✅；UI ☐） |
 | **M4** | UX + 后端补齐 | 对标 NeoWOW 会话级体验 | — | 未开始 |
 
 ### 5.2 依赖关系（简图）
@@ -550,7 +601,7 @@ Phase 0 (P0-1~P0-6)
 | **image** | 比例/模型生效；参考图来自入边或 Dock 上传；生成图可预览 | ✅ Dock/参数（生成待 API Key） |
 | **video** | T2V/I2V 切换；I2V 参考图正确；轮询完成后可播放 | ✅ Dock/T2V·I2V（生成待 API Key） |
 | **audio** | 音色可选；生成后可 `<audio>` 播放 | ✅ Dock/音色（生成待 API Key） |
-| **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ 待手测 |
+| **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ §0.5 U3 |
 | **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ✅ Dock/上传入口 |
 | **sceneComposer** | 场景列表编辑；展开子图 | ✅ API 手测 2026-07-16（save + batch-generate） |
 | **videoComposition** | 入边轨收集 + 轨排序/时长持久化；时间轴预览；export MP4 | ✅ 生产 export（curl 2026-07-16） |
@@ -674,7 +725,9 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-14 | M3 | C-2~C-3 videoComposition | C-4 export 未做 | 生产手测 C-2/C-3 |
 | 2026-07-14 | M3 | C-4 videoComposition export API | 生产 export 手测 | M4 / worldModel |
 | 2026-07-16 | M3 | C-2~C-4 生产 export 验收 | API_PUBLIC_URL 容器 env 曾错配 127.0.0.1（已热修） | sceneComposer 生产手测 / Deploy recover 加固 PR |
-| 2026-07-16 | M3 | sceneComposer 生产 API 手测 | GHA Wait 轮询被 MOTD 污染卡住（#11） | 浏览器 UI 手测 / fix deploy poll |
+| 2026-07-16 | M3 | sceneComposer 生产 API 手测 | — | §0.5 浏览器 UI |
+| 2026-07-16 | Deploy | PR #11 API_PUBLIC_URL + recover | GHA Wait failure | PR #12 轮询修复 ✅ |
+| 2026-07-16 | — | 节点 E2E 审计 + §0.5 P0 清单 | 真实生成待 API Key | U1–U8 浏览器手测 |
 
 ---
 
@@ -689,4 +742,4 @@ Phase 0 (P0-1~P0-6)
 
 ---
 
-**最后更新**：2026-07-14（D-1~D-4 sceneComposer 落地；`pnpm build` 通过）
+**最后更新**：2026-07-16（§0.5 P0 手测清单；M3 ~90%；Deploy PR #12 全绿）
