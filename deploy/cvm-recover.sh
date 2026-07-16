@@ -27,8 +27,20 @@ docker image prune -f 2>/dev/null || true
 log "=== Restart lnkpi-api with existing image if present ==="
 if [[ -d "${DEPLOY_DIR}/deploy" ]]; then
   cd "${DEPLOY_DIR}"
+  if [[ -f .env ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+  fi
   if docker images lnkpi-api --format '{{.Tag}}' 2>/dev/null | grep -q .; then
-    export LNKPI_API_IMAGE="lnkpi-api:latest"
+    if docker images lnkpi-api:latest --format '{{.Tag}}' 2>/dev/null | grep -q latest; then
+      export LNKPI_API_IMAGE="lnkpi-api:latest"
+    else
+      LATEST_TAG=$(docker images lnkpi-api --format '{{.Tag}}' | grep -v '<none>' | head -1)
+      export LNKPI_API_IMAGE="lnkpi-api:${LATEST_TAG}"
+    fi
+    log "using image ${LNKPI_API_IMAGE}"
     docker compose -f deploy/docker-compose.prod.yml up -d --no-build --force-recreate --remove-orphans 2>/dev/null || true
   fi
 fi

@@ -3,6 +3,12 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+if [[ -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
+fi
 IMAGE_TAG="${IMAGE_TAG:?set IMAGE_TAG to git commit sha}"
 STATUS_FILE="${STATUS_FILE:-/tmp/lnkpi-deploy-${IMAGE_TAG}.status}"
 LOG_FILE="${LOG_FILE:-/tmp/lnkpi-deploy-${IMAGE_TAG}.log}"

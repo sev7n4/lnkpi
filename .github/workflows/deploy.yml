@@ -44,7 +44,8 @@ jobs:
     environment: production
     env:
       SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
-      SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER }}
+      # 腾讯云 CVM 需使用 root + 密钥登录；非 root 用户会触发微信扫码且 sudo 易挂起
+      SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER || 'root' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,6 +63,8 @@ jobs:
             User ${{ env.SSH_USER }}
             IdentityFile ~/.ssh/deploy_key
             StrictHostKeyChecking no
+            BatchMode yes
+            LogLevel ERROR
             ServerAliveInterval 15
             ServerAliveCountMax 30
             TCPKeepAlive yes
@@ -89,7 +92,32 @@ jobs:
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
-          /tmp/lnkpi-ssh-retry.sh "recover-ssh" ssh -n deploy-cvm "sudo bash -lc 'if [[ -x ${DEPLOY_DIR}/deploy/cvm-recover.sh ]]; then ${DEPLOY_DIR}/deploy/cvm-recover.sh; else pkill -f deploy-remote-build || true; docker ps; fi'"
+          API_PORT="${{ env.API_PORT }}"
+          SSH_HOST="${{ env.SSH_HOST }}"
+          RECOVER_OK=0
+          # -T + bash -s 避免腾讯云登录 shell MOTD/二维码污染 SSH 输出
+          if /tmp/lnkpi-ssh-retry.sh "recover-ssh" ssh -T deploy-cvm "bash -s" < deploy/cvm-recover.sh; then
+            RECOVER_OK=1
+          elif ssh -T deploy-cvm "bash -s" <<EOF
+          set -euo pipefail
+          pkill -f deploy-remote-build || true
+          pkill -f launch-cvm-build || true
+          docker ps --filter name=lnkpi-api || true
+          EOF
+          then
+            RECOVER_OK=1
+          fi
+          if [[ "$RECOVER_OK" != "1" ]]; then
+            echo "WARN: recover SSH failed after retries; checking external health..."
+            if curl -fsS --connect-timeout 5 --max-time 10 "http://${SSH_HOST}:${API_PORT}/api/health" >/tmp/lnkpi-recover-health.json; then
+              echo "External health OK — continuing deploy"
+              head -c 200 /tmp/lnkpi-recover-health.json
+              echo ""
+            else
+              echo "ERROR: recover failed and API unreachable"
+              exit 1
+            fi
+          fi
 
       - name: Sync source to CVM
         if: ${{ github.event.inputs.recover_only != true }}
@@ -104,7 +132,7 @@ jobs:
               --exclude='**/dist' \
               --exclude='.cursor' \
               --exclude='docs' \
-              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "sudo bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
+              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
 
       - name: Launch background build on CVM
         if: ${{ github.event.inputs.recover_only != true }}
@@ -117,14 +145,14 @@ jobs:
           PID_FILE="/tmp/lnkpi-deploy-${IMAGE_TAG}.pid"
 
           # 使用独立 launcher 脚本立即返回，避免 sudo bash -c 'cmd &' 等待后台任务
-          LAUNCH_OUT=$(/tmp/lnkpi-ssh-retry.sh "launch-ssh" ssh -n deploy-cvm "sudo bash ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${IMAGE_TAG}")
+          LAUNCH_OUT=$(/tmp/lnkpi-ssh-retry.sh "launch-ssh" ssh -n deploy-cvm "bash ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${IMAGE_TAG}")
           echo "${LAUNCH_OUT}"
 
           sleep 2
-          PID=$(ssh deploy-cvm "sudo cat ${PID_FILE} 2>/dev/null || true")
+          PID=$(ssh deploy-cvm "cat ${PID_FILE} 2>/dev/null || true")
           if [[ -z "${PID}" ]]; then
             echo "ERROR: CVM build pid file missing"
-            ssh deploy-cvm "sudo tail -40 ${LOG_FILE} 2>/dev/null || true"
+            ssh deploy-cvm "tail -40 ${LOG_FILE} 2>/dev/null || true"
             exit 1
           fi
           echo "Build started on CVM (pid=${PID}, log=${LOG_FILE})"
@@ -139,7 +167,7 @@ jobs:
           OK=0
 
           for i in $(seq 1 180); do
-            STATUS=$(/tmp/lnkpi-ssh-retry.sh "status-ssh" ssh -n deploy-cvm "sudo cat ${STATUS_FILE} 2>/dev/null || echo pending")
+            STATUS=$(/tmp/lnkpi-ssh-retry.sh "status-ssh" ssh -n deploy-cvm "cat ${STATUS_FILE} 2>/dev/null || echo pending")
             echo "Attempt $i: status=${STATUS}"
             case "$STATUS" in
               success)
@@ -148,7 +176,7 @@ jobs:
                 ;;
               failed)
                 echo "=== CVM build log (tail) ==="
-                ssh deploy-cvm "sudo tail -80 ${LOG_FILE} 2>/dev/null || true"
+                ssh deploy-cvm "tail -80 ${LOG_FILE} 2>/dev/null || true"
                 exit 1
                 ;;
             esac
@@ -157,7 +185,7 @@ jobs:
 
           if [[ "$OK" != "1" ]]; then
             echo "Build timed out after 90 minutes"
-            ssh deploy-cvm "sudo tail -80 ${LOG_FILE} 2>/dev/null || true"
+            ssh deploy-cvm "tail -80 ${LOG_FILE} 2>/dev/null || true"
             exit 1
           fi
 
