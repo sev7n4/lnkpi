@@ -70,6 +70,18 @@ export const useAuthStore = defineStore('auth', () => {
     showLoginDialog.value = true
   }
 
+  async function restoreSession() {
+    if (!token.value) return
+    try {
+      const { data } = await withAuthRetry(() =>
+        api.get<{ data: User }>('/auth/profile', { timeout: AUTH_TIMEOUT_MS }),
+      )
+      user.value = data.data
+    } catch {
+      logout()
+    }
+  }
+
   return {
     user,
     token,
@@ -80,5 +92,6 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     openLogin,
+    restoreSession,
   }
 })
