@@ -4,6 +4,11 @@
   "buildCommand": "cd ../.. && pnpm --filter @lnkpi/web build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "functions": {
+    "api/proxy.ts": {
+      "maxDuration": 120
+    }
+  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/proxy?path=$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
