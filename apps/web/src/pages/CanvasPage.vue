@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { useShotPolling } from '@/composables/useShotPolling'
-import { useGenerationPolling, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { useGenerationPolling, parseRecordText, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -197,10 +197,7 @@ const shotPolling = useShotPolling((shots) => {
   for (const shot of shots) {
     const material = shot.materials.find((m) => m.status === 'completed' && m.url)
     if (!material) continue
-    const shotNode = findNodeById(shot.id)
-    if (shotNode) {
-      shotNode.data = { ...(shotNode.data as Record<string, unknown>), status: 'generated', coverUrl: material.url }
-    }
+    patchNodeData(shot.id, { status: NODE_GENERATION_STATUS.completed, coverUrl: material.url })
     for (const n of nodes.value) {
       if (n.type !== 'image' && n.type !== 'video') continue
       let linked = false
@@ -211,19 +208,24 @@ const shotPolling = useShotPolling((shots) => {
         }
       }
       if (linked) {
-        n.data = { ...(n.data as Record<string, unknown>), url: material.url, status: NODE_GENERATION_STATUS.completed }
+        patchNodeData(n.id, { url: material.url, status: NODE_GENERATION_STATUS.completed })
       }
     }
   }
+  void saveCanvas()
 })
 
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
     if (record.status === NODE_GENERATION_STATUS.completed) {
-      patchNodeData(task.nodeId, {
+      const patch: Record<string, unknown> = {
         url: parseRecordUrl(record),
         status: NODE_GENERATION_STATUS.completed,
-      })
+      }
+      if (record.type === 'text') {
+        patch.content = parseRecordText(record)
+      }
+      patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
       patchNodeData(task.nodeId, { status: NODE_GENERATION_STATUS.error })
     }

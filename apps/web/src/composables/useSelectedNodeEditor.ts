@@ -42,12 +42,9 @@ export function useSelectedNodeEditor(nodes: Ref<EditableFlowNode[]>) {
   }
 
   function patchNodeData(id: string, patch: Record<string, unknown>) {
-    for (const node of nodes.value) {
-      if (node.id === id) {
-        node.data = { ...(node.data ?? {}), ...patch }
-        break
-      }
-    }
+    nodes.value = nodes.value.map((node) =>
+      node.id === id ? { ...node, data: { ...(node.data ?? {}), ...patch } } : node,
+    )
   }
 
   return {

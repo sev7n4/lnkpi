@@ -37,10 +37,35 @@ export class OpenAITTSProvider implements AudioProvider {
   }
 }
 
+/** Agnes 暂无独立 TTS：先尝试 OpenAI 兼容 /audio/speech，失败则占位 MP3 */
+export class FallbackAudioProvider implements AudioProvider {
+  constructor(
+    private primary: AudioProvider,
+    private fallback: AudioProvider = new PlaceholderAudioProvider(),
+  ) {}
+
+  async generate(text: string, voice?: string): Promise<{ url: string }> {
+    try {
+      return await this.primary.generate(text, voice)
+    } catch (err) {
+      console.warn('[AudioProvider] primary TTS failed, using fallback:', err)
+      return this.fallback.generate(text, voice)
+    }
+  }
+}
+
+function isAgnesBaseUrl(baseUrl?: string) {
+  return Boolean(baseUrl?.includes('agnes-ai.com'))
+}
+
 export function createAudioProvider(): AudioProvider {
   const key = process.env.OPENAI_API_KEY
-  if (key) {
-    return new OpenAITTSProvider(key, process.env.OPENAI_BASE_URL)
+  const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1'
+  const model = process.env.OPENAI_TTS_MODEL ?? 'tts-1'
+  if (!key) return new PlaceholderAudioProvider()
+  const tts = new OpenAITTSProvider(key, baseUrl, model)
+  if (isAgnesBaseUrl(baseUrl)) {
+    return new FallbackAudioProvider(tts)
   }
-  return new PlaceholderAudioProvider()
+  return tts
 }
