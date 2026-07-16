@@ -53,7 +53,7 @@
 | shot | ✅ | ✅ | **已完成** | — |
 | mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
 | sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 生产手测 + 生成闭环 |
-| videoComposition | ✅ | 🟢 | **C-1~C-4 已落地** | 生产手测 export |
+| videoComposition | ✅ | 🟢 | **C-1~C-4 已落地** | — |
 | worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
 | prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
 
@@ -61,7 +61,7 @@
 
 1. ~~**P0 生产验收**~~：✅ 2026-07-14 已完成登录 + 5 节点 Dock 手测
 2. ~~**P1 sceneComposer**（D-1~D-4）~~ ✅ 2026-07-14 代码落地
-3. **生产手测** videoComposition C-2~C-4 export，或 sceneComposer 生成闭环
+3. ~~**生产手测** videoComposition C-2~C-4 export~~ ✅ 2026-07-16 curl export MP4 公网 URL 可访问；或 sceneComposer 生成闭环
 4. **P1 可选 polish**：I-6 AIImageEditor 联动、UX-6 Capabilities API
 5. **P2** worldModel / upscale / lip-sync
 
@@ -152,7 +152,7 @@ completed → 写回 url / content / coverUrl
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
 | **sceneComposer** | ✅ | 🔴 20% | ❌ 仅 draft | ❌ | **无导演台专属 Dock + 编排 API** | 未开始 |
 | **mediaInput** | ✅ | 🟢 75% | 🟡 本地 upload | ✅ | 预览+转节点已完成；OSS STS 待升级 | 基本完成 |
-| **videoComposition** | ✅ | 🟢 85% | 🟡 export | ✅ 入边 video/audio/mediaInput | 生产 export 手测 | C-1~C-4 完成 |
+| **videoComposition** | ✅ | 🟢 85% | ✅ export | ✅ 入边 video/audio/mediaInput | ✅ 生产 export 2026-07-16 | C-1~C-4 完成 |
 | **worldModel** | ❌ | — | ❌ | ❌ | **无 Dock、无 3D API** | 未开始 |
 | **prompt** | ✅ | 🟡 50% | ⚠️ 与 text 混用 | ❌ | Legacy 面板，是否合并进 text 待产品定稿 | 未开始 |
 | **group** | — | — | — | — | 容器节点，不需要 Dock | — |
@@ -553,7 +553,7 @@ Phase 0 (P0-1~P0-6)
 | **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ 待手测 |
 | **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ✅ Dock/上传入口 |
 | **sceneComposer** | 场景列表编辑；展开子图 | ✅ Dock/展开（生成待 API Key） |
-| **videoComposition** | 入边轨收集 + 轨排序/时长持久化；时间轴预览；export MP4 | ☐ 生产 export 手测 |
+| **videoComposition** | 入边轨收集 + 轨排序/时长持久化；时间轴预览；export MP4 | ✅ 生产 export（curl 2026-07-16） |
 
 ### 6.3 回归清单（每次大改 Dock 后跑）
 
@@ -673,6 +673,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-14 | M3 | D-1~D-4 sceneComposer | 生产手测待做 | videoComposition C-1 |
 | 2026-07-14 | M3 | C-2~C-3 videoComposition | C-4 export 未做 | 生产手测 C-2/C-3 |
 | 2026-07-14 | M3 | C-4 videoComposition export API | 生产 export 手测 | M4 / worldModel |
+| 2026-07-16 | M3 | C-2~C-4 生产 export 验收 | API_PUBLIC_URL 容器 env 曾错配 127.0.0.1（已热修） | sceneComposer 生产手测 / Deploy recover 加固 PR |
 
 ---
 
