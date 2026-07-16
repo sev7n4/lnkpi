@@ -1304,6 +1304,7 @@ const {
   startShotPolling: (ids) => shotPolling.start(ids),
   startGenerationPolling: (tasks) => generationPolling.start(tasks),
   resolveProviderModels: () => ({
+    text: getProviderConfig('text').model,
     image: getProviderConfig('image').model,
     video: getProviderConfig('video').model,
   }),

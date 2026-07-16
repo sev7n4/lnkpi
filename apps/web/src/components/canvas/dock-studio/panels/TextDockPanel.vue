@@ -9,7 +9,10 @@ import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPrompt
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
+
+const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -25,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const content = ref('')
-const textModel = ref('gpt-4o')
+const textModel = ref(getConfig('text').model)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
@@ -34,7 +37,7 @@ const wordCount = computed(() => content.value.replace(/\s/g, '').length)
 function syncFromNode() {
   const data = props.node.data ?? {}
   content.value = String(data.content ?? data.prompt ?? '')
-  textModel.value = String(data.textModel ?? 'gpt-4o')
+  textModel.value = String(data.textModel ?? getConfig('text').model)
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })

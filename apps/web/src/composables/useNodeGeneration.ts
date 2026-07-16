@@ -33,7 +33,7 @@ export interface NodeGenerationDeps {
   requireLogin: () => boolean
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
-  resolveProviderModels: () => { image: string; video: string }
+  resolveProviderModels: () => { image: string; video: string; text: string }
 }
 
 function findNodeById(nodes: EditableFlowNode[], id: string) {
@@ -75,7 +75,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     try {
       if (nodeType === 'text') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: prompt, prompt })
-        const { data: res } = await studioApi.generateText(prompt, String(data.textModel ?? 'gpt-4o'))
+        const models = deps.resolveProviderModels()
+        const { data: res } = await studioApi.generateText(
+          prompt,
+          String(data.textModel ?? models.text),
+        )
         const content = parseRecordText(res.data)
         deps.patchNodeData(node.id, {
           content,
@@ -158,9 +162,10 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const refImage = mergeReferenceImageUrl(data, upstream)
       const imagePrompt = buildPromptWithRefImage(prompt, refImage)
       const aspectRatio = String(data.imageAspect ?? '16:9')
+      const models = deps.resolveProviderModels()
       const { data: res } = await studioApi.generateImage(
         imagePrompt,
-        String(data.imageModel ?? 'flux-pro'),
+        String(data.imageModel ?? models.image),
         aspectRatio,
       )
       deps.patchNodeData(node.id, {
@@ -176,9 +181,10 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const videoMode = resolveVideoMode(data, upstream)
     const refImage = videoMode === 'image_to_video' ? mergeReferenceImageUrl(data, upstream) : ''
     const videoPrompt = buildPromptWithRefImage(prompt, refImage)
+    const models = deps.resolveProviderModels()
     const { data: res } = await studioApi.generateVideo(
       videoPrompt,
-      String(data.videoModel ?? 'kling-v1'),
+      String(data.videoModel ?? models.video),
       settings?.duration,
       settings?.aspectRatio,
     )
