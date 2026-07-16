@@ -1,8 +1,21 @@
 import type { IncomingHttpHeaders } from 'node:http'
 
 const API_ORIGIN = process.env.LNKPI_API_ORIGIN ?? 'http://119.29.173.89:5100'
-const UPSTREAM_TIMEOUT_MS = 20_000
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 20_000
 const MAX_ATTEMPTS = 3
+
+/** Vercel Serverless 最大执行时长（秒），需与上游超时匹配 */
+export const config = {
+  maxDuration: 120,
+}
+
+const LONG_RUNNING_PATHS: Array<{ pattern: RegExp; timeoutMs: number }> = [
+  { pattern: /\/studio\/text\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/image\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/image\/variation$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/video\/generate$/i, timeoutMs: 90_000 },
+  { pattern: /\/studio\/audio\/generate$/i, timeoutMs: 60_000 },
+]
 
 type VercelRequest = {
   method?: string
@@ -27,6 +40,20 @@ function buildUpstreamPath(query: VercelRequest['query']) {
     .filter(Boolean)
     .join('/')
   return joined ? `/api/${joined}` : '/api'
+}
+
+function resolveUpstreamTimeoutMs(upstreamPath: string): number {
+  for (const { pattern, timeoutMs } of LONG_RUNNING_PATHS) {
+    if (pattern.test(upstreamPath)) return timeoutMs
+  }
+  return DEFAULT_UPSTREAM_TIMEOUT_MS
+}
+
+function isStudioGeneratePost(method: string, upstreamPath: string): boolean {
+  return (
+    method === 'POST'
+    && /\/studio\/(text|image|video|audio)\/(generate|variation)$/i.test(upstreamPath)
+  )
 }
 
 function buildUpstreamUrl(req: VercelRequest) {
@@ -68,23 +95,26 @@ function buildUpstreamBody(req: VercelRequest) {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method?.toUpperCase() ?? 'GET'
+  const upstreamPath = buildUpstreamPath(req.query)
   const target = buildUpstreamUrl(req)
   const headers = buildUpstreamHeaders(req)
   const body = buildUpstreamBody(req)
+  const timeoutMs = resolveUpstreamTimeoutMs(upstreamPath)
+  const maxAttempts = isStudioGeneratePost(method, upstreamPath) ? 1 : MAX_ATTEMPTS
 
   if (body != null && !headers.has('content-type')) {
     headers.set('content-type', 'application/json')
   }
 
   let lastError: unknown
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const upstream = await fetch(target, {
         method,
         headers,
         body,
         redirect: 'manual',
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
       })
       const responseBody = Buffer.from(await upstream.arrayBuffer())
       res.status(upstream.status)
@@ -96,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return
     } catch (error) {
       lastError = error
-      if (attempt < MAX_ATTEMPTS) {
+      if (attempt < maxAttempts) {
         await new Promise((resolve) => setTimeout(resolve, 400 * attempt))
       }
     }
