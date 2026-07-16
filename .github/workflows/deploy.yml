@@ -167,7 +167,8 @@ jobs:
           OK=0
 
           for i in $(seq 1 180); do
-            STATUS=$(/tmp/lnkpi-ssh-retry.sh "status-ssh" ssh -n deploy-cvm "cat ${STATUS_FILE} 2>/dev/null || echo pending")
+            RAW=$(ssh -T deploy-cvm "cat ${STATUS_FILE} 2>/dev/null || echo pending" 2>/dev/null || echo pending)
+            STATUS=$(printf '%s' "$RAW" | tr -d '\r' | grep -Eo 'success|failed|running|pending' | tail -1 || echo pending)
             echo "Attempt $i: status=${STATUS}"
             case "$STATUS" in
               success)
