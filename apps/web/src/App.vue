@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import AppHeader from '@/components/layout/AppHeader.vue'
+import LoginDialog from '@/components/auth/LoginDialog.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 const isImmersiveCanvas = computed(() => route.name === 'canvas')
+
+onMounted(() => {
+  void auth.restoreSession()
+})
 </script>
 
 <template>
@@ -14,5 +21,6 @@ const isImmersiveCanvas = computed(() => route.name === 'canvas')
     <main class="relative" :class="isImmersiveCanvas ? 'h-screen overflow-hidden' : ''">
       <RouterView />
     </main>
+    <LoginDialog />
   </div>
 </template>

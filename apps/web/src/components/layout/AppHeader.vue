@@ -3,7 +3,6 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
-import LoginDialog from '@/components/auth/LoginDialog.vue'
 import MembershipModal from '@/components/membership/MembershipModal.vue'
 
 const showMembership = ref(false)
@@ -85,6 +84,5 @@ function navigate(path: string) {
     </div>
   </header>
 
-  <LoginDialog />
   <MembershipModal v-model="showMembership" />
 </template>
