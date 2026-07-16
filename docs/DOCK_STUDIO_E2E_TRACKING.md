@@ -52,7 +52,7 @@
 | audio | ✅ | ✅ | **已完成** | — |
 | shot | ✅ | ✅ | **已完成** | — |
 | mediaInput | ✅ | 🟡 | **基本完成** | M-3 升级 OSS STS |
-| sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 生产手测 + 生成闭环 |
+| sceneComposer | ✅ | 🟡 | **D-1~D-4 已落地** | 浏览器 UI 手测 |
 | videoComposition | ✅ | 🟢 | **C-1~C-4 已落地** | — |
 | worldModel | ❌ | ❌ | **未开始** | W-1~W-3 |
 | prompt | 🟡 Legacy | ⚠️ | **待定** | 是否合并进 text |
@@ -552,7 +552,7 @@ Phase 0 (P0-1~P0-6)
 | **audio** | 音色可选；生成后可 `<audio>` 播放 | ✅ Dock/音色（生成待 API Key） |
 | **shot** | 生成后子节点创建/更新；封面与 polling 同步 | ☐ 待手测 |
 | **mediaInput** | 预览正确；可转 image/video；OSS url 非 blob | ✅ Dock/上传入口 |
-| **sceneComposer** | 场景列表编辑；展开子图 | ✅ Dock/展开（生成待 API Key） |
+| **sceneComposer** | 场景列表编辑；展开子图 | ✅ API 手测 2026-07-16（save + batch-generate） |
 | **videoComposition** | 入边轨收集 + 轨排序/时长持久化；时间轴预览；export MP4 | ✅ 生产 export（curl 2026-07-16） |
 
 ### 6.3 回归清单（每次大改 Dock 后跑）
@@ -674,6 +674,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-14 | M3 | C-2~C-3 videoComposition | C-4 export 未做 | 生产手测 C-2/C-3 |
 | 2026-07-14 | M3 | C-4 videoComposition export API | 生产 export 手测 | M4 / worldModel |
 | 2026-07-16 | M3 | C-2~C-4 生产 export 验收 | API_PUBLIC_URL 容器 env 曾错配 127.0.0.1（已热修） | sceneComposer 生产手测 / Deploy recover 加固 PR |
+| 2026-07-16 | M3 | sceneComposer 生产 API 手测 | GHA Wait 轮询被 MOTD 污染卡住（#11） | 浏览器 UI 手测 / fix deploy poll |
 
 ---
 
