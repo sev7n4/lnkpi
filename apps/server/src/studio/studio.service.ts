@@ -4,6 +4,7 @@ import {
   createImageProvider,
   createTextProvider,
   createVideoProvider,
+  generatePromptFromUserInput,
 } from '@lnkpi/agent'
 import { PrismaService } from '../prisma/prisma.service'
 
@@ -33,6 +34,28 @@ export class StudioService {
         url: null,
         status: 'completed',
         metadata: JSON.stringify({ text }),
+      },
+    })
+  }
+
+  async generatePrompt(userId: string, prompt: string, model?: string) {
+    const trimmed = prompt?.trim()
+    if (!trimmed) throw new BadRequestException('prompt 不能为空')
+    await this.consumePoints(userId, 5, '提示词模式生成')
+    const { mode, content } = await generatePromptFromUserInput(trimmed, {
+      model,
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL,
+    })
+    return this.prisma.generationRecord.create({
+      data: {
+        userId,
+        type: 'prompt',
+        prompt: trimmed,
+        model,
+        url: null,
+        status: 'completed',
+        metadata: JSON.stringify({ mode, content }),
       },
     })
   }
