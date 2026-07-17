@@ -18,6 +18,7 @@ import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
+import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
@@ -255,19 +256,6 @@ function startPollingForGeneratingVideos() {
   if (tasks.length) generationPolling.start(tasks)
 }
 
-const mentionOptions = computed((): Array<{ id: string; label: string; type: string }> => {
-  const out: Array<{ id: string; label: string; type: string }> = []
-  for (const n of nodes.value) {
-    const data = n.data as Record<string, unknown>
-    out.push({
-      id: n.id,
-      label: String(data.title ?? data.prompt ?? n.id),
-      type: String(n.type ?? 'node'),
-    })
-  }
-  return out
-})
-
 const playCanvasNodes = computed((): Array<{ id: string; type: string; position: { x: number; y: number }; data: Record<string, unknown> }> =>
   nodes.value.map((n) => ({
     id: n.id,
@@ -312,6 +300,41 @@ const editorUpstream = computed(() => {
     return { textPrompt: '', referenceImageUrl: '', referenceImageNodeId: null, textNodeIds: [] }
   }
   return resolveUpstreamContext(node.id, nodes.value, edges.value)
+})
+
+const selectedRefs = computed((): NodeRef[] => {
+  const node = editorNode.value
+  if (!node) return []
+  return resolveNodeRefs({
+    targetNodeId: node.id,
+    targetType: String(node.type),
+    nodes: nodes.value,
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    localRefs: (node.data?.localRefs as LocalRefBinding[]) ?? [],
+    refOrder: (node.data?.refOrder as string[]) ?? [],
+  })
+})
+
+const mentionOptions = computed((): Array<{ id: string; label: string; type: string }> => {
+  const refOptions = selectedRefs.value
+    .filter((ref) => !ref.stale)
+    .map((ref) => ({
+      id: ref.refId,
+      label: ref.refKey,
+      type: ref.mediaType,
+    }))
+  if (refOptions.length) return refOptions
+
+  const out: Array<{ id: string; label: string; type: string }> = []
+  for (const n of nodes.value) {
+    const data = n.data as Record<string, unknown>
+    out.push({
+      id: n.id,
+      label: String(data.title ?? data.prompt ?? n.id),
+      type: String(n.type ?? 'node'),
+    })
+  }
+  return out
 })
 
 const editorCompositionTracks = computed(() => {
@@ -845,6 +868,88 @@ function resolveDropPosition(clientPos: { x: number; y: number }, nodeType: stri
   }
 }
 
+const LOCAL_REF_TARGET_TYPES = new Set(['text', 'prompt', 'image', 'video', 'audio'])
+
+function createLocalRefId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
+function appendLocalRef(nodeId: string, binding: LocalRefBinding) {
+  const node = findNodeById(nodeId)
+  const prev = (node?.data?.localRefs as LocalRefBinding[]) ?? []
+  patchNodeData(nodeId, { localRefs: [...prev, binding] })
+}
+
+function canAcceptLocalRef(nodeType: string, mediaType: LocalRefBinding['mediaType']): boolean {
+  if (!LOCAL_REF_TARGET_TYPES.has(nodeType)) return false
+  if (mediaType === 'text') return nodeType === 'text' || nodeType === 'prompt'
+  if (mediaType === 'image') return nodeType === 'text' || nodeType === 'image' || nodeType === 'video'
+  if (mediaType === 'video') return nodeType === 'video'
+  if (mediaType === 'audio') return nodeType === 'audio'
+  return false
+}
+
+function previewPatchForLocalRef(
+  nodeType: string,
+  mediaType: LocalRefBinding['mediaType'],
+  url: string,
+): Record<string, unknown> {
+  if (mediaType === 'image' && nodeType === 'image') return { url, status: 'completed' }
+  if (mediaType === 'image' && nodeType === 'video') return { referenceImageUrl: url }
+  if (mediaType === 'video' && nodeType === 'video') return { url, status: 'completed' }
+  if (mediaType === 'audio' && nodeType === 'audio') return { url, status: 'completed' }
+  return {}
+}
+
+function applyLocalRefToSelectedNode(binding: LocalRefBinding): boolean {
+  const node = editorNode.value
+  if (!node) return false
+  const nodeType = String(node.type ?? '')
+  if (!canAcceptLocalRef(nodeType, binding.mediaType)) return false
+
+  appendLocalRef(node.id, binding)
+  const previewPatch = previewPatchForLocalRef(nodeType, binding.mediaType, binding.url ?? '')
+  if (Object.keys(previewPatch).length) patchNodeData(node.id, previewPatch)
+  void saveCanvas()
+  return true
+}
+
+function assetPayloadFromItem(asset: CanvasAssetItem): MediaFilePayload | null {
+  if (asset.kind !== 'image' && asset.kind !== 'video' && asset.kind !== 'audio') return null
+  return {
+    url: asset.url,
+    fileName: asset.label,
+    mimeType: asset.kind === 'video' ? 'video/mp4' : asset.kind === 'audio' ? 'audio/mpeg' : 'image/png',
+    kind: asset.kind,
+  }
+}
+
+function tryApplyAssetToSelectedNode(asset: CanvasAssetItem): boolean {
+  if (asset.kind !== 'image' && asset.kind !== 'video' && asset.kind !== 'audio') return false
+  const payload = assetPayloadFromItem(asset)
+  if (!payload) return false
+  return applyLocalRefToSelectedNode({
+    id: createLocalRefId('asset'),
+    mediaType: asset.kind,
+    sourceKind: 'asset',
+    label: asset.label,
+    url: payload.url,
+  })
+}
+
+function tryApplyUploadToSelectedNode(payload: MediaFilePayload): boolean {
+  if (payload.kind === 'other') return false
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('upload'),
+    mediaType: payload.kind,
+    sourceKind: 'upload',
+    label: payload.fileName,
+    url: payload.url,
+  }
+  if (payload.kind === 'text') binding.text = payload.textContent ?? ''
+  return applyLocalRefToSelectedNode(binding)
+}
+
 async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: number; y: number }) {
   if (payload.kind === 'other') return
 
@@ -902,6 +1007,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
 
 async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) {
   const payload = await fileToPersistedPayload(file)
+  if (tryApplyUploadToSelectedNode(payload)) return
   await createFileNodeAt(payload, clientPos)
 }
 
@@ -978,22 +1084,15 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
 }
 
 async function handleAssetApply(asset: CanvasAssetItem) {
+  if (tryApplyAssetToSelectedNode(asset)) return
+
   const center = canvasAreaRef.value?.getBoundingClientRect()
   const clientPos = {
     x: center ? center.left + center.width / 2 : window.innerWidth / 2,
     y: center ? center.top + center.height / 2 : window.innerHeight / 2,
   }
-  if (asset.kind === 'image' || asset.kind === 'video' || asset.kind === 'audio') {
-    await createFileNodeAt(
-      {
-        url: asset.url,
-        fileName: asset.label,
-        mimeType: asset.kind === 'video' ? 'video/mp4' : asset.kind === 'audio' ? 'audio/mpeg' : 'image/png',
-        kind: asset.kind,
-      },
-      clientPos,
-    )
-  }
+  const payload = assetPayloadFromItem(asset)
+  if (payload) await createFileNodeAt(payload, clientPos)
 }
 
 async function handlePackageDownload() {
@@ -1091,6 +1190,19 @@ useCanvasKeyboard({
 function patchSelectedNode(patch: Record<string, unknown>) {
   if (!editorNode.value) return
   debouncedNodePatch.patchNode(editorNode.value.id, patch)
+}
+
+function handleRemoveRef(ref: NodeRef) {
+  const node = editorNode.value
+  if (!node) return
+  if (ref.sourceKind === 'edge' && ref.edgeId) {
+    deleteEdgeById(ref.edgeId)
+    return
+  }
+  const localRefs = ((node.data?.localRefs as LocalRefBinding[]) ?? []).filter(
+    (binding) => binding.id !== ref.refId,
+  )
+  patchSelectedNode({ localRefs })
 }
 
 async function handleNodeGenerate() {
@@ -1396,16 +1508,10 @@ onMounted(() => {
         event.preventDefault()
         try {
           const asset = JSON.parse(assetRaw) as CanvasAssetItem
-          if (asset.kind === 'image' || asset.kind === 'video' || asset.kind === 'audio') {
-            void createFileNodeAt(
-              {
-                url: asset.url,
-                fileName: asset.label,
-                mimeType: asset.kind === 'video' ? 'video/mp4' : asset.kind === 'audio' ? 'audio/mpeg' : 'image/png',
-                kind: asset.kind,
-              },
-              { x: event.clientX, y: event.clientY },
-            )
+          if (tryApplyAssetToSelectedNode(asset)) return
+          const payload = assetPayloadFromItem(asset)
+          if (payload) {
+            void createFileNodeAt(payload, { x: event.clientX, y: event.clientY })
           }
         } catch {
           // ignore
@@ -1535,11 +1641,13 @@ onMounted(() => {
         <DockStudioToolbar
           :node="editorNode"
           :upstream="editorUpstream"
+          :refs="selectedRefs"
           :composition-tracks="editorCompositionTracks"
           :mentions="mentionOptions"
           :generating="nodeGenerating"
           :scale="viewportSettings.bottomToolbarScale"
           @patch="patchSelectedNode"
+          @remove-ref="handleRemoveRef"
           @generate="handleNodeGenerate"
           @save="handleSceneComposerSave"
           @expand="handleSceneComposerExpand"

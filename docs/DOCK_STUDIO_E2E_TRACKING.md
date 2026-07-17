@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-16（M3 export/sceneComposer 生产 API 验收；Deploy PR #11/#12；§0.5 P0 手测清单）
+> **最后更新**：2026-07-18（§6.4 节点数据贯通 RefChip 验收；M3 export/sceneComposer 生产 API 验收；§0.5 P0 手测清单）
 
 ---
 
@@ -612,6 +612,27 @@ Phase 0 (P0-1~P0-6)
 - [ ] 媒体拖放/粘贴 → 建节点 → 选中 Dock 联动
 - [ ] Agent 浮动窗与 Dock 不互相遮挡关键控件
 - [ ] 未登录点生成 → 正确提示登录
+
+### 6.4 节点数据贯通 RefChip 验收（2026-07-18）
+
+> 规格：`docs/superpowers/specs/2026-07-18-node-data-flow-refs-design.md`  
+> 代码验收报告：`.superpowers/sdd/task-10-report.md`  
+> **图例**：✅ 代码已验 · 🟡 待浏览器手测
+
+| # | 场景 | 期望 | 代码 | 手测 |
+|---|------|------|------|------|
+| R1 | 多 text → image | 单行 T1/T2；生成 body 含 refs；出图用合并文案 | ✅ | ☐ |
+| R2 | 多 image → image/video | I1/I2 皆在 refs；主图 I1 | ✅ | ☐ |
+| R3 | prompt.content → image | 注入长文非短 prompt | ✅ | ☐ |
+| R4 | × 芯片 | edge 删除 / localRefs 移除 | ✅ | ☐ |
+| R5 | 资产拖入 | 出现 upload/asset 芯片 | ✅ | ☐ |
+| R6 | prompt 上游长文 | 不进 prompt 生成；空框可预填 | ✅ | ☐ |
+| R7 | 图 → text | 电商方案类长文；扣 5 点 | ✅ | ☐ |
+| R8 | 音频 + 图片芯片 | 只展示不报错 | ✅ | ☐ |
+| R9 | 仅改上游 content | 下游芯片更新；不自动重生成 | ✅ | ☐ |
+| R10 | @T1 / @I2 提及 | 生成时优先 mentionedKeys | ✅ | ☐ |
+
+**构建/单测**：`pnpm build` ✅ · `pnpm --filter @lnkpi/agent test` 23 passed ✅
 
 ---
 

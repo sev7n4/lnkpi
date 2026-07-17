@@ -3,21 +3,21 @@ import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import {
-  buildPromptWithRefImage,
   mergePromptWithUpstream,
   mergeReferenceImageUrl,
   resolveUpstreamContext,
-  resolveVideoMode,
   type CanvasEdgeLike,
 } from '@/composables/useUpstreamNodeContext'
+import { resolveNodeRefs, type LocalRefBinding } from '@/composables/useNodeRefs'
 import {
   parseRecordPromptContent,
   parseRecordText,
   parseRecordUrl,
   type GenerationPollTask,
 } from '@/composables/useGenerationPolling'
+import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
-import { studioApi } from '@/services/studio-api'
+import { studioApi, type StudioRefPayload } from '@/services/studio-api'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
@@ -39,6 +39,49 @@ export interface NodeGenerationDeps {
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
   resolveProviderModels: () => { image: string; video: string; text: string }
+}
+
+function localPrompt(data: Record<string, unknown>): string {
+  return String(data.prompt ?? data.content ?? '').trim()
+}
+
+function normalizeEdges(edges: CanvasEdgeLike[]) {
+  return edges.map((edge) => ({
+    id: edge.id ?? `${edge.source}->${edge.target}`,
+    source: edge.source,
+    target: edge.target,
+  }))
+}
+
+function resolveStudioRefs(
+  node: EditableFlowNode,
+  nodes: EditableFlowNode[],
+  edges: CanvasEdgeLike[],
+): StudioRefPayload[] {
+  const data = node.data ?? {}
+  return resolveNodeRefs({
+    targetNodeId: node.id,
+    targetType: String(node.type),
+    nodes,
+    edges: normalizeEdges(edges),
+    localRefs: (data.localRefs as LocalRefBinding[]) ?? [],
+    refOrder: (data.refOrder as string[]) ?? [],
+  })
+    .filter((r) => !r.stale)
+    .map((r) => ({
+      refKey: r.refKey,
+      mediaType: r.mediaType,
+      label: r.label,
+      text: r.payload.text,
+      url: r.payload.url,
+    }))
+}
+
+function firstImageRefUrl(refs: StudioRefPayload[]): string {
+  for (const ref of refs) {
+    if (ref.mediaType === 'image' && ref.url?.trim()) return ref.url.trim()
+  }
+  return ''
 }
 
 function findNodeById(nodes: EditableFlowNode[], id: string) {
@@ -71,20 +114,25 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const data = node.data ?? {}
     const nodeType = String(node.type)
     const upstream = resolveUpstreamContext(node.id, deps.nodes.value, deps.edges.value)
-    const prompt = mergePromptWithUpstream(data, upstream)
+    const local = localPrompt(data)
+    const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
+    const mentionedKeys = parseRefMentions(local)
+    const canvasPrompt = mergePromptWithUpstream(data, upstream)
     if (!deps.requireLogin()) return
-    if (nodeType !== 'sceneComposer' && !prompt) return
+    if (nodeType === 'prompt') {
+      if (!local) return
+    } else if (nodeType !== 'sceneComposer' && !local && !refs.length) {
+      return
+    }
 
     generating.value = true
 
     try {
       if (nodeType === 'prompt') {
-        const userPrompt = String(data.prompt ?? '').trim() || prompt
-        if (!userPrompt) return
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
         const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generatePrompt(
-          userPrompt,
+          local,
           String(data.textModel ?? models.text),
         )
         const parsed = parseRecordPromptContent(res.data)
@@ -99,11 +147,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'text') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: prompt, prompt })
+        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: local, prompt: local })
         const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generateText(
-          prompt,
+          local,
           String(data.textModel ?? models.text),
+          refs,
+          mentionedKeys,
         )
         const content = parseRecordText(res.data)
         deps.patchNodeData(node.id, {
@@ -116,17 +166,17 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'audio') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
-        const { data: res } = await studioApi.generateAudio(prompt, {
+        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
+        const { data: res } = await studioApi.generateAudio(local, {
           voice: String(data.audioVoice ?? 'female-1'),
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
-        })
+        }, refs, mentionedKeys)
         deps.patchNodeData(node.id, {
           url: parseRecordUrl(res.data),
           status: NODE_GENERATION_STATUS.completed,
-          prompt,
+          prompt: local,
         })
         await deps.saveCanvas()
         return
@@ -138,12 +188,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'image' || nodeType === 'video') {
-        await generateImageOrVideo(node, prompt, data, upstream)
+        await generateImageOrVideo(node, local, data, upstream, refs, mentionedKeys)
         return
       }
 
       if (nodeType === 'shot') {
-        await generateShot(node, prompt, data)
+        await generateShot(node, canvasPrompt, data)
       }
     } catch (err) {
       console.error('[NodeGeneration]', nodeType, err)
@@ -161,20 +211,23 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     prompt: string,
     data: Record<string, unknown>,
     upstream: ReturnType<typeof resolveUpstreamContext>,
+    refs: StudioRefPayload[],
+    mentionedKeys: string[],
   ) {
     const nodeType = String(node.type)
     const linkedShotEdge = findIncomingEdge(deps.edges.value, node.id)
     const shotId = linkedShotEdge?.source
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
+    const canvasPrompt = mergePromptWithUpstream(data, upstream)
 
     if (shotNode?.type === 'shot' && shotId) {
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
-      deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt })
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
+      deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
       if (nodeType === 'video') {
         const settings = data.videoSettings as VideoSettings | undefined
-        await canvasApi.generateVideo(shotId, prompt, settings)
+        await canvasApi.generateVideo(shotId, canvasPrompt, settings)
       } else {
-        await canvasApi.generateImage(shotId, prompt)
+        await canvasApi.generateImage(shotId, canvasPrompt)
       }
       deps.startShotPolling([shotId])
       await deps.saveCanvas()
@@ -183,15 +236,17 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
     deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
 
+    const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
+
     if (nodeType === 'image') {
-      const refImage = mergeReferenceImageUrl(data, upstream)
-      const imagePrompt = buildPromptWithRefImage(prompt, refImage)
       const aspectRatio = String(data.imageAspect ?? '16:9')
       const models = deps.resolveProviderModels()
       const { data: res } = await studioApi.generateImage(
-        imagePrompt,
+        prompt,
         String(data.imageModel ?? models.image),
         aspectRatio,
+        refs,
+        mentionedKeys,
       )
       deps.patchNodeData(node.id, {
         url: parseRecordUrl(res.data),
@@ -203,15 +258,14 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
 
     const settings = data.videoSettings as VideoSettings | undefined
-    const videoMode = resolveVideoMode(data, upstream)
-    const refImage = videoMode === 'image_to_video' ? mergeReferenceImageUrl(data, upstream) : ''
-    const videoPrompt = buildPromptWithRefImage(prompt, refImage)
     const models = deps.resolveProviderModels()
     const { data: res } = await studioApi.generateVideo(
-      videoPrompt,
+      prompt,
       String(data.videoModel ?? models.video),
       settings?.duration,
       settings?.aspectRatio,
+      refs,
+      mentionedKeys,
     )
     const url = parseRecordUrl(res.data)
     const recordId = res.data.id

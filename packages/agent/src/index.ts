@@ -21,3 +21,7 @@ export {
   generatePromptContent,
   generatePromptFromUserInput,
 } from './prompt-modes'
+export { mergeRefsToPrompt } from './refs/merge-refs'
+export type { MergeTextSource } from './refs/merge-refs'
+export { generateTextWithImages, ECOMMERCE_VISION_SYSTEM, DEFAULT_VISION_USER_PROMPT } from './refs/vision-text'
+export type { VisionTextOptions } from './refs/vision-text'

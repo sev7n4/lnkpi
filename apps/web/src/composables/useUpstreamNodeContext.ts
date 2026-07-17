@@ -1,7 +1,9 @@
 import { computed, type Ref } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
+import { resolveNodeRefs } from '@/composables/useNodeRefs'
 
 export interface CanvasEdgeLike {
+  id?: string
   source: string
   target: string
 }
@@ -17,26 +19,14 @@ export interface UpstreamNodeContext {
   textNodeIds: string[]
 }
 
-function nodeTextContent(node: EditableFlowNode): string {
-  const data = node.data ?? {}
-  const type = String(node.type ?? '')
-  if (type === 'prompt') {
-    return String(data.content ?? data.prompt ?? '').trim()
-  }
-  return String(data.content ?? data.prompt ?? '').trim()
-}
-
-function nodeMediaUrl(node: EditableFlowNode): string {
-  const data = node.data ?? {}
-  return String(data.url ?? '').trim()
-}
-
-function isTextSourceType(type: string): boolean {
-  return type === 'text' || type === 'prompt'
-}
-
-function isImageSourceType(type: string): boolean {
-  return type === 'image' || type === 'mediaInput'
+function normalizeEdges(
+  edges: CanvasEdgeLike[],
+): Array<{ id: string; source: string; target: string }> {
+  return edges.map((edge) => ({
+    id: edge.id ?? `${edge.source}->${edge.target}`,
+    source: edge.source,
+    target: edge.target,
+  }))
 }
 
 export function resolveUpstreamContext(
@@ -44,41 +34,27 @@ export function resolveUpstreamContext(
   nodes: EditableFlowNode[],
   edges: CanvasEdgeLike[],
 ): UpstreamNodeContext {
-  const nodeMap = new Map(nodes.map((n) => [n.id, n]))
-  const textParts: string[] = []
-  const textNodeIds: string[] = []
-  let referenceImageUrl = ''
-  let referenceImageNodeId: string | null = null
+  const targetNode = nodes.find((n) => n.id === targetNodeId)
+  const targetType = String(targetNode?.type ?? '')
 
-  for (const edge of edges) {
-    if (edge.target !== targetNodeId) continue
-    const source = nodeMap.get(edge.source)
-    if (!source) continue
-    const type = String(source.type ?? '')
+  const refs = resolveNodeRefs({
+    targetNodeId,
+    targetType,
+    nodes,
+    edges: normalizeEdges(edges),
+  })
 
-    if (isTextSourceType(type)) {
-      const text = nodeTextContent(source)
-      if (text) {
-        textParts.push(text)
-        textNodeIds.push(source.id)
-      }
-      continue
-    }
-
-    if (isImageSourceType(type)) {
-      const url = nodeMediaUrl(source)
-      if (url && !referenceImageUrl) {
-        referenceImageUrl = url
-        referenceImageNodeId = source.id
-      }
-    }
-  }
+  const textRefs = refs.filter((r) => r.mediaType === 'text' && !r.stale)
+  const imageRefs = refs.filter((r) => r.mediaType === 'image' && !r.stale)
 
   return {
-    textPrompt: textParts.join('\n'),
-    referenceImageUrl,
-    referenceImageNodeId,
-    textNodeIds,
+    textPrompt: textRefs
+      .map((r) => r.payload.text)
+      .filter(Boolean)
+      .join('\n'),
+    referenceImageUrl: imageRefs[0]?.payload.url ?? '',
+    referenceImageNodeId: imageRefs[0]?.sourceNodeId ?? null,
+    textNodeIds: textRefs.map((r) => r.sourceNodeId!).filter(Boolean),
   }
 }
 

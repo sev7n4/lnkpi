@@ -4,6 +4,7 @@ export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot' 
 
 export * from './sceneComposer'
 export * from './videoComposition'
+export * from './nodeRefs'
 
 export type GenerationType = 'text' | 'image' | 'video'
 

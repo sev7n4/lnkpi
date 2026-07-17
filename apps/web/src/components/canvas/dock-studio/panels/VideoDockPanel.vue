@@ -12,6 +12,8 @@ import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
@@ -22,6 +24,7 @@ const { getConfig } = useModelProviderSettings()
 const props = defineProps<{
   node: EditableFlowNode
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   mentions?: MentionOption[]
   generating?: boolean
 }>()
@@ -30,6 +33,7 @@ const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const prompt = ref('')
@@ -123,13 +127,29 @@ function pickReferenceImage() {
   refInput.value?.click()
 }
 
+function createLocalRefId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
 function onRefFileChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   const url = URL.createObjectURL(file)
   referenceImageUrl.value = url
   videoMode.value = 'image_to_video'
-  emit('patch', { referenceImageUrl: url, videoMode: 'image_to_video' })
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('upload'),
+    mediaType: 'image',
+    sourceKind: 'upload',
+    label: file.name,
+    url,
+  }
+  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+  emit('patch', {
+    localRefs: [...prev, binding],
+    referenceImageUrl: url,
+    videoMode: 'image_to_video',
+  })
   ;(event.target as HTMLInputElement).value = ''
 }
 
@@ -138,10 +158,24 @@ function clearReferenceImage() {
   videoMode.value = 'text_to_video'
   emit('patch', { referenceImageUrl: '', videoMode: 'text_to_video' })
 }
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 </script>
 
 <template>
   <DockToolbarShell type-label="视频生成" @close="emit('close')">
+    <DockRefStrip
+      :refs="refs ?? []"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"

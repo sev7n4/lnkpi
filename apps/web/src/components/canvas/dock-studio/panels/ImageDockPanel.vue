@@ -8,6 +8,8 @@ import ImageAspectSelector, { type ImageAspectRatio } from '@/components/canvas/
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
@@ -19,12 +21,15 @@ const props = defineProps<{
   upstream: UpstreamNodeContext
   mentions?: MentionOption[]
   generating?: boolean
+  /** Task 4 will pass resolveNodeRefs output from CanvasPage */
+  refs?: NodeRef[]
 }>()
 
 const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const prompt = ref('')
@@ -41,6 +46,46 @@ const effectiveRefUrl = computed(() => {
   if (local) return local
   return props.upstream.referenceImageUrl.trim()
 })
+
+/** Prefer CanvasPage refs when prop is passed, even if empty */
+const stripRefs = computed((): NodeRef[] => {
+  if (props.refs !== undefined) return props.refs
+
+  const items: NodeRef[] = []
+  props.upstream.textNodeIds.forEach((nodeId, index) => {
+    items.push({
+      refId: nodeId,
+      refKey: `T${index + 1}`,
+      mediaType: 'text',
+      sourceKind: 'edge',
+      label: '文本引用',
+      preview: props.upstream.textPrompt.slice(0, 48),
+      payload: { text: props.upstream.textPrompt },
+      sourceNodeId: nodeId,
+    })
+  })
+  if (props.upstream.referenceImageUrl) {
+    items.push({
+      refId: props.upstream.referenceImageNodeId ?? 'upstream-image',
+      refKey: `I${items.filter((r) => r.mediaType === 'image').length + 1}`,
+      mediaType: 'image',
+      sourceKind: 'edge',
+      label: '参考图',
+      preview: props.upstream.referenceImageUrl,
+      payload: { url: props.upstream.referenceImageUrl },
+      sourceNodeId: props.upstream.referenceImageNodeId ?? undefined,
+    })
+  }
+  return items
+})
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -103,12 +148,27 @@ function pickReferenceImage() {
   refInput.value?.click()
 }
 
+function createLocalRefId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
 function onRefFileChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   const url = URL.createObjectURL(file)
   referenceImageUrl.value = url
-  syncField('referenceImageUrl', url)
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('upload'),
+    mediaType: 'image',
+    sourceKind: 'upload',
+    label: file.name,
+    url,
+  }
+  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+  emit('patch', {
+    localRefs: [...prev, binding],
+    referenceImageUrl: url,
+  })
   ;(event.target as HTMLInputElement).value = ''
 }
 
@@ -120,6 +180,13 @@ function clearReferenceImage() {
 
 <template>
   <DockToolbarShell type-label="图片生成" @close="emit('close')">
+    <!-- Task 4: selectedRefs from CanvasPage; upstream fallback only when refs prop omitted -->
+    <DockRefStrip
+      :refs="stripRefs"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"

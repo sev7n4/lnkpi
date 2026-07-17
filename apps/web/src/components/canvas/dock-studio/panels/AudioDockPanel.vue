@@ -10,6 +10,8 @@ import AudioVoiceSettingsSelector, {
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import {
   DEFAULT_AUDIO_EMOTION,
@@ -22,6 +24,7 @@ import { isNodeGenerating } from '@/constants/dockStudio'
 const props = defineProps<{
   node: EditableFlowNode
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   mentions?: MentionOption[]
   generating?: boolean
 }>()
@@ -30,6 +33,7 @@ const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const prompt = ref('')
@@ -114,10 +118,24 @@ function toggleVoice() {
     }
   })
 }
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 </script>
 
 <template>
   <DockToolbarShell type-label="音频生成" @close="emit('close')">
+    <DockRefStrip
+      :refs="refs ?? []"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"
