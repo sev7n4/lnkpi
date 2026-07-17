@@ -11,6 +11,7 @@ export const config = {
 
 const LONG_RUNNING_PATHS: Array<{ pattern: RegExp; timeoutMs: number }> = [
   { pattern: /\/studio\/text\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/prompt\/generate$/i, timeoutMs: 120_000 },
   { pattern: /\/studio\/image\/generate$/i, timeoutMs: 120_000 },
   { pattern: /\/studio\/image\/variation$/i, timeoutMs: 120_000 },
   { pattern: /\/studio\/video\/generate$/i, timeoutMs: 90_000 },
@@ -52,7 +53,7 @@ function resolveUpstreamTimeoutMs(upstreamPath: string): number {
 function isStudioGeneratePost(method: string, upstreamPath: string): boolean {
   return (
     method === 'POST'
-    && /\/studio\/(text|image|video|audio)\/(generate|variation)$/i.test(upstreamPath)
+    && /\/studio\/(text|prompt|image|video|audio)\/(generate|variation)$/i.test(upstreamPath)
   )
 }
 
