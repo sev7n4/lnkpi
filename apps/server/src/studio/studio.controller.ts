@@ -1,7 +1,28 @@
 import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
-import { IsNumber, IsOptional, IsString } from 'class-validator'
+import { Type } from 'class-transformer'
+import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { StudioService } from './studio.service'
+
+class StudioRefDto {
+  @IsString()
+  refKey!: string
+
+  @IsString()
+  mediaType!: string
+
+  @IsOptional()
+  @IsString()
+  label?: string
+
+  @IsOptional()
+  @IsString()
+  text?: string
+
+  @IsOptional()
+  @IsString()
+  url?: string
+}
 
 class GenerateImageDto {
   @IsString()
@@ -14,6 +35,12 @@ class GenerateImageDto {
   @IsOptional()
   @IsString()
   aspectRatio?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudioRefDto)
+  refs?: StudioRefDto[]
 }
 
 class GenerateVideoDto {
@@ -31,6 +58,12 @@ class GenerateVideoDto {
   @IsOptional()
   @IsString()
   aspectRatio?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudioRefDto)
+  refs?: StudioRefDto[]
 }
 
 class GenerateAudioDto {
@@ -52,6 +85,12 @@ class GenerateAudioDto {
   @IsOptional()
   @IsNumber()
   speed?: number
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudioRefDto)
+  refs?: StudioRefDto[]
 }
 
 class GenerateTextDto {
@@ -61,6 +100,12 @@ class GenerateTextDto {
   @IsOptional()
   @IsString()
   model?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudioRefDto)
+  refs?: StudioRefDto[]
 }
 
 class GeneratePromptDto {
@@ -99,7 +144,7 @@ export class StudioController {
   @Post('text/generate')
   @UseGuards(AuthGuard)
   async generateText(@Req() req: { user: { sub: string } }, @Body() dto: GenerateTextDto) {
-    const data = await this.studioService.generateText(req.user.sub, dto.prompt, dto.model)
+    const data = await this.studioService.generateText(req.user.sub, dto.prompt, dto.model, dto.refs)
     return { code: 0, message: 'ok', data }
   }
 
@@ -137,6 +182,7 @@ export class StudioController {
       dto.prompt,
       dto.model,
       dto.aspectRatio,
+      dto.refs,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -150,6 +196,7 @@ export class StudioController {
       dto.model,
       dto.duration,
       dto.aspectRatio,
+      dto.refs,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -157,12 +204,17 @@ export class StudioController {
   @Post('audio/generate')
   @UseGuards(AuthGuard)
   async generateAudio(@Req() req: { user: { sub: string } }, @Body() dto: GenerateAudioDto) {
-    const data = await this.studioService.generateAudio(req.user.sub, dto.text, {
-      voice: dto.voice,
-      emotion: dto.emotion,
-      language: dto.language,
-      speed: dto.speed,
-    })
+    const data = await this.studioService.generateAudio(
+      req.user.sub,
+      dto.text,
+      {
+        voice: dto.voice,
+        emotion: dto.emotion,
+        language: dto.language,
+        speed: dto.speed,
+      },
+      dto.refs,
+    )
     return { code: 0, message: 'ok', data }
   }
 }

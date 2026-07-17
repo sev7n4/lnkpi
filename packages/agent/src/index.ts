@@ -21,3 +21,5 @@ export {
   generatePromptContent,
   generatePromptFromUserInput,
 } from './prompt-modes'
+export { mergeRefsToPrompt } from './refs/merge-refs'
+export type { MergeTextSource } from './refs/merge-refs'
