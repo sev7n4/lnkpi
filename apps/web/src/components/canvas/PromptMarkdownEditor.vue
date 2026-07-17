@@ -56,20 +56,20 @@ function ensureEditor() {
 
 watch(
   () => props.visible,
-  (v) => {
+  (v, wasVisible) => {
     if (v) {
       ensureEditor()
       editor.value?.commands.setContent(props.modelValue || '')
       setTimeout(() => editor.value?.commands.focus('end'), 50)
     } else {
       speech.stop()
+      if (wasVisible) flushSave()
     }
   },
 )
 
 function close() {
   speech.stop()
-  flushSave()
   emit('update:visible', false)
 }
 
