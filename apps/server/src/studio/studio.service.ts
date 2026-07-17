@@ -5,6 +5,7 @@ import {
   createTextProvider,
   createVideoProvider,
   generatePromptFromUserInput,
+  generateTextWithImages,
   mergeRefsToPrompt,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -76,8 +77,15 @@ export class StudioService {
 
   async generateText(userId: string, prompt: string, model?: string, refs?: StudioRefInput[]) {
     await this.consumePoints(userId, 5, '文本生成')
-    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(prompt, refs, 'text')
-    const { text } = await createTextProvider().generate(mergedText, model)
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(prompt, refs, 'text')
+    const { text } =
+      referenceImages.length > 0
+        ? await generateTextWithImages(mergedText, referenceImages, {
+            model,
+            apiKey: process.env.OPENAI_API_KEY,
+            baseUrl: process.env.OPENAI_BASE_URL,
+          })
+        : await createTextProvider().generate(mergedText, model)
     return this.prisma.generationRecord.create({
       data: {
         userId,
@@ -86,7 +94,13 @@ export class StudioService {
         model,
         url: null,
         status: 'completed',
-        metadata: JSON.stringify({ text, skippedMerge, refsCount: refs?.length ?? 0 }),
+        metadata: JSON.stringify({
+          text,
+          skippedMerge,
+          refsCount: refs?.length ?? 0,
+          visionUsed: referenceImages.length > 0,
+          referenceImages,
+        }),
       },
     })
   }
