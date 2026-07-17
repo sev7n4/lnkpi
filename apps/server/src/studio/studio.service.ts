@@ -60,11 +60,13 @@ export class StudioService {
     localPrompt: string,
     refs: StudioRefInput[] | undefined,
     downstreamType: 'text' | 'image' | 'video' | 'audio',
+    mentionedKeys?: string[],
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
       localPrompt: localPrompt.trim() || undefined,
       downstreamType,
+      mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: process.env.OPENAI_BASE_URL,
     })
@@ -75,9 +77,20 @@ export class StudioService {
     }
   }
 
-  async generateText(userId: string, prompt: string, model?: string, refs?: StudioRefInput[]) {
+  async generateText(
+    userId: string,
+    prompt: string,
+    model?: string,
+    refs?: StudioRefInput[],
+    mentionedKeys?: string[],
+  ) {
     await this.consumePoints(userId, 5, '文本生成')
-    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(prompt, refs, 'text')
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+      prompt,
+      refs,
+      'text',
+      mentionedKeys,
+    )
     const { text } =
       referenceImages.length > 0
         ? await generateTextWithImages(mergedText, referenceImages, {
@@ -143,9 +156,15 @@ export class StudioService {
     model?: string,
     aspectRatio = '16:9',
     refs?: StudioRefInput[],
+    mentionedKeys?: string[],
   ) {
     await this.consumePoints(userId, 10, '图像生成')
-    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(prompt, refs, 'image')
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+      prompt,
+      refs,
+      'image',
+      mentionedKeys,
+    )
     const primaryRef = referenceImages[0]
     const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const { url } = await createImageProvider().generate(effectivePrompt)
@@ -186,9 +205,15 @@ export class StudioService {
     duration = 5,
     aspectRatio = '16:9',
     refs?: StudioRefInput[],
+    mentionedKeys?: string[],
   ) {
     await this.consumePoints(userId, 30, '视频生成')
-    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(prompt, refs, 'video')
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+      prompt,
+      refs,
+      'video',
+      mentionedKeys,
+    )
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
@@ -208,10 +233,11 @@ export class StudioService {
     text: string,
     options: { voice?: string; emotion?: string; language?: string; speed?: number } = {},
     refs?: StudioRefInput[],
+    mentionedKeys?: string[],
   ) {
     const voice = options.voice
     await this.consumePoints(userId, 5, '音频生成')
-    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(text, refs, 'audio')
+    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(text, refs, 'audio', mentionedKeys)
     const { url } = await createAudioProvider().generate(mergedText, voice)
     const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
     const record = await this.prisma.generationRecord.create({

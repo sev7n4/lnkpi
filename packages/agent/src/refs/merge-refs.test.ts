@@ -97,4 +97,30 @@ describe('mergeRefsToPrompt LLM merge', () => {
       }),
     ).rejects.toThrow(/LLM 请求失败/)
   })
+
+  it('includes mentionedKeys in LLM system and user messages', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'merged result' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mergeRefsToPrompt({
+      sources: [{ refKey: 'T1', label: 'L1', text: 'A' }],
+      localPrompt: 'B',
+      downstreamType: 'video',
+      mentionedKeys: ['T1', 'I2'],
+      apiKey: 'test-key',
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const system = body.messages.find((m) => m.role === 'system')?.content ?? ''
+    const user = body.messages.find((m) => m.role === 'user')?.content ?? ''
+    expect(system).toContain('T1、I2')
+    expect(user).toContain('【优先参考】')
+    expect(user).toContain('T1、I2')
+  })
 })

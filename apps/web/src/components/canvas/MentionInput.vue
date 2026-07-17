@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { splitRefMentions } from '@/composables/useRefMentions'
 
 export interface MentionOption {
   id: string
@@ -16,10 +17,13 @@ const props = defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [v: string]; submit: [] }>()
 
 const textareaRef = ref<HTMLTextAreaElement>()
+const backdropRef = ref<HTMLDivElement>()
 const showMenu = ref(false)
 const filterText = ref('')
 const selectedIndex = ref(0)
 const mentionStart = ref(-1)
+
+const highlightSegments = computed(() => splitRefMentions(props.modelValue))
 
 const filteredMentions = computed(() => {
   const q = filterText.value.toLowerCase()
@@ -30,6 +34,14 @@ const filteredMentions = computed(() => {
 
 function updateValue(value: string) {
   emit('update:modelValue', value)
+}
+
+function syncBackdropScroll() {
+  const el = textareaRef.value
+  const backdrop = backdropRef.value
+  if (!el || !backdrop) return
+  backdrop.scrollTop = el.scrollTop
+  backdrop.scrollLeft = el.scrollLeft
 }
 
 function detectMention(el: HTMLTextAreaElement) {
@@ -51,6 +63,7 @@ function onInput(e: Event) {
   const el = e.target as HTMLTextAreaElement
   updateValue(el.value)
   detectMention(el)
+  syncBackdropScroll()
 }
 
 function insertMention(option: MentionOption) {
@@ -67,6 +80,7 @@ function insertMention(option: MentionOption) {
     const pos = before.length + token.length + 1
     el.focus()
     el.setSelectionRange(pos, pos)
+    syncBackdropScroll()
   })
 }
 
@@ -93,16 +107,31 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="relative flex-1">
-    <textarea
-      ref="textareaRef"
-      :value="modelValue"
-      class="input-field min-h-[48px] w-full resize-none"
-      rows="2"
-      :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
-      @input="onInput"
-      @keydown="onKeydown"
-      @click="textareaRef && detectMention(textareaRef)"
-    />
+    <div class="mention-input-shell">
+      <div
+        ref="backdropRef"
+        class="mention-input-backdrop input-field min-h-[48px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5] text-white/85"
+        aria-hidden="true"
+      >
+        <template v-for="(segment, idx) in highlightSegments" :key="idx">
+          <span v-if="segment.kind === 'mention'" class="font-medium text-[#818cf8]">{{ segment.value }}</span>
+          <span v-else>{{ segment.value }}</span>
+        </template>
+        <span v-if="!modelValue">&nbsp;</span>
+      </div>
+
+      <textarea
+        ref="textareaRef"
+        :value="modelValue"
+        class="mention-input-field input-field min-h-[48px] w-full resize-none text-sm leading-[1.5] text-transparent caret-white"
+        rows="2"
+        :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
+        @input="onInput"
+        @keydown="onKeydown"
+        @scroll="syncBackdropScroll"
+        @click="textareaRef && detectMention(textareaRef)"
+      />
+    </div>
 
     <ul
       v-if="showMenu && filteredMentions.length"
@@ -121,3 +150,29 @@ function onKeydown(e: KeyboardEvent) {
     </ul>
   </div>
 </template>
+
+<style scoped>
+.mention-input-shell {
+  position: relative;
+}
+
+.mention-input-backdrop,
+.mention-input-field {
+  min-height: 48px;
+  padding: 0.625rem 0.75rem;
+  border-width: 1px;
+  border-style: solid;
+}
+
+.mention-input-backdrop {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.mention-input-field {
+  position: absolute;
+  inset: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+</style>

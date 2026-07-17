@@ -41,6 +41,11 @@ class GenerateImageDto {
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
   refs?: StudioRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class GenerateVideoDto {
@@ -64,6 +69,11 @@ class GenerateVideoDto {
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
   refs?: StudioRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class GenerateAudioDto {
@@ -91,6 +101,11 @@ class GenerateAudioDto {
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
   refs?: StudioRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class GenerateTextDto {
@@ -106,6 +121,11 @@ class GenerateTextDto {
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
   refs?: StudioRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class GeneratePromptDto {
@@ -144,7 +164,13 @@ export class StudioController {
   @Post('text/generate')
   @UseGuards(AuthGuard)
   async generateText(@Req() req: { user: { sub: string } }, @Body() dto: GenerateTextDto) {
-    const data = await this.studioService.generateText(req.user.sub, dto.prompt, dto.model, dto.refs)
+    const data = await this.studioService.generateText(
+      req.user.sub,
+      dto.prompt,
+      dto.model,
+      dto.refs,
+      dto.mentionedKeys,
+    )
     return { code: 0, message: 'ok', data }
   }
 
@@ -183,6 +209,7 @@ export class StudioController {
       dto.model,
       dto.aspectRatio,
       dto.refs,
+      dto.mentionedKeys,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -197,6 +224,7 @@ export class StudioController {
       dto.duration,
       dto.aspectRatio,
       dto.refs,
+      dto.mentionedKeys,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -214,6 +242,7 @@ export class StudioController {
         speed: dto.speed,
       },
       dto.refs,
+      dto.mentionedKeys,
     )
     return { code: 0, message: 'ok', data }
   }

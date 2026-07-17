@@ -15,6 +15,7 @@ import {
   parseRecordUrl,
   type GenerationPollTask,
 } from '@/composables/useGenerationPolling'
+import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type StudioRefPayload } from '@/services/studio-api'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
@@ -115,6 +116,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const upstream = resolveUpstreamContext(node.id, deps.nodes.value, deps.edges.value)
     const local = localPrompt(data)
     const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
+    const mentionedKeys = parseRefMentions(local)
     const canvasPrompt = mergePromptWithUpstream(data, upstream)
     if (!deps.requireLogin()) return
     if (nodeType === 'prompt') {
@@ -151,6 +153,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           local,
           String(data.textModel ?? models.text),
           refs,
+          mentionedKeys,
         )
         const content = parseRecordText(res.data)
         deps.patchNodeData(node.id, {
@@ -169,7 +172,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
-        }, refs)
+        }, refs, mentionedKeys)
         deps.patchNodeData(node.id, {
           url: parseRecordUrl(res.data),
           status: NODE_GENERATION_STATUS.completed,
@@ -185,7 +188,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'image' || nodeType === 'video') {
-        await generateImageOrVideo(node, local, data, upstream, refs)
+        await generateImageOrVideo(node, local, data, upstream, refs, mentionedKeys)
         return
       }
 
@@ -209,6 +212,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     data: Record<string, unknown>,
     upstream: ReturnType<typeof resolveUpstreamContext>,
     refs: StudioRefPayload[],
+    mentionedKeys: string[],
   ) {
     const nodeType = String(node.type)
     const linkedShotEdge = findIncomingEdge(deps.edges.value, node.id)
@@ -242,6 +246,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         String(data.imageModel ?? models.image),
         aspectRatio,
         refs,
+        mentionedKeys,
       )
       deps.patchNodeData(node.id, {
         url: parseRecordUrl(res.data),
@@ -260,6 +265,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       settings?.duration,
       settings?.aspectRatio,
       refs,
+      mentionedKeys,
     )
     const url = parseRecordUrl(res.data)
     const recordId = res.data.id

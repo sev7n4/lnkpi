@@ -256,19 +256,6 @@ function startPollingForGeneratingVideos() {
   if (tasks.length) generationPolling.start(tasks)
 }
 
-const mentionOptions = computed((): Array<{ id: string; label: string; type: string }> => {
-  const out: Array<{ id: string; label: string; type: string }> = []
-  for (const n of nodes.value) {
-    const data = n.data as Record<string, unknown>
-    out.push({
-      id: n.id,
-      label: String(data.title ?? data.prompt ?? n.id),
-      type: String(n.type ?? 'node'),
-    })
-  }
-  return out
-})
-
 const playCanvasNodes = computed((): Array<{ id: string; type: string; position: { x: number; y: number }; data: Record<string, unknown> }> =>
   nodes.value.map((n) => ({
     id: n.id,
@@ -326,6 +313,28 @@ const selectedRefs = computed((): NodeRef[] => {
     localRefs: (node.data?.localRefs as LocalRefBinding[]) ?? [],
     refOrder: (node.data?.refOrder as string[]) ?? [],
   })
+})
+
+const mentionOptions = computed((): Array<{ id: string; label: string; type: string }> => {
+  const refOptions = selectedRefs.value
+    .filter((ref) => !ref.stale)
+    .map((ref) => ({
+      id: ref.refId,
+      label: ref.refKey,
+      type: ref.mediaType,
+    }))
+  if (refOptions.length) return refOptions
+
+  const out: Array<{ id: string; label: string; type: string }> = []
+  for (const n of nodes.value) {
+    const data = n.data as Record<string, unknown>
+    out.push({
+      id: n.id,
+      label: String(data.title ?? data.prompt ?? n.id),
+      type: String(n.type ?? 'node'),
+    })
+  }
+  return out
 })
 
 const editorCompositionTracks = computed(() => {
