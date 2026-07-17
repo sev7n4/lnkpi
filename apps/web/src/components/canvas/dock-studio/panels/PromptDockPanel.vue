@@ -102,23 +102,25 @@ function toggleVoice() {
         {{ promptMode }}
       </span>
 
-      <button
-        type="button"
-        class="dock-icon-btn"
-        :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-        title="语音输入"
-        :disabled="readonly"
-        @click="toggleVoice"
-      >
-        🎤
-      </button>
+      <div class="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          class="dock-icon-btn"
+          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
+          title="语音输入"
+          :disabled="readonly"
+          @click="toggleVoice"
+        >
+          🎤
+        </button>
 
-      <DockGenerateButton
-        :generating="generating"
-        :disabled="!prompt.trim()"
-        label="生成提示词"
-        @generate="onGenerate"
-      />
+        <DockGenerateButton
+          :generating="generating"
+          :disabled="!prompt.trim()"
+          label="生成提示词"
+          @generate="onGenerate"
+        />
+      </div>
     </div>
   </DockToolbarShell>
 </template>
