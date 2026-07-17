@@ -18,6 +18,7 @@ import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
+import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
@@ -312,6 +313,19 @@ const editorUpstream = computed(() => {
     return { textPrompt: '', referenceImageUrl: '', referenceImageNodeId: null, textNodeIds: [] }
   }
   return resolveUpstreamContext(node.id, nodes.value, edges.value)
+})
+
+const selectedRefs = computed((): NodeRef[] => {
+  const node = editorNode.value
+  if (!node) return []
+  return resolveNodeRefs({
+    targetNodeId: node.id,
+    targetType: String(node.type),
+    nodes: nodes.value,
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    localRefs: (node.data?.localRefs as LocalRefBinding[]) ?? [],
+    refOrder: (node.data?.refOrder as string[]) ?? [],
+  })
 })
 
 const editorCompositionTracks = computed(() => {
@@ -1093,6 +1107,19 @@ function patchSelectedNode(patch: Record<string, unknown>) {
   debouncedNodePatch.patchNode(editorNode.value.id, patch)
 }
 
+function handleRemoveRef(ref: NodeRef) {
+  const node = editorNode.value
+  if (!node) return
+  if (ref.sourceKind === 'edge' && ref.edgeId) {
+    deleteEdgeById(ref.edgeId)
+    return
+  }
+  const localRefs = ((node.data?.localRefs as LocalRefBinding[]) ?? []).filter(
+    (binding) => binding.id !== ref.refId,
+  )
+  patchSelectedNode({ localRefs })
+}
+
 async function handleNodeGenerate() {
   await debouncedNodePatch.flush()
   const node = editorNode.value
@@ -1535,11 +1562,13 @@ onMounted(() => {
         <DockStudioToolbar
           :node="editorNode"
           :upstream="editorUpstream"
+          :refs="selectedRefs"
           :composition-tracks="editorCompositionTracks"
           :mentions="mentionOptions"
           :generating="nodeGenerating"
           :scale="viewportSettings.bottomToolbarScale"
           @patch="patchSelectedNode"
+          @remove-ref="handleRemoveRef"
           @generate="handleNodeGenerate"
           @save="handleSceneComposerSave"
           @expand="handleSceneComposerExpand"

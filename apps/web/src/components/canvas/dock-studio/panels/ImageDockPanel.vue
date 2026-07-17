@@ -47,9 +47,9 @@ const effectiveRefUrl = computed(() => {
   return props.upstream.referenceImageUrl.trim()
 })
 
-/** Task 3 smoke: upstream fallback until Task 4 wires selectedRefs */
+/** Prefer CanvasPage refs when prop is passed, even if empty */
 const stripRefs = computed((): NodeRef[] => {
-  if (props.refs?.length) return props.refs
+  if (props.refs !== undefined) return props.refs
 
   const items: NodeRef[] = []
   props.upstream.textNodeIds.forEach((nodeId, index) => {
@@ -165,7 +165,7 @@ function clearReferenceImage() {
 
 <template>
   <DockToolbarShell type-label="图片生成" @close="emit('close')">
-    <!-- Task 3 smoke mount; Task 4 replaces fallback with CanvasPage selectedRefs -->
+    <!-- Task 4: selectedRefs from CanvasPage; upstream fallback only when refs prop omitted -->
     <DockRefStrip
       :refs="stripRefs"
       @reorder="onRefReorder"

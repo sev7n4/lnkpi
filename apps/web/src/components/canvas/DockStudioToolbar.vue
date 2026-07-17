@@ -7,10 +7,12 @@ import { EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
 import { computed } from 'vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
+import type { NodeRef } from '@/composables/useNodeRefs'
 
 const props = defineProps<{
   node: EditableFlowNode | null
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   compositionTracks?: CompositionTrack[]
   mentions?: MentionOption[]
   generating?: boolean
@@ -19,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
+  removeRef: [ref: NodeRef]
   generate: []
   close: []
   upload: [file: File]
@@ -62,10 +65,12 @@ const dockLocked = computed(() => {
         <DockStudioRouter
           :node="node"
           :upstream="upstream"
+          :refs="refs"
           :composition-tracks="compositionTracks"
           :mentions="mentions"
           :generating="generating"
           @patch="emit('patch', $event)"
+          @remove-ref="emit('removeRef', $event)"
           @generate="emit('generate')"
           @close="emit('close')"
           @upload="emit('upload', $event)"

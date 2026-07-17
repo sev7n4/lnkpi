@@ -15,10 +15,12 @@ import VideoCompositionDockPanel from '@/components/canvas/dock-studio/panels/Vi
 import LegacyDockPanel from '@/components/canvas/dock-studio/panels/LegacyDockPanel.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
+import type { NodeRef } from '@/composables/useNodeRefs'
 
 const props = defineProps<{
   node: EditableFlowNode | null
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   compositionTracks?: CompositionTrack[]
   mentions?: MentionOption[]
   generating?: boolean
@@ -26,6 +28,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
+  removeRef: [ref: NodeRef]
   generate: []
   close: []
   upload: [file: File]
@@ -46,6 +49,7 @@ const dockReadonly = computed(() => {
 
 const panelBindings = {
   patch: (patch: Record<string, unknown>) => emit('patch', patch),
+  removeRef: (ref: NodeRef) => emit('removeRef', ref),
   generate: () => emit('generate'),
   close: () => emit('close'),
 }
@@ -56,10 +60,12 @@ const panelBindings = {
     v-if="node && nodeType === 'text'"
     :node="node"
     :upstream="upstream"
+    :refs="refs"
     :mentions="mentions"
     :generating="generating"
     :readonly="dockReadonly"
     @patch="panelBindings.patch"
+    @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
   />
@@ -67,9 +73,11 @@ const panelBindings = {
     v-else-if="node && nodeType === 'prompt'"
     :node="node"
     :upstream="upstream"
+    :refs="refs"
     :mentions="mentions"
     :generating="generating"
     @patch="panelBindings.patch"
+    @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
   />
@@ -77,10 +85,12 @@ const panelBindings = {
     v-else-if="node && nodeType === 'image'"
     :node="node"
     :upstream="upstream"
+    :refs="refs"
     :mentions="mentions"
     :generating="generating"
     :readonly="dockReadonly"
     @patch="panelBindings.patch"
+    @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
   />
@@ -88,10 +98,12 @@ const panelBindings = {
     v-else-if="node && nodeType === 'video'"
     :node="node"
     :upstream="upstream"
+    :refs="refs"
     :mentions="mentions"
     :generating="generating"
     :readonly="dockReadonly"
     @patch="panelBindings.patch"
+    @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
   />
@@ -99,10 +111,12 @@ const panelBindings = {
     v-else-if="node && nodeType === 'audio'"
     :node="node"
     :upstream="upstream"
+    :refs="refs"
     :mentions="mentions"
     :generating="generating"
     :readonly="dockReadonly"
     @patch="panelBindings.patch"
+    @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
   />

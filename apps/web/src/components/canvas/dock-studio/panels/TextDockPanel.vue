@@ -8,6 +8,8 @@ import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbar
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
@@ -17,6 +19,7 @@ const { getConfig } = useModelProviderSettings()
 const props = defineProps<{
   node: EditableFlowNode
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   mentions?: MentionOption[]
   generating?: boolean
 }>()
@@ -25,6 +28,7 @@ const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const content = ref('')
@@ -80,10 +84,24 @@ function toggleVoice() {
     }
   })
 }
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 </script>
 
 <template>
   <DockToolbarShell type-label="文本生成" @close="emit('close')">
+    <DockRefStrip
+      :refs="refs ?? []"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="content"
       :mentions="mentions"

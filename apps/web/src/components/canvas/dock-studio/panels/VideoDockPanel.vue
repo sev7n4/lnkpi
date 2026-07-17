@@ -12,6 +12,8 @@ import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
@@ -22,6 +24,7 @@ const { getConfig } = useModelProviderSettings()
 const props = defineProps<{
   node: EditableFlowNode
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   mentions?: MentionOption[]
   generating?: boolean
 }>()
@@ -30,6 +33,7 @@ const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const prompt = ref('')
@@ -138,10 +142,24 @@ function clearReferenceImage() {
   videoMode.value = 'text_to_video'
   emit('patch', { referenceImageUrl: '', videoMode: 'text_to_video' })
 }
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 </script>
 
 <template>
   <DockToolbarShell type-label="视频生成" @close="emit('close')">
+    <DockRefStrip
+      :refs="refs ?? []"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"

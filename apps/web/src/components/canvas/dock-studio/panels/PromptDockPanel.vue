@@ -7,6 +7,8 @@ import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.v
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
@@ -25,6 +27,7 @@ const { getConfig } = useModelProviderSettings()
 const props = defineProps<{
   node: EditableFlowNode
   upstream: UpstreamNodeContext
+  refs?: NodeRef[]
   mentions?: MentionOption[]
   generating?: boolean
 }>()
@@ -33,6 +36,7 @@ const emit = defineEmits<{
   patch: [patch: Record<string, unknown>]
   generate: []
   close: []
+  removeRef: [ref: NodeRef]
 }>()
 
 const prompt = ref('')
@@ -50,6 +54,8 @@ const promptModeLabel = computed(() => {
   return mode ? (MODE_LABELS[mode] ?? mode) : ''
 })
 
+const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType === 'text'))
+
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? '')
@@ -59,14 +65,23 @@ function syncFromNode() {
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 
 watch(
-  () => props.upstream,
-  (ctx) => {
-    if (!prompt.value.trim() && ctx.textPrompt) {
-      prompt.value = ctx.textPrompt
-      emit('patch', { prompt: ctx.textPrompt })
-    }
+  textRefs,
+  (refs) => {
+    if (prompt.value.trim()) return
+    const data = props.node.data ?? {}
+    if (data.promptPrefillFromRefId) return
+
+    const textRef = refs.find((ref) => ref.payload.text || ref.preview)
+    if (!textRef) return
+
+    const raw = textRef.payload.text ?? textRef.preview
+    const summary = raw.length > 80 ? `${raw.slice(0, 77)}...` : raw
+    if (!summary.trim()) return
+
+    prompt.value = summary
+    emit('patch', { prompt: summary, promptPrefillFromRefId: textRef.refId })
   },
-  { immediate: true },
+  { immediate: true, deep: true },
 )
 
 function onPromptInput(value: string) {
@@ -91,10 +106,24 @@ function toggleVoice() {
     }
   })
 }
+
+function onRefReorder(refIds: string[]) {
+  emit('patch', { refOrder: refIds })
+}
+
+function onRefRemove(ref: NodeRef) {
+  emit('removeRef', ref)
+}
 </script>
 
 <template>
   <DockToolbarShell type-label="提示词" @close="emit('close')">
+    <DockRefStrip
+      :refs="textRefs"
+      @reorder="onRefReorder"
+      @remove="onRefRemove"
+    />
+
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"
