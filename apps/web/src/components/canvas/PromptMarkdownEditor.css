@@ -1,0 +1,178 @@
+.prompt-md-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+}
+
+.prompt-md-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 100%);
+  max-height: min(85vh, 720px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: #1a1a1e;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.prompt-md-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.prompt-md-format-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.prompt-md-format-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.prompt-md-format-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.prompt-md-format-btn.is-active {
+  border-color: rgba(99, 102, 241, 0.55);
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+}
+
+.prompt-md-spacer {
+  flex: 1;
+  min-width: 12px;
+}
+
+.prompt-md-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prompt-md-actions .dock-icon-btn {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: none;
+  border-radius: 16px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.2s ease;
+}
+
+.prompt-md-actions .dock-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.prompt-md-editor {
+  flex: 1;
+  min-height: 360px;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.prompt-md-editor .tiptap {
+  min-height: 320px;
+  outline: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.prompt-md-editor .tiptap p.is-editor-empty:first-child::before {
+  color: rgba(255, 255, 255, 0.35);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.prompt-md-editor .tiptap h1 {
+  margin: 0.6em 0 0.4em;
+  font-size: 1.6em;
+  font-weight: 700;
+}
+
+.prompt-md-editor .tiptap h2 {
+  margin: 0.55em 0 0.35em;
+  font-size: 1.35em;
+  font-weight: 650;
+}
+
+.prompt-md-editor .tiptap h3 {
+  margin: 0.5em 0 0.3em;
+  font-size: 1.15em;
+  font-weight: 600;
+}
+
+.prompt-md-editor .tiptap ul,
+.prompt-md-editor .tiptap ol {
+  margin: 0.4em 0;
+  padding-left: 1.4em;
+}
+
+.prompt-md-editor .tiptap hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.prompt-md-editor .tiptap strong {
+  font-weight: 700;
+}
+
+.prompt-md-editor .tiptap em {
+  font-style: italic;
+}
+
+.prompt-md-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.82);
+  transition: background 0.15s, color 0.15s;
+}
+
+.prompt-md-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}

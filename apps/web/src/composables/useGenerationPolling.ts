@@ -64,6 +64,19 @@ export function useGenerationPolling(
   return { start, stop, clearTasks }
 }
 
+export function parseRecordPromptContent(record: { metadata?: string | null; prompt: string }) {
+  if (!record.metadata) return { content: record.prompt, mode: null as string | null }
+  try {
+    const meta = JSON.parse(record.metadata) as { content?: string; mode?: string; text?: string }
+    return {
+      content: meta.content ?? meta.text ?? record.prompt,
+      mode: meta.mode ?? null,
+    }
+  } catch {
+    return { content: record.prompt, mode: null }
+  }
+}
+
 export function parseRecordText(record: { metadata?: string | null; prompt: string }) {
   if (!record.metadata) return record.prompt
   try {

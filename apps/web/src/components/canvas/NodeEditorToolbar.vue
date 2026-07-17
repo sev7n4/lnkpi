@@ -84,25 +84,27 @@ function toggleVoice() {
       />
     </div>
 
-    <div class="bottom-toolbar-actions">
-      <button
-        type="button"
-        class="dock-icon-btn"
-        :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-        title="语音输入"
-        @click="toggleVoice"
-      >
-        🎤
-      </button>
+    <div class="bottom-toolbar-actions flex-wrap items-center">
+      <div class="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          class="dock-icon-btn"
+          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
+          title="语音输入"
+          @click="toggleVoice"
+        >
+          🎤
+        </button>
 
-      <button
-        type="button"
-        class="btn-primary ml-auto px-4 py-1.5 text-xs"
-        :disabled="!prompt.trim() || generating"
-        @click="onGenerate"
-      >
-        {{ generating ? '保存中...' : '应用' }}
-      </button>
+        <button
+          type="button"
+          class="btn-primary px-4 py-1.5 text-xs"
+          :disabled="!prompt.trim() || generating"
+          @click="onGenerate"
+        >
+          {{ generating ? '保存中...' : '应用' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

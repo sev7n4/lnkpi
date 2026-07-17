@@ -63,6 +63,15 @@ class GenerateTextDto {
   model?: string
 }
 
+class GeneratePromptDto {
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+}
+
 class ImageVariationDto {
   @IsString()
   prompt!: string
@@ -91,6 +100,13 @@ export class StudioController {
   @UseGuards(AuthGuard)
   async generateText(@Req() req: { user: { sub: string } }, @Body() dto: GenerateTextDto) {
     const data = await this.studioService.generateText(req.user.sub, dto.prompt, dto.model)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('prompt/generate')
+  @UseGuards(AuthGuard)
+  async generatePrompt(@Req() req: { user: { sub: string } }, @Body() dto: GeneratePromptDto) {
+    const data = await this.studioService.generatePrompt(req.user.sub, dto.prompt, dto.model)
     return { code: 0, message: 'ok', data }
   }
 

@@ -10,7 +10,12 @@ import {
   resolveVideoMode,
   type CanvasEdgeLike,
 } from '@/composables/useUpstreamNodeContext'
-import { parseRecordText, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import {
+  parseRecordPromptContent,
+  parseRecordText,
+  parseRecordUrl,
+  type GenerationPollTask,
+} from '@/composables/useGenerationPolling'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
@@ -73,6 +78,26 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     generating.value = true
 
     try {
+      if (nodeType === 'prompt') {
+        const userPrompt = String(data.prompt ?? '').trim() || prompt
+        if (!userPrompt) return
+        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+        const models = deps.resolveProviderModels()
+        const { data: res } = await studioApi.generatePrompt(
+          userPrompt,
+          String(data.textModel ?? models.text),
+        )
+        const parsed = parseRecordPromptContent(res.data)
+        deps.patchNodeData(node.id, {
+          content: parsed.content,
+          promptMode: parsed.mode,
+          status: NODE_GENERATION_STATUS.completed,
+          errorMessage: null,
+        })
+        await deps.saveCanvas()
+        return
+      }
+
       if (nodeType === 'text') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: prompt, prompt })
         const models = deps.resolveProviderModels()

@@ -128,7 +128,7 @@ function clearReferenceImage() {
       @submit="onGenerate"
     />
 
-    <div class="bottom-toolbar-actions">
+    <div class="bottom-toolbar-actions flex-wrap items-center">
       <UniversalModelSelector
         v-model="imageModel"
         type="image"
@@ -166,22 +166,24 @@ function clearReferenceImage() {
         <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
       </div>
 
-      <button
-        type="button"
-        class="dock-icon-btn"
-        :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-        title="语音输入"
-        :disabled="readonly"
-        @click="toggleVoice"
-      >
-        🎤
-      </button>
+      <div class="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          class="dock-icon-btn"
+          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
+          title="语音输入"
+          :disabled="readonly"
+          @click="toggleVoice"
+        >
+          🎤
+        </button>
 
-      <DockGenerateButton
-        :generating="generating"
-        :disabled="!prompt.trim()"
-        @generate="onGenerate"
-      />
+        <DockGenerateButton
+          :generating="generating"
+          :disabled="!prompt.trim()"
+          @generate="onGenerate"
+        />
+      </div>
     </div>
   </DockToolbarShell>
 </template>

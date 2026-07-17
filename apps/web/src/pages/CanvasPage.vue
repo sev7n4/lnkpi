@@ -447,6 +447,9 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
     case 'text':
       id = addNode('text', { content: '', status: 'idle', textModel }, { position })
       break
+    case 'prompt':
+      id = addNode('prompt', { prompt: '', label: '提示词', status: 'idle', textModel }, { position })
+      break
     case 'image':
       id = addNode('image', { url: '', status: 'idle', prompt: '', imageModel }, { position })
       break

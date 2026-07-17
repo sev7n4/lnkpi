@@ -3,18 +3,24 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
-import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue'
+import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
-import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
-import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
-import {
-  SHOT_GENERATE_MODE_OPTIONS,
-  type ShotGenerateMode,
-} from '@/constants/dockAudio'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
+
+const MODE_LABELS: Record<string, string> = {
+  image_prompt_multi_style: '多风格绘画提示词',
+  character_turnaround: '人物三视图',
+  storyboard: '分镜提示词',
+  script: '剧本',
+  copywriting: '文案/旁白',
+  generic: '通用创作',
+}
+
+const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -29,26 +35,25 @@ const emit = defineEmits<{
   close: []
 }>()
 
-const title = ref('')
 const prompt = ref('')
-const shotGenerateMode = ref<ShotGenerateMode>('auto')
-const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
+const textModel = ref(getConfig('text').model)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const promptMode = computed(() => {
+  const mode = props.node.data?.promptMode
+  return mode ? String(mode) : ''
+})
 
-const modeLabel = computed(
-  () => SHOT_GENERATE_MODE_OPTIONS.find((m) => m.value === shotGenerateMode.value)?.label ?? '自动',
-)
+const promptModeLabel = computed(() => {
+  const mode = promptMode.value
+  return mode ? (MODE_LABELS[mode] ?? mode) : ''
+})
 
 function syncFromNode() {
   const data = props.node.data ?? {}
-  title.value = String(data.title ?? '')
   prompt.value = String(data.prompt ?? '')
-  shotGenerateMode.value = (data.shotGenerateMode as ShotGenerateMode | undefined) ?? 'auto'
-  if (data.videoSettings && typeof data.videoSettings === 'object') {
-    videoSettings.value = { ...DEFAULT_VIDEO_SETTINGS, ...(data.videoSettings as VideoSettings) }
-  }
+  textModel.value = String(data.textModel ?? getConfig('text').model)
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
@@ -69,28 +74,8 @@ function onPromptInput(value: string) {
   emit('patch', { prompt: value })
 }
 
-function onTitleInput(value: string) {
-  title.value = value
-  emit('patch', { title: value })
-}
-
-function onOptimized(value: string) {
-  prompt.value = value
-  emit('patch', { prompt: value })
-}
-
-function setMode(mode: ShotGenerateMode) {
-  shotGenerateMode.value = mode
-  emit('patch', { shotGenerateMode: mode })
-}
-
 function onGenerate() {
-  emit('patch', {
-    title: title.value,
-    prompt: prompt.value,
-    shotGenerateMode: shotGenerateMode.value,
-    videoSettings: shotGenerateMode.value === 'video' ? { ...videoSettings.value } : undefined,
-  })
+  emit('patch', { prompt: prompt.value, textModel: textModel.value })
   emit('generate')
 }
 
@@ -109,50 +94,27 @@ function toggleVoice() {
 </script>
 
 <template>
-  <DockToolbarShell
-    type-label="分镜"
-    show-title
-    :title="title"
-    title-placeholder="分镜标题"
-    @update:title="onTitleInput"
-    @close="emit('close')"
-  >
+  <DockToolbarShell type-label="提示词" @close="emit('close')">
     <DockPromptSection
       :model-value="prompt"
       :mentions="mentions"
-      placeholder="描述镜头画面、构图与氛围..."
+      placeholder="描述创作需求，生成结构化提示词..."
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
 
     <div class="bottom-toolbar-actions flex-wrap">
-      <div class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
-        <button
-          v-for="opt in SHOT_GENERATE_MODE_OPTIONS"
-          :key="opt.value"
-          type="button"
-          class="rounded-md px-2 py-1 text-[10px] transition"
-          :class="shotGenerateMode === opt.value ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/50'"
-          :disabled="readonly"
-          @click="setMode(opt.value)"
-        >
-          {{ opt.label }}
-        </button>
-      </div>
-      <span class="text-[10px] text-white/40">{{ modeLabel }}</span>
-
-      <VideoSettingsSelector
-        v-if="shotGenerateMode === 'video'"
-        v-model="videoSettings"
-        @update:model-value="emit('patch', { videoSettings: $event })"
+      <UniversalModelSelector
+        v-model="textModel"
+        type="text"
+        @update:model-value="emit('patch', { textModel: $event })"
       />
-
-      <DockOptimizePrompt
-        :prompt="prompt"
-        optimize-style="cinematic"
-        :disabled="readonly"
-        @optimized="onOptimized"
-      />
+      <span
+        v-if="promptModeLabel"
+        class="rounded-md bg-fuchsia-500/15 px-2 py-0.5 text-[10px] text-fuchsia-300"
+      >
+        {{ promptModeLabel }}
+      </span>
 
       <div class="ml-auto flex items-center gap-2">
         <button
@@ -169,6 +131,7 @@ function toggleVoice() {
         <DockGenerateButton
           :generating="generating"
           :disabled="!prompt.trim()"
+          label="生成提示词"
           @generate="onGenerate"
         />
       </div>

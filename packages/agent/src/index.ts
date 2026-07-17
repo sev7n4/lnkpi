@@ -10,3 +10,14 @@ export type { TextProvider } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider } from './tools/audio-provider'
 export type { AgentStreamEvent, AgentMessage, AgentToolCall, AgentContext, AgentToolDefinition } from './types'
+export type { PromptModeId, PromptModeDefinition } from './prompt-modes'
+export {
+  PROMPT_MODES,
+  PROMPT_MODE_IDS,
+  getPromptMode,
+  tryRuleShortcut,
+  heuristicMode,
+  classifyPromptMode,
+  generatePromptContent,
+  generatePromptFromUserInput,
+} from './prompt-modes'
