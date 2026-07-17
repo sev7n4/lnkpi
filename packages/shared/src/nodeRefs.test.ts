@@ -28,6 +28,19 @@ describe('resolveNodeRefs', () => {
     expect(images.map((r) => r.refKey)).toEqual(['I1', 'I2'])
   })
 
+  it('falls back from empty content to prompt on prompt node', () => {
+    const refs = resolveNodeRefs({
+      targetNodeId: 'img1',
+      targetType: 'image',
+      nodes: [
+        { id: 'p1', type: 'prompt', data: { content: '', prompt: '短需求' } },
+        { id: 'img1', type: 'image', data: {} },
+      ],
+      edges: [{ id: 'e1', source: 'p1', target: 'img1' }],
+    })
+    expect(refs.find((r) => r.sourceNodeId === 'p1')?.payload.text).toBe('短需求')
+  })
+
   it('respects refOrder for same media type', () => {
     const refs = resolveNodeRefs({
       targetNodeId: 'img1',

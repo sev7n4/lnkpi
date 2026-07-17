@@ -60,7 +60,7 @@ function textPreview(text: string): string {
 }
 
 function resolveTextPayload(data: Record<string, unknown>): string {
-  return trimString(data.content ?? data.prompt)
+  return trimString(data.content) || trimString(data.prompt)
 }
 
 function resolveUrlPayload(data: Record<string, unknown>): string {
