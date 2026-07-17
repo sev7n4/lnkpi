@@ -30,10 +30,13 @@ export async function generatePromptContent(
     }),
   })
   if (!res.ok) {
-    return { mode, content: def.placeholder(prompt) }
+    throw new Error(`LLM 请求失败: ${res.status} ${res.statusText}`)
   }
   const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
-  const content = json.choices[0]?.message?.content ?? def.placeholder(prompt)
+  const content = json.choices[0]?.message?.content?.trim()
+  if (!content) {
+    throw new Error('LLM 返回空内容')
+  }
   return { mode, content }
 }
 

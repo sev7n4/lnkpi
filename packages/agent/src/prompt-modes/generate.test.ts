@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { generatePromptContent } from './generate'
 
 describe('generatePromptContent without key', () => {
@@ -10,5 +10,33 @@ describe('generatePromptContent without key', () => {
     expect(content).toContain(input)
     expect(content.length).toBeGreaterThan(input.length)
     expect(content).not.toBe(input)
+  })
+})
+
+describe('generatePromptContent with key', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    delete process.env.OPENAI_API_KEY
+  })
+
+  it('throws when API returns !ok', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    }))
+    await expect(
+      generatePromptContent('test', 'generic', { apiKey: 'test-key' }),
+    ).rejects.toThrow(/LLM 请求失败/)
+  })
+
+  it('throws when API returns empty content', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '' } }] }),
+    }))
+    await expect(
+      generatePromptContent('test', 'generic', { apiKey: 'test-key' }),
+    ).rejects.toThrow(/LLM 返回空内容/)
   })
 })

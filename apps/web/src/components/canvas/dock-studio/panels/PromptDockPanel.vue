@@ -11,6 +11,15 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
+const MODE_LABELS: Record<string, string> = {
+  image_prompt_multi_style: '多风格绘画提示词',
+  character_turnaround: '人物三视图',
+  storyboard: '分镜提示词',
+  script: '剧本',
+  copywriting: '文案/旁白',
+  generic: '通用创作',
+}
+
 const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
@@ -34,6 +43,11 @@ const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!p
 const promptMode = computed(() => {
   const mode = props.node.data?.promptMode
   return mode ? String(mode) : ''
+})
+
+const promptModeLabel = computed(() => {
+  const mode = promptMode.value
+  return mode ? (MODE_LABELS[mode] ?? mode) : ''
 })
 
 function syncFromNode() {
@@ -96,10 +110,10 @@ function toggleVoice() {
         @update:model-value="emit('patch', { textModel: $event })"
       />
       <span
-        v-if="promptMode"
+        v-if="promptModeLabel"
         class="rounded-md bg-fuchsia-500/15 px-2 py-0.5 text-[10px] text-fuchsia-300"
       >
-        {{ promptMode }}
+        {{ promptModeLabel }}
       </span>
 
       <div class="ml-auto flex items-center gap-2">

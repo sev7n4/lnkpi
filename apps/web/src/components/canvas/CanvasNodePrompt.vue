@@ -3,10 +3,11 @@ import { computed, ref } from 'vue'
 import { useNodeId, useVueFlow } from '@vue-flow/core'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 
 const props = defineProps<{
   selected?: boolean
-  data: { prompt?: string; content?: string; label?: string; status?: string }
+  data: { prompt?: string; content?: string; label?: string; status?: string; errorMessage?: string }
 }>()
 
 const nodeId = useNodeId()
@@ -20,6 +21,10 @@ const preview = computed(() => {
   if (c) return c.length > 180 ? `${c.slice(0, 180)}…` : c
   return ''
 })
+
+const isError = computed(
+  () => props.data.status === NODE_GENERATION_STATUS.error || props.data.status === 'error',
+)
 
 function openEditor() {
   draft.value = String(props.data.content ?? '')
@@ -42,6 +47,9 @@ function onSave(md: string) {
         <p class="text-[11px] text-white/35">双击编辑文本</p>
         <p v-if="data.prompt" class="mt-1 line-clamp-2 text-[11px] text-white/40">{{ data.prompt }}</p>
       </template>
+      <p v-if="isError && data.errorMessage" class="mt-1 line-clamp-2 text-[10px] text-red-400/90">
+        {{ data.errorMessage }}
+      </p>
     </div>
     <PromptMarkdownEditor
       v-model:visible="editorOpen"
