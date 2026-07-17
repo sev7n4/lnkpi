@@ -1,6 +1,6 @@
 # 画布节点数据贯通与多上游引用（产品规格）
 
-> 状态：产品决策已收口；开发计划见 `docs/superpowers/plans/2026-07-18-node-data-flow-refs.md`  
+> 状态：**实现完成**（2026-07-18，Tasks 1–9）；验收清单见 `.superpowers/sdd/task-10-report.md`；开发计划见 `docs/superpowers/plans/2026-07-18-node-data-flow-refs.md`  
 > 日期：2026-07-18  
 > 范围：画布节点之间的**数据贯通**（引用注入），以及 Dock Studio **多上游 RefChip UI**；**不含**自动级联生成、不含全图编排引擎  
 > 前置：`prompt` 节点意图模板已上线（见 `2026-07-17-prompt-node-intent-templates-design.md`）
