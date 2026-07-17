@@ -4,6 +4,7 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import TextDockPanel from '@/components/canvas/dock-studio/panels/TextDockPanel.vue'
+import PromptDockPanel from '@/components/canvas/dock-studio/panels/PromptDockPanel.vue'
 import ImageDockPanel from '@/components/canvas/dock-studio/panels/ImageDockPanel.vue'
 import VideoDockPanel from '@/components/canvas/dock-studio/panels/VideoDockPanel.vue'
 import AudioDockPanel from '@/components/canvas/dock-studio/panels/AudioDockPanel.vue'
@@ -58,6 +59,16 @@ const panelBindings = {
     :mentions="mentions"
     :generating="generating"
     :readonly="dockReadonly"
+    @patch="panelBindings.patch"
+    @generate="panelBindings.generate"
+    @close="panelBindings.close"
+  />
+  <PromptDockPanel
+    v-else-if="node && nodeType === 'prompt'"
+    :node="node"
+    :upstream="upstream"
+    :mentions="mentions"
+    :generating="generating"
     @patch="panelBindings.patch"
     @generate="panelBindings.generate"
     @close="panelBindings.close"

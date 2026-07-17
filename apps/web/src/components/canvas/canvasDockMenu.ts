@@ -9,6 +9,7 @@ export interface CanvasDockMenuItem {
 }
 
 export const CANVAS_DOCK_MENU_ITEMS: CanvasDockMenuItem[] = [
+  { type: 'prompt', label: '提示词', desc: '多模式提示词扩写', badge: 'Prompt', tone: 'text-fuchsia-300 bg-fuchsia-500/15' },
   { type: 'text', label: '文本', desc: '脚本、广告词、品牌文案', badge: 'Neo-G', tone: 'text-sky-300 bg-sky-500/15' },
   { type: 'image', label: '图片', desc: 'AI 图像生成', badge: 'Image', tone: 'text-emerald-300 bg-emerald-500/15' },
   { type: 'video', label: '视频', desc: '文生视频 / 图生视频', tone: 'text-violet-300 bg-violet-500/15' },
@@ -24,6 +25,7 @@ export const CANVAS_DOCK_MENU_ITEMS: CanvasDockMenuItem[] = [
 /** 从源节点拖出连线时可创建的目标类型（简化规则，后续可按 Neo 细化） */
 export const CONNECT_OUT_TARGET_TYPES: DockNodeType[] = [
   'text',
+  'prompt',
   'image',
   'video',
   'audio',

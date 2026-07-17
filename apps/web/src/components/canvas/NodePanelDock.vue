@@ -4,6 +4,7 @@ import { CANVAS_DOCK_MENU_ITEMS } from '@/components/canvas/canvasDockMenu'
 
 export type DockNodeType =
   | 'text'
+  | 'prompt'
   | 'image'
   | 'video'
   | 'audio'
