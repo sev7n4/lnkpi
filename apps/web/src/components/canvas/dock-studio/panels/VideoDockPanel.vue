@@ -13,7 +13,7 @@ import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbar
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
-import type { NodeRef } from '@/composables/useNodeRefs'
+import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
@@ -127,13 +127,29 @@ function pickReferenceImage() {
   refInput.value?.click()
 }
 
+function createLocalRefId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+}
+
 function onRefFileChange(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
   if (!file || !file.type.startsWith('image/')) return
   const url = URL.createObjectURL(file)
   referenceImageUrl.value = url
   videoMode.value = 'image_to_video'
-  emit('patch', { referenceImageUrl: url, videoMode: 'image_to_video' })
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('upload'),
+    mediaType: 'image',
+    sourceKind: 'upload',
+    label: file.name,
+    url,
+  }
+  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+  emit('patch', {
+    localRefs: [...prev, binding],
+    referenceImageUrl: url,
+    videoMode: 'image_to_video',
+  })
   ;(event.target as HTMLInputElement).value = ''
 }
 

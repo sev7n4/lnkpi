@@ -107,8 +107,18 @@ function toggleVoice() {
   })
 }
 
+function mergeRefOrder(reorderedTextRefIds: string[]): string[] {
+  const allRefs = props.refs ?? []
+  const textIdSet = new Set(reorderedTextRefIds)
+  const nonTextIds = allRefs.filter((ref) => ref.mediaType !== 'text').map((ref) => ref.refId)
+  const prevOrder = (props.node.data?.refOrder as string[]) ?? allRefs.map((ref) => ref.refId)
+  const preservedNonText = prevOrder.filter((id) => nonTextIds.includes(id) && !textIdSet.has(id))
+  const missingNonText = nonTextIds.filter((id) => !preservedNonText.includes(id))
+  return [...reorderedTextRefIds, ...preservedNonText, ...missingNonText]
+}
+
 function onRefReorder(refIds: string[]) {
-  emit('patch', { refOrder: refIds })
+  emit('patch', { refOrder: mergeRefOrder(refIds) })
 }
 
 function onRefRemove(ref: NodeRef) {

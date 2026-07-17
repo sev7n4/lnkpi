@@ -31,6 +31,7 @@ function extractTextSources(refs?: StudioRefInput[]): MergeTextSource[] {
     }))
 }
 
+// Provider image/video APIs currently use only referenceImages[0] (I1); full list is kept in metadata.
 function extractReferenceImages(refs?: StudioRefInput[]): string[] {
   return (refs ?? [])
     .filter((r) => r.mediaType === 'image' && r.url?.trim())
@@ -165,7 +166,7 @@ export class StudioService {
       'image',
       mentionedKeys,
     )
-    const primaryRef = referenceImages[0]
+    const primaryRef = referenceImages[0] // only I1 is sent to the image provider; see extractReferenceImages
     const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const { url } = await createImageProvider().generate(effectivePrompt)
     return this.prisma.generationRecord.create({
@@ -214,17 +215,19 @@ export class StudioService {
       'video',
       mentionedKeys,
     )
+    const primaryRef = referenceImages[0]
+    const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'video',
-        prompt: mergedText,
+        prompt: effectivePrompt,
         model,
         status: 'generating',
-        metadata: JSON.stringify({ duration, aspectRatio, referenceImages, skippedMerge }),
+        metadata: JSON.stringify({ duration, aspectRatio, referenceImages, skippedMerge, mergedText }),
       },
     })
-    this.completeVideo(record.id, mergedText, model, duration, aspectRatio, referenceImages[0]).catch(console.error)
+    this.completeVideo(record.id, effectivePrompt, model, duration, aspectRatio).catch(console.error)
     return record
   }
 
@@ -267,11 +270,9 @@ export class StudioService {
     model?: string,
     duration?: number,
     aspectRatio?: string,
-    primaryRefImage?: string,
   ) {
     try {
-      const effectivePrompt = primaryRefImage ? buildPromptWithRefImage(prompt, primaryRefImage) : prompt
-      const { url } = await createVideoProvider().generate(effectivePrompt, { model, duration, aspectRatio })
+      const { url } = await createVideoProvider().generate(prompt, { model, duration, aspectRatio })
       await this.prisma.generationRecord.update({
         where: { id },
         data: { url, status: 'completed' },
