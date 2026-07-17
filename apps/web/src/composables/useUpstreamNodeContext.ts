@@ -19,6 +19,10 @@ export interface UpstreamNodeContext {
 
 function nodeTextContent(node: EditableFlowNode): string {
   const data = node.data ?? {}
+  const type = String(node.type ?? '')
+  if (type === 'prompt') {
+    return String(data.content ?? data.prompt ?? '').trim()
+  }
   return String(data.content ?? data.prompt ?? '').trim()
 }
 
