@@ -5,7 +5,6 @@ import {
   VueFlow,
   Panel,
   SelectionMode,
-  applyNodeChanges,
   applyEdgeChanges,
   type Node,
   type Edge,
@@ -108,7 +107,7 @@ interface CanvasEdge {
 const nodes = ref<EditableFlowNode[]>([])
 const edges = ref<CanvasEdge[]>([])
 
-/** 受控模式：:nodes + apply-default=false + applyNodeChanges，避免内部/外部状态互相覆盖 */
+/** 受控模式：:nodes + apply-default=false，由 onNodesChange 落地变更，避免内部/外部状态互相覆盖 */
 const flowNodes = computed(() => nodes.value as unknown as Node[])
 const flowEdges = computed(() => edges.value as unknown as Edge[])
 
@@ -682,16 +681,53 @@ function syncMultiSelectionFromNodes() {
   }
 }
 
+/**
+ * 受控模式下必须自行落地 nodesChange。
+ * 注意：vue-flow 的 applyNodeChanges 对 position/dimensions 要求 isGraphNode
+ *（带 computedPosition），而我们的 EditableFlowNode 是普通对象，直接 apply 会
+ * 静默丢弃拖拽位移 → 鼠标是抓手但节点不动。这里对 plain node 显式应用变更。
+ */
 function onNodesChange(changes: NodeChange[]) {
-  let next = applyNodeChanges(changes, nodes.value as any) as unknown as EditableFlowNode[]
+  if (!changes.length) return
+
+  let next = nodes.value
+  let changed = false
+
+  for (const change of changes) {
+    if (change.type === 'position' && change.position) {
+      const pos = change.position
+      next = next.map((node) =>
+        node.id === change.id ? { ...node, position: { x: pos.x, y: pos.y } } : node,
+      )
+      changed = true
+    } else if (change.type === 'select') {
+      next = next.map((node) =>
+        node.id === change.id ? { ...node, selected: change.selected } : node,
+      )
+      changed = true
+    } else if (change.type === 'remove') {
+      next = next.filter((node) => node.id !== change.id)
+      changed = true
+    } else if (change.type === 'add') {
+      const item = change.item as EditableFlowNode
+      if (!next.some((node) => node.id === item.id)) {
+        next = [...next, { id: item.id, type: item.type, position: item.position, data: item.data, selected: item.selected }]
+        changed = true
+      }
+    }
+  }
+
   if (pendingExclusiveSelectId) {
     const id = pendingExclusiveSelectId
     next = next.map((node) => {
       const selected = node.id === id
       return node.selected === selected ? node : { ...node, selected }
     })
+    changed = true
   }
-  nodes.value = next
+
+  if (changed) nodes.value = next
+
   if (changes.some((change) => change.type === 'select') || pendingExclusiveSelectId) {
     syncMultiSelectionFromNodes()
   }
