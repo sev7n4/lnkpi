@@ -156,19 +156,40 @@ export function buildImageProviderOptions(input: {
   size: string
   n: number
   referenceImages: string[]
+  effectivePromptSuffix?: string
   meta: AdapterMeta
 } {
   const { modelKey, size, n, referenceImages } = input
   const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('image', modelKey)
 
   const refCount = referenceImages.length
-  const refImageMode = refCount > 0 ? 'native' : 'none'
-
-  return {
+  const result: {
+    modelId: string
+    size: string
+    n: number
+    referenceImages: string[]
+    effectivePromptSuffix?: string
+  } = {
     modelId: entry.gatewayModelId,
     size,
     n,
-    referenceImages,
+    referenceImages: [],
+  }
+
+  if (refCount === 1) {
+    result.referenceImages = [referenceImages[0]]
+  } else if (refCount > 1) {
+    result.referenceImages = [referenceImages[0]]
+    result.effectivePromptSuffix = referenceImages
+      .slice(1)
+      .map((url) => `[ref-image:${url}]`)
+      .join(' ')
+  }
+
+  const refImageMode = refCount > 0 ? 'primary_image' : 'none'
+
+  return {
+    ...result,
     meta: {
       modelKey: resolvedKey,
       gatewayModelId: entry.gatewayModelId,

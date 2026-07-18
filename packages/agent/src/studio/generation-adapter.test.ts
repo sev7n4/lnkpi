@@ -87,15 +87,44 @@ describe('buildVideoProviderOptions', () => {
 })
 
 describe('buildImageProviderOptions', () => {
-  it('passes modelId size n and keeps all reference URLs in meta', () => {
+  it('passes modelId size n with none refImageMode when no references', () => {
     const r = buildImageProviderOptions({
       modelKey: 'seedream-5.0-pro',
       size: '1024x1024',
       n: 2,
-      referenceImages: ['https://cdn.example/a.png'],
+      referenceImages: [],
     })
     expect(r.modelId).toBeTruthy()
     expect(r.n).toBe(2)
+    expect(r.referenceImages).toEqual([])
+    expect(r.meta.refImageMode).toBe('none')
+    expect(r.meta.referenceImageCount).toBe(0)
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('uses primary_image for a single reference', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'seedream-5.0-pro',
+      size: '1024x1024',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png'],
+    })
+    expect(r.referenceImages).toEqual(['https://cdn.example/a.png'])
+    expect(r.meta.refImageMode).toBe('primary_image')
     expect(r.meta.referenceImageCount).toBe(1)
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('puts extra references into effectivePromptSuffix for I2+', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'seedream-5.0-pro',
+      size: '1024x1024',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png', 'https://cdn.example/b.png'],
+    })
+    expect(r.referenceImages).toEqual(['https://cdn.example/a.png'])
+    expect(r.meta.refImageMode).toBe('primary_image')
+    expect(r.meta.referenceImageCount).toBe(2)
+    expect(r.effectivePromptSuffix).toBe('[ref-image:https://cdn.example/b.png]')
   })
 })
