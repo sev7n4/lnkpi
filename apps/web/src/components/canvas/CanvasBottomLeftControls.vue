@@ -14,10 +14,11 @@ const emit = defineEmits<{
   cycleMinimap: []
 }>()
 
-const { viewport, zoomTo, fitView } = useVueFlow()
+const { viewport, zoomTo, fitView, nodes: flowNodes, setCenter } = useVueFlow()
 const showGridPanel = ref(false)
 const showListPanel = ref(false)
 const showMinimapPopover = ref(false)
+const minimapBodyRef = ref<HTMLElement | null>(null)
 
 const zoomPercent = computed(() => Math.round(viewport.value.zoom * 100))
 
@@ -82,6 +83,70 @@ function focusNode(id: string) {
   showListPanel.value = false
 }
 
+function onMinimapClick(event: MouseEvent) {
+  const el = minimapBodyRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+
+  const mapNodes = flowNodes.value.filter((n) => !n.hidden)
+  if (!mapNodes.length) return
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxX = -Infinity
+  let maxY = -Infinity
+  for (const node of mapNodes) {
+    const w = node.dimensions?.width || 280
+    const h = node.dimensions?.height || 160
+    minX = Math.min(minX, node.position.x)
+    minY = Math.min(minY, node.position.y)
+    maxX = Math.max(maxX, node.position.x + w)
+    maxY = Math.max(maxY, node.position.y + h)
+  }
+
+  const pad = 40
+  minX -= pad
+  minY -= pad
+  maxX += pad
+  maxY += pad
+  const worldW = Math.max(1, maxX - minX)
+  const worldH = Math.max(1, maxY - minY)
+
+  const localX = event.clientX - rect.left
+  const localY = event.clientY - rect.top
+  const flowX = minX + (localX / rect.width) * worldW
+  const flowY = minY + (localY / rect.height) * worldH
+
+  let bestId: string | null = null
+  let bestDist = Infinity
+  for (const node of mapNodes) {
+    const w = node.dimensions?.width || 280
+    const h = node.dimensions?.height || 160
+    const cx = node.position.x + w / 2
+    const cy = node.position.y + h / 2
+    const inside =
+      flowX >= node.position.x &&
+      flowX <= node.position.x + w &&
+      flowY >= node.position.y &&
+      flowY <= node.position.y + h
+    const dist = Math.hypot(flowX - cx, flowY - cy)
+    if (inside || dist < Math.min(w, h) * 0.6) {
+      if (dist < bestDist) {
+        bestDist = dist
+        bestId = node.id
+      }
+    }
+  }
+
+  if (bestId) {
+    focusNode(bestId)
+    return
+  }
+
+  void setCenter(flowX, flowY, { zoom: viewport.value.zoom, duration: 250 })
+}
+
 function nodeLabel(node: { id: string; type?: string; data: Record<string, unknown> }) {
   const data = node.data
   return String(data.title ?? data.prompt ?? data.content ?? node.id).slice(0, 36)
@@ -124,7 +189,11 @@ watch(
       class="minimap-popover pointer-events-auto absolute bottom-full left-0 mb-1.5 overflow-hidden rounded-xl border border-white/10 bg-[rgba(20,20,20,0.96)] shadow-xl backdrop-blur-md"
       @click.stop
     >
-      <div class="minimap-popover-body">
+      <div
+        ref="minimapBodyRef"
+        class="minimap-popover-body"
+        @click.stop="onMinimapClick"
+      >
         <MiniMap
           :pannable="true"
           :zoomable="true"

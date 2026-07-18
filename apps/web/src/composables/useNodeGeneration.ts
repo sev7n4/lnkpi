@@ -13,6 +13,7 @@ import {
   parseRecordPromptContent,
   parseRecordText,
   parseRecordUrl,
+  parseRecordUrls,
   type GenerationPollTask,
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
@@ -240,6 +241,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
     if (nodeType === 'image') {
       const aspectRatio = String(data.imageAspect ?? '16:9')
+      const resolution = String(data.imageResolution ?? '1K')
+      const count = Number(data.imageCount ?? 1)
       const models = deps.resolveProviderModels()
       const { data: res } = await studioApi.generateImage(
         prompt,
@@ -247,11 +250,17 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         aspectRatio,
         refs,
         mentionedKeys,
+        resolution,
+        count,
       )
+      const urls = parseRecordUrls(res.data)
       deps.patchNodeData(node.id, {
-        url: parseRecordUrl(res.data),
+        url: urls[0] ?? parseRecordUrl(res.data),
+        images: urls,
         status: NODE_GENERATION_STATUS.completed,
         referenceImageUrl: refImage || undefined,
+        imageResolution: resolution,
+        imageCount: count,
       })
       await deps.saveCanvas()
       return
@@ -266,6 +275,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       settings?.aspectRatio,
       refs,
       mentionedKeys,
+      settings?.resolution,
+      settings?.crop,
     )
     const url = parseRecordUrl(res.data)
     const recordId = res.data.id

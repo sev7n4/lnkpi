@@ -24,7 +24,7 @@ function run(action: string, payload?: string) {
 
 <template>
   <div
-    v-if="visible"
+    v-if="visible && nodeId"
     class="fixed z-[100] min-w-[160px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
     :style="{ left: `${x}px`, top: `${y}px` }"
     @click.stop
@@ -59,20 +59,5 @@ function run(action: string, payload?: string) {
     >
       删除节点
     </button>
-
-    <template v-if="!nodeId">
-      <button
-        class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
-        @click="run('add-node')"
-      >
-        添加节点
-      </button>
-      <button
-        class="block w-full px-4 py-2 text-left text-xs text-white/80 hover:bg-white/5"
-        @click="run('upload-media')"
-      >
-        上传媒体
-      </button>
-    </template>
   </div>
 </template>

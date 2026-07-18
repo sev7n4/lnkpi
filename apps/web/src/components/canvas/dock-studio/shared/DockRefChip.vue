@@ -1,6 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { NodeRef, RefMediaType } from '@/composables/useNodeRefs'
+import DockTypeIcon from './DockTypeIcon.vue'
+import DockRefPreview from './DockRefPreview.vue'
+import { resolveMediaUrl } from '@/services/api-base'
+import type { DockNodeIconKind } from './dockIcons'
 
 const props = defineProps<{
   refItem: NodeRef
@@ -13,28 +17,31 @@ const emit = defineEmits<{
   remove: []
 }>()
 
-const MEDIA_DOT: Record<RefMediaType, string> = {
-  text: 'bg-sky-400',
-  image: 'bg-emerald-400',
-  video: 'bg-violet-400',
-  audio: 'bg-amber-400',
-}
+const previewOpen = ref(false)
+const previewPos = ref({ x: 0, y: 0 })
 
-const MEDIA_ICON: Record<RefMediaType, string> = {
-  text: 'T',
-  image: '🖼',
-  video: '▶',
-  audio: '♪',
+const MEDIA_ICON: Record<RefMediaType, DockNodeIconKind> = {
+  text: 'text',
+  image: 'image',
+  video: 'video',
+  audio: 'audio',
 }
 
 const thumbUrl = computed(() => {
-  if (props.refItem.mediaType !== 'image') return ''
-  return props.refItem.payload.url ?? props.refItem.preview
+  if (props.refItem.mediaType !== 'image' && props.refItem.mediaType !== 'video') return ''
+  const raw = props.refItem.payload.url ?? props.refItem.preview
+  return raw ? resolveMediaUrl(raw) : ''
 })
 
 function onRemoveClick(event: MouseEvent) {
   event.stopPropagation()
   emit('remove')
+}
+
+function onChipClick(event: MouseEvent) {
+  if (props.refItem.stale) return
+  previewPos.value = { x: event.clientX + 8, y: event.clientY + 8 }
+  previewOpen.value = true
 }
 </script>
 
@@ -47,55 +54,70 @@ function onRemoveClick(event: MouseEvent) {
       'is-drag-over': dragOver,
     }"
     :draggable="draggable"
-    :title="refItem.label"
+    :title="`${refItem.refKey} · ${refItem.label}`"
+    role="button"
+    tabindex="0"
+    @click="onChipClick"
+    @keydown.enter.prevent="onChipClick($event as unknown as MouseEvent)"
   >
     <span class="dock-ref-chip__key">{{ refItem.refKey }}</span>
-    <span
-      class="dock-ref-chip__dot"
-      :class="MEDIA_DOT[refItem.mediaType]"
-      aria-hidden="true"
-    />
+
     <img
-      v-if="thumbUrl"
+      v-if="thumbUrl && refItem.mediaType === 'image'"
       :src="thumbUrl"
       alt=""
-      class="dock-ref-chip__thumb"
+      class="dock-ref-chip__media"
       draggable="false"
     >
+    <video
+      v-else-if="thumbUrl && refItem.mediaType === 'video'"
+      :src="thumbUrl"
+      class="dock-ref-chip__media"
+      muted
+      playsinline
+      preload="metadata"
+      draggable="false"
+    />
     <span v-else class="dock-ref-chip__icon" aria-hidden="true">
-      {{ MEDIA_ICON[refItem.mediaType] }}
+      <DockTypeIcon :icon="MEDIA_ICON[refItem.mediaType]" :size="14" />
     </span>
-    <span class="dock-ref-chip__label">{{ refItem.label }}</span>
+
     <button
       type="button"
       class="dock-ref-chip__remove"
       aria-label="移除引用"
       @click="onRemoveClick"
     >
-      <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5">
+      <svg viewBox="0 0 24 24" width="8" height="8" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M18 6 6 18M6 6l12 12" />
       </svg>
     </button>
   </div>
+
+  <DockRefPreview
+    v-if="previewOpen"
+    :ref-item="refItem"
+    :x="previewPos.x"
+    :y="previewPos.y"
+    @close="previewOpen = false"
+  />
 </template>
 
 <style scoped>
 .dock-ref-chip {
+  position: relative;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 5px;
-  height: 30px;
-  max-width: 168px;
-  padding: 0 6px 0 8px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.82);
-  cursor: grab;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
   user-select: none;
   transition:
     border-color 0.15s ease,
@@ -120,84 +142,64 @@ function onRemoveClick(event: MouseEvent) {
   border-style: dashed;
   border-color: rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.38);
+  color: rgba(255, 255, 255, 0.3);
   cursor: default;
 }
 
 .dock-ref-chip__key {
-  flex-shrink: 0;
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  z-index: 1;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 
-.dock-ref-chip.is-stale .dock-ref-chip__key {
-  color: rgba(255, 255, 255, 0.28);
-}
-
-.dock-ref-chip__dot {
-  flex-shrink: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-}
-
-.dock-ref-chip.is-stale .dock-ref-chip__dot {
-  background: rgba(255, 255, 255, 0.22) !important;
-}
-
-.dock-ref-chip__thumb {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+.dock-ref-chip__media {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.dock-ref-chip.is-stale .dock-ref-chip__thumb {
-  opacity: 0.45;
+.dock-ref-chip.is-stale .dock-ref-chip__media {
+  opacity: 0.4;
   filter: grayscale(1);
 }
 
 .dock-ref-chip__icon {
-  flex-shrink: 0;
-  width: 14px;
-  font-size: 10px;
-  line-height: 1;
-  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   opacity: 0.75;
 }
 
-.dock-ref-chip__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-}
-
 .dock-ref-chip__remove {
-  display: inline-flex;
-  flex-shrink: 0;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  z-index: 2;
+  display: none;
+  width: 14px;
+  height: 14px;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-left: -2px;
   border: none;
   border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.35);
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
+  background: rgba(0, 0, 0, 0.65);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dock-ref-chip:hover .dock-ref-chip__remove {
+  display: inline-flex;
 }
 
 .dock-ref-chip__remove:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(239, 68, 68, 0.75);
 }
 </style>

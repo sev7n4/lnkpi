@@ -37,6 +37,14 @@ class GenerateImageDto {
   aspectRatio?: string
 
   @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsNumber()
+  count?: number
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
@@ -63,6 +71,14 @@ class GenerateVideoDto {
   @IsOptional()
   @IsString()
   aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsString()
+  crop?: string
 
   @IsOptional()
   @IsArray()
@@ -210,6 +226,8 @@ export class StudioController {
       dto.aspectRatio,
       dto.refs,
       dto.mentionedKeys,
+      dto.resolution,
+      dto.count,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -225,6 +243,8 @@ export class StudioController {
       dto.aspectRatio,
       dto.refs,
       dto.mentionedKeys,
+      dto.resolution,
+      dto.crop,
     )
     return { code: 0, message: 'ok', data }
   }

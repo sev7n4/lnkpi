@@ -68,7 +68,7 @@ function onFileChange(event: Event) {
 
 <template>
   <DockToolbarShell
-    type-label="媒体输入"
+    type="mediaInput"
     show-title
     :title="title"
     title-placeholder="素材名称"

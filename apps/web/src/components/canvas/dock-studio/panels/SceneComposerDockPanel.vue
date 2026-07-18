@@ -156,7 +156,7 @@ const canBatchGenerate = computed(() =>
 
 <template>
   <DockToolbarShell
-    type-label="导演台"
+    type="sceneComposer"
     show-title
     :title="payload.title ?? '场景编排'"
     title-placeholder="编排标题"

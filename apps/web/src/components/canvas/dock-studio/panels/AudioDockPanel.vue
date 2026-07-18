@@ -10,6 +10,8 @@ import AudioVoiceSettingsSelector, {
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -20,6 +22,7 @@ import {
   DEFAULT_AUDIO_VOICE,
 } from '@/constants/dockAudio'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import { estimateAudioCredits } from '@/constants/credits'
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -46,13 +49,7 @@ const voiceSettings = ref<AudioVoiceSettings>({
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
-
-const upstreamHint = computed(() => {
-  if (props.upstream.textNodeIds.length && !String(props.node.data?.prompt ?? '').trim()) {
-    return '已连接文本节点，生成时将优先使用连线文案'
-  }
-  return ''
-})
+const credits = computed(() => estimateAudioCredits())
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -129,7 +126,7 @@ function onRefRemove(ref: NodeRef) {
 </script>
 
 <template>
-  <DockToolbarShell type-label="音频生成" @close="emit('close')">
+  <DockToolbarShell type="audio" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
       @reorder="onRefReorder"
@@ -144,8 +141,6 @@ function onRefRemove(ref: NodeRef) {
       @submit="onGenerate"
     />
 
-    <p v-if="upstreamHint" class="mb-2 px-1 text-[10px] text-[#818cf8]/80">{{ upstreamHint }}</p>
-
     <div class="bottom-toolbar-actions flex-wrap">
       <VoiceModelSelector
         v-model="audioVoice"
@@ -157,21 +152,15 @@ function onRefRemove(ref: NodeRef) {
       />
 
       <div class="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-          title="语音输入"
+        <DockMicButton
+          :listening="speech.listening.value"
           :disabled="readonly"
-          @click="toggleVoice"
-        >
-          🎤
-        </button>
-
+          @toggle="toggleVoice"
+        />
+        <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
           :disabled="!prompt.trim() && !upstream.textPrompt.trim()"
-          label="生成音频"
           @generate="onGenerate"
         />
       </div>

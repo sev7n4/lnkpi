@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import type { DockNodeType } from '@/components/canvas/NodePanelDock.vue'
 import { CANVAS_DOCK_MENU_ITEMS } from '@/components/canvas/canvasDockMenu'
+import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 
 const props = defineProps<{
   x: number
@@ -60,10 +61,10 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
           @click="emit('select', item.type)"
         >
           <span
-            class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-medium"
+            class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
             :class="item.tone"
           >
-            {{ item.label.slice(0, 1) }}
+            <DockTypeIcon :type="item.type" :size="14" />
           </span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">

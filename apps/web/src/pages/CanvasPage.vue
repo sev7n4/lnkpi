@@ -61,7 +61,7 @@ import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import { downloadMediaPackage, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
-import { CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
+import { CANVAS_NODE_PATCH_KEY, CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -857,6 +857,13 @@ function renameNodeById(nodeId: string, title: string) {
 
 provide(CANVAS_NODE_RENAME_KEY, renameNodeById)
 
+function patchNodeMediaById(nodeId: string, patch: Record<string, unknown>) {
+  patchNodeData(nodeId, patch)
+  void saveCanvas()
+}
+
+provide(CANVAS_NODE_PATCH_KEY, patchNodeMediaById)
+
 function resolveDropPosition(clientPos: { x: number; y: number }, nodeType: string) {
   const flowPoint = screenToFlowPoint(clientPos.x, clientPos.y)
   const { w, h } = getNodeSize({ type: nodeType } as FlowNode)
@@ -1269,7 +1276,8 @@ function onNodeContextMenu(event: NodeMouseEvent) {
 function onPaneContextMenu(event: MouseEvent | TouchEvent) {
   event.preventDefault()
   const { x, y } = getEventCoords(event)
-  contextMenu.value = { x, y }
+  // Blank canvas: open node picker directly (no intermediate menu / upload-media)
+  blankNodePicker.value = { x, y }
 }
 
 function closeContextMenu() {
@@ -1321,16 +1329,6 @@ function handleContextAction(action: string) {
 
   if (action === 'ungroup' && menu.nodeId) {
     handleUngroupById(menu.nodeId)
-    return
-  }
-
-  if (action === 'add-node') {
-    blankNodePicker.value = { x: menu.x, y: menu.y }
-    return
-  }
-
-  if (action === 'upload-media') {
-    triggerMediaUpload(menu.x, menu.y)
   }
 }
 

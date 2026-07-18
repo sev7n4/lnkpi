@@ -7,6 +7,7 @@ import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
@@ -110,7 +111,7 @@ function toggleVoice() {
 
 <template>
   <DockToolbarShell
-    type-label="分镜"
+    type="shot"
     show-title
     :title="title"
     title-placeholder="分镜标题"
@@ -155,17 +156,11 @@ function toggleVoice() {
       />
 
       <div class="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-          title="语音输入"
+        <DockMicButton
+          :listening="speech.listening.value"
           :disabled="readonly"
-          @click="toggleVoice"
-        >
-          🎤
-        </button>
-
+          @toggle="toggleVoice"
+        />
         <DockGenerateButton
           :generating="generating"
           :disabled="!prompt.trim()"

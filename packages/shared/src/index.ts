@@ -5,6 +5,7 @@ export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot' 
 export * from './sceneComposer'
 export * from './videoComposition'
 export * from './nodeRefs'
+export * from './imageParams'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
@@ -140,11 +141,13 @@ export const VIDEO_MODELS: AIModel[] = [
 
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1'
 export type VideoCropMode = 'none' | 'center' | 'fill'
+export type VideoResolution = '480p' | '720p' | '1080p'
 
 export interface VideoSettings {
   aspectRatio: VideoAspectRatio
   duration: 5 | 10 | 15
   crop: VideoCropMode
+  resolution: VideoResolution
 }
 
 export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: string }[] = [
@@ -159,6 +162,12 @@ export const VIDEO_DURATION_OPTIONS: { value: 5 | 10 | 15; label: string }[] = [
   { value: 15, label: '15 秒' },
 ]
 
+export const VIDEO_RESOLUTION_OPTIONS: { value: VideoResolution; label: string }[] = [
+  { value: '480p', label: '480p' },
+  { value: '720p', label: '720p' },
+  { value: '1080p', label: '1080p' },
+]
+
 export const VIDEO_CROP_OPTIONS: { value: VideoCropMode; label: string }[] = [
   { value: 'none', label: '不裁剪' },
   { value: 'center', label: '居中裁剪' },
@@ -169,6 +178,7 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   aspectRatio: '16:9',
   duration: 5,
   crop: 'none',
+  resolution: '720p',
 }
 
 // --- Shot/Material 模型（对标 NeoWOW Canvas Domain）---

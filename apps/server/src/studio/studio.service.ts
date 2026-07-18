@@ -9,6 +9,7 @@ import {
   mergeRefsToPrompt,
   type MergeTextSource,
 } from '@lnkpi/agent'
+import { resolveImageSize, type ImageResolutionTier } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -158,8 +159,11 @@ export class StudioService {
     aspectRatio = '16:9',
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
+    resolution = '1K',
+    count = 1,
   ) {
-    await this.consumePoints(userId, 10, '图像生成')
+    const n = Math.max(1, Math.min(4, Number(count) || 1))
+    await this.consumePoints(userId, 10 * n, '图像生成')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
@@ -168,16 +172,26 @@ export class StudioService {
     )
     const primaryRef = referenceImages[0] // only I1 is sent to the image provider; see extractReferenceImages
     const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
-    const { url } = await createImageProvider().generate(effectivePrompt)
+    const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
+    const { url, urls } = await createImageProvider().generate(effectivePrompt, { size, n })
+    const imageUrls = urls?.length ? urls : [url]
     return this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'image',
         prompt: effectivePrompt,
         model,
-        url,
+        url: imageUrls[0],
         status: 'completed',
-        metadata: JSON.stringify({ aspectRatio, referenceImages, skippedMerge }),
+        metadata: JSON.stringify({
+          aspectRatio,
+          resolution,
+          count: n,
+          size,
+          urls: imageUrls,
+          referenceImages,
+          skippedMerge,
+        }),
       },
     })
   }
@@ -207,8 +221,11 @@ export class StudioService {
     aspectRatio = '16:9',
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
+    resolution = '720p',
+    crop = 'none',
   ) {
-    await this.consumePoints(userId, 30, '视频生成')
+    const durationCredits = duration >= 15 ? 70 : duration >= 10 ? 50 : 30
+    await this.consumePoints(userId, durationCredits, '视频生成')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
@@ -224,10 +241,18 @@ export class StudioService {
         prompt: effectivePrompt,
         model,
         status: 'generating',
-        metadata: JSON.stringify({ duration, aspectRatio, referenceImages, skippedMerge, mergedText }),
+        metadata: JSON.stringify({
+          duration,
+          aspectRatio,
+          resolution,
+          crop,
+          referenceImages,
+          skippedMerge,
+          mergedText,
+        }),
       },
     })
-    this.completeVideo(record.id, effectivePrompt, model, duration, aspectRatio).catch(console.error)
+    this.completeVideo(record.id, effectivePrompt, model, duration, aspectRatio, resolution, crop).catch(console.error)
     return record
   }
 
@@ -270,9 +295,17 @@ export class StudioService {
     model?: string,
     duration?: number,
     aspectRatio?: string,
+    resolution?: string,
+    crop?: string,
   ) {
     try {
-      const { url } = await createVideoProvider().generate(prompt, { model, duration, aspectRatio })
+      const { url } = await createVideoProvider().generate(prompt, {
+        model,
+        duration,
+        aspectRatio,
+        resolution,
+        crop,
+      })
       await this.prisma.generationRecord.update({
         where: { id },
         data: { url, status: 'completed' },

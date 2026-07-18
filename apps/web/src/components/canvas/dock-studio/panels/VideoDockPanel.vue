@@ -12,12 +12,16 @@ import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import { estimateVideoCredits } from '@/constants/credits'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -45,14 +49,13 @@ const refInput = ref<HTMLInputElement | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const credits = computed(() => estimateVideoCredits(videoSettings.value.duration))
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
   if (local) return local
   return props.upstream.referenceImageUrl.trim()
 })
-
-const modeLabel = computed(() => (videoMode.value === 'image_to_video' ? '图生视频' : '文生视频'))
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -169,7 +172,7 @@ function onRefRemove(ref: NodeRef) {
 </script>
 
 <template>
-  <DockToolbarShell type-label="视频生成" @close="emit('close')">
+  <DockToolbarShell type="video" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
       @reorder="onRefReorder"
@@ -185,28 +188,28 @@ function onRefRemove(ref: NodeRef) {
     />
 
     <div class="bottom-toolbar-actions flex-wrap">
-      <div class="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+      <div class="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/5 p-0.5">
         <button
           type="button"
-          class="rounded-md px-2 py-1 text-[10px] transition"
-          :class="videoMode === 'text_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/50'"
+          class="rounded-md px-1.5 py-1 transition"
+          :class="videoMode === 'text_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
           :disabled="readonly"
+          title="文生视频"
           @click="setVideoMode('text_to_video')"
         >
-          文生视频
+          <DockTypeIcon icon="text" :size="12" />
         </button>
         <button
           type="button"
-          class="rounded-md px-2 py-1 text-[10px] transition"
-          :class="videoMode === 'image_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/50'"
+          class="rounded-md px-1.5 py-1 transition"
+          :class="videoMode === 'image_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
           :disabled="readonly"
+          title="图生视频"
           @click="setVideoMode('image_to_video')"
         >
-          图生视频
+          <DockTypeIcon icon="image" :size="12" />
         </button>
       </div>
-
-      <span class="text-[10px] text-white/40">{{ modeLabel }}</span>
 
       <UniversalModelSelector
         v-model="videoModel"
@@ -222,43 +225,39 @@ function onRefRemove(ref: NodeRef) {
         <div class="flex items-center gap-1.5">
           <button
             type="button"
-            class="dock-icon-btn text-xs"
+            class="dock-icon-btn"
             :disabled="readonly"
             title="参考图"
             @click="pickReferenceImage"
           >
-            🖼
+            <DockTypeIcon icon="image" :size="13" />
           </button>
           <div
             v-if="effectiveRefUrl"
-            class="relative h-8 w-8 overflow-hidden rounded-md border border-white/15"
+            class="relative h-7 w-7 overflow-hidden rounded-md border border-white/15"
           >
             <img :src="effectiveRefUrl" alt="" class="h-full w-full object-cover">
             <button
               type="button"
-              class="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] opacity-0 transition hover:opacity-100"
+              class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition hover:opacity-100"
               @click="clearReferenceImage"
             >
-              ✕
+              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
             </button>
           </div>
-          <span v-else class="text-[10px] text-amber-400/80">请连接或上传参考图</span>
           <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
         </div>
       </template>
 
       <div class="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-          title="语音输入"
+        <DockMicButton
+          :listening="speech.listening.value"
           :disabled="readonly"
-          @click="toggleVoice"
-        >
-          🎤
-        </button>
-
+          @toggle="toggleVoice"
+        />
+        <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
           :disabled="!prompt.trim() || (videoMode === 'image_to_video' && !effectiveRefUrl)"

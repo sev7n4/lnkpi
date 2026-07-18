@@ -1,6 +1,13 @@
 <script setup lang="ts">
-defineProps<{
-  typeLabel: string
+import { computed } from 'vue'
+import DockTypeIcon from './DockTypeIcon.vue'
+import { DOCK_TYPE_LABELS, dockTypeToIcon } from './dockIcons'
+
+const props = defineProps<{
+  /** Node type key, e.g. text / image / video / audio */
+  type?: string
+  /** @deprecated Prefer `type` — kept for legacy panels */
+  typeLabel?: string
   showTitle?: boolean
   title?: string
   titlePlaceholder?: string
@@ -11,6 +18,12 @@ const emit = defineEmits<{
   close: []
   'update:title': [value: string]
 }>()
+
+const iconKind = computed(() => dockTypeToIcon(props.type ?? 'text'))
+const tooltip = computed(() => {
+  if (props.type && DOCK_TYPE_LABELS[props.type]) return DOCK_TYPE_LABELS[props.type]
+  return props.typeLabel ?? '节点'
+})
 </script>
 
 <template>
@@ -21,7 +34,9 @@ const emit = defineEmits<{
   >
     <div class="bottom-toolbar-header">
       <div class="flex items-center gap-2">
-        <span class="bottom-toolbar-type">{{ typeLabel }}</span>
+        <span class="bottom-toolbar-type-icon" :title="tooltip">
+          <DockTypeIcon :icon="iconKind" :size="18" />
+        </span>
         <input
           v-if="showTitle"
           :value="title"
