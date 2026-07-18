@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { AUDIO_VOICE_OPTIONS, DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
+import { useClickOutside } from '@/composables/useClickOutside'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 
 const props = defineProps<{
@@ -12,6 +13,10 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+useClickOutside(rootRef, () => {
+  open.value = false
+})
 
 const current = computed(
   () => AUDIO_VOICE_OPTIONS.find((v) => v.id === props.modelValue) ?? AUDIO_VOICE_OPTIONS[0],
@@ -24,7 +29,7 @@ function select(id: string) {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="rootRef" class="relative">
     <button
       type="button"
       class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"

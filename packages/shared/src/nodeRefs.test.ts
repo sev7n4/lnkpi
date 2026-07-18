@@ -41,6 +41,27 @@ describe('resolveNodeRefs', () => {
     expect(refs.find((r) => r.sourceNodeId === 'p1')?.payload.text).toBe('短需求')
   })
 
+  it('drops refs whose upstream content is empty', () => {
+    const refs = resolveNodeRefs({
+      targetNodeId: 'img1',
+      targetType: 'image',
+      nodes: [
+        { id: 't1', type: 'text', data: { content: '' } },
+        { id: 'i1', type: 'image', data: { url: '' } },
+        { id: 't2', type: 'text', data: { content: '有内容' } },
+        { id: 'img1', type: 'image', data: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 't1', target: 'img1' },
+        { id: 'e2', source: 'i1', target: 'img1' },
+        { id: 'e3', source: 't2', target: 'img1' },
+      ],
+    })
+    expect(refs).toHaveLength(1)
+    expect(refs[0].payload.text).toBe('有内容')
+    expect(refs[0].refKey).toBe('T1')
+  })
+
   it('respects refOrder for same media type', () => {
     const refs = resolveNodeRefs({
       targetNodeId: 'img1',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { Work } from '@lnkpi/shared'
 import { WORK_CATEGORIES } from '@lnkpi/shared'
@@ -24,6 +24,7 @@ const activeCategory = ref('全部')
 const loading = ref(false)
 const showPublish = ref(false)
 const userSessions = ref<Session[]>([])
+const mySessions = ref<Session[]>([])
 const greeting = getGreeting()
 
 function getGreeting() {
@@ -73,6 +74,37 @@ async function fetchWorks() {
   } finally {
     loading.value = false
   }
+}
+
+async function fetchMySessions() {
+  if (!auth.isLoggedIn) {
+    mySessions.value = []
+    return
+  }
+  try {
+    const { data } = await api.get<{ data: Session[] }>('/sessions')
+    mySessions.value = data.data
+  } catch {
+    mySessions.value = []
+  }
+}
+
+function openCanvas(sessionId: string) {
+  router.push(`/workflow/${sessionId}`)
+}
+
+function formatSessionTime(iso: string) {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return ''
+  const diff = Date.now() - date.getTime()
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days} 天前`
+  return date.toLocaleDateString()
 }
 
 async function createCanvas() {
@@ -126,7 +158,14 @@ async function openPublish() {
   }
 }
 
-onMounted(fetchWorks)
+onMounted(() => {
+  fetchWorks()
+  void fetchMySessions()
+})
+
+watch(() => auth.isLoggedIn, () => {
+  void fetchMySessions()
+})
 </script>
 
 <template>
@@ -145,6 +184,45 @@ onMounted(fetchWorks)
           @create="createCanvas"
           @guide="createCanvas"
         />
+      </div>
+    </section>
+
+    <!-- 我的画布：历史画布 + 新建入口 -->
+    <section v-if="auth.isLoggedIn" class="mb-12">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white/90">我的画布</h2>
+        <span v-if="mySessions.length" class="text-xs text-white/35">{{ mySessions.length }} 个画布</span>
+      </div>
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+        <button
+          type="button"
+          class="flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-white/50 transition hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 hover:text-[#818cf8]"
+          @click="createCanvas"
+        >
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 4v16m8-8H4" />
+          </svg>
+          <span class="text-xs font-medium">新建画布</span>
+        </button>
+        <button
+          v-for="session in mySessions.slice(0, 11)"
+          :key="session.id"
+          type="button"
+          class="group flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] p-3 text-left transition hover:border-[#6366f1]/40 hover:bg-[#1f1f24]"
+          @click="openCanvas(session.id)"
+        >
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6366f1]/15 text-[#818cf8]">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 2h6m-3-3v6" />
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <p class="truncate text-[13px] font-medium text-white/85 group-hover:text-white">
+              {{ session.title || '未命名画布' }}
+            </p>
+            <p class="mt-0.5 text-[10px] text-white/35">{{ formatSessionTime(session.updatedAt) }}</p>
+          </div>
+        </button>
       </div>
     </section>
 

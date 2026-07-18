@@ -17,9 +17,17 @@
   --neo-panel-bg-rgba: rgba(24, 24, 27, 0.92);
   --neo-node-card-bg: rgba(40, 40, 45, 0.4);
   --neo-node-border: rgba(255, 255, 255, 0.08);
-  --neo-glass-bg: radial-gradient(135% 135% at 30% 25%, rgba(108, 114, 140, 0.38), rgba(0, 0, 0, 0.34));
+  --neo-glass-bg: radial-gradient(135% 135% at 30% 25%, rgba(96, 102, 128, 0.26), rgba(8, 8, 12, 0.2));
   --neo-glass-border: rgba(255, 255, 255, 0.14);
-  --neo-glass-blur: 24px;
+  --neo-glass-blur: 28px;
   --neo-glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   --neo-glass-glow: 0 0 18px 1px rgba(170, 178, 205, 0.22);
+}
+
+/* 画布白天模式：仅覆盖画布相关 token（面板/节点内部仍保持深色系） */
+:root[data-canvas-theme='light'] {
+  --neo-bg: #eceef2;
+  --neo-glass-bg: radial-gradient(135% 135% at 30% 25%, rgba(120, 126, 150, 0.3), rgba(30, 30, 38, 0.42));
+  --neo-glass-border: rgba(0, 0, 0, 0.12);
+  --neo-glass-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }

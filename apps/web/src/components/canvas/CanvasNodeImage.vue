@@ -51,8 +51,10 @@ function openEdit() {
         <img :src="displayUrl" alt="">
         <button
           type="button"
-          class="neo-node-replace-btn"
+          class="neo-node-replace-btn nodrag"
           title="替换图片"
+          @pointerdown.stop
+          @mousedown.stop
           @click.stop="openPicker"
         >
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
@@ -81,8 +83,10 @@ function openEdit() {
           <button
             v-if="data.status !== 'generating'"
             type="button"
-            class="neo-node-upload-btn"
+            class="neo-node-upload-btn nodrag"
             title="上传图片"
+            @pointerdown.stop
+            @mousedown.stop
             @click.stop="openPicker"
           >
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -100,7 +104,8 @@ function openEdit() {
         ref="fileInput"
         type="file"
         :accept="accept"
-        class="hidden"
+        class="nodrag hidden"
+        @click.stop
         @change="onFileChange"
       >
     </div>
