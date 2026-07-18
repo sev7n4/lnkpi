@@ -1,6 +1,8 @@
+import type { AxiosResponse } from 'axios'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
+import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { studioApi } from '@/services/studio-api'
@@ -26,6 +28,10 @@ vi.mock('@/services/canvas-api', () => ({
     exportVideoComposition: vi.fn(),
   },
 }))
+
+function mockAxiosResponse<T>(data: T): AxiosResponse<T> {
+  return { data, status: 200, statusText: 'OK', headers: {}, config: {} as AxiosResponse<T>['config'] }
+}
 
 const completedRecord = {
   id: 'rec-1',
@@ -63,7 +69,7 @@ function createDeps(nodes: EditableFlowNode[]) {
 
   const deps = {
     nodes: ref(nodes),
-    edges: ref([]),
+    edges: ref<CanvasEdgeLike[]>([]),
     sessionId: ref('session-1'),
     patchNodeData,
     addNode: vi.fn(() => 'new-node'),
@@ -82,12 +88,12 @@ function createDeps(nodes: EditableFlowNode[]) {
 describe('useNodeGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(studioApi.generateAudio).mockResolvedValue({
-      data: { data: { ...completedRecord, type: 'audio', url: 'https://example.com/out.mp3' } },
-    })
-    vi.mocked(studioApi.generateImage).mockResolvedValue({
-      data: { data: completedRecord },
-    })
+    vi.mocked(studioApi.generateAudio).mockResolvedValue(
+      mockAxiosResponse({ data: { ...completedRecord, type: 'audio', url: 'https://example.com/out.mp3' } }),
+    )
+    vi.mocked(studioApi.generateImage).mockResolvedValue(
+      mockAxiosResponse({ data: completedRecord }),
+    )
   })
 
   it('passes audio options to studioApi.generateAudio', async () => {

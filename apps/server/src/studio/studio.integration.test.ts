@@ -16,7 +16,9 @@ const imageGenerate = vi.fn(async () => ({
   url: 'https://example.com/a.png',
   urls: ['https://example.com/a.png'],
 }))
-const videoGenerate = vi.fn(async () => ({ url: 'https://example.com/v.mp4' }))
+const videoGenerate = vi.fn(async (_prompt: string, _opts?: Record<string, unknown>) => ({
+  url: 'https://example.com/v.mp4',
+}))
 const audioGenerate = vi.fn(async () => ({ url: 'https://example.com/a.mp3' }))
 const textGenerate = vi.fn(async (prompt: string) => ({ text: `ok:${prompt}` }))
 const visionGenerate = vi.fn(async (prompt: string) => ({ text: `vision:${prompt}` }))
