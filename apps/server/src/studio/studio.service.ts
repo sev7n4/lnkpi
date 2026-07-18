@@ -1,5 +1,8 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import {
+  buildAudioRequest,
+  buildImageProviderOptions,
+  buildVideoProviderOptions,
   createAudioProvider,
   createImageProvider,
   createTextProvider,
@@ -170,26 +173,32 @@ export class StudioService {
       'image',
       mentionedKeys,
     )
-    const primaryRef = referenceImages[0] // only I1 is sent to the image provider; see extractReferenceImages
-    const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
-    const { url, urls } = await createImageProvider().generate(effectivePrompt, { size, n, modelId: model })
+    const built = buildImageProviderOptions({ modelKey: model, size, n, referenceImages })
+    const primaryRef = built.referenceImages[0]
+    const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
+    const { url, urls } = await createImageProvider().generate(effectivePrompt, {
+      size: built.size,
+      n: built.n,
+      modelId: built.modelId,
+    })
     const imageUrls = urls?.length ? urls : [url]
     return this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'image',
         prompt: effectivePrompt,
-        model,
+        model: built.meta.modelKey,
         url: imageUrls[0],
         status: 'completed',
         metadata: JSON.stringify({
+          ...built.meta,
           aspectRatio,
           resolution,
           count: n,
-          size,
+          size: built.size,
           urls: imageUrls,
-          referenceImages,
+          referenceImages: built.referenceImages,
           skippedMerge,
         }),
       },
@@ -232,16 +241,24 @@ export class StudioService {
       'video',
       mentionedKeys,
     )
-    const primaryRef = referenceImages[0]
-    const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
+    const built = buildVideoProviderOptions({
+      modelKey: model,
+      duration,
+      aspectRatio,
+      resolution,
+      crop,
+      referenceImages,
+    })
+    const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'video',
         prompt: effectivePrompt,
-        model,
+        model: built.meta.modelKey,
         status: 'generating',
         metadata: JSON.stringify({
+          ...built.meta,
           duration,
           aspectRatio,
           resolution,
@@ -252,37 +269,64 @@ export class StudioService {
         }),
       },
     })
-    this.completeVideo(record.id, effectivePrompt, model, duration, aspectRatio, resolution, crop).catch(console.error)
+    this.completeVideo(record.id, effectivePrompt, {
+      model: built.model,
+      duration: built.duration,
+      aspectRatio: built.aspectRatio,
+      resolution: built.resolution,
+      crop: built.crop,
+      image: built.image,
+    }).catch(console.error)
     return record
   }
 
   async generateAudio(
     userId: string,
     text: string,
-    options: { voice?: string; emotion?: string; language?: string; speed?: number } = {},
+    options: {
+      model?: string
+      voice?: string
+      emotion?: string
+      language?: string
+      speed?: number
+      volume?: number
+      pitch?: number
+    } = {},
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
   ) {
-    const voice = options.voice
     await this.consumePoints(userId, 5, '音频生成')
     const { mergedText, skippedMerge } = await this.resolveMergedPrompt(text, refs, 'audio', mentionedKeys)
-    const { url } = await createAudioProvider().generate(mergedText, voice)
+    const built = buildAudioRequest({
+      mergedText,
+      modelKey: options.model,
+      voice: options.voice,
+      emotion: options.emotion,
+      language: options.language,
+      speed: options.speed,
+      volume: options.volume,
+      pitch: options.pitch,
+    })
+    const { url } = await createAudioProvider().generate(built.text, built.options)
     const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'audio',
         prompt: mergedText,
-        model: voice,
+        model: built.meta.modelKey,
         url: storeUrl,
         status: 'completed',
         metadata: JSON.stringify({
-          voice: voice ?? 'default',
+          ...built.meta,
+          skippedMerge,
+          voice: built.options.voice ?? options.voice ?? 'default',
           emotion: options.emotion ?? 'neutral',
           language: options.language ?? 'zh',
           speed: options.speed ?? 1,
+          volume: options.volume,
+          pitch: options.pitch,
           hasTtsData: url.startsWith('data:'),
-          skippedMerge,
         }),
       },
     })
@@ -292,20 +336,17 @@ export class StudioService {
   private async completeVideo(
     id: string,
     prompt: string,
-    model?: string,
-    duration?: number,
-    aspectRatio?: string,
-    resolution?: string,
-    crop?: string,
+    options: {
+      model?: string
+      duration?: number
+      aspectRatio?: string
+      resolution?: string
+      crop?: string
+      image?: string
+    },
   ) {
     try {
-      const { url } = await createVideoProvider().generate(prompt, {
-        model,
-        duration,
-        aspectRatio,
-        resolution,
-        crop,
-      })
+      const { url } = await createVideoProvider().generate(prompt, options)
       await this.prisma.generationRecord.update({
         where: { id },
         data: { url, status: 'completed' },

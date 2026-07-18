@@ -98,6 +98,10 @@ class GenerateAudioDto {
 
   @IsOptional()
   @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsString()
   voice?: string
 
   @IsOptional()
@@ -111,6 +115,14 @@ class GenerateAudioDto {
   @IsOptional()
   @IsNumber()
   speed?: number
+
+  @IsOptional()
+  @IsNumber()
+  volume?: number
+
+  @IsOptional()
+  @IsNumber()
+  pitch?: number
 
   @IsOptional()
   @IsArray()
@@ -256,10 +268,13 @@ export class StudioController {
       req.user.sub,
       dto.text,
       {
+        model: dto.model,
         voice: dto.voice,
         emotion: dto.emotion,
         language: dto.language,
         speed: dto.speed,
+        volume: dto.volume,
+        pitch: dto.pitch,
       },
       dto.refs,
       dto.mentionedKeys,
