@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
   mergePromptWithUpstream,
   mergeReferenceImageUrl,
@@ -180,7 +181,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
         const { data: res } = await studioApi.generateAudio(local, {
           model: String(data.audioModel ?? defaultModelKey('audio')),
-          voice: String(data.audioVoice ?? 'female-1'),
+          voice: String(data.audioVoice ?? DEFAULT_AUDIO_VOICE),
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,

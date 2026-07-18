@@ -59,11 +59,23 @@ const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateAudioCredits())
 
+function syncVoiceToCatalog(emitPatch: boolean) {
+  const voices = getModelEntry(audioModel.value)?.voices
+  if (!voices?.length) return
+  if (!voices.some((v) => v.id === audioVoice.value)) {
+    audioVoice.value = voices[0].id
+    if (emitPatch) {
+      emit('patch', { audioVoice: voices[0].id })
+    }
+  }
+}
+
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
   audioModel.value = resolveModelKey('audio', data.audioModel as string | undefined).modelKey
   audioVoice.value = String(data.audioVoice ?? DEFAULT_AUDIO_VOICE)
+  syncVoiceToCatalog(true)
   const emotion = data.audioEmotion as AudioVoiceSettings['emotion'] | undefined
   const language = data.audioLanguage as AudioVoiceSettings['language'] | undefined
   const speed = typeof data.audioSpeed === 'number' ? data.audioSpeed : DEFAULT_AUDIO_SPEED
@@ -80,14 +92,7 @@ function syncFromNode() {
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 
-watch(audioModel, (model) => {
-  const voices = getModelEntry(model)?.voices
-  if (!voices?.length) return
-  if (!voices.some((v) => v.id === audioVoice.value)) {
-    audioVoice.value = voices[0].id
-    emit('patch', { audioVoice: voices[0].id })
-  }
-})
+watch(audioModel, () => syncVoiceToCatalog(true))
 
 watch(
   () => props.upstream,

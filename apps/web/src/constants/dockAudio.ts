@@ -28,7 +28,7 @@ export const AUDIO_LANGUAGE_OPTIONS: Array<{ value: AudioLanguage; label: string
   { value: 'ja', label: '日本語' },
 ]
 
-export const DEFAULT_AUDIO_VOICE = 'female-1'
+export const DEFAULT_AUDIO_VOICE = 'female-shaonv'
 export const DEFAULT_AUDIO_EMOTION: AudioEmotion = 'neutral'
 export const DEFAULT_AUDIO_LANGUAGE: AudioLanguage = 'zh'
 export const DEFAULT_AUDIO_SPEED = 1
