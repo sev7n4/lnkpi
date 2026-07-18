@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useClickOutside } from '@/composables/useClickOutside'
 import {
   DEFAULT_VIDEO_SETTINGS,
   VIDEO_ASPECT_RATIO_OPTIONS,
@@ -18,6 +19,10 @@ const emit = defineEmits<{
 }>()
 
 const open = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+useClickOutside(rootRef, () => {
+  open.value = false
+})
 
 function patch(partial: Partial<VideoSettings>) {
   emit('update:modelValue', { ...DEFAULT_VIDEO_SETTINGS, ...props.modelValue, ...partial })
@@ -25,7 +30,7 @@ function patch(partial: Partial<VideoSettings>) {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="rootRef" class="relative">
     <button
       type="button"
       class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"

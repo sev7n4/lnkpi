@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { MiniMap } from '@vue-flow/minimap'
 import { useVueFlow } from '@vue-flow/core'
+import { useClickOutside } from '@/composables/useClickOutside'
 import type { CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
 
 const props = defineProps<{
@@ -19,6 +20,14 @@ const showGridPanel = ref(false)
 const showListPanel = ref(false)
 const showMinimapPopover = ref(false)
 const minimapBodyRef = ref<HTMLElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
+
+useClickOutside(rootRef, () => {
+  showGridPanel.value = false
+  if (props.settings.minimapExpanded !== 0) {
+    emit('update:settings', { minimapExpanded: 0 })
+  }
+})
 
 const zoomPercent = computed(() => Math.round(viewport.value.zoom * 100))
 
@@ -182,7 +191,7 @@ watch(
 </script>
 
 <template>
-  <div class="canvas-bottom-toolbar relative w-max">
+  <div ref="rootRef" class="canvas-bottom-toolbar relative w-max">
     <!-- 缩略图浮层 -->
     <div
       v-if="showMinimapPopover && settings.minimapExpanded === 1"

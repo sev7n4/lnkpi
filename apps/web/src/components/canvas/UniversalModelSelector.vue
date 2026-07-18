@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { GenerationType } from '@lnkpi/shared'
 import { useCapabilities } from '@/composables/useCapabilities'
+import { useClickOutside } from '@/composables/useClickOutside'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/dockIcons'
 
@@ -16,6 +17,10 @@ const emit = defineEmits<{
 
 const { modelsFor, loading } = useCapabilities()
 const open = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+useClickOutside(rootRef, () => {
+  open.value = false
+})
 
 const models = computed(() => modelsFor(props.type))
 const current = computed(() => {
@@ -46,7 +51,7 @@ function select(id: string) {
 </script>
 
 <template>
-  <div class="relative">
+  <div ref="rootRef" class="relative">
     <button
       type="button"
       class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"

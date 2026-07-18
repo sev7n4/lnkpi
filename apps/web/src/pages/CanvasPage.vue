@@ -55,8 +55,8 @@ import MultiSelectToolbarOverlay from '@/components/canvas/MultiSelectToolbarOve
 import MultiSelectConnectOverlay from '@/components/canvas/MultiSelectConnectOverlay.vue'
 import BatchConnectPickerLine from '@/components/canvas/BatchConnectPickerLine.vue'
 import EdgeScissorsOverlay from '@/components/canvas/EdgeScissorsOverlay.vue'
-import CanvasAssetPanel from '@/components/canvas/CanvasAssetPanel.vue'
 import { useCanvasViewportSettings, type CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
+import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import { downloadMediaPackage, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
@@ -116,6 +116,15 @@ const showPublish = ref(false)
 const showModelSettings = ref(false)
 const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string } | null>(null)
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
+const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
+
+const DEFAULT_DARK_GRID_COLOR = 'rgba(255,255,255,0.08)'
+const effectiveGridColor = computed(() => {
+  if (canvasTheme.value === 'light' && viewportSettings.value.gridColor === DEFAULT_DARK_GRID_COLOR) {
+    return 'rgba(0,0,0,0.12)'
+  }
+  return viewportSettings.value.gridColor
+})
 const multiSelectedIds = ref<string[]>([])
 let nodeCounter = 0
 
@@ -1524,7 +1533,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="relative h-screen w-full overflow-hidden bg-[#141414]" @click="closeContextMenu">
+  <div class="relative h-screen w-full overflow-hidden bg-[var(--neo-bg)]" @click="closeContextMenu">
     <div class="flex h-full min-w-0 overflow-hidden">
       <div ref="canvasAreaRef" class="relative min-h-0 min-w-0 flex-1">
         <ClickRippleLayer :container="canvasAreaRef" />
@@ -1582,7 +1591,7 @@ onMounted(() => {
             :variant="viewportSettings.gridVariant"
             :gap="viewportSettings.gridGap"
             :size="viewportSettings.gridDotSize"
-            :color="viewportSettings.gridColor"
+            :color="effectiveGridColor"
           />
 
           <MultiSelectToolbarOverlay
@@ -1656,13 +1665,30 @@ onMounted(() => {
           @close="onPaneClick"
         />
 
-        <NodePanelDock @add="handleDockAdd" @open-settings="showModelSettings = true" />
-
-        <CanvasAssetPanel
+        <NodePanelDock
           :assets="canvasAssets"
-          @apply="handleAssetApply"
-          @upload="triggerMediaUpload()"
+          @add="handleDockAdd"
+          @open-settings="showModelSettings = true"
+          @asset-apply="handleAssetApply"
+          @asset-upload="triggerMediaUpload()"
         />
+
+        <button
+          type="button"
+          class="canvas-theme-toggle pointer-events-auto absolute right-3 top-3 z-[50] flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:text-white"
+          :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
+          @click="toggleCanvasTheme"
+        >
+          <!-- 太阳 -->
+          <svg v-if="canvasTheme === 'dark'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <circle cx="12" cy="12" r="4" />
+            <path stroke-linecap="round" d="M12 3v2m0 14v2M5.64 5.64l1.41 1.41m9.9 9.9 1.41 1.41M3 12h2m14 0h2M5.64 18.36l1.41-1.41m9.9-9.9 1.41-1.41" />
+          </svg>
+          <!-- 月亮 -->
+          <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
 
         <input
           ref="mediaInputRef"
@@ -1736,7 +1762,8 @@ onMounted(() => {
 
 <style scoped>
 .canvas-flow {
-  background: #141414;
+  background: var(--neo-bg);
+  transition: background 0.25s ease;
 }
 
 :deep(.canvas-panel-bottom-left) {
@@ -1745,9 +1772,10 @@ onMounted(() => {
   max-width: none !important;
 }
 
-:deep(.vue-flow__selection) {
-  background: rgba(99, 102, 241, 0.12);
-  border: 1px solid rgba(129, 140, 248, 0.55);
+:deep(.vue-flow__selection),
+:deep(.vue-flow__nodesselection-rect) {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1.5px dashed rgba(129, 140, 248, 0.7);
   border-radius: 4px;
 }
 

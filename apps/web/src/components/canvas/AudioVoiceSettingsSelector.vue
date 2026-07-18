@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useClickOutside } from '@/composables/useClickOutside'
 import {
   AUDIO_EMOTION_OPTIONS,
   AUDIO_LANGUAGE_OPTIONS,
@@ -35,6 +36,11 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const speedOpen = ref(false)
+const rootRef = ref<HTMLElement | null>(null)
+useClickOutside(rootRef, () => {
+  open.value = false
+  speedOpen.value = false
+})
 
 function patch(partial: Partial<AudioVoiceSettings>) {
   emit('update:modelValue', { ...props.modelValue, ...partial })
@@ -47,7 +53,7 @@ function bumpSpeed(delta: number) {
 </script>
 
 <template>
-  <div class="flex items-center gap-1">
+  <div ref="rootRef" class="flex items-center gap-1">
     <div class="relative">
       <button
         type="button"

@@ -4,9 +4,11 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
-import ImageAspectSelector, { type ImageAspectRatio } from '@/components/canvas/ImageAspectSelector.vue'
-import ImageResolutionSelector, { type ImageResolution } from '@/components/canvas/ImageResolutionSelector.vue'
-import ImageCountSelector, { type ImageCount } from '@/components/canvas/ImageCountSelector.vue'
+import ImageParamsSelector, {
+  type ImageAspectRatio,
+  type ImageCount,
+  type ImageResolution,
+} from '@/components/canvas/ImageParamsSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
@@ -212,17 +214,13 @@ function clearReferenceImage() {
         type="image"
         @update:model-value="syncField('imageModel', $event)"
       />
-      <ImageAspectSelector
-        v-model="imageAspect"
-        @update:model-value="syncField('imageAspect', $event)"
-      />
-      <ImageResolutionSelector
-        v-model="imageResolution"
-        @update:model-value="syncField('imageResolution', $event)"
-      />
-      <ImageCountSelector
-        v-model="imageCount"
-        @update:model-value="syncField('imageCount', $event)"
+      <ImageParamsSelector
+        :aspect="imageAspect"
+        :resolution="imageResolution"
+        :count="imageCount"
+        @update:aspect="imageAspect = $event; syncField('imageAspect', $event)"
+        @update:resolution="imageResolution = $event; syncField('imageResolution', $event)"
+        @update:count="imageCount = $event; syncField('imageCount', $event)"
       />
 
       <div class="flex items-center gap-1.5">

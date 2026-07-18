@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useClickOutside } from '@/composables/useClickOutside'
 
 defineProps<{
   title: string
@@ -16,10 +17,13 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const menuOpen = ref(false)
+const menuRef = ref<HTMLElement | null>(null)
 
 function closeMenu() {
   menuOpen.value = false
 }
+
+useClickOutside(menuRef, closeMenu)
 </script>
 
 <template>
@@ -38,11 +42,11 @@ function closeMenu() {
     <div class="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] px-2 py-1 shadow-lg backdrop-blur-xl">
       <input
         :value="title"
-        class="max-w-[180px] truncate bg-transparent px-1 py-1 text-sm font-medium text-white/90 outline-none placeholder:text-white/30 sm:max-w-[240px]"
+        class="w-[110px] truncate bg-transparent px-1 py-1 text-sm font-medium text-white/90 outline-none transition-all duration-200 placeholder:text-white/30 focus:w-[200px]"
         placeholder="未命名画布"
         @input="emit('update:title', ($event.target as HTMLInputElement).value)"
       >
-      <div class="relative">
+      <div ref="menuRef" class="relative">
         <button
           type="button"
           class="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/[0.06] hover:text-white/80"

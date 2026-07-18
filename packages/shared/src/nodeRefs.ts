@@ -206,5 +206,8 @@ export function resolveNodeRefs(input: ResolveNodeRefsInput): NodeRef[] {
     drafts.push(resolveLocalRef(binding))
   }
 
-  return assignRefKeys(applyRefOrder(drafts, input.refOrder))
+  // 上游内容为空（stale）的引用不生成芯片
+  const visible = drafts.filter((draft) => !draft.stale)
+
+  return assignRefKeys(applyRefOrder(visible, input.refOrder))
 }

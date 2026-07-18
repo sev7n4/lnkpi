@@ -3,6 +3,17 @@
   --neo-node-selected-ring: rgba(255, 255, 255, 1);
   --neo-node-border: rgba(255, 255, 255, 0.08);
   --neo-node-card-bg: rgba(40, 40, 45, 0.4);
+  --neo-node-title-color: #fff;
+  --neo-node-icon-color: rgba(255, 255, 255, 0.85);
+}
+
+/* 画布白天模式：节点卡片保持深色以保证内部白色文字可读，外部标题转深色 */
+:root[data-canvas-theme='light'] {
+  --neo-node-selected-ring: rgba(24, 24, 27, 0.9);
+  --neo-node-border: rgba(0, 0, 0, 0.12);
+  --neo-node-card-bg: rgba(32, 32, 38, 0.88);
+  --neo-node-title-color: #1f2430;
+  --neo-node-icon-color: rgba(24, 24, 27, 0.8);
 }
 
 .neo-node-wrapper {
@@ -30,7 +41,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--neo-node-icon-color);
 }
 
 .neo-node-icon svg {
@@ -41,7 +52,7 @@
 .neo-node-title {
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--neo-node-title-color);
   white-space: nowrap;
 }
 
@@ -404,23 +415,23 @@
   background: rgba(162, 162, 162, 0.55);
 }
 
-/* 多选批量连线端点：与单节点端点同款，尺寸 2×；始终 show-handles */
+/* 多选批量连线端点：与单节点端点同款，略大一号；始终 show-handles */
 .multi-select-batch-handle.neo-node-wrapper .handle-plus {
   opacity: 1;
 }
 
 .multi-select-batch-handle.neo-node-wrapper {
-  width: 80px;
-  height: 80px;
+  width: 48px;
+  height: 48px;
   overflow: visible;
 }
 
 .multi-select-batch-handle .vue-flow__handle.neo-flow-handle {
-  width: 80px;
-  height: 80px;
-  min-width: 80px;
-  min-height: 80px;
-  --fx: 28px;
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  --fx: 16px;
 }
 
 .multi-select-batch-handle .vue-flow__handle-right.neo-flow-handle {
@@ -431,21 +442,21 @@
 }
 
 .multi-select-batch-handle .handle-hitbox {
-  inset: -32px;
+  inset: -18px;
 }
 
 .multi-select-batch-handle .handle-plus-inner {
-  width: 48px;
-  height: 48px;
-  border-width: 4px;
+  width: 30px;
+  height: 30px;
+  border-width: 2.5px;
 }
 
 .multi-select-batch-handle .handle-plus-inner::before {
-  font-size: 28px;
+  font-size: 18px;
 }
 
 .multi-select-batch-handle .vue-flow__handle-right .handle-plus-inner {
-  transform: translateX(-24px) scale(0.78);
+  transform: translateX(-14px) scale(0.85);
 }
 
 .multi-select-batch-handle .vue-flow__handle.neo-flow-handle:hover .handle-plus-inner,
@@ -464,13 +475,16 @@
 .bottom-toolbar-container {
   position: relative;
   isolation: isolate;
+  /* 外层 dock 包裹层为 pointer-events: none，避免整条底部区域拦截画布点击 */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
   min-width: min(600px, calc(100vw - 32px));
   max-width: min(1000px, calc(100vw - 32px));
   padding: 10px 12px 10px;
-  overflow: hidden;
+  /* 弹出卡片（模型/参数选择）需溢出容器显示，不可用 hidden */
+  overflow: visible;
   border: 1px solid var(--neo-glass-border);
   border-radius: 20px;
   background: var(--neo-glass-bg);

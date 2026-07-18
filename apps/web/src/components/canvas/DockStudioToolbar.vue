@@ -61,7 +61,7 @@ const dockLocked = computed(() => {
       class="dock-studio-toolbar pointer-events-none absolute inset-x-0 bottom-3 z-[45] flex justify-center px-4"
       :class="{ 'is-dock-locked': dockLocked }"
     >
-      <div class="pointer-events-auto w-full flex justify-center" :style="dockStyle">
+      <div class="pointer-events-none w-full flex justify-center" :style="dockStyle">
         <DockStudioRouter
           :node="node"
           :upstream="upstream"
