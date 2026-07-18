@@ -42,8 +42,8 @@ jobs:
       - name: Build packages
         run: pnpm build
 
-      - name: Agent tests
-        run: pnpm --filter @lnkpi/agent test
+      - name: Unit and integration tests
+        run: pnpm test
 
       - name: Build summary
         if: always()
