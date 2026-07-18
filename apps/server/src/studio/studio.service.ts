@@ -173,7 +173,7 @@ export class StudioService {
     const primaryRef = referenceImages[0] // only I1 is sent to the image provider; see extractReferenceImages
     const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
-    const { url, urls } = await createImageProvider().generate(effectivePrompt, { size, n })
+    const { url, urls } = await createImageProvider().generate(effectivePrompt, { size, n, modelId: model })
     const imageUrls = urls?.length ? urls : [url]
     return this.prisma.generationRecord.create({
       data: {
