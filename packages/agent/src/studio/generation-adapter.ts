@@ -214,17 +214,31 @@ export function buildVideoProviderOptions(input: {
     effectivePromptSuffix?: string
   } = { model: entry.gatewayModelId }
 
-  if (duration !== undefined && entry.params.duration === 'native') {
-    result.duration = duration
-    nativeParams.duration = duration
+  const scalarParams: Record<string, string | number | undefined> = {
+    duration,
+    aspectRatio,
+    resolution,
+    crop,
   }
-  if (aspectRatio !== undefined && entry.params.aspectRatio === 'native') {
-    result.aspectRatio = aspectRatio
-    nativeParams.aspectRatio = aspectRatio
-  }
-  if (resolution !== undefined && entry.params.resolution === 'native') {
-    result.resolution = resolution
-    nativeParams.resolution = resolution
+
+  for (const [field, value] of Object.entries(scalarParams)) {
+    if (value === undefined) continue
+    const disposition = entry.params[field] ?? 'metadataOnly'
+
+    if (disposition === 'native') {
+      ;(result as Record<string, unknown>)[field] = value
+      nativeParams[field] = value
+    } else if (disposition === 'metadataOnly') {
+      droppedFields.push({
+        field,
+        reason: `${field} not supported natively by ${entry.modelKey}`,
+      })
+    } else {
+      droppedFields.push({
+        field,
+        reason: `${field} configured as promptPrefix but not applied for video scalars`,
+      })
+    }
   }
 
   const refCount = referenceImages.length
@@ -238,18 +252,6 @@ export function buildVideoProviderOptions(input: {
       .slice(1)
       .map((url) => `[ref-image:${url}]`)
       .join(' ')
-  }
-
-  if (crop !== undefined) {
-    if (entry.params.crop === 'native') {
-      result.crop = crop
-      nativeParams.crop = crop
-    } else {
-      droppedFields.push({
-        field: 'crop',
-        reason: `crop not supported natively by ${entry.modelKey}`,
-      })
-    }
   }
 
   const refImageMode = refCount > 0 ? 'primary_image' : 'none'

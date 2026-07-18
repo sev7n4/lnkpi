@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as shared from '@lnkpi/shared'
 import { buildAudioRequest, buildVideoProviderOptions, buildImageProviderOptions } from './generation-adapter'
 
 describe('buildAudioRequest', () => {
@@ -40,6 +41,48 @@ describe('buildVideoProviderOptions', () => {
     expect(r.image).toBe('https://cdn.example/a.png')
     expect(r.meta.refImageMode).toBe('primary_image')
     expect(r.meta.referenceImageCount).toBe(2)
+  })
+
+  it('records metadataOnly crop in droppedFields', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      crop: 'center',
+      referenceImages: [],
+    })
+    expect(r.crop).toBeUndefined()
+    expect(r.meta.droppedFields).toContainEqual({
+      field: 'crop',
+      reason: 'crop not supported natively by seedance-2.0-min',
+    })
+  })
+
+  it('records non-native duration in droppedFields', () => {
+    const spy = vi.spyOn(shared, 'resolveModelKey').mockReturnValue({
+      modelKey: 'test-video',
+      entry: {
+        modelKey: 'test-video',
+        displayName: 'Test Video',
+        gatewayModelId: 'test-video',
+        modality: 'video',
+        providerBinding: 'gateway-openai-compat',
+        params: { model: 'native', duration: 'metadataOnly' },
+      },
+      fallback: false,
+    })
+
+    const r = buildVideoProviderOptions({
+      modelKey: 'test-video',
+      duration: 10,
+      referenceImages: [],
+    })
+
+    expect(r.duration).toBeUndefined()
+    expect(r.meta.droppedFields).toContainEqual({
+      field: 'duration',
+      reason: 'duration not supported natively by test-video',
+    })
+
+    spy.mockRestore()
   })
 })
 
