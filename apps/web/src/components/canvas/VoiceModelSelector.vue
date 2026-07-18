@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { AUDIO_VOICE_OPTIONS, DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
+import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 
 const props = defineProps<{
   modelValue: string
@@ -26,10 +27,11 @@ function select(id: string) {
   <div class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs transition hover:bg-white/10"
+      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      title="音色"
       @click="open = !open"
     >
-      <span class="text-white/50">音色</span>
+      <DockTypeIcon icon="audio" :size="12" class="text-white/50" />
       <span class="max-w-[88px] truncate font-medium">{{ current?.label ?? DEFAULT_AUDIO_VOICE }}</span>
     </button>
     <div

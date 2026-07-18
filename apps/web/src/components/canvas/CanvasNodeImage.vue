@@ -3,6 +3,7 @@ import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
+import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 
 const props = defineProps<{
   id: string
@@ -12,6 +13,17 @@ const props = defineProps<{
 
 const editor = useCanvasEditorStore()
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
+const {
+  accept,
+  dragOver,
+  rejectFlash,
+  fileInput,
+  openPicker,
+  onFileChange,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+} = useNodeMediaUpload(props.id, 'image')
 
 function openEdit() {
   if (!displayUrl.value) return
@@ -25,9 +37,30 @@ function openEdit() {
 
 <template>
   <NeoBaseNode node-type="image" :selected="selected" :data="data" :status="data.status">
-    <div class="neo-gen-card">
+    <div
+      class="neo-gen-card neo-node-upload-target"
+      :class="{
+        'is-drag-over': dragOver,
+        'is-reject': rejectFlash,
+      }"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+    >
       <div v-if="data.url" class="neo-gen-preview">
         <img :src="displayUrl" alt="">
+        <button
+          type="button"
+          class="neo-node-replace-btn"
+          title="替换图片"
+          @click.stop="openPicker"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </button>
         <button
           type="button"
           class="absolute bottom-1.5 right-1.5 rounded-xl border-none bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-black/85"
@@ -45,16 +78,31 @@ function openEdit() {
         }"
       >
         <div class="neo-placeholder-content">
-          <svg class="neo-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="2.5" y="3" width="19" height="18" rx="3" />
-            <circle cx="8" cy="9" r="2" />
-            <path d="M21.5 15.5l-5-5L4 21" />
-          </svg>
+          <button
+            v-if="data.status !== 'generating'"
+            type="button"
+            class="neo-node-upload-btn"
+            title="上传图片"
+            @click.stop="openPicker"
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </button>
           <span class="neo-placeholder-text">
-            {{ data.status === 'generating' ? '生成中...' : '等待生成' }}
+            {{ data.status === 'generating' ? '生成中...' : '上传或等待生成' }}
           </span>
         </div>
       </div>
+      <input
+        ref="fileInput"
+        type="file"
+        :accept="accept"
+        class="hidden"
+        @change="onFileChange"
+      >
     </div>
   </NeoBaseNode>
 </template>

@@ -91,9 +91,23 @@ export function parseRecordUrl(record: { url?: string | null; metadata?: string 
   if (record.url) return record.url
   if (!record.metadata) return ''
   try {
-    const meta = JSON.parse(record.metadata) as { url?: string }
-    return meta.url ?? ''
+    const meta = JSON.parse(record.metadata) as { url?: string; urls?: string[] }
+    return meta.url ?? meta.urls?.[0] ?? ''
   } catch {
     return ''
+  }
+}
+
+export function parseRecordUrls(record: { url?: string | null; metadata?: string | null }): string[] {
+  if (!record.metadata) {
+    return record.url ? [record.url] : []
+  }
+  try {
+    const meta = JSON.parse(record.metadata) as { url?: string; urls?: string[] }
+    if (Array.isArray(meta.urls) && meta.urls.length) return meta.urls.filter(Boolean)
+    const single = meta.url ?? record.url
+    return single ? [single] : []
+  } catch {
+    return record.url ? [record.url] : []
   }
 }

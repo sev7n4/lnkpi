@@ -81,7 +81,7 @@ function readSavedTracks(): CompositionTrackRecord[] {
 
 <template>
   <DockToolbarShell
-    type-label="视频合成"
+    type="videoComposition"
     show-title
     :title="title"
     title-placeholder="合成项目名"

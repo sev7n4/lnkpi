@@ -110,7 +110,7 @@ function onKeydown(e: KeyboardEvent) {
     <div class="mention-input-shell">
       <div
         ref="backdropRef"
-        class="mention-input-backdrop input-field min-h-[48px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5] text-white/85"
+        class="mention-input-backdrop input-field min-h-[96px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5] text-white/85"
         aria-hidden="true"
       >
         <template v-for="(segment, idx) in highlightSegments" :key="idx">
@@ -123,8 +123,8 @@ function onKeydown(e: KeyboardEvent) {
       <textarea
         ref="textareaRef"
         :value="modelValue"
-        class="mention-input-field input-field min-h-[48px] w-full resize-none text-sm leading-[1.5] text-transparent caret-white"
-        rows="2"
+        class="mention-input-field input-field min-h-[96px] w-full resize-none text-sm leading-[1.5] text-transparent caret-white"
+        rows="4"
         :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
         @input="onInput"
         @keydown="onKeydown"
@@ -154,19 +154,34 @@ function onKeydown(e: KeyboardEvent) {
 <style scoped>
 .mention-input-shell {
   position: relative;
+  max-height: 200px;
 }
 
 .mention-input-backdrop,
 .mention-input-field {
-  min-height: 48px;
-  padding: 0.625rem 0.75rem;
-  border-width: 1px;
-  border-style: solid;
+  min-height: 96px;
+  max-height: 200px;
+  padding: 0.375rem 0.25rem;
+  border: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.mention-input-backdrop::-webkit-scrollbar,
+.mention-input-field::-webkit-scrollbar {
+  width: 4px;
+}
+
+.mention-input-backdrop::-webkit-scrollbar-thumb,
+.mention-input-field::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .mention-input-backdrop {
   pointer-events: none;
-  overflow: hidden;
 }
 
 .mention-input-field {

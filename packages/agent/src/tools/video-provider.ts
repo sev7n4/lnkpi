@@ -1,7 +1,14 @@
 export interface VideoProvider {
   generate(
     prompt: string,
-    options?: { model?: string; duration?: number; aspectRatio?: string; image?: string },
+    options?: {
+      model?: string
+      duration?: number
+      aspectRatio?: string
+      resolution?: string
+      crop?: string
+      image?: string
+    },
   ): Promise<{ url: string }>
 }
 
@@ -52,10 +59,21 @@ export class AgnesVideoProvider implements VideoProvider {
 
   async generate(
     prompt: string,
-    options?: { model?: string; duration?: number; aspectRatio?: string; image?: string },
+    options?: {
+      model?: string
+      duration?: number
+      aspectRatio?: string
+      resolution?: string
+      crop?: string
+      image?: string
+    },
   ): Promise<{ url: string }> {
     const model = options?.model || process.env.OPENAI_VIDEO_MODEL || this.defaultModel
-    const { width, height, num_frames, frame_rate } = resolveVideoParams(options?.duration, options?.aspectRatio)
+    const { width, height, num_frames, frame_rate } = resolveVideoParams(
+      options?.duration,
+      options?.aspectRatio,
+      options?.resolution,
+    )
 
     const body: Record<string, unknown> = {
       model,
@@ -108,35 +126,42 @@ export class AgnesVideoProvider implements VideoProvider {
 }
 
 /** num_frames 须满足 8n+1 且 <= 441；seconds ≈ num_frames / frame_rate */
-export function resolveVideoParams(durationSec = 5, aspectRatio = '16:9') {
+export function resolveVideoParams(durationSec = 5, aspectRatio = '16:9', resolution = '720p') {
   const frame_rate = 24
   const targetFrames = Math.ceil(durationSec * frame_rate)
   let num_frames = Math.ceil((Math.max(targetFrames, 9) - 1) / 8) * 8 + 1
   num_frames = Math.min(441, num_frames)
 
-  let width = 1152
-  let height = 768
+  const longEdge =
+    resolution === '1080p' ? 1920 : resolution === '480p' ? 854 : 1280
+
+  let width = longEdge
+  let height = Math.round((longEdge * 9) / 16)
   switch (aspectRatio) {
     case '9:16':
-      width = 768
-      height = 1152
+      height = longEdge
+      width = Math.round((longEdge * 9) / 16)
       break
-    case '1:1':
-      width = 768
-      height = 768
+    case '1:1': {
+      const side = resolution === '1080p' ? 1080 : resolution === '480p' ? 480 : 720
+      width = side
+      height = side
       break
+    }
     case '4:3':
-      width = 1024
-      height = 768
+      width = longEdge
+      height = Math.round((longEdge * 3) / 4)
       break
     case '3:4':
-      width = 768
-      height = 1024
+      height = longEdge
+      width = Math.round((longEdge * 3) / 4)
       break
     default:
       break
   }
 
+  width = Math.round(width / 8) * 8
+  height = Math.round(height / 8) * 8
   return { width, height, num_frames, frame_rate }
 }
 

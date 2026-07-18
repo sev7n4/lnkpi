@@ -37,10 +37,12 @@ export const studioApi = {
     aspectRatio?: string,
     refs?: StudioRefPayload[],
     mentionedKeys?: string[],
+    resolution?: string,
+    count?: number,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/image/generate',
-      { prompt, model, aspectRatio, refs, mentionedKeys },
+      { prompt, model, aspectRatio, refs, mentionedKeys, resolution, count },
       { timeout: 120_000 },
     ),
   generateImageVariation: (prompt: string, basePrompt?: string, model?: string) =>
@@ -60,10 +62,12 @@ export const studioApi = {
     aspectRatio?: string,
     refs?: StudioRefPayload[],
     mentionedKeys?: string[],
+    resolution?: string,
+    crop?: string,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/video/generate',
-      { prompt, model, duration, aspectRatio, refs, mentionedKeys },
+      { prompt, model, duration, aspectRatio, refs, mentionedKeys, resolution, crop },
       { timeout: 60_000 },
     ),
   generateAudio: (text: string, options?: AudioGenerateOptions, refs?: StudioRefPayload[], mentionedKeys?: string[]) =>

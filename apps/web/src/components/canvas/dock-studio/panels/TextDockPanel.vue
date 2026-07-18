@@ -7,12 +7,15 @@ import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.v
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import { estimateTextCredits } from '@/constants/credits'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -37,6 +40,7 @@ const textModel = ref(getConfig('text').model)
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const wordCount = computed(() => content.value.replace(/\s/g, '').length)
+const credits = computed(() => estimateTextCredits())
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -95,7 +99,7 @@ function onRefRemove(ref: NodeRef) {
 </script>
 
 <template>
-  <DockToolbarShell type-label="文本生成" @close="emit('close')">
+  <DockToolbarShell type="text" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
       @reorder="onRefReorder"
@@ -122,24 +126,18 @@ function onRefRemove(ref: NodeRef) {
         :disabled="readonly"
         @optimized="onOptimized"
       />
-      <span class="text-[10px] text-white/35">{{ wordCount }} 字</span>
+      <span class="text-[10px] text-white/35">{{ wordCount }}</span>
 
       <div class="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-          title="语音输入"
+        <DockMicButton
+          :listening="speech.listening.value"
           :disabled="readonly"
-          @click="toggleVoice"
-        >
-          🎤
-        </button>
-
+          @toggle="toggleVoice"
+        />
+        <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
           :disabled="!content.trim()"
-          label="生成文案"
           @generate="onGenerate"
         />
       </div>

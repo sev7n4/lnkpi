@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-export type ImageAspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4'
+export type ImageAspectRatio =
+  | '1:1'
+  | '16:9'
+  | '9:16'
+  | '4:3'
+  | '3:4'
+  | '3:2'
+  | '2:3'
+  | '21:9'
 
 defineProps<{
   modelValue: ImageAspectRatio
@@ -19,6 +27,9 @@ const options: Array<{ value: ImageAspectRatio; label: string }> = [
   { value: '9:16', label: '9:16' },
   { value: '4:3', label: '4:3' },
   { value: '3:4', label: '3:4' },
+  { value: '3:2', label: '3:2' },
+  { value: '2:3', label: '2:3' },
+  { value: '21:9', label: '21:9' },
 ]
 </script>
 
@@ -26,15 +37,18 @@ const options: Array<{ value: ImageAspectRatio; label: string }> = [
   <div class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs transition hover:bg-white/10"
+      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      title="画面比例"
       @click="open = !open"
     >
-      <span class="text-white/50">比例</span>
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" class="text-white/50">
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+      </svg>
       <span class="font-medium">{{ modelValue }}</span>
     </button>
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-50 mb-1 flex gap-1 rounded-xl border border-white/10 bg-[#242424] p-1.5 shadow-xl"
+      class="absolute bottom-full left-0 z-50 mb-1 flex max-w-[220px] flex-wrap gap-1 rounded-xl border border-white/10 bg-[#242424] p-1.5 shadow-xl"
       @click.stop
     >
       <button

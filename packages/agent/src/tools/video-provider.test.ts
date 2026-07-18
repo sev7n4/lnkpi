@@ -13,8 +13,21 @@ describe('resolveVideoParams', () => {
     expect(long.num_frames).toBe(441)
   })
 
-  it('maps aspect ratios', () => {
-    expect(resolveVideoParams(5, '9:16')).toEqual(expect.objectContaining({ width: 768, height: 1152 }))
-    expect(resolveVideoParams(5, '1:1')).toEqual(expect.objectContaining({ width: 768, height: 768 }))
+  it('maps aspect ratios at 720p', () => {
+    expect(resolveVideoParams(5, '9:16', '720p')).toEqual(
+      expect.objectContaining({ width: 720, height: 1280 }),
+    )
+    expect(resolveVideoParams(5, '1:1', '720p')).toEqual(
+      expect.objectContaining({ width: 720, height: 720 }),
+    )
+    expect(resolveVideoParams(5, '16:9', '720p')).toEqual(
+      expect.objectContaining({ width: 1280, height: 720 }),
+    )
+  })
+
+  it('maps 1080p long edge', () => {
+    expect(resolveVideoParams(5, '16:9', '1080p')).toEqual(
+      expect.objectContaining({ width: 1920, height: 1080 }),
+    )
   })
 })

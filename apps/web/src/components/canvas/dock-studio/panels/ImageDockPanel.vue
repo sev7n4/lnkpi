@@ -5,14 +5,20 @@ import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import ImageAspectSelector, { type ImageAspectRatio } from '@/components/canvas/ImageAspectSelector.vue'
+import ImageResolutionSelector, { type ImageResolution } from '@/components/canvas/ImageResolutionSelector.vue'
+import ImageCountSelector, { type ImageCount } from '@/components/canvas/ImageCountSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
+import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import { estimateImageCredits } from '@/constants/credits'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -21,7 +27,6 @@ const props = defineProps<{
   upstream: UpstreamNodeContext
   mentions?: MentionOption[]
   generating?: boolean
-  /** Task 4 will pass resolveNodeRefs output from CanvasPage */
   refs?: NodeRef[]
 }>()
 
@@ -35,11 +40,14 @@ const emit = defineEmits<{
 const prompt = ref('')
 const imageModel = ref(getConfig('image').model)
 const imageAspect = ref<ImageAspectRatio>('16:9')
+const imageResolution = ref<ImageResolution>('1K')
+const imageCount = ref<ImageCount>(1)
 const referenceImageUrl = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const credits = computed(() => estimateImageCredits(imageCount.value))
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -47,7 +55,6 @@ const effectiveRefUrl = computed(() => {
   return props.upstream.referenceImageUrl.trim()
 })
 
-/** Prefer CanvasPage refs when prop is passed, even if empty */
 const stripRefs = computed((): NodeRef[] => {
   if (props.refs !== undefined) return props.refs
 
@@ -92,6 +99,9 @@ function syncFromNode() {
   prompt.value = String(data.prompt ?? data.content ?? '')
   imageModel.value = String(data.imageModel ?? getConfig('image').model)
   imageAspect.value = (data.imageAspect as ImageAspectRatio | undefined) ?? '16:9'
+  imageResolution.value = (data.imageResolution as ImageResolution | undefined) ?? '1K'
+  const count = Number(data.imageCount ?? 1)
+  imageCount.value = (count === 2 || count === 4 ? count : 1) as ImageCount
   referenceImageUrl.value = String(data.referenceImageUrl ?? '')
 }
 
@@ -126,6 +136,8 @@ function onGenerate() {
     prompt: prompt.value,
     imageModel: imageModel.value,
     imageAspect: imageAspect.value,
+    imageResolution: imageResolution.value,
+    imageCount: imageCount.value,
     referenceImageUrl: effectiveRefUrl.value || undefined,
   })
   emit('generate')
@@ -179,8 +191,7 @@ function clearReferenceImage() {
 </script>
 
 <template>
-  <DockToolbarShell type-label="图片生成" @close="emit('close')">
-    <!-- Task 4: selectedRefs from CanvasPage; upstream fallback only when refs prop omitted -->
+  <DockToolbarShell type="image" @close="emit('close')">
     <DockRefStrip
       :refs="stripRefs"
       @reorder="onRefReorder"
@@ -205,20 +216,28 @@ function clearReferenceImage() {
         v-model="imageAspect"
         @update:model-value="syncField('imageAspect', $event)"
       />
+      <ImageResolutionSelector
+        v-model="imageResolution"
+        @update:model-value="syncField('imageResolution', $event)"
+      />
+      <ImageCountSelector
+        v-model="imageCount"
+        @update:model-value="syncField('imageCount', $event)"
+      />
 
       <div class="flex items-center gap-1.5">
         <button
           type="button"
-          class="dock-icon-btn text-xs"
+          class="dock-icon-btn"
           :disabled="readonly"
           title="参考图"
           @click="pickReferenceImage"
         >
-          🖼
+          <DockTypeIcon icon="image" :size="13" />
         </button>
         <div
           v-if="effectiveRefUrl"
-          class="relative h-8 w-8 overflow-hidden rounded-md border border-white/15"
+          class="relative h-7 w-7 overflow-hidden rounded-md border border-white/15"
         >
           <img :src="effectiveRefUrl" alt="" class="h-full w-full object-cover">
           <button
@@ -226,25 +245,21 @@ function clearReferenceImage() {
             class="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] opacity-0 transition hover:opacity-100"
             @click="clearReferenceImage"
           >
-            ✕
+            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <span v-else class="text-[10px] text-white/35">无参考图</span>
         <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
       </div>
 
       <div class="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :class="speech.listening.value ? 'animate-pulse text-red-400' : ''"
-          title="语音输入"
+        <DockMicButton
+          :listening="speech.listening.value"
           :disabled="readonly"
-          @click="toggleVoice"
-        >
-          🎤
-        </button>
-
+          @toggle="toggleVoice"
+        />
+        <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
           :disabled="!prompt.trim()"
