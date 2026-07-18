@@ -5,6 +5,7 @@ import {
   getModelEntry,
   type StudioModality,
   type StudioModelEntry,
+  type StudioVoiceOption,
 } from '@lnkpi/shared'
 
 export {
@@ -14,6 +15,7 @@ export {
   getModelEntry,
   type StudioModality,
   type StudioModelEntry,
+  type StudioVoiceOption,
 }
 
 export function modelsAsSelectorOptions(modality: StudioModality) {

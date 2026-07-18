@@ -19,6 +19,7 @@ import {
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type StudioRefPayload } from '@/services/studio-api'
+import { defaultModelKey } from '@/constants/studioModels'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
@@ -178,10 +179,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       if (nodeType === 'audio') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
         const { data: res } = await studioApi.generateAudio(local, {
+          model: String(data.audioModel ?? defaultModelKey('audio')),
           voice: String(data.audioVoice ?? 'female-1'),
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
+          volume: typeof data.audioVolume === 'number' ? data.audioVolume : 1,
+          pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
         }, refs, mentionedKeys)
         deps.patchNodeData(node.id, {
           url: parseRecordUrl(res.data),

@@ -32,6 +32,16 @@ export const DEFAULT_AUDIO_VOICE = 'female-1'
 export const DEFAULT_AUDIO_EMOTION: AudioEmotion = 'neutral'
 export const DEFAULT_AUDIO_LANGUAGE: AudioLanguage = 'zh'
 export const DEFAULT_AUDIO_SPEED = 1
+export const DEFAULT_AUDIO_VOLUME = 1
+export const DEFAULT_AUDIO_PITCH = 0
+
+export interface AudioVoiceSettings {
+  emotion: AudioEmotion
+  language: AudioLanguage
+  speed: number
+  volume: number
+  pitch: number
+}
 
 export type ShotGenerateMode = 'auto' | 'image' | 'video'
 
