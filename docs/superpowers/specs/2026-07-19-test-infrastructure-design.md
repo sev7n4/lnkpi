@@ -1,6 +1,6 @@
 # 测试基础设施（T0 前置）产品与技术规格
 
-> 状态：**待审阅**（§1–§3 已共创确认；实现计划待 `writing-plans`）  
+> 状态：**已实现**（T0 已落地；§6 后续迭代见 T1–T4）  
 > 日期：2026-07-19  
 > 范围：**T0** — 单元 + 服务端集成测试地基，并全量接入 CI；**不含** Playwright E2E / 真库  
 > 背景：C1 PR [#25](https://github.com/sev7n4/lnkpi/pull/25) **暂停合并**，本规格作为其前置；合入 main 后再 rebase #25 并按需补 C1 专项用例  
@@ -152,7 +152,7 @@ install → prisma generate → pnpm build → pnpm test → (pull_request) dock
 
 | 轮次 | 名称 | 内容 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
-| **T0** | 测试地基 | 本规格：Vitest 全仓、Server 集成、Web composable、CI 全量 | — | 规格确认中 → 实现 |
+| **T0** | 测试地基 | 本规格：Vitest 全仓、Server 集成、Web composable、CI 全量 | — | **已实现** |
 | **T1** | C1 合入 | PR #25 rebase 到含 T0 的 main；按需补 C1 专项用例；再 Squash & Merge | T0 合入 | 暂停（#25 待 rebase） |
 | **T2** | Playwright E2E | 起 web + api（网关 mock）；画布：选模型/参数/生成/断言请求或节点状态 | T0 | 规划中 |
 | **T3** | 可选加固 | 真库 Prisma 集成子集；部署后鉴权 API 冒烟（不止 health） | T0 / T2 | 可选 |
