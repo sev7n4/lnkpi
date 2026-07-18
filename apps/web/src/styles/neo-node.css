@@ -486,14 +486,42 @@
   /* 弹出卡片（模型/参数选择）需溢出容器显示，不可用 hidden */
   overflow: visible;
   border: 1px solid var(--neo-glass-border);
-  border-radius: 20px;
+  /* aimarket creation-panel: rounded-[1.5rem] + backdrop-blur-2xl + saturate-150 */
+  border-radius: 24px;
   background: var(--neo-glass-bg);
-  backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.15);
-  -webkit-backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.5);
+  -webkit-backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.5);
   box-shadow: var(--neo-glass-shadow);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
+}
+
+/* aimarket 顶部高光细线 */
+.bottom-toolbar-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 24px;
+  left: 24px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+}
+
+/* aimarket 两侧氛围光斑（橙/紫） */
+.bottom-toolbar-container::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  right: -32px;
+  left: -40px;
+  height: 112px;
+  pointer-events: none;
+  background:
+    radial-gradient(56px 56px at 48px 56px, rgba(249, 115, 22, 0.08), transparent 70%),
+    radial-gradient(48px 48px at calc(100% - 44px) 52px, rgba(139, 92, 246, 0.08), transparent 70%);
+  filter: blur(28px);
 }
 
 .bottom-toolbar-container:hover {

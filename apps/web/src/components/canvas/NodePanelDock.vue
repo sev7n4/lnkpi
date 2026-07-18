@@ -64,9 +64,9 @@ useClickOutside(rootRef, () => {
     class="node-panel-dock pointer-events-none absolute left-3 top-3 z-[50]"
   >
     <div class="pointer-events-auto relative">
-      <!-- 竖向胶囊：添加节点 + 素材库 + 模型设置 -->
+      <!-- 竖向面板：添加节点 + 资产库 + 模型设置（文字+图标组合） -->
       <div
-        class="vertical-capsule flex flex-col items-center gap-0.5 rounded-full border border-white/[0.08] bg-[rgba(22,22,22,0.94)] p-1 shadow-[0_8px_28px_rgba(0,0,0,0.42)] backdrop-blur-xl"
+        class="vertical-capsule flex flex-col items-stretch gap-0.5 rounded-2xl border border-white/[0.08] bg-[rgba(22,22,22,0.94)] p-1 shadow-[0_8px_28px_rgba(0,0,0,0.42)] backdrop-blur-xl"
       >
         <button
           type="button"
@@ -76,7 +76,7 @@ useClickOutside(rootRef, () => {
           @click.stop="toggleMenu"
         >
           <svg
-            class="h-[18px] w-[18px] transition-transform duration-200"
+            class="h-[17px] w-[17px] transition-transform duration-200"
             :class="showMenu ? 'rotate-45' : ''"
             fill="none"
             viewBox="0 0 24 24"
@@ -84,27 +84,29 @@ useClickOutside(rootRef, () => {
           >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
+          <span class="rail-btn-label">添加</span>
         </button>
 
         <button
           type="button"
           class="rail-btn text-white/55"
           :class="showAssets ? 'is-active' : ''"
-          title="素材库"
+          title="资产库"
           @click.stop="toggleAssets"
         >
-          <svg class="h-[17px] w-[17px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="h-[16px] w-[16px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
+          <span class="rail-btn-label">资产库</span>
           <span
             v-if="assets.length"
-            class="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[#6366f1] px-0.5 text-[8px] font-semibold text-white"
+            class="absolute -right-1 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[#6366f1] px-0.5 text-[8px] font-semibold text-white"
           >
             {{ assets.length > 99 ? '99+' : assets.length }}
           </span>
         </button>
 
-        <span class="my-0.5 h-px w-5 bg-white/[0.08]" />
+        <span class="mx-auto my-0.5 h-px w-8 bg-white/[0.08]" />
 
         <button
           type="button"
@@ -112,7 +114,7 @@ useClickOutside(rootRef, () => {
           title="模型服务配置"
           @click.stop="emit('open-settings')"
         >
-          <svg class="h-[17px] w-[17px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg class="h-[16px] w-[16px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -121,6 +123,7 @@ useClickOutside(rootRef, () => {
             />
             <circle cx="12" cy="12" r="3" stroke-width="1.75" />
           </svg>
+          <span class="rail-btn-label">设置</span>
         </button>
       </div>
 
@@ -176,13 +179,16 @@ useClickOutside(rootRef, () => {
 
 <style scoped>
 .rail-btn {
-  @apply relative flex h-9 w-9 items-center justify-center rounded-full transition;
+  @apply relative flex w-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 transition;
 }
 .rail-btn:hover {
   @apply bg-white/[0.06] text-[#a5b4fc];
 }
 .rail-btn.is-active {
   @apply bg-[#6366f1]/15 text-[#a5b4fc];
+}
+.rail-btn-label {
+  @apply text-[10px] leading-none;
 }
 
 .menu-pop-enter-active,
