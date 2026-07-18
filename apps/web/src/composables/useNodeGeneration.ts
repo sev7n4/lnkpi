@@ -78,6 +78,15 @@ function resolveStudioRefs(
     }))
 }
 
+function hasBlobReference(refs: StudioRefPayload[], data: Record<string, unknown>): boolean {
+  const direct = String(data.referenceImageUrl ?? '').trim()
+  if (direct.startsWith('blob:')) return true
+  for (const ref of refs) {
+    if (ref.url?.trim().startsWith('blob:')) return true
+  }
+  return false
+}
+
 function firstImageRefUrl(refs: StudioRefPayload[]): string {
   for (const ref of refs) {
     if (ref.mediaType === 'image' && ref.url?.trim()) return ref.url.trim()
@@ -232,6 +241,14 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
       deps.startShotPolling([shotId])
       await deps.saveCanvas()
+      return
+    }
+
+    if (hasBlobReference(refs, data)) {
+      deps.patchNodeData(node.id, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '参考图尚未上传，请先上传后再生成',
+      })
       return
     }
 
