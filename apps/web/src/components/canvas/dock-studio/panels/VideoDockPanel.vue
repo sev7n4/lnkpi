@@ -23,6 +23,7 @@ import { resolveModelKey } from '@/constants/studioModels'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
+import { persistMediaUrl } from '@/composables/useMediaUpload'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -47,6 +48,8 @@ const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
+const refUploading = ref(false)
+const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
@@ -135,26 +138,50 @@ function createLocalRefId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function onRefFileChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
+async function onRefFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
   if (!file || !file.type.startsWith('image/')) return
-  const url = URL.createObjectURL(file)
-  referenceImageUrl.value = url
+
+  refUploadError.value = ''
+  refUploading.value = true
+  const blobUrl = URL.createObjectURL(file)
+  referenceImageUrl.value = blobUrl
   videoMode.value = 'image_to_video'
-  const binding: LocalRefBinding = {
-    id: createLocalRefId('upload'),
-    mediaType: 'image',
-    sourceKind: 'upload',
-    label: file.name,
-    url,
+
+  try {
+    const url = await persistMediaUrl(file, blobUrl)
+    const loggedIn = !!localStorage.getItem('token')
+    if (url.startsWith('blob:') && loggedIn) {
+      refUploadError.value = '参考图上传失败，请重试'
+      URL.revokeObjectURL(blobUrl)
+      referenceImageUrl.value = ''
+      return
+    }
+    if (url !== blobUrl) URL.revokeObjectURL(blobUrl)
+
+    referenceImageUrl.value = url
+    const binding: LocalRefBinding = {
+      id: createLocalRefId('upload'),
+      mediaType: 'image',
+      sourceKind: 'upload',
+      label: file.name,
+      url,
+    }
+    const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+    emit('patch', {
+      localRefs: [...prev, binding],
+      referenceImageUrl: url,
+      videoMode: 'image_to_video',
+    })
+  } catch {
+    refUploadError.value = '参考图上传失败，请重试'
+    URL.revokeObjectURL(blobUrl)
+    referenceImageUrl.value = ''
+  } finally {
+    refUploading.value = false
   }
-  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
-  emit('patch', {
-    localRefs: [...prev, binding],
-    referenceImageUrl: url,
-    videoMode: 'image_to_video',
-  })
-  ;(event.target as HTMLInputElement).value = ''
 }
 
 function clearReferenceImage() {
@@ -227,11 +254,12 @@ function onRefRemove(ref: NodeRef) {
           <button
             type="button"
             class="dock-icon-btn"
-            :disabled="readonly"
+            :disabled="readonly || refUploading"
             title="参考图"
             @click="pickReferenceImage"
           >
-            <DockTypeIcon icon="image" :size="13" />
+            <DockTypeIcon v-if="!refUploading" icon="image" :size="13" />
+            <span v-else class="text-[9px] text-white/60">…</span>
           </button>
           <div
             v-if="effectiveRefUrl"
@@ -249,6 +277,7 @@ function onRefRemove(ref: NodeRef) {
             </button>
           </div>
           <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+          <p v-if="refUploadError" class="text-[10px] text-red-400/90">{{ refUploadError }}</p>
         </div>
       </template>
 

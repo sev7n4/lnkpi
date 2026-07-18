@@ -96,6 +96,15 @@ function firstImageRefUrl(refs: StudioRefPayload[]): string {
   return ''
 }
 
+function hasBlobReference(refs: StudioRefPayload[], data: Record<string, unknown>): boolean {
+  const direct = String(data.referenceImageUrl ?? '').trim()
+  if (direct.startsWith('blob:')) return true
+  for (const ref of refs) {
+    if (ref.url?.trim().startsWith('blob:')) return true
+  }
+  return false
+}
+
 function findNodeById(nodes: EditableFlowNode[], id: string) {
   for (const node of nodes) {
     if (node.id === id) return node
@@ -134,6 +143,14 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     if (nodeType === 'prompt') {
       if (!local) return
     } else if (nodeType !== 'sceneComposer' && !local && !refs.length) {
+      return
+    }
+
+    if (hasBlobReference(refs, data)) {
+      deps.patchNodeData(node.id, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '参考图尚未上传完成，请等待上传或重新选择',
+      })
       return
     }
 

@@ -22,6 +22,7 @@ import { useModelProviderSettings } from '@/composables/useModelProviderSettings
 import { resolveModelKey } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateImageCredits } from '@/constants/credits'
+import { persistMediaUrl } from '@/composables/useMediaUpload'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -47,6 +48,8 @@ const imageResolution = ref<ImageResolution>('1K')
 const imageCount = ref<ImageCount>(1)
 const referenceImageUrl = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
+const refUploading = ref(false)
+const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
@@ -167,24 +170,48 @@ function createLocalRefId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
-function onRefFileChange(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0]
+async function onRefFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
   if (!file || !file.type.startsWith('image/')) return
-  const url = URL.createObjectURL(file)
-  referenceImageUrl.value = url
-  const binding: LocalRefBinding = {
-    id: createLocalRefId('upload'),
-    mediaType: 'image',
-    sourceKind: 'upload',
-    label: file.name,
-    url,
+
+  refUploadError.value = ''
+  refUploading.value = true
+  const blobUrl = URL.createObjectURL(file)
+  referenceImageUrl.value = blobUrl
+
+  try {
+    const url = await persistMediaUrl(file, blobUrl)
+    const loggedIn = !!localStorage.getItem('token')
+    if (url.startsWith('blob:') && loggedIn) {
+      refUploadError.value = '参考图上传失败，请重试'
+      URL.revokeObjectURL(blobUrl)
+      referenceImageUrl.value = ''
+      return
+    }
+    if (url !== blobUrl) URL.revokeObjectURL(blobUrl)
+
+    referenceImageUrl.value = url
+    const binding: LocalRefBinding = {
+      id: createLocalRefId('upload'),
+      mediaType: 'image',
+      sourceKind: 'upload',
+      label: file.name,
+      url,
+    }
+    const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+    emit('patch', {
+      localRefs: [...prev, binding],
+      referenceImageUrl: url,
+    })
+  } catch {
+    refUploadError.value = '参考图上传失败，请重试'
+    URL.revokeObjectURL(blobUrl)
+    referenceImageUrl.value = ''
+  } finally {
+    refUploading.value = false
   }
-  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
-  emit('patch', {
-    localRefs: [...prev, binding],
-    referenceImageUrl: url,
-  })
-  ;(event.target as HTMLInputElement).value = ''
 }
 
 function clearReferenceImage() {
@@ -228,11 +255,12 @@ function clearReferenceImage() {
         <button
           type="button"
           class="dock-icon-btn"
-          :disabled="readonly"
+          :disabled="readonly || refUploading"
           title="参考图"
           @click="pickReferenceImage"
         >
-          <DockTypeIcon icon="image" :size="13" />
+          <DockTypeIcon v-if="!refUploading" icon="image" :size="13" />
+          <span v-else class="text-[9px] text-white/60">…</span>
         </button>
         <div
           v-if="effectiveRefUrl"
@@ -250,6 +278,7 @@ function clearReferenceImage() {
           </button>
         </div>
         <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+        <p v-if="refUploadError" class="text-[10px] text-red-400/90">{{ refUploadError }}</p>
       </div>
 
       <div class="ml-auto flex items-center gap-2">
