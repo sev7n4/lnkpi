@@ -1,7 +1,22 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { VueFlow, Panel, SelectionMode, type Node, type Edge, type Connection, type NodeMouseEvent, type NodeChange, type NodeDragEvent, type OnConnectStartParams, type EdgeMouseEvent } from '@vue-flow/core'
+import {
+  VueFlow,
+  Panel,
+  SelectionMode,
+  applyNodeChanges,
+  applyEdgeChanges,
+  type Node,
+  type Edge,
+  type Connection,
+  type NodeMouseEvent,
+  type NodeChange,
+  type EdgeChange,
+  type NodeDragEvent,
+  type OnConnectStartParams,
+  type EdgeMouseEvent,
+} from '@vue-flow/core'
 import type { DockNodeType } from '@/components/canvas/NodePanelDock.vue'
 import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
@@ -93,19 +108,9 @@ interface CanvasEdge {
 const nodes = ref<EditableFlowNode[]>([])
 const edges = ref<CanvasEdge[]>([])
 
-const flowNodes = computed({
-  get: () => nodes.value as unknown as Node[],
-  set: (value) => {
-    nodes.value = value as unknown as EditableFlowNode[]
-  },
-})
-
-const flowEdges = computed({
-  get: () => edges.value as unknown as Edge[],
-  set: (value) => {
-    edges.value = value as unknown as CanvasEdge[]
-  },
-})
+/** 受控模式：:nodes + apply-default=false + applyNodeChanges，避免内部/外部状态互相覆盖 */
+const flowNodes = computed(() => nodes.value as unknown as Node[])
+const flowEdges = computed(() => edges.value as unknown as Edge[])
 
 const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
@@ -126,6 +131,8 @@ const effectiveGridColor = computed(() => {
   return viewportSettings.value.gridColor
 })
 const multiSelectedIds = ref<string[]>([])
+/** 独占选中进行中：挡住 Vue Flow 随后的 select change 把源节点再次标成 selected */
+let pendingExclusiveSelectId: string | null = null
 let nodeCounter = 0
 
 const pendingConnect = ref<{
@@ -544,8 +551,7 @@ function handleBlankPickerSelect(type: DockNodeType) {
 
   const id = createNodeAt(type, position)
   if (!id) return
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void saveCanvas()
   void focusNodeById(id)
 }
@@ -572,8 +578,7 @@ function handleConnectPickerSelect(type: DockNodeType) {
   if (!id) return
 
   connectSourceToNode(picker.sourceNodeId, id)
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void saveCanvas()
   void focusNodeById(id)
 }
@@ -639,13 +644,32 @@ function handleDockAdd(type: DockNodeType) {
   const position = resolveNewNodePosition(type)
   const id = createNodeAt(type, position)
   if (!id) return
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void saveCanvas()
   void focusNodeById(id)
 }
 
+function selectOnlyNode(id: string) {
+  pendingExclusiveSelectId = id
+  selectNode(id)
+  multiSelectedIds.value = [id]
+  // fitView / connect-end 可能异步再抛 select change，短窗口内保持独占
+  window.setTimeout(() => {
+    if (pendingExclusiveSelectId === id) pendingExclusiveSelectId = null
+  }, 400)
+}
+
 function syncMultiSelectionFromNodes() {
+  if (pendingExclusiveSelectId) {
+    const id = pendingExclusiveSelectId
+    nodes.value = nodes.value.map((node) => {
+      const selected = node.id === id
+      return node.selected === selected ? node : { ...node, selected }
+    })
+    multiSelectedIds.value = [id]
+    selectedNodeId.value = id
+    return
+  }
   const ids: string[] = []
   for (const node of nodes.value) {
     if (node.selected) ids.push(node.id)
@@ -659,15 +683,27 @@ function syncMultiSelectionFromNodes() {
 }
 
 function onNodesChange(changes: NodeChange[]) {
-  for (const change of changes) {
-    if (change.type === 'select') {
-      syncMultiSelectionFromNodes()
-      return
-    }
+  let next = applyNodeChanges(changes, nodes.value as any) as unknown as EditableFlowNode[]
+  if (pendingExclusiveSelectId) {
+    const id = pendingExclusiveSelectId
+    next = next.map((node) => {
+      const selected = node.id === id
+      return node.selected === selected ? node : { ...node, selected }
+    })
+  }
+  nodes.value = next
+  if (changes.some((change) => change.type === 'select') || pendingExclusiveSelectId) {
+    syncMultiSelectionFromNodes()
   }
 }
 
+function onEdgesChange(changes: EdgeChange[]) {
+  edges.value = applyEdgeChanges(changes, edges.value as any) as unknown as CanvasEdge[]
+}
+
 function onSelectionEnd() {
+  // 框选允许多选，结束独占保护
+  pendingExclusiveSelectId = null
   syncMultiSelectionFromNodes()
 }
 
@@ -683,8 +719,16 @@ function onNodeDragStop(event: NodeDragEvent) {
   }
 }
 
-function onNodeClick(_event: NodeMouseEvent) {
-  syncMultiSelectionFromNodes()
+function onNodeClick(event: NodeMouseEvent) {
+  const mouse = event.event as MouseEvent
+  const multi = mouse.shiftKey || mouse.metaKey || mouse.ctrlKey
+  if (!multi) {
+    // 单击独占选中，避免「拖出下游后源+目标双选 → dock 不出现 / 出现多选 +」
+    selectOnlyNode(event.node.id)
+  } else {
+    pendingExclusiveSelectId = null
+    syncMultiSelectionFromNodes()
+  }
   closeContextMenu()
 }
 
@@ -695,8 +739,7 @@ function handleGroupSelection() {
   )
   if (!result) return
   nodes.value = result.nodes as unknown as EditableFlowNode[]
-  selectNode(result.groupId)
-  multiSelectedIds.value = [result.groupId]
+  selectOnlyNode(result.groupId)
   void nextTick().then(() => {
     vueFlowRef.value?.updateNodeInternals?.()
   })
@@ -818,8 +861,7 @@ async function handleGenerateVideoFromSelection() {
   connectNodes(textNode.id, id)
   connectNodes(imageNode.id, id)
 
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void saveCanvas()
   await nextTick()
   await focusNodeById(id)
@@ -827,6 +869,7 @@ async function handleGenerateVideoFromSelection() {
 }
 
 function onPaneClick() {
+  pendingExclusiveSelectId = null
   multiSelectedIds.value = []
   selectedEdgeId.value = null
   clearSelection()
@@ -1018,8 +1061,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
   }
 
   if (!id) return
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void saveCanvas()
   await focusNodeById(id)
 }
@@ -1096,8 +1138,7 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
     target: childId,
     style: { stroke: '#6366f1' },
   })
-  selectNode(childId)
-  multiSelectedIds.value = [childId]
+  selectOnlyNode(childId)
   await saveCanvas()
   await focusNodeById(childId)
 }
@@ -1163,8 +1204,7 @@ function handleBatchConnectPickerSelect(type: DockNodeType) {
   if (!id) return
 
   connectSelectionToTarget(id, picker.sourceIds)
-  selectNode(id)
-  multiSelectedIds.value = [id]
+  selectOnlyNode(id)
   void focusNodeById(id)
 }
 
@@ -1456,6 +1496,37 @@ watch(
   { deep: true },
 )
 
+function nextNodeCounterFromNodes(list: EditableFlowNode[]) {
+  let max = 0
+  for (const node of list) {
+    const match = String(node.id).match(/(\d+)$/)
+    if (match) max = Math.max(max, Number(match[1]))
+  }
+  return max
+}
+
+function hydrateCanvasEdges(
+  raw: Array<Pick<CanvasEdge, 'id' | 'source' | 'target'> & Partial<CanvasEdge>>,
+  nodeList: EditableFlowNode[],
+): CanvasEdge[] {
+  const ids = new Set(nodeList.map((node) => node.id))
+  const animated = viewportSettings.value.edgeAnimated
+  const out: CanvasEdge[] = []
+  for (const edge of raw) {
+    if (!ids.has(edge.source) || !ids.has(edge.target)) continue
+    out.push({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      animated,
+      style: { stroke: '#7c3aed', ...(edge.style ?? {}) },
+    })
+  }
+  return out
+}
+
 async function loadSession() {
   try {
     const { data } = await api.get<{ data: { title: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
@@ -1464,8 +1535,11 @@ async function loadSession() {
     sessionTitle.value = data.data.title
     if (data.data.canvasData?.nodes?.length) {
       nodes.value = data.data.canvasData.nodes as EditableFlowNode[]
-      edges.value = (data.data.canvasData.edges ?? []) as CanvasEdge[]
-      nodeCounter = nodes.value.length
+      edges.value = hydrateCanvasEdges(
+        (data.data.canvasData.edges ?? []) as CanvasEdge[],
+        nodes.value,
+      )
+      nodeCounter = nextNodeCounterFromNodes(nodes.value)
     } else {
       nodes.value = [{
         id: 'prompt-1',
@@ -1552,8 +1626,9 @@ onMounted(() => {
         <VueFlow
           v-if="canvasMode === 'vueflow'"
           ref="vueFlowRef"
-          v-model:nodes="flowNodes"
-          v-model:edges="flowEdges"
+          :nodes="flowNodes"
+          :edges="flowEdges"
+          :apply-default="false"
           :node-types="nodeTypes as any"
           :default-viewport="{ zoom: 0.8, x: 0, y: 0 }"
           :min-zoom="0.1"
@@ -1580,6 +1655,7 @@ onMounted(() => {
           @connect-start="onConnectStart"
           @connect-end="onConnectEnd"
           @nodes-change="onNodesChange"
+          @edges-change="onEdgesChange"
           @selection-end="onSelectionEnd"
           @node-click="onNodeClick"
           @node-drag-stop="onNodeDragStop"

@@ -108,6 +108,7 @@ export function canvasDataToFlow(data: CanvasData): { nodes: FlowNode[]; edges: 
 }
 
 export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasData {
+  const ids = new Set(nodes.map((n) => n.id))
   return {
     nodes: nodes.map((n) => ({
       id: n.id,
@@ -115,10 +116,13 @@ export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasDa
       position: n.position,
       data: n.data,
     })),
-    edges: edges.map((e) => ({
-      id: e.id,
-      source: e.source,
-      target: e.target,
-    })),
+    // 丢弃指向已删除节点的边，避免紫线悬空
+    edges: edges
+      .filter((e) => ids.has(e.source) && ids.has(e.target))
+      .map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+      })),
   }
 }
