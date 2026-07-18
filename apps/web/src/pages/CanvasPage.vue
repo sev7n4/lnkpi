@@ -190,12 +190,15 @@ const canvasAssets = computed((): CanvasAssetItem[] => {
     if (type === 'image') kind = url.match(/\.(mp4|webm|mov)/i) ? 'video' : 'image'
     else if (type === 'video') kind = 'video'
     else if (type === 'audio') kind = 'audio'
+    const createdAt = Number(data.createdAt ?? 0)
     out.push({
       id: `${node.id}-asset`,
       nodeId: node.id,
       url,
       label: String(data.title ?? data.fileName ?? data.prompt ?? node.id),
       kind,
+      createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : undefined,
+      source: 'user',
     })
   }
   return out
@@ -586,7 +589,7 @@ function addNode(
     id,
     type,
     position: opts?.position ?? { x: 200 + nodeCounter * 60, y: 150 + nodeCounter * 40 },
-    data,
+    data: { createdAt: Date.now(), ...data },
   })
   return id
 }

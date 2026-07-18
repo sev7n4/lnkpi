@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { AssetsModule } from './assets/assets.module'
 import { AuthModule } from './auth/auth.module'
 import { SessionsModule } from './sessions/sessions.module'
 import { WorksModule } from './works/works.module'
@@ -13,6 +14,6 @@ import { UsersModule } from './users/users.module'
 import { HealthModule } from './health/health.module'
 
 @Module({
-  imports: [PrismaModule, AuthModule, SessionsModule, WorksModule, AgentModule, CanvasModule, UsersModule, MembershipModule, StudioModule, StoriesModule, UploadModule, HealthModule],
+  imports: [PrismaModule, AssetsModule, AuthModule, SessionsModule, WorksModule, AgentModule, CanvasModule, UsersModule, MembershipModule, StudioModule, StoriesModule, UploadModule, HealthModule],
 })
 export class AppModule {}
