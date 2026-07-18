@@ -8,7 +8,7 @@ export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, Fallb
 export type { ImageProvider } from './tools/image-provider'
 export type { TextProvider } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
-export type { AudioProvider } from './tools/audio-provider'
+export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'
 export type { AgentStreamEvent, AgentMessage, AgentToolCall, AgentContext, AgentToolDefinition } from './types'
 export type { PromptModeId, PromptModeDefinition } from './prompt-modes'
 export {
