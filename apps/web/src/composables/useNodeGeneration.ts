@@ -20,7 +20,7 @@ import {
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type StudioRefPayload } from '@/services/studio-api'
-import { defaultModelKey } from '@/constants/studioModels'
+import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
@@ -159,10 +159,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     try {
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
-        const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generatePrompt(
           local,
-          String(data.textModel ?? models.text),
+          resolveModelKey('text', data.textModel as string | undefined).modelKey,
         )
         const parsed = parseRecordPromptContent(res.data)
         deps.patchNodeData(node.id, {
@@ -177,10 +176,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
       if (nodeType === 'text') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: local, prompt: local })
-        const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generateText(
           local,
-          String(data.textModel ?? models.text),
+          resolveModelKey('text', data.textModel as string | undefined).modelKey,
           refs,
           mentionedKeys,
         )
@@ -282,10 +280,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const aspectRatio = String(data.imageAspect ?? '16:9')
       const resolution = String(data.imageResolution ?? '1K')
       const count = Number(data.imageCount ?? 1)
-      const models = deps.resolveProviderModels()
       const { data: res } = await studioApi.generateImage(
         prompt,
-        String(data.imageModel ?? models.image),
+        resolveModelKey('image', data.imageModel as string | undefined).modelKey,
         aspectRatio,
         refs,
         mentionedKeys,
@@ -306,10 +303,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
 
     const settings = data.videoSettings as VideoSettings | undefined
-    const models = deps.resolveProviderModels()
     const { data: res } = await studioApi.generateVideo(
       prompt,
-      String(data.videoModel ?? models.video),
+      resolveModelKey('video', data.videoModel as string | undefined).modelKey,
       settings?.duration,
       settings?.aspectRatio,
       refs,

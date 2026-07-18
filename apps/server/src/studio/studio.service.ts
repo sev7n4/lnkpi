@@ -12,7 +12,7 @@ import {
   mergeRefsToPrompt,
   type MergeTextSource,
 } from '@lnkpi/agent'
-import { resolveImageSize, type ImageResolutionTier } from '@lnkpi/shared'
+import { resolveImageSize, resolveModelKey, type ImageResolutionTier } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -96,24 +96,29 @@ export class StudioService {
       'text',
       mentionedKeys,
     )
+    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', model)
+    const gatewayModelId = entry.gatewayModelId
     const { text } =
       referenceImages.length > 0
         ? await generateTextWithImages(mergedText, referenceImages, {
-            model,
+            model: gatewayModelId,
             apiKey: process.env.OPENAI_API_KEY,
             baseUrl: process.env.OPENAI_BASE_URL,
           })
-        : await createTextProvider().generate(mergedText, model)
+        : await createTextProvider().generate(mergedText, gatewayModelId)
     return this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'text',
         prompt: mergedText,
-        model,
+        model: resolvedKey,
         url: null,
         status: 'completed',
         metadata: JSON.stringify({
           text,
+          modelKey: resolvedKey,
+          gatewayModelId,
+          ...(fallback ? { modelFallback: true } : {}),
           skippedMerge,
           refsCount: refs?.length ?? 0,
           visionUsed: referenceImages.length > 0,
@@ -127,8 +132,10 @@ export class StudioService {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     await this.consumePoints(userId, 5, '提示词模式生成')
+    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', model)
+    const gatewayModelId = entry.gatewayModelId
     const { mode, content } = await generatePromptFromUserInput(trimmed, {
-      model,
+      model: gatewayModelId,
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: process.env.OPENAI_BASE_URL,
     })
@@ -137,10 +144,16 @@ export class StudioService {
         userId,
         type: 'prompt',
         prompt: trimmed,
-        model,
+        model: resolvedKey,
         url: null,
         status: 'completed',
-        metadata: JSON.stringify({ mode, content }),
+        metadata: JSON.stringify({
+          mode,
+          content,
+          modelKey: resolvedKey,
+          gatewayModelId,
+          ...(fallback ? { modelFallback: true } : {}),
+        }),
       },
     })
   }
@@ -176,7 +189,8 @@ export class StudioService {
     const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
     const built = buildImageProviderOptions({ modelKey: model, size, n, referenceImages })
     const primaryRef = built.referenceImages[0]
-    const effectivePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
+    const basePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
+    const effectivePrompt = [basePrompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
     const { url, urls } = await createImageProvider().generate(effectivePrompt, {
       size: built.size,
       n: built.n,
@@ -198,7 +212,7 @@ export class StudioService {
           count: n,
           size: built.size,
           urls: imageUrls,
-          referenceImages: built.referenceImages,
+          referenceImages,
           skippedMerge,
         }),
       },
