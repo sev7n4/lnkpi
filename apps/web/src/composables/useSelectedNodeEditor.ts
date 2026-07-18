@@ -27,18 +27,20 @@ export function useSelectedNodeEditor(nodes: Ref<EditableFlowNode[]>) {
     selectedNodeId.value = null
   }
 
+  /** 不可变更新 selected，避免与 applyNodeChanges 抢状态时出现「幽灵多选」 */
   function clearSelection() {
     clearEditorSelection()
-    for (const node of nodes.value) {
-      node.selected = false
-    }
+    nodes.value = nodes.value.map((node) =>
+      node.selected ? { ...node, selected: false } : node,
+    )
   }
 
   function selectNode(id: string | null) {
     selectedNodeId.value = id
-    for (const node of nodes.value) {
-      node.selected = id !== null && node.id === id
-    }
+    nodes.value = nodes.value.map((node) => {
+      const selected = id !== null && node.id === id
+      return node.selected === selected ? node : { ...node, selected }
+    })
   }
 
   function patchNodeData(id: string, patch: Record<string, unknown>) {
