@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { GenerationType } from '@lnkpi/shared'
-import { useCapabilities } from '@/composables/useCapabilities'
+import { modelsAsSelectorOptions, type StudioModality } from '@/constants/studioModels'
 import { useClickOutside } from '@/composables/useClickOutside'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/dockIcons'
@@ -9,20 +9,23 @@ import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/do
 const props = defineProps<{
   modelValue: string
   type: GenerationType
+  /** Override catalog modality (e.g. audio when type is not in GenerationType) */
+  modality?: StudioModality
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
 
-const { modelsFor, loading } = useCapabilities()
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
 useClickOutside(rootRef, () => {
   open.value = false
 })
 
-const models = computed(() => modelsFor(props.type))
+const catalogModality = computed((): StudioModality => props.modality ?? props.type)
+
+const models = computed(() => modelsAsSelectorOptions(catalogModality.value))
 const current = computed(() => {
   const found = models.value.find((m) => m.id === props.modelValue)
   if (found) return found
@@ -33,15 +36,20 @@ const current = computed(() => {
 })
 
 const typeIcon = computed((): DockNodeIconKind => {
-  if (props.type === 'image') return 'image'
-  if (props.type === 'video') return 'video'
+  const m = catalogModality.value
+  if (m === 'image') return 'image'
+  if (m === 'video') return 'video'
+  if (m === 'audio') return 'audio'
   return 'text'
 })
 
 const typeTitle = computed(() => {
-  if (props.type === 'text') return '文本模型'
-  if (props.type === 'image') return '图像模型'
-  return '视频模型'
+  const m = catalogModality.value
+  if (m === 'text') return '文本模型'
+  if (m === 'image') return '图像模型'
+  if (m === 'video') return '视频模型'
+  if (m === 'audio') return '音频模型'
+  return '模型'
 })
 
 function select(id: string) {
@@ -60,7 +68,6 @@ function select(id: string) {
     >
       <DockTypeIcon :icon="typeIcon" :size="13" class="text-white/55" />
       <span class="max-w-[110px] truncate font-medium">{{ current?.name ?? '...' }}</span>
-      <span v-if="loading" class="text-[9px] text-white/30">…</span>
       <svg class="h-3 w-3 shrink-0 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>

@@ -1,4 +1,5 @@
 import { ref, watch } from 'vue'
+import { defaultModelKey } from '@/constants/studioModels'
 
 export type ProviderKind = 'text' | 'image' | 'video' | 'audio'
 
@@ -20,10 +21,10 @@ export const PROVIDER_KINDS: Array<{ key: ProviderKind; label: string; hint: str
 ]
 
 const defaults: ModelProviderSettings = {
-  text: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  image: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'dall-e-3' },
-  video: { apiKey: '', baseUrl: '', model: 'kling-v1' },
-  audio: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: 'tts-1' },
+  text: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: defaultModelKey('text') },
+  image: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: defaultModelKey('image') },
+  video: { apiKey: '', baseUrl: '', model: defaultModelKey('video') },
+  audio: { apiKey: '', baseUrl: 'https://api.openai.com/v1', model: defaultModelKey('audio') },
 }
 
 function loadSettings(): ModelProviderSettings {

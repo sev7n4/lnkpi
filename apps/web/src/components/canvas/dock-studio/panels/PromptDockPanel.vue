@@ -14,6 +14,7 @@ import { estimateTextCredits } from '@/constants/credits'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
+import { resolveModelKey } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
 const MODE_LABELS: Record<string, string> = {
@@ -62,7 +63,7 @@ const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? '')
-  textModel.value = String(data.textModel ?? getConfig('text').model)
+  textModel.value = resolveModelKey('text', data.textModel as string | undefined).modelKey
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
