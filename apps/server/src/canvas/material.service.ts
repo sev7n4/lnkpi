@@ -8,6 +8,7 @@ import {
 import { resolveImageSize, type ImageResolutionTier } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
+import { videoCredits } from '../points/video-credits'
 
 export type CanvasImageGenerateInput = {
   userId: string
@@ -30,12 +31,6 @@ export type CanvasVideoGenerateInput = {
   resolution?: string
   crop?: string
   skipCharge?: boolean
-}
-
-function videoCredits(duration: number): number {
-  if (duration >= 15) return 70
-  if (duration >= 10) return 50
-  return 30
 }
 
 @Injectable()
@@ -199,7 +194,8 @@ export class MaterialService {
         crop,
         referenceImages: [],
       })
-      const { url } = await createVideoProvider().generate(prompt, {
+      const effectivePrompt = [prompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
+      const { url } = await createVideoProvider().generate(effectivePrompt, {
         model: built.model,
         duration: built.duration,
         aspectRatio: built.aspectRatio,

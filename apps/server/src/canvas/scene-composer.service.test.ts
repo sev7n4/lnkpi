@@ -128,4 +128,117 @@ describe('SceneComposerService batchGenerate', () => {
     expect(shotUpdate).not.toHaveBeenCalled()
     expect(shotCreate).not.toHaveBeenCalled()
   })
+
+  it('rejects shot from another session before consume', async () => {
+    shotFindUnique.mockImplementation(async (args: { where: { id: string } }) => {
+      if (args.where.id === 'shot-foreign') {
+        return { id: 'shot-foreign', sessionId: 'sess-other' }
+      }
+      return null
+    })
+
+    await expect(
+      svc.batchGenerate('u1', {
+        sessionId: 'sess-1',
+        composerNodeId: 'composer-1',
+        items: [
+          {
+            shotNodeId: 'shot-foreign',
+            prompt: 'a cat',
+            mediaType: 'image',
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException)
+
+    expect(consume).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(generateVideo).not.toHaveBeenCalled()
+    expect(shotUpdate).not.toHaveBeenCalled()
+    expect(shotCreate).not.toHaveBeenCalled()
+  })
+
+  it('does not create shots or materials when consume throws', async () => {
+    consume.mockRejectedValueOnce(new Error('积分不足'))
+
+    await expect(
+      svc.batchGenerate('u1', {
+        sessionId: 'sess-1',
+        composerNodeId: 'composer-1',
+        items: [
+          {
+            shotNodeId: 'shot-img',
+            prompt: 'a cat',
+            mediaType: 'image',
+          },
+        ],
+      }),
+    ).rejects.toThrow('积分不足')
+
+    expect(consume).toHaveBeenCalledTimes(1)
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(generateVideo).not.toHaveBeenCalled()
+    expect(shotUpdate).not.toHaveBeenCalled()
+    expect(shotCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('SceneComposerService save', () => {
+  let svc: SceneComposerService
+  const sessionFindFirst = vi.fn(async (): Promise<{ id: string; userId: string } | null> => ({
+    id: 'sess-1',
+    userId: 'u1',
+  }))
+  const shotFindUnique = vi.fn(async () => null)
+  const shotUpdate = vi.fn(async () => ({}))
+  const shotCreate = vi.fn(async () => ({}))
+  const reorder = vi.fn(async () => ({}))
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        SceneComposerService,
+        { provide: PointsService, useValue: { consume: vi.fn() } },
+        {
+          provide: MaterialService,
+          useValue: { generateImage: vi.fn(), generateVideo: vi.fn() },
+        },
+        {
+          provide: ShotService,
+          useValue: { update: shotUpdate, create: shotCreate, reorder },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            session: { findFirst: sessionFindFirst },
+            shot: { findUnique: shotFindUnique },
+          },
+        },
+      ],
+    }).compile()
+    svc = moduleRef.get(SceneComposerService)
+  })
+
+  it('rejects foreign session with NotFoundException', async () => {
+    sessionFindFirst.mockResolvedValueOnce(null)
+
+    await expect(
+      svc.save('u1', {
+        sessionId: 'sess-other',
+        composerNodeId: 'composer-1',
+        scenes: [
+          {
+            id: 'scene-1',
+            title: 'Scene',
+            shots: [{ id: 's1', title: 'Shot', prompt: 'p', mediaType: 'none' }],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException)
+
+    expect(shotUpdate).not.toHaveBeenCalled()
+    expect(shotCreate).not.toHaveBeenCalled()
+    expect(reorder).not.toHaveBeenCalled()
+  })
 })

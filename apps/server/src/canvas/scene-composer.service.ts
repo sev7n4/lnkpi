@@ -8,6 +8,7 @@ import type {
 import { MaterialService } from './material.service'
 import { ShotService } from './shot.service'
 import { PointsService } from '../points/points.service'
+import { videoCredits } from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -29,8 +30,7 @@ export class SceneComposerService {
 
   private itemCredits(item: SceneComposerBatchItem): number {
     if (item.mediaType === 'video') {
-      const d = item.duration ?? 5
-      return d >= 15 ? 70 : d >= 10 ? 50 : 30
+      return videoCredits(item.duration ?? 5)
     }
     return 10
   }

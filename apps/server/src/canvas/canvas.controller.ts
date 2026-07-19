@@ -80,7 +80,9 @@ class GenerateVideoDto {
   model?: string
 
   @IsOptional()
-  duration?: number
+  @IsNumber()
+  @IsIn([5, 10, 15])
+  duration?: 5 | 10 | 15
 
   @IsOptional()
   @IsString()

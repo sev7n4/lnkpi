@@ -150,4 +150,17 @@ describe('MaterialService video', () => {
       }),
     )
   })
+
+  it('rejects foreign shot without charging', async () => {
+    shotFindUnique.mockResolvedValueOnce({
+      id: 'shot-1',
+      sessionId: 'sess-1',
+      session: { id: 'sess-1', userId: 'other' },
+    })
+    await expect(
+      svc.generateVideo({ userId: 'u1', shotId: 'shot-1', prompt: 'x' }),
+    ).rejects.toBeInstanceOf(NotFoundException)
+    expect(consume).not.toHaveBeenCalled()
+    expect(materialCreate).not.toHaveBeenCalled()
+  })
 })
