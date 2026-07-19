@@ -162,14 +162,16 @@ export function resolveCanvasImageParams(data: Record<string, unknown>) {
   }
 }
 
-export function resolveCanvasVideoParams(data: Record<string, unknown>) {
+export function resolveCanvasVideoParams(
+  data: Record<string, unknown>,
+): Partial<VideoSettings> & { model: string } {
   const settings = (data.videoSettings as Partial<VideoSettings> | undefined) ?? {}
   return {
     model: resolveModelKey('video', data.videoModel as string | undefined).modelKey,
-    duration: (settings.duration ?? DEFAULT_VIDEO_SETTINGS.duration) as 5 | 10 | 15,
-    aspectRatio: String(settings.aspectRatio ?? DEFAULT_VIDEO_SETTINGS.aspectRatio),
-    resolution: String(settings.resolution ?? DEFAULT_VIDEO_SETTINGS.resolution),
-    crop: String(settings.crop ?? DEFAULT_VIDEO_SETTINGS.crop),
+    duration: settings.duration ?? DEFAULT_VIDEO_SETTINGS.duration,
+    aspectRatio: settings.aspectRatio ?? DEFAULT_VIDEO_SETTINGS.aspectRatio,
+    resolution: settings.resolution ?? DEFAULT_VIDEO_SETTINGS.resolution,
+    crop: settings.crop ?? DEFAULT_VIDEO_SETTINGS.crop,
   }
 }
 

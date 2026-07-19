@@ -1,6 +1,6 @@
 # C2 Canvas 旁路接入 Studio Adapter（产品与技术规格）
 
-> 状态：**设计确认 / 待实现**  
+> 状态：**已实现**  
 > 日期：2026-07-19  
 > 范围：**C2 最小** — shot、shot 子媒体与 sceneComposer batch 接入 C1 模型目录、生成 adapter、参数透传与统一计费  
 > 前置：T0 测试地基（PR #26）、C1 Studio 模型适配层（PR #25）  

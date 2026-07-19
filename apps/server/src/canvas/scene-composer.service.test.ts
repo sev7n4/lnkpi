@@ -13,7 +13,7 @@ describe('SceneComposerService batchGenerate', () => {
   const consume = vi.fn(async () => {})
   const generateImage = vi.fn(async () => ({ id: 'm-img' }))
   const generateVideo = vi.fn(async () => ({ id: 'm-vid' }))
-  const sessionFindFirst = vi.fn(async () => ({
+  const sessionFindFirst = vi.fn(async (): Promise<{ id: string; userId: string } | null> => ({
     id: 'sess-1',
     userId: 'u1',
   }))
