@@ -211,23 +211,13 @@ export class ProviderService {
   }
 
   async createChannel(userId: string, input: CreateChannelInput) {
-    const name = input.name?.trim()
-    if (!name) throw new BadRequestException('name is required')
-    if (name === 'platform' || name.toLowerCase() === PLATFORM_CHANNEL_ID) {
-      throw new BadRequestException('reserved channel name')
-    }
+    const name = this.assertChannelName(input.name)
     if (input.apiFormat !== 'openai' && input.apiFormat !== 'gemini') {
       throw new BadRequestException('apiFormat must be openai or gemini')
     }
 
-    const baseUrl = assertSafeOutboundUrl(input.baseUrl, {
-      allowHttpLocalhost: process.env.NODE_ENV !== 'production',
-    }).toString()
-
-    const existing = await this.prisma.providerChannel.findFirst({
-      where: { userId, name },
-    })
-    if (existing) throw new BadRequestException('channel name already exists')
+    const baseUrl = this.safeOutboundUrl(input.baseUrl).toString()
+    await this.assertUniqueChannelName(userId, name)
 
     const keyFields = this.encryptOptionalSecret(input.apiKey)
     const row = await this.prisma.providerChannel.create({
@@ -251,8 +241,10 @@ export class ProviderService {
 
     const data: Record<string, unknown> = {}
     if (input.name !== undefined) {
-      const name = input.name.trim()
-      if (!name) throw new BadRequestException('name is required')
+      const name = this.assertChannelName(input.name)
+      if (name !== existing.name) {
+        await this.assertUniqueChannelName(userId, name)
+      }
       data.name = name
     }
     if (input.apiFormat !== undefined) {
@@ -262,9 +254,7 @@ export class ProviderService {
       data.apiFormat = input.apiFormat
     }
     if (input.baseUrl !== undefined) {
-      data.baseUrl = assertSafeOutboundUrl(input.baseUrl, {
-        allowHttpLocalhost: process.env.NODE_ENV !== 'production',
-      }).toString()
+      data.baseUrl = this.safeOutboundUrl(input.baseUrl).toString()
     }
     if (input.models !== undefined) {
       data.models = JSON.stringify(input.models)
@@ -327,20 +317,20 @@ export class ProviderService {
     }
     if (!apiKey) throw new BadRequestException('apiKey is required to pull models')
 
-    const base = assertSafeOutboundUrl(channel.baseUrl, {
-      allowHttpLocalhost: process.env.NODE_ENV !== 'production',
-    })
+    const base = this.safeOutboundUrl(channel.baseUrl)
     const modelsUrl = new URL(base.toString().replace(/\/?$/, '/') + 'models')
-    assertSafeOutboundUrl(modelsUrl.toString(), {
-      allowHttpLocalhost: process.env.NODE_ENV !== 'production',
-    })
+    this.safeOutboundUrl(modelsUrl.toString())
 
     const response = await fetch(modelsUrl, {
+      redirect: 'manual',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         Accept: 'application/json',
       },
     })
+    if (response.status >= 300 && response.status < 400) {
+      throw new BadRequestException('redirects are not allowed when pulling models')
+    }
     if (!response.ok) {
       throw new BadRequestException(`failed to pull models (${response.status})`)
     }
@@ -421,9 +411,7 @@ export class ProviderService {
 
   async updateWebdav(userId: string, input: UpdateWebdavInput) {
     if (input.url !== undefined && input.url.trim()) {
-      assertSafeOutboundUrl(input.url, {
-        allowHttpLocalhost: process.env.NODE_ENV !== 'production',
-      })
+      this.safeOutboundUrl(input.url)
     }
 
     const existing = await this.prisma.userWebdavConfig.findUnique({ where: { userId } })
@@ -533,6 +521,34 @@ export class ProviderService {
       throw new NotFoundException('channel not found')
     }
     return channel
+  }
+
+  private assertChannelName(raw: string | undefined): string {
+    const name = raw?.trim()
+    if (!name) throw new BadRequestException('name is required')
+    if (name === 'platform' || name.toLowerCase() === PLATFORM_CHANNEL_ID) {
+      throw new BadRequestException('reserved channel name')
+    }
+    return name
+  }
+
+  private async assertUniqueChannelName(userId: string, name: string) {
+    const existing = await this.prisma.providerChannel.findFirst({
+      where: { userId, name },
+    })
+    if (existing) throw new BadRequestException('channel name already exists')
+  }
+
+  private safeOutboundUrl(url: string): URL {
+    try {
+      return assertSafeOutboundUrl(url, {
+        allowHttpLocalhost: process.env.NODE_ENV !== 'production',
+      })
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err
+      const message = err instanceof Error ? err.message : 'Invalid URL'
+      throw new BadRequestException(message)
+    }
   }
 
   private encryptOptionalSecret(secret?: string) {

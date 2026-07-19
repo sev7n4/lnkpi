@@ -1,5 +1,6 @@
 import 'reflect-metadata'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BadRequestException } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { CryptoService } from './crypto.service'
 import { ProviderService } from './provider.service'
@@ -231,5 +232,70 @@ describe('ProviderService', () => {
     const ch = boot.channels.find((c) => c.name === 'mine')!
     expect(ch.hasApiKey).toBe(true)
     expect(JSON.stringify(boot)).not.toContain('sk-secret')
+  })
+
+  it('rejects create/update with unsafe baseUrl as 400', async () => {
+    await expect(
+      svc.createChannel('u1', {
+        name: 'bad',
+        apiFormat: 'openai',
+        baseUrl: 'http://127.0.0.1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+
+    const ch = await svc.createChannel('u1', {
+      name: 'ok',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com',
+    })
+    await expect(
+      svc.updateChannel('u1', ch.id, { baseUrl: 'https://169.254.169.254' }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('rejects rename to reserved or duplicate channel name', async () => {
+    const a = await svc.createChannel('u1', {
+      name: 'alpha',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com',
+    })
+    await svc.createChannel('u1', {
+      name: 'beta',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com',
+    })
+
+    await expect(svc.updateChannel('u1', a.id, { name: 'platform' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    )
+    await expect(svc.updateChannel('u1', a.id, { name: 'beta' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    )
+  })
+
+  it('rejects pullModels redirects instead of following them', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'pull',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com',
+      apiKey: 'sk-test',
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 302,
+      ok: false,
+      headers: { get: () => 'https://169.254.169.254/models' },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await expect(svc.pullModels('u1', ch.id)).rejects.toBeInstanceOf(BadRequestException)
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.any(URL),
+        expect.objectContaining({ redirect: 'manual' }),
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
