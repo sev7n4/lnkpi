@@ -3,17 +3,19 @@ import { NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { resolveImageSize } from '@lnkpi/shared'
-import { createImageProvider } from '@lnkpi/agent'
+import { createImageProvider, createVideoProvider } from '@lnkpi/agent'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 const imageGenerate = vi.fn(async () => ({ url: 'https://example.com/a.png' }))
+const videoGenerate = vi.fn(async () => ({ url: 'https://example.com/v.mp4' }))
 vi.mock('@lnkpi/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@lnkpi/agent')>()
   return {
     ...actual,
     createImageProvider: vi.fn(() => ({ generate: imageGenerate })),
+    createVideoProvider: vi.fn(() => ({ generate: videoGenerate })),
   }
 })
 
@@ -79,5 +81,61 @@ describe('MaterialService image', () => {
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(consume).not.toHaveBeenCalled()
     expect(materialCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('MaterialService video', () => {
+  let svc: MaterialService
+  const consume = vi.fn(async () => {})
+  const materialCreate = vi.fn(async (args: { data: Record<string, unknown> }) => ({
+    id: 'm1',
+    ...args.data,
+  }))
+  const materialUpdate = vi.fn(async () => ({}))
+  const shotFindUnique = vi.fn(async () => ({
+    id: 'shot-1',
+    sessionId: 'sess-1',
+    session: { id: 'sess-1', userId: 'u1' },
+  }))
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        MaterialService,
+        { provide: PointsService, useValue: { consume } },
+        {
+          provide: PrismaService,
+          useValue: {
+            shot: { findUnique: shotFindUnique },
+            material: { create: materialCreate, update: materialUpdate },
+          },
+        },
+      ],
+    }).compile()
+    svc = moduleRef.get(MaterialService)
+  })
+
+  it('passes video adapter options and charges by duration', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'seedance-2.0-min',
+      duration: 10,
+      aspectRatio: '16:9',
+      resolution: '720p',
+      crop: 'none',
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalledWith('u1', 50, '视频生成')
+    const [prompt, opts] = videoGenerate.mock.calls[0]
+    expect(prompt).toBe('walk')
+    expect(opts).toMatchObject({
+      model: 'seedance-2.0-min',
+      duration: 10,
+      aspectRatio: '16:9',
+      resolution: '720p',
+    })
   })
 })

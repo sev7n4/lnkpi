@@ -107,7 +107,11 @@ export class SceneComposerService {
     }
 
     if (item.mediaType === 'video') {
-      const material = await this.materialService.generateVideo(item.shotNodeId, item.prompt)
+      const material = await this.materialService.generateVideo({
+        userId,
+        shotId: item.shotNodeId,
+        prompt: item.prompt,
+      })
       return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'video' }
     }
 

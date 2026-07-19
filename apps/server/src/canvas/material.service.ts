@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import {
   buildImageProviderOptions,
+  buildVideoProviderOptions,
   createImageProvider,
   createVideoProvider,
 } from '@lnkpi/agent'
@@ -16,6 +17,23 @@ export type CanvasImageGenerateInput = {
   aspectRatio?: string
   resolution?: string
   count?: number
+}
+
+export type CanvasVideoGenerateInput = {
+  userId: string
+  shotId: string
+  prompt: string
+  model?: string
+  duration?: number
+  aspectRatio?: string
+  resolution?: string
+  crop?: string
+}
+
+function videoCredits(duration: number): number {
+  if (duration >= 15) return 70
+  if (duration >= 10) return 50
+  return 30
 }
 
 @Injectable()
@@ -81,17 +99,40 @@ export class MaterialService {
     return material
   }
 
-  async generateVideo(
-    shotId: string,
-    prompt: string,
-    duration = 5,
-    aspectRatio = '16:9',
-    crop = 'none',
-  ) {
+  async generateVideo(input: CanvasVideoGenerateInput) {
+    const {
+      userId,
+      shotId,
+      prompt,
+      model,
+      duration = 5,
+      aspectRatio = '16:9',
+      resolution = '720p',
+      crop = 'none',
+    } = input
+
+    const shot = await this.prisma.shot.findUnique({
+      where: { id: shotId },
+      include: { session: true },
+    })
+    if (!shot || shot.session.userId !== userId) {
+      throw new NotFoundException('分镜不存在')
+    }
+
+    await this.points.consume(userId, videoCredits(duration), '视频生成')
+
     const material = await this.prisma.material.create({
       data: { shotId, type: 'video', prompt, status: 'generating' },
     })
-    this.runVideoGeneration(material.id, prompt, duration, aspectRatio, crop).catch(console.error)
+    this.runVideoGeneration(
+      material.id,
+      prompt,
+      model,
+      duration,
+      aspectRatio,
+      resolution,
+      crop,
+    ).catch(console.error)
     return material
   }
 
@@ -136,15 +177,29 @@ export class MaterialService {
   private async runVideoGeneration(
     materialId: string,
     prompt: string,
+    model: string | undefined,
     duration: number,
     aspectRatio: string,
+    resolution: string,
     crop: string,
   ) {
     try {
-      const enriched = crop !== 'none'
-        ? `${prompt} [aspect:${aspectRatio}, crop:${crop}]`
-        : `${prompt} [aspect:${aspectRatio}]`
-      const { url } = await createVideoProvider().generate(enriched, { duration, aspectRatio })
+      const built = buildVideoProviderOptions({
+        modelKey: model,
+        duration,
+        aspectRatio,
+        resolution,
+        crop,
+        referenceImages: [],
+      })
+      const { url } = await createVideoProvider().generate(prompt, {
+        model: built.model,
+        duration: built.duration,
+        aspectRatio: built.aspectRatio,
+        resolution: built.resolution,
+        crop: built.crop,
+        image: built.image,
+      })
       await this.prisma.material.update({
         where: { id: materialId },
         data: { url, thumbnail: url, status: 'completed' },

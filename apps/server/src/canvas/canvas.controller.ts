@@ -312,14 +312,15 @@ export class CanvasController {
 
   @Post('material/generate-video')
   @UseGuards(AuthGuard)
-  async generateVideo(@Body() dto: GenerateVideoDto) {
-    const data = await this.materialService.generateVideo(
-      dto.shotId,
-      dto.prompt,
-      dto.duration,
-      dto.aspectRatio,
-      dto.crop,
-    )
+  async generateVideo(@Req() req: { user: { sub: string } }, @Body() dto: GenerateVideoDto) {
+    const data = await this.materialService.generateVideo({
+      userId: req.user.sub,
+      shotId: dto.shotId,
+      prompt: dto.prompt,
+      duration: dto.duration,
+      aspectRatio: dto.aspectRatio,
+      crop: dto.crop,
+    })
     return { code: 0, message: 'ok', data }
   }
 
