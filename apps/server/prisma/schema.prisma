@@ -153,6 +153,7 @@ model Material {
   thumbnail String?
   prompt    String?
   status    String   @default("idle")
+  metadata  String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }

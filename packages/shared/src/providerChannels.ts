@@ -3,6 +3,10 @@ export type ApiCallFormat = 'openai' | 'gemini'
 
 export const CHANNEL_MODEL_SEPARATOR = '::'
 
+/** Fixed copy for BYOK → platform fallback confirmation dialog */
+export const BYOK_FALLBACK_CONFIRM_MESSAGE =
+  '自定义渠道失败，已切换平台服务，可能会有额外费用，是否继续？'
+
 export function encodeChannelModel(channelId: string, modelName: string): string {
   return `${channelId}${CHANNEL_MODEL_SEPARATOR}${modelName}`
 }

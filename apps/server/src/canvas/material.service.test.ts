@@ -7,6 +7,21 @@ import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@ln
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { ProviderResolverService } from '../provider/provider-resolver.service'
+
+function platformResolve(model?: string) {
+  const modelName = model?.includes('::') ? model.split('::')[1]! : (model ?? '')
+  return {
+    channelId: 'platform',
+    modelName,
+    apiFormat: 'openai' as const,
+    credentials: {
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL ?? '',
+    },
+    source: 'platform' as const,
+  }
+}
 
 const imageGenerate = vi.fn(
   async (_prompt: string, _opts?: Record<string, unknown>) => ({ url: 'https://example.com/a.png' }),
@@ -52,6 +67,12 @@ describe('MaterialService image', () => {
           useValue: {
             shot: { findUnique: shotFindUnique },
             material: { create: materialCreate, update: materialUpdate },
+          },
+        },
+        {
+          provide: ProviderResolverService,
+          useValue: {
+            resolveForGeneration: vi.fn(async (_u: string, model?: string) => platformResolve(model)),
           },
         },
       ],
@@ -160,6 +181,12 @@ describe('MaterialService video', () => {
           useValue: {
             shot: { findUnique: shotFindUnique },
             material: { create: materialCreate, update: materialUpdate },
+          },
+        },
+        {
+          provide: ProviderResolverService,
+          useValue: {
+            resolveForGeneration: vi.fn(async (_u: string, model?: string) => platformResolve(model)),
           },
         },
       ],
