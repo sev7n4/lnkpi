@@ -1,10 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { GenerationType } from '@lnkpi/shared'
-import { modelsAsSelectorOptions, type StudioModality } from '@/constants/studioModels'
+import { decodeChannelModel, modelOptionName } from '@lnkpi/shared'
+import { type StudioModality } from '@/constants/studioModels'
 import { useClickOutside } from '@/composables/useClickOutside'
+import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/dockIcons'
+
+export type SelectorModelOption = {
+  id: string
+  name: string
+  channelName: string
+  disabled?: boolean
+}
 
 const props = defineProps<{
   modelValue: string
@@ -23,16 +32,56 @@ useClickOutside(rootRef, () => {
   open.value = false
 })
 
+const { preferences, allChannels } = useProviderBootstrap()
+
 const catalogModality = computed((): StudioModality => props.modality ?? props.type)
 
-const models = computed(() => modelsAsSelectorOptions(catalogModality.value))
-const current = computed(() => {
-  const found = models.value.find((m) => m.id === props.modelValue)
+function selectableForModality(modality: StudioModality): string[] {
+  const prefs = preferences.value
+  if (!prefs) return []
+  if (modality === 'image') return prefs.selectableImageModels
+  if (modality === 'video') return prefs.selectableVideoModels
+  if (modality === 'audio') return prefs.selectableAudioModels
+  return prefs.selectableTextModels
+}
+
+function channelNameForValue(value: string): string {
+  const decoded = decodeChannelModel(value)
+  if (!decoded) return '未知渠道'
+  const ch = allChannels.value.find((c) => c.id === decoded.channelId)
+  return ch?.name || decoded.channelId
+}
+
+function labelForValue(value: string): string {
+  return `${modelOptionName(value)}（${channelNameForValue(value)}）`
+}
+
+const selectableOptions = computed((): SelectorModelOption[] => {
+  return selectableForModality(catalogModality.value).map((id) => ({
+    id,
+    name: modelOptionName(id),
+    channelName: channelNameForValue(id),
+  }))
+})
+
+const current = computed((): SelectorModelOption | undefined => {
+  const found = selectableOptions.value.find((m) => m.id === props.modelValue)
   if (found) return found
   if (props.modelValue) {
-    return { id: props.modelValue, name: props.modelValue, provider: '自定义' }
+    return {
+      id: props.modelValue,
+      name: modelOptionName(props.modelValue),
+      channelName: channelNameForValue(props.modelValue),
+      disabled: true,
+    }
   }
-  return models.value[0]
+  return selectableOptions.value[0]
+})
+
+const currentLabel = computed(() => {
+  if (!current.value) return '...'
+  const base = `${current.value.name}（${current.value.channelName}）`
+  return current.value.disabled ? `${base} · 已停用` : base
 })
 
 const typeIcon = computed((): DockNodeIconKind => {
@@ -67,7 +116,9 @@ function select(id: string) {
       @click="open = !open"
     >
       <DockTypeIcon :icon="typeIcon" :size="13" class="text-white/55" />
-      <span class="max-w-[110px] truncate font-medium">{{ current?.name ?? '...' }}</span>
+      <span class="max-w-[140px] truncate font-medium" :class="current?.disabled ? 'text-amber-300/90' : ''">
+        {{ currentLabel }}
+      </span>
       <svg class="h-3 w-3 shrink-0 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>
@@ -75,20 +126,32 @@ function select(id: string) {
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-50 mb-1 min-w-[200px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
+      class="absolute bottom-full left-0 z-50 mb-1 min-w-[220px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
       @click.stop
     >
       <button
-        v-for="model in models"
+        v-if="current?.disabled"
+        type="button"
+        class="flex w-full items-center justify-between px-3 py-2 text-xs text-amber-300/90"
+        disabled
+      >
+        <span class="truncate">{{ labelForValue(current.id) }}</span>
+        <span class="ml-2 shrink-0 text-amber-300/60">已停用</span>
+      </button>
+      <button
+        v-for="model in selectableOptions"
         :key="model.id"
         type="button"
         class="flex w-full items-center justify-between px-3 py-2 text-xs transition hover:bg-white/5"
         :class="model.id === modelValue ? 'text-[#818cf8]' : 'text-white/70'"
         @click="select(model.id)"
       >
-        <span>{{ model.name }}</span>
-        <span class="text-white/30">{{ model.provider }}</span>
+        <span class="truncate">{{ model.name }}</span>
+        <span class="ml-2 shrink-0 text-white/30">{{ model.channelName }}</span>
       </button>
+      <p v-if="!selectableOptions.length" class="px-3 py-2 text-[11px] text-white/40">
+        暂无可选模型，请先在配置中设置
+      </p>
     </div>
   </div>
 </template>

@@ -50,6 +50,11 @@ import DockStudioToolbar from '@/components/canvas/DockStudioToolbar.vue'
 import CanvasFloatingChrome from '@/components/canvas/CanvasFloatingChrome.vue'
 import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftControls.vue'
 import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
+import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
+import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
+import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
+import type { FallbackConfirmDecision, FallbackPendingRequest } from '@/composables/useNodeGeneration'
+import type { StudioModality } from '@/constants/studioModels'
 import ClickRippleLayer from '@/components/canvas/ClickRippleLayer.vue'
 import ConnectNodePicker from '@/components/canvas/ConnectNodePicker.vue'
 import ConnectPickerLine from '@/components/canvas/ConnectPickerLine.vue'
@@ -156,6 +161,61 @@ const mediaInputRef = ref<HTMLInputElement | null>(null)
 const pendingMediaPos = ref<{ x: number; y: number } | null>(null)
 
 const { getConfig: getProviderConfig } = useModelProviderSettings()
+const { preferences, load: loadProviderBootstrap } = useProviderBootstrap()
+
+const fallbackDialog = ref<{
+  open: boolean
+  message: string
+  loading: boolean
+}>({ open: false, message: BYOK_FALLBACK_CONFIRM_MESSAGE, loading: false })
+let fallbackResolve: ((decision: FallbackConfirmDecision) => void) | null = null
+const fallbackPromptedKeys = new Set<string>()
+
+function requestFallbackConfirm(req: FallbackPendingRequest): Promise<FallbackConfirmDecision> {
+  const key = `${req.kind}:${req.id}`
+  if (fallbackPromptedKeys.has(key) && !fallbackDialog.value.open) {
+    return Promise.resolve('cancel')
+  }
+  fallbackPromptedKeys.add(key)
+  return new Promise((resolve) => {
+    fallbackResolve = resolve
+    fallbackDialog.value = {
+      open: true,
+      message: req.message?.trim() || BYOK_FALLBACK_CONFIRM_MESSAGE,
+      loading: false,
+    }
+  })
+}
+
+function settleFallback(decision: FallbackConfirmDecision) {
+  fallbackDialog.value = { ...fallbackDialog.value, open: false, loading: false }
+  const resolve = fallbackResolve
+  fallbackResolve = null
+  resolve?.(decision)
+}
+
+function onFallbackDialogConfirm() {
+  fallbackDialog.value = { ...fallbackDialog.value, loading: true }
+  settleFallback('confirm')
+}
+
+function onFallbackDialogCancel() {
+  settleFallback('cancel')
+}
+
+function isModelSelectable(modality: StudioModality, model: string): boolean {
+  const prefs = preferences.value
+  if (!prefs) return true
+  const list =
+    modality === 'image'
+      ? prefs.selectableImageModels
+      : modality === 'video'
+        ? prefs.selectableVideoModels
+        : modality === 'audio'
+          ? prefs.selectableAudioModels
+          : prefs.selectableTextModels
+  return list.includes(model)
+}
 
 const minimapNodeList = computed(() => {
   const out: Array<{ id: string; type?: string; data: Record<string, unknown> }> = []
@@ -212,8 +272,40 @@ const canvasAssets = computed((): CanvasAssetItem[] => {
 
 const canvasInteractionEnabled = computed(() => canvasMode.value === 'vueflow' && !viewportSettings.value.viewLocked)
 
+let onFallbackPendingFromPoll:
+  | ((kind: 'studio' | 'material', id: string, nodeId: string, message?: string) => Promise<void>)
+  | null = null
+
+function findLinkedMediaNodeId(shotId: string, materialId: string): string {
+  if (nodes.value.some((n) => n.id === materialId)) return materialId
+  for (const e of edges.value) {
+    if (e.source !== shotId) continue
+    const target = nodes.value.find((n) => n.id === e.target)
+    if (target && (target.type === 'image' || target.type === 'video')) return target.id
+  }
+  return materialId
+}
+
+function parseFallbackMessage(metadata?: string | null): string | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as { confirmMessage?: string }
+    return typeof meta.confirmMessage === 'string' ? meta.confirmMessage : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const shotPolling = useShotPolling((shots) => {
   for (const shot of shots) {
+    for (const material of shot.materials) {
+      if (material.status === NODE_GENERATION_STATUS.fallback_pending) {
+        const nodeId = findLinkedMediaNodeId(shot.id, material.id)
+        patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.fallback_pending })
+        void onFallbackPendingFromPoll?.('material', material.id, nodeId)
+        continue
+      }
+    }
     const material = shot.materials.find((m) => m.status === 'completed' && m.url)
     if (!material) continue
     patchNodeData(shot.id, { status: NODE_GENERATION_STATUS.completed, coverUrl: material.url })
@@ -236,6 +328,19 @@ const shotPolling = useShotPolling((shots) => {
 
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
+    if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
+      patchNodeData(task.nodeId, {
+        status: NODE_GENERATION_STATUS.fallback_pending,
+        generationRecordId: record.id,
+      })
+      void onFallbackPendingFromPoll?.(
+        'studio',
+        record.id,
+        task.nodeId,
+        parseFallbackMessage(record.metadata),
+      )
+      continue
+    }
     if (record.status === NODE_GENERATION_STATUS.completed) {
       const patch: Record<string, unknown> = {
         url: parseRecordUrl(record),
@@ -483,6 +588,7 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
   const textModel = getProviderConfig('text').model
   const imageModel = getProviderConfig('image').model
   const videoModel = getProviderConfig('video').model
+  const audioModel = getProviderConfig('audio').model
   let id: string
   switch (type) {
     case 'text':
@@ -498,7 +604,7 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
       id = addNode('video', { url: '', status: 'idle', prompt: '', videoModel }, { position })
       break
     case 'audio':
-      id = addNode('audio', { url: '', status: 'idle', prompt: '' }, { position })
+      id = addNode('audio', { url: '', status: 'idle', prompt: '', audioModel }, { position })
       break
     case 'sceneComposer':
       id = addNode('sceneComposer', createInitialSceneComposerNodeData(), { position })
@@ -1092,6 +1198,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
         status: 'completed',
         ...meta,
         prompt: '',
+        audioModel: getProviderConfig('audio').model,
       }, { position: resolveDropPosition(clientPos, 'audio') })
       break
   }
@@ -1487,6 +1594,7 @@ const {
   expandSceneComposer,
   batchGenerateSceneComposer,
   exportVideoComposition,
+  onFallbackPending,
 } = useNodeGeneration({
   nodes,
   edges,
@@ -1509,7 +1617,11 @@ const {
     image: getProviderConfig('image').model,
     video: getProviderConfig('video').model,
   }),
+  requestFallbackConfirm,
+  isModelSelectable,
 })
+
+onFallbackPendingFromPoll = onFallbackPending
 
 const debouncedNodePatch = useDebouncedNodePatch(
   (id, patch) => patchNodeData(id, patch),
@@ -1612,6 +1724,9 @@ const canvasAreaRef = ref<HTMLElement | null>(null)
 const agentRailRef = ref<InstanceType<typeof AgentSideRail> | null>(null)
 
 onMounted(() => {
+  void loadProviderBootstrap().catch(() => {
+    // Dock falls back to catalog defaults until bootstrap succeeds
+  })
   loadSession()
   loadSessions()
 
@@ -1850,6 +1965,13 @@ onMounted(() => {
     </div>
 
     <ProviderConfigDialog v-model="showModelSettings" />
+    <ByokFallbackConfirmDialog
+      v-model="fallbackDialog.open"
+      :message="fallbackDialog.message"
+      :loading="fallbackDialog.loading"
+      @confirm="onFallbackDialogConfirm"
+      @cancel="onFallbackDialogCancel"
+    />
     <StoryboardDialog
       v-model="showStoryboard"
       :shots="storyboardShots"

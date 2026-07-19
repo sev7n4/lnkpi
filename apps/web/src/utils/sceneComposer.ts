@@ -2,7 +2,7 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding } from '@/composables/useNodeRefs'
 import { parseRefMentions } from '@/composables/useRefMentions'
-import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
+import { resolveGenerationModel } from '@/constants/studioModels'
 import {
   createDefaultSceneComposerPayload,
   DEFAULT_VIDEO_SETTINGS,
@@ -158,7 +158,7 @@ function expandSingleShot(
 
 export function resolveCanvasImageParams(data: Record<string, unknown>) {
   return {
-    model: resolveModelKey('image', data.imageModel as string | undefined).modelKey,
+    model: resolveGenerationModel('image', data.imageModel as string | undefined),
     aspectRatio: String(data.imageAspect ?? '16:9'),
     resolution: String(data.imageResolution ?? '1K'),
     count: 1 as const,
@@ -170,7 +170,7 @@ export function resolveCanvasVideoParams(
 ): Partial<VideoSettings> & { model: string } {
   const settings = (data.videoSettings as Partial<VideoSettings> | undefined) ?? {}
   return {
-    model: resolveModelKey('video', data.videoModel as string | undefined).modelKey,
+    model: resolveGenerationModel('video', data.videoModel as string | undefined),
     duration: settings.duration ?? DEFAULT_VIDEO_SETTINGS.duration,
     aspectRatio: settings.aspectRatio ?? DEFAULT_VIDEO_SETTINGS.aspectRatio,
     resolution: settings.resolution ?? DEFAULT_VIDEO_SETTINGS.resolution,
@@ -256,14 +256,7 @@ export function buildBatchGenerateItems(
       const mentionedKeys = parseRefMentions(finalPrompt)
 
       if (shot.mediaType === 'image') {
-        const params = childNode
-          ? resolveCanvasImageParams(childData)
-          : {
-              model: defaultModelKey('image'),
-              aspectRatio: '16:9',
-              resolution: '1K',
-              count: 1 as const,
-            }
+        const params = resolveCanvasImageParams(childNode ? childData : {})
         items.push({
           shotNodeId: shot.shotNodeId,
           title: shot.title || scene.title,
@@ -277,15 +270,7 @@ export function buildBatchGenerateItems(
           mentionedKeys,
         })
       } else {
-        const params = childNode
-          ? resolveCanvasVideoParams(childData)
-          : {
-              model: defaultModelKey('video'),
-              duration: DEFAULT_VIDEO_SETTINGS.duration,
-              aspectRatio: DEFAULT_VIDEO_SETTINGS.aspectRatio,
-              resolution: DEFAULT_VIDEO_SETTINGS.resolution,
-              crop: DEFAULT_VIDEO_SETTINGS.crop,
-            }
+        const params = resolveCanvasVideoParams(childNode ? childData : {})
         items.push({
           shotNodeId: shot.shotNodeId,
           title: shot.title || scene.title,

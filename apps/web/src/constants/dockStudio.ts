@@ -37,6 +37,7 @@ export const NODE_GENERATION_STATUS = {
   completed: 'completed',
   error: 'error',
   failed: 'failed',
+  fallback_pending: 'fallback_pending',
 } as const
 
 export type NodeGenerationStatus = (typeof NODE_GENERATION_STATUS)[keyof typeof NODE_GENERATION_STATUS]

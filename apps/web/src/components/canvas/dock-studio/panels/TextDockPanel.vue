@@ -14,7 +14,7 @@ import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vu
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveModelKey } from '@/constants/studioModels'
+import { resolveGenerationModel } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateTextCredits } from '@/constants/credits'
 
@@ -46,7 +46,7 @@ const credits = computed(() => estimateTextCredits())
 function syncFromNode() {
   const data = props.node.data ?? {}
   content.value = String(data.content ?? data.prompt ?? '')
-  textModel.value = resolveModelKey('text', data.textModel as string | undefined).modelKey
+  textModel.value = resolveGenerationModel('text', data.textModel as string | undefined)
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })

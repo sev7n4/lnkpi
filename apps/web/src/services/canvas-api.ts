@@ -69,4 +69,8 @@ export const canvasApi = {
     api.post('/agent/canvas/scene-composer/batch-generate', payload),
   exportVideoComposition: (payload: VideoCompositionExportRequest) =>
     api.post('/agent/canvas/video-composition/export', payload),
+  confirmMaterialPlatformFallback: (id: string) =>
+    api.post(`/agent/canvas/material/${id}/confirm-platform-fallback`, {}, { timeout: 120_000 }),
+  cancelMaterialPlatformFallback: (id: string) =>
+    api.post(`/agent/canvas/material/${id}/cancel-platform-fallback`),
 }

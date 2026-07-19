@@ -3,6 +3,9 @@ import {
   defaultModelKey,
   resolveModelKey,
   getModelEntry,
+  decodeChannelModel,
+  encodeChannelModel,
+  modelOptionName,
   type StudioModality,
   type StudioModelEntry,
   type StudioVoiceOption,
@@ -13,6 +16,9 @@ export {
   defaultModelKey,
   resolveModelKey,
   getModelEntry,
+  decodeChannelModel,
+  encodeChannelModel,
+  modelOptionName,
   type StudioModality,
   type StudioModelEntry,
   type StudioVoiceOption,
@@ -24,4 +30,21 @@ export function modelsAsSelectorOptions(modality: StudioModality) {
     name: m.displayName,
     provider: 'catalog',
   }))
+}
+
+/** Normalize node/API model values to `channelId::modelName` for BYOK. */
+export function resolveGenerationModel(
+  modality: StudioModality,
+  requested?: string | null,
+): string {
+  const trimmed = requested?.trim()
+  if (trimmed) {
+    if (decodeChannelModel(trimmed)) return trimmed
+    return encodeChannelModel('platform', resolveModelKey(modality, trimmed).modelKey)
+  }
+  return encodeChannelModel('platform', defaultModelKey(modality))
+}
+
+export function catalogModelKeyFromValue(value: string): string {
+  return decodeChannelModel(value)?.modelName ?? value
 }

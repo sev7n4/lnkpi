@@ -1,6 +1,7 @@
 import type { AxiosResponse } from 'axios'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { encodeChannelModel } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
@@ -16,6 +17,8 @@ vi.mock('@/services/studio-api', () => ({
     generateAudio: vi.fn(),
     generateText: vi.fn(),
     generatePrompt: vi.fn(),
+    confirmPlatformFallback: vi.fn(),
+    cancelPlatformFallback: vi.fn(),
   },
 }))
 
@@ -28,9 +31,10 @@ vi.mock('@/services/canvas-api', () => ({
     saveSceneComposer: vi.fn(),
     batchGenerateSceneComposer: vi.fn(),
     exportVideoComposition: vi.fn(),
+    confirmMaterialPlatformFallback: vi.fn(),
+    cancelMaterialPlatformFallback: vi.fn(),
   },
 }))
-
 function mockAxiosResponse<T>(data: T): AxiosResponse<T> {
   return { data, status: 200, statusText: 'OK', headers: {}, config: {} as AxiosResponse<T>['config'] }
 }
@@ -57,17 +61,19 @@ function createNode(
   }
 }
 
-function createDeps(nodes: EditableFlowNode[]) {
+function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown> = {}) {
   const patchNodeData = vi.fn()
   const saveCanvas = vi.fn(async () => {})
   const requireLogin = vi.fn(() => true)
   const startShotPolling = vi.fn()
   const startGenerationPolling = vi.fn()
   const resolveProviderModels = vi.fn(() => ({
-    image: 'default-image-model',
-    video: 'default-video-model',
-    text: 'default-text-model',
+    image: encodeChannelModel('platform', 'default-image-model'),
+    video: encodeChannelModel('platform', 'default-video-model'),
+    text: encodeChannelModel('platform', 'default-text-model'),
   }))
+  const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+  const isModelSelectable = vi.fn(() => true)
 
   const deps = {
     nodes: ref(nodes),
@@ -81,6 +87,9 @@ function createDeps(nodes: EditableFlowNode[]) {
     startShotPolling,
     startGenerationPolling,
     resolveProviderModels,
+    requestFallbackConfirm,
+    isModelSelectable,
+    ...overrides,
   }
 
   const api = useNodeGeneration(deps)
@@ -113,7 +122,7 @@ describe('useNodeGeneration', () => {
     expect(studioApi.generateAudio).toHaveBeenCalledWith(
       'hello world',
       {
-        model: 'minimax-speech-2.8-hd',
+        model: encodeChannelModel('platform', defaultModelKey('audio')),
         voice: 'male-1',
         emotion: 'happy',
         language: 'en',
@@ -129,7 +138,7 @@ describe('useNodeGeneration', () => {
   it('passes model, resolution, and count to studioApi.generateImage', async () => {
     const node = createNode('image', {
       prompt: 'a cat',
-      imageModel: 'seedream-5.0-pro',
+      imageModel: encodeChannelModel('platform', 'seedream-5.0-pro'),
       imageAspect: '16:9',
       imageResolution: '2K',
       imageCount: 3,
@@ -140,13 +149,160 @@ describe('useNodeGeneration', () => {
 
     expect(studioApi.generateImage).toHaveBeenCalledWith(
       'a cat',
-      'seedream-5.0-pro',
+      encodeChannelModel('platform', 'seedream-5.0-pro'),
       '16:9',
       [],
       [],
       '2K',
       3,
     )
+  })
+
+  it('normalizes bare catalog model keys to channel:: payload format', async () => {
+    const node = createNode('image', {
+      prompt: 'a cat',
+      imageModel: 'seedream-5.0-pro',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    })
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateImage).toHaveBeenCalledWith(
+      'a cat',
+      encodeChannelModel('platform', 'seedream-5.0-pro'),
+      '16:9',
+      [],
+      [],
+      '1K',
+      1,
+    )
+  })
+
+  it('preserves user-channel model channelId::modelName in studio payload', async () => {
+    const model = encodeChannelModel('ch-user-1', 'my-custom-model')
+    const node = createNode('image', {
+      prompt: 'a dog',
+      imageModel: model,
+      imageAspect: '1:1',
+      imageResolution: '2K',
+      imageCount: 1,
+    })
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateImage).toHaveBeenCalledWith(
+      'a dog',
+      model,
+      '1:1',
+      [],
+      [],
+      '2K',
+      1,
+    )
+  })
+
+  it('invokes requestFallbackConfirm and confirm API on studio fallback_pending', async () => {
+    const model = encodeChannelModel('ch-user-1', 'my-custom-model')
+    const node = createNode('image', {
+      prompt: 'fallback me',
+      imageModel: model,
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    })
+    const pendingRecord = {
+      id: 'rec-pending-1',
+      type: 'image',
+      prompt: 'fallback me',
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      url: null,
+      metadata: JSON.stringify({ confirmMessage: '自定义渠道失败，已切换平台服务，可能会有额外费用，是否继续？' }),
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(studioApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: pendingRecord }))
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...pendingRecord,
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/fallback.png',
+        },
+      }),
+    )
+    const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    await api.generateForNode(node)
+
+    expect(requestFallbackConfirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'studio',
+        id: 'rec-pending-1',
+        nodeId: 'image-1',
+      }),
+    )
+    expect(studioApi.confirmPlatformFallback).toHaveBeenCalledWith('rec-pending-1')
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/fallback.png',
+      }),
+    )
+  })
+
+  it('calls cancel API when fallback confirm is declined', async () => {
+    const model = encodeChannelModel('ch-user-1', 'my-custom-model')
+    const node = createNode('text', {
+      prompt: 'hello',
+      content: 'hello',
+      textModel: model,
+    })
+    const pendingRecord = {
+      id: 'rec-pending-2',
+      type: 'text',
+      prompt: 'hello',
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      url: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(studioApi.generateText).mockResolvedValue(mockAxiosResponse({ data: pendingRecord }))
+    vi.mocked(studioApi.cancelPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({ data: { ...pendingRecord, status: NODE_GENERATION_STATUS.failed } }),
+    )
+    const requestFallbackConfirm = vi.fn(async () => 'cancel' as const)
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    await api.generateForNode(node)
+
+    expect(studioApi.cancelPlatformFallback).toHaveBeenCalledWith('rec-pending-2')
+    expect(studioApi.confirmPlatformFallback).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.error }),
+    )
+  })
+
+  it('blocks generate when model is not selectable', async () => {
+    const model = encodeChannelModel('ch-user-1', 'disabled-model')
+    const node = createNode('image', {
+      prompt: 'blocked',
+      imageModel: model,
+    })
+    const isModelSelectable = vi.fn(() => false)
+    const { api, deps } = createDeps([node], { isModelSelectable })
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateImage).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '当前模型已停用，请重新选择模型后再生成',
+    })
   })
 
   it('blocks image generation when referenceImageUrl is a blob url', async () => {
@@ -188,7 +344,7 @@ describe('useNodeGeneration', () => {
     const shot = createNode('shot', { title: 'Shot', prompt: 'sunset' }, 'shot-1')
     const image = createNode('image', {
       prompt: 'sunset',
-      imageModel: 'navo-pro',
+      imageModel: encodeChannelModel('platform', 'navo-pro'),
       imageAspect: '9:16',
       imageResolution: '2K',
     }, 'image-1')
@@ -199,7 +355,7 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(image)
 
     expect(canvasApi.generateImage).toHaveBeenCalledWith('shot-1', 'sunset', {
-      model: 'navo-pro',
+      model: encodeChannelModel('platform', 'navo-pro'),
       aspectRatio: '9:16',
       resolution: '2K',
       count: 1,
@@ -291,7 +447,7 @@ describe('useNodeGeneration', () => {
     const shot = createNode('shot', { title: 'Shot', prompt: 'motion' }, 'shot-1')
     const video = createNode('video', {
       prompt: 'motion',
-      videoModel: 'happyhose-1.1',
+      videoModel: encodeChannelModel('platform', 'happyhose-1.1'),
       videoSettings: {
         duration: 10,
         aspectRatio: '9:16',
@@ -306,7 +462,7 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(video)
 
     expect(canvasApi.generateVideo).toHaveBeenCalledWith('shot-1', 'motion', {
-      model: 'happyhose-1.1',
+      model: encodeChannelModel('platform', 'happyhose-1.1'),
       duration: 10,
       aspectRatio: '9:16',
       resolution: '1080p',
@@ -327,7 +483,7 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(shot)
 
     expect(canvasApi.generateImage).toHaveBeenCalledWith('shot-1', 'fallback', {
-      model: defaultModelKey('image'),
+      model: encodeChannelModel('platform', defaultModelKey('image')),
       aspectRatio: '16:9',
       resolution: '1K',
       count: 1,
@@ -339,7 +495,7 @@ describe('useNodeGeneration', () => {
   it('keeps independent studio image path on studioApi', async () => {
     const node = createNode('image', {
       prompt: 'standalone cat',
-      imageModel: 'seedream-5.0-pro',
+      imageModel: encodeChannelModel('platform', 'seedream-5.0-pro'),
       imageAspect: '16:9',
       imageResolution: '2K',
       imageCount: 2,
@@ -350,7 +506,7 @@ describe('useNodeGeneration', () => {
 
     expect(studioApi.generateImage).toHaveBeenCalledWith(
       'standalone cat',
-      'seedream-5.0-pro',
+      encodeChannelModel('platform', 'seedream-5.0-pro'),
       '16:9',
       [],
       [],

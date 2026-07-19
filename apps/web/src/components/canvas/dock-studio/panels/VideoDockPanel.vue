@@ -19,7 +19,7 @@ import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vu
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveModelKey } from '@/constants/studioModels'
+import { resolveGenerationModel } from '@/constants/studioModels'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
@@ -64,7 +64,7 @@ const effectiveRefUrl = computed(() => {
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
-  videoModel.value = resolveModelKey('video', data.videoModel as string | undefined).modelKey
+  videoModel.value = resolveGenerationModel('video', data.videoModel as string | undefined)
   if (data.videoSettings && typeof data.videoSettings === 'object') {
     videoSettings.value = { ...DEFAULT_VIDEO_SETTINGS, ...(data.videoSettings as VideoSettings) }
   }
