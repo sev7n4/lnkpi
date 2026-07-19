@@ -53,7 +53,8 @@ import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
-import type { FallbackConfirmDecision, FallbackPendingRequest } from '@/composables/useNodeGeneration'
+import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
+import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
 import ClickRippleLayer from '@/components/canvas/ClickRippleLayer.vue'
 import ConnectNodePicker from '@/components/canvas/ConnectNodePicker.vue'
@@ -168,64 +169,28 @@ const fallbackDialog = ref<{
   message: string
   loading: boolean
 }>({ open: false, message: BYOK_FALLBACK_CONFIRM_MESSAGE, loading: false })
-let fallbackResolve: ((decision: FallbackConfirmDecision) => void) | null = null
-const fallbackPromptedKeys = new Set<string>()
-const fallbackConfirmQueue: Array<{
-  req: FallbackPendingRequest
-  resolve: (decision: FallbackConfirmDecision) => void
-}> = []
 
-function fallbackConfirmKey(req: FallbackPendingRequest): string {
-  return `${req.kind}:${req.id}`
-}
+const fallbackConfirmQueue = createFallbackConfirmQueue({
+  defaultMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
+  onOpen: (message) => {
+    fallbackDialog.value = { open: true, message, loading: false }
+  },
+  onClose: () => {
+    fallbackDialog.value = { ...fallbackDialog.value, open: false, loading: false }
+  },
+})
 
-function drainFallbackConfirmQueue() {
-  if (fallbackResolve || fallbackDialog.value.open) return
-  while (fallbackConfirmQueue.length) {
-    const next = fallbackConfirmQueue.shift()!
-    const key = fallbackConfirmKey(next.req)
-    if (fallbackPromptedKeys.has(key)) {
-      next.resolve('cancel')
-      continue
-    }
-    fallbackPromptedKeys.add(key)
-    fallbackResolve = next.resolve
-    fallbackDialog.value = {
-      open: true,
-      message: next.req.message?.trim() || BYOK_FALLBACK_CONFIRM_MESSAGE,
-      loading: false,
-    }
-    return
-  }
-}
-
-function requestFallbackConfirm(req: FallbackPendingRequest): Promise<FallbackConfirmDecision> {
-  const key = fallbackConfirmKey(req)
-  if (fallbackPromptedKeys.has(key) && !fallbackDialog.value.open && !fallbackResolve) {
-    const queued = fallbackConfirmQueue.some((item) => fallbackConfirmKey(item.req) === key)
-    if (!queued) return Promise.resolve('cancel')
-  }
-  return new Promise((resolve) => {
-    fallbackConfirmQueue.push({ req, resolve })
-    drainFallbackConfirmQueue()
-  })
-}
-
-function settleFallback(decision: FallbackConfirmDecision) {
-  fallbackDialog.value = { ...fallbackDialog.value, open: false, loading: false }
-  const resolve = fallbackResolve
-  fallbackResolve = null
-  resolve?.(decision)
-  drainFallbackConfirmQueue()
+function requestFallbackConfirm(req: FallbackPendingRequest) {
+  return fallbackConfirmQueue.request(req)
 }
 
 function onFallbackDialogConfirm() {
   fallbackDialog.value = { ...fallbackDialog.value, loading: true }
-  settleFallback('confirm')
+  fallbackConfirmQueue.settle('confirm')
 }
 
 function onFallbackDialogCancel() {
-  settleFallback('cancel')
+  fallbackConfirmQueue.settle('cancel')
 }
 
 function isModelSelectable(modality: StudioModality, model: string): boolean {
@@ -301,12 +266,19 @@ let onFallbackPendingFromPoll:
   | ((kind: 'studio' | 'material', id: string, nodeId: string, message?: string) => Promise<void>)
   | null = null
 
+const fallbackPollClaimedKeys = new Set<string>()
+
 async function invokeFallbackPendingFromPoll(
   kind: 'studio' | 'material',
   id: string,
   nodeId: string,
   message?: string,
 ) {
+  const key = fallbackConfirmKey({ kind, id })
+  // Claim synchronously so parallel poll ticks cannot both enter handlers
+  // (shared Promise would otherwise double-call confirm/cancel APIs).
+  if (fallbackPollClaimedKeys.has(key) || fallbackConfirmQueue.isPrompted(key)) return
+  fallbackPollClaimedKeys.add(key)
   try {
     await onFallbackPendingFromPoll?.(kind, id, nodeId, message)
   } catch (err) {
