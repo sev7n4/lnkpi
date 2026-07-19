@@ -43,5 +43,8 @@ export const NODE_GENERATION_STATUS = {
 export type NodeGenerationStatus = (typeof NODE_GENERATION_STATUS)[keyof typeof NODE_GENERATION_STATUS]
 
 export function isNodeGenerating(status: unknown): boolean {
-  return status === NODE_GENERATION_STATUS.generating
+  return (
+    status === NODE_GENERATION_STATUS.generating ||
+    status === NODE_GENERATION_STATUS.fallback_pending
+  )
 }

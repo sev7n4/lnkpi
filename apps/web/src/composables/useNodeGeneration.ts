@@ -407,27 +407,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         resolution,
         count,
       )
-      if (res.data.status === NODE_GENERATION_STATUS.fallback_pending) {
-        deps.patchNodeData(node.id, {
-          referenceImageUrl: refImage || undefined,
-          imageResolution: resolution,
-          imageCount: count,
-          generationRecordId: res.data.id,
-        })
-        await resolveStudioRecord(node.id, res.data)
-        return
-      }
-      const urls = parseRecordUrls(res.data)
       deps.patchNodeData(node.id, {
-        url: urls[0] ?? parseRecordUrl(res.data),
-        images: urls,
-        status: NODE_GENERATION_STATUS.completed,
         referenceImageUrl: refImage || undefined,
         imageResolution: resolution,
         imageCount: count,
         generationRecordId: res.data.id,
       })
-      await deps.saveCanvas()
+      await resolveStudioRecord(node.id, res.data)
       return
     }
 
@@ -481,19 +467,27 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     nodeId: string,
     message?: string,
   ) {
-    if (kind === 'studio') {
-      await handleStudioFallback(nodeId, {
-        id,
-        type: 'video',
-        prompt: '',
-        status: NODE_GENERATION_STATUS.fallback_pending,
-        metadata: message ? JSON.stringify({ confirmMessage: message }) : null,
-        createdAt: new Date().toISOString(),
+    try {
+      if (kind === 'studio') {
+        await handleStudioFallback(nodeId, {
+          id,
+          type: 'video',
+          prompt: '',
+          status: NODE_GENERATION_STATUS.fallback_pending,
+          metadata: message ? JSON.stringify({ confirmMessage: message }) : null,
+          createdAt: new Date().toISOString(),
+        })
+      } else {
+        await handleMaterialFallback(nodeId, id, message)
+      }
+      await deps.saveCanvas()
+    } catch (err) {
+      deps.patchNodeData(nodeId, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: err instanceof Error ? err.message : '平台回退处理失败',
       })
-    } else {
-      await handleMaterialFallback(nodeId, id, message)
+      await deps.saveCanvas()
     }
-    await deps.saveCanvas()
   }
 
   async function generateShot(node: EditableFlowNode, prompt: string, data: Record<string, unknown>) {

@@ -255,6 +255,59 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('routes studio image generating status through resolveStudioRecord (starts poll)', async () => {
+    const node = createNode('image', {
+      prompt: 'async image',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    })
+    vi.mocked(studioApi.generateImage).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          id: 'rec-async-img',
+          type: 'image',
+          prompt: 'async image',
+          status: NODE_GENERATION_STATUS.generating,
+          url: null,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    )
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.startGenerationPolling).toHaveBeenCalledWith([
+      { recordId: 'rec-async-img', nodeId: 'image-1' },
+    ])
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.generating }),
+    )
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.completed }),
+    )
+  })
+
+  it('sets node error when onFallbackPending confirm API fails', async () => {
+    const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+    vi.mocked(studioApi.confirmPlatformFallback).mockRejectedValue(new Error('confirm failed'))
+    const { api, deps } = createDeps([], { requestFallbackConfirm })
+
+    await api.onFallbackPending('studio', 'rec-fail-1', 'node-fail-1', '请确认')
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'node-fail-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: 'confirm failed',
+      }),
+    )
+    expect(deps.saveCanvas).toHaveBeenCalled()
+  })
+
   it('calls cancel API when fallback confirm is declined', async () => {
     const model = encodeChannelModel('ch-user-1', 'my-custom-model')
     const node = createNode('text', {

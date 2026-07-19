@@ -170,20 +170,44 @@ const fallbackDialog = ref<{
 }>({ open: false, message: BYOK_FALLBACK_CONFIRM_MESSAGE, loading: false })
 let fallbackResolve: ((decision: FallbackConfirmDecision) => void) | null = null
 const fallbackPromptedKeys = new Set<string>()
+const fallbackConfirmQueue: Array<{
+  req: FallbackPendingRequest
+  resolve: (decision: FallbackConfirmDecision) => void
+}> = []
 
-function requestFallbackConfirm(req: FallbackPendingRequest): Promise<FallbackConfirmDecision> {
-  const key = `${req.kind}:${req.id}`
-  if (fallbackPromptedKeys.has(key) && !fallbackDialog.value.open) {
-    return Promise.resolve('cancel')
-  }
-  fallbackPromptedKeys.add(key)
-  return new Promise((resolve) => {
-    fallbackResolve = resolve
+function fallbackConfirmKey(req: FallbackPendingRequest): string {
+  return `${req.kind}:${req.id}`
+}
+
+function drainFallbackConfirmQueue() {
+  if (fallbackResolve || fallbackDialog.value.open) return
+  while (fallbackConfirmQueue.length) {
+    const next = fallbackConfirmQueue.shift()!
+    const key = fallbackConfirmKey(next.req)
+    if (fallbackPromptedKeys.has(key)) {
+      next.resolve('cancel')
+      continue
+    }
+    fallbackPromptedKeys.add(key)
+    fallbackResolve = next.resolve
     fallbackDialog.value = {
       open: true,
-      message: req.message?.trim() || BYOK_FALLBACK_CONFIRM_MESSAGE,
+      message: next.req.message?.trim() || BYOK_FALLBACK_CONFIRM_MESSAGE,
       loading: false,
     }
+    return
+  }
+}
+
+function requestFallbackConfirm(req: FallbackPendingRequest): Promise<FallbackConfirmDecision> {
+  const key = fallbackConfirmKey(req)
+  if (fallbackPromptedKeys.has(key) && !fallbackDialog.value.open && !fallbackResolve) {
+    const queued = fallbackConfirmQueue.some((item) => fallbackConfirmKey(item.req) === key)
+    if (!queued) return Promise.resolve('cancel')
+  }
+  return new Promise((resolve) => {
+    fallbackConfirmQueue.push({ req, resolve })
+    drainFallbackConfirmQueue()
   })
 }
 
@@ -192,6 +216,7 @@ function settleFallback(decision: FallbackConfirmDecision) {
   const resolve = fallbackResolve
   fallbackResolve = null
   resolve?.(decision)
+  drainFallbackConfirmQueue()
 }
 
 function onFallbackDialogConfirm() {
@@ -276,6 +301,23 @@ let onFallbackPendingFromPoll:
   | ((kind: 'studio' | 'material', id: string, nodeId: string, message?: string) => Promise<void>)
   | null = null
 
+async function invokeFallbackPendingFromPoll(
+  kind: 'studio' | 'material',
+  id: string,
+  nodeId: string,
+  message?: string,
+) {
+  try {
+    await onFallbackPendingFromPoll?.(kind, id, nodeId, message)
+  } catch (err) {
+    patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: err instanceof Error ? err.message : '平台回退处理失败',
+    })
+    void saveCanvas()
+  }
+}
+
 function findLinkedMediaNodeId(shotId: string, materialId: string): string {
   if (nodes.value.some((n) => n.id === materialId)) return materialId
   for (const e of edges.value) {
@@ -302,7 +344,7 @@ const shotPolling = useShotPolling((shots) => {
       if (material.status === NODE_GENERATION_STATUS.fallback_pending) {
         const nodeId = findLinkedMediaNodeId(shot.id, material.id)
         patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.fallback_pending })
-        void onFallbackPendingFromPoll?.('material', material.id, nodeId)
+        void invokeFallbackPendingFromPoll('material', material.id, nodeId)
         continue
       }
     }
@@ -333,7 +375,7 @@ const generationPolling = useGenerationPolling((results) => {
         status: NODE_GENERATION_STATUS.fallback_pending,
         generationRecordId: record.id,
       })
-      void onFallbackPendingFromPoll?.(
+      void invokeFallbackPendingFromPoll(
         'studio',
         record.id,
         task.nodeId,
