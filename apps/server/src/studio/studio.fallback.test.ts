@@ -290,8 +290,35 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     expect(createVideoProvider).toHaveBeenCalledWith(undefined)
     expect(videoGenerate).toHaveBeenCalled()
+    const [[, videoOpts]] = videoGenerate.mock.calls
+    expect((videoOpts as { model?: string }).model).not.toBe('custom-model')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
+  })
+
+  it('image confirm → platform uses catalog gateway model, not user custom', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+    // Force pending meta to look like a user gateway id was persisted.
+    stored = {
+      ...stored,
+      status: 'fallback_pending',
+      metadata: JSON.stringify({
+        ...JSON.parse(String(stored.metadata ?? '{}')),
+        gatewayModelId: 'custom-model',
+        modelId: 'custom-model',
+        channelId: 'ch_user',
+      }),
+    }
+    vi.clearAllMocks()
+    imageGenerate.mockResolvedValueOnce({ url: 'https://example.com/i.png', urls: ['https://example.com/i.png'] })
+
+    const result = await svc.confirmPlatformFallback('u1', 'g1')
+    expect(result.status).toBe('completed')
+    expect(createImageProvider).toHaveBeenCalledWith(undefined)
+    const [[, opts]] = imageGenerate.mock.calls
+    expect((opts as { modelId?: string }).modelId).not.toBe('custom-model')
+    expect((opts as { modelId?: string }).modelId).toBeTruthy()
   })
 
   it('cancel-platform-fallback → failed', async () => {

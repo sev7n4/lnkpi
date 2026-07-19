@@ -531,7 +531,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                   <span class="mb-1 block text-[11px] text-white/50">调用格式</span>
                   <el-select v-model="draft.apiFormat" class="w-full" :disabled="draft.readOnly">
                     <el-option label="OpenAI" value="openai" />
-                    <el-option label="Gemini" value="gemini" />
+                    <el-option label="Gemini（暂未接入生成链）" value="gemini" disabled />
                   </el-select>
                 </label>
                 <label class="block">

@@ -621,14 +621,10 @@ export class StudioService {
     const meta = parseMeta(record.metadata)
 
     if (record.type === 'image') {
-      const platform = await this.resolver.resolveForGeneration(
-        userId,
-        String(meta.modelKey ?? meta.gatewayModelId ?? 'seedream-5.0-pro'),
-        'image',
-      )
       const size = String(meta.size ?? '1024x1024')
       const n = Number(meta.count ?? 1) || 1
-      const modelId = String(meta.gatewayModelId ?? meta.modelId ?? platform.modelName)
+      // Never reuse user-channel modelName against platform credentials.
+      const modelId = this.platformGatewayModelId('image', meta)
       const { url, urls } = await createImageProvider(undefined).generate(record.prompt, {
         size,
         n,
@@ -643,6 +639,7 @@ export class StudioService {
           metadata: JSON.stringify({
             ...meta,
             urls: imageUrls,
+            gatewayModelId: modelId,
             providerFallback: true,
             channelId: 'platform',
           }),
@@ -727,8 +724,9 @@ export class StudioService {
     }
 
     if (record.type === 'video') {
+      const platformModel = this.platformGatewayModelId('video', meta)
       const { url } = await createVideoProvider(undefined).generate(record.prompt, {
-        model: String(meta.gatewayModelId ?? meta.model ?? 'seedance-2.0-min'),
+        model: platformModel,
         duration: Number(meta.duration ?? 5),
         aspectRatio: String(meta.aspectRatio ?? '16:9'),
         resolution: String(meta.resolution ?? '720p'),
@@ -744,6 +742,7 @@ export class StudioService {
           status: 'completed',
           metadata: JSON.stringify({
             ...meta,
+            gatewayModelId: platformModel,
             providerFallback: true,
             channelId: 'platform',
           }),
