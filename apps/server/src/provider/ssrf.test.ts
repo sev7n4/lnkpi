@@ -29,4 +29,28 @@ describe('assertSafeOutboundUrl', () => {
   it('rejects http localhost by default', () => {
     expect(() => assertSafeOutboundUrl('http://localhost:3000')).toThrow()
   })
+
+  it('rejects bracketed IPv6 loopback over https', () => {
+    expect(() => assertSafeOutboundUrl('https://[::1]')).toThrow(
+      'URL points to a private or restricted address',
+    )
+  })
+
+  it('rejects bracketed IPv4-mapped loopback over https', () => {
+    expect(() => assertSafeOutboundUrl('https://[::ffff:127.0.0.1]')).toThrow(
+      'URL points to a private or restricted address',
+    )
+  })
+
+  it('rejects bracketed IPv4-mapped metadata over https', () => {
+    expect(() => assertSafeOutboundUrl('https://[::ffff:169.254.169.254]')).toThrow(
+      'URL points to a private or restricted address',
+    )
+  })
+
+  it('rejects bracketed IPv6 ULA over https', () => {
+    expect(() => assertSafeOutboundUrl('https://[fc00::1]')).toThrow(
+      'URL points to a private or restricted address',
+    )
+  })
 })

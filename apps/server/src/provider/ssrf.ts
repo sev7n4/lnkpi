@@ -25,21 +25,49 @@ function isPrivateIpv4(host: string): boolean {
   return PRIVATE_IPV4_RANGES.some(([start, end]) => value >= start && value <= end)
 }
 
+function normalizeHostname(host: string): string {
+  if (host.startsWith('[') && host.endsWith(']')) {
+    return host.slice(1, -1)
+  }
+  return host
+}
+
+function isPrivateIpv4Mapped(host: string): boolean {
+  const normalized = host.toLowerCase()
+  if (!normalized.startsWith('::ffff:')) return false
+
+  const suffix = normalized.slice('::ffff:'.length)
+  if (suffix.includes('.')) {
+    return isPrivateIpv4(suffix)
+  }
+
+  const parts = suffix.split(':')
+  if (parts.length !== 2) return false
+
+  const hi = Number.parseInt(parts[0], 16)
+  const lo = Number.parseInt(parts[1], 16)
+  if (Number.isNaN(hi) || Number.isNaN(lo)) return false
+
+  const ipv4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`
+  return isPrivateIpv4(ipv4)
+}
+
 function isPrivateIpv6(host: string): boolean {
   const normalized = host.toLowerCase()
   if (normalized === '::1') return true
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true
   if (normalized.startsWith('fe80')) return true
+  if (isPrivateIpv4Mapped(normalized)) return true
   return false
 }
 
 function isLocalhostHost(host: string): boolean {
-  const normalized = host.toLowerCase()
+  const normalized = normalizeHostname(host).toLowerCase()
   return normalized === 'localhost' || normalized.endsWith('.localhost')
 }
 
 function isBlockedHost(host: string): boolean {
-  const normalized = host.toLowerCase()
+  const normalized = normalizeHostname(host).toLowerCase()
   if (isLocalhostHost(normalized)) return true
   if (isPrivateIpv4(normalized)) return true
   if (normalized.includes(':') && isPrivateIpv6(normalized)) return true
