@@ -12,8 +12,24 @@ import { StudioModule } from './studio/studio.module'
 import { UploadModule } from './upload/upload.module'
 import { UsersModule } from './users/users.module'
 import { HealthModule } from './health/health.module'
+import { ProviderModule } from './provider/provider.module'
 
 @Module({
-  imports: [PrismaModule, AssetsModule, AuthModule, SessionsModule, WorksModule, AgentModule, CanvasModule, UsersModule, MembershipModule, StudioModule, StoriesModule, UploadModule, HealthModule],
+  imports: [
+    PrismaModule,
+    AssetsModule,
+    AuthModule,
+    SessionsModule,
+    WorksModule,
+    AgentModule,
+    CanvasModule,
+    UsersModule,
+    MembershipModule,
+    StudioModule,
+    StoriesModule,
+    UploadModule,
+    HealthModule,
+    ProviderModule,
+  ],
 })
 export class AppModule {}
