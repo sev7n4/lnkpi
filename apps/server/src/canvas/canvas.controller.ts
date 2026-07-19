@@ -388,15 +388,21 @@ export class CanvasController {
 
   @Post('scene-composer/save')
   @UseGuards(AuthGuard)
-  async saveSceneComposer(@Body() dto: SaveSceneComposerDto) {
-    const data = await this.sceneComposerService.save(dto)
+  async saveSceneComposer(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: SaveSceneComposerDto,
+  ) {
+    const data = await this.sceneComposerService.save(req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 
   @Post('scene-composer/batch-generate')
   @UseGuards(AuthGuard)
-  async batchGenerateSceneComposer(@Body() dto: BatchGenerateSceneComposerDto) {
-    const data = await this.sceneComposerService.batchGenerate(dto)
+  async batchGenerateSceneComposer(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: BatchGenerateSceneComposerDto,
+  ) {
+    const data = await this.sceneComposerService.batchGenerate(req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 

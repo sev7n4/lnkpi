@@ -17,6 +17,7 @@ export type CanvasImageGenerateInput = {
   aspectRatio?: string
   resolution?: string
   count?: number
+  skipCharge?: boolean
 }
 
 export type CanvasVideoGenerateInput = {
@@ -28,6 +29,7 @@ export type CanvasVideoGenerateInput = {
   aspectRatio?: string
   resolution?: string
   crop?: string
+  skipCharge?: boolean
 }
 
 function videoCredits(duration: number): number {
@@ -67,7 +69,7 @@ export class MaterialService {
   }
 
   async generateImage(input: CanvasImageGenerateInput) {
-    const { userId, shotId, prompt, model, aspectRatio, resolution, count } = input
+    const { userId, shotId, prompt, model, aspectRatio, resolution, count, skipCharge } = input
 
     const shot = await this.prisma.shot.findUnique({
       where: { id: shotId },
@@ -88,7 +90,9 @@ export class MaterialService {
       )
     }
 
-    await this.points.consume(userId, 10, '图像生成')
+    if (!skipCharge) {
+      await this.points.consume(userId, 10, '图像生成')
+    }
 
     const material = await this.prisma.material.create({
       data: { shotId, type: 'image', prompt, status: 'generating' },
@@ -109,6 +113,7 @@ export class MaterialService {
       aspectRatio = '16:9',
       resolution = '720p',
       crop = 'none',
+      skipCharge,
     } = input
 
     const shot = await this.prisma.shot.findUnique({
@@ -119,7 +124,9 @@ export class MaterialService {
       throw new NotFoundException('分镜不存在')
     }
 
-    await this.points.consume(userId, videoCredits(duration), '视频生成')
+    if (!skipCharge) {
+      await this.points.consume(userId, videoCredits(duration), '视频生成')
+    }
 
     const material = await this.prisma.material.create({
       data: { shotId, type: 'video', prompt, status: 'generating' },

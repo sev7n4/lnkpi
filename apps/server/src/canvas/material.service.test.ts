@@ -82,6 +82,17 @@ describe('MaterialService image', () => {
     expect(consume).not.toHaveBeenCalled()
     expect(materialCreate).not.toHaveBeenCalled()
   })
+
+  it('does not charge when skipCharge is true', async () => {
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+      skipCharge: true,
+    })
+    expect(consume).not.toHaveBeenCalled()
+    expect(materialCreate).toHaveBeenCalled()
+  })
 })
 
 describe('MaterialService video', () => {
