@@ -85,13 +85,24 @@ describe('MaterialService BYOK fallback_pending', () => {
     svc = moduleRef.get(MaterialService)
   })
 
-  it('image: user fail → fallback_pending, no platform provider', async () => {
+  it('image: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+    vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
+      mergedText: 'merged cat prompt',
+      skippedMerge: false,
+    })
     imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateImage({
       userId: 'u1',
       shotId: 'shot-1',
       prompt: 'a cat',
       model: 'ch_user::custom-model',
+      refs: [
+        {
+          refKey: 'r1',
+          mediaType: 'image',
+          url: 'https://cdn.example.com/ref.png',
+        },
+      ],
     })
     await vi.waitFor(() =>
       expect(materialUpdate.mock.calls.some((c) => c[0].data.status === 'fallback_pending')).toBe(
@@ -103,6 +114,10 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.channelId).toBe('ch_user')
     expect(meta.failureClass).toBeTruthy()
     expect(meta.confirmMessage).toBe(BYOK_FALLBACK_CONFIRM_MESSAGE)
+    expect(meta.effectivePrompt).toContain('merged cat prompt')
+    expect(meta.effectivePrompt).toContain('https://cdn.example.com/ref.png')
+    expect(meta.referenceImages).toEqual(['https://cdn.example.com/ref.png'])
+    expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createImageProvider).toHaveBeenCalledTimes(1)
     expect(createImageProvider).toHaveBeenCalledWith({
       apiKey: 'user-key',
@@ -110,7 +125,11 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
-  it('video: user fail → fallback_pending, no platform provider', async () => {
+  it('video: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+    vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
+      mergedText: 'merged walk prompt',
+      skippedMerge: false,
+    })
     videoGenerate.mockRejectedValueOnce(new Error('unauthorized'))
     await svc.generateVideo({
       userId: 'u1',
@@ -118,12 +137,25 @@ describe('MaterialService BYOK fallback_pending', () => {
       prompt: 'walk',
       model: 'ch_user::custom-model',
       duration: 5,
+      refs: [
+        {
+          refKey: 'r1',
+          mediaType: 'image',
+          url: 'https://cdn.example.com/frame.png',
+        },
+      ],
     })
     await vi.waitFor(() =>
       expect(materialUpdate.mock.calls.some((c) => c[0].data.status === 'fallback_pending')).toBe(
         true,
       ),
     )
+    const call = materialUpdate.mock.calls.find((c) => c[0].data.status === 'fallback_pending')![0]
+    const meta = JSON.parse(String(call.data.metadata))
+    expect(meta.effectivePrompt).toBe('merged walk prompt')
+    expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
+    expect(meta.image).toBe('https://cdn.example.com/frame.png')
+    expect(call.data.prompt).toBe('merged walk prompt')
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
       apiKey: 'user-key',
@@ -157,6 +189,48 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     expect(createImageProvider).toHaveBeenCalledWith(undefined)
     expect(imageGenerate).toHaveBeenCalled()
+    const meta = JSON.parse(String(result.metadata))
+    expect(meta.providerFallback).toBe(true)
+  })
+
+  it('video confirm → platform generate called with catalog model', async () => {
+    videoGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'ch_user::custom-model',
+      duration: 5,
+      refs: [
+        {
+          refKey: 'r1',
+          mediaType: 'image',
+          url: 'https://cdn.example.com/frame.png',
+        },
+      ],
+    })
+    await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+
+    vi.clearAllMocks()
+    videoGenerate.mockResolvedValueOnce({ url: 'https://example.com/plat.mp4' })
+    resolveForGeneration.mockResolvedValue({
+      channelId: 'platform',
+      modelName: 'seedance-2.0-min',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'plat', baseUrl: 'https://p.example.com/v1' },
+      source: 'platform',
+    })
+
+    const result = await svc.confirmPlatformFallback('u1', 'm1')
+    expect(result.status).toBe('completed')
+    expect(createVideoProvider).toHaveBeenCalledWith(undefined)
+    expect(videoGenerate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        model: 'seedance-2.0-min',
+        image: 'https://cdn.example.com/frame.png',
+      }),
+    )
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
   })

@@ -233,6 +233,37 @@ describe('StudioService BYOK fallback_pending', () => {
     void credCall
   })
 
+  it('text confirm → platform uses catalog gateway model, not user custom', async () => {
+    textGenerate.mockRejectedValueOnce(new Error('unauthorized'))
+    await svc.generateText('u1', 'hello', 'ch_user::custom-model')
+    vi.clearAllMocks()
+    textGenerate.mockResolvedValueOnce({ text: 'platform ok' })
+
+    const result = await svc.confirmPlatformFallback('u1', 'g1')
+    expect(result.status).toBe('completed')
+    expect(createTextProvider).toHaveBeenCalledWith(undefined)
+    expect(textGenerate).toHaveBeenCalledWith('hello', 'gemini-3.1-flash')
+    const [[, modelArg]] = textGenerate.mock.calls
+    expect(modelArg).not.toBe('custom-model')
+  })
+
+  it('audio confirm → platform uses catalog gateway model, not user custom', async () => {
+    audioGenerate.mockRejectedValueOnce(new Error('network'))
+    await svc.generateAudio('u1', 'hi', { model: 'ch_user::custom-model' })
+    vi.clearAllMocks()
+    audioGenerate.mockResolvedValueOnce({ url: 'https://example.com/a.mp3' })
+
+    const result = await svc.confirmPlatformFallback('u1', 'g1')
+    expect(result.status).toBe('completed')
+    expect(createAudioProvider).toHaveBeenCalledWith(undefined)
+    expect(audioGenerate).toHaveBeenCalledWith(
+      'hi',
+      expect.objectContaining({ model: 'speech-2.8-hd' }),
+    )
+    const opts = audioGenerate.mock.calls[0][1] as { model?: string }
+    expect(opts.model).not.toBe('custom-model')
+  })
+
   it('video confirm → platform generate called', async () => {
     videoGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateVideo('u1', 'walk', 'ch_user::custom-model')

@@ -16,6 +16,7 @@ import {
 import {
   BYOK_FALLBACK_CONFIRM_MESSAGE,
   resolveImageSize,
+  resolveModelKey,
   type GenerationRefPayload,
   type ImageResolutionTier,
 } from '@lnkpi/shared'
@@ -285,7 +286,11 @@ export class MaterialService {
 
     if (material.type === 'image') {
       const size = String(meta.size ?? resolveImageSize('16:9', '1K'))
-      const modelId = String(meta.gatewayModelId ?? meta.modelId ?? 'seedream-5.0-pro')
+      const modelKey =
+        typeof meta.modelKey === 'string' && meta.modelKey.trim()
+          ? meta.modelKey
+          : undefined
+      const modelId = resolveModelKey('image', modelKey).entry.gatewayModelId
       const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
       const { url } = await createImageProvider(undefined).generate(prompt, {
         modelId,
@@ -301,6 +306,7 @@ export class MaterialService {
           prompt,
           metadata: JSON.stringify({
             ...meta,
+            gatewayModelId: modelId,
             providerFallback: true,
             channelId: 'platform',
           }),
@@ -310,13 +316,23 @@ export class MaterialService {
 
     if (material.type === 'video') {
       const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
+      const modelKey =
+        typeof meta.modelKey === 'string' && meta.modelKey.trim()
+          ? meta.modelKey
+          : undefined
+      const platformModel = resolveModelKey('video', modelKey).entry.gatewayModelId
       const { url } = await createVideoProvider(undefined).generate(prompt, {
-        model: String(meta.gatewayModelId ?? meta.modelName ?? 'seedance-2.0-min'),
+        model: platformModel,
         duration: Number(meta.duration ?? 5),
         aspectRatio: String(meta.aspectRatio ?? '16:9'),
         resolution: String(meta.resolution ?? '720p'),
         crop: meta.crop === undefined ? undefined : String(meta.crop),
-        image: typeof meta.image === 'string' ? meta.image : undefined,
+        image:
+          typeof meta.image === 'string'
+            ? meta.image
+            : Array.isArray(meta.referenceImages)
+              ? (meta.referenceImages as string[])[0]
+              : undefined,
       })
       return this.prisma.material.update({
         where: { id: material.id },
@@ -327,6 +343,7 @@ export class MaterialService {
           prompt,
           metadata: JSON.stringify({
             ...meta,
+            gatewayModelId: platformModel,
             providerFallback: true,
             channelId: 'platform',
           }),
@@ -384,39 +401,40 @@ export class MaterialService {
     mentionedKeys: string[] | undefined,
     resolved: ResolvedGenerationProvider,
   ) {
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+      prompt,
+      refs,
+      'image',
+      mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
+    )
+    this.logger.log(
+      JSON.stringify({
+        event: 'canvas_material_merge',
+        skippedMerge,
+        refsCount: refs?.length ?? 0,
+        referenceImages: referenceImages.length,
+      }),
+    )
+    const size = resolveImageSize(
+      aspectRatio ?? '16:9',
+      (resolution ?? '1K') as ImageResolutionTier,
+    )
+    const built = buildImageProviderOptions({
+      modelKey: resolved.modelName,
+      size,
+      n: 1,
+      referenceImages,
+    })
+    const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
+    const primary = built.referenceImages[0]
+    const base = primary ? buildPromptWithRefImage(mergedText, primary) : mergedText
+    const effectivePrompt = [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
+
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
-        prompt,
-        refs,
-        'image',
-        mentionedKeys,
-        resolved.source === 'user' ? resolved.credentials : undefined,
-      )
-      this.logger.log(
-        JSON.stringify({
-          event: 'canvas_material_merge',
-          skippedMerge,
-          refsCount: refs?.length ?? 0,
-          referenceImages: referenceImages.length,
-        }),
-      )
-      const size = resolveImageSize(
-        aspectRatio ?? '16:9',
-        (resolution ?? '1K') as ImageResolutionTier,
-      )
-      const built = buildImageProviderOptions({
-        modelKey: resolved.modelName,
-        size,
-        n: 1,
-        referenceImages,
-      })
-      const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
-      const primary = built.referenceImages[0]
-      const base = primary ? buildPromptWithRefImage(mergedText, primary) : mergedText
-      const effectivePrompt = [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
       const provider = createImageProvider(userProviderOpts(resolved))
       const { url } = await provider.generate(effectivePrompt, {
         modelId,
@@ -437,6 +455,8 @@ export class MaterialService {
             aspectRatio,
             resolution,
             size: built.size,
+            referenceImages,
+            skippedMerge,
             channelId: resolved.channelId,
             effectivePrompt,
           }),
@@ -447,30 +467,23 @@ export class MaterialService {
       if (resolved.source === 'user') {
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
         const prev = parseMeta(existing?.metadata)
-        const size = resolveImageSize(
-          aspectRatio ?? '16:9',
-          (resolution ?? '1K') as ImageResolutionTier,
-        )
-        const built = buildImageProviderOptions({
-          modelKey: resolved.modelName,
-          size,
-          n: 1,
-          referenceImages: [],
-        })
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
             status: 'fallback_pending',
+            prompt: effectivePrompt,
             metadata: JSON.stringify({
               ...prev,
               ...built.meta,
-              modelId: resolved.modelName,
+              modelId,
               model,
               originalModel: model,
               aspectRatio,
               resolution,
-              size,
-              effectivePrompt: existing?.prompt ?? prompt,
+              size: built.size,
+              referenceImages,
+              skippedMerge,
+              effectivePrompt,
               channelId: resolved.channelId,
               failureClass: classifyByokFailure(err),
               confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
@@ -500,35 +513,36 @@ export class MaterialService {
     mentionedKeys: string[] | undefined,
     resolved: ResolvedGenerationProvider,
   ) {
+    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+      prompt,
+      refs,
+      'video',
+      mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
+    )
+    this.logger.log(
+      JSON.stringify({
+        event: 'canvas_material_merge',
+        skippedMerge,
+        refsCount: refs?.length ?? 0,
+        referenceImages: referenceImages.length,
+      }),
+    )
+    const built = buildVideoProviderOptions({
+      modelKey: resolved.modelName,
+      duration,
+      aspectRatio,
+      resolution,
+      crop,
+      referenceImages,
+    })
+    const gatewayModel = resolved.source === 'user' ? resolved.modelName : built.model
+    const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
+
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
-        prompt,
-        refs,
-        'video',
-        mentionedKeys,
-        resolved.source === 'user' ? resolved.credentials : undefined,
-      )
-      this.logger.log(
-        JSON.stringify({
-          event: 'canvas_material_merge',
-          skippedMerge,
-          refsCount: refs?.length ?? 0,
-          referenceImages: referenceImages.length,
-        }),
-      )
-      const built = buildVideoProviderOptions({
-        modelKey: resolved.modelName,
-        duration,
-        aspectRatio,
-        resolution,
-        crop,
-        referenceImages,
-      })
-      const gatewayModel = resolved.source === 'user' ? resolved.modelName : built.model
-      const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
       const { url } = await createVideoProvider(userProviderOpts(resolved)).generate(
         effectivePrompt,
         {
@@ -555,6 +569,8 @@ export class MaterialService {
             resolution,
             crop,
             image: built.image,
+            referenceImages,
+            skippedMerge,
             channelId: resolved.channelId,
             effectivePrompt,
           }),
@@ -565,18 +581,11 @@ export class MaterialService {
       if (resolved.source === 'user') {
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
         const prev = parseMeta(existing?.metadata)
-        const built = buildVideoProviderOptions({
-          modelKey: resolved.modelName,
-          duration,
-          aspectRatio,
-          resolution,
-          crop,
-          referenceImages: [],
-        })
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
             status: 'fallback_pending',
+            prompt: effectivePrompt,
             metadata: JSON.stringify({
               ...prev,
               ...built.meta,
@@ -588,7 +597,9 @@ export class MaterialService {
               resolution,
               crop,
               image: built.image,
-              effectivePrompt: existing?.prompt ?? prompt,
+              referenceImages,
+              skippedMerge,
+              effectivePrompt,
               channelId: resolved.channelId,
               failureClass: classifyByokFailure(err),
               confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,

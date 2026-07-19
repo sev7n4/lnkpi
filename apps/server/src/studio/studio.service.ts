@@ -17,6 +17,7 @@ import {
   resolveImageSize,
   resolveModelKey,
   type ImageResolutionTier,
+  type StudioModality,
 } from '@lnkpi/shared'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -127,6 +128,18 @@ export class StudioService {
       confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
       originalModel: extra.originalModel,
     }
+  }
+
+  /** Catalog gateway id for platform confirm — never reuse user-channel modelName. */
+  private platformGatewayModelId(
+    modality: StudioModality,
+    meta: Record<string, unknown>,
+  ): string {
+    const requested =
+      typeof meta.modelKey === 'string' && meta.modelKey.trim()
+        ? meta.modelKey
+        : undefined
+    return resolveModelKey(modality, requested).entry.gatewayModelId
   }
 
   async generateText(
@@ -638,7 +651,8 @@ export class StudioService {
     }
 
     if (record.type === 'text' || record.type === 'prompt') {
-      const gatewayModelId = String(meta.gatewayModelId ?? 'gemini-3.1-flash')
+      // Never reuse user-channel modelName against platform credentials.
+      const gatewayModelId = this.platformGatewayModelId('text', meta)
       const referenceImages = Array.isArray(meta.referenceImages)
         ? (meta.referenceImages as string[])
         : []
@@ -671,6 +685,7 @@ export class StudioService {
             ...meta,
             ...promptMeta,
             text: record.type === 'text' ? text : meta.text,
+            gatewayModelId,
             providerFallback: true,
             channelId: 'platform',
           }),
@@ -679,12 +694,15 @@ export class StudioService {
     }
 
     if (record.type === 'audio') {
-      const audioOptions = (meta.audioOptions as Record<string, unknown> | undefined) ?? {
-        model: String(meta.gatewayModelId ?? 'speech-2.8-hd'),
-        voice: meta.voice,
-        speed: meta.speed,
-        volume: meta.volume,
-        pitch: meta.pitch,
+      const platformModel = this.platformGatewayModelId('audio', meta)
+      const prevAudio = (meta.audioOptions as Record<string, unknown> | undefined) ?? {}
+      const audioOptions = {
+        ...prevAudio,
+        model: platformModel,
+        voice: prevAudio.voice ?? meta.voice,
+        speed: prevAudio.speed ?? meta.speed,
+        volume: prevAudio.volume ?? meta.volume,
+        pitch: prevAudio.pitch ?? meta.pitch,
       }
       const { url } = await createAudioProvider(undefined).generate(
         record.prompt,
@@ -698,6 +716,8 @@ export class StudioService {
           status: 'completed',
           metadata: JSON.stringify({
             ...meta,
+            audioOptions,
+            gatewayModelId: platformModel,
             hasTtsData: url.startsWith('data:'),
             providerFallback: true,
             channelId: 'platform',
