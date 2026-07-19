@@ -152,7 +152,7 @@ describe('StudioService BYOK fallback_pending', () => {
       expect(generate).toHaveBeenCalledTimes(1)
 
       resolveForGeneration.mockClear()
-      createProvider.mockClear()
+      vi.mocked(createProvider).mockClear()
       generate.mockClear()
     },
   )

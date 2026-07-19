@@ -1,7 +1,8 @@
 # BYOK 自定义网关设计规格
 
 **日期**：2026-07-19  
-**状态**：已设计 / 待实现  
+**状态**：已实现 / 待合入  
+
 **分支建议**：`feature/byok-provider-channels`  
 **UI 复刻基准**：Vercel 部署 [infinite-canvas-sage-phi](https://infinite-canvas-sage-phi.vercel.app) **v0.4.0** 配置弹窗（渠道 / 模型 / 生成偏好 / WebDAV）  
 **参考源码对照**：GitHub `basketikun/infinite-canvas`（字段语义对照；不以 v0.8+/main 的 Drawer/脚本编辑器为复刻目标）

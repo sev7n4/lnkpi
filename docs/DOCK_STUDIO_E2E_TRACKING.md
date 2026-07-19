@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-19（§C2.1 Canvas T*/I* refs 验收；§0.5 P0 手测清单）
+> **最后更新**：2026-07-19（§十 BYOK 渠道；§C2.1 Canvas T*/I* refs 验收）
 
 ---
 
@@ -131,6 +131,7 @@
 | 七 | 建议优先开工的 3 个 Sprint | 近期排期 |
 | 八 | C2 Canvas 旁路 adapter 验收 | C2 实现状态与手测清单 |
 | 九 | C2.1 Canvas T*/I* refs 验收 | C2.1 实现状态与手测清单 |
+| 十 | BYOK 自定义网关验收 | 渠道加密 / 四 Tab / fallback_pending |
 
 ---
 
@@ -807,8 +808,57 @@ Phase 0 (P0-1~P0-6)
 | C2.1-2 | **image** → shot-linked **video** → 生成 | I\* 进入图生视频 referenceImages | ☐ |
 | C2.1-3 | **已展开** sceneComposer：改媒体 prompt/@mention → 批量生成 | batch items 含媒体子节点 prompt/refs | ☐ |
 | C2.1-4 | **未展开** sceneComposer batch | composer 上 T\*/I\* 生效 | ☐ |
-| C2.1-5 | refs 含 `blob:` | Web 拦截不发请求；直打 API Server 扣费前拒绝 | ☐ |
+| C2.1-5 | refs 含 `blob:` | Web 拦截不发请求；直打 API Server 扣费前拒绝 | ◑ 服务端已验（生产 API 400「参考图尚未上传」，积分 265→265 未扣；Web UI 拦截待手测） |
 | C2.1-6 | 积分不足 → sceneComposer 批量生成 | 整批零启动；无 shot 进入 generating | ☐ |
+
+---
+
+## 十、BYOK 自定义网关验收（2026-07-19）
+
+> **规格**：[2026-07-19-byok-provider-channels-design.md](./superpowers/specs/2026-07-19-byok-provider-channels-design.md)  
+> **计划**：[2026-07-19-byok-provider-channels.md](./superpowers/plans/2026-07-19-byok-provider-channels.md)  
+> **分支**：`feature/byok-provider-channels`  
+> **状态**：**实现完成 / 待合入** — AES-GCM 加密渠道、v0.4.0 四 Tab、Dock 可选模型、`fallback_pending` 二次确认、WebDAV 服务端代理
+
+### 10.1 自动化验收
+
+| 项 | 结果 | 说明 |
+|----|------|------|
+| `pnpm install --frozen-lockfile` | ✅ | lockfile 一致 |
+| `prisma generate` + `db push` | ✅ | 含 ProviderChannel / Preferences / Webdav |
+| `pnpm build` | ✅ | shared / agent / web / server（server 排除 `*.test.ts`） |
+| `pnpm test` | ✅ | shared / agent / web / server 全绿 |
+
+### 10.2 实现范围摘要
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| `channelId::modelName` 编解码 | ✅ | `@lnkpi/shared` |
+| AES-256-GCM + SSRF URL 护栏 | ✅ | `BYOK_ENCRYPTION_KEY_V1`；GET 永不回传明文 |
+| bootstrap / channels / preferences / webdav API | ✅ | 平台渠道只读 `platform` |
+| ProviderResolver + create*Provider opts | ✅ | 用户凭据注入生成链 |
+| Studio / Material `fallback_pending` | ✅ | confirm / cancel 平台重试 |
+| ProviderConfigDialog 四 Tab | ✅ | 渠道 / 模型 / 生成偏好 / WebDAV |
+| Dock 绑定可选模型 + 确认弹窗 | ✅ | 停用拦截；串行 dedupe |
+| WebDAV 服务端 test/sync | ✅ | sessions.json MVP；无 API Key 入同步包 |
+
+### 10.3 浏览器手测清单
+
+| # | 步骤 | 预期 | 通过 |
+|---|------|------|------|
+| BYOK-1 | 打开配置弹窗 → 四 Tab 字段可见 | 对齐 v0.4.0；保存走服务端 | ☐ |
+| BYOK-2 | 新建用户渠道 + 有效 Key → 生成 | 走用户渠道成功；bootstrap 无明文 key | ☐ |
+| BYOK-3 | 故意错误 Key → 生成 | 进入确认弹窗文案；点继续 → 平台重试成功 | ☐ |
+| BYOK-4 | 点取消 | 节点/记录 `failed`，不调平台 | ☐ |
+| BYOK-5 | Dock 模型列表 | 仅 preferences 可选项；标签 `模型名（渠道名）` | ☐ |
+| BYOK-6 | 停用模型仍挂在节点上 → 点生成 | 拦截并提示重选 | ☐ |
+| BYOK-7 | WebDAV test（可用环境） | 服务端代理成功/清晰错误；无密码回传 | ☐ |
+| BYOK-8 | `GET /provider/bootstrap` | JSON 无明文 apiKey / password | ☐ |
+
+### 10.4 运维注意
+
+- 部署前配置 `BYOK_ENCRYPTION_KEY_V1`（32 字节随机，base64），见 `.env.example`
+- 勿用 `JWT_SECRET` 兼作加密主密钥
 
 ---
 
@@ -836,6 +886,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-16 | — | 节点 E2E 审计 + §0.5 P0 清单 | 真实生成待 API Key | U1–U8 浏览器手测 |
 | 2026-07-19 | C2 | Canvas 旁路 adapter + 统一计费（T1–T6） | 浏览器手测 C2-1~C2-6 待验 | C2 PR 合入 → C2.1 refs |
 | 2026-07-19 | C2.1 | Canvas T\*/I\* refs + prompt merge（T1–T6） | 浏览器手测 C2.1-1~C2.1-6 待验 | C2.1 PR 合入 → C3 V\* |
+| 2026-07-19 | BYOK | 渠道加密 + 四 Tab + fallback_pending（T1–T9） | 浏览器手测 BYOK-1~8 待验 | PR 合入 → 配置加密主密钥部署 |
 
 ---
 
@@ -848,8 +899,10 @@ Phase 0 (P0-1~P0-6)
 | [superpowers/plans/2026-07-09-neowow-workflow.md](./superpowers/plans/2026-07-09-neowow-workflow.md) | M1/M2 实现计划 |
 | [2026-07-19-c2-canvas-generation-adapter-design.md](./superpowers/specs/2026-07-19-c2-canvas-generation-adapter-design.md) | C2 Canvas 旁路 adapter 规格 |
 | [2026-07-19-c21-canvas-refs-design.md](./superpowers/specs/2026-07-19-c21-canvas-refs-design.md) | C2.1 Canvas T\*/I\* refs 规格 |
+| [2026-07-19-byok-provider-channels-design.md](./superpowers/specs/2026-07-19-byok-provider-channels-design.md) | BYOK 自定义网关规格 |
+| [2026-07-19-byok-provider-channels.md](./superpowers/plans/2026-07-19-byok-provider-channels.md) | BYOK 实现计划 |
 | [PRODUCT_CAPABILITY_MAP.md](./PRODUCT_CAPABILITY_MAP.md) | 产品能力地图 |
 
 ---
 
-**最后更新**：2026-07-19（§9 C2.1 Canvas T*/I* refs 验收；M3 ~90%）
+**最后更新**：2026-07-19（§十 BYOK 自定义网关验收；§九 C2.1）
