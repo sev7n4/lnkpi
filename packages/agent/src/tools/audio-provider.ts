@@ -77,7 +77,18 @@ function isAgnesBaseUrl(baseUrl?: string) {
   return Boolean(baseUrl?.includes('agnes-ai.com'))
 }
 
-export function createAudioProvider(): AudioProvider {
+export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
+
+export function createAudioProvider(opts?: ProviderCredentialOpts): AudioProvider {
+  if (opts?.apiKey) {
+    const baseUrl = opts.baseUrl ?? 'https://api.openai.com/v1'
+    const model = opts.model ?? 'tts-1'
+    const tts = new OpenAITTSProvider(opts.apiKey, baseUrl, model)
+    if (isAgnesBaseUrl(baseUrl)) {
+      return new FallbackAudioProvider(tts)
+    }
+    return tts
+  }
   const key = process.env.OPENAI_API_KEY
   const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1'
   const model = process.env.OPENAI_TTS_MODEL ?? 'tts-1'

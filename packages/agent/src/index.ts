@@ -5,7 +5,7 @@ export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } fr
 export { createTextProvider, PlaceholderTextProvider, OpenAITextProvider } from './tools/text-provider'
 export { createVideoProvider, PlaceholderVideoProvider, AgnesVideoProvider, resolveVideoParams } from './tools/video-provider'
 export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, FallbackAudioProvider } from './tools/audio-provider'
-export type { ImageProvider } from './tools/image-provider'
+export type { ImageProvider, ProviderCredentialOpts } from './tools/image-provider'
 export type { TextProvider } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'

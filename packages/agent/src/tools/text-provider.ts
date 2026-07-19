@@ -39,7 +39,12 @@ export class OpenAITextProvider implements TextProvider {
   }
 }
 
-export function createTextProvider(): TextProvider {
+export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
+
+export function createTextProvider(opts?: ProviderCredentialOpts): TextProvider {
+  if (opts?.apiKey) {
+    return new OpenAITextProvider(opts.apiKey, opts.baseUrl, opts.model)
+  }
   const key = process.env.OPENAI_API_KEY
   if (key) {
     return new OpenAITextProvider(key, process.env.OPENAI_BASE_URL, process.env.OPENAI_CHAT_MODEL)
