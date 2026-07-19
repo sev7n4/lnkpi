@@ -1,10 +1,31 @@
-import { Inject, Injectable } from '@nestjs/common'
-import { createImageProvider, createVideoProvider } from '@lnkpi/agent'
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  buildImageProviderOptions,
+  createImageProvider,
+  createVideoProvider,
+} from '@lnkpi/agent'
+import { resolveImageSize, type ImageResolutionTier } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { PointsService } from '../points/points.service'
+
+export type CanvasImageGenerateInput = {
+  userId: string
+  shotId: string
+  prompt: string
+  model?: string
+  aspectRatio?: string
+  resolution?: string
+  count?: number
+}
 
 @Injectable()
 export class MaterialService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(MaterialService.name)
+
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PointsService) private readonly points: PointsService,
+  ) {}
 
   async createFromAgent(data: {
     id?: string
@@ -27,11 +48,36 @@ export class MaterialService {
     })
   }
 
-  async generateImage(shotId: string, prompt: string) {
+  async generateImage(input: CanvasImageGenerateInput) {
+    const { userId, shotId, prompt, model, aspectRatio, resolution, count } = input
+
+    const shot = await this.prisma.shot.findUnique({
+      where: { id: shotId },
+      include: { session: true },
+    })
+    if (!shot || shot.session.userId !== userId) {
+      throw new NotFoundException('分镜不存在')
+    }
+
+    const requested = count ?? 1
+    if (requested > 1) {
+      this.logger.log(
+        JSON.stringify({
+          event: 'canvas_image_count_clamped',
+          requested,
+          effective: 1,
+        }),
+      )
+    }
+
+    await this.points.consume(userId, 10, '图像生成')
+
     const material = await this.prisma.material.create({
       data: { shotId, type: 'image', prompt, status: 'generating' },
     })
-    this.runImageGeneration(material.id, prompt).catch(console.error)
+    this.runImageGeneration(material.id, prompt, model, aspectRatio, resolution).catch(
+      console.error,
+    )
     return material
   }
 
@@ -49,10 +95,31 @@ export class MaterialService {
     return material
   }
 
-  private async runImageGeneration(materialId: string, prompt: string) {
+  private async runImageGeneration(
+    materialId: string,
+    prompt: string,
+    model?: string,
+    aspectRatio?: string,
+    resolution?: string,
+  ) {
     try {
+      const size = resolveImageSize(
+        aspectRatio ?? '16:9',
+        (resolution ?? '1K') as ImageResolutionTier,
+      )
+      const built = buildImageProviderOptions({
+        modelKey: model,
+        size,
+        n: 1,
+        referenceImages: [],
+      })
+      const effectivePrompt = [prompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
       const provider = createImageProvider()
-      const { url } = await provider.generate(prompt)
+      const { url } = await provider.generate(effectivePrompt, {
+        modelId: built.modelId,
+        size: built.size,
+        n: built.n,
+      })
       await this.prisma.material.update({
         where: { id: materialId },
         data: { url, thumbnail: url, status: 'completed' },

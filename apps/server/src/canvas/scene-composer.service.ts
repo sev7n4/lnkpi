@@ -71,11 +71,11 @@ export class SceneComposerService {
   }
 
   async batchGenerate(dto: SceneComposerBatchGenerateRequest) {
-    await this.assertSession(dto.sessionId)
+    const session = await this.assertSession(dto.sessionId)
     const results: Array<{ shotNodeId: string; materialId?: string; mediaType: string }> = []
 
     for (const item of dto.items) {
-      const result = await this.generateItem(dto.sessionId, item)
+      const result = await this.generateItem(dto.sessionId, session.userId, item)
       results.push(result)
     }
 
@@ -85,7 +85,11 @@ export class SceneComposerService {
     }
   }
 
-  private async generateItem(sessionId: string, item: SceneComposerBatchItem) {
+  private async generateItem(
+    sessionId: string,
+    userId: string,
+    item: SceneComposerBatchItem,
+  ) {
     const existing = await this.prisma.shot.findUnique({ where: { id: item.shotNodeId } })
     if (existing) {
       await this.shotService.update(item.shotNodeId, {
@@ -107,7 +111,11 @@ export class SceneComposerService {
       return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'video' }
     }
 
-    const material = await this.materialService.generateImage(item.shotNodeId, item.prompt)
+    const material = await this.materialService.generateImage({
+      userId,
+      shotId: item.shotNodeId,
+      prompt: item.prompt,
+    })
     return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'image' }
   }
 }

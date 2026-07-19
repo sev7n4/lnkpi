@@ -301,8 +301,12 @@ export class CanvasController {
 
   @Post('material/generate-image')
   @UseGuards(AuthGuard)
-  async generateImage(@Body() dto: GenerateImageDto) {
-    const data = await this.materialService.generateImage(dto.shotId, dto.prompt)
+  async generateImage(@Req() req: { user: { sub: string } }, @Body() dto: GenerateImageDto) {
+    const data = await this.materialService.generateImage({
+      userId: req.user.sub,
+      shotId: dto.shotId,
+      prompt: dto.prompt,
+    })
     return { code: 0, message: 'ok', data }
   }
 
