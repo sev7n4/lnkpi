@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { NotFoundException } from '@nestjs/common'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { SceneComposerService } from './scene-composer.service'
@@ -156,6 +156,52 @@ describe('SceneComposerService batchGenerate', () => {
     expect(generateVideo).not.toHaveBeenCalled()
     expect(shotUpdate).not.toHaveBeenCalled()
     expect(shotCreate).not.toHaveBeenCalled()
+  })
+
+  it('rejects batch when any item has blob ref before charging', async () => {
+    await expect(
+      svc.batchGenerate('u1', {
+        sessionId: 'sess-1',
+        composerNodeId: 'composer-1',
+        items: [
+          {
+            shotNodeId: 'shot-img',
+            prompt: 'a cat',
+            mediaType: 'image',
+            refs: [{ refKey: 'I1', mediaType: 'image', url: 'blob:x' }],
+          },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+
+    expect(consume).not.toHaveBeenCalled()
+    expect(generateImage).not.toHaveBeenCalled()
+    expect(generateVideo).not.toHaveBeenCalled()
+  })
+
+  it('passes refs and mentionedKeys to material with skipCharge', async () => {
+    await svc.batchGenerate('u1', {
+      sessionId: 'sess-1',
+      composerNodeId: 'composer-1',
+      items: [
+        {
+          shotNodeId: 'shot-img',
+          prompt: 'a cat @I1',
+          mediaType: 'image',
+          model: 'seedream-5.0-pro',
+          refs: [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/a.png' }],
+          mentionedKeys: ['I1'],
+        },
+      ],
+    })
+
+    expect(generateImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skipCharge: true,
+        refs: expect.arrayContaining([expect.objectContaining({ refKey: 'I1' })]),
+        mentionedKeys: ['I1'],
+      }),
+    )
   })
 
   it('does not create shots or materials when consume throws', async () => {

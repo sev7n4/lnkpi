@@ -1,4 +1,7 @@
 import { api } from './api'
+import type { GenerationRefPayload } from '@lnkpi/shared'
+
+export type StudioRefPayload = GenerationRefPayload
 
 export interface GenerationRecord {
   id: string
@@ -19,14 +22,6 @@ export interface AudioGenerateOptions {
   volume?: number
   pitch?: number
   model?: string
-}
-
-export type StudioRefPayload = {
-  refKey: string
-  mediaType: string
-  label?: string
-  text?: string
-  url?: string
 }
 
 export const studioApi = {

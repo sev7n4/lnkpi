@@ -1,19 +1,27 @@
 import 'reflect-metadata'
-import { NotFoundException } from '@nestjs/common'
+import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { resolveImageSize } from '@lnkpi/shared'
-import { createImageProvider, createVideoProvider } from '@lnkpi/agent'
+import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@lnkpi/agent'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 
-const imageGenerate = vi.fn(async () => ({ url: 'https://example.com/a.png' }))
-const videoGenerate = vi.fn(async () => ({ url: 'https://example.com/v.mp4' }))
+const imageGenerate = vi.fn(
+  async (_prompt: string, _opts?: Record<string, unknown>) => ({ url: 'https://example.com/a.png' }),
+)
+const videoGenerate = vi.fn(
+  async (_prompt: string, _opts?: Record<string, unknown>) => ({ url: 'https://example.com/v.mp4' }),
+)
 vi.mock('@lnkpi/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@lnkpi/agent')>()
   return {
     ...actual,
+    mergeRefsToPrompt: vi.fn(async (input: { localPrompt?: string }) => ({
+      mergedText: input.localPrompt ?? 'merged',
+      skippedMerge: true,
+    })),
     createImageProvider: vi.fn(() => ({ generate: imageGenerate })),
     createVideoProvider: vi.fn(() => ({ generate: videoGenerate })),
   }
@@ -93,6 +101,38 @@ describe('MaterialService image', () => {
     expect(consume).not.toHaveBeenCalled()
     expect(materialCreate).toHaveBeenCalled()
   })
+
+  it('rejects blob refs before charging', async () => {
+    await expect(
+      svc.generateImage({
+        userId: 'u1',
+        shotId: 'shot-1',
+        prompt: 'x',
+        refs: [{ refKey: 'I1', mediaType: 'image', url: 'blob:http://localhost/x' }],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+    expect(consume).not.toHaveBeenCalled()
+    expect(materialCreate).not.toHaveBeenCalled()
+  })
+
+  it('passes I* into image adapter and merges T*', async () => {
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'local',
+      model: 'seedream-5.0-pro',
+      refs: [
+        { refKey: 'T1', mediaType: 'text', text: 'style soft' },
+        { refKey: 'I1', mediaType: 'image', url: 'https://example.com/a.png' },
+      ],
+      mentionedKeys: ['T1'],
+    })
+    await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
+    expect(mergeRefsToPrompt).toHaveBeenCalled()
+    const [prompt, opts] = imageGenerate.mock.calls[0]
+    expect(String(prompt)).toContain('[ref-image:https://example.com/a.png]')
+    expect(opts).toMatchObject({ n: 1, modelId: 'seedream-5.0-pro' })
+  })
 })
 
 describe('MaterialService video', () => {
@@ -162,5 +202,19 @@ describe('MaterialService video', () => {
     ).rejects.toBeInstanceOf(NotFoundException)
     expect(consume).not.toHaveBeenCalled()
     expect(materialCreate).not.toHaveBeenCalled()
+  })
+
+  it('passes I1 as video options.image', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'seedance-2.0-min',
+      duration: 5,
+      refs: [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/ref.png' }],
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    const [, opts] = videoGenerate.mock.calls[0]
+    expect(opts).toMatchObject({ image: 'https://example.com/ref.png' })
   })
 })

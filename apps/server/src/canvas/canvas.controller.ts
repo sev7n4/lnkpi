@@ -2,6 +2,7 @@ import { Body, Controller, Get, Inject, Post, Put, Query, Req, UseGuards } from 
 import { IsArray, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import type {
+  RefMediaType,
   SceneComposerBatchGenerateRequest,
   SceneComposerSaveRequest,
   VideoCompositionExportRequest,
@@ -44,6 +45,26 @@ class CreateShotDto {
   prompt?: string
 }
 
+class CanvasRefDto {
+  @IsString()
+  refKey!: string
+
+  @IsIn(['text', 'image', 'video', 'audio'])
+  mediaType!: RefMediaType
+
+  @IsOptional()
+  @IsString()
+  label?: string
+
+  @IsOptional()
+  @IsString()
+  text?: string
+
+  @IsOptional()
+  @IsString()
+  url?: string
+}
+
 class GenerateImageDto {
   @IsString()
   shotId!: string
@@ -66,6 +87,17 @@ class GenerateImageDto {
   @IsOptional()
   @IsNumber()
   count?: number
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CanvasRefDto)
+  refs?: CanvasRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class GenerateVideoDto {
@@ -95,6 +127,17 @@ class GenerateVideoDto {
   @IsOptional()
   @IsString()
   crop?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CanvasRefDto)
+  refs?: CanvasRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class EditShotDto {
@@ -232,6 +275,17 @@ class SceneComposerBatchItemDto {
   @IsOptional()
   @IsNumber()
   count?: number
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CanvasRefDto)
+  refs?: CanvasRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class BatchGenerateSceneComposerDto implements SceneComposerBatchGenerateRequest {
@@ -360,6 +414,8 @@ export class CanvasController {
       aspectRatio: dto.aspectRatio,
       resolution: dto.resolution,
       count: dto.count,
+      refs: dto.refs,
+      mentionedKeys: dto.mentionedKeys,
     })
     return { code: 0, message: 'ok', data }
   }
@@ -376,6 +432,8 @@ export class CanvasController {
       aspectRatio: dto.aspectRatio,
       resolution: dto.resolution,
       crop: dto.crop,
+      refs: dto.refs,
+      mentionedKeys: dto.mentionedKeys,
     })
     return { code: 0, message: 'ok', data }
   }

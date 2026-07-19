@@ -1,5 +1,7 @@
 /** 导演台 sceneComposer 节点编排数据结构（D-2） */
 
+import type { GenerationRefPayload } from './nodeRefs'
+
 export type SceneComposerShotMediaType = 'image' | 'video' | 'none'
 
 export interface SceneComposerShot {
@@ -42,6 +44,8 @@ export interface SceneComposerBatchItem {
   duration?: 5 | 10 | 15
   crop?: string
   count?: number
+  refs?: GenerationRefPayload[]
+  mentionedKeys?: string[]
 }
 
 export interface SceneComposerSaveRequest {

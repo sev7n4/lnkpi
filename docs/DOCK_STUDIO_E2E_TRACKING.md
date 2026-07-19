@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-19（§C2 Canvas 旁路 adapter 验收；§0.5 P0 手测清单）
+> **最后更新**：2026-07-19（§C2.1 Canvas T*/I* refs 验收；§0.5 P0 手测清单）
 
 ---
 
@@ -130,6 +130,7 @@
 | 六 | 单节点 E2E 测试清单 | 验收标准模板 |
 | 七 | 建议优先开工的 3 个 Sprint | 近期排期 |
 | 八 | C2 Canvas 旁路 adapter 验收 | C2 实现状态与手测清单 |
+| 九 | C2.1 Canvas T*/I* refs 验收 | C2.1 实现状态与手测清单 |
 
 ---
 
@@ -753,7 +754,7 @@ Phase 0 (P0-1~P0-6)
 | Material video（shot / shot-linked） | ✅ 按时长 30/50/70 | ✅ |
 | sceneComposer batch | ✅ 整批预检一次扣除 + skipCharge | ✅ |
 | Web 参数解析 | ✅ 媒体子节点 → canvas-api | — |
-| refs / V\* / A\* | ⏭ C2.1 / C3 / C4 | — |
+| refs / V\* / A\* | ⏭ C2.1（见 §九）/ C3 / C4 | — |
 
 ### 8.3 浏览器手测清单（规格 §8.3）
 
@@ -765,6 +766,49 @@ Phase 0 (P0-1~P0-6)
 | C2-4 | **已展开** sceneComposer：改子节点配置 → 批量生成 | batch items 含子节点 model/参数 | ☐ |
 | C2-5 | 积分不足 → sceneComposer 批量生成 | 整批零启动；无 shot 进入 generating | ☐ |
 | C2-6 | 非本人 session/shot 调用 generate / batch | HTTP 404；无副作用 | ☐ |
+
+---
+
+## 九、C2.1 Canvas T*/I* refs 验收（2026-07-19）
+
+**规格**：[2026-07-19-c21-canvas-refs-design.md](./superpowers/specs/2026-07-19-c21-canvas-refs-design.md)  
+**分支**：`feature/c21-canvas-refs`（PR 待合入）  
+**状态**：**实现完成 / 待合入** — shot、shot-linked image/video、sceneComposer batch 传递并消费 `refs` + `mentionedKeys`；Material 走与 Studio 同款 `mergeRefsToPrompt` + adapter `referenceImages`
+
+### 9.1 自动化验收
+
+| 项 | 结果 | 说明 |
+|----|------|------|
+| `pnpm install --frozen-lockfile` | ✅ | lockfile 一致 |
+| `prisma generate` | ✅ | |
+| `pnpm build` | ✅ | shared / web / agent / server |
+| `pnpm test` | ✅ | shared 8 · agent 37 · web 15 · server 23 |
+
+### 9.2 实现范围摘要
+
+| 路径 | T\*/I\* merge | 目标节点语义 | blob 护栏 |
+|------|---------------|--------------|-----------|
+| 直接 shot 生成 | ✅ merge 不另计费 | local prompt + shot refs | ✅ Web + Server 扣费前 |
+| shot-linked image/video | ✅ I\* → referenceImages | 媒体节点 prompt/refs | ✅ |
+| sceneComposer batch 已展开 | ✅ 按项独立 merge | 媒体子节点 prompt/refs；空则 shot prompt | ✅ batch 预检 |
+| sceneComposer batch 未展开 | ✅ composer refs | shot prompt + composer refs | ✅ |
+| `canvasPrompt` 双重合并 | ✅ 已停用 | 上游文案走 T\* edge refs | — |
+| V\* / A\* | ⏭ 不消费 | 可展示 | — |
+
+**目标节点语义（§3.2）**：refs 归属目标节点，不做 composer→shot→child 三层隐式合并；batch 已展开用媒体子节点 refs，未展开/子节点缺失用 composer refs。
+
+**后续路线**：C3 V\* 抽帧/视频理解 → C4 A\* ASR/音色参考。
+
+### 9.3 浏览器手测清单（规格 §8.3）
+
+| # | 步骤 | 预期 | 通过 |
+|---|------|------|------|
+| C2.1-1 | **text** → **shot** → 生成 | T\* 合并文案进入 Material；无 `canvasPrompt` 重复 | ☐ |
+| C2.1-2 | **image** → shot-linked **video** → 生成 | I\* 进入图生视频 referenceImages | ☐ |
+| C2.1-3 | **已展开** sceneComposer：改媒体 prompt/@mention → 批量生成 | batch items 含媒体子节点 prompt/refs | ☐ |
+| C2.1-4 | **未展开** sceneComposer batch | composer 上 T\*/I\* 生效 | ☐ |
+| C2.1-5 | refs 含 `blob:` | Web 拦截不发请求；直打 API Server 扣费前拒绝 | ☐ |
+| C2.1-6 | 积分不足 → sceneComposer 批量生成 | 整批零启动；无 shot 进入 generating | ☐ |
 
 ---
 
@@ -791,6 +835,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-16 | Deploy | PR #11 API_PUBLIC_URL + recover | GHA Wait failure | PR #12 轮询修复 ✅ |
 | 2026-07-16 | — | 节点 E2E 审计 + §0.5 P0 清单 | 真实生成待 API Key | U1–U8 浏览器手测 |
 | 2026-07-19 | C2 | Canvas 旁路 adapter + 统一计费（T1–T6） | 浏览器手测 C2-1~C2-6 待验 | C2 PR 合入 → C2.1 refs |
+| 2026-07-19 | C2.1 | Canvas T\*/I\* refs + prompt merge（T1–T6） | 浏览器手测 C2.1-1~C2.1-6 待验 | C2.1 PR 合入 → C3 V\* |
 
 ---
 
@@ -802,8 +847,9 @@ Phase 0 (P0-1~P0-6)
 | [NEOWOW_RESEARCH.md](./NEOWOW_RESEARCH.md) | NeoWOW 产品调研 |
 | [superpowers/plans/2026-07-09-neowow-workflow.md](./superpowers/plans/2026-07-09-neowow-workflow.md) | M1/M2 实现计划 |
 | [2026-07-19-c2-canvas-generation-adapter-design.md](./superpowers/specs/2026-07-19-c2-canvas-generation-adapter-design.md) | C2 Canvas 旁路 adapter 规格 |
+| [2026-07-19-c21-canvas-refs-design.md](./superpowers/specs/2026-07-19-c21-canvas-refs-design.md) | C2.1 Canvas T\*/I\* refs 规格 |
 | [PRODUCT_CAPABILITY_MAP.md](./PRODUCT_CAPABILITY_MAP.md) | 产品能力地图 |
 
 ---
 
-**最后更新**：2026-07-19（§8 C2 Canvas 旁路 adapter 验收；M3 ~90%）
+**最后更新**：2026-07-19（§9 C2.1 Canvas T*/I* refs 验收；M3 ~90%）

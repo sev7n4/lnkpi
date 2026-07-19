@@ -1,11 +1,14 @@
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
+import { resolveNodeRefs, type LocalRefBinding } from '@/composables/useNodeRefs'
+import { parseRefMentions } from '@/composables/useRefMentions'
 import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
 import {
   createDefaultSceneComposerPayload,
   DEFAULT_VIDEO_SETTINGS,
   normalizeSceneComposerPayload,
   resolveSceneComposerCoverUrl,
+  type GenerationRefPayload,
   type SceneComposerBatchItem,
   type SceneComposerPayload,
   type SceneComposerScene,
@@ -177,6 +180,44 @@ export function resolveCanvasVideoParams(
 
 export interface BuildBatchGenerateItemsOptions {
   nodes?: EditableFlowNode[]
+  edges?: CanvasEdgeLike[]
+  composerNodeId?: string
+}
+
+function normalizeEdges(edges: CanvasEdgeLike[]) {
+  return edges.map((edge) => ({
+    id: edge.id ?? `${edge.source}->${edge.target}`,
+    source: edge.source,
+    target: edge.target,
+  }))
+}
+
+function nodeLocalPrompt(data: Record<string, unknown>): string {
+  return String(data.prompt ?? data.content ?? '').trim()
+}
+
+export function toGenerationRefs(
+  node: EditableFlowNode,
+  nodes: EditableFlowNode[],
+  edges: CanvasEdgeLike[],
+): GenerationRefPayload[] {
+  const data = node.data ?? {}
+  return resolveNodeRefs({
+    targetNodeId: node.id,
+    targetType: String(node.type),
+    nodes,
+    edges: normalizeEdges(edges),
+    localRefs: (data.localRefs as LocalRefBinding[]) ?? [],
+    refOrder: (data.refOrder as string[]) ?? [],
+  })
+    .filter((ref) => !ref.stale)
+    .map((ref) => ({
+      refKey: ref.refKey,
+      mediaType: ref.mediaType,
+      label: ref.label,
+      text: ref.payload.text,
+      url: ref.payload.url,
+    }))
 }
 
 function findMediaChildNode(
@@ -194,6 +235,10 @@ export function buildBatchGenerateItems(
   options?: BuildBatchGenerateItemsOptions,
 ): SceneComposerBatchItem[] {
   const nodes = options?.nodes ?? []
+  const edges = options?.edges ?? []
+  const composerNode = options?.composerNodeId
+    ? findNode(nodes, options.composerNodeId)
+    : null
   const items: SceneComposerBatchItem[] = []
 
   for (const scene of payload.scenes) {
@@ -203,6 +248,12 @@ export function buildBatchGenerateItems(
 
       const childNode = findMediaChildNode(nodes, shot, shot.mediaType)
       const childData = childNode?.data ?? {}
+      const refsTarget = childNode ?? composerNode
+      const refs = refsTarget ? toGenerationRefs(refsTarget, nodes, edges) : []
+      const finalPrompt = childNode
+        ? nodeLocalPrompt(childData) || shot.prompt.trim()
+        : shot.prompt.trim()
+      const mentionedKeys = parseRefMentions(finalPrompt)
 
       if (shot.mediaType === 'image') {
         const params = childNode
@@ -216,12 +267,14 @@ export function buildBatchGenerateItems(
         items.push({
           shotNodeId: shot.shotNodeId,
           title: shot.title || scene.title,
-          prompt: shot.prompt.trim(),
+          prompt: finalPrompt,
           mediaType: 'image',
           model: params.model,
           aspectRatio: params.aspectRatio,
           resolution: params.resolution,
           count: params.count,
+          refs,
+          mentionedKeys,
         })
       } else {
         const params = childNode
@@ -236,13 +289,15 @@ export function buildBatchGenerateItems(
         items.push({
           shotNodeId: shot.shotNodeId,
           title: shot.title || scene.title,
-          prompt: shot.prompt.trim(),
+          prompt: finalPrompt,
           mediaType: 'video',
           model: params.model,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
           resolution: params.resolution,
           crop: params.crop,
+          refs,
+          mentionedKeys,
         })
       }
     }

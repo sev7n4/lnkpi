@@ -1,11 +1,19 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common'
 import {
   buildImageProviderOptions,
   buildVideoProviderOptions,
   createImageProvider,
   createVideoProvider,
+  mergeRefsToPrompt,
+  type MergeTextSource,
 } from '@lnkpi/agent'
-import { resolveImageSize, type ImageResolutionTier } from '@lnkpi/shared'
+import { resolveImageSize, type GenerationRefPayload, type ImageResolutionTier } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
 import { videoCredits } from '../points/video-credits'
@@ -19,6 +27,8 @@ export type CanvasImageGenerateInput = {
   resolution?: string
   count?: number
   skipCharge?: boolean
+  refs?: GenerationRefPayload[]
+  mentionedKeys?: string[]
 }
 
 export type CanvasVideoGenerateInput = {
@@ -31,6 +41,40 @@ export type CanvasVideoGenerateInput = {
   resolution?: string
   crop?: string
   skipCharge?: boolean
+  refs?: GenerationRefPayload[]
+  mentionedKeys?: string[]
+}
+
+function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
+  for (const ref of refs ?? []) {
+    const url = ref.url?.trim()
+    if (url?.startsWith('blob:')) {
+      throw new BadRequestException('参考图尚未上传')
+    }
+  }
+}
+
+function extractTextSources(refs?: GenerationRefPayload[]): MergeTextSource[] {
+  return (refs ?? [])
+    .filter((r) => r.mediaType === 'text' && r.text?.trim())
+    .map((r) => ({
+      refKey: r.refKey,
+      label: r.label?.trim() || r.refKey,
+      text: r.text!.trim(),
+    }))
+}
+
+function extractReferenceImages(refs?: GenerationRefPayload[]): string[] {
+  return (refs ?? [])
+    .filter((r) => r.mediaType === 'image' && r.url?.trim())
+    .map((r) => r.url!.trim())
+}
+
+function buildPromptWithRefImage(prompt: string, refImageUrl: string): string {
+  const trimmed = prompt.trim()
+  const ref = refImageUrl.trim()
+  if (!ref) return trimmed
+  return `${trimmed} [ref-image:${ref}]`
 }
 
 @Injectable()
@@ -64,7 +108,18 @@ export class MaterialService {
   }
 
   async generateImage(input: CanvasImageGenerateInput) {
-    const { userId, shotId, prompt, model, aspectRatio, resolution, count, skipCharge } = input
+    const {
+      userId,
+      shotId,
+      prompt,
+      model,
+      aspectRatio,
+      resolution,
+      count,
+      skipCharge,
+      refs,
+      mentionedKeys,
+    } = input
 
     const shot = await this.prisma.shot.findUnique({
       where: { id: shotId },
@@ -73,6 +128,8 @@ export class MaterialService {
     if (!shot || shot.session.userId !== userId) {
       throw new NotFoundException('分镜不存在')
     }
+
+    assertNoBlobRefs(refs)
 
     const requested = count ?? 1
     if (requested > 1) {
@@ -92,9 +149,15 @@ export class MaterialService {
     const material = await this.prisma.material.create({
       data: { shotId, type: 'image', prompt, status: 'generating' },
     })
-    this.runImageGeneration(material.id, prompt, model, aspectRatio, resolution).catch(
-      console.error,
-    )
+    this.runImageGeneration(
+      material.id,
+      prompt,
+      model,
+      aspectRatio,
+      resolution,
+      refs,
+      mentionedKeys,
+    ).catch(console.error)
     return material
   }
 
@@ -109,6 +172,8 @@ export class MaterialService {
       resolution = '720p',
       crop = 'none',
       skipCharge,
+      refs,
+      mentionedKeys,
     } = input
 
     const shot = await this.prisma.shot.findUnique({
@@ -118,6 +183,8 @@ export class MaterialService {
     if (!shot || shot.session.userId !== userId) {
       throw new NotFoundException('分镜不存在')
     }
+
+    assertNoBlobRefs(refs)
 
     if (!skipCharge) {
       await this.points.consume(userId, videoCredits(duration), '视频生成')
@@ -134,8 +201,31 @@ export class MaterialService {
       aspectRatio,
       resolution,
       crop,
+      refs,
+      mentionedKeys,
     ).catch(console.error)
     return material
+  }
+
+  private async resolveMergedPrompt(
+    localPrompt: string,
+    refs: GenerationRefPayload[] | undefined,
+    downstreamType: 'image' | 'video',
+    mentionedKeys?: string[],
+  ) {
+    const { mergedText, skippedMerge } = await mergeRefsToPrompt({
+      sources: extractTextSources(refs),
+      localPrompt: localPrompt.trim() || undefined,
+      downstreamType,
+      mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL,
+    })
+    return {
+      mergedText,
+      skippedMerge,
+      referenceImages: extractReferenceImages(refs),
+    }
   }
 
   private async runImageGeneration(
@@ -144,8 +234,24 @@ export class MaterialService {
     model?: string,
     aspectRatio?: string,
     resolution?: string,
+    refs?: GenerationRefPayload[],
+    mentionedKeys?: string[],
   ) {
     try {
+      const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+        prompt,
+        refs,
+        'image',
+        mentionedKeys,
+      )
+      this.logger.log(
+        JSON.stringify({
+          event: 'canvas_material_merge',
+          skippedMerge,
+          refsCount: refs?.length ?? 0,
+          referenceImages: referenceImages.length,
+        }),
+      )
       const size = resolveImageSize(
         aspectRatio ?? '16:9',
         (resolution ?? '1K') as ImageResolutionTier,
@@ -154,9 +260,11 @@ export class MaterialService {
         modelKey: model,
         size,
         n: 1,
-        referenceImages: [],
+        referenceImages,
       })
-      const effectivePrompt = [prompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
+      const primary = built.referenceImages[0]
+      const base = primary ? buildPromptWithRefImage(mergedText, primary) : mergedText
+      const effectivePrompt = [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
       const provider = createImageProvider()
       const { url } = await provider.generate(effectivePrompt, {
         modelId: built.modelId,
@@ -165,7 +273,7 @@ export class MaterialService {
       })
       await this.prisma.material.update({
         where: { id: materialId },
-        data: { url, thumbnail: url, status: 'completed' },
+        data: { url, thumbnail: url, status: 'completed', prompt: effectivePrompt },
       })
     } catch (err) {
       console.error('Image generation failed:', err)
@@ -184,17 +292,33 @@ export class MaterialService {
     aspectRatio: string,
     resolution: string,
     crop: string,
+    refs?: GenerationRefPayload[],
+    mentionedKeys?: string[],
   ) {
     try {
+      const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+        prompt,
+        refs,
+        'video',
+        mentionedKeys,
+      )
+      this.logger.log(
+        JSON.stringify({
+          event: 'canvas_material_merge',
+          skippedMerge,
+          refsCount: refs?.length ?? 0,
+          referenceImages: referenceImages.length,
+        }),
+      )
       const built = buildVideoProviderOptions({
         modelKey: model,
         duration,
         aspectRatio,
         resolution,
         crop,
-        referenceImages: [],
+        referenceImages,
       })
-      const effectivePrompt = [prompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
+      const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
       const { url } = await createVideoProvider().generate(effectivePrompt, {
         model: built.model,
         duration: built.duration,
@@ -205,7 +329,7 @@ export class MaterialService {
       })
       await this.prisma.material.update({
         where: { id: materialId },
-        data: { url, thumbnail: url, status: 'completed' },
+        data: { url, thumbnail: url, status: 'completed', prompt: effectivePrompt },
       })
     } catch (err) {
       console.error('Video generation failed:', err)
