@@ -1,12 +1,19 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { AUDIO_VOICE_OPTIONS, DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
+import type { StudioVoiceOption } from '@/constants/studioModels'
 import { useClickOutside } from '@/composables/useClickOutside'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 
-const props = defineProps<{
-  modelValue: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    voices?: StudioVoiceOption[]
+  }>(),
+  {
+    voices: undefined,
+  },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -18,8 +25,12 @@ useClickOutside(rootRef, () => {
   open.value = false
 })
 
+const voiceOptions = computed(() =>
+  props.voices?.length ? props.voices : AUDIO_VOICE_OPTIONS,
+)
+
 const current = computed(
-  () => AUDIO_VOICE_OPTIONS.find((v) => v.id === props.modelValue) ?? AUDIO_VOICE_OPTIONS[0],
+  () => voiceOptions.value.find((v) => v.id === props.modelValue) ?? voiceOptions.value[0],
 )
 
 function select(id: string) {
@@ -45,7 +56,7 @@ function select(id: string) {
       @click.stop
     >
       <button
-        v-for="voice in AUDIO_VOICE_OPTIONS"
+        v-for="voice in voiceOptions"
         :key="voice.id"
         type="button"
         class="flex w-full px-3 py-2 text-xs transition hover:bg-white/5"

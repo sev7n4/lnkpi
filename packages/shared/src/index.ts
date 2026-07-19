@@ -6,6 +6,7 @@ export * from './sceneComposer'
 export * from './videoComposition'
 export * from './nodeRefs'
 export * from './imageParams'
+export * from './studioModelCatalog'
 
 export type GenerationType = 'text' | 'image' | 'video'
 

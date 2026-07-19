@@ -3,10 +3,9 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
+import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import VoiceModelSelector from '@/components/canvas/VoiceModelSelector.vue'
-import AudioVoiceSettingsSelector, {
-  type AudioVoiceSettings,
-} from '@/components/canvas/AudioVoiceSettingsSelector.vue'
+import AudioVoiceSettingsSelector from '@/components/canvas/AudioVoiceSettingsSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
@@ -18,9 +17,13 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import {
   DEFAULT_AUDIO_EMOTION,
   DEFAULT_AUDIO_LANGUAGE,
+  DEFAULT_AUDIO_PITCH,
   DEFAULT_AUDIO_SPEED,
+  DEFAULT_AUDIO_VOLUME,
   DEFAULT_AUDIO_VOICE,
+  type AudioVoiceSettings,
 } from '@/constants/dockAudio'
+import { getModelEntry, resolveModelKey } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateAudioCredits } from '@/constants/credits'
 
@@ -40,32 +43,56 @@ const emit = defineEmits<{
 }>()
 
 const prompt = ref('')
+const audioModel = ref(resolveModelKey('audio').modelKey)
 const audioVoice = ref(DEFAULT_AUDIO_VOICE)
 const voiceSettings = ref<AudioVoiceSettings>({
   emotion: DEFAULT_AUDIO_EMOTION,
   language: DEFAULT_AUDIO_LANGUAGE,
   speed: DEFAULT_AUDIO_SPEED,
+  volume: DEFAULT_AUDIO_VOLUME,
+  pitch: DEFAULT_AUDIO_PITCH,
 })
+
+const modelVoices = computed(() => getModelEntry(audioModel.value)?.voices)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateAudioCredits())
 
+function syncVoiceToCatalog(emitPatch: boolean) {
+  const voices = getModelEntry(audioModel.value)?.voices
+  if (!voices?.length) return
+  if (!voices.some((v) => v.id === audioVoice.value)) {
+    audioVoice.value = voices[0].id
+    if (emitPatch) {
+      emit('patch', { audioVoice: voices[0].id })
+    }
+  }
+}
+
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
+  audioModel.value = resolveModelKey('audio', data.audioModel as string | undefined).modelKey
   audioVoice.value = String(data.audioVoice ?? DEFAULT_AUDIO_VOICE)
+  syncVoiceToCatalog(true)
   const emotion = data.audioEmotion as AudioVoiceSettings['emotion'] | undefined
   const language = data.audioLanguage as AudioVoiceSettings['language'] | undefined
   const speed = typeof data.audioSpeed === 'number' ? data.audioSpeed : DEFAULT_AUDIO_SPEED
+  const volume = typeof data.audioVolume === 'number' ? data.audioVolume : DEFAULT_AUDIO_VOLUME
+  const pitch = typeof data.audioPitch === 'number' ? data.audioPitch : DEFAULT_AUDIO_PITCH
   voiceSettings.value = {
     emotion: emotion ?? DEFAULT_AUDIO_EMOTION,
     language: language ?? DEFAULT_AUDIO_LANGUAGE,
     speed,
+    volume,
+    pitch,
   }
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
+
+watch(audioModel, () => syncVoiceToCatalog(true))
 
 watch(
   () => props.upstream,
@@ -89,16 +116,21 @@ function syncVoiceSettings(value: AudioVoiceSettings) {
     audioEmotion: value.emotion,
     audioLanguage: value.language,
     audioSpeed: value.speed,
+    audioVolume: value.volume,
+    audioPitch: value.pitch,
   })
 }
 
 function onGenerate() {
   emit('patch', {
     prompt: prompt.value,
+    audioModel: audioModel.value,
     audioVoice: audioVoice.value,
     audioEmotion: voiceSettings.value.emotion,
     audioLanguage: voiceSettings.value.language,
     audioSpeed: voiceSettings.value.speed,
+    audioVolume: voiceSettings.value.volume,
+    audioPitch: voiceSettings.value.pitch,
   })
   emit('generate')
 }
@@ -142,8 +174,15 @@ function onRefRemove(ref: NodeRef) {
     />
 
     <div class="bottom-toolbar-actions flex-wrap">
+      <UniversalModelSelector
+        v-model="audioModel"
+        type="text"
+        modality="audio"
+        @update:model-value="emit('patch', { audioModel: $event })"
+      />
       <VoiceModelSelector
         v-model="audioVoice"
+        :voices="modelVoices"
         @update:model-value="emit('patch', { audioVoice: $event })"
       />
       <AudioVoiceSettingsSelector

@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
   mergePromptWithUpstream,
   mergeReferenceImageUrl,
@@ -19,6 +20,7 @@ import {
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type StudioRefPayload } from '@/services/studio-api'
+import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
@@ -78,6 +80,13 @@ function resolveStudioRefs(
     }))
 }
 
+function firstImageRefUrl(refs: StudioRefPayload[]): string {
+  for (const ref of refs) {
+    if (ref.mediaType === 'image' && ref.url?.trim()) return ref.url.trim()
+  }
+  return ''
+}
+
 function hasBlobReference(refs: StudioRefPayload[], data: Record<string, unknown>): boolean {
   const direct = String(data.referenceImageUrl ?? '').trim()
   if (direct.startsWith('blob:')) return true
@@ -85,13 +94,6 @@ function hasBlobReference(refs: StudioRefPayload[], data: Record<string, unknown
     if (ref.url?.trim().startsWith('blob:')) return true
   }
   return false
-}
-
-function firstImageRefUrl(refs: StudioRefPayload[]): string {
-  for (const ref of refs) {
-    if (ref.mediaType === 'image' && ref.url?.trim()) return ref.url.trim()
-  }
-  return ''
 }
 
 function findNodeById(nodes: EditableFlowNode[], id: string) {
@@ -135,15 +137,22 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
 
+    if (hasBlobReference(refs, data)) {
+      deps.patchNodeData(node.id, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '参考图尚未上传，请先上传后再生成',
+      })
+      return
+    }
+
     generating.value = true
 
     try {
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
-        const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generatePrompt(
           local,
-          String(data.textModel ?? models.text),
+          resolveModelKey('text', data.textModel as string | undefined).modelKey,
         )
         const parsed = parseRecordPromptContent(res.data)
         deps.patchNodeData(node.id, {
@@ -158,10 +167,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
       if (nodeType === 'text') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: local, prompt: local })
-        const models = deps.resolveProviderModels()
         const { data: res } = await studioApi.generateText(
           local,
-          String(data.textModel ?? models.text),
+          resolveModelKey('text', data.textModel as string | undefined).modelKey,
           refs,
           mentionedKeys,
         )
@@ -178,10 +186,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       if (nodeType === 'audio') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
         const { data: res } = await studioApi.generateAudio(local, {
-          voice: String(data.audioVoice ?? 'female-1'),
+          model: String(data.audioModel ?? defaultModelKey('audio')),
+          voice: String(data.audioVoice ?? DEFAULT_AUDIO_VOICE),
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
+          volume: typeof data.audioVolume === 'number' ? data.audioVolume : 1,
+          pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
         }, refs, mentionedKeys)
         deps.patchNodeData(node.id, {
           url: parseRecordUrl(res.data),
@@ -244,14 +255,6 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
 
-    if (hasBlobReference(refs, data)) {
-      deps.patchNodeData(node.id, {
-        status: NODE_GENERATION_STATUS.error,
-        errorMessage: '参考图尚未上传，请先上传后再生成',
-      })
-      return
-    }
-
     deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
 
     const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
@@ -260,10 +263,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const aspectRatio = String(data.imageAspect ?? '16:9')
       const resolution = String(data.imageResolution ?? '1K')
       const count = Number(data.imageCount ?? 1)
-      const models = deps.resolveProviderModels()
       const { data: res } = await studioApi.generateImage(
         prompt,
-        String(data.imageModel ?? models.image),
+        resolveModelKey('image', data.imageModel as string | undefined).modelKey,
         aspectRatio,
         refs,
         mentionedKeys,
@@ -284,10 +286,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
 
     const settings = data.videoSettings as VideoSettings | undefined
-    const models = deps.resolveProviderModels()
     const { data: res } = await studioApi.generateVideo(
       prompt,
-      String(data.videoModel ?? models.video),
+      resolveModelKey('video', data.videoModel as string | undefined).modelKey,
       settings?.duration,
       settings?.aspectRatio,
       refs,

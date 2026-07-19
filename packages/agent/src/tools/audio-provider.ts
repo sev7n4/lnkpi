@@ -1,5 +1,19 @@
+export interface AudioGenerateOptions {
+  model?: string
+  voice?: string
+  speed?: number
+  volume?: number
+  pitch?: number
+  emotion?: string
+}
+
 export interface AudioProvider {
-  generate(text: string, voice?: string): Promise<{ url: string }>
+  generate(text: string, voiceOrOpts?: string | AudioGenerateOptions): Promise<{ url: string }>
+}
+
+function resolveAudioOptions(voiceOrOpts?: string | AudioGenerateOptions): AudioGenerateOptions {
+  if (typeof voiceOrOpts === 'string') return { voice: voiceOrOpts }
+  return voiceOrOpts ?? {}
 }
 
 const PLACEHOLDER_MP3 = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -17,7 +31,8 @@ export class OpenAITTSProvider implements AudioProvider {
     private model = 'tts-1',
   ) {}
 
-  async generate(text: string, voice?: string): Promise<{ url: string }> {
+  async generate(text: string, voiceOrOpts?: string | AudioGenerateOptions): Promise<{ url: string }> {
+    const options = resolveAudioOptions(voiceOrOpts)
     const res = await fetch(`${this.baseUrl}/audio/speech`, {
       method: 'POST',
       headers: {
@@ -25,9 +40,13 @@ export class OpenAITTSProvider implements AudioProvider {
         Authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
-        model: this.model,
+        model: options.model ?? this.model,
         input: text.slice(0, 4096),
-        voice: voice ?? 'alloy',
+        voice: options.voice ?? 'alloy',
+        speed: options.speed,
+        ...(options.volume != null ? { volume: options.volume } : {}),
+        ...(options.pitch != null ? { pitch: options.pitch } : {}),
+        ...(options.emotion ? { emotion: options.emotion } : {}),
       }),
     })
     if (!res.ok) throw new Error(`TTS API ${res.status}: ${await res.text()}`)
@@ -44,12 +63,12 @@ export class FallbackAudioProvider implements AudioProvider {
     private fallback: AudioProvider = new PlaceholderAudioProvider(),
   ) {}
 
-  async generate(text: string, voice?: string): Promise<{ url: string }> {
+  async generate(text: string, voiceOrOpts?: string | AudioGenerateOptions): Promise<{ url: string }> {
     try {
-      return await this.primary.generate(text, voice)
+      return await this.primary.generate(text, voiceOrOpts)
     } catch (err) {
       console.warn('[AudioProvider] primary TTS failed, using fallback:', err)
-      return this.fallback.generate(text, voice)
+      return this.fallback.generate(text, voiceOrOpts)
     }
   }
 }

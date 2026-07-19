@@ -16,6 +16,9 @@ export interface AudioGenerateOptions {
   emotion?: string
   language?: string
   speed?: number
+  volume?: number
+  pitch?: number
+  model?: string
 }
 
 export type StudioRefPayload = {
