@@ -7,6 +7,7 @@ export * from './videoComposition'
 export * from './nodeRefs'
 export * from './imageParams'
 export * from './studioModelCatalog'
+export * from './providerChannels'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
