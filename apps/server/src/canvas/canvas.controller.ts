@@ -50,6 +50,22 @@ class GenerateImageDto {
 
   @IsString()
   prompt!: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsNumber()
+  count?: number
 }
 
 class GenerateVideoDto {
@@ -60,11 +76,19 @@ class GenerateVideoDto {
   prompt!: string
 
   @IsOptional()
+  @IsString()
+  model?: string
+
+  @IsOptional()
   duration?: number
 
   @IsOptional()
   @IsString()
   aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
 
   @IsOptional()
   @IsString()
@@ -182,6 +206,30 @@ class SceneComposerBatchItemDto {
 
   @IsIn(['image', 'video'])
   mediaType!: 'image' | 'video'
+
+  @IsOptional()
+  @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsIn([5, 10, 15])
+  duration?: 5 | 10 | 15
+
+  @IsOptional()
+  @IsString()
+  crop?: string
+
+  @IsOptional()
+  @IsNumber()
+  count?: number
 }
 
 class BatchGenerateSceneComposerDto implements SceneComposerBatchGenerateRequest {
@@ -306,6 +354,10 @@ export class CanvasController {
       userId: req.user.sub,
       shotId: dto.shotId,
       prompt: dto.prompt,
+      model: dto.model,
+      aspectRatio: dto.aspectRatio,
+      resolution: dto.resolution,
+      count: dto.count,
     })
     return { code: 0, message: 'ok', data }
   }
@@ -317,8 +369,10 @@ export class CanvasController {
       userId: req.user.sub,
       shotId: dto.shotId,
       prompt: dto.prompt,
+      model: dto.model,
       duration: dto.duration,
       aspectRatio: dto.aspectRatio,
+      resolution: dto.resolution,
       crop: dto.crop,
     })
     return { code: 0, message: 'ok', data }

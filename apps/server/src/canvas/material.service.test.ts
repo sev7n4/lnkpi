@@ -129,13 +129,14 @@ describe('MaterialService video', () => {
     })
     await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
     expect(consume).toHaveBeenCalledWith('u1', 50, '视频生成')
-    const [prompt, opts] = videoGenerate.mock.calls[0]
-    expect(prompt).toBe('walk')
-    expect(opts).toMatchObject({
-      model: 'seedance-2.0-min',
-      duration: 10,
-      aspectRatio: '16:9',
-      resolution: '720p',
-    })
+    expect(videoGenerate).toHaveBeenCalledWith(
+      'walk',
+      expect.objectContaining({
+        model: 'seedance-2.0-min',
+        duration: 10,
+        aspectRatio: '16:9',
+        resolution: '720p',
+      }),
+    )
   })
 })
