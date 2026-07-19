@@ -1,12 +1,16 @@
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
+import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
 import {
   createDefaultSceneComposerPayload,
+  DEFAULT_VIDEO_SETTINGS,
   normalizeSceneComposerPayload,
   resolveSceneComposerCoverUrl,
+  type SceneComposerBatchItem,
   type SceneComposerPayload,
   type SceneComposerScene,
   type SceneComposerShot,
+  type VideoSettings,
 } from '@lnkpi/shared'
 
 export interface SceneComposerExpandDeps {
@@ -149,24 +153,96 @@ function expandSingleShot(
   })
 }
 
-export function buildBatchGenerateItems(payload: SceneComposerPayload) {
-  const items: Array<{
-    shotNodeId: string
-    title: string
-    prompt: string
-    mediaType: 'image' | 'video'
-  }> = []
+export function resolveCanvasImageParams(data: Record<string, unknown>) {
+  return {
+    model: resolveModelKey('image', data.imageModel as string | undefined).modelKey,
+    aspectRatio: String(data.imageAspect ?? '16:9'),
+    resolution: String(data.imageResolution ?? '1K'),
+    count: 1 as const,
+  }
+}
+
+export function resolveCanvasVideoParams(data: Record<string, unknown>) {
+  const settings = (data.videoSettings as Partial<VideoSettings> | undefined) ?? {}
+  return {
+    model: resolveModelKey('video', data.videoModel as string | undefined).modelKey,
+    duration: (settings.duration ?? DEFAULT_VIDEO_SETTINGS.duration) as 5 | 10 | 15,
+    aspectRatio: String(settings.aspectRatio ?? DEFAULT_VIDEO_SETTINGS.aspectRatio),
+    resolution: String(settings.resolution ?? DEFAULT_VIDEO_SETTINGS.resolution),
+    crop: String(settings.crop ?? DEFAULT_VIDEO_SETTINGS.crop),
+  }
+}
+
+export interface BuildBatchGenerateItemsOptions {
+  nodes?: EditableFlowNode[]
+}
+
+function findMediaChildNode(
+  nodes: EditableFlowNode[],
+  shot: SceneComposerShot,
+  mediaType: 'image' | 'video',
+): EditableFlowNode | null {
+  const nodeId = mediaType === 'video' ? shot.videoNodeId : shot.imageNodeId
+  if (!nodeId) return null
+  return findNode(nodes, nodeId)
+}
+
+export function buildBatchGenerateItems(
+  payload: SceneComposerPayload,
+  options?: BuildBatchGenerateItemsOptions,
+): SceneComposerBatchItem[] {
+  const nodes = options?.nodes ?? []
+  const items: SceneComposerBatchItem[] = []
 
   for (const scene of payload.scenes) {
     for (const shot of scene.shots) {
       if (!shot.shotNodeId || !shot.prompt.trim()) continue
       if (shot.mediaType !== 'image' && shot.mediaType !== 'video') continue
-      items.push({
-        shotNodeId: shot.shotNodeId,
-        title: shot.title || scene.title,
-        prompt: shot.prompt.trim(),
-        mediaType: shot.mediaType,
-      })
+
+      const childNode = findMediaChildNode(nodes, shot, shot.mediaType)
+      const childData = childNode?.data ?? {}
+
+      if (shot.mediaType === 'image') {
+        const params = childNode
+          ? resolveCanvasImageParams(childData)
+          : {
+              model: defaultModelKey('image'),
+              aspectRatio: '16:9',
+              resolution: '1K',
+              count: 1 as const,
+            }
+        items.push({
+          shotNodeId: shot.shotNodeId,
+          title: shot.title || scene.title,
+          prompt: shot.prompt.trim(),
+          mediaType: 'image',
+          model: params.model,
+          aspectRatio: params.aspectRatio,
+          resolution: params.resolution,
+          count: params.count,
+        })
+      } else {
+        const params = childNode
+          ? resolveCanvasVideoParams(childData)
+          : {
+              model: defaultModelKey('video'),
+              duration: DEFAULT_VIDEO_SETTINGS.duration,
+              aspectRatio: DEFAULT_VIDEO_SETTINGS.aspectRatio,
+              resolution: DEFAULT_VIDEO_SETTINGS.resolution,
+              crop: DEFAULT_VIDEO_SETTINGS.crop,
+            }
+        items.push({
+          shotNodeId: shot.shotNodeId,
+          title: shot.title || scene.title,
+          prompt: shot.prompt.trim(),
+          mediaType: 'video',
+          model: params.model,
+          duration: params.duration,
+          aspectRatio: params.aspectRatio,
+          resolution: params.resolution,
+          crop: params.crop,
+        })
+      }
     }
   }
 

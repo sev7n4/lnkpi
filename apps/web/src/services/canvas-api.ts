@@ -17,15 +17,32 @@ export const canvasApi = {
     api.post('/agent/canvas/shot/edit', { shotId, ...data }),
   reorderShots: (sessionId: string, shotIds: string[]) =>
     api.post('/agent/canvas/shot-order', { sessionId, shotIds }),
-  generateImage: (shotId: string, prompt: string) =>
-    api.post('/agent/canvas/material/generate-image', { shotId, prompt }),
-  generateVideo: (shotId: string, prompt: string, settings?: Partial<VideoSettings>) =>
+  generateImage: (
+    shotId: string,
+    prompt: string,
+    opts?: { model?: string; aspectRatio?: string; resolution?: string; count?: number },
+  ) =>
+    api.post('/agent/canvas/material/generate-image', {
+      shotId,
+      prompt,
+      model: opts?.model,
+      aspectRatio: opts?.aspectRatio,
+      resolution: opts?.resolution,
+      count: 1,
+    }),
+  generateVideo: (
+    shotId: string,
+    prompt: string,
+    settings?: Partial<VideoSettings> & { model?: string },
+  ) =>
     api.post('/agent/canvas/material/generate-video', {
       shotId,
       prompt,
+      model: settings?.model,
       duration: settings?.duration,
       aspectRatio: settings?.aspectRatio,
       crop: settings?.crop,
+      resolution: settings?.resolution,
     }),
   statusBatch: (ids: string[]) =>
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),

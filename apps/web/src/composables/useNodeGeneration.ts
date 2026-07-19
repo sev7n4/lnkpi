@@ -27,6 +27,8 @@ import {
   buildBatchGenerateItems,
   expandSceneComposerGraph,
   readSceneComposerFromNode,
+  resolveCanvasImageParams,
+  resolveCanvasVideoParams,
   sceneComposerToNodePatch,
 } from '@/utils/sceneComposer'
 
@@ -110,13 +112,22 @@ function findIncomingEdge(edges: CanvasEdgeLike[], targetId: string) {
   return null
 }
 
-function shotHasChildType(nodes: EditableFlowNode[], edges: CanvasEdgeLike[], shotId: string, childType: string) {
+function findShotMediaChild(
+  nodes: EditableFlowNode[],
+  edges: CanvasEdgeLike[],
+  shotId: string,
+  childType: string,
+): EditableFlowNode | null {
   for (const edge of edges) {
     if (edge.source !== shotId) continue
     const target = findNodeById(nodes, edge.target)
-    if (target?.type === childType) return true
+    if (target?.type === childType) return target
   }
-  return false
+  return null
+}
+
+function shotHasChildType(nodes: EditableFlowNode[], edges: CanvasEdgeLike[], shotId: string, childType: string) {
+  return findShotMediaChild(nodes, edges, shotId, childType) !== null
 }
 
 export function useNodeGeneration(deps: NodeGenerationDeps) {
@@ -245,10 +256,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
       deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
       if (nodeType === 'video') {
-        const settings = data.videoSettings as VideoSettings | undefined
-        await canvasApi.generateVideo(shotId, canvasPrompt, settings)
+        const params = resolveCanvasVideoParams(data)
+        await canvasApi.generateVideo(shotId, canvasPrompt, params)
       } else {
-        await canvasApi.generateImage(shotId, canvasPrompt)
+        const params = resolveCanvasImageParams(data)
+        await canvasApi.generateImage(shotId, canvasPrompt, params)
       }
       deps.startShotPolling([shotId])
       await deps.saveCanvas()
@@ -337,12 +349,16 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const shouldGenerateImage = mode === 'image' || (mode === 'auto' && hasImageChild && !shouldGenerateVideo)
 
     if (shouldGenerateVideo) {
-      const settings = data.videoSettings as VideoSettings | undefined
-      await canvasApi.generateVideo(node.id, prompt, settings)
+      const childNode = findShotMediaChild(deps.nodes.value, deps.edges.value, node.id, 'video')
+      const params = resolveCanvasVideoParams(childNode?.data ?? {})
+      await canvasApi.generateVideo(node.id, prompt, params)
     } else if (shouldGenerateImage) {
-      await canvasApi.generateImage(node.id, prompt)
+      const childNode = findShotMediaChild(deps.nodes.value, deps.edges.value, node.id, 'image')
+      const params = resolveCanvasImageParams(childNode?.data ?? {})
+      await canvasApi.generateImage(node.id, prompt, params)
     } else {
-      const matRes = await canvasApi.generateImage(node.id, prompt)
+      const params = resolveCanvasImageParams({})
+      const matRes = await canvasApi.generateImage(node.id, prompt, params)
       const material = matRes.data.data as { id: string }
       deps.addNode('image', { url: '', status: NODE_GENERATION_STATUS.generating, prompt }, {
         id: material.id,
@@ -409,7 +425,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     generating.value = true
     try {
       const payload = readSceneComposerFromNode(node)
-      const items = buildBatchGenerateItems(payload)
+      const items = buildBatchGenerateItems(payload, { nodes: deps.nodes.value })
       if (!items.length) return
 
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
