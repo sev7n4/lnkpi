@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { VideoSettings } from '@lnkpi/shared'
+import type { GenerationRefPayload, VideoSettings } from '@lnkpi/shared'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerSaveRequest,
@@ -20,7 +20,14 @@ export const canvasApi = {
   generateImage: (
     shotId: string,
     prompt: string,
-    opts?: { model?: string; aspectRatio?: string; resolution?: string; count?: number },
+    opts?: {
+      model?: string
+      aspectRatio?: string
+      resolution?: string
+      count?: number
+      refs?: GenerationRefPayload[]
+      mentionedKeys?: string[]
+    },
   ) =>
     api.post('/agent/canvas/material/generate-image', {
       shotId,
@@ -29,11 +36,17 @@ export const canvasApi = {
       aspectRatio: opts?.aspectRatio,
       resolution: opts?.resolution,
       count: 1,
+      refs: opts?.refs,
+      mentionedKeys: opts?.mentionedKeys,
     }),
   generateVideo: (
     shotId: string,
     prompt: string,
-    settings?: Partial<VideoSettings> & { model?: string },
+    settings?: Partial<VideoSettings> & {
+      model?: string
+      refs?: GenerationRefPayload[]
+      mentionedKeys?: string[]
+    },
   ) =>
     api.post('/agent/canvas/material/generate-video', {
       shotId,
@@ -43,6 +56,8 @@ export const canvasApi = {
       aspectRatio: settings?.aspectRatio,
       crop: settings?.crop,
       resolution: settings?.resolution,
+      refs: settings?.refs,
+      mentionedKeys: settings?.mentionedKeys,
     }),
   statusBatch: (ids: string[]) =>
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),

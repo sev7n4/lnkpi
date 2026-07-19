@@ -203,9 +203,88 @@ describe('useNodeGeneration', () => {
       aspectRatio: '9:16',
       resolution: '2K',
       count: 1,
+      refs: [],
+      mentionedKeys: [],
     })
     expect(studioApi.generateImage).not.toHaveBeenCalled()
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
+  })
+
+  it('shot-linked image sends media local prompt and refs, not canvasPrompt', async () => {
+    const textUpstream = createNode('text', { content: 'upstream style', prompt: 'upstream style' }, 'text-1')
+    const shot = createNode('shot', { title: 'Shot', prompt: 'shot prompt' }, 'shot-1')
+    const image = createNode('image', {
+      prompt: '',
+      imageModel: 'navo-pro',
+      imageAspect: '9:16',
+      imageResolution: '2K',
+    }, 'image-1')
+    const { api, deps } = createDeps([textUpstream, shot, image])
+    deps.edges.value = [
+      { id: 'e-shot-image', source: 'shot-1', target: 'image-1' },
+      { id: 'e-text-image', source: 'text-1', target: 'image-1' },
+    ]
+    vi.mocked(canvasApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: {} }))
+
+    await api.generateForNode(image)
+
+    expect(canvasApi.generateImage).toHaveBeenCalledWith(
+      'shot-1',
+      '',
+      expect.objectContaining({
+        refs: expect.arrayContaining([
+          expect.objectContaining({ refKey: 'T1', mediaType: 'text', text: 'upstream style' }),
+        ]),
+        mentionedKeys: [],
+      }),
+    )
+    expect(canvasApi.generateImage).not.toHaveBeenCalledWith('shot-1', 'upstream style', expect.anything())
+  })
+
+  it('blocks canvas image when blob ref present', async () => {
+    const refNode = createNode('image', { url: 'blob:http://localhost/ref-456' }, 'ref-1')
+    const shot = createNode('shot', { title: 'Shot', prompt: 'sunset' }, 'shot-1')
+    const image = createNode('image', {
+      prompt: 'sunset',
+      localRefs: [{ id: 'r1', mediaType: 'image', sourceKind: 'upload', label: 'ref', url: 'blob:http://localhost/ref-456' }],
+      refOrder: ['r1'],
+    }, 'image-1')
+    const { api, deps } = createDeps([refNode, shot, image])
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+
+    await api.generateForNode(image)
+
+    expect(canvasApi.generateImage).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '参考图尚未上传，请先上传后再生成',
+    })
+  })
+
+  it('generateShot uses shot local prompt with shot refs', async () => {
+    const textUpstream = createNode('text', { content: 'cinematic', prompt: 'cinematic' }, 'text-1')
+    const shot = createNode('shot', {
+      title: 'Shot',
+      prompt: 'local shot @T1',
+      shotGenerateMode: 'image',
+    }, 'shot-1')
+    const { api, deps } = createDeps([textUpstream, shot])
+    deps.edges.value = [{ id: 'e-text-shot', source: 'text-1', target: 'shot-1' }]
+    vi.mocked(canvasApi.editShot).mockResolvedValue(mockAxiosResponse({ data: {} }))
+    vi.mocked(canvasApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: {} }))
+
+    await api.generateForNode(shot)
+
+    expect(canvasApi.generateImage).toHaveBeenCalledWith(
+      'shot-1',
+      'local shot @T1',
+      expect.objectContaining({
+        refs: expect.arrayContaining([
+          expect.objectContaining({ refKey: 'T1', mediaType: 'text', text: 'cinematic' }),
+        ]),
+        mentionedKeys: ['T1'],
+      }),
+    )
   })
 
   it('passes shot-linked video child params to canvasApi.generateVideo', async () => {
@@ -232,6 +311,8 @@ describe('useNodeGeneration', () => {
       aspectRatio: '9:16',
       resolution: '1080p',
       crop: 'center',
+      refs: [],
+      mentionedKeys: [],
     })
     expect(studioApi.generateVideo).not.toHaveBeenCalled()
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
@@ -250,6 +331,8 @@ describe('useNodeGeneration', () => {
       aspectRatio: '16:9',
       resolution: '1K',
       count: 1,
+      refs: [],
+      mentionedKeys: [],
     })
   })
 

@@ -4,7 +4,6 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
-  mergePromptWithUpstream,
   mergeReferenceImageUrl,
   resolveUpstreamContext,
   type CanvasEdgeLike,
@@ -140,7 +139,6 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const local = localPrompt(data)
     const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
     const mentionedKeys = parseRefMentions(local)
-    const canvasPrompt = mergePromptWithUpstream(data, upstream)
     if (!deps.requireLogin()) return
     if (nodeType === 'prompt') {
       if (!local) return
@@ -225,7 +223,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'shot') {
-        await generateShot(node, canvasPrompt, data)
+        await generateShot(node, local, data)
       }
     } catch (err) {
       console.error('[NodeGeneration]', nodeType, err)
@@ -250,17 +248,16 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const linkedShotEdge = findIncomingEdge(deps.edges.value, node.id)
     const shotId = linkedShotEdge?.source
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
-    const canvasPrompt = mergePromptWithUpstream(data, upstream)
 
     if (shotNode?.type === 'shot' && shotId) {
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
-      deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt: canvasPrompt })
+      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
+      deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt })
       if (nodeType === 'video') {
         const params = resolveCanvasVideoParams(data)
-        await canvasApi.generateVideo(shotId, canvasPrompt, params)
+        await canvasApi.generateVideo(shotId, prompt, { ...params, refs, mentionedKeys })
       } else {
         const params = resolveCanvasImageParams(data)
-        await canvasApi.generateImage(shotId, canvasPrompt, params)
+        await canvasApi.generateImage(shotId, prompt, { ...params, refs, mentionedKeys })
       }
       deps.startShotPolling([shotId])
       await deps.saveCanvas()
@@ -329,6 +326,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
   }
 
   async function generateShot(node: EditableFlowNode, prompt: string, data: Record<string, unknown>) {
+    const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
+    const mentionedKeys = parseRefMentions(prompt)
     deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
     const title = String(data.title ?? (prompt.slice(0, 24) || '新分镜'))
     try {
@@ -351,14 +350,14 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     if (shouldGenerateVideo) {
       const childNode = findShotMediaChild(deps.nodes.value, deps.edges.value, node.id, 'video')
       const params = resolveCanvasVideoParams(childNode?.data ?? {})
-      await canvasApi.generateVideo(node.id, prompt, params)
+      await canvasApi.generateVideo(node.id, prompt, { ...params, refs, mentionedKeys })
     } else if (shouldGenerateImage) {
       const childNode = findShotMediaChild(deps.nodes.value, deps.edges.value, node.id, 'image')
       const params = resolveCanvasImageParams(childNode?.data ?? {})
-      await canvasApi.generateImage(node.id, prompt, params)
+      await canvasApi.generateImage(node.id, prompt, { ...params, refs, mentionedKeys })
     } else {
       const params = resolveCanvasImageParams({})
-      const matRes = await canvasApi.generateImage(node.id, prompt, params)
+      const matRes = await canvasApi.generateImage(node.id, prompt, { ...params, refs, mentionedKeys })
       const material = matRes.data.data as { id: string }
       deps.addNode('image', { url: '', status: NODE_GENERATION_STATUS.generating, prompt }, {
         id: material.id,
@@ -425,8 +424,22 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     generating.value = true
     try {
       const payload = readSceneComposerFromNode(node)
-      const items = buildBatchGenerateItems(payload, { nodes: deps.nodes.value })
+      const items = buildBatchGenerateItems(payload, {
+        nodes: deps.nodes.value,
+        edges: deps.edges.value,
+        composerNodeId: node.id,
+      })
       if (!items.length) return
+
+      for (const item of items) {
+        if (hasBlobReference(item.refs ?? [], {})) {
+          deps.patchNodeData(node.id, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage: '参考图尚未上传，请先上传后再生成',
+          })
+          return
+        }
+      }
 
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
       for (const item of items) {
