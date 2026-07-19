@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { encodeChannelModel } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { defaultModelKey } from '@/constants/studioModels'
 import type { SceneComposerPayload } from '@lnkpi/shared'
@@ -42,7 +43,7 @@ describe('buildBatchGenerateItems', () => {
     })
     expect(items[0]).toMatchObject({
       mediaType: 'image',
-      model: 'navo-pro',
+      model: encodeChannelModel('platform', 'navo-pro'),
       aspectRatio: '9:16',
       resolution: '2K',
       count: 1,
@@ -51,7 +52,7 @@ describe('buildBatchGenerateItems', () => {
 
   it('falls back to catalog defaults when child missing', () => {
     const items = buildBatchGenerateItems(payload, { nodes: [] })
-    expect(items[0].model).toBe(defaultModelKey('image'))
+    expect(items[0].model).toBe(encodeChannelModel('platform', defaultModelKey('image')))
   })
 
   it('uses media child prompt and refs when expanded', () => {

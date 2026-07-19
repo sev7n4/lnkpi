@@ -7,6 +7,7 @@ export * from './videoComposition'
 export * from './nodeRefs'
 export * from './imageParams'
 export * from './studioModelCatalog'
+export * from './providerChannels'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
@@ -186,7 +187,12 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
 
 export type ShotStatus = 'draft' | 'generating' | 'generated' | 'failed'
 export type MaterialType = 'image' | 'video' | 'audio'
-export type MaterialStatus = 'idle' | 'generating' | 'completed' | 'failed'
+export type MaterialStatus =
+  | 'idle'
+  | 'generating'
+  | 'completed'
+  | 'failed'
+  | 'fallback_pending'
 
 export interface Material {
   id: string

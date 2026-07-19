@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Inject, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
 import { IsArray, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import type {
@@ -435,6 +435,26 @@ export class CanvasController {
       refs: dto.refs,
       mentionedKeys: dto.mentionedKeys,
     })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('material/:id/confirm-platform-fallback')
+  @UseGuards(AuthGuard)
+  async confirmMaterialPlatformFallback(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    const data = await this.materialService.confirmPlatformFallback(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('material/:id/cancel-platform-fallback')
+  @UseGuards(AuthGuard)
+  async cancelMaterialPlatformFallback(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    const data = await this.materialService.cancelPlatformFallback(req.user.sub, id)
     return { code: 0, message: 'ok', data }
   }
 

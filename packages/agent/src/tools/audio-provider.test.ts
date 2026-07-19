@@ -1,5 +1,43 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OpenAITTSProvider } from './audio-provider'
+import { createAudioProvider, OpenAITTSProvider } from './audio-provider'
+
+describe('createAudioProvider', () => {
+  const env = { ...process.env }
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    process.env = { ...env }
+    process.env.OPENAI_API_KEY = 'env-key'
+    process.env.OPENAI_BASE_URL = 'https://env.example.com/v1'
+    process.env.OPENAI_TTS_MODEL = 'env-tts'
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    process.env = env
+    vi.unstubAllGlobals()
+  })
+
+  it('uses explicit opts over env credentials', async () => {
+    const provider = createAudioProvider({
+      apiKey: 'opts-key',
+      baseUrl: 'https://opts.example.com/v1',
+      model: 'opts-tts',
+    })
+    expect(provider).toBeInstanceOf(OpenAITTSProvider)
+    await provider.generate('hello')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('https://opts.example.com/v1/audio/speech')
+    expect(init.headers).toMatchObject({ Authorization: 'Bearer opts-key' })
+    expect(JSON.parse(String(init.body))).toMatchObject({ model: 'opts-tts' })
+  })
+})
 
 describe('OpenAITTSProvider', () => {
   let fetchMock: ReturnType<typeof vi.fn>

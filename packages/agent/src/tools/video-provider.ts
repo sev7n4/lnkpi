@@ -68,7 +68,7 @@ export class AgnesVideoProvider implements VideoProvider {
       image?: string
     },
   ): Promise<{ url: string }> {
-    const model = options?.model || process.env.OPENAI_VIDEO_MODEL || this.defaultModel
+    const model = options?.model || this.defaultModel
     const { width, height, num_frames, frame_rate } = resolveVideoParams(
       options?.duration,
       options?.aspectRatio,
@@ -173,7 +173,20 @@ function isAgnesBaseUrl(baseUrl?: string) {
   return Boolean(baseUrl?.includes('agnes-ai.com'))
 }
 
-export function createVideoProvider(): VideoProvider {
+export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
+
+export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvider {
+  if (opts?.apiKey) {
+    if (isAgnesBaseUrl(opts.baseUrl)) {
+      return new AgnesVideoProvider(
+        opts.apiKey,
+        opts.baseUrl,
+        process.env.AGNES_API_ROOT ?? 'https://apihub.agnes-ai.com',
+        opts.model ?? 'agnes-video-v2.0',
+      )
+    }
+    return new OpenAIVideoProvider()
+  }
   const key = process.env.OPENAI_API_KEY || process.env.VIDEO_API_KEY
   const baseUrl = process.env.OPENAI_BASE_URL
   if (key && isAgnesBaseUrl(baseUrl)) {

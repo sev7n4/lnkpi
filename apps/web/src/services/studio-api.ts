@@ -74,4 +74,10 @@ export const studioApi = {
       { text, ...options, refs, mentionedKeys },
       { timeout: 60_000 },
     ),
+  confirmPlatformFallback: (id: string) =>
+    api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/confirm-platform-fallback`, {}, {
+      timeout: 120_000,
+    }),
+  cancelPlatformFallback: (id: string) =>
+    api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/cancel-platform-fallback`),
 }

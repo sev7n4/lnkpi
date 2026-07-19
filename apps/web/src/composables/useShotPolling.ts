@@ -29,7 +29,7 @@ export function useShotPolling(onUpdate: (shots: ShotStatus[]) => void) {
         const shots = (data.data ?? data) as ShotStatus[]
         onUpdate(shots)
         const stillGenerating = shots.some((s) =>
-          s.materials.some((m) => m.status === 'generating'),
+          s.materials.some((m) => m.status === 'generating' || m.status === 'pending'),
         )
         if (!stillGenerating) stop()
       } catch {

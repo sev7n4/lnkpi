@@ -28,6 +28,7 @@ export function useGenerationPolling(
     const stillGenerating = results.some(
       ({ record }) => record.status === 'generating' || record.status === 'pending',
     )
+    // fallback_pending / completed / failed are terminal for this poll loop
     if (!stillGenerating && results.length === tasks.value.length) {
       stop()
     }

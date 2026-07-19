@@ -1,8 +1,23 @@
 import { Test } from '@nestjs/testing'
 import { vi } from 'vitest'
 import { PointsService } from '../points/points.service'
+import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { StudioService } from './studio.service'
 import { PrismaService } from '../prisma/prisma.service'
+
+export function defaultPlatformResolve(model?: string) {
+  const modelName = model?.includes('::') ? model.split('::')[1]! : (model ?? '')
+  return {
+    channelId: 'platform',
+    modelName,
+    apiFormat: 'openai' as const,
+    credentials: {
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL ?? '',
+    },
+    source: 'platform' as const,
+  }
+}
 
 export function createPrismaMock() {
   return {
@@ -51,6 +66,14 @@ export async function createStudioService() {
       {
         provide: PrismaService,
         useValue: createPrismaMock(),
+      },
+      {
+        provide: ProviderResolverService,
+        useValue: {
+          resolveForGeneration: vi.fn(async (_userId: string, model?: string) =>
+            defaultPlatformResolve(model),
+          ),
+        },
       },
     ],
   }).compile()

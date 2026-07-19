@@ -281,4 +281,24 @@ export class StudioController {
     )
     return { code: 0, message: 'ok', data }
   }
+
+  @Post('generations/:id/confirm-platform-fallback')
+  @UseGuards(AuthGuard)
+  async confirmPlatformFallback(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    const data = await this.studioService.confirmPlatformFallback(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('generations/:id/cancel-platform-fallback')
+  @UseGuards(AuthGuard)
+  async cancelPlatformFallback(
+    @Req() req: { user: { sub: string } },
+    @Param('id') id: string,
+  ) {
+    const data = await this.studioService.cancelPlatformFallback(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
 }

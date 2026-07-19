@@ -23,9 +23,16 @@ import {
   DEFAULT_AUDIO_VOICE,
   type AudioVoiceSettings,
 } from '@/constants/dockAudio'
-import { getModelEntry, resolveModelKey } from '@/constants/studioModels'
+import {
+  catalogModelKeyFromValue,
+  getModelEntry,
+  resolveGenerationModel,
+} from '@/constants/studioModels'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateAudioCredits } from '@/constants/credits'
+
+const { getConfig } = useModelProviderSettings()
 
 const props = defineProps<{
   node: EditableFlowNode
@@ -43,7 +50,7 @@ const emit = defineEmits<{
 }>()
 
 const prompt = ref('')
-const audioModel = ref(resolveModelKey('audio').modelKey)
+const audioModel = ref(getConfig('audio').model)
 const audioVoice = ref(DEFAULT_AUDIO_VOICE)
 const voiceSettings = ref<AudioVoiceSettings>({
   emotion: DEFAULT_AUDIO_EMOTION,
@@ -53,14 +60,14 @@ const voiceSettings = ref<AudioVoiceSettings>({
   pitch: DEFAULT_AUDIO_PITCH,
 })
 
-const modelVoices = computed(() => getModelEntry(audioModel.value)?.voices)
+const modelVoices = computed(() => getModelEntry(catalogModelKeyFromValue(audioModel.value))?.voices)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateAudioCredits())
 
 function syncVoiceToCatalog(emitPatch: boolean) {
-  const voices = getModelEntry(audioModel.value)?.voices
+  const voices = getModelEntry(catalogModelKeyFromValue(audioModel.value))?.voices
   if (!voices?.length) return
   if (!voices.some((v) => v.id === audioVoice.value)) {
     audioVoice.value = voices[0].id
@@ -73,7 +80,7 @@ function syncVoiceToCatalog(emitPatch: boolean) {
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
-  audioModel.value = resolveModelKey('audio', data.audioModel as string | undefined).modelKey
+  audioModel.value = resolveGenerationModel('audio', data.audioModel as string | undefined)
   audioVoice.value = String(data.audioVoice ?? DEFAULT_AUDIO_VOICE)
   syncVoiceToCatalog(true)
   const emotion = data.audioEmotion as AudioVoiceSettings['emotion'] | undefined

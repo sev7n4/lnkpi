@@ -12,9 +12,20 @@ import {
   mergeRefsToPrompt,
   type MergeTextSource,
 } from '@lnkpi/agent'
-import { resolveImageSize, resolveModelKey, type ImageResolutionTier } from '@lnkpi/shared'
+import {
+  BYOK_FALLBACK_CONFIRM_MESSAGE,
+  resolveImageSize,
+  resolveModelKey,
+  type ImageResolutionTier,
+  type StudioModality,
+} from '@lnkpi/shared'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { classifyByokFailure } from '../provider/byok-fallback'
+import {
+  ProviderResolverService,
+  type ResolvedGenerationProvider,
+} from '../provider/provider-resolver.service'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -50,11 +61,29 @@ function buildPromptWithRefImage(prompt: string, refImageUrl: string): string {
   return `${trimmed} [ref-image:${ref}]`
 }
 
+function userProviderOpts(resolved: ResolvedGenerationProvider) {
+  if (resolved.source !== 'user') return undefined
+  return {
+    apiKey: resolved.credentials.apiKey,
+    baseUrl: resolved.credentials.baseUrl || undefined,
+  }
+}
+
+function parseMeta(raw: string | null | undefined): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
 @Injectable()
 export class StudioService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PointsService) private readonly points: PointsService,
+    @Inject(ProviderResolverService) private readonly resolver: ProviderResolverService,
   ) {}
 
   async listGenerations(userId: string, type?: string) {
@@ -70,20 +99,47 @@ export class StudioService {
     refs: StudioRefInput[] | undefined,
     downstreamType: 'text' | 'image' | 'video' | 'audio',
     mentionedKeys?: string[],
+    credentials?: { apiKey?: string; baseUrl?: string },
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
       localPrompt: localPrompt.trim() || undefined,
       downstreamType,
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
-      apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: process.env.OPENAI_BASE_URL,
+      apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
+      baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
     })
     return {
       mergedText,
       skippedMerge,
       referenceImages: extractReferenceImages(refs),
     }
+  }
+
+  private pendingMeta(
+    resolved: ResolvedGenerationProvider,
+    err: unknown,
+    extra: Record<string, unknown> = {},
+  ) {
+    return {
+      ...extra,
+      channelId: resolved.channelId,
+      failureClass: classifyByokFailure(err),
+      confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
+      originalModel: extra.originalModel,
+    }
+  }
+
+  /** Catalog gateway id for platform confirm — never reuse user-channel modelName. */
+  private platformGatewayModelId(
+    modality: StudioModality,
+    meta: Record<string, unknown>,
+  ): string {
+    const requested =
+      typeof meta.modelKey === 'string' && meta.modelKey.trim()
+        ? meta.modelKey
+        : undefined
+    return resolveModelKey(modality, requested).entry.gatewayModelId
   }
 
   async generateText(
@@ -94,72 +150,137 @@ export class StudioService {
     mentionedKeys?: string[],
   ) {
     await this.points.consume(userId, 5, '文本生成')
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'text',
       mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
     )
-    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', model)
-    const gatewayModelId = entry.gatewayModelId
-    const { text } =
-      referenceImages.length > 0
-        ? await generateTextWithImages(mergedText, referenceImages, {
-            model: gatewayModelId,
-            apiKey: process.env.OPENAI_API_KEY,
-            baseUrl: process.env.OPENAI_BASE_URL,
-          })
-        : await createTextProvider().generate(mergedText, gatewayModelId)
-    return this.prisma.generationRecord.create({
-      data: {
-        userId,
-        type: 'text',
-        prompt: mergedText,
-        model: resolvedKey,
-        url: null,
-        status: 'completed',
-        metadata: JSON.stringify({
-          text,
-          modelKey: resolvedKey,
-          gatewayModelId,
-          ...(fallback ? { modelFallback: true } : {}),
-          skippedMerge,
-          refsCount: refs?.length ?? 0,
-          visionUsed: referenceImages.length > 0,
-          referenceImages,
-        }),
-      },
-    })
+    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
+    const gatewayModelId =
+      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
+    const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
+
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const opts = userProviderOpts(resolved)
+      const { text } =
+        referenceImages.length > 0
+          ? await generateTextWithImages(mergedText, referenceImages, {
+              model: gatewayModelId,
+              apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+              baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+            })
+          : await createTextProvider(opts).generate(mergedText, gatewayModelId)
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'text',
+          prompt: mergedText,
+          model: storeModel,
+          url: null,
+          status: 'completed',
+          metadata: JSON.stringify({
+            text,
+            modelKey: resolvedKey,
+            gatewayModelId,
+            channelId: resolved.channelId,
+            ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
+            skippedMerge,
+            refsCount: refs?.length ?? 0,
+            visionUsed: referenceImages.length > 0,
+            referenceImages,
+          }),
+        },
+      })
+    } catch (err) {
+      if (resolved.source !== 'user') throw err
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'text',
+          prompt: mergedText,
+          model: storeModel,
+          url: null,
+          status: 'fallback_pending',
+          metadata: JSON.stringify(
+            this.pendingMeta(resolved, err, {
+              originalModel: model,
+              modelKey: resolvedKey,
+              gatewayModelId,
+              skippedMerge,
+              refsCount: refs?.length ?? 0,
+              visionUsed: referenceImages.length > 0,
+              referenceImages,
+            }),
+          ),
+        },
+      })
+    }
   }
 
   async generatePrompt(userId: string, prompt: string, model?: string) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     await this.points.consume(userId, 5, '提示词模式生成')
-    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', model)
-    const gatewayModelId = entry.gatewayModelId
-    const { mode, content } = await generatePromptFromUserInput(trimmed, {
-      model: gatewayModelId,
-      apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: process.env.OPENAI_BASE_URL,
-    })
-    return this.prisma.generationRecord.create({
-      data: {
-        userId,
-        type: 'prompt',
-        prompt: trimmed,
-        model: resolvedKey,
-        url: null,
-        status: 'completed',
-        metadata: JSON.stringify({
-          mode,
-          content,
-          modelKey: resolvedKey,
-          gatewayModelId,
-          ...(fallback ? { modelFallback: true } : {}),
-        }),
-      },
-    })
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
+    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
+    const gatewayModelId =
+      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
+    const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
+    const opts = userProviderOpts(resolved)
+
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { mode, content } = await generatePromptFromUserInput(trimmed, {
+        model: gatewayModelId,
+        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+      })
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'prompt',
+          prompt: trimmed,
+          model: storeModel,
+          url: null,
+          status: 'completed',
+          metadata: JSON.stringify({
+            mode,
+            content,
+            modelKey: resolvedKey,
+            gatewayModelId,
+            channelId: resolved.channelId,
+            ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
+          }),
+        },
+      })
+    } catch (err) {
+      if (resolved.source !== 'user') throw err
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'prompt',
+          prompt: trimmed,
+          model: storeModel,
+          url: null,
+          status: 'fallback_pending',
+          metadata: JSON.stringify(
+            this.pendingMeta(resolved, err, {
+              originalModel: model,
+              modelKey: resolvedKey,
+              gatewayModelId,
+            }),
+          ),
+        },
+      })
+    }
   }
 
   async getGeneration(userId: string, id: string) {
@@ -184,60 +305,137 @@ export class StudioService {
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
     await this.points.consume(userId, 10 * n, '图像生成')
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'image',
       mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
     )
     const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
-    const built = buildImageProviderOptions({ modelKey: model, size, n, referenceImages })
+    const built = buildImageProviderOptions({
+      modelKey: resolved.modelName,
+      size,
+      n,
+      referenceImages,
+    })
+    const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
+    const storeModel =
+      resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
     const primaryRef = built.referenceImages[0]
     const basePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const effectivePrompt = [basePrompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
-    const { url, urls } = await createImageProvider().generate(effectivePrompt, {
-      size: built.size,
-      n: built.n,
-      modelId: built.modelId,
-    })
-    const imageUrls = urls?.length ? urls : [url]
-    return this.prisma.generationRecord.create({
-      data: {
-        userId,
-        type: 'image',
-        prompt: effectivePrompt,
-        model: built.meta.modelKey,
-        url: imageUrls[0],
-        status: 'completed',
-        metadata: JSON.stringify({
-          ...built.meta,
-          aspectRatio,
-          resolution,
-          count: n,
+
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url, urls } = await createImageProvider(userProviderOpts(resolved)).generate(
+        effectivePrompt,
+        {
           size: built.size,
-          urls: imageUrls,
-          referenceImages,
-          skippedMerge,
-        }),
-      },
-    })
+          n: built.n,
+          modelId,
+        },
+      )
+      const imageUrls = urls?.length ? urls : [url]
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'image',
+          prompt: effectivePrompt,
+          model: storeModel,
+          url: imageUrls[0],
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...built.meta,
+            modelId,
+            aspectRatio,
+            resolution,
+            count: n,
+            size: built.size,
+            urls: imageUrls,
+            referenceImages,
+            skippedMerge,
+            channelId: resolved.channelId,
+          }),
+        },
+      })
+    } catch (err) {
+      if (resolved.source !== 'user') throw err
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'image',
+          prompt: effectivePrompt,
+          model: storeModel,
+          url: null,
+          status: 'fallback_pending',
+          metadata: JSON.stringify(
+            this.pendingMeta(resolved, err, {
+              ...built.meta,
+              modelId,
+              originalModel: model,
+              aspectRatio,
+              resolution,
+              count: n,
+              size: built.size,
+              referenceImages,
+              skippedMerge,
+            }),
+          ),
+        },
+      })
+    }
   }
 
   async generateImageVariation(userId: string, prompt: string, basePrompt?: string, model?: string) {
     await this.points.consume(userId, 10, '图像变体')
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const combined = basePrompt ? `${basePrompt}。变体要求：${prompt}` : prompt
-    const { url } = await createImageProvider().generate(combined)
-    return this.prisma.generationRecord.create({
-      data: {
-        userId,
-        type: 'image',
-        prompt: combined,
-        model,
-        url,
-        status: 'completed',
-        metadata: JSON.stringify({ variation: true, basePrompt }),
-      },
-    })
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url } = await createImageProvider(userProviderOpts(resolved)).generate(combined, {
+        modelId: resolved.modelName || undefined,
+      })
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'image',
+          prompt: combined,
+          model: model ?? resolved.modelName,
+          url,
+          status: 'completed',
+          metadata: JSON.stringify({
+            variation: true,
+            basePrompt,
+            channelId: resolved.channelId,
+          }),
+        },
+      })
+    } catch (err) {
+      if (resolved.source !== 'user') throw err
+      return this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'image',
+          prompt: combined,
+          model: model ?? resolved.modelName,
+          url: null,
+          status: 'fallback_pending',
+          metadata: JSON.stringify(
+            this.pendingMeta(resolved, err, {
+              originalModel: model,
+              variation: true,
+              basePrompt,
+            }),
+          ),
+        },
+      })
+    }
   }
 
   async generateVideo(
@@ -253,27 +451,33 @@ export class StudioService {
   ) {
     const durationCredits = duration >= 15 ? 70 : duration >= 10 ? 50 : 30
     await this.points.consume(userId, durationCredits, '视频生成')
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'video',
       mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
     )
     const built = buildVideoProviderOptions({
-      modelKey: model,
+      modelKey: resolved.modelName,
       duration,
       aspectRatio,
       resolution,
       crop,
       referenceImages,
     })
+    const gatewayModel =
+      resolved.source === 'user' ? resolved.modelName : built.model
+    const storeModel =
+      resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
     const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'video',
         prompt: effectivePrompt,
-        model: built.meta.modelKey,
+        model: storeModel,
         status: 'generating',
         metadata: JSON.stringify({
           ...built.meta,
@@ -284,17 +488,25 @@ export class StudioService {
           referenceImages,
           skippedMerge,
           mergedText,
+          channelId: resolved.channelId,
+          originalModel: model,
+          providerSource: resolved.source,
         }),
       },
     })
-    this.completeVideo(record.id, effectivePrompt, {
-      model: built.model,
-      duration: built.duration,
-      aspectRatio: built.aspectRatio,
-      resolution: built.resolution,
-      crop: built.crop,
-      image: built.image,
-    }).catch(console.error)
+    this.completeVideo(
+      record.id,
+      effectivePrompt,
+      {
+        model: gatewayModel,
+        duration: built.duration,
+        aspectRatio: built.aspectRatio,
+        resolution: built.resolution,
+        crop: built.crop,
+        image: built.image,
+      },
+      resolved,
+    ).catch(console.error)
     return record
   }
 
@@ -314,10 +526,17 @@ export class StudioService {
     mentionedKeys?: string[],
   ) {
     await this.points.consume(userId, 5, '音频生成')
-    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(text, refs, 'audio', mentionedKeys)
+    const resolved = await this.resolver.resolveForGeneration(userId, options.model, 'audio')
+    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
+      text,
+      refs,
+      'audio',
+      mentionedKeys,
+      resolved.source === 'user' ? resolved.credentials : undefined,
+    )
     const built = buildAudioRequest({
       mergedText,
-      modelKey: options.model,
+      modelKey: resolved.modelName,
       voice: options.voice,
       emotion: options.emotion,
       language: options.language,
@@ -325,30 +544,224 @@ export class StudioService {
       volume: options.volume,
       pitch: options.pitch,
     })
-    const { url } = await createAudioProvider().generate(built.text, built.options)
-    const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
-    const record = await this.prisma.generationRecord.create({
-      data: {
-        userId,
-        type: 'audio',
-        prompt: mergedText,
-        model: built.meta.modelKey,
-        url: storeUrl,
-        status: 'completed',
-        metadata: JSON.stringify({
-          ...built.meta,
-          skippedMerge,
-          voice: built.options.voice ?? options.voice ?? 'default',
-          emotion: options.emotion ?? 'neutral',
-          language: options.language ?? 'zh',
-          speed: options.speed ?? 1,
-          volume: options.volume,
-          pitch: options.pitch,
-          hasTtsData: url.startsWith('data:'),
-        }),
-      },
+    const audioOpts =
+      resolved.source === 'user'
+        ? { ...built.options, model: resolved.modelName }
+        : built.options
+    const storeModel =
+      resolved.source === 'user' ? options.model ?? built.meta.modelKey : built.meta.modelKey
+
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url } = await createAudioProvider(userProviderOpts(resolved)).generate(
+        built.text,
+        audioOpts,
+      )
+      const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
+      const record = await this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'audio',
+          prompt: mergedText,
+          model: storeModel,
+          url: storeUrl,
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...built.meta,
+            skippedMerge,
+            voice: built.options.voice ?? options.voice ?? 'default',
+            emotion: options.emotion ?? 'neutral',
+            language: options.language ?? 'zh',
+            speed: options.speed ?? 1,
+            volume: options.volume,
+            pitch: options.pitch,
+            hasTtsData: url.startsWith('data:'),
+            channelId: resolved.channelId,
+          }),
+        },
+      })
+      return { ...record, url }
+    } catch (err) {
+      if (resolved.source !== 'user') throw err
+      const record = await this.prisma.generationRecord.create({
+        data: {
+          userId,
+          type: 'audio',
+          prompt: mergedText,
+          model: storeModel,
+          url: null,
+          status: 'fallback_pending',
+          metadata: JSON.stringify(
+            this.pendingMeta(resolved, err, {
+              ...built.meta,
+              originalModel: options.model,
+              skippedMerge,
+              voice: options.voice,
+              emotion: options.emotion,
+              language: options.language,
+              speed: options.speed,
+              volume: options.volume,
+              pitch: options.pitch,
+              audioOptions: audioOpts,
+            }),
+          ),
+        },
+      })
+      return record
+    }
+  }
+
+  async confirmPlatformFallback(userId: string, recordId: string) {
+    const record = await this.getGeneration(userId, recordId)
+    if (record.status !== 'fallback_pending') {
+      throw new BadRequestException('当前状态不可确认平台回退')
+    }
+    const meta = parseMeta(record.metadata)
+
+    if (record.type === 'image') {
+      const size = String(meta.size ?? '1024x1024')
+      const n = Number(meta.count ?? 1) || 1
+      // Never reuse user-channel modelName against platform credentials.
+      const modelId = this.platformGatewayModelId('image', meta)
+      const { url, urls } = await createImageProvider(undefined).generate(record.prompt, {
+        size,
+        n,
+        modelId,
+      })
+      const imageUrls = urls?.length ? urls : [url]
+      return this.prisma.generationRecord.update({
+        where: { id: record.id },
+        data: {
+          url: imageUrls[0],
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            urls: imageUrls,
+            gatewayModelId: modelId,
+            providerFallback: true,
+            channelId: 'platform',
+          }),
+        },
+      })
+    }
+
+    if (record.type === 'text' || record.type === 'prompt') {
+      // Never reuse user-channel modelName against platform credentials.
+      const gatewayModelId = this.platformGatewayModelId('text', meta)
+      const referenceImages = Array.isArray(meta.referenceImages)
+        ? (meta.referenceImages as string[])
+        : []
+      let text: string
+      let promptMeta: Record<string, unknown> = {}
+      if (record.type === 'prompt') {
+        const { mode, content } = await generatePromptFromUserInput(record.prompt, {
+          model: gatewayModelId,
+          apiKey: process.env.OPENAI_API_KEY,
+          baseUrl: process.env.OPENAI_BASE_URL,
+        })
+        text = content
+        promptMeta = { mode, content }
+      } else if (referenceImages.length > 0) {
+        const result = await generateTextWithImages(record.prompt, referenceImages, {
+          model: gatewayModelId,
+          apiKey: process.env.OPENAI_API_KEY,
+          baseUrl: process.env.OPENAI_BASE_URL,
+        })
+        text = result.text
+      } else {
+        const result = await createTextProvider(undefined).generate(record.prompt, gatewayModelId)
+        text = result.text
+      }
+      return this.prisma.generationRecord.update({
+        where: { id: record.id },
+        data: {
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            ...promptMeta,
+            text: record.type === 'text' ? text : meta.text,
+            gatewayModelId,
+            providerFallback: true,
+            channelId: 'platform',
+          }),
+        },
+      })
+    }
+
+    if (record.type === 'audio') {
+      const platformModel = this.platformGatewayModelId('audio', meta)
+      const prevAudio = (meta.audioOptions as Record<string, unknown> | undefined) ?? {}
+      const audioOptions = {
+        ...prevAudio,
+        model: platformModel,
+        voice: prevAudio.voice ?? meta.voice,
+        speed: prevAudio.speed ?? meta.speed,
+        volume: prevAudio.volume ?? meta.volume,
+        pitch: prevAudio.pitch ?? meta.pitch,
+      }
+      const { url } = await createAudioProvider(undefined).generate(
+        record.prompt,
+        audioOptions as { model?: string; voice?: string; speed?: number; volume?: number; pitch?: number },
+      )
+      const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
+      return this.prisma.generationRecord.update({
+        where: { id: record.id },
+        data: {
+          url: storeUrl,
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            audioOptions,
+            gatewayModelId: platformModel,
+            hasTtsData: url.startsWith('data:'),
+            providerFallback: true,
+            channelId: 'platform',
+          }),
+        },
+      })
+    }
+
+    if (record.type === 'video') {
+      const platformModel = this.platformGatewayModelId('video', meta)
+      const { url } = await createVideoProvider(undefined).generate(record.prompt, {
+        model: platformModel,
+        duration: Number(meta.duration ?? 5),
+        aspectRatio: String(meta.aspectRatio ?? '16:9'),
+        resolution: String(meta.resolution ?? '720p'),
+        crop: meta.crop === undefined ? undefined : String(meta.crop),
+        image: Array.isArray(meta.referenceImages)
+          ? (meta.referenceImages as string[])[0]
+          : undefined,
+      })
+      return this.prisma.generationRecord.update({
+        where: { id: record.id },
+        data: {
+          url,
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            gatewayModelId: platformModel,
+            providerFallback: true,
+            channelId: 'platform',
+          }),
+        },
+      })
+    }
+
+    throw new BadRequestException('不支持的生成类型')
+  }
+
+  async cancelPlatformFallback(userId: string, recordId: string) {
+    const record = await this.getGeneration(userId, recordId)
+    if (record.status !== 'fallback_pending') {
+      throw new BadRequestException('当前状态不可取消平台回退')
+    }
+    return this.prisma.generationRecord.update({
+      where: { id: record.id },
+      data: { status: 'failed' },
     })
-    return { ...record, url }
   }
 
   private async completeVideo(
@@ -362,17 +775,35 @@ export class StudioService {
       crop?: string
       image?: string
     },
+    resolved: ResolvedGenerationProvider,
   ) {
     try {
-      const { url } = await createVideoProvider().generate(prompt, options)
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url } = await createVideoProvider(userProviderOpts(resolved)).generate(
+        prompt,
+        options,
+      )
       await this.prisma.generationRecord.update({
         where: { id },
         data: { url, status: 'completed' },
       })
     } catch (err) {
       console.error('Video generation failed:', err)
+      if (resolved.source === 'user') {
+        const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+        const meta = parseMeta(existing?.metadata)
+        await this.prisma.generationRecord.update({
+          where: { id },
+          data: {
+            status: 'fallback_pending',
+            metadata: JSON.stringify(this.pendingMeta(resolved, err, meta)),
+          },
+        })
+        return
+      }
       await this.prisma.generationRecord.update({ where: { id }, data: { status: 'failed' } })
     }
   }
-
 }

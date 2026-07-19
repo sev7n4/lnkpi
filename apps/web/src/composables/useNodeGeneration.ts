@@ -18,8 +18,11 @@ import {
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
-import { studioApi, type StudioRefPayload } from '@/services/studio-api'
-import { defaultModelKey, resolveModelKey } from '@/constants/studioModels'
+import { studioApi, type GenerationRecord, type StudioRefPayload } from '@/services/studio-api'
+import {
+  resolveGenerationModel,
+  type StudioModality,
+} from '@/constants/studioModels'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import { applyTrackOrder } from '@/utils/compositionUpstream'
 import {
@@ -30,6 +33,15 @@ import {
   resolveCanvasVideoParams,
   sceneComposerToNodePatch,
 } from '@/utils/sceneComposer'
+
+export type FallbackConfirmDecision = 'confirm' | 'cancel'
+
+export interface FallbackPendingRequest {
+  kind: 'studio' | 'material'
+  id: string
+  nodeId: string
+  message?: string
+}
 
 export interface NodeGenerationDeps {
   nodes: Ref<EditableFlowNode[]>
@@ -43,6 +55,8 @@ export interface NodeGenerationDeps {
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
   resolveProviderModels: () => { image: string; video: string; text: string }
+  requestFallbackConfirm?: (req: FallbackPendingRequest) => Promise<FallbackConfirmDecision>
+  isModelSelectable?: (modality: StudioModality, model: string) => boolean
 }
 
 function localPrompt(data: Record<string, unknown>): string {
@@ -129,8 +143,131 @@ function shotHasChildType(nodes: EditableFlowNode[], edges: CanvasEdgeLike[], sh
   return findShotMediaChild(nodes, edges, shotId, childType) !== null
 }
 
+function parseConfirmMessage(metadata?: string | null): string | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as { confirmMessage?: string }
+    return typeof meta.confirmMessage === 'string' ? meta.confirmMessage : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function modalityForNodeType(nodeType: string): StudioModality | null {
+  if (nodeType === 'image') return 'image'
+  if (nodeType === 'video') return 'video'
+  if (nodeType === 'audio') return 'audio'
+  if (nodeType === 'text' || nodeType === 'prompt') return 'text'
+  return null
+}
+
+function modelFieldForModality(modality: StudioModality): string {
+  if (modality === 'image') return 'imageModel'
+  if (modality === 'video') return 'videoModel'
+  if (modality === 'audio') return 'audioModel'
+  return 'textModel'
+}
+
 export function useNodeGeneration(deps: NodeGenerationDeps) {
   const generating = ref(false)
+
+  async function handleStudioFallback(nodeId: string, record: GenerationRecord): Promise<boolean> {
+    if (record.status !== NODE_GENERATION_STATUS.fallback_pending) return false
+    const decision = deps.requestFallbackConfirm
+      ? await deps.requestFallbackConfirm({
+          kind: 'studio',
+          id: record.id,
+          nodeId,
+          message: parseConfirmMessage(record.metadata),
+        })
+      : 'cancel'
+
+    if (decision === 'confirm') {
+      const { data: res } = await studioApi.confirmPlatformFallback(record.id)
+      return applyStudioRecord(nodeId, res.data)
+    }
+
+    await studioApi.cancelPlatformFallback(record.id)
+    deps.patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '已取消平台回退',
+      generationRecordId: record.id,
+    })
+    return true
+  }
+
+  function applyStudioRecord(nodeId: string, record: GenerationRecord): boolean {
+    if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
+      return false
+    }
+    if (record.status === NODE_GENERATION_STATUS.completed) {
+      const urls = parseRecordUrls(record)
+      const patch: Record<string, unknown> = {
+        status: NODE_GENERATION_STATUS.completed,
+        errorMessage: null,
+        generationRecordId: record.id,
+      }
+      if (record.type === 'text' || record.type === 'prompt') {
+        if (record.type === 'prompt') {
+          const parsed = parseRecordPromptContent(record)
+          patch.content = parsed.content
+          patch.promptMode = parsed.mode
+        } else {
+          const content = parseRecordText(record)
+          patch.content = content
+          patch.prompt = content
+        }
+      } else {
+        patch.url = urls[0] ?? parseRecordUrl(record)
+        if (urls.length) patch.images = urls
+      }
+      deps.patchNodeData(nodeId, patch)
+      return true
+    }
+    if (
+      record.status === NODE_GENERATION_STATUS.generating ||
+      record.status === 'pending'
+    ) {
+      deps.patchNodeData(nodeId, {
+        status: NODE_GENERATION_STATUS.generating,
+        generationRecordId: record.id,
+      })
+      deps.startGenerationPolling([{ recordId: record.id, nodeId }])
+      return true
+    }
+    deps.patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '生成失败',
+      generationRecordId: record.id,
+    })
+    return true
+  }
+
+  async function resolveStudioRecord(nodeId: string, record: GenerationRecord) {
+    if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
+      const handled = await handleStudioFallback(nodeId, record)
+      if (!handled) {
+        deps.patchNodeData(nodeId, {
+          status: NODE_GENERATION_STATUS.error,
+          errorMessage: '平台回退仍待确认',
+          generationRecordId: record.id,
+        })
+      }
+      await deps.saveCanvas()
+      return
+    }
+    applyStudioRecord(nodeId, record)
+    await deps.saveCanvas()
+  }
+
+  function assertModelSelectable(node: EditableFlowNode, modality: StudioModality, model: string): boolean {
+    if (!deps.isModelSelectable || deps.isModelSelectable(modality, model)) return true
+    deps.patchNodeData(node.id, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '当前模型已停用，请重新选择模型后再生成',
+    })
+    return false
+  }
 
   async function generateForNode(node: EditableFlowNode) {
     const data = node.data ?? {}
@@ -154,6 +291,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
 
+    const modality = modalityForNodeType(nodeType)
+    if (modality) {
+      const field = modelFieldForModality(modality)
+      const model = resolveGenerationModel(modality, data[field] as string | undefined)
+      if (!assertModelSelectable(node, modality, model)) return
+    }
+
     generating.value = true
 
     try {
@@ -161,16 +305,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
         const { data: res } = await studioApi.generatePrompt(
           local,
-          resolveModelKey('text', data.textModel as string | undefined).modelKey,
+          resolveGenerationModel('text', data.textModel as string | undefined),
         )
-        const parsed = parseRecordPromptContent(res.data)
-        deps.patchNodeData(node.id, {
-          content: parsed.content,
-          promptMode: parsed.mode,
-          status: NODE_GENERATION_STATUS.completed,
-          errorMessage: null,
-        })
-        await deps.saveCanvas()
+        await resolveStudioRecord(node.id, res.data)
         return
       }
 
@@ -178,24 +315,18 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: local, prompt: local })
         const { data: res } = await studioApi.generateText(
           local,
-          resolveModelKey('text', data.textModel as string | undefined).modelKey,
+          resolveGenerationModel('text', data.textModel as string | undefined),
           refs,
           mentionedKeys,
         )
-        const content = parseRecordText(res.data)
-        deps.patchNodeData(node.id, {
-          content,
-          prompt: content,
-          status: NODE_GENERATION_STATUS.completed,
-        })
-        await deps.saveCanvas()
+        await resolveStudioRecord(node.id, res.data)
         return
       }
 
       if (nodeType === 'audio') {
         deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
         const { data: res } = await studioApi.generateAudio(local, {
-          model: String(data.audioModel ?? defaultModelKey('audio')),
+          model: resolveGenerationModel('audio', data.audioModel as string | undefined),
           voice: String(data.audioVoice ?? DEFAULT_AUDIO_VOICE),
           emotion: String(data.audioEmotion ?? 'neutral'),
           language: String(data.audioLanguage ?? 'zh'),
@@ -203,12 +334,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           volume: typeof data.audioVolume === 'number' ? data.audioVolume : 1,
           pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
         }, refs, mentionedKeys)
-        deps.patchNodeData(node.id, {
-          url: parseRecordUrl(res.data),
-          status: NODE_GENERATION_STATUS.completed,
-          prompt: local,
-        })
-        await deps.saveCanvas()
+        await resolveStudioRecord(node.id, res.data)
         return
       }
 
@@ -274,30 +400,27 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const count = Number(data.imageCount ?? 1)
       const { data: res } = await studioApi.generateImage(
         prompt,
-        resolveModelKey('image', data.imageModel as string | undefined).modelKey,
+        resolveGenerationModel('image', data.imageModel as string | undefined),
         aspectRatio,
         refs,
         mentionedKeys,
         resolution,
         count,
       )
-      const urls = parseRecordUrls(res.data)
       deps.patchNodeData(node.id, {
-        url: urls[0] ?? parseRecordUrl(res.data),
-        images: urls,
-        status: NODE_GENERATION_STATUS.completed,
         referenceImageUrl: refImage || undefined,
         imageResolution: resolution,
         imageCount: count,
+        generationRecordId: res.data.id,
       })
-      await deps.saveCanvas()
+      await resolveStudioRecord(node.id, res.data)
       return
     }
 
     const settings = data.videoSettings as VideoSettings | undefined
     const { data: res } = await studioApi.generateVideo(
       prompt,
-      resolveModelKey('video', data.videoModel as string | undefined).modelKey,
+      resolveGenerationModel('video', data.videoModel as string | undefined),
       settings?.duration,
       settings?.aspectRatio,
       refs,
@@ -305,24 +428,66 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       settings?.resolution,
       settings?.crop,
     )
-    const url = parseRecordUrl(res.data)
-    const recordId = res.data.id
-    if (res.data.status === NODE_GENERATION_STATUS.completed && url) {
-      deps.patchNodeData(node.id, {
-        url,
-        status: NODE_GENERATION_STATUS.completed,
-        referenceImageUrl: refImage || undefined,
-        generationRecordId: recordId,
-      })
-    } else {
-      deps.patchNodeData(node.id, {
-        status: NODE_GENERATION_STATUS.generating,
-        referenceImageUrl: refImage || undefined,
-        generationRecordId: recordId,
-      })
-      deps.startGenerationPolling([{ recordId, nodeId: node.id }])
+    deps.patchNodeData(node.id, {
+      referenceImageUrl: refImage || undefined,
+      generationRecordId: res.data.id,
+    })
+    await resolveStudioRecord(node.id, res.data)
+  }
+
+  async function handleMaterialFallback(nodeId: string, materialId: string, message?: string) {
+    const decision = deps.requestFallbackConfirm
+      ? await deps.requestFallbackConfirm({
+          kind: 'material',
+          id: materialId,
+          nodeId,
+          message,
+        })
+      : 'cancel'
+
+    if (decision === 'confirm') {
+      await canvasApi.confirmMaterialPlatformFallback(materialId)
+      deps.patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.generating })
+      const shotEdge = findIncomingEdge(deps.edges.value, nodeId)
+      if (shotEdge?.source) deps.startShotPolling([shotEdge.source])
+      return
     }
-    await deps.saveCanvas()
+
+    await canvasApi.cancelMaterialPlatformFallback(materialId)
+    deps.patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '已取消平台回退',
+    })
+  }
+
+  /** Exposed for CanvasPage shot/generation polling when status becomes fallback_pending */
+  async function onFallbackPending(
+    kind: 'studio' | 'material',
+    id: string,
+    nodeId: string,
+    message?: string,
+  ) {
+    try {
+      if (kind === 'studio') {
+        await handleStudioFallback(nodeId, {
+          id,
+          type: 'video',
+          prompt: '',
+          status: NODE_GENERATION_STATUS.fallback_pending,
+          metadata: message ? JSON.stringify({ confirmMessage: message }) : null,
+          createdAt: new Date().toISOString(),
+        })
+      } else {
+        await handleMaterialFallback(nodeId, id, message)
+      }
+      await deps.saveCanvas()
+    } catch (err) {
+      deps.patchNodeData(nodeId, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: err instanceof Error ? err.message : '平台回退处理失败',
+      })
+      await deps.saveCanvas()
+    }
   }
 
   async function generateShot(node: EditableFlowNode, prompt: string, data: Record<string, unknown>) {
@@ -506,5 +671,6 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     expandSceneComposer,
     batchGenerateSceneComposer,
     exportVideoComposition,
+    onFallbackPending,
   }
 }

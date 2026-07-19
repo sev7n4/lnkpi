@@ -21,6 +21,61 @@ model User {
   stories    Story[]
   generations GenerationRecord[]
   pointTransactions PointTransaction[]
+  providerChannels ProviderChannel[]
+  aiPreferences    UserAiPreferences?
+  webdavConfig     UserWebdavConfig?
+}
+
+model ProviderChannel {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  apiFormat       String
+  baseUrl         String
+  encryptedApiKey String?
+  iv              String?
+  authTag         String?
+  keyVersion      Int      @default(1)
+  models          String   @default("[]")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model UserAiPreferences {
+  userId                 String  @id
+  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  selectableImageModels  String  @default("[]")
+  selectableVideoModels  String  @default("[]")
+  selectableTextModels   String  @default("[]")
+  selectableAudioModels  String  @default("[]")
+  defaultImageModel      String  @default("")
+  defaultVideoModel      String  @default("")
+  defaultTextModel       String  @default("")
+  defaultAudioModel      String  @default("")
+  canvasImageCount       Int     @default(3)
+  audioVoice             String  @default("female-shaonv")
+  audioFormat            String  @default("mp3")
+  audioSpeed             Float   @default(1)
+  audioInstructions      String?
+  systemPrompt           String?
+}
+
+model UserWebdavConfig {
+  userId            String    @id
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  url               String    @default("")
+  directory         String    @default("")
+  username          String    @default("")
+  encryptedPassword String?
+  iv                String?
+  authTag           String?
+  keyVersion        Int       @default(1)
+  connectionMode    String    @default("proxy")
+  lastSyncedAt      DateTime?
 }
 
 model PointTransaction {
@@ -98,6 +153,7 @@ model Material {
   thumbnail String?
   prompt    String?
   status    String   @default("idle")
+  metadata  String?
   order     Int      @default(0)
   createdAt DateTime @default(now())
 }

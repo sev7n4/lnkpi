@@ -63,7 +63,12 @@ export class OpenAIImageProvider implements ImageProvider {
   }
 }
 
-export function createImageProvider(): ImageProvider {
+export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
+
+export function createImageProvider(opts?: ProviderCredentialOpts): ImageProvider {
+  if (opts?.apiKey) {
+    return new OpenAIImageProvider(opts.apiKey, opts.baseUrl, opts.model)
+  }
   const key = process.env.OPENAI_API_KEY
   if (key) {
     return new OpenAIImageProvider(key, process.env.OPENAI_BASE_URL, process.env.OPENAI_IMAGE_MODEL)

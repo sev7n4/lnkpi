@@ -19,7 +19,7 @@ import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vu
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveModelKey } from '@/constants/studioModels'
+import { resolveGenerationModel } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
@@ -103,7 +103,7 @@ function onRefRemove(ref: NodeRef) {
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
-  imageModel.value = resolveModelKey('image', data.imageModel as string | undefined).modelKey
+  imageModel.value = resolveGenerationModel('image', data.imageModel as string | undefined)
   imageAspect.value = (data.imageAspect as ImageAspectRatio | undefined) ?? '16:9'
   imageResolution.value = (data.imageResolution as ImageResolution | undefined) ?? '1K'
   const count = Number(data.imageCount ?? 1)
