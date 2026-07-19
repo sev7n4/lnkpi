@@ -211,3 +211,11 @@ export function resolveNodeRefs(input: ResolveNodeRefsInput): NodeRef[] {
 
   return assignRefKeys(applyRefOrder(visible, input.refOrder))
 }
+
+export interface GenerationRefPayload {
+  refKey: string
+  mediaType: RefMediaType
+  label?: string
+  text?: string
+  url?: string
+}
