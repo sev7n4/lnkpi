@@ -7,6 +7,8 @@ import type {
 } from '@lnkpi/shared'
 import { MaterialService } from './material.service'
 import { ShotService } from './shot.service'
+import { PointsService } from '../points/points.service'
+import { videoCredits } from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -15,16 +17,34 @@ export class SceneComposerService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ShotService) private readonly shotService: ShotService,
     @Inject(MaterialService) private readonly materialService: MaterialService,
+    @Inject(PointsService) private readonly points: PointsService,
   ) {}
 
-  private async assertSession(sessionId: string) {
-    const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
+  private async assertOwnedSession(sessionId: string, userId: string) {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId },
+    })
     if (!session) throw new NotFoundException('画布不存在')
     return session
   }
 
-  async save(dto: SceneComposerSaveRequest) {
-    await this.assertSession(dto.sessionId)
+  private itemCredits(item: SceneComposerBatchItem): number {
+    if (item.mediaType === 'video') {
+      return videoCredits(item.duration ?? 5)
+    }
+    return 10
+  }
+
+  private async assertShotInSession(shotId: string, sessionId: string) {
+    const shot = await this.prisma.shot.findUnique({ where: { id: shotId } })
+    if (shot && shot.sessionId !== sessionId) {
+      throw new NotFoundException('画布不存在')
+    }
+    return shot
+  }
+
+  async save(userId: string, dto: SceneComposerSaveRequest) {
+    await this.assertOwnedSession(dto.sessionId, userId)
     const syncedShots: string[] = []
 
     for (const scene of dto.scenes) {
@@ -51,7 +71,7 @@ export class SceneComposerService {
     for (const [index, shot] of scene.shots.entries()) {
       if (!shot.shotNodeId) continue
       syncedShots.push(shot.shotNodeId)
-      const existing = await this.prisma.shot.findUnique({ where: { id: shot.shotNodeId } })
+      const existing = await this.assertShotInSession(shot.shotNodeId, sessionId)
       if (existing) {
         await this.shotService.update(shot.shotNodeId, {
           title: shot.title || scene.title || `镜头 ${index + 1}`,
@@ -70,12 +90,22 @@ export class SceneComposerService {
     }
   }
 
-  async batchGenerate(dto: SceneComposerBatchGenerateRequest) {
-    await this.assertSession(dto.sessionId)
+  async batchGenerate(userId: string, dto: SceneComposerBatchGenerateRequest) {
+    await this.assertOwnedSession(dto.sessionId, userId)
+
+    for (const item of dto.items) {
+      await this.assertShotInSession(item.shotNodeId, dto.sessionId)
+    }
+
+    const total = dto.items.reduce((sum, item) => sum + this.itemCredits(item), 0)
+    if (total > 0) {
+      await this.points.consume(userId, total, `导演台批量生成 ×${dto.items.length}`)
+    }
+
     const results: Array<{ shotNodeId: string; materialId?: string; mediaType: string }> = []
 
     for (const item of dto.items) {
-      const result = await this.generateItem(dto.sessionId, item)
+      const result = await this.generateItem(dto.sessionId, userId, item)
       results.push(result)
     }
 
@@ -85,7 +115,11 @@ export class SceneComposerService {
     }
   }
 
-  private async generateItem(sessionId: string, item: SceneComposerBatchItem) {
+  private async generateItem(
+    sessionId: string,
+    userId: string,
+    item: SceneComposerBatchItem,
+  ) {
     const existing = await this.prisma.shot.findUnique({ where: { id: item.shotNodeId } })
     if (existing) {
       await this.shotService.update(item.shotNodeId, {
@@ -103,11 +137,30 @@ export class SceneComposerService {
     }
 
     if (item.mediaType === 'video') {
-      const material = await this.materialService.generateVideo(item.shotNodeId, item.prompt)
+      const material = await this.materialService.generateVideo({
+        userId,
+        shotId: item.shotNodeId,
+        prompt: item.prompt,
+        model: item.model,
+        duration: item.duration,
+        aspectRatio: item.aspectRatio,
+        resolution: item.resolution,
+        crop: item.crop,
+        skipCharge: true,
+      })
       return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'video' }
     }
 
-    const material = await this.materialService.generateImage(item.shotNodeId, item.prompt)
+    const material = await this.materialService.generateImage({
+      userId,
+      shotId: item.shotNodeId,
+      prompt: item.prompt,
+      model: item.model,
+      aspectRatio: item.aspectRatio,
+      resolution: item.resolution,
+      count: item.count,
+      skipCharge: true,
+    })
     return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'image' }
   }
 }

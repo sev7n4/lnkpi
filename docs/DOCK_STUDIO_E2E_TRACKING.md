@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-18（§6.4 节点数据贯通 RefChip 验收；M3 export/sceneComposer 生产 API 验收；§0.5 P0 手测清单）
+> **最后更新**：2026-07-19（§C2 Canvas 旁路 adapter 验收；§0.5 P0 手测清单）
 
 ---
 
@@ -129,6 +129,7 @@
 | 五 | 推荐实施顺序（里程碑） | 排期与演示节点 |
 | 六 | 单节点 E2E 测试清单 | 验收标准模板 |
 | 七 | 建议优先开工的 3 个 Sprint | 近期排期 |
+| 八 | C2 Canvas 旁路 adapter 验收 | C2 实现状态与手测清单 |
 
 ---
 
@@ -727,6 +728,46 @@ Phase 0 (P0-1~P0-6)
 | UX-4 文本文件 | Dock 联动 | 文本仍走 `createFileNodeAt` → text 节点 | 可扩展 |
 | `useCanvasMedia` | 传 `MediaFilePayload` | 改为直接传 `File`，由 `ingestMediaFile` 统一持久化 | — |
 
+---
+
+## 八、C2 Canvas 旁路 adapter 验收（2026-07-19）
+
+**规格**：[2026-07-19-c2-canvas-generation-adapter-design.md](./superpowers/specs/2026-07-19-c2-canvas-generation-adapter-design.md)  
+**分支**：`feature/c2-canvas-generation-adapter`（PR 待合入）  
+**状态**：**实现完成 / 待合入** — shot、shot-linked image/video、sceneComposer batch 已接入 C1 catalog + generation adapter + PointsService 统一计费
+
+### 8.1 自动化验收
+
+| 项 | 结果 | 说明 |
+|----|------|------|
+| `pnpm install --frozen-lockfile` | ✅ | lockfile 一致 |
+| `prisma generate` | ✅ | |
+| `pnpm build` | ✅ | shared / web / agent / server |
+| `pnpm test` | ✅ | shared 7 · agent 37 · web 10 · server 14 |
+
+### 8.2 实现范围摘要
+
+| 路径 | adapter + 扣费 | 所有权校验 |
+|------|----------------|------------|
+| Material image（shot / shot-linked） | ✅ count=1 | ✅ session/shot 404 |
+| Material video（shot / shot-linked） | ✅ 按时长 30/50/70 | ✅ |
+| sceneComposer batch | ✅ 整批预检一次扣除 + skipCharge | ✅ |
+| Web 参数解析 | ✅ 媒体子节点 → canvas-api | — |
+| refs / V\* / A\* | ⏭ C2.1 / C3 / C4 | — |
+
+### 8.3 浏览器手测清单（规格 §8.3）
+
+| # | 步骤 | 预期 | 通过 |
+|---|------|------|------|
+| C2-1 | shot + **image** 子节点：选非默认模型/分辨率 → 生成 | 请求带 model/aspect/resolution；积分 -10；节点 completed | ☐ |
+| C2-2 | shot + **video** 子节点：选模型/时长/比例/分辨率 → 生成 | 请求带完整 videoSettings；积分按秒数扣费 | ☐ |
+| C2-3 | **未展开** sceneComposer → 批量生成 | 走 catalog 默认参数 | ☐ |
+| C2-4 | **已展开** sceneComposer：改子节点配置 → 批量生成 | batch items 含子节点 model/参数 | ☐ |
+| C2-5 | 积分不足 → sceneComposer 批量生成 | 整批零启动；无 shot 进入 generating | ☐ |
+| C2-6 | 非本人 session/shot 调用 generate / batch | HTTP 404；无副作用 | ☐ |
+
+---
+
 ## 附录 A：迭代记录模板
 
 复制下表到每次 Sprint 结束时的「迭代记录」区。
@@ -749,6 +790,7 @@ Phase 0 (P0-1~P0-6)
 | 2026-07-16 | M3 | sceneComposer 生产 API 手测 | — | §0.5 浏览器 UI |
 | 2026-07-16 | Deploy | PR #11 API_PUBLIC_URL + recover | GHA Wait failure | PR #12 轮询修复 ✅ |
 | 2026-07-16 | — | 节点 E2E 审计 + §0.5 P0 清单 | 真实生成待 API Key | U1–U8 浏览器手测 |
+| 2026-07-19 | C2 | Canvas 旁路 adapter + 统一计费（T1–T6） | 浏览器手测 C2-1~C2-6 待验 | C2 PR 合入 → C2.1 refs |
 
 ---
 
@@ -759,8 +801,9 @@ Phase 0 (P0-1~P0-6)
 | [NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md) | NeoWOW 画布 UI 逆向调研 |
 | [NEOWOW_RESEARCH.md](./NEOWOW_RESEARCH.md) | NeoWOW 产品调研 |
 | [superpowers/plans/2026-07-09-neowow-workflow.md](./superpowers/plans/2026-07-09-neowow-workflow.md) | M1/M2 实现计划 |
+| [2026-07-19-c2-canvas-generation-adapter-design.md](./superpowers/specs/2026-07-19-c2-canvas-generation-adapter-design.md) | C2 Canvas 旁路 adapter 规格 |
 | [PRODUCT_CAPABILITY_MAP.md](./PRODUCT_CAPABILITY_MAP.md) | 产品能力地图 |
 
 ---
 
-**最后更新**：2026-07-16（§0.5 P0 手测清单；M3 ~90%；Deploy PR #12 全绿）
+**最后更新**：2026-07-19（§8 C2 Canvas 旁路 adapter 验收；M3 ~90%）

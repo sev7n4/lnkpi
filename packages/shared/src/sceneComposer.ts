@@ -36,6 +36,12 @@ export interface SceneComposerBatchItem {
   title?: string
   prompt: string
   mediaType: Exclude<SceneComposerShotMediaType, 'none'>
+  model?: string
+  aspectRatio?: string
+  resolution?: string
+  duration?: 5 | 10 | 15
+  crop?: string
+  count?: number
 }
 
 export interface SceneComposerSaveRequest {

@@ -13,6 +13,7 @@ import {
   type MergeTextSource,
 } from '@lnkpi/agent'
 import { resolveImageSize, resolveModelKey, type ImageResolutionTier } from '@lnkpi/shared'
+import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -51,7 +52,10 @@ function buildPromptWithRefImage(prompt: string, refImageUrl: string): string {
 
 @Injectable()
 export class StudioService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PointsService) private readonly points: PointsService,
+  ) {}
 
   async listGenerations(userId: string, type?: string) {
     return this.prisma.generationRecord.findMany({
@@ -89,7 +93,7 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
   ) {
-    await this.consumePoints(userId, 5, '文本生成')
+    await this.points.consume(userId, 5, '文本生成')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
@@ -131,7 +135,7 @@ export class StudioService {
   async generatePrompt(userId: string, prompt: string, model?: string) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
-    await this.consumePoints(userId, 5, '提示词模式生成')
+    await this.points.consume(userId, 5, '提示词模式生成')
     const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', model)
     const gatewayModelId = entry.gatewayModelId
     const { mode, content } = await generatePromptFromUserInput(trimmed, {
@@ -179,7 +183,7 @@ export class StudioService {
     count = 1,
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
-    await this.consumePoints(userId, 10 * n, '图像生成')
+    await this.points.consume(userId, 10 * n, '图像生成')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
@@ -220,7 +224,7 @@ export class StudioService {
   }
 
   async generateImageVariation(userId: string, prompt: string, basePrompt?: string, model?: string) {
-    await this.consumePoints(userId, 10, '图像变体')
+    await this.points.consume(userId, 10, '图像变体')
     const combined = basePrompt ? `${basePrompt}。变体要求：${prompt}` : prompt
     const { url } = await createImageProvider().generate(combined)
     return this.prisma.generationRecord.create({
@@ -248,7 +252,7 @@ export class StudioService {
     crop = 'none',
   ) {
     const durationCredits = duration >= 15 ? 70 : duration >= 10 ? 50 : 30
-    await this.consumePoints(userId, durationCredits, '视频生成')
+    await this.points.consume(userId, durationCredits, '视频生成')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
@@ -309,7 +313,7 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
   ) {
-    await this.consumePoints(userId, 5, '音频生成')
+    await this.points.consume(userId, 5, '音频生成')
     const { mergedText, skippedMerge } = await this.resolveMergedPrompt(text, refs, 'audio', mentionedKeys)
     const built = buildAudioRequest({
       mergedText,
@@ -371,19 +375,4 @@ export class StudioService {
     }
   }
 
-  private async consumePoints(userId: string, cost: number, reason: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
-    if (!user || user.points < cost) {
-      throw new BadRequestException('积分不足')
-    }
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { points: { decrement: cost } },
-      }),
-      this.prisma.pointTransaction.create({
-        data: { userId, amount: -cost, reason },
-      }),
-    ])
-  }
 }

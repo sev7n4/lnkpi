@@ -5,6 +5,8 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
+import { defaultModelKey } from '@/constants/studioModels'
+import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
 
 vi.mock('@/services/studio-api', () => ({
@@ -180,5 +182,98 @@ describe('useNodeGeneration', () => {
       status: NODE_GENERATION_STATUS.error,
       errorMessage: '参考图尚未上传，请先上传后再生成',
     })
+  })
+
+  it('passes shot-linked image child params to canvasApi.generateImage', async () => {
+    const shot = createNode('shot', { title: 'Shot', prompt: 'sunset' }, 'shot-1')
+    const image = createNode('image', {
+      prompt: 'sunset',
+      imageModel: 'navo-pro',
+      imageAspect: '9:16',
+      imageResolution: '2K',
+    }, 'image-1')
+    const { api, deps } = createDeps([shot, image])
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+    vi.mocked(canvasApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: {} }))
+
+    await api.generateForNode(image)
+
+    expect(canvasApi.generateImage).toHaveBeenCalledWith('shot-1', 'sunset', {
+      model: 'navo-pro',
+      aspectRatio: '9:16',
+      resolution: '2K',
+      count: 1,
+    })
+    expect(studioApi.generateImage).not.toHaveBeenCalled()
+    expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
+  })
+
+  it('passes shot-linked video child params to canvasApi.generateVideo', async () => {
+    const shot = createNode('shot', { title: 'Shot', prompt: 'motion' }, 'shot-1')
+    const video = createNode('video', {
+      prompt: 'motion',
+      videoModel: 'happyhose-1.1',
+      videoSettings: {
+        duration: 10,
+        aspectRatio: '9:16',
+        resolution: '1080p',
+        crop: 'center',
+      },
+    }, 'video-1')
+    const { api, deps } = createDeps([shot, video])
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'video-1' }]
+    vi.mocked(canvasApi.generateVideo).mockResolvedValue(mockAxiosResponse({ data: {} }))
+
+    await api.generateForNode(video)
+
+    expect(canvasApi.generateVideo).toHaveBeenCalledWith('shot-1', 'motion', {
+      model: 'happyhose-1.1',
+      duration: 10,
+      aspectRatio: '9:16',
+      resolution: '1080p',
+      crop: 'center',
+    })
+    expect(studioApi.generateVideo).not.toHaveBeenCalled()
+    expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
+  })
+
+  it('uses catalog defaults for generateShot when media child is missing', async () => {
+    const shot = createNode('shot', { title: 'Shot', prompt: 'fallback', shotGenerateMode: 'image' }, 'shot-1')
+    const { api } = createDeps([shot])
+    vi.mocked(canvasApi.editShot).mockResolvedValue(mockAxiosResponse({ data: {} }))
+    vi.mocked(canvasApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: {} }))
+
+    await api.generateForNode(shot)
+
+    expect(canvasApi.generateImage).toHaveBeenCalledWith('shot-1', 'fallback', {
+      model: defaultModelKey('image'),
+      aspectRatio: '16:9',
+      resolution: '1K',
+      count: 1,
+    })
+  })
+
+  it('keeps independent studio image path on studioApi', async () => {
+    const node = createNode('image', {
+      prompt: 'standalone cat',
+      imageModel: 'seedream-5.0-pro',
+      imageAspect: '16:9',
+      imageResolution: '2K',
+      imageCount: 2,
+    })
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateImage).toHaveBeenCalledWith(
+      'standalone cat',
+      'seedream-5.0-pro',
+      '16:9',
+      [],
+      [],
+      '2K',
+      2,
+    )
+    expect(canvasApi.generateImage).not.toHaveBeenCalled()
   })
 })

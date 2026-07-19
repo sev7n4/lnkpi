@@ -50,6 +50,22 @@ class GenerateImageDto {
 
   @IsString()
   prompt!: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsNumber()
+  count?: number
 }
 
 class GenerateVideoDto {
@@ -60,11 +76,21 @@ class GenerateVideoDto {
   prompt!: string
 
   @IsOptional()
-  duration?: number
+  @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsNumber()
+  @IsIn([5, 10, 15])
+  duration?: 5 | 10 | 15
 
   @IsOptional()
   @IsString()
   aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
 
   @IsOptional()
   @IsString()
@@ -182,6 +208,30 @@ class SceneComposerBatchItemDto {
 
   @IsIn(['image', 'video'])
   mediaType!: 'image' | 'video'
+
+  @IsOptional()
+  @IsString()
+  model?: string
+
+  @IsOptional()
+  @IsString()
+  aspectRatio?: string
+
+  @IsOptional()
+  @IsString()
+  resolution?: string
+
+  @IsOptional()
+  @IsIn([5, 10, 15])
+  duration?: 5 | 10 | 15
+
+  @IsOptional()
+  @IsString()
+  crop?: string
+
+  @IsOptional()
+  @IsNumber()
+  count?: number
 }
 
 class BatchGenerateSceneComposerDto implements SceneComposerBatchGenerateRequest {
@@ -301,21 +351,32 @@ export class CanvasController {
 
   @Post('material/generate-image')
   @UseGuards(AuthGuard)
-  async generateImage(@Body() dto: GenerateImageDto) {
-    const data = await this.materialService.generateImage(dto.shotId, dto.prompt)
+  async generateImage(@Req() req: { user: { sub: string } }, @Body() dto: GenerateImageDto) {
+    const data = await this.materialService.generateImage({
+      userId: req.user.sub,
+      shotId: dto.shotId,
+      prompt: dto.prompt,
+      model: dto.model,
+      aspectRatio: dto.aspectRatio,
+      resolution: dto.resolution,
+      count: dto.count,
+    })
     return { code: 0, message: 'ok', data }
   }
 
   @Post('material/generate-video')
   @UseGuards(AuthGuard)
-  async generateVideo(@Body() dto: GenerateVideoDto) {
-    const data = await this.materialService.generateVideo(
-      dto.shotId,
-      dto.prompt,
-      dto.duration,
-      dto.aspectRatio,
-      dto.crop,
-    )
+  async generateVideo(@Req() req: { user: { sub: string } }, @Body() dto: GenerateVideoDto) {
+    const data = await this.materialService.generateVideo({
+      userId: req.user.sub,
+      shotId: dto.shotId,
+      prompt: dto.prompt,
+      model: dto.model,
+      duration: dto.duration,
+      aspectRatio: dto.aspectRatio,
+      resolution: dto.resolution,
+      crop: dto.crop,
+    })
     return { code: 0, message: 'ok', data }
   }
 
@@ -329,15 +390,21 @@ export class CanvasController {
 
   @Post('scene-composer/save')
   @UseGuards(AuthGuard)
-  async saveSceneComposer(@Body() dto: SaveSceneComposerDto) {
-    const data = await this.sceneComposerService.save(dto)
+  async saveSceneComposer(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: SaveSceneComposerDto,
+  ) {
+    const data = await this.sceneComposerService.save(req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 
   @Post('scene-composer/batch-generate')
   @UseGuards(AuthGuard)
-  async batchGenerateSceneComposer(@Body() dto: BatchGenerateSceneComposerDto) {
-    const data = await this.sceneComposerService.batchGenerate(dto)
+  async batchGenerateSceneComposer(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: BatchGenerateSceneComposerDto,
+  ) {
+    const data = await this.sceneComposerService.batchGenerate(req.user.sub, dto)
     return { code: 0, message: 'ok', data }
   }
 

@@ -153,7 +153,7 @@ install → prisma generate → pnpm build → pnpm test → (pull_request) dock
 | 轮次 | 名称 | 内容 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- |
 | **T0** | 测试地基 | 本规格：Vitest 全仓、Server 集成、Web composable、CI 全量 | — | **已实现** |
-| **T1** | C1 合入 | PR #25 rebase 到含 T0 的 main；按需补 C1 专项用例；再 Squash & Merge | T0 合入 | 暂停（#25 待 rebase） |
+| **T1** | C1 合入 | PR #25 rebase 到含 T0 的 main；按需补 C1 专项用例；再 Squash & Merge | T0 合入 | **已合入** |
 | **T2** | Playwright E2E | 起 web + api（网关 mock）；画布：选模型/参数/生成/断言请求或节点状态 | T0 | 规划中 |
 | **T3** | 可选加固 | 真库 Prisma 集成子集；部署后鉴权 API 冒烟（不止 health） | T0 / T2 | 可选 |
 | **C2** | 旁路统一 | shot / scene composer 与 studio 共用参数 + refs | C1 合入后 | 产品规格已拆 |

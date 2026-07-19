@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common'
+import { PointsModule } from '../points/points.module'
 import { StudioController } from './studio.controller'
 import { StudioService } from './studio.service'
 
 @Module({
+  imports: [PointsModule],
   controllers: [StudioController],
   providers: [StudioService],
 })
