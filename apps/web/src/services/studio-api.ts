@@ -37,22 +37,23 @@ export const studioApi = {
     mentionedKeys?: string[],
     resolution?: string,
     count?: number,
+    signal?: AbortSignal,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/image/generate',
       { prompt, model, aspectRatio, refs, mentionedKeys, resolution, count },
-      { timeout: 120_000 },
+      { timeout: 120_000, signal },
     ),
-  generateImageVariation: (prompt: string, basePrompt?: string, model?: string) =>
-    api.post<{ data: GenerationRecord }>('/studio/image/variation', { prompt, basePrompt, model }, { timeout: 120_000 }),
-  generateText: (prompt: string, model?: string, refs?: StudioRefPayload[], mentionedKeys?: string[]) =>
+  generateImageVariation: (prompt: string, basePrompt?: string, model?: string, signal?: AbortSignal) =>
+    api.post<{ data: GenerationRecord }>('/studio/image/variation', { prompt, basePrompt, model }, { timeout: 120_000, signal }),
+  generateText: (prompt: string, model?: string, refs?: StudioRefPayload[], mentionedKeys?: string[], signal?: AbortSignal) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/text/generate',
       { prompt, model, refs, mentionedKeys },
-      { timeout: 90_000 },
+      { timeout: 90_000, signal },
     ),
-  generatePrompt: (prompt: string, model?: string) =>
-    api.post<{ data: GenerationRecord }>('/studio/prompt/generate', { prompt, model }, { timeout: 90_000 }),
+  generatePrompt: (prompt: string, model?: string, signal?: AbortSignal) =>
+    api.post<{ data: GenerationRecord }>('/studio/prompt/generate', { prompt, model }, { timeout: 90_000, signal }),
   generateVideo: (
     prompt: string,
     model?: string,
@@ -62,17 +63,18 @@ export const studioApi = {
     mentionedKeys?: string[],
     resolution?: string,
     crop?: string,
+    signal?: AbortSignal,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/video/generate',
       { prompt, model, duration, aspectRatio, refs, mentionedKeys, resolution, crop },
-      { timeout: 60_000 },
+      { timeout: 60_000, signal },
     ),
-  generateAudio: (text: string, options?: AudioGenerateOptions, refs?: StudioRefPayload[], mentionedKeys?: string[]) =>
+  generateAudio: (text: string, options?: AudioGenerateOptions, refs?: StudioRefPayload[], mentionedKeys?: string[], signal?: AbortSignal) =>
     api.post<{ data: GenerationRecord & { url?: string } }>(
       '/studio/audio/generate',
       { text, ...options, refs, mentionedKeys },
-      { timeout: 60_000 },
+      { timeout: 60_000, signal },
     ),
   confirmPlatformFallback: (id: string) =>
     api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/confirm-platform-fallback`, {}, {

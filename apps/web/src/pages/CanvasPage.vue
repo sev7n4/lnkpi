@@ -33,7 +33,7 @@ import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
-import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
 import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
@@ -1602,7 +1602,7 @@ async function saveCanvas() {
 }
 
 const {
-  generating: nodeGenerating,
+  isNodeBusy,
   generateForNode,
   saveSceneComposer,
   expandSceneComposer,
@@ -1626,6 +1626,7 @@ const {
   },
   startShotPolling: (ids) => shotPolling.start(ids),
   startGenerationPolling: (tasks) => generationPolling.start(tasks),
+  stopGenerationPolling: (nodeId) => generationPolling.removeByNodeId(nodeId),
   resolveProviderModels: () => ({
     text: getProviderConfig('text').model,
     image: getProviderConfig('image').model,
@@ -1633,6 +1634,12 @@ const {
   }),
   requestFallbackConfirm,
   isModelSelectable,
+})
+
+const selectedNodeGenerating = computed(() => {
+  const node = editorNode.value
+  if (!node) return false
+  return isNodeBusy(node.id) || isNodeGenerating(node.data?.status)
 })
 
 onFallbackPendingFromPoll = onFallbackPending
@@ -1895,7 +1902,7 @@ onMounted(() => {
           :refs="selectedRefs"
           :composition-tracks="editorCompositionTracks"
           :mentions="mentionOptions"
-          :generating="nodeGenerating"
+          :generating="selectedNodeGenerating"
           :scale="viewportSettings.bottomToolbarScale"
           @patch="patchSelectedNode"
           @remove-ref="handleRemoveRef"

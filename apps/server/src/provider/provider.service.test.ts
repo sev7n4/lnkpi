@@ -342,6 +342,37 @@ describe('ProviderService', () => {
     )
   })
 
+  it('pullModels infers capability and preserves prior tags', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'pull-cap',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: 'sk-test',
+      models: [{ name: 'custom-img', capability: 'image' }],
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'custom-img' },
+          { id: 'dall-e-3' },
+          { id: 'gpt-4o' },
+          { id: 'kling-v2' },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const updated = await svc.pullModels('u1', ch.id)
+    const byName = Object.fromEntries(updated.models.map((m) => [m.name, m.capability]))
+    expect(byName['custom-img']).toBe('image')
+    expect(byName['dall-e-3']).toBe('image')
+    expect(byName['gpt-4o']).toBe('text')
+    expect(byName['kling-v2']).toBe('video')
+  })
+
   it('rejects intranet WebDAV URL on update and test', async () => {
     await expect(
       svc.updateWebdav('u1', { url: 'https://10.0.0.5/webdav' }),

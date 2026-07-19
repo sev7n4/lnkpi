@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
-import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
   mergeReferenceImageUrl,
@@ -54,6 +54,7 @@ export interface NodeGenerationDeps {
   requireLogin: () => boolean
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
+  stopGenerationPolling?: (nodeId: string) => void
   resolveProviderModels: () => { image: string; video: string; text: string }
   requestFallbackConfirm?: (req: FallbackPendingRequest) => Promise<FallbackConfirmDecision>
   isModelSelectable?: (modality: StudioModality, model: string) => boolean
@@ -168,8 +169,72 @@ function modelFieldForModality(modality: StudioModality): string {
   return 'textModel'
 }
 
+function isAbortError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { code?: string; name?: string; message?: string }
+  return e.code === 'ERR_CANCELED' || e.name === 'CanceledError' || e.name === 'AbortError'
+}
+
 export function useNodeGeneration(deps: NodeGenerationDeps) {
+  const busyNodeIds = ref(new Set<string>())
+  const abortByNodeId = new Map<string, AbortController>()
+
+  function isNodeBusy(nodeId: string): boolean {
+    return busyNodeIds.value.has(nodeId)
+  }
+
+  function markBusy(nodeId: string) {
+    const next = new Set(busyNodeIds.value)
+    next.add(nodeId)
+    busyNodeIds.value = next
+  }
+
+  function markIdle(nodeId: string) {
+    if (!busyNodeIds.value.has(nodeId)) return
+    const next = new Set(busyNodeIds.value)
+    next.delete(nodeId)
+    busyNodeIds.value = next
+  }
+
+  /** True when any node is mid-request (legacy aggregate; prefer isNodeBusy). */
   const generating = ref(false)
+  function syncGeneratingFlag() {
+    generating.value = busyNodeIds.value.size > 0
+  }
+
+  function cancelGeneration(nodeId: string) {
+    const ac = abortByNodeId.get(nodeId)
+    if (ac) {
+      ac.abort()
+      abortByNodeId.delete(nodeId)
+    }
+    deps.stopGenerationPolling?.(nodeId)
+    markIdle(nodeId)
+    syncGeneratingFlag()
+    deps.patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.draft,
+      errorMessage: null,
+    })
+  }
+
+  function beginNodeWork(nodeId: string): AbortSignal {
+    const existing = abortByNodeId.get(nodeId)
+    if (existing) existing.abort()
+    const ac = new AbortController()
+    abortByNodeId.set(nodeId, ac)
+    markBusy(nodeId)
+    syncGeneratingFlag()
+    return ac.signal
+  }
+
+  function endNodeWork(nodeId: string, signal?: AbortSignal) {
+    const ac = abortByNodeId.get(nodeId)
+    if (ac && (!signal || ac.signal === signal)) {
+      abortByNodeId.delete(nodeId)
+    }
+    markIdle(nodeId)
+    syncGeneratingFlag()
+  }
 
   async function handleStudioFallback(nodeId: string, record: GenerationRecord): Promise<boolean> {
     if (record.status !== NODE_GENERATION_STATUS.fallback_pending) return false
@@ -270,6 +335,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
   }
 
   async function generateForNode(node: EditableFlowNode) {
+    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+      cancelGeneration(node.id)
+      return
+    }
+
     const data = node.data ?? {}
     const nodeType = String(node.type)
     const upstream = resolveUpstreamContext(node.id, deps.nodes.value, deps.edges.value)
@@ -298,7 +368,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       if (!assertModelSelectable(node, modality, model)) return
     }
 
-    generating.value = true
+    const signal = beginNodeWork(node.id)
 
     try {
       if (nodeType === 'prompt') {
@@ -306,7 +376,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         const { data: res } = await studioApi.generatePrompt(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
+          signal,
         )
+        if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
         return
       }
@@ -318,7 +390,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           resolveGenerationModel('text', data.textModel as string | undefined),
           refs,
           mentionedKeys,
+          signal,
         )
+        if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
         return
       }
@@ -333,7 +407,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
           volume: typeof data.audioVolume === 'number' ? data.audioVolume : 1,
           pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
-        }, refs, mentionedKeys)
+        }, refs, mentionedKeys, signal)
+        if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
         return
       }
@@ -344,7 +419,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'image' || nodeType === 'video') {
-        await generateImageOrVideo(node, local, data, upstream, refs, mentionedKeys)
+        await generateImageOrVideo(node, local, data, upstream, refs, mentionedKeys, signal)
         return
       }
 
@@ -352,13 +427,14 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         await generateShot(node, local, data)
       }
     } catch (err) {
+      if (isAbortError(err) || signal.aborted) return
       console.error('[NodeGeneration]', nodeType, err)
       deps.patchNodeData(node.id, {
         status: NODE_GENERATION_STATUS.error,
         errorMessage: err instanceof Error ? err.message : '生成失败',
       })
     } finally {
-      generating.value = false
+      endNodeWork(node.id, signal)
     }
   }
 
@@ -369,6 +445,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     upstream: ReturnType<typeof resolveUpstreamContext>,
     refs: StudioRefPayload[],
     mentionedKeys: string[],
+    signal?: AbortSignal,
   ) {
     const nodeType = String(node.type)
     const linkedShotEdge = findIncomingEdge(deps.edges.value, node.id)
@@ -406,7 +483,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         mentionedKeys,
         resolution,
         count,
+        signal,
       )
+      if (signal?.aborted) return
       deps.patchNodeData(node.id, {
         referenceImageUrl: refImage || undefined,
         imageResolution: resolution,
@@ -427,7 +506,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       mentionedKeys,
       settings?.resolution,
       settings?.crop,
+      signal,
     )
+    if (signal?.aborted) return
     deps.patchNodeData(node.id, {
       referenceImageUrl: refImage || undefined,
       generationRecordId: res.data.id,
@@ -556,7 +637,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
   async function expandSceneComposer(node: EditableFlowNode) {
     if (!deps.requireLogin()) return
-    generating.value = true
+    if (isNodeBusy(node.id)) {
+      cancelGeneration(node.id)
+      return
+    }
+    const signal = beginNodeWork(node.id)
     try {
       const current = readSceneComposerFromNode(node)
       const models = deps.resolveProviderModels()
@@ -577,16 +662,21 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         scenes: expanded.scenes,
       })
       await deps.saveCanvas()
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || signal.aborted) return
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
     } finally {
-      generating.value = false
+      endNodeWork(node.id, signal)
     }
   }
 
   async function batchGenerateSceneComposer(node: EditableFlowNode) {
     if (!deps.requireLogin()) return
-    generating.value = true
+    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+      cancelGeneration(node.id)
+      return
+    }
+    const signal = beginNodeWork(node.id)
     try {
       const payload = readSceneComposerFromNode(node)
       const items = buildBatchGenerateItems(payload, {
@@ -620,20 +710,25 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       deps.startShotPolling(items.map((item) => item.shotNodeId))
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
       await deps.saveCanvas()
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || signal.aborted) return
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
     } finally {
-      generating.value = false
+      endNodeWork(node.id, signal)
     }
   }
 
   async function exportVideoComposition(node: EditableFlowNode, tracks: CompositionTrack[]) {
     if (!deps.requireLogin()) return
+    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+      cancelGeneration(node.id)
+      return
+    }
     const ordered = applyTrackOrder(tracks, node.data?.trackOrder as string[] | undefined)
     const exportTracks = ordered.filter((track) => track.url.trim())
     if (!exportTracks.length) return
 
-    generating.value = true
+    const signal = beginNodeWork(node.id)
     try {
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
       const { data: res } = await canvasApi.exportVideoComposition({
@@ -649,6 +744,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
           startSec: track.startSec,
         })),
       })
+      if (signal.aborted) return
       const result = res.data as { url: string; durationSec: number }
       deps.patchNodeData(node.id, {
         url: result.url,
@@ -657,15 +753,18 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         exportedAt: new Date().toISOString(),
       })
       await deps.saveCanvas()
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || signal.aborted) return
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
     } finally {
-      generating.value = false
+      endNodeWork(node.id, signal)
     }
   }
 
   return {
     generating,
+    isNodeBusy,
+    cancelGeneration,
     generateForNode,
     saveSceneComposer,
     expandSceneComposer,

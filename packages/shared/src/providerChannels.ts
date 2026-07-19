@@ -26,3 +26,31 @@ export function modelOptionName(value: string): string {
   const decoded = decodeChannelModel(value)
   return decoded?.modelName ?? value
 }
+
+const IMAGE_MODEL_RE =
+  /(dall-?e|flux|seedream|imagen|midjourney|stable-?diffusion|sdxl|gpt-image|ideogram|recraft|banana)/i
+const VIDEO_MODEL_RE =
+  /(kling|seedance|sora|runway|luma|pika|hailuo|vidu|veo|wan2|cogvideo|happyhose)/i
+const AUDIO_MODEL_RE = /(whisper|tts|audio|suno|fish-speech|cosyvoice|speech|voice)/i
+
+/** Best-effort modality guess from OpenAI-compatible model ids (no modality in /models). */
+export function inferModelCapability(modelName: string): ModelCapability {
+  const name = modelName.trim()
+  if (!name) return 'text'
+  if (IMAGE_MODEL_RE.test(name)) return 'image'
+  if (VIDEO_MODEL_RE.test(name)) return 'video'
+  if (AUDIO_MODEL_RE.test(name)) return 'audio'
+  return 'text'
+}
+
+/**
+ * When re-pulling models: keep user/previous tags, else infer from name, else text.
+ */
+export function resolvePulledModelCapability(
+  modelName: string,
+  previousByName: Record<string, ModelCapability>,
+): ModelCapability {
+  const prev = previousByName[modelName]
+  if (prev === 'text' || prev === 'image' || prev === 'video' || prev === 'audio') return prev
+  return inferModelCapability(modelName)
+}
