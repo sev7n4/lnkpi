@@ -111,10 +111,13 @@ describe('useNodeGeneration', () => {
     expect(studioApi.generateAudio).toHaveBeenCalledWith(
       'hello world',
       {
+        model: 'minimax-speech-2.8-hd',
         voice: 'male-1',
         emotion: 'happy',
         language: 'en',
         speed: 1.5,
+        volume: 1,
+        pitch: 0,
       },
       [],
       [],

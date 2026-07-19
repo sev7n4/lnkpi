@@ -62,12 +62,12 @@ describe('StudioService integration (provider params)', () => {
     })
   })
 
-  it('embeds reference image url in video prompt and passes duration params', async () => {
+  it('passes reference image via options.image and native video params', async () => {
     const refUrl = 'https://example.com/ref.png'
     await svc.generateVideo(
       'u1',
       'a prompt',
-      'agnes-video-v2.0',
+      'seedance-2.0-min',
       10,
       '16:9',
       [{ refKey: 'i1', mediaType: 'image', url: refUrl }],
@@ -78,39 +78,53 @@ describe('StudioService integration (provider params)', () => {
 
     await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
     const [prompt, opts] = videoGenerate.mock.calls[0]
-    expect(prompt).toContain(refUrl)
+    expect(prompt).toBe('a prompt')
     expect(opts).toMatchObject({
-      model: 'agnes-video-v2.0',
+      model: 'seedance-2.0-min',
       duration: 10,
       aspectRatio: '16:9',
       resolution: '720p',
-      crop: 'none',
+      image: refUrl,
+    })
+    // crop is metadataOnly — adapter omits native value; service may still pass undefined
+    expect(opts?.crop).toBeUndefined()
+  })
+
+  it('passes built audio options (model, voice, speed) to audio provider', async () => {
+    await svc.generateAudio('u1', 'say hello', {
+      model: 'minimax-speech-2.8-hd',
+      voice: 'female-shaonv',
+      speed: 1.2,
+      volume: 0.8,
+      pitch: 2,
+    })
+
+    expect(createAudioProvider).toHaveBeenCalled()
+    expect(audioGenerate).toHaveBeenCalledWith('say hello', {
+      model: 'speech-2.8-hd',
+      voice: 'female-shaonv',
+      speed: 1.2,
+      volume: 0.8,
+      pitch: 2,
     })
   })
 
-  it('passes merged text and voice to audio provider', async () => {
-    await svc.generateAudio('u1', 'say hello', { voice: 'alloy' })
-
-    expect(createAudioProvider).toHaveBeenCalled()
-    expect(audioGenerate).toHaveBeenCalledWith('say hello', 'alloy')
-  })
-
-  it('passes model to text provider when no image refs', async () => {
-    await svc.generateText('u1', 'hello world', 'gpt-4o')
+  it('resolves text model via catalog gateway id when no image refs', async () => {
+    await svc.generateText('u1', 'hello world', 'gemini-3.1-flash')
 
     expect(createTextProvider).toHaveBeenCalled()
-    expect(textGenerate).toHaveBeenCalledWith('hello world', 'gpt-4o')
+    expect(textGenerate).toHaveBeenCalledWith('hello world', 'gemini-3.1-flash')
     expect(generateTextWithImages).not.toHaveBeenCalled()
   })
 
-  it('passes model to generateTextWithImages when image refs present', async () => {
+  it('passes catalog gateway model to generateTextWithImages when image refs present', async () => {
     const refUrl = 'https://example.com/dress.jpg'
-    await svc.generateText('u1', 'describe dress', 'gpt-4o', [
+    await svc.generateText('u1', 'describe dress', 'gemini-3.1-flash', [
       { refKey: 'i1', mediaType: 'image', url: refUrl },
     ])
 
     expect(generateTextWithImages).toHaveBeenCalledWith('describe dress', [refUrl], {
-      model: 'gpt-4o',
+      model: 'gemini-3.1-flash',
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: process.env.OPENAI_BASE_URL,
     })
