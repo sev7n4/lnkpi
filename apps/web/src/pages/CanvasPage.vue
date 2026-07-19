@@ -49,7 +49,7 @@ import NodePanelDock from '@/components/canvas/NodePanelDock.vue'
 import DockStudioToolbar from '@/components/canvas/DockStudioToolbar.vue'
 import CanvasFloatingChrome from '@/components/canvas/CanvasFloatingChrome.vue'
 import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftControls.vue'
-import ModelProviderSettingsDialog from '@/components/canvas/ModelProviderSettingsDialog.vue'
+import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ClickRippleLayer from '@/components/canvas/ClickRippleLayer.vue'
 import ConnectNodePicker from '@/components/canvas/ConnectNodePicker.vue'
 import ConnectPickerLine from '@/components/canvas/ConnectPickerLine.vue'
@@ -1849,7 +1849,7 @@ onMounted(() => {
       />
     </div>
 
-    <ModelProviderSettingsDialog v-model="showModelSettings" />
+    <ProviderConfigDialog v-model="showModelSettings" />
     <StoryboardDialog
       v-model="showStoryboard"
       :shots="storyboardShots"
