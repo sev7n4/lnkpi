@@ -1,6 +1,6 @@
 # C2.1 Canvas 旁路接入 T*/I* Refs（产品与技术规格）
 
-> 状态：**设计确认 / 待实现**  
+> 状态：**已实现 / 待合入**  
 > 日期：2026-07-19  
 > 范围：**C2.1 最小对齐** — shot、shot-linked image/video、sceneComposer batch 传递并消费 `refs` + `mentionedKeys`；Material 走与 Studio 同款 `mergeRefsToPrompt` + `referenceImages`  
 > 前置：C2 Canvas adapter/计费（PR #27）、C1 Studio 模型适配层（PR #25）、节点数据贯通 refs（2026-07-18）  
