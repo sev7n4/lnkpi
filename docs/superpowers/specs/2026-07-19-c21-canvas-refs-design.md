@@ -191,7 +191,7 @@ export interface SceneComposerBatchItem {
 
 ### 5.3 `buildBatchGenerateItems`
 
-签名扩展为接收 `nodes` + `edges` + `composerNodeId`（或等价上下文），以便：
+签名扩展为接收 `{ nodes, edges, composerNodeId }`，以便：
 
 - 定位媒体子节点 / composer；
 - 解析目标 refs；
