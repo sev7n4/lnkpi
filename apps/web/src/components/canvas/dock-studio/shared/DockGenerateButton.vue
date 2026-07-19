@@ -13,9 +13,10 @@ const emit = defineEmits<{
   <button
     type="button"
     class="dock-generate-btn"
-    :disabled="disabled || generating"
-    :title="generating ? '生成中...' : '生成'"
-    aria-label="生成"
+    :class="{ 'is-generating': generating }"
+    :disabled="disabled"
+    :title="generating ? '点击取消生成' : '生成'"
+    :aria-label="generating ? '取消生成' : '生成'"
     @click="emit('generate')"
   >
     <svg
@@ -74,6 +75,15 @@ const emit = defineEmits<{
 .dock-generate-btn:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+.dock-generate-btn.is-generating {
+  background: #111;
+  color: #fff;
+}
+
+.dock-generate-btn.is-generating:hover:not(:disabled) {
+  background: #333;
 }
 
 .dock-generate-btn__spinner {

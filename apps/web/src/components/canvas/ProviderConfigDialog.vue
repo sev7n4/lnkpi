@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { encodeChannelModel, type ApiCallFormat, type ModelCapability } from '@lnkpi/shared'
+import { encodeChannelModel, decodeChannelModel, inferModelCapability, type ApiCallFormat, type ModelCapability } from '@lnkpi/shared'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import {
   apiErrorMessage,
@@ -214,7 +214,30 @@ const modelOptionPool = computed(() => {
 })
 
 function optionsForCapability(capability: ModelCapability) {
-  return modelOptionPool.value.filter((o) => o.capability === capability)
+  // User channels may list OpenAI-compatible ids without reliable modality;
+  // include every non-platform model in all groups so they can be opted-in.
+  // Platform models stay filtered by capability.
+  return modelOptionPool.value.filter((o) => {
+    if (o.capability === capability) return true
+    const decoded = decodeChannelModel(o.value)
+    return Boolean(decoded && decoded.channelId !== 'platform')
+  })
+}
+
+function setModelCapability(draft: ChannelDraft, name: string, capability: ModelCapability) {
+  draft.modelMeta[name] = capability
+}
+
+function onModelNamesChange(draft: ChannelDraft, names: string[]) {
+  draft.modelNames = names
+  for (const name of names) {
+    if (!draft.modelMeta[name]) {
+      draft.modelMeta[name] = inferModelCapability(name)
+    }
+  }
+  for (const key of Object.keys(draft.modelMeta)) {
+    if (!names.includes(key)) delete draft.modelMeta[key]
+  }
 }
 
 function labelForModelValue(value: string) {
@@ -561,7 +584,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                 <label class="block md:col-span-2">
                   <span class="mb-1 block text-[11px] text-white/50">模型列表</span>
                   <el-select
-                    v-model="draft.modelNames"
+                    :model-value="draft.modelNames"
                     class="w-full"
                     multiple
                     filterable
@@ -569,7 +592,34 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                     default-first-option
                     :disabled="draft.readOnly"
                     placeholder="输入模型名，或点击拉取模型"
+                    @update:model-value="onModelNamesChange(draft, $event)"
                   />
+                  <div
+                    v-if="draft.modelNames.length && !draft.readOnly"
+                    class="mt-2 flex flex-wrap gap-2"
+                  >
+                    <div
+                      v-for="name in draft.modelNames"
+                      :key="name"
+                      class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1"
+                    >
+                      <span class="max-w-[140px] truncate text-[11px] text-white/75">{{ name }}</span>
+                      <el-select
+                        :model-value="draft.modelMeta[name] ?? 'text'"
+                        size="small"
+                        class="!w-[88px]"
+                        @update:model-value="setModelCapability(draft, name, $event)"
+                      >
+                        <el-option label="文本" value="text" />
+                        <el-option label="图像" value="image" />
+                        <el-option label="视频" value="video" />
+                        <el-option label="音频" value="audio" />
+                      </el-select>
+                    </div>
+                  </div>
+                  <p class="mt-1.5 text-[10px] leading-4 text-white/35">
+                    能力标签决定模型优先出现在哪一类可选项；自定义渠道模型也可在任意类型中勾选。
+                  </p>
                 </label>
               </div>
             </section>
@@ -582,6 +632,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
             <div class="text-sm font-semibold text-white">默认模型和可选项</div>
             <div class="mt-1 text-xs leading-5 text-white/45">
               可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。
+              自定义渠道模型会出现在全部类型的候选列表中，便于勾选到图像/视频/音频。
             </div>
           </div>
 

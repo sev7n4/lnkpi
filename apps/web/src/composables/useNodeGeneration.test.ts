@@ -132,6 +132,7 @@ describe('useNodeGeneration', () => {
       },
       [],
       [],
+      expect.any(AbortSignal),
     )
   })
 
@@ -155,6 +156,7 @@ describe('useNodeGeneration', () => {
       [],
       '2K',
       3,
+      expect.any(AbortSignal),
     )
   })
 
@@ -178,6 +180,7 @@ describe('useNodeGeneration', () => {
       [],
       '1K',
       1,
+      expect.any(AbortSignal),
     )
   })
 
@@ -202,6 +205,7 @@ describe('useNodeGeneration', () => {
       [],
       '2K',
       1,
+      expect.any(AbortSignal),
     )
   })
 
@@ -527,6 +531,83 @@ describe('useNodeGeneration', () => {
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
   })
 
+  it('allows parallel generation on two nodes', async () => {
+    let resolveA!: (v: unknown) => void
+    let resolveB!: (v: unknown) => void
+    const hangA = new Promise((r) => {
+      resolveA = r
+    })
+    const hangB = new Promise((r) => {
+      resolveB = r
+    })
+    vi.mocked(studioApi.generateImage)
+      .mockImplementationOnce(() => hangA as never)
+      .mockImplementationOnce(() => hangB as never)
+
+    const nodeA = createNode('image', { prompt: 'a' }, 'img-a')
+    const nodeB = createNode('image', { prompt: 'b' }, 'img-b')
+    const { api, deps } = createDeps([nodeA, nodeB])
+
+    const pA = api.generateForNode(nodeA)
+    const pB = api.generateForNode(nodeB)
+
+    await Promise.resolve()
+    expect(api.isNodeBusy('img-a')).toBe(true)
+    expect(api.isNodeBusy('img-b')).toBe(true)
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-a',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.generating }),
+    )
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-b',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.generating }),
+    )
+
+    resolveA(mockAxiosResponse({ data: { ...completedRecord, id: 'rec-a' } }))
+    resolveB(mockAxiosResponse({ data: { ...completedRecord, id: 'rec-b' } }))
+    await Promise.all([pA, pB])
+    expect(api.isNodeBusy('img-a')).toBe(false)
+    expect(api.isNodeBusy('img-b')).toBe(false)
+  })
+
+  it('second generate click cancels in-flight generation', async () => {
+    let rejectHang!: (err: unknown) => void
+    const hang = new Promise((_resolve, reject) => {
+      rejectHang = reject
+    })
+    vi.mocked(studioApi.generateImage).mockImplementation(
+      (_prompt, _model, _aspect, _refs, _keys, _res, _count, signal?: AbortSignal) => {
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            const err = new Error('canceled')
+            ;(err as { code?: string }).code = 'ERR_CANCELED'
+            rejectHang(err)
+          })
+        }
+        return hang as never
+      },
+    )
+
+    const node = createNode('image', { prompt: 'cancel-me' }, 'img-1')
+    const { api, deps } = createDeps([node])
+
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(api.isNodeBusy('img-1')).toBe(true)
+
+    await api.generateForNode(node)
+    await pending
+
+    expect(api.isNodeBusy('img-1')).toBe(false)
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.draft,
+        errorMessage: null,
+      }),
+    )
+  })
+
   it('uses catalog defaults for generateShot when media child is missing', async () => {
     const shot = createNode('shot', { title: 'Shot', prompt: 'fallback', shotGenerateMode: 'image' }, 'shot-1')
     const { api } = createDeps([shot])
@@ -565,6 +646,7 @@ describe('useNodeGeneration', () => {
       [],
       '2K',
       2,
+      expect.any(AbortSignal),
     )
     expect(canvasApi.generateImage).not.toHaveBeenCalled()
   })

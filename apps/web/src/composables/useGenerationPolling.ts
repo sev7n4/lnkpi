@@ -50,6 +50,13 @@ export function useGenerationPolling(
     }, 2000)
   }
 
+  function removeByNodeId(nodeId: string) {
+    const next = tasks.value.filter((t) => t.nodeId !== nodeId)
+    if (next.length === tasks.value.length) return
+    tasks.value = next
+    if (!next.length) stop()
+  }
+
   function stop() {
     if (timer.value) clearInterval(timer.value)
     timer.value = undefined
@@ -62,7 +69,7 @@ export function useGenerationPolling(
 
   onUnmounted(stop)
 
-  return { start, stop, clearTasks }
+  return { start, stop, clearTasks, removeByNodeId }
 }
 
 export function parseRecordPromptContent(record: { metadata?: string | null; prompt: string }) {

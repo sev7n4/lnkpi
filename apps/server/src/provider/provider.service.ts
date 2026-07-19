@@ -9,6 +9,7 @@ import {
   STUDIO_MODEL_CATALOG,
   defaultModelKey,
   encodeChannelModel,
+  resolvePulledModelCapability,
   type ApiCallFormat,
   type ModelCapability,
   type StudioModality,
@@ -337,10 +338,23 @@ export class ProviderService {
     }
 
     const body = (await response.json()) as { data?: Array<{ id?: string }> }
+    const previousByName: Record<string, ModelCapability> = {}
+    try {
+      const existing = JSON.parse(channel.models || '[]') as ChannelModelEntry[]
+      for (const entry of existing) {
+        if (entry?.name && entry.capability) previousByName[entry.name] = entry.capability
+      }
+    } catch {
+      // ignore malformed stored models
+    }
+
     const models: ChannelModelEntry[] = (body.data ?? [])
       .map((item) => item.id)
       .filter((name): name is string => typeof name === 'string' && name.length > 0)
-      .map((name) => ({ name, capability: 'text' as ModelCapability }))
+      .map((name) => ({
+        name,
+        capability: resolvePulledModelCapability(name, previousByName),
+      }))
 
     const row = await this.prisma.providerChannel.update({
       where: { id: channel.id },

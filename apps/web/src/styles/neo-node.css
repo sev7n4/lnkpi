@@ -77,8 +77,11 @@
 }
 
 .neo-node-status.running {
+  width: 8px;
+  height: 8px;
   background: #3b82f6;
-  animation: neo-node-pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
+  animation: neo-node-pulse 1.2s ease-in-out infinite;
 }
 
 .neo-node-status.success {
@@ -637,12 +640,12 @@
   opacity: 0.88;
 }
 
-.bottom-toolbar-container.is-dock-readonly .bottom-toolbar-actions :not(.bottom-toolbar-close) {
+.dock-studio-toolbar.is-dock-locked .bottom-toolbar-actions button:not(.bottom-toolbar-close):not(.dock-generate-btn) {
   pointer-events: none;
   opacity: 0.55;
 }
 
-.dock-studio-toolbar.is-dock-locked .bottom-toolbar-actions button:not(.bottom-toolbar-close) {
+.bottom-toolbar-container.is-dock-readonly .bottom-toolbar-actions :not(.bottom-toolbar-close):not(.dock-generate-btn) {
   pointer-events: none;
   opacity: 0.55;
 }
