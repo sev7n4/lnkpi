@@ -4,7 +4,6 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  NotImplementedException,
 } from '@nestjs/common'
 import {
   STUDIO_MODEL_CATALOG,
@@ -17,6 +16,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service'
 import { CryptoService } from './crypto.service'
 import { assertSafeOutboundUrl } from './ssrf'
+import { WebdavService } from './webdav.service'
 
 export const PLATFORM_CHANNEL_ID = 'platform'
 
@@ -191,6 +191,7 @@ export class ProviderService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(CryptoService) private readonly crypto: CryptoService,
+    @Inject(WebdavService) private readonly webdav: WebdavService,
   ) {}
 
   async bootstrap(userId: string) {
@@ -477,12 +478,71 @@ export class ProviderService {
     return this.toPublicWebdav(row)
   }
 
-  async testWebdav(_userId: string) {
-    throw new NotImplementedException('WebDAV test proxy is not implemented yet (Task 8)')
+  async testWebdav(userId: string) {
+    const creds = await this.requireWebdavCredentials(userId)
+    return this.webdav.testConnection(creds)
   }
 
-  async syncWebdav(_userId: string) {
-    throw new NotImplementedException('WebDAV sync proxy is not implemented yet (Task 8)')
+  async syncWebdav(userId: string) {
+    const creds = await this.requireWebdavCredentials(userId)
+    const sessions = await this.prisma.session.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    // MVP sync payload: session list only — never API keys or encrypted secrets
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      sessions: sessions.map((s) => ({
+        id: s.id,
+        title: s.title,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
+      })),
+    }
+
+    await this.webdav.uploadJson(creds, 'sessions.json', payload)
+
+    const row = await this.prisma.userWebdavConfig.update({
+      where: { userId },
+      data: { lastSyncedAt: new Date() },
+    })
+    return this.toPublicWebdav(row)
+  }
+
+  private async requireWebdavCredentials(userId: string) {
+    const row = await this.prisma.userWebdavConfig.findUnique({ where: { userId } })
+    if (!row?.url?.trim()) {
+      throw new BadRequestException('WebDAV is not configured')
+    }
+    this.safeOutboundUrl(row.url)
+
+    let password = ''
+    if (row.encryptedPassword && row.iv && row.authTag) {
+      try {
+        password = this.crypto.decrypt({
+          ciphertext: row.encryptedPassword,
+          iv: row.iv,
+          authTag: row.authTag,
+          keyVersion: row.keyVersion,
+        })
+      } catch {
+        throw new BadRequestException('failed to decrypt WebDAV password')
+      }
+    }
+
+    return {
+      url: row.url,
+      directory: row.directory ?? '',
+      username: row.username ?? '',
+      password,
+    }
   }
 
   private async ensurePlatformChannel(): Promise<ChannelRow> {

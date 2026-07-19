@@ -419,9 +419,9 @@ async function syncWebdav() {
   syncingWebdav.value = true
   try {
     await saveWebdav()
-    await providerApi.syncWebdav()
-    const data = await load(true)
-    webdavDraft.lastSyncedAt = data.webdav.lastSyncedAt
+    const updated = await providerApi.syncWebdav()
+    patchWebdav(updated)
+    webdavDraft.lastSyncedAt = updated.lastSyncedAt
     ElMessage.success('同步完成')
   } catch (err) {
     ElMessage.error(apiErrorMessage(err, 'WebDAV 同步失败'))

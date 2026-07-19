@@ -4,6 +4,7 @@ import { BadRequestException } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { CryptoService } from './crypto.service'
 import { ProviderService } from './provider.service'
+import { WebdavService } from './webdav.service'
 import { PrismaService } from '../prisma/prisma.service'
 
 type ChannelRow = {
@@ -52,13 +53,23 @@ type WebdavRow = {
   lastSyncedAt: Date | null
 }
 
+type SessionRow = {
+  id: string
+  userId: string
+  title: string
+  createdAt: Date
+  updatedAt: Date
+}
+
 function createMemoryPrisma() {
   const channels = new Map<string, ChannelRow>()
   const preferences = new Map<string, PreferencesRow>()
   const webdav = new Map<string, WebdavRow>()
+  const sessions = new Map<string, SessionRow>()
   let seq = 0
 
   return {
+    _sessions: sessions,
     providerChannel: {
       findUnique: async ({ where }: { where: { id?: string } }) => {
         if (where.id) return channels.get(where.id) ?? null
@@ -185,6 +196,38 @@ function createMemoryPrisma() {
         webdav.set(where.userId, row)
         return row
       },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { userId: string }
+        data: Partial<WebdavRow>
+      }) => {
+        const existing = webdav.get(where.userId)
+        if (!existing) throw new Error('not found')
+        const row = { ...existing, ...data }
+        webdav.set(where.userId, row)
+        return row
+      },
+    },
+    session: {
+      findMany: async ({
+        where,
+        select: _select,
+      }: {
+        where?: { userId?: string }
+        orderBy?: unknown
+        select?: unknown
+      } = {}) => {
+        return [...sessions.values()]
+          .filter((row) => !where?.userId || row.userId === where.userId)
+          .map((row) => ({
+            id: row.id,
+            title: row.title,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+          }))
+      },
     },
   }
 }
@@ -192,20 +235,24 @@ function createMemoryPrisma() {
 describe('ProviderService', () => {
   const originalKey = process.env.BYOK_ENCRYPTION_KEY_V1
   let svc: ProviderService
+  let prisma: ReturnType<typeof createMemoryPrisma>
 
   beforeEach(async () => {
     process.env.BYOK_ENCRYPTION_KEY_V1 = Buffer.alloc(32, 7).toString('base64')
+    prisma = createMemoryPrisma()
     const moduleRef = await Test.createTestingModule({
       providers: [
         ProviderService,
         CryptoService,
-        { provide: PrismaService, useValue: createMemoryPrisma() },
+        WebdavService,
+        { provide: PrismaService, useValue: prisma },
       ],
     }).compile()
     svc = moduleRef.get(ProviderService)
   })
 
   afterEach(() => {
+    vi.unstubAllGlobals()
     if (originalKey === undefined) {
       delete process.env.BYOK_ENCRYPTION_KEY_V1
     } else {
@@ -288,14 +335,99 @@ describe('ProviderService', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    try {
-      await expect(svc.pullModels('u1', ch.id)).rejects.toBeInstanceOf(BadRequestException)
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(URL),
-        expect.objectContaining({ redirect: 'manual' }),
-      )
-    } finally {
-      vi.unstubAllGlobals()
-    }
+    await expect(svc.pullModels('u1', ch.id)).rejects.toBeInstanceOf(BadRequestException)
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ redirect: 'manual' }),
+    )
+  })
+
+  it('rejects intranet WebDAV URL on update and test', async () => {
+    await expect(
+      svc.updateWebdav('u1', { url: 'https://10.0.0.5/webdav' }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+
+    await svc.updateWebdav('u1', {
+      url: 'https://dav.example.com/webdav',
+      directory: 'lnkpi',
+      username: 'alice',
+      password: 'dav-secret',
+    })
+
+    // Force stored URL to an intranet host to exercise test-time SSRF guard
+    const row = await prisma.userWebdavConfig.findUnique({ where: { userId: 'u1' } })
+    await prisma.userWebdavConfig.update({
+      where: { userId: 'u1' },
+      data: { ...row!, url: 'https://169.254.169.254/latest' },
+    })
+
+    await expect(svc.testWebdav('u1')).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('encrypts WebDAV password and bootstrap never returns plaintext', async () => {
+    const password = 'webdav-plain-secret'
+    const publicCfg = await svc.updateWebdav('u1', {
+      url: 'https://dav.example.com/webdav',
+      directory: 'lnkpi',
+      username: 'alice',
+      password,
+    })
+
+    expect(publicCfg).toMatchObject({
+      url: 'https://dav.example.com/webdav',
+      hasPassword: true,
+      connectionMode: 'proxy',
+    })
+    expect(JSON.stringify(publicCfg)).not.toContain(password)
+
+    const stored = await prisma.userWebdavConfig.findUnique({ where: { userId: 'u1' } })
+    expect(stored?.encryptedPassword).toBeTruthy()
+    expect(stored?.encryptedPassword).not.toBe(password)
+    expect(stored?.iv).toBeTruthy()
+    expect(stored?.authTag).toBeTruthy()
+
+    const boot = await svc.bootstrap('u1')
+    expect(boot.webdav?.hasPassword).toBe(true)
+    expect(JSON.stringify(boot)).not.toContain(password)
+    expect(boot.webdav && 'password' in boot.webdav).toBe(false)
+    expect(boot.webdav && 'encryptedPassword' in boot.webdav).toBe(false)
+  })
+
+  it('syncWebdav uploads sessions list JSON without API keys', async () => {
+    await svc.createChannel('u1', {
+      name: 'mine',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.openai.com',
+      apiKey: 'sk-never-sync',
+    })
+    await svc.updateWebdav('u1', {
+      url: 'https://dav.example.com/webdav',
+      directory: 'lnkpi',
+      username: 'alice',
+      password: 'dav-pass',
+    })
+    prisma._sessions.set('s1', {
+      id: 's1',
+      userId: 'u1',
+      title: 'Canvas A',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({ status: 201, ok: true })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await svc.syncWebdav('u1')
+    expect(result?.lastSyncedAt).toBeInstanceOf(Date)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit]
+    expect(init.method).toBe('PUT')
+    const body = String(init.body)
+    expect(body).toContain('Canvas A')
+    expect(body).toContain('"sessions"')
+    expect(body).not.toContain('sk-never-sync')
+    expect(body).not.toContain('dav-pass')
+    expect(body).not.toContain('encryptedApiKey')
   })
 })

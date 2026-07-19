@@ -110,9 +110,9 @@ export const providerApi = {
   updateWebdav: (input: UpdateWebdavInput) =>
     unwrap(api.put<ApiEnvelope<ProviderWebdavPublic>>('/provider/webdav', input)),
 
-  testWebdav: () => unwrap(api.post<ApiEnvelope<unknown>>('/provider/webdav/test')),
+  testWebdav: () => unwrap(api.post<ApiEnvelope<{ ok: true }>>('/provider/webdav/test')),
 
-  syncWebdav: () => unwrap(api.post<ApiEnvelope<unknown>>('/provider/webdav/sync')),
+  syncWebdav: () => unwrap(api.post<ApiEnvelope<ProviderWebdavPublic>>('/provider/webdav/sync')),
 }
 
 export function apiErrorMessage(err: unknown, fallback = '请求失败'): string {
