@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerBatchItem,
@@ -41,6 +41,16 @@ export class SceneComposerService {
       throw new NotFoundException('画布不存在')
     }
     return shot
+  }
+
+  private assertNoBlobRefsInBatch(items: SceneComposerBatchItem[]) {
+    for (const item of items) {
+      for (const ref of item.refs ?? []) {
+        if (ref.url?.trim().startsWith('blob:')) {
+          throw new BadRequestException('参考图尚未上传')
+        }
+      }
+    }
   }
 
   async save(userId: string, dto: SceneComposerSaveRequest) {
@@ -97,6 +107,8 @@ export class SceneComposerService {
       await this.assertShotInSession(item.shotNodeId, dto.sessionId)
     }
 
+    this.assertNoBlobRefsInBatch(dto.items)
+
     const total = dto.items.reduce((sum, item) => sum + this.itemCredits(item), 0)
     if (total > 0) {
       await this.points.consume(userId, total, `导演台批量生成 ×${dto.items.length}`)
@@ -146,6 +158,8 @@ export class SceneComposerService {
         aspectRatio: item.aspectRatio,
         resolution: item.resolution,
         crop: item.crop,
+        refs: item.refs,
+        mentionedKeys: item.mentionedKeys,
         skipCharge: true,
       })
       return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'video' }
@@ -159,6 +173,8 @@ export class SceneComposerService {
       aspectRatio: item.aspectRatio,
       resolution: item.resolution,
       count: item.count,
+      refs: item.refs,
+      mentionedKeys: item.mentionedKeys,
       skipCharge: true,
     })
     return { shotNodeId: item.shotNodeId, materialId: material.id, mediaType: 'image' }
