@@ -8,8 +8,12 @@ import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 
-const imageGenerate = vi.fn(async () => ({ url: 'https://example.com/a.png' }))
-const videoGenerate = vi.fn(async () => ({ url: 'https://example.com/v.mp4' }))
+const imageGenerate = vi.fn(
+  async (_prompt: string, _opts?: Record<string, unknown>) => ({ url: 'https://example.com/a.png' }),
+)
+const videoGenerate = vi.fn(
+  async (_prompt: string, _opts?: Record<string, unknown>) => ({ url: 'https://example.com/v.mp4' }),
+)
 vi.mock('@lnkpi/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@lnkpi/agent')>()
   return {
