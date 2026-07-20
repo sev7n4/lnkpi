@@ -344,6 +344,72 @@ describe('StudioService BYOK fallback_pending', () => {
     expect((opts as { modelId?: string }).modelId).toBeTruthy()
   })
 
+  it.each([
+    {
+      name: 'image',
+      cost: 10,
+      refundReason: '图像生成-失败退款',
+      run: () => svc.generateImage('u1', 'a cat', undefined),
+      failOnce: () => imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502')),
+    },
+    {
+      name: 'text',
+      cost: 5,
+      refundReason: '文本生成-失败退款',
+      run: () => svc.generateText('u1', 'hello'),
+      failOnce: () => textGenerate.mockRejectedValueOnce(new Error('platform upstream 502')),
+    },
+  ] as const)(
+    '$name: platform source failure → refund after consume',
+    async ({ run, failOnce, cost, refundReason }) => {
+      resolveForGeneration.mockResolvedValue(platformResolved)
+      failOnce()
+      await expect(run()).rejects.toThrow('platform upstream 502')
+      expect(pointsConsume).toHaveBeenCalledWith('u1', cost, expect.any(String))
+      expect(pointsRefund).toHaveBeenCalledWith('u1', cost, refundReason)
+    },
+  )
+
+  it('confirmPlatformFallback: platform generate failure → refund, failed, refundedPoints', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+    vi.clearAllMocks()
+    resolveForGeneration.mockImplementation(async (_uid: string, model?: string) => ({
+      ...platformResolved,
+      modelName: model?.includes('::') ? model.split('::')[1]! : (model ?? platformResolved.modelName),
+    }))
+    imageGenerate.mockRejectedValueOnce(new Error('platform confirm failed'))
+    pointsConsume.mockResolvedValue(undefined)
+
+    await expect(svc.confirmPlatformFallback('u1', 'g1')).rejects.toThrow('platform confirm failed')
+
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退失败退款')
+    const failedUpdate = generationUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_fallback_failed')
+    expect(meta.chargedPoints).toBe(10)
+    expect(meta.priorByokRefunded).toBe(true)
+  })
+
+  it('video: platform source failure → refund and failed metadata', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    videoGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    const record = await svc.generateVideo('u1', 'walk')
+    expect(record.status).toBe('generating')
+
+    await vi.waitFor(() =>
+      expect(generationUpdate.mock.calls.some((c) => c[0].data.status === 'failed')).toBe(true),
+    )
+    const failedUpdate = generationUpdate.mock.calls.find((c) => c[0].data.status === 'failed')!
+    const meta = JSON.parse(String(failedUpdate[0].data.metadata))
+    expect(meta.refundedPoints).toBe(30)
+    expect(meta.refundReason).toBe('platform_failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-失败退款')
+  })
+
   it('cancel-platform-fallback → failed without double refund', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('fail'))
     await svc.generateImage('u1', 'a cat', 'ch_user::custom-model')

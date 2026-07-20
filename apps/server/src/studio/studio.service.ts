@@ -914,7 +914,15 @@ export class StudioService {
         return
       }
       await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-      await this.prisma.generationRecord.update({ where: { id }, data: { status: 'failed' } })
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+      const meta = parseMeta(existing?.metadata)
+      await this.prisma.generationRecord.update({
+        where: { id },
+        data: {
+          status: 'failed',
+          metadata: JSON.stringify(applyRefundMeta(meta, cost, 'platform_failed')),
+        },
+      })
     }
   }
 }
