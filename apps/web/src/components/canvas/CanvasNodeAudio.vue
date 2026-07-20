@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
 import { computed } from 'vue'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
@@ -7,7 +8,7 @@ import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; prompt?: string; label?: string }
+  data: { url?: string; status: string; prompt?: string; label?: string; errorMessage?: string }
 }>()
 
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
@@ -91,6 +92,10 @@ const {
         @click.stop
         @change="onFileChange"
       >
+      <NodeTaskCornerActions
+        :status="data.status"
+        :error-message="data.errorMessage as string | undefined"
+      />
     </div>
   </NeoBaseNode>
 </template>

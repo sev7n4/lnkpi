@@ -290,7 +290,7 @@ function clearReferenceImage() {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!prompt.trim()"
+          :disabled="!generating && !prompt.trim()"
           @generate="onGenerate"
         />
       </div>

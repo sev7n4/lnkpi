@@ -81,7 +81,12 @@ import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import { downloadMediaPackage, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
-import { CANVAS_NODE_PATCH_KEY, CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
+import {
+  CANVAS_NODE_CANCEL_KEY,
+  CANVAS_NODE_PATCH_KEY,
+  CANVAS_NODE_RENAME_KEY,
+  CANVAS_NODE_RETRY_KEY,
+} from '@/composables/canvasNodeActions'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -310,8 +315,15 @@ function parseFallbackMessage(metadata?: string | null): string | undefined {
   }
 }
 
+/** Cancelled (draft) nodes must ignore late poll writes. */
+function acceptsPollWrite(status: unknown): boolean {
+  return isNodeGenerating(status) || status === 'pending'
+}
+
 const shotPolling = useShotPolling((shots) => {
   for (const shot of shots) {
+    const shotNode = nodes.value.find((n) => n.id === shot.id)
+    if (!acceptsPollWrite(shotNode?.data?.status)) continue
     for (const material of shot.materials) {
       if (material.status === NODE_GENERATION_STATUS.fallback_pending) {
         const nodeId = findLinkedMediaNodeId(shot.id, material.id)
@@ -333,6 +345,7 @@ const shotPolling = useShotPolling((shots) => {
         }
       }
       if (linked) {
+        if (!acceptsPollWrite(n.data?.status)) continue
         patchNodeData(n.id, { url: material.url, status: NODE_GENERATION_STATUS.completed })
       }
     }
@@ -342,6 +355,8 @@ const shotPolling = useShotPolling((shots) => {
 
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
+    const node = nodes.value.find((n) => n.id === task.nodeId)
+    if (!acceptsPollWrite(node?.data?.status)) continue
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       patchNodeData(task.nodeId, {
         status: NODE_GENERATION_STATUS.fallback_pending,
@@ -1422,10 +1437,21 @@ function handleRemoveRef(ref: NodeRef) {
 }
 
 async function handleNodeGenerate() {
-  await debouncedNodePatch.flush()
   const node = editorNode.value
   if (!node) return
-  await generateForNode(node)
+  // Cancel before flush so a second click isn't delayed by pending patches.
+  if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    cancelGeneration(node.id)
+    return
+  }
+  await debouncedNodePatch.flush()
+  const fresh = editorNode.value
+  if (!fresh) return
+  if (isNodeBusy(fresh.id) || isNodeGenerating(fresh.data?.status)) {
+    cancelGeneration(fresh.id)
+    return
+  }
+  await generateForNode(fresh)
 }
 
 async function handleSceneComposerSave() {
@@ -1603,6 +1629,7 @@ async function saveCanvas() {
 
 const {
   isNodeBusy,
+  cancelGeneration,
   generateForNode,
   saveSceneComposer,
   expandSceneComposer,
@@ -1627,6 +1654,7 @@ const {
   startShotPolling: (ids) => shotPolling.start(ids),
   startGenerationPolling: (tasks) => generationPolling.start(tasks),
   stopGenerationPolling: (nodeId) => generationPolling.removeByNodeId(nodeId),
+  stopShotPolling: (id) => shotPolling.removeById(id),
   resolveProviderModels: () => ({
     text: getProviderConfig('text').model,
     image: getProviderConfig('image').model,
@@ -1635,6 +1663,25 @@ const {
   requestFallbackConfirm,
   isModelSelectable,
 })
+
+function retryNodeGeneration(nodeId: string) {
+  const node = nodes.value.find((n) => n.id === nodeId)
+  if (!node) return
+  const data = node.data ?? {}
+  const prompt = String(data.prompt ?? '').trim()
+  if (!prompt && String(node.type) !== 'sceneComposer') {
+    patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '请先填写提示词',
+    })
+    return
+  }
+  patchNodeData(nodeId, { errorMessage: null })
+  return generateForNode(node as EditableFlowNode)
+}
+
+provide(CANVAS_NODE_CANCEL_KEY, (id) => cancelGeneration(id))
+provide(CANVAS_NODE_RETRY_KEY, (id) => { void retryNodeGeneration(id) })
 
 const selectedNodeGenerating = computed(() => {
   const node = editorNode.value

@@ -23,13 +23,17 @@ export function useGenerationPolling(
         // ignore single poll failure
       }
     }
-    if (results.length) onUpdate(results)
+    // Ignore results for tasks removed during await (e.g. cancel → removeByNodeId)
+    const active = results.filter(({ task }) =>
+      tasks.value.some((t) => t.nodeId === task.nodeId && t.recordId === task.recordId),
+    )
+    if (active.length) onUpdate(active)
 
-    const stillGenerating = results.some(
+    const stillGenerating = active.some(
       ({ record }) => record.status === 'generating' || record.status === 'pending',
     )
     // fallback_pending / completed / failed are terminal for this poll loop
-    if (!stillGenerating && results.length === tasks.value.length) {
+    if (!stillGenerating && active.length === tasks.value.length) {
       stop()
     }
   }

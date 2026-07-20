@@ -62,7 +62,11 @@ function createNode(
 }
 
 function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown> = {}) {
-  const patchNodeData = vi.fn()
+  const nodesRef = ref(nodes)
+  const patchNodeData = vi.fn((id: string, patch: Record<string, unknown>) => {
+    const node = nodesRef.value.find((n) => n.id === id)
+    if (node) node.data = { ...(node.data ?? {}), ...patch }
+  })
   const saveCanvas = vi.fn(async () => {})
   const requireLogin = vi.fn(() => true)
   const startShotPolling = vi.fn()
@@ -76,7 +80,7 @@ function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown
   const isModelSelectable = vi.fn(() => true)
 
   const deps = {
-    nodes: ref(nodes),
+    nodes: nodesRef,
     edges: ref<CanvasEdgeLike[]>([]),
     sessionId: ref('session-1'),
     patchNodeData,
@@ -531,6 +535,57 @@ describe('useNodeGeneration', () => {
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
   })
 
+  it('text generate writes result to content without overwriting prompt', async () => {
+    const node = createNode('text', {
+      prompt: '写一句广告语',
+      content: '',
+    })
+    const { api, deps } = createDeps([node])
+    vi.mocked(studioApi.generateText).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'text',
+          prompt: '写一句广告语',
+          metadata: JSON.stringify({ text: '买它！限时优惠。' }),
+        },
+      }),
+    )
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateText).toHaveBeenCalledWith(
+      '写一句广告语',
+      expect.any(String),
+      [],
+      [],
+      expect.any(AbortSignal),
+    )
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.generating,
+        prompt: '写一句广告语',
+      }),
+    )
+    const generatingPatch = deps.patchNodeData.mock.calls.find(
+      (call) => call[1]?.status === NODE_GENERATION_STATUS.generating,
+    )?.[1] as Record<string, unknown>
+    expect(generatingPatch).not.toHaveProperty('content')
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        content: '买它！限时优惠。',
+      }),
+    )
+    const completedPatch = deps.patchNodeData.mock.calls.find(
+      (call) => call[1]?.status === NODE_GENERATION_STATUS.completed,
+    )?.[1] as Record<string, unknown>
+    expect(completedPatch).not.toHaveProperty('prompt')
+  })
+
   it('allows parallel generation on two nodes', async () => {
     let resolveA!: (v: unknown) => void
     let resolveB!: (v: unknown) => void
@@ -568,6 +623,236 @@ describe('useNodeGeneration', () => {
     await Promise.all([pA, pB])
     expect(api.isNodeBusy('img-a')).toBe(false)
     expect(api.isNodeBusy('img-b')).toBe(false)
+  })
+
+  it('writes generationStartedAt when generation begins', async () => {
+    const node = createNode('image', { prompt: 'cat' }, 'img-1')
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(studioApi.generateImage).mockImplementationOnce(() => hang as never)
+    const { api, deps } = createDeps([node])
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.generating,
+        generationStartedAt: expect.stringMatching(/^\d{4}-/),
+      }),
+    )
+    resolveHang(mockAxiosResponse({ data: completedRecord }))
+    await pending
+  })
+
+  it('cancelGeneration stops generation and shot polling', () => {
+    const stopGenerationPolling = vi.fn()
+    const stopShotPolling = vi.fn()
+    const node = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'img-1')
+    const { api } = createDeps([node], { stopGenerationPolling, stopShotPolling })
+
+    api.cancelGeneration('img-1')
+
+    expect(stopGenerationPolling).toHaveBeenCalledWith('img-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('img-1')
+  })
+
+  it('cancelGeneration stops linked shot polling for shot-linked media', () => {
+    const stopShotPolling = vi.fn()
+    const shot = createNode('shot', {
+      title: 'Shot',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'shot-1')
+    const image = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'image-1')
+    const { api, deps } = createDeps([shot, image], { stopShotPolling })
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+
+    api.cancelGeneration('image-1')
+
+    expect(stopShotPolling).toHaveBeenCalledWith('image-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('shot-1')
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'shot-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.draft,
+        errorMessage: null,
+      }),
+    )
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+  })
+
+  it('does not addNode after cancel during no-child generateShot hang', async () => {
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(canvasApi.editShot).mockResolvedValue(mockAxiosResponse({ data: {} }))
+    vi.mocked(canvasApi.generateImage).mockImplementationOnce(() => hang as never)
+
+    // auto mode + no media children → else branch that addNode/addEdge
+    const shot = createNode('shot', { title: 'Shot', prompt: 'lonely', shotGenerateMode: 'auto' }, 'shot-1')
+    const { api, deps } = createDeps([shot])
+
+    const pending = api.generateForNode(shot)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    api.cancelGeneration('shot-1')
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveHang(mockAxiosResponse({ data: { data: { id: 'mat-late' } } }))
+    await pending
+
+    expect(deps.addNode).not.toHaveBeenCalled()
+    expect(deps.addEdge).not.toHaveBeenCalled()
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+  })
+
+  it('does not restart shot polling after cancel during shot-linked generate hang', async () => {
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(canvasApi.generateImage).mockImplementationOnce(() => hang as never)
+
+    const shot = createNode('shot', { title: 'Shot', prompt: 'sunset' }, 'shot-1')
+    const image = createNode('image', { prompt: 'sunset' }, 'image-1')
+    const stopShotPolling = vi.fn()
+    const { api, deps } = createDeps([shot, image], { stopShotPolling })
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+
+    const pending = api.generateForNode(image)
+    await Promise.resolve()
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+
+    api.cancelGeneration('image-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('shot-1')
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+    expect(image.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveHang(mockAxiosResponse({ data: {} }))
+    await pending
+
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+  })
+
+  it('does not write fallback error after cancel during confirm dialog', async () => {
+    let resolveConfirm!: (decision: 'confirm' | 'cancel') => void
+    const confirmHang = new Promise<'confirm' | 'cancel'>((r) => { resolveConfirm = r })
+    const requestFallbackConfirm = vi.fn(() => confirmHang)
+
+    const pendingRecord = {
+      id: 'rec-fb-cancel',
+      type: 'image',
+      prompt: 'fallback me',
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      url: null,
+      metadata: JSON.stringify({ confirmMessage: '是否继续？' }),
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(studioApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: pendingRecord }))
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...pendingRecord,
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/fallback.png',
+        },
+      }),
+    )
+
+    const node = createNode('image', {
+      prompt: 'fallback me',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    }, 'img-fb')
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(requestFallbackConfirm).toHaveBeenCalled()
+
+    api.cancelGeneration('img-fb')
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveConfirm('confirm')
+    await pending
+
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '平台回退仍待确认',
+      }),
+    )
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/fallback.png',
+      }),
+    )
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+  })
+
+  it('ignores late studio completed write after cancel to draft', async () => {
+    const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id: 'rec-late',
+          url: 'https://example.com/late.png',
+        },
+      }),
+    )
+    const node = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.draft,
+    }, 'img-1')
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    await api.onFallbackPending('studio', 'rec-late', 'img-1')
+
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/late.png',
+      }),
+    )
+  })
+
+  it('cancel keeps existing content and url', async () => {
+    const node = createNode('image', {
+      prompt: 'x',
+      url: 'https://example.com/keep.png',
+      content: 'keep-me',
+    }, 'img-keep')
+    let rejectHang!: (e: unknown) => void
+    const hang = new Promise((_r, j) => { rejectHang = j })
+    vi.mocked(studioApi.generateImage).mockImplementation((_a, _b, _c, _d, _e, _f, _g, signal?: AbortSignal) => {
+      signal?.addEventListener('abort', () => {
+        const err = new Error('canceled')
+        ;(err as { code?: string }).code = 'ERR_CANCELED'
+        rejectHang(err)
+      })
+      return hang as never
+    })
+    const { api, deps } = createDeps([node])
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(api.isNodeBusy('img-keep')).toBe(true)
+    await api.generateForNode(node) // cancel via second click
+    await pending
+    const draftPatch = deps.patchNodeData.mock.calls.find(
+      (c) => c[1]?.status === NODE_GENERATION_STATUS.draft,
+    )?.[1] as Record<string, unknown>
+    expect(draftPatch).toBeTruthy()
+    expect(draftPatch).not.toHaveProperty('url')
+    expect(draftPatch).not.toHaveProperty('content')
   })
 
   it('second generate click cancels in-flight generation', async () => {

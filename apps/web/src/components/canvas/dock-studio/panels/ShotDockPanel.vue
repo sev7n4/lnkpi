@@ -163,7 +163,7 @@ function toggleVoice() {
         />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!prompt.trim()"
+          :disabled="!generating && !prompt.trim()"
           @generate="onGenerate"
         />
       </div>

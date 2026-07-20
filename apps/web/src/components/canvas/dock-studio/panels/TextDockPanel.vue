@@ -35,45 +35,69 @@ const emit = defineEmits<{
   removeRef: [ref: NodeRef]
 }>()
 
-const content = ref('')
+/** Dock input only — never sync from generated `content` after prompt exists. */
+const prompt = ref('')
 const textModel = ref(getConfig('text').model)
+/** One-shot legacy content→prompt seed for the current node visit. */
+const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
-const wordCount = computed(() => content.value.replace(/\s/g, '').length)
+const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
 
 function syncFromNode() {
   const data = props.node.data ?? {}
-  content.value = String(data.content ?? data.prompt ?? '')
+  const nodeId = props.node.id
+
+  // Prefer `prompt` whenever the key is present as a string — including "" after clear.
+  // Only fall back to `content` when `prompt` is truly absent (legacy nodes).
+  if (typeof data.prompt === 'string') {
+    prompt.value = data.prompt
+  } else if (legacySeededForId.value !== nodeId) {
+    prompt.value = String(data.content ?? '')
+    legacySeededForId.value = nodeId
+  }
+
   textModel.value = resolveGenerationModel('text', data.textModel as string | undefined)
 }
 
-watch(() => props.node, syncFromNode, { immediate: true, deep: true })
+watch(
+  () => props.node.id,
+  () => {
+    legacySeededForId.value = null
+    syncFromNode()
+  },
+  { immediate: true },
+)
+watch(
+  () => [props.node.data?.prompt, props.node.data?.textModel] as const,
+  () => syncFromNode(),
+)
 
 watch(
   () => props.upstream,
   (ctx) => {
-    if (!content.value.trim() && ctx.textPrompt) {
-      content.value = ctx.textPrompt
-      emit('patch', { content: ctx.textPrompt, prompt: ctx.textPrompt })
+    if (!prompt.value.trim() && ctx.textPrompt) {
+      prompt.value = ctx.textPrompt
+      emit('patch', { prompt: ctx.textPrompt })
     }
   },
   { immediate: true },
 )
 
-function onContentInput(value: string) {
-  content.value = value
-  emit('patch', { content: value, prompt: value })
+function onPromptInput(value: string) {
+  prompt.value = value
+  emit('patch', { prompt: value })
 }
 
 function onOptimized(value: string) {
-  content.value = value
-  emit('patch', { content: value, prompt: value })
+  prompt.value = value
+  emit('patch', { prompt: value })
 }
 
 function onGenerate() {
-  emit('patch', { content: content.value, prompt: content.value, textModel: textModel.value })
+  emit('patch', { prompt: prompt.value, textModel: textModel.value })
   emit('generate')
 }
 
@@ -84,8 +108,8 @@ function toggleVoice() {
   }
   speech.start((text, isFinal) => {
     if (isFinal) {
-      const next = content.value ? `${content.value} ${text}` : text
-      onContentInput(next)
+      const next = prompt.value ? `${prompt.value} ${text}` : text
+      onPromptInput(next)
     }
   })
 }
@@ -108,10 +132,10 @@ function onRefRemove(ref: NodeRef) {
     />
 
     <DockPromptSection
-      :model-value="content"
+      :model-value="prompt"
       :mentions="mentions"
       placeholder="输入脚本、旁白或品牌文案..."
-      @update:model-value="onContentInput"
+      @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
 
@@ -122,7 +146,7 @@ function onRefRemove(ref: NodeRef) {
         @update:model-value="emit('patch', { textModel: $event })"
       />
       <DockOptimizePrompt
-        :prompt="content"
+        :prompt="prompt"
         optimize-style="copywriting"
         :disabled="readonly"
         @optimized="onOptimized"
@@ -138,7 +162,7 @@ function onRefRemove(ref: NodeRef) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!content.trim()"
+          :disabled="!generating && !prompt.trim()"
           @generate="onGenerate"
         />
       </div>

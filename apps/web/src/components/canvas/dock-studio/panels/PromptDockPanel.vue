@@ -168,7 +168,7 @@ function onRefRemove(ref: NodeRef) {
         <DockCreditBadge :credits="estimateTextCredits()" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!prompt.trim()"
+          :disabled="!generating && !prompt.trim()"
           @generate="onGenerate"
         />
       </div>
