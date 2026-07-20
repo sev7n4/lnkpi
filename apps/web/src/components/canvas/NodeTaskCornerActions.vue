@@ -1,14 +1,29 @@
 <script setup lang="ts">
 import { computed, inject, onUnmounted, ref, watch } from 'vue'
 import { useNodeId } from '@vue-flow/core'
+import type { ErrorCode, GenerationDiagnostic, TaskKind } from '@lnkpi/shared'
+import NodeDiagnosticPopover from '@/components/canvas/NodeDiagnosticPopover.vue'
 import { resolveTaskChrome, truncateError } from '@/components/canvas/nodeTaskChrome'
 import { CANVAS_NODE_CANCEL_KEY, CANVAS_NODE_RETRY_KEY } from '@/composables/canvasNodeActions'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { canvasApi } from '@/services/canvas-api'
+import { studioApi } from '@/services/studio-api'
+import {
+  buildCopyForNode,
+  createDiagnosticCache,
+} from '@/utils/generationDiagnostic'
+
+const diagnosticCache = createDiagnosticCache()
 
 const props = defineProps<{
   status?: unknown
   startedAt?: string
   errorMessage?: string
+  errorCode?: string
+  taskKind?: TaskKind
+  taskId?: string
+  nodeLabel?: string
+  sessionId?: string
 }>()
 
 const nodeId = useNodeId()
@@ -19,6 +34,11 @@ const nowMs = ref(Date.now())
 const completedFlash = ref(false)
 let tick: ReturnType<typeof setInterval> | undefined
 let flashTimer: ReturnType<typeof setTimeout> | undefined
+
+const diagOpen = ref(false)
+const diagLoading = ref(false)
+const diag = ref<GenerationDiagnostic | null>(null)
+const copyLabel = ref('复制诊断')
 
 watch(
   () => props.status,
@@ -62,16 +82,35 @@ const chrome = computed(() =>
 )
 
 const err = computed(() => truncateError(props.errorMessage))
+const isFallbackPending = computed(
+  () => props.status === NODE_GENERATION_STATUS.fallback_pending,
+)
 const showError = computed(
   () =>
-    Boolean(err.value) &&
-    (props.status === NODE_GENERATION_STATUS.error ||
-      props.status === NODE_GENERATION_STATUS.failed),
+    (Boolean(err.value) &&
+      (props.status === NODE_GENERATION_STATUS.error ||
+        props.status === NODE_GENERATION_STATUS.failed ||
+        isFallbackPending.value)) ||
+    isFallbackPending.value,
 )
+const displayErr = computed(() => {
+  if (err.value) return err.value
+  if (isFallbackPending.value) return '平台回退待确认'
+  return ''
+})
 
 const isClickable = computed(
   () => chrome.value?.action === 'cancel' || chrome.value?.action === 'retry',
 )
+
+const popoverMessage = computed(
+  () => diag.value?.userMessage || props.errorMessage || displayErr.value || '生成失败',
+)
+const popoverHint = computed(() => {
+  if (diag.value?.hint) return diag.value.hint
+  if (isFallbackPending.value) return '请确认是否使用平台回退继续，或取消本次生成。'
+  return undefined
+})
 
 function onAction(e: Event) {
   e.stopPropagation()
@@ -79,6 +118,75 @@ function onAction(e: Event) {
   if (!nodeId || !chrome.value?.action) return
   if (chrome.value.action === 'cancel') cancel?.(nodeId)
   if (chrome.value.action === 'retry') void retry?.(nodeId)
+}
+
+function buildFallbackDiagnostic(): GenerationDiagnostic {
+  const code = (props.errorCode as ErrorCode | undefined) || 'unknown'
+  const taskKind: TaskKind = props.taskKind || 'generation'
+  return {
+    userMessage: props.errorMessage || displayErr.value || '生成失败',
+    code: isFallbackPending.value ? 'fallback_pending' : code,
+    taskKind,
+    taskId: props.taskId || 'unknown',
+    occurredAt: new Date().toISOString(),
+    providerSnippet: null,
+    hint: isFallbackPending.value
+      ? '请确认是否使用平台回退继续，或取消本次生成。'
+      : undefined,
+  }
+}
+
+async function fetchDiagnostic(): Promise<GenerationDiagnostic> {
+  const taskId = props.taskId
+  const taskKind = props.taskKind
+  if (!taskId || !taskKind) return buildFallbackDiagnostic()
+
+  return diagnosticCache.get(taskKind, taskId, () =>
+    taskKind === 'material'
+      ? canvasApi.getMaterialDiagnostic(taskId)
+      : studioApi.getGenerationDiagnostic(taskId),
+  )
+}
+
+async function openDiag(e: Event) {
+  e.stopPropagation()
+  e.preventDefault()
+  if (diagOpen.value) {
+    diagOpen.value = false
+    return
+  }
+  diagOpen.value = true
+  diagLoading.value = true
+  copyLabel.value = '复制诊断'
+  try {
+    diag.value = await fetchDiagnostic()
+  } catch {
+    diag.value = buildFallbackDiagnostic()
+  } finally {
+    diagLoading.value = false
+  }
+}
+
+async function copyDiag() {
+  const payload = diag.value || buildFallbackDiagnostic()
+  const text = buildCopyForNode(payload, {
+    nodeId: nodeId || undefined,
+    nodeLabel: props.nodeLabel,
+    sessionId: props.sessionId,
+  })
+  try {
+    await navigator.clipboard.writeText(text)
+    copyLabel.value = '已复制'
+    setTimeout(() => {
+      copyLabel.value = '复制诊断'
+    }, 1500)
+  } catch {
+    copyLabel.value = '复制失败'
+  }
+}
+
+function closeDiag() {
+  diagOpen.value = false
 }
 </script>
 
@@ -90,7 +198,29 @@ function onAction(e: Event) {
     @mousedown.stop
     @click.stop
   >
-    <p v-if="showError" class="neo-task-error">{{ err }}</p>
+    <div v-if="showError" class="neo-task-error-wrap">
+      <p class="neo-task-error-row">
+        <span class="neo-task-error">{{ displayErr }}</span>
+        <button
+          type="button"
+          class="neo-task-diag-btn"
+          aria-label="诊断信息"
+          title="诊断信息"
+          @click="openDiag"
+        >
+          ⓘ
+        </button>
+      </p>
+      <NodeDiagnosticPopover
+        v-if="diagOpen"
+        :user-message="popoverMessage"
+        :hint="popoverHint"
+        :loading="diagLoading"
+        :copy-label="copyLabel"
+        @copy="copyDiag"
+        @close="closeDiag"
+      />
+    </div>
     <div class="neo-task-chrome-row">
       <span v-if="chrome.elapsedText" class="neo-task-elapsed">{{ chrome.elapsedText }}</span>
       <button

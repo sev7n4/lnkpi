@@ -11,6 +11,24 @@ import {
 export type { ErrorCode, GenerationDiagnostic, TaskKind }
 export { formatDiagnosticCopy }
 
+export interface DiagnosticNodeContext {
+  nodeId?: string
+  nodeLabel?: string
+  sessionId?: string
+}
+
+export function buildCopyForNode(
+  diag: GenerationDiagnostic,
+  ctx: DiagnosticNodeContext,
+): string {
+  return formatDiagnosticCopy({
+    ...diag,
+    nodeId: ctx.nodeId ?? diag.nodeId,
+    nodeLabel: ctx.nodeLabel ?? diag.nodeLabel,
+    sessionId: ctx.sessionId ?? diag.sessionId,
+  })
+}
+
 export interface ShortGenerationError {
   userMessage: string
   errorCode?: ErrorCode

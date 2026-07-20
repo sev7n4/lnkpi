@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import {
+  buildCopyForNode,
   buildPollingFailurePatch,
   createDiagnosticCache,
   parseErrorCodeFromMetadata,
@@ -103,6 +104,24 @@ describe('buildPollingFailurePatch', () => {
       generationRecordId: 'rec-2',
     })
     expect(patch).not.toHaveProperty('errorCode')
+  })
+})
+
+describe('buildCopyForNode', () => {
+  it('buildCopyForNode merges node context', () => {
+    const text = buildCopyForNode(
+      {
+        userMessage: 'x',
+        code: 'unknown',
+        taskKind: 'generation',
+        taskId: 'g1',
+        occurredAt: 't',
+        providerSnippet: null,
+      },
+      { nodeId: 'n1', nodeLabel: '文本', sessionId: 's1' },
+    )
+    expect(text).toContain('nodeId: n1')
+    expect(text).toContain('sessionId: s1')
   })
 })
 

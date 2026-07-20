@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { useNodeId, useVueFlow } from '@vue-flow/core'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
@@ -7,11 +8,35 @@ import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
 
 const props = defineProps<{
   selected?: boolean
-  data: { content: string; label?: string; status?: string; errorMessage?: string; generationStartedAt?: string }
+  data: {
+    content: string
+    label?: string
+    status?: string
+    errorMessage?: string
+    errorCode?: string
+    generationStartedAt?: string
+    generationRecordId?: string
+    materialId?: string
+  }
 }>()
 
 const nodeId = useNodeId()
 const { updateNodeData } = useVueFlow()
+const route = useRoute()
+const sessionId = computed(() => route.params.sessionId as string | undefined)
+const taskId = computed(
+  () =>
+    (typeof props.data.generationRecordId === 'string' && props.data.generationRecordId) ||
+    (typeof props.data.materialId === 'string' && props.data.materialId) ||
+    undefined,
+)
+const taskKind = computed(() =>
+  typeof props.data.generationRecordId === 'string' && props.data.generationRecordId
+    ? ('generation' as const)
+    : typeof props.data.materialId === 'string' && props.data.materialId
+      ? ('material' as const)
+      : undefined,
+)
 
 const editorOpen = ref(false)
 const draft = ref('')
@@ -34,6 +59,11 @@ function onSave(md: string) {
         :status="data.status"
         :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
         :error-message="data.errorMessage as string | undefined"
+        :error-code="data.errorCode as string | undefined"
+        :task-kind="taskKind"
+        :task-id="taskId"
+        :node-label="typeof data.label === 'string' ? data.label : undefined"
+        :session-id="sessionId"
       />
     </div>
     <PromptMarkdownEditor
