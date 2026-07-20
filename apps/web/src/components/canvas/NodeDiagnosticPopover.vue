@@ -18,7 +18,10 @@ const root = ref<HTMLElement | null>(null)
 function onDocPointerDown(e: PointerEvent) {
   const el = root.value
   if (!el) return
-  if (e.target instanceof Node && el.contains(e.target)) return
+  const target = e.target
+  if (!(target instanceof Node)) return
+  if (el.contains(target)) return
+  if (target instanceof Element && target.closest('.neo-task-diag-btn')) return
   emit('close')
 }
 
