@@ -62,7 +62,11 @@ function createNode(
 }
 
 function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown> = {}) {
-  const patchNodeData = vi.fn()
+  const nodesRef = ref(nodes)
+  const patchNodeData = vi.fn((id: string, patch: Record<string, unknown>) => {
+    const node = nodesRef.value.find((n) => n.id === id)
+    if (node) node.data = { ...(node.data ?? {}), ...patch }
+  })
   const saveCanvas = vi.fn(async () => {})
   const requireLogin = vi.fn(() => true)
   const startShotPolling = vi.fn()
@@ -76,7 +80,7 @@ function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown
   const isModelSelectable = vi.fn(() => true)
 
   const deps = {
-    nodes: ref(nodes),
+    nodes: nodesRef,
     edges: ref<CanvasEdgeLike[]>([]),
     sessionId: ref('session-1'),
     patchNodeData,
@@ -640,12 +644,73 @@ describe('useNodeGeneration', () => {
     await pending
   })
 
+  it('cancelGeneration stops generation and shot polling', () => {
+    const stopGenerationPolling = vi.fn()
+    const stopShotPolling = vi.fn()
+    const node = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'img-1')
+    const { api } = createDeps([node], { stopGenerationPolling, stopShotPolling })
+
+    api.cancelGeneration('img-1')
+
+    expect(stopGenerationPolling).toHaveBeenCalledWith('img-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('img-1')
+  })
+
+  it('cancelGeneration stops linked shot polling for shot-linked media', () => {
+    const stopShotPolling = vi.fn()
+    const shot = createNode('shot', {
+      title: 'Shot',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'shot-1')
+    const image = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'image-1')
+    const { api, deps } = createDeps([shot, image], { stopShotPolling })
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+
+    api.cancelGeneration('image-1')
+
+    expect(stopShotPolling).toHaveBeenCalledWith('image-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('shot-1')
+  })
+
+  it('ignores late studio completed write after cancel to draft', async () => {
+    const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id: 'rec-late',
+          url: 'https://example.com/late.png',
+        },
+      }),
+    )
+    const node = createNode('image', {
+      prompt: 'x',
+      status: NODE_GENERATION_STATUS.draft,
+    }, 'img-1')
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    await api.onFallbackPending('studio', 'rec-late', 'img-1')
+
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/late.png',
+      }),
+    )
+  })
+
   it('cancel keeps existing content and url', async () => {
     const node = createNode('image', {
       prompt: 'x',
       url: 'https://example.com/keep.png',
       content: 'keep-me',
-      status: NODE_GENERATION_STATUS.generating,
     }, 'img-keep')
     let rejectHang!: (e: unknown) => void
     const hang = new Promise((_r, j) => { rejectHang = j })
@@ -660,7 +725,8 @@ describe('useNodeGeneration', () => {
     const { api, deps } = createDeps([node])
     const pending = api.generateForNode(node)
     await Promise.resolve()
-    await api.generateForNode(node) // cancel
+    expect(api.isNodeBusy('img-keep')).toBe(true)
+    await api.generateForNode(node) // cancel via second click
     await pending
     const draftPatch = deps.patchNodeData.mock.calls.find(
       (c) => c[1]?.status === NODE_GENERATION_STATUS.draft,

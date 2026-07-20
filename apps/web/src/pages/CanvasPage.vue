@@ -315,8 +315,15 @@ function parseFallbackMessage(metadata?: string | null): string | undefined {
   }
 }
 
+/** Cancelled (draft) nodes must ignore late poll writes. */
+function acceptsPollWrite(status: unknown): boolean {
+  return isNodeGenerating(status) || status === 'pending'
+}
+
 const shotPolling = useShotPolling((shots) => {
   for (const shot of shots) {
+    const shotNode = nodes.value.find((n) => n.id === shot.id)
+    if (!acceptsPollWrite(shotNode?.data?.status)) continue
     for (const material of shot.materials) {
       if (material.status === NODE_GENERATION_STATUS.fallback_pending) {
         const nodeId = findLinkedMediaNodeId(shot.id, material.id)
@@ -338,6 +345,7 @@ const shotPolling = useShotPolling((shots) => {
         }
       }
       if (linked) {
+        if (!acceptsPollWrite(n.data?.status)) continue
         patchNodeData(n.id, { url: material.url, status: NODE_GENERATION_STATUS.completed })
       }
     }
@@ -347,6 +355,8 @@ const shotPolling = useShotPolling((shots) => {
 
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
+    const node = nodes.value.find((n) => n.id === task.nodeId)
+    if (!acceptsPollWrite(node?.data?.status)) continue
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       patchNodeData(task.nodeId, {
         status: NODE_GENERATION_STATUS.fallback_pending,
@@ -1644,6 +1654,7 @@ const {
   startShotPolling: (ids) => shotPolling.start(ids),
   startGenerationPolling: (tasks) => generationPolling.start(tasks),
   stopGenerationPolling: (nodeId) => generationPolling.removeByNodeId(nodeId),
+  stopShotPolling: (id) => shotPolling.removeById(id),
   resolveProviderModels: () => ({
     text: getProviderConfig('text').model,
     image: getProviderConfig('image').model,

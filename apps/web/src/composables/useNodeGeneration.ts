@@ -55,9 +55,15 @@ export interface NodeGenerationDeps {
   startShotPolling: (shotIds: string[]) => void
   startGenerationPolling: (tasks: GenerationPollTask[]) => void
   stopGenerationPolling?: (nodeId: string) => void
+  stopShotPolling?: (nodeId: string) => void
   resolveProviderModels: () => { image: string; video: string; text: string }
   requestFallbackConfirm?: (req: FallbackPendingRequest) => Promise<FallbackConfirmDecision>
   isModelSelectable?: (modality: StudioModality, model: string) => boolean
+}
+
+/** Node still accepts poll / resolve writes (not cancelled to draft). */
+function acceptsGenerationWrite(status: unknown): boolean {
+  return isNodeGenerating(status) || status === 'pending'
 }
 
 function localPrompt(data: Record<string, unknown>): string {
@@ -213,6 +219,16 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       abortByNodeId.delete(nodeId)
     }
     deps.stopGenerationPolling?.(nodeId)
+    deps.stopShotPolling?.(nodeId)
+    const node = findNodeById(deps.nodes.value, nodeId)
+    if (node && (node.type === 'image' || node.type === 'video')) {
+      const linkedShotEdge = findIncomingEdge(deps.edges.value, nodeId)
+      const shotId = linkedShotEdge?.source
+      const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
+      if (shotNode?.type === 'shot' && shotId) {
+        deps.stopShotPolling?.(shotId)
+      }
+    }
     markIdle(nodeId)
     syncGeneratingFlag()
     deps.patchNodeData(nodeId, {
@@ -266,6 +282,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
   }
 
   function applyStudioRecord(nodeId: string, record: GenerationRecord): boolean {
+    const current = findNodeById(deps.nodes.value, nodeId)
+    if (!acceptsGenerationWrite(current?.data?.status)) return false
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       return false
     }
@@ -313,6 +331,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
   }
 
   async function resolveStudioRecord(nodeId: string, record: GenerationRecord) {
+    const current = findNodeById(deps.nodes.value, nodeId)
+    if (!acceptsGenerationWrite(current?.data?.status)) return
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       const handled = await handleStudioFallback(nodeId, record)
       if (!handled) {
