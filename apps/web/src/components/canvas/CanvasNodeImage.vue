@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
@@ -8,7 +9,7 @@ import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; prompt?: string; label?: string }
+  data: { url?: string; status: string; prompt?: string; label?: string; errorMessage?: string }
 }>()
 
 const editor = useCanvasEditorStore()
@@ -108,6 +109,10 @@ function openEdit() {
         @click.stop
         @change="onFileChange"
       >
+      <NodeTaskCornerActions
+        :status="data.status"
+        :error-message="data.errorMessage as string | undefined"
+      />
     </div>
   </NeoBaseNode>
 </template>

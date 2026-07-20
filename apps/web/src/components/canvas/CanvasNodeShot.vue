@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
 
 defineProps<{
   selected?: boolean
-  data: { title?: string; prompt?: string; status?: string; coverUrl?: string; label?: string }
+  data: {
+    title?: string
+    prompt?: string
+    status?: string
+    coverUrl?: string
+    label?: string
+    errorMessage?: string
+  }
 }>()
 </script>
 
@@ -27,6 +35,10 @@ defineProps<{
           <span v-if="data.prompt" class="line-clamp-2 max-w-[220px] text-[11px] text-white/40">{{ data.prompt }}</span>
         </div>
       </div>
+      <NodeTaskCornerActions
+        :status="data.status"
+        :error-message="data.errorMessage as string | undefined"
+      />
     </div>
   </NeoBaseNode>
 </template>
