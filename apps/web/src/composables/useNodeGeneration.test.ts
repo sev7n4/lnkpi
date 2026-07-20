@@ -676,6 +676,100 @@ describe('useNodeGeneration', () => {
 
     expect(stopShotPolling).toHaveBeenCalledWith('image-1')
     expect(stopShotPolling).toHaveBeenCalledWith('shot-1')
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'shot-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.draft,
+        errorMessage: null,
+      }),
+    )
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+  })
+
+  it('does not restart shot polling after cancel during shot-linked generate hang', async () => {
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(canvasApi.generateImage).mockImplementationOnce(() => hang as never)
+
+    const shot = createNode('shot', { title: 'Shot', prompt: 'sunset' }, 'shot-1')
+    const image = createNode('image', { prompt: 'sunset' }, 'image-1')
+    const stopShotPolling = vi.fn()
+    const { api, deps } = createDeps([shot, image], { stopShotPolling })
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'image-1' }]
+
+    const pending = api.generateForNode(image)
+    await Promise.resolve()
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+
+    api.cancelGeneration('image-1')
+    expect(stopShotPolling).toHaveBeenCalledWith('shot-1')
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+    expect(image.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveHang(mockAxiosResponse({ data: {} }))
+    await pending
+
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+  })
+
+  it('does not write fallback error after cancel during confirm dialog', async () => {
+    let resolveConfirm!: (decision: 'confirm' | 'cancel') => void
+    const confirmHang = new Promise<'confirm' | 'cancel'>((r) => { resolveConfirm = r })
+    const requestFallbackConfirm = vi.fn(() => confirmHang)
+
+    const pendingRecord = {
+      id: 'rec-fb-cancel',
+      type: 'image',
+      prompt: 'fallback me',
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      url: null,
+      metadata: JSON.stringify({ confirmMessage: '是否继续？' }),
+      createdAt: '2026-01-01T00:00:00.000Z',
+    }
+    vi.mocked(studioApi.generateImage).mockResolvedValue(mockAxiosResponse({ data: pendingRecord }))
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...pendingRecord,
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/fallback.png',
+        },
+      }),
+    )
+
+    const node = createNode('image', {
+      prompt: 'fallback me',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    }, 'img-fb')
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(requestFallbackConfirm).toHaveBeenCalled()
+
+    api.cancelGeneration('img-fb')
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveConfirm('confirm')
+    await pending
+
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '平台回退仍待确认',
+      }),
+    )
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'img-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/fallback.png',
+      }),
+    )
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.draft)
   })
 
   it('ignores late studio completed write after cancel to draft', async () => {

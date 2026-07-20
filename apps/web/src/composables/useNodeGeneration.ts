@@ -212,6 +212,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     generating.value = busyNodeIds.value.size > 0
   }
 
+  function nodeAcceptsWrite(nodeId: string): boolean {
+    const current = findNodeById(deps.nodes.value, nodeId)
+    return acceptsGenerationWrite(current?.data?.status)
+  }
+
   function cancelGeneration(nodeId: string) {
     const ac = abortByNodeId.get(nodeId)
     if (ac) {
@@ -227,6 +232,30 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
       if (shotNode?.type === 'shot' && shotId) {
         deps.stopShotPolling?.(shotId)
+        deps.patchNodeData(shotId, {
+          status: NODE_GENERATION_STATUS.draft,
+          errorMessage: null,
+        })
+        markIdle(shotId)
+      }
+    }
+    if (node?.type === 'shot') {
+      for (const edge of deps.edges.value) {
+        if (edge.source !== nodeId) continue
+        const child = findNodeById(deps.nodes.value, edge.target)
+        if (!child || (child.type !== 'image' && child.type !== 'video')) continue
+        if (!isNodeGenerating(child.data?.status)) continue
+        deps.stopGenerationPolling?.(child.id)
+        const childAc = abortByNodeId.get(child.id)
+        if (childAc) {
+          childAc.abort()
+          abortByNodeId.delete(child.id)
+        }
+        markIdle(child.id)
+        deps.patchNodeData(child.id, {
+          status: NODE_GENERATION_STATUS.draft,
+          errorMessage: null,
+        })
       }
     }
     markIdle(nodeId)
@@ -273,6 +302,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
 
     await studioApi.cancelPlatformFallback(record.id)
+    if (!nodeAcceptsWrite(nodeId)) return false
     deps.patchNodeData(nodeId, {
       status: NODE_GENERATION_STATUS.error,
       errorMessage: '已取消平台回退',
@@ -336,6 +366,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       const handled = await handleStudioFallback(nodeId, record)
       if (!handled) {
+        if (!nodeAcceptsWrite(nodeId)) return
         deps.patchNodeData(nodeId, {
           status: NODE_GENERATION_STATUS.error,
           errorMessage: '平台回退仍待确认',
@@ -456,7 +487,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'shot') {
-        await generateShot(node, local, data)
+        await generateShot(node, local, data, signal)
       }
     } catch (err) {
       if (isAbortError(err) || signal.aborted) return
@@ -502,6 +533,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         const params = resolveCanvasImageParams(data)
         await canvasApi.generateImage(shotId, prompt, { ...params, refs, mentionedKeys })
       }
+      if (signal?.aborted || !nodeAcceptsWrite(node.id) || !nodeAcceptsWrite(shotId)) return
       deps.startShotPolling([shotId])
       await deps.saveCanvas()
       return
@@ -572,6 +604,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
     if (decision === 'confirm') {
       await canvasApi.confirmMaterialPlatformFallback(materialId)
+      if (!nodeAcceptsWrite(nodeId)) return
       deps.patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.generating })
       const shotEdge = findIncomingEdge(deps.edges.value, nodeId)
       if (shotEdge?.source) deps.startShotPolling([shotEdge.source])
@@ -579,6 +612,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
 
     await canvasApi.cancelMaterialPlatformFallback(materialId)
+    if (!nodeAcceptsWrite(nodeId)) return
     deps.patchNodeData(nodeId, {
       status: NODE_GENERATION_STATUS.error,
       errorMessage: '已取消平台回退',
@@ -607,6 +641,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
       await deps.saveCanvas()
     } catch (err) {
+      const current = findNodeById(deps.nodes.value, nodeId)
+      if (current && !acceptsGenerationWrite(current.data?.status)) return
       deps.patchNodeData(nodeId, {
         status: NODE_GENERATION_STATUS.error,
         errorMessage: err instanceof Error ? err.message : '平台回退处理失败',
@@ -615,7 +651,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
   }
 
-  async function generateShot(node: EditableFlowNode, prompt: string, data: Record<string, unknown>) {
+  async function generateShot(
+    node: EditableFlowNode,
+    prompt: string,
+    data: Record<string, unknown>,
+    signal?: AbortSignal,
+  ) {
     const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
     const mentionedKeys = parseRefMentions(prompt)
     deps.patchNodeData(node.id, {
@@ -674,6 +715,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         style: { stroke: '#6366f1' },
       })
     }
+    if (signal?.aborted || !nodeAcceptsWrite(node.id)) return
     deps.startShotPolling([node.id])
     await deps.saveCanvas()
   }
@@ -769,6 +811,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         items,
       })
 
+      if (
+        signal.aborted
+        || !nodeAcceptsWrite(node.id)
+        || items.some((item) => !nodeAcceptsWrite(item.shotNodeId))
+      ) {
+        return
+      }
       deps.startShotPolling(items.map((item) => item.shotNodeId))
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
       await deps.saveCanvas()
