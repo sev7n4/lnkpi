@@ -11,6 +11,7 @@ defineProps<{
     coverUrl?: string
     label?: string
     errorMessage?: string
+    generationStartedAt?: string
   }
 }>()
 </script>
@@ -37,6 +38,7 @@ defineProps<{
       </div>
       <NodeTaskCornerActions
         :status="data.status"
+        :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
         :error-message="data.errorMessage as string | undefined"
       />
     </div>

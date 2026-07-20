@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@lnkpi/agent'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
+import { BadRequestException } from '@nestjs/common'
+import { createCancelFlag } from '../points/charge-session'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -32,20 +34,38 @@ const userResolved = {
   source: 'user' as const,
 }
 
+const platformResolved = {
+  channelId: 'platform',
+  modelName: 'seedream-5.0-pro',
+  apiFormat: 'openai' as const,
+  credentials: { apiKey: 'plat-key', baseUrl: 'https://platform.example.com/v1' },
+  source: 'platform' as const,
+}
+
 describe('MaterialService BYOK fallback_pending', () => {
   let svc: MaterialService
   let resolveForGeneration: ReturnType<typeof vi.fn>
   let materialUpdate: ReturnType<typeof vi.fn>
+  let materialUpdateMany: ReturnType<typeof vi.fn>
   let materialFindFirst: ReturnType<typeof vi.fn>
+  let pointsConsume: ReturnType<typeof vi.fn>
+  let pointsRefund: ReturnType<typeof vi.fn>
   let stored: Record<string, unknown>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     stored = { id: 'm1', shotId: 'shot-1', type: 'image', prompt: 'a cat', status: 'generating' }
+    pointsConsume = vi.fn(async () => {})
+    pointsRefund = vi.fn(async () => {})
     resolveForGeneration = vi.fn(async () => userResolved)
     materialUpdate = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       stored = { ...stored, ...args.data, id: args.where.id }
       return stored
+    })
+    materialUpdateMany = vi.fn(async (args: { where: { id: string; status: string }; data: Record<string, unknown> }) => {
+      if (stored.status !== args.where.status) return { count: 0 }
+      stored = { ...stored, ...args.data }
+      return { count: 1 }
     })
     materialFindFirst = vi.fn(async () => ({
       ...stored,
@@ -55,7 +75,13 @@ describe('MaterialService BYOK fallback_pending', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         MaterialService,
-        { provide: PointsService, useValue: { consume: vi.fn(async () => {}) } },
+        {
+          provide: PointsService,
+          useValue: {
+            consume: pointsConsume,
+            refund: pointsRefund,
+          },
+        },
         {
           provide: PrismaService,
           useValue: {
@@ -72,6 +98,7 @@ describe('MaterialService BYOK fallback_pending', () => {
                 return stored
               }),
               update: materialUpdate,
+              updateMany: materialUpdateMany,
               findFirst: materialFindFirst,
             },
           },
@@ -85,7 +112,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     svc = moduleRef.get(MaterialService)
   })
 
-  it('image: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+  it('image: user fail → fallback_pending retains effectivePrompt/refs and refunds', async () => {
     vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
       mergedText: 'merged cat prompt',
       skippedMerge: false,
@@ -117,6 +144,10 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.effectivePrompt).toContain('merged cat prompt')
     expect(meta.effectivePrompt).toContain('https://cdn.example.com/ref.png')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/ref.png'])
+    expect(meta.chargedPoints).toBe(10)
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('byok_failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-BYOK失败退款')
     expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createImageProvider).toHaveBeenCalledTimes(1)
     expect(createImageProvider).toHaveBeenCalledWith({
@@ -125,7 +156,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
-  it('video: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+  it('video: user fail → fallback_pending retains effectivePrompt/refs and refunds', async () => {
     vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
       mergedText: 'merged walk prompt',
       skippedMerge: false,
@@ -155,6 +186,8 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.effectivePrompt).toBe('merged walk prompt')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
     expect(meta.image).toBe('https://cdn.example.com/frame.png')
+    expect(meta.refundedPoints).toBe(30)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
     expect(call.data.prompt).toBe('merged walk prompt')
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
@@ -163,7 +196,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
-  it('image confirm → platform generate called', async () => {
+  it('image confirm → platform generate called and consumes points', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateImage({
       userId: 'u1',
@@ -189,11 +222,14 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     expect(createImageProvider).toHaveBeenCalledWith(undefined)
     expect(imageGenerate).toHaveBeenCalled()
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
+    expect(meta.chargedPoints).toBe(10)
+    expect(meta.priorByokRefunded).toBe(true)
   })
 
-  it('video confirm → platform generate called with catalog model', async () => {
+  it('video confirm → platform generate called with catalog model and consumes points', async () => {
     videoGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateVideo({
       userId: 'u1',
@@ -231,11 +267,55 @@ describe('MaterialService BYOK fallback_pending', () => {
         image: 'https://cdn.example.com/frame.png',
       }),
     )
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 30, '平台回退生成')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
   })
 
-  it('cancel → failed', async () => {
+  it('image: platform source failure → refund after consume', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+    })
+    await vi.waitFor(() =>
+      expect(materialUpdate.mock.calls.some((c) => c[0].data.status === 'failed')).toBe(true),
+    )
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像生成')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-失败退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')!
+    const meta = JSON.parse(String(failedUpdate[0].data.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_failed')
+  })
+
+  it('confirmPlatformFallback: platform generate failure → refund, failed, refundedPoints', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+      model: 'ch_user::custom-model',
+    })
+    await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    vi.clearAllMocks()
+    imageGenerate.mockRejectedValueOnce(new Error('platform confirm failed'))
+
+    await expect(svc.confirmPlatformFallback('u1', 'm1')).rejects.toThrow('platform confirm failed')
+
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退失败退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_fallback_failed')
+    expect(meta.priorByokRefunded).toBe(true)
+  })
+
+  it('cancel → failed without double refund', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('fail'))
     await svc.generateImage({
       userId: 'u1',
@@ -244,7 +324,93 @@ describe('MaterialService BYOK fallback_pending', () => {
       model: 'ch_user::custom-model',
     })
     await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    pointsRefund.mockClear()
     const result = await svc.cancelPlatformFallback('u1', 'm1')
     expect(result.status).toBe('failed')
+    expect(pointsRefund).not.toHaveBeenCalled()
+  })
+
+  it('confirmPlatformFallback: client abort after generate → refund once, failed', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+      model: 'ch_user::custom-model',
+    })
+    await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    vi.clearAllMocks()
+    imageGenerate.mockResolvedValueOnce({ url: 'https://example.com/plat.png' })
+
+    const listeners: Record<string, (() => void)[]> = {}
+    const cancel = createCancelFlag({
+      aborted: false,
+      on(event: string, cb: () => void) {
+        listeners[event] = listeners[event] ?? []
+        listeners[event].push(cb)
+      },
+    })
+    const promise = svc.confirmPlatformFallback('u1', 'm1', cancel)
+    listeners.close?.forEach((cb) => cb())
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException)
+    await expect(promise).rejects.toMatchObject({
+      response: { message: '已取消', refundedPoints: 10 },
+    })
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundReason).toBe('cancelled')
+    expect(meta.refundedPoints).toBe(10)
+  })
+
+  it('cancelGeneration on generating image → refund once and failed metadata', async () => {
+    stored = {
+      id: 'm1',
+      shotId: 'shot-1',
+      type: 'image',
+      prompt: 'a cat',
+      status: 'generating',
+      metadata: JSON.stringify({ chargedPoints: 10 }),
+    }
+    materialFindFirst.mockResolvedValue({
+      ...stored,
+      shot: { session: { userId: 'u1' } },
+    })
+    const result = await svc.cancelGeneration('u1', 'm1')
+    expect(result.status).toBe('failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-取消退款')
+    const meta = JSON.parse(String(materialUpdate.mock.calls.at(-1)?.[0].data.metadata))
+    expect(meta.cancelled).toBe(true)
+    expect(meta.refundedPoints).toBe(10)
+  })
+
+  it('image: cancel before runImageGeneration success → ignore late completed write', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    let resolveImage!: (v: { url: string }) => void
+    imageGenerate.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveImage = r
+        }),
+    )
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+    })
+    await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
+    stored = {
+      ...stored,
+      status: 'failed',
+      metadata: JSON.stringify({ chargedPoints: 10, cancelled: true, refundedPoints: 10 }),
+    }
+    resolveImage({ url: 'https://example.com/late.png' })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(materialUpdateMany).not.toHaveBeenCalled()
+    expect(stored.status).toBe('failed')
   })
 })

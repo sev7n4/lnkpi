@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@lnkpi/shared'
 import { api } from '@/services/api'
+import { membershipApi } from '@/services/users-api'
 
 const AUTH_TIMEOUT_MS = 45_000
 
@@ -82,6 +83,25 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  function setPoints(n: number) {
+    if (user.value) user.value.points = n
+  }
+
+  async function refreshPoints(): Promise<number> {
+    if (!token.value) return user.value?.points ?? 0
+    try {
+      const { data } = await membershipApi.getPoints()
+      const points = data.data.points
+      if (user.value) {
+        user.value.points = points
+        user.value.membership = data.data.membership
+      }
+      return points
+    } catch {
+      return user.value?.points ?? 0
+    }
+  }
+
   return {
     user,
     token,
@@ -93,5 +113,7 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     openLogin,
     restoreSession,
+    setPoints,
+    refreshPoints,
   }
 })

@@ -43,6 +43,7 @@ async function claimDaily() {
   try {
     const { data } = await membershipApi.claimDaily()
     points.value = data.data.points
+    auth.setPoints(data.data.points)
     message.value = `已领取 ${data.data.added} 积分`
   } catch {
     message.value = '领取失败'

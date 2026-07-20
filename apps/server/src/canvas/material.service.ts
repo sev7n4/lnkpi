@@ -20,6 +20,15 @@ import {
   type GenerationRefPayload,
   type ImageResolutionTier,
 } from '@lnkpi/shared'
+import {
+  alreadyRefunded,
+  applyChargeMeta,
+  applyRefundMeta,
+  isCancelledException,
+  isCancelledMeta,
+  rethrowWithRefundedPoints,
+  throwCancelledException,
+} from '../points/charge-session'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
 import { videoCredits } from '../points/video-credits'
@@ -105,6 +114,8 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
   }
 }
 
+type CancelFlag = { isCancelled(): boolean }
+
 @Injectable()
 export class MaterialService {
   private readonly logger = new Logger(MaterialService.name)
@@ -134,6 +145,41 @@ export class MaterialService {
         status: data.status ?? 'completed',
       },
     })
+  }
+
+  private pendingMeta(
+    resolved: ResolvedGenerationProvider,
+    err: unknown,
+    extra: Record<string, unknown> = {},
+  ) {
+    return {
+      ...extra,
+      channelId: resolved.channelId,
+      failureClass: classifyByokFailure(err),
+      confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
+    }
+  }
+
+  private byokPendingMeta(
+    resolved: ResolvedGenerationProvider,
+    err: unknown,
+    cost: number,
+    extra: Record<string, unknown> = {},
+  ) {
+    return applyRefundMeta(
+      applyChargeMeta(this.pendingMeta(resolved, err, extra), cost),
+      cost,
+      'byok_failed',
+    )
+  }
+
+  private platformFallbackCost(type: string, meta: Record<string, unknown>): number {
+    if (type === 'image') return 10
+    if (type === 'video') {
+      const duration = Number(meta.duration ?? 5)
+      return videoCredits(duration)
+    }
+    throw new BadRequestException('不支持的素材类型')
   }
 
   async generateImage(input: CanvasImageGenerateInput) {
@@ -171,8 +217,10 @@ export class MaterialService {
       )
     }
 
+    const cost = 10
+    const chargeReason = '图像生成'
     if (!skipCharge) {
-      await this.points.consume(userId, 10, '图像生成')
+      await this.points.consume(userId, cost, chargeReason)
     }
 
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
@@ -182,18 +230,25 @@ export class MaterialService {
         type: 'image',
         prompt,
         status: 'generating',
-        metadata: JSON.stringify({
-          model,
-          aspectRatio,
-          resolution,
-          channelId: resolved.channelId,
-          providerSource: resolved.source,
-        }),
+        metadata: JSON.stringify(
+          applyChargeMeta(
+            {
+              model,
+              aspectRatio,
+              resolution,
+              channelId: resolved.channelId,
+              providerSource: resolved.source,
+            },
+            skipCharge ? 0 : cost,
+          ),
+        ),
       },
     })
     this.runImageGeneration(
       material.id,
       userId,
+      cost,
+      chargeReason,
       prompt,
       model,
       aspectRatio,
@@ -201,6 +256,7 @@ export class MaterialService {
       refs,
       mentionedKeys,
       resolved,
+      skipCharge,
     ).catch(console.error)
     return material
   }
@@ -230,8 +286,10 @@ export class MaterialService {
 
     assertNoBlobRefs(refs)
 
+    const cost = videoCredits(duration)
+    const chargeReason = '视频生成'
     if (!skipCharge) {
-      await this.points.consume(userId, videoCredits(duration), '视频生成')
+      await this.points.consume(userId, cost, chargeReason)
     }
 
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
@@ -241,20 +299,27 @@ export class MaterialService {
         type: 'video',
         prompt,
         status: 'generating',
-        metadata: JSON.stringify({
-          model,
-          duration,
-          aspectRatio,
-          resolution,
-          crop,
-          channelId: resolved.channelId,
-          providerSource: resolved.source,
-        }),
+        metadata: JSON.stringify(
+          applyChargeMeta(
+            {
+              model,
+              duration,
+              aspectRatio,
+              resolution,
+              crop,
+              channelId: resolved.channelId,
+              providerSource: resolved.source,
+            },
+            skipCharge ? 0 : cost,
+          ),
+        ),
       },
     })
     this.runVideoGeneration(
       material.id,
       userId,
+      cost,
+      chargeReason,
       prompt,
       model,
       duration,
@@ -264,11 +329,12 @@ export class MaterialService {
       refs,
       mentionedKeys,
       resolved,
+      skipCharge,
     ).catch(console.error)
     return material
   }
 
-  async confirmPlatformFallback(userId: string, materialId: string) {
+  async confirmPlatformFallback(userId: string, materialId: string, cancel?: CancelFlag) {
     const material = await this.prisma.material.findFirst({
       where: { id: materialId, shot: { session: { userId } } },
       include: { shot: { include: { session: true } } },
@@ -278,80 +344,122 @@ export class MaterialService {
       throw new BadRequestException('当前状态不可确认平台回退')
     }
     const meta = parseMeta(material.metadata)
-    await this.resolver.resolveForGeneration(
-      userId,
-      String(meta.modelKey ?? meta.gatewayModelId ?? meta.model ?? ''),
-      material.type === 'video' ? 'video' : 'image',
-    )
+    const platformCost = this.platformFallbackCost(material.type, meta)
+    await this.points.consume(userId, platformCost, '平台回退生成')
+    const chargedMeta = { ...meta, chargedPoints: platformCost, priorByokRefunded: true }
 
-    if (material.type === 'image') {
-      const size = String(meta.size ?? resolveImageSize('16:9', '1K'))
-      const modelKey =
-        typeof meta.modelKey === 'string' && meta.modelKey.trim()
-          ? meta.modelKey
-          : undefined
-      const modelId = resolveModelKey('image', modelKey).entry.gatewayModelId
-      const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
-      const { url } = await createImageProvider(undefined).generate(prompt, {
-        modelId,
-        size,
-        n: 1,
-      })
-      return this.prisma.material.update({
+    try {
+      await this.resolver.resolveForGeneration(
+        userId,
+        String(meta.modelKey ?? meta.gatewayModelId ?? meta.model ?? ''),
+        material.type === 'video' ? 'video' : 'image',
+      )
+
+      if (material.type === 'image') {
+        const size = String(meta.size ?? resolveImageSize('16:9', '1K'))
+        const modelKey =
+          typeof meta.modelKey === 'string' && meta.modelKey.trim()
+            ? meta.modelKey
+            : undefined
+        const modelId = resolveModelKey('image', modelKey).entry.gatewayModelId
+        const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
+        const { url } = await createImageProvider(undefined).generate(prompt, {
+          modelId,
+          size,
+          n: 1,
+        })
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throwCancelledException(platformCost)
+        }
+        return this.prisma.material.update({
+          where: { id: material.id },
+          data: {
+            url,
+            thumbnail: url,
+            status: 'completed',
+            prompt,
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              gatewayModelId: modelId,
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
+        })
+      }
+
+      if (material.type === 'video') {
+        const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
+        const modelKey =
+          typeof meta.modelKey === 'string' && meta.modelKey.trim()
+            ? meta.modelKey
+            : undefined
+        const platformModel = resolveModelKey('video', modelKey).entry.gatewayModelId
+        const { url } = await createVideoProvider(undefined).generate(prompt, {
+          model: platformModel,
+          duration: Number(meta.duration ?? 5),
+          aspectRatio: String(meta.aspectRatio ?? '16:9'),
+          resolution: String(meta.resolution ?? '720p'),
+          crop: meta.crop === undefined ? undefined : String(meta.crop),
+          image:
+            typeof meta.image === 'string'
+              ? meta.image
+              : Array.isArray(meta.referenceImages)
+                ? (meta.referenceImages as string[])[0]
+                : undefined,
+        })
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throwCancelledException(platformCost)
+        }
+        return this.prisma.material.update({
+          where: { id: material.id },
+          data: {
+            url,
+            thumbnail: url,
+            status: 'completed',
+            prompt,
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              gatewayModelId: platformModel,
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
+        })
+      }
+
+      throw new BadRequestException('不支持的素材类型')
+    } catch (err) {
+      if (isCancelledException(err)) {
+        await this.prisma.material.update({
+          where: { id: material.id },
+          data: {
+            status: 'failed',
+            metadata: JSON.stringify(
+              applyRefundMeta(chargedMeta, platformCost, 'cancelled'),
+            ),
+          },
+        })
+        throw err
+      }
+      if (err instanceof BadRequestException && err.message === '不支持的素材类型') {
+        await this.points.refund(userId, platformCost, '平台回退失败退款')
+        rethrowWithRefundedPoints(err, platformCost)
+      }
+      await this.points.refund(userId, platformCost, '平台回退失败退款')
+      await this.prisma.material.update({
         where: { id: material.id },
         data: {
-          url,
-          thumbnail: url,
-          status: 'completed',
-          prompt,
-          metadata: JSON.stringify({
-            ...meta,
-            gatewayModelId: modelId,
-            providerFallback: true,
-            channelId: 'platform',
-          }),
+          status: 'failed',
+          metadata: JSON.stringify(
+            applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
+          ),
         },
       })
+      rethrowWithRefundedPoints(err, platformCost)
     }
-
-    if (material.type === 'video') {
-      const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
-      const modelKey =
-        typeof meta.modelKey === 'string' && meta.modelKey.trim()
-          ? meta.modelKey
-          : undefined
-      const platformModel = resolveModelKey('video', modelKey).entry.gatewayModelId
-      const { url } = await createVideoProvider(undefined).generate(prompt, {
-        model: platformModel,
-        duration: Number(meta.duration ?? 5),
-        aspectRatio: String(meta.aspectRatio ?? '16:9'),
-        resolution: String(meta.resolution ?? '720p'),
-        crop: meta.crop === undefined ? undefined : String(meta.crop),
-        image:
-          typeof meta.image === 'string'
-            ? meta.image
-            : Array.isArray(meta.referenceImages)
-              ? (meta.referenceImages as string[])[0]
-              : undefined,
-      })
-      return this.prisma.material.update({
-        where: { id: material.id },
-        data: {
-          url,
-          thumbnail: url,
-          status: 'completed',
-          prompt,
-          metadata: JSON.stringify({
-            ...meta,
-            gatewayModelId: platformModel,
-            providerFallback: true,
-            channelId: 'platform',
-          }),
-        },
-      })
-    }
-
-    throw new BadRequestException('不支持的素材类型')
   }
 
   async cancelPlatformFallback(userId: string, materialId: string) {
@@ -362,9 +470,42 @@ export class MaterialService {
     if (material.status !== 'fallback_pending') {
       throw new BadRequestException('当前状态不可取消平台回退')
     }
+    const meta = parseMeta(material.metadata)
+    if (!alreadyRefunded(meta)) {
+      const cost =
+        typeof meta.chargedPoints === 'number'
+          ? meta.chargedPoints
+          : this.platformFallbackCost(material.type, meta)
+      await this.points.refund(userId, cost, '平台回退取消退款')
+    }
     return this.prisma.material.update({
       where: { id: material.id },
       data: { status: 'failed' },
+    })
+  }
+
+  async cancelGeneration(userId: string, materialId: string) {
+    const material = await this.prisma.material.findFirst({
+      where: { id: materialId, shot: { session: { userId } } },
+    })
+    if (!material) throw new NotFoundException('素材不存在')
+    if (material.status !== 'generating') {
+      throw new BadRequestException('当前状态不可取消')
+    }
+    const meta = parseMeta(material.metadata)
+    const cost = typeof meta.chargedPoints === 'number' ? meta.chargedPoints : 0
+    const chargeReason = material.type === 'video' ? '视频生成' : '图像生成'
+    let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
+    if (cost > 0 && !alreadyRefunded(meta)) {
+      await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+      updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
+    }
+    return this.prisma.material.update({
+      where: { id: material.id },
+      data: {
+        status: 'failed',
+        metadata: JSON.stringify(updatedMeta),
+      },
     })
   }
 
@@ -393,6 +534,8 @@ export class MaterialService {
   private async runImageGeneration(
     materialId: string,
     userId: string,
+    cost: number,
+    chargeReason: string,
     prompt: string,
     model: string | undefined,
     aspectRatio: string | undefined,
@@ -400,6 +543,7 @@ export class MaterialService {
     refs: GenerationRefPayload[] | undefined,
     mentionedKeys: string[] | undefined,
     resolved: ResolvedGenerationProvider,
+    skipCharge?: boolean,
   ) {
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -441,61 +585,87 @@ export class MaterialService {
         size: built.size,
         n: built.n,
       })
-      await this.prisma.material.update({
-        where: { id: materialId },
+      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existing || existing.status !== 'generating') return
+      const prev = parseMeta(existing.metadata)
+      if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const updated = await this.prisma.material.updateMany({
+        where: { id: materialId, status: 'generating' },
         data: {
           url,
           thumbnail: url,
           status: 'completed',
           prompt: effectivePrompt,
-          metadata: JSON.stringify({
-            ...built.meta,
-            modelId,
-            model,
-            aspectRatio,
-            resolution,
-            size: built.size,
-            referenceImages,
-            skippedMerge,
-            channelId: resolved.channelId,
-            effectivePrompt,
-          }),
+          metadata: JSON.stringify(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                modelId,
+                model,
+                aspectRatio,
+                resolution,
+                size: built.size,
+                referenceImages,
+                skippedMerge,
+                channelId: resolved.channelId,
+                effectivePrompt,
+              },
+              skipCharge ? 0 : cost,
+            ),
+          ),
         },
       })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Image generation failed:', err)
       if (resolved.source === 'user') {
+        if (!skipCharge) {
+          await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+        }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-        const prev = parseMeta(existing?.metadata)
+        if (!existing || existing.status !== 'generating') return
+        const prev = parseMeta(existing.metadata)
+        if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
             status: 'fallback_pending',
             prompt: effectivePrompt,
-            metadata: JSON.stringify({
-              ...prev,
-              ...built.meta,
-              modelId,
-              model,
-              originalModel: model,
-              aspectRatio,
-              resolution,
-              size: built.size,
-              referenceImages,
-              skippedMerge,
-              effectivePrompt,
-              channelId: resolved.channelId,
-              failureClass: classifyByokFailure(err),
-              confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
-              userId,
-            }),
+            metadata: JSON.stringify(
+              this.byokPendingMeta(resolved, err, skipCharge ? 0 : cost, {
+                ...prev,
+                ...built.meta,
+                modelId,
+                model,
+                originalModel: model,
+                aspectRatio,
+                resolution,
+                size: built.size,
+                referenceImages,
+                skippedMerge,
+                effectivePrompt,
+                userId,
+              }),
+            ),
           },
         })
         return
       }
+      if (!skipCharge) {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      }
+      const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existingFailed || existingFailed.status !== 'generating') return
+      const prevFailed = parseMeta(existingFailed.metadata)
+      if (isCancelledMeta(prevFailed) || alreadyRefunded(prevFailed)) return
       await this.prisma.material.update({
         where: { id: materialId },
-        data: { status: 'failed' },
+        data: {
+          status: 'failed',
+          metadata: JSON.stringify(
+            applyRefundMeta(prevFailed, skipCharge ? 0 : cost, 'platform_failed'),
+          ),
+        },
       })
     }
   }
@@ -503,6 +673,8 @@ export class MaterialService {
   private async runVideoGeneration(
     materialId: string,
     userId: string,
+    cost: number,
+    chargeReason: string,
     prompt: string,
     model: string | undefined,
     duration: number,
@@ -512,6 +684,7 @@ export class MaterialService {
     refs: GenerationRefPayload[] | undefined,
     mentionedKeys: string[] | undefined,
     resolved: ResolvedGenerationProvider,
+    skipCharge?: boolean,
   ) {
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -554,64 +727,90 @@ export class MaterialService {
           image: built.image,
         },
       )
-      await this.prisma.material.update({
-        where: { id: materialId },
+      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existing || existing.status !== 'generating') return
+      const prev = parseMeta(existing.metadata)
+      if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const updated = await this.prisma.material.updateMany({
+        where: { id: materialId, status: 'generating' },
         data: {
           url,
           thumbnail: url,
           status: 'completed',
           prompt: effectivePrompt,
-          metadata: JSON.stringify({
-            ...built.meta,
-            model,
-            duration,
-            aspectRatio,
-            resolution,
-            crop,
-            image: built.image,
-            referenceImages,
-            skippedMerge,
-            channelId: resolved.channelId,
-            effectivePrompt,
-          }),
+          metadata: JSON.stringify(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                model,
+                duration,
+                aspectRatio,
+                resolution,
+                crop,
+                image: built.image,
+                referenceImages,
+                skippedMerge,
+                channelId: resolved.channelId,
+                effectivePrompt,
+              },
+              skipCharge ? 0 : cost,
+            ),
+          ),
         },
       })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Video generation failed:', err)
       if (resolved.source === 'user') {
+        if (!skipCharge) {
+          await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+        }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-        const prev = parseMeta(existing?.metadata)
+        if (!existing || existing.status !== 'generating') return
+        const prev = parseMeta(existing.metadata)
+        if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
             status: 'fallback_pending',
             prompt: effectivePrompt,
-            metadata: JSON.stringify({
-              ...prev,
-              ...built.meta,
-              model,
-              originalModel: model,
-              modelName: resolved.modelName,
-              duration,
-              aspectRatio,
-              resolution,
-              crop,
-              image: built.image,
-              referenceImages,
-              skippedMerge,
-              effectivePrompt,
-              channelId: resolved.channelId,
-              failureClass: classifyByokFailure(err),
-              confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
-              userId,
-            }),
+            metadata: JSON.stringify(
+              this.byokPendingMeta(resolved, err, skipCharge ? 0 : cost, {
+                ...prev,
+                ...built.meta,
+                model,
+                originalModel: model,
+                modelName: resolved.modelName,
+                duration,
+                aspectRatio,
+                resolution,
+                crop,
+                image: built.image,
+                referenceImages,
+                skippedMerge,
+                effectivePrompt,
+                userId,
+              }),
+            ),
           },
         })
         return
       }
+      if (!skipCharge) {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      }
+      const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existingFailed || existingFailed.status !== 'generating') return
+      const prevFailed = parseMeta(existingFailed.metadata)
+      if (isCancelledMeta(prevFailed) || alreadyRefunded(prevFailed)) return
       await this.prisma.material.update({
         where: { id: materialId },
-        data: { status: 'failed' },
+        data: {
+          status: 'failed',
+          metadata: JSON.stringify(
+            applyRefundMeta(prevFailed, skipCharge ? 0 : cost, 'platform_failed'),
+          ),
+        },
       })
     }
   }

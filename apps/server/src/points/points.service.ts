@@ -20,4 +20,17 @@ export class PointsService {
       })
     })
   }
+
+  async refund(userId: string, amount: number, reason: string): Promise<void> {
+    if (amount <= 0) return
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.updateMany({
+        where: { id: userId },
+        data: { points: { increment: amount } },
+      })
+      await tx.pointTransaction.create({
+        data: { userId, amount, reason },
+      })
+    })
+  }
 }

@@ -8,7 +8,7 @@ import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; duration?: number; label?: string; errorMessage?: string }
+  data: { url?: string; status: string; duration?: number; label?: string; errorMessage?: string; generationStartedAt?: string }
 }>()
 
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
@@ -94,6 +94,7 @@ const {
       >
       <NodeTaskCornerActions
         :status="data.status"
+        :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
         :error-message="data.errorMessage as string | undefined"
       />
     </div>

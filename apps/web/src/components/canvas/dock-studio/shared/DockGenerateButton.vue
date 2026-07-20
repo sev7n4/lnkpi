@@ -84,6 +84,7 @@ const emit = defineEmits<{
   opacity: 1 !important;
   pointer-events: auto !important;
   cursor: pointer;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
 .dock-generate-btn.is-generating:hover:not(:disabled) {

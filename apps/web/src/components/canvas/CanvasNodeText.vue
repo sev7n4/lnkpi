@@ -7,7 +7,7 @@ import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
 
 const props = defineProps<{
   selected?: boolean
-  data: { content: string; label?: string; status?: string; errorMessage?: string }
+  data: { content: string; label?: string; status?: string; errorMessage?: string; generationStartedAt?: string }
 }>()
 
 const nodeId = useNodeId()
@@ -32,6 +32,7 @@ function onSave(md: string) {
       <p>{{ data.content || '点击下方 Dock Studio 编辑...' }}</p>
       <NodeTaskCornerActions
         :status="data.status"
+        :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
         :error-message="data.errorMessage as string | undefined"
       />
     </div>

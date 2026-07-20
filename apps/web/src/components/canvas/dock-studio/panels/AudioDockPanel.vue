@@ -101,16 +101,7 @@ watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 
 watch(audioModel, () => syncVoiceToCatalog(true))
 
-watch(
-  () => props.upstream,
-  (ctx) => {
-    if (!prompt.value.trim() && ctx.textPrompt) {
-      prompt.value = ctx.textPrompt
-      emit('patch', { prompt: ctx.textPrompt })
-    }
-  },
-  { immediate: true },
-)
+const hasRefs = computed(() => (props.refs?.length ?? 0) > 0)
 
 function onPromptInput(value: string) {
   prompt.value = value
@@ -206,7 +197,7 @@ function onRefRemove(ref: NodeRef) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!generating && !prompt.trim() && !upstream.textPrompt.trim()"
+          :disabled="!generating && !prompt.trim() && !hasRefs"
           @generate="onGenerate"
         />
       </div>
