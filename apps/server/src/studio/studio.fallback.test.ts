@@ -58,6 +58,7 @@ describe('StudioService BYOK fallback_pending', () => {
   let resolveForGeneration: ReturnType<typeof vi.fn>
   let generationCreate: ReturnType<typeof vi.fn>
   let generationUpdate: ReturnType<typeof vi.fn>
+  let generationUpdateMany: ReturnType<typeof vi.fn>
   let generationFindFirst: ReturnType<typeof vi.fn>
   let pointsConsume: ReturnType<typeof vi.fn>
   let pointsRefund: ReturnType<typeof vi.fn>
@@ -76,6 +77,11 @@ describe('StudioService BYOK fallback_pending', () => {
     generationUpdate = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       stored = { ...stored, ...args.data, id: args.where.id }
       return stored
+    })
+    generationUpdateMany = vi.fn(async (args: { where: { id: string; status: string }; data: Record<string, unknown> }) => {
+      if (stored.status !== args.where.status) return { count: 0 }
+      stored = { ...stored, ...args.data }
+      return { count: 1 }
     })
     generationFindFirst = vi.fn(async () => stored)
 
@@ -100,6 +106,7 @@ describe('StudioService BYOK fallback_pending', () => {
             generationRecord: {
               create: generationCreate,
               update: generationUpdate,
+              updateMany: generationUpdateMany,
               findFirst: generationFindFirst,
               findMany: vi.fn(async () => []),
             },
@@ -420,6 +427,44 @@ describe('StudioService BYOK fallback_pending', () => {
     const result = await svc.cancelPlatformFallback('u1', 'g1')
     expect(result.status).toBe('failed')
     expect(pointsRefund).not.toHaveBeenCalled()
+  })
+
+  it('cancelGeneration on generating video → refund once and failed metadata', async () => {
+    stored = {
+      id: 'g-vid',
+      type: 'video',
+      status: 'generating',
+      metadata: JSON.stringify({ chargedPoints: 30, duration: 5 }),
+    }
+    generationFindFirst.mockResolvedValue(stored)
+    const result = await svc.cancelGeneration('u1', 'g-vid')
+    expect(result.status).toBe('failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-取消退款')
+    const meta = JSON.parse(String(generationUpdate.mock.calls.at(-1)?.[0].data.metadata))
+    expect(meta.cancelled).toBe(true)
+    expect(meta.refundedPoints).toBe(30)
+  })
+
+  it('video: cancel before completeVideo success → ignore late completed write', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    let resolveVideo!: (v: { url: string }) => void
+    videoGenerate.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveVideo = r
+        }),
+    )
+    await svc.generateVideo('u1', 'walk')
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    stored = {
+      ...stored,
+      status: 'failed',
+      metadata: JSON.stringify({ chargedPoints: 30, cancelled: true, refundedPoints: 30 }),
+    }
+    resolveVideo({ url: 'https://example.com/v.mp4' })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(generationUpdateMany).not.toHaveBeenCalled()
+    expect(stored.status).toBe('failed')
   })
 
   it('text: client abort after generate → refund once and throw 已取消', async () => {

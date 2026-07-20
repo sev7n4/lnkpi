@@ -82,4 +82,6 @@ export const studioApi = {
     }),
   cancelPlatformFallback: (id: string) =>
     api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/cancel-platform-fallback`),
+  cancelGeneration: (id: string) =>
+    api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/cancel`),
 }

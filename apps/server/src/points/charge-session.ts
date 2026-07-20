@@ -19,6 +19,10 @@ export function alreadyRefunded(meta: Record<string, unknown>): boolean {
   return typeof meta.refundedPoints === 'number' && meta.refundedPoints > 0
 }
 
+export function isCancelledMeta(meta: Record<string, unknown>): boolean {
+  return meta.cancelled === true
+}
+
 export function applyRefundMeta(
   meta: Record<string, unknown>,
   refundedPoints: number,

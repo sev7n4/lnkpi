@@ -27,6 +27,7 @@ vi.mock('@/services/studio-api', () => ({
     generatePrompt: vi.fn(),
     confirmPlatformFallback: vi.fn(),
     cancelPlatformFallback: vi.fn(),
+    cancelGeneration: vi.fn(),
   },
 }))
 
@@ -41,6 +42,7 @@ vi.mock('@/services/canvas-api', () => ({
     exportVideoComposition: vi.fn(),
     confirmMaterialPlatformFallback: vi.fn(),
     cancelMaterialPlatformFallback: vi.fn(),
+    cancelMaterial: vi.fn(),
   },
 }))
 function mockAxiosResponse<T>(data: T): AxiosResponse<T> {
@@ -730,16 +732,21 @@ describe('useNodeGeneration', () => {
     await pending
   })
 
-  it('cancelGeneration stops generation and shot polling', () => {
+  it('cancelGeneration stops generation and shot polling', async () => {
     const stopGenerationPolling = vi.fn()
     const stopShotPolling = vi.fn()
     const node = createNode('image', {
       prompt: 'x',
       status: NODE_GENERATION_STATUS.generating,
+      generationRecordId: 'rec-cancel-1',
     }, 'img-1')
     const { api } = createDeps([node], { stopGenerationPolling, stopShotPolling })
+    vi.mocked(studioApi.cancelGeneration).mockResolvedValue(
+      mockAxiosResponse({ data: { id: 'rec-cancel-1', status: 'failed' } }),
+    )
 
     api.cancelGeneration('img-1')
+    await vi.waitFor(() => expect(studioApi.cancelGeneration).toHaveBeenCalledWith('rec-cancel-1'))
 
     expect(stopGenerationPolling).toHaveBeenCalledWith('img-1')
     expect(stopShotPolling).toHaveBeenCalledWith('img-1')

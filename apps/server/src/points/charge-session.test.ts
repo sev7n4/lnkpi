@@ -5,6 +5,7 @@ import {
   applyChargeMeta,
   applyRefundMeta,
   isCancelledException,
+  isCancelledMeta,
   rethrowWithRefundedPoints,
   throwCancelledException,
 } from './charge-session'
@@ -30,6 +31,12 @@ describe('charge-session', () => {
     expect(alreadyRefunded({})).toBe(false)
     expect(alreadyRefunded({ refundedPoints: 0 })).toBe(false)
     expect(alreadyRefunded({ refundedPoints: '5' })).toBe(false)
+  })
+
+  it('isCancelledMeta returns true when cancelled flag is set', () => {
+    expect(isCancelledMeta({ cancelled: true })).toBe(true)
+    expect(isCancelledMeta({ cancelled: false })).toBe(false)
+    expect(isCancelledMeta({})).toBe(false)
   })
 
   it('throwCancelledException includes refundedPoints in response body', () => {

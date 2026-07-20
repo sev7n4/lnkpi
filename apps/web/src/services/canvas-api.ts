@@ -73,4 +73,5 @@ export const canvasApi = {
     api.post(`/agent/canvas/material/${id}/confirm-platform-fallback`, {}, { timeout: 120_000 }),
   cancelMaterialPlatformFallback: (id: string) =>
     api.post(`/agent/canvas/material/${id}/cancel-platform-fallback`),
+  cancelMaterial: (id: string) => api.post(`/agent/canvas/material/${id}/cancel`),
 }

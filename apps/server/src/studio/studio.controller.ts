@@ -327,4 +327,11 @@ export class StudioController {
     const data = await this.studioService.cancelPlatformFallback(req.user.sub, id)
     return { code: 0, message: 'ok', data }
   }
+
+  @Post('generations/:id/cancel')
+  @UseGuards(AuthGuard)
+  async cancelGeneration(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    const data = await this.studioService.cancelGeneration(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
 }

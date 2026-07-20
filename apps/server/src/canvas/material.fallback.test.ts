@@ -46,6 +46,7 @@ describe('MaterialService BYOK fallback_pending', () => {
   let svc: MaterialService
   let resolveForGeneration: ReturnType<typeof vi.fn>
   let materialUpdate: ReturnType<typeof vi.fn>
+  let materialUpdateMany: ReturnType<typeof vi.fn>
   let materialFindFirst: ReturnType<typeof vi.fn>
   let pointsConsume: ReturnType<typeof vi.fn>
   let pointsRefund: ReturnType<typeof vi.fn>
@@ -60,6 +61,11 @@ describe('MaterialService BYOK fallback_pending', () => {
     materialUpdate = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       stored = { ...stored, ...args.data, id: args.where.id }
       return stored
+    })
+    materialUpdateMany = vi.fn(async (args: { where: { id: string; status: string }; data: Record<string, unknown> }) => {
+      if (stored.status !== args.where.status) return { count: 0 }
+      stored = { ...stored, ...args.data }
+      return { count: 1 }
     })
     materialFindFirst = vi.fn(async () => ({
       ...stored,
@@ -92,6 +98,7 @@ describe('MaterialService BYOK fallback_pending', () => {
                 return stored
               }),
               update: materialUpdate,
+              updateMany: materialUpdateMany,
               findFirst: materialFindFirst,
             },
           },
@@ -358,5 +365,52 @@ describe('MaterialService BYOK fallback_pending', () => {
     const meta = JSON.parse(String(failedUpdate![0].data.metadata))
     expect(meta.refundReason).toBe('cancelled')
     expect(meta.refundedPoints).toBe(10)
+  })
+
+  it('cancelGeneration on generating image → refund once and failed metadata', async () => {
+    stored = {
+      id: 'm1',
+      shotId: 'shot-1',
+      type: 'image',
+      prompt: 'a cat',
+      status: 'generating',
+      metadata: JSON.stringify({ chargedPoints: 10 }),
+    }
+    materialFindFirst.mockResolvedValue({
+      ...stored,
+      shot: { session: { userId: 'u1' } },
+    })
+    const result = await svc.cancelGeneration('u1', 'm1')
+    expect(result.status).toBe('failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-取消退款')
+    const meta = JSON.parse(String(materialUpdate.mock.calls.at(-1)?.[0].data.metadata))
+    expect(meta.cancelled).toBe(true)
+    expect(meta.refundedPoints).toBe(10)
+  })
+
+  it('image: cancel before runImageGeneration success → ignore late completed write', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    let resolveImage!: (v: { url: string }) => void
+    imageGenerate.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveImage = r
+        }),
+    )
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+    })
+    await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
+    stored = {
+      ...stored,
+      status: 'failed',
+      metadata: JSON.stringify({ chargedPoints: 10, cancelled: true, refundedPoints: 10 }),
+    }
+    resolveImage({ url: 'https://example.com/late.png' })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(materialUpdateMany).not.toHaveBeenCalled()
+    expect(stored.status).toBe('failed')
   })
 })

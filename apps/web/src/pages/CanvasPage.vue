@@ -337,6 +337,30 @@ const shotPolling = useShotPolling((shots) => {
         void invokeFallbackPendingFromPoll('material', material.id, nodeId)
         continue
       }
+      if (material.status === 'failed') {
+        const nodeId = findLinkedMediaNodeId(shot.id, material.id)
+        const childNode = nodes.value.find((n) => n.id === nodeId)
+        const refundedPoints = parseRefundedPointsFromMetadata(
+          (material as { metadata?: string | null }).metadata,
+        )
+        const errorMessage = refundedPoints
+          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
+          : '生成失败'
+        if (childNode && acceptsPollWrite(childNode.data?.status)) {
+          patchNodeData(nodeId, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage,
+          })
+        }
+        if (acceptsPollWrite(shotNode?.data?.status)) {
+          patchNodeData(shot.id, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage,
+          })
+        }
+        void auth.refreshPoints()
+        continue
+      }
     }
     const material = shot.materials.find((m) => m.status === 'completed' && m.url)
     if (!material) continue

@@ -25,6 +25,7 @@ import {
   applyChargeMeta,
   applyRefundMeta,
   isCancelledException,
+  isCancelledMeta,
   rethrowWithRefundedPoints,
   throwCancelledException,
 } from '../points/charge-session'
@@ -483,6 +484,31 @@ export class MaterialService {
     })
   }
 
+  async cancelGeneration(userId: string, materialId: string) {
+    const material = await this.prisma.material.findFirst({
+      where: { id: materialId, shot: { session: { userId } } },
+    })
+    if (!material) throw new NotFoundException('素材不存在')
+    if (material.status !== 'generating') {
+      throw new BadRequestException('当前状态不可取消')
+    }
+    const meta = parseMeta(material.metadata)
+    const cost = typeof meta.chargedPoints === 'number' ? meta.chargedPoints : 0
+    const chargeReason = material.type === 'video' ? '视频生成' : '图像生成'
+    let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
+    if (cost > 0 && !alreadyRefunded(meta)) {
+      await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+      updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
+    }
+    return this.prisma.material.update({
+      where: { id: material.id },
+      data: {
+        status: 'failed',
+        metadata: JSON.stringify(updatedMeta),
+      },
+    })
+  }
+
   private async resolveMergedPrompt(
     localPrompt: string,
     refs: GenerationRefPayload[] | undefined,
@@ -559,8 +585,12 @@ export class MaterialService {
         size: built.size,
         n: built.n,
       })
-      await this.prisma.material.update({
-        where: { id: materialId },
+      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existing || existing.status !== 'generating') return
+      const prev = parseMeta(existing.metadata)
+      if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const updated = await this.prisma.material.updateMany({
+        where: { id: materialId, status: 'generating' },
         data: {
           url,
           thumbnail: url,
@@ -585,6 +615,7 @@ export class MaterialService {
           ),
         },
       })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Image generation failed:', err)
       if (resolved.source === 'user') {
@@ -592,7 +623,9 @@ export class MaterialService {
           await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
         }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-        const prev = parseMeta(existing?.metadata)
+        if (!existing || existing.status !== 'generating') return
+        const prev = parseMeta(existing.metadata)
+        if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
@@ -621,14 +654,16 @@ export class MaterialService {
       if (!skipCharge) {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
       }
-      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-      const prev = parseMeta(existing?.metadata)
+      const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existingFailed || existingFailed.status !== 'generating') return
+      const prevFailed = parseMeta(existingFailed.metadata)
+      if (isCancelledMeta(prevFailed) || alreadyRefunded(prevFailed)) return
       await this.prisma.material.update({
         where: { id: materialId },
         data: {
           status: 'failed',
           metadata: JSON.stringify(
-            applyRefundMeta(prev, skipCharge ? 0 : cost, 'platform_failed'),
+            applyRefundMeta(prevFailed, skipCharge ? 0 : cost, 'platform_failed'),
           ),
         },
       })
@@ -692,8 +727,12 @@ export class MaterialService {
           image: built.image,
         },
       )
-      await this.prisma.material.update({
-        where: { id: materialId },
+      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existing || existing.status !== 'generating') return
+      const prev = parseMeta(existing.metadata)
+      if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const updated = await this.prisma.material.updateMany({
+        where: { id: materialId, status: 'generating' },
         data: {
           url,
           thumbnail: url,
@@ -719,6 +758,7 @@ export class MaterialService {
           ),
         },
       })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Video generation failed:', err)
       if (resolved.source === 'user') {
@@ -726,7 +766,9 @@ export class MaterialService {
           await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
         }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-        const prev = parseMeta(existing?.metadata)
+        if (!existing || existing.status !== 'generating') return
+        const prev = parseMeta(existing.metadata)
+        if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
         await this.prisma.material.update({
           where: { id: materialId },
           data: {
@@ -757,14 +799,16 @@ export class MaterialService {
       if (!skipCharge) {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
       }
-      const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
-      const prev = parseMeta(existing?.metadata)
+      const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
+      if (!existingFailed || existingFailed.status !== 'generating') return
+      const prevFailed = parseMeta(existingFailed.metadata)
+      if (isCancelledMeta(prevFailed) || alreadyRefunded(prevFailed)) return
       await this.prisma.material.update({
         where: { id: materialId },
         data: {
           status: 'failed',
           metadata: JSON.stringify(
-            applyRefundMeta(prev, skipCharge ? 0 : cost, 'platform_failed'),
+            applyRefundMeta(prevFailed, skipCharge ? 0 : cost, 'platform_failed'),
           ),
         },
       })

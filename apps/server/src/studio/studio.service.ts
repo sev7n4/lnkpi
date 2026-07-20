@@ -24,6 +24,7 @@ import {
   applyChargeMeta,
   applyRefundMeta,
   isCancelledException,
+  isCancelledMeta,
   rethrowWithRefundedPoints,
   throwCancelledException,
 } from '../points/charge-session'
@@ -937,6 +938,29 @@ export class StudioService {
     })
   }
 
+  async cancelGeneration(userId: string, recordId: string) {
+    const record = await this.getGeneration(userId, recordId)
+    if (record.status !== 'generating') {
+      throw new BadRequestException('当前状态不可取消')
+    }
+    const meta = parseMeta(record.metadata)
+    const cost = typeof meta.chargedPoints === 'number' ? meta.chargedPoints : 0
+    const chargeReason =
+      record.type === 'video' ? '视频生成' : record.type === 'image' ? '图像生成' : '生成'
+    let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
+    if (cost > 0 && !alreadyRefunded(meta)) {
+      await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+      updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
+    }
+    return this.prisma.generationRecord.update({
+      where: { id: record.id },
+      data: {
+        status: 'failed',
+        metadata: JSON.stringify(updatedMeta),
+      },
+    })
+  }
+
   private async completeVideo(
     id: string,
     userId: string,
@@ -961,16 +985,23 @@ export class StudioService {
         prompt,
         options,
       )
-      await this.prisma.generationRecord.update({
-        where: { id },
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+      if (!existing || existing.status !== 'generating') return
+      const meta = parseMeta(existing.metadata)
+      if (isCancelledMeta(meta) || alreadyRefunded(meta)) return
+      const updated = await this.prisma.generationRecord.updateMany({
+        where: { id, status: 'generating' },
         data: { url, status: 'completed' },
       })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Video generation failed:', err)
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+      if (!existing || existing.status !== 'generating') return
+      const meta = parseMeta(existing.metadata)
+      if (isCancelledMeta(meta) || alreadyRefunded(meta)) return
       if (resolved.source === 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
-        const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
-        const meta = parseMeta(existing?.metadata)
         await this.prisma.generationRecord.update({
           where: { id },
           data: {
@@ -981,8 +1012,6 @@ export class StudioService {
         return
       }
       await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
-      const meta = parseMeta(existing?.metadata)
       await this.prisma.generationRecord.update({
         where: { id },
         data: {
