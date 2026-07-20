@@ -33,6 +33,12 @@ import {
   resolveCanvasVideoParams,
   sceneComposerToNodePatch,
 } from '@/utils/sceneComposer'
+import {
+  extractRefundedPointsFromError,
+  formatCancelledMessage,
+  formatGenerationFailureMessage,
+} from '@/utils/generationPointsMessage'
+import { useAuthStore } from '@/stores/auth'
 
 export type FallbackConfirmDecision = 'confirm' | 'cancel'
 
@@ -59,6 +65,7 @@ export interface NodeGenerationDeps {
   resolveProviderModels: () => { image: string; video: string; text: string }
   requestFallbackConfirm?: (req: FallbackPendingRequest) => Promise<FallbackConfirmDecision>
   isModelSelectable?: (modality: StudioModality, model: string) => boolean
+  onInsufficientPoints?: () => void
 }
 
 /** Node still accepts poll / resolve writes (not cancelled to draft). */
@@ -186,8 +193,31 @@ function isAbortError(err: unknown): boolean {
 }
 
 export function useNodeGeneration(deps: NodeGenerationDeps) {
+  const auth = useAuthStore()
   const busyNodeIds = ref(new Set<string>())
   const abortByNodeId = new Map<string, AbortController>()
+
+  function refreshPointsAfterGeneration() {
+    void auth.refreshPoints()
+  }
+
+  function patchGenerationError(nodeId: string, err: unknown, signal?: AbortSignal) {
+    const refundedPoints = extractRefundedPointsFromError(err)
+    if (signal?.aborted) {
+      if (refundedPoints) {
+        deps.patchNodeData(nodeId, { errorMessage: formatCancelledMessage(refundedPoints) })
+      }
+      return
+    }
+    if (isAbortError(err)) return
+    const errorMessage = formatGenerationFailureMessage(err, refundedPoints)
+    if (errorMessage.includes('积分不足')) deps.onInsufficientPoints?.()
+    if (!nodeAcceptsWrite(nodeId)) return
+    deps.patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage,
+    })
+  }
 
   function isNodeBusy(nodeId: string): boolean {
     return busyNodeIds.value.has(nodeId)
@@ -234,7 +264,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         deps.stopShotPolling?.(shotId)
         deps.patchNodeData(shotId, {
           status: NODE_GENERATION_STATUS.draft,
-          errorMessage: null,
+          errorMessage: formatCancelledMessage(),
         })
         markIdle(shotId)
       }
@@ -254,7 +284,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         markIdle(child.id)
         deps.patchNodeData(child.id, {
           status: NODE_GENERATION_STATUS.draft,
-          errorMessage: null,
+          errorMessage: formatCancelledMessage(),
         })
       }
     }
@@ -262,8 +292,9 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     syncGeneratingFlag()
     deps.patchNodeData(nodeId, {
       status: NODE_GENERATION_STATUS.draft,
-      errorMessage: null,
+      errorMessage: formatCancelledMessage(),
     })
+    refreshPointsAfterGeneration()
   }
 
   function beginNodeWork(nodeId: string): AbortSignal {
@@ -490,14 +521,16 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         await generateShot(node, local, data, signal)
       }
     } catch (err) {
-      if (isAbortError(err) || signal.aborted) return
+      if (signal.aborted) {
+        patchGenerationError(node.id, err, signal)
+        return
+      }
+      if (isAbortError(err)) return
       console.error('[NodeGeneration]', nodeType, err)
-      deps.patchNodeData(node.id, {
-        status: NODE_GENERATION_STATUS.error,
-        errorMessage: err instanceof Error ? err.message : '生成失败',
-      })
+      patchGenerationError(node.id, err, signal)
     } finally {
       endNodeWork(node.id, signal)
+      refreshPointsAfterGeneration()
     }
   }
 
@@ -768,10 +801,15 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       })
       await deps.saveCanvas()
     } catch (err) {
-      if (isAbortError(err) || signal.aborted) return
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+      if (signal.aborted) {
+        patchGenerationError(node.id, err, signal)
+        return
+      }
+      if (isAbortError(err)) return
+      patchGenerationError(node.id, err, signal)
     } finally {
       endNodeWork(node.id, signal)
+      refreshPointsAfterGeneration()
     }
   }
 
@@ -827,10 +865,15 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
       await deps.saveCanvas()
     } catch (err) {
-      if (isAbortError(err) || signal.aborted) return
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+      if (signal.aborted) {
+        patchGenerationError(node.id, err, signal)
+        return
+      }
+      if (isAbortError(err)) return
+      patchGenerationError(node.id, err, signal)
     } finally {
       endNodeWork(node.id, signal)
+      refreshPointsAfterGeneration()
     }
   }
 
@@ -870,10 +913,15 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       })
       await deps.saveCanvas()
     } catch (err) {
-      if (isAbortError(err) || signal.aborted) return
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.error })
+      if (signal.aborted) {
+        patchGenerationError(node.id, err, signal)
+        return
+      }
+      if (isAbortError(err)) return
+      patchGenerationError(node.id, err, signal)
     } finally {
       endNodeWork(node.id, signal)
+      refreshPointsAfterGeneration()
     }
   }
 

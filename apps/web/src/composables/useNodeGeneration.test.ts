@@ -10,6 +10,14 @@ import { defaultModelKey } from '@/constants/studioModels'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
 
+const mockRefreshPoints = vi.fn(async () => 100)
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    refreshPoints: mockRefreshPoints,
+  }),
+}))
+
 vi.mock('@/services/studio-api', () => ({
   studioApi: {
     generateImage: vi.fn(),
@@ -103,12 +111,56 @@ function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown
 describe('useNodeGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockRefreshPoints.mockResolvedValue(100)
     vi.mocked(studioApi.generateAudio).mockResolvedValue(
       mockAxiosResponse({ data: { ...completedRecord, type: 'audio', url: 'https://example.com/out.mp3' } }),
     )
     vi.mocked(studioApi.generateImage).mockResolvedValue(
       mockAxiosResponse({ data: completedRecord }),
     )
+  })
+
+  it('maps 积分不足 to recharge message and calls onInsufficientPoints', async () => {
+    const node = createNode('image', { prompt: 'a cat' })
+    const onInsufficientPoints = vi.fn()
+    vi.mocked(studioApi.generateImage).mockRejectedValue({
+      response: { data: { message: '积分不足' } },
+    })
+    const { api, deps } = createDeps([node], { onInsufficientPoints })
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '积分不足，请充值后再试',
+    })
+    expect(onInsufficientPoints).toHaveBeenCalled()
+    expect(mockRefreshPoints).toHaveBeenCalled()
+  })
+
+  it('maps generation failure with refundedPoints in response', async () => {
+    const node = createNode('image', { prompt: 'a cat' })
+    vi.mocked(studioApi.generateImage).mockRejectedValue({
+      response: { data: { message: 'upstream failed', refundedPoints: 10 } },
+    })
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '生成失败，10 积分已返回',
+    })
+    expect(mockRefreshPoints).toHaveBeenCalled()
+  })
+
+  it('refreshes points after successful generation', async () => {
+    const node = createNode('image', { prompt: 'a cat' })
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(mockRefreshPoints).toHaveBeenCalled()
   })
 
   it('passes audio options to studioApi.generateAudio', async () => {
@@ -680,7 +732,7 @@ describe('useNodeGeneration', () => {
       'shot-1',
       expect.objectContaining({
         status: NODE_GENERATION_STATUS.draft,
-        errorMessage: null,
+        errorMessage: '已取消',
       }),
     )
     expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
@@ -888,9 +940,34 @@ describe('useNodeGeneration', () => {
       'img-1',
       expect.objectContaining({
         status: NODE_GENERATION_STATUS.draft,
-        errorMessage: null,
+        errorMessage: '已取消',
       }),
     )
+  })
+
+  it('overwrites cancel message when abort response includes refundedPoints', async () => {
+    let rejectHang!: (e: unknown) => void
+    const hang = new Promise((_r, j) => { rejectHang = j })
+    vi.mocked(studioApi.generateImage).mockImplementation((_a, _b, _c, _d, _e, _f, _g, signal?: AbortSignal) => {
+      signal?.addEventListener('abort', () => {
+        rejectHang({
+          response: { data: { message: '已取消', refundedPoints: 10 } },
+        })
+      })
+      return hang as never
+    })
+
+    const node = createNode('image', { prompt: 'cancel-refund' }, 'img-refund')
+    const { api, deps } = createDeps([node])
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    await api.generateForNode(node)
+    await pending
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith('img-refund', {
+      errorMessage: '已取消，10 积分已返回',
+    })
+    expect(mockRefreshPoints).toHaveBeenCalled()
   })
 
   it('uses catalog defaults for generateShot when media child is missing', async () => {
