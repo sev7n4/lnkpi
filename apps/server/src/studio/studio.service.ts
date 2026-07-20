@@ -19,6 +19,11 @@ import {
   type ImageResolutionTier,
   type StudioModality,
 } from '@lnkpi/shared'
+import {
+  alreadyRefunded,
+  applyChargeMeta,
+  applyRefundMeta,
+} from '../points/charge-session'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
@@ -130,6 +135,33 @@ export class StudioService {
     }
   }
 
+  private byokPendingMeta(
+    resolved: ResolvedGenerationProvider,
+    err: unknown,
+    cost: number,
+    extra: Record<string, unknown> = {},
+  ) {
+    return applyRefundMeta(
+      applyChargeMeta(this.pendingMeta(resolved, err, extra), cost),
+      cost,
+      'byok_failed',
+    )
+  }
+
+  private platformFallbackCost(type: string, meta: Record<string, unknown>): number {
+    if (type === 'text' || type === 'prompt' || type === 'audio') return 5
+    if (type === 'image') return 10 * (Number(meta.count ?? 1) || 1)
+    if (type === 'video') {
+      const duration = Number(meta.duration ?? 5)
+      return duration >= 15 ? 70 : duration >= 10 ? 50 : 30
+    }
+    throw new BadRequestException('不支持的生成类型')
+  }
+
+  private videoDurationCredits(duration: number): number {
+    return duration >= 15 ? 70 : duration >= 10 ? 50 : 30
+  }
+
   /** Catalog gateway id for platform confirm — never reuse user-channel modelName. */
   private platformGatewayModelId(
     modality: StudioModality,
@@ -149,7 +181,9 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
   ) {
-    await this.points.consume(userId, 5, '文本生成')
+    const cost = 5
+    const chargeReason = '文本生成'
+    await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -162,6 +196,16 @@ export class StudioService {
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
+    const baseMeta = {
+      modelKey: resolvedKey,
+      gatewayModelId,
+      channelId: resolved.channelId,
+      skippedMerge,
+      refsCount: refs?.length ?? 0,
+      visionUsed: referenceImages.length > 0,
+      referenceImages,
+      ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
+    }
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
@@ -184,21 +228,15 @@ export class StudioService {
           model: storeModel,
           url: null,
           status: 'completed',
-          metadata: JSON.stringify({
-            text,
-            modelKey: resolvedKey,
-            gatewayModelId,
-            channelId: resolved.channelId,
-            ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
-            skippedMerge,
-            refsCount: refs?.length ?? 0,
-            visionUsed: referenceImages.length > 0,
-            referenceImages,
-          }),
+          metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, text }, cost)),
         },
       })
     } catch (err) {
-      if (resolved.source !== 'user') throw err
+      if (resolved.source !== 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        throw err
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -208,14 +246,9 @@ export class StudioService {
           url: null,
           status: 'fallback_pending',
           metadata: JSON.stringify(
-            this.pendingMeta(resolved, err, {
+            this.byokPendingMeta(resolved, err, cost, {
               originalModel: model,
-              modelKey: resolvedKey,
-              gatewayModelId,
-              skippedMerge,
-              refsCount: refs?.length ?? 0,
-              visionUsed: referenceImages.length > 0,
-              referenceImages,
+              ...baseMeta,
             }),
           ),
         },
@@ -226,13 +259,21 @@ export class StudioService {
   async generatePrompt(userId: string, prompt: string, model?: string) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
-    await this.points.consume(userId, 5, '提示词模式生成')
+    const cost = 5
+    const chargeReason = '提示词模式生成'
+    await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
     const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
     const opts = userProviderOpts(resolved)
+    const baseMeta = {
+      modelKey: resolvedKey,
+      gatewayModelId,
+      channelId: resolved.channelId,
+      ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
+    }
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
@@ -251,18 +292,15 @@ export class StudioService {
           model: storeModel,
           url: null,
           status: 'completed',
-          metadata: JSON.stringify({
-            mode,
-            content,
-            modelKey: resolvedKey,
-            gatewayModelId,
-            channelId: resolved.channelId,
-            ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
-          }),
+          metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, mode, content }, cost)),
         },
       })
     } catch (err) {
-      if (resolved.source !== 'user') throw err
+      if (resolved.source !== 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        throw err
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -272,10 +310,9 @@ export class StudioService {
           url: null,
           status: 'fallback_pending',
           metadata: JSON.stringify(
-            this.pendingMeta(resolved, err, {
+            this.byokPendingMeta(resolved, err, cost, {
               originalModel: model,
-              modelKey: resolvedKey,
-              gatewayModelId,
+              ...baseMeta,
             }),
           ),
         },
@@ -304,7 +341,9 @@ export class StudioService {
     count = 1,
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
-    await this.points.consume(userId, 10 * n, '图像生成')
+    const cost = 10 * n
+    const chargeReason = '图像生成'
+    await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -348,22 +387,31 @@ export class StudioService {
           model: storeModel,
           url: imageUrls[0],
           status: 'completed',
-          metadata: JSON.stringify({
-            ...built.meta,
-            modelId,
-            aspectRatio,
-            resolution,
-            count: n,
-            size: built.size,
-            urls: imageUrls,
-            referenceImages,
-            skippedMerge,
-            channelId: resolved.channelId,
-          }),
+          metadata: JSON.stringify(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                modelId,
+                aspectRatio,
+                resolution,
+                count: n,
+                size: built.size,
+                urls: imageUrls,
+                referenceImages,
+                skippedMerge,
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+          ),
         },
       })
     } catch (err) {
-      if (resolved.source !== 'user') throw err
+      if (resolved.source !== 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        throw err
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -373,7 +421,7 @@ export class StudioService {
           url: null,
           status: 'fallback_pending',
           metadata: JSON.stringify(
-            this.pendingMeta(resolved, err, {
+            this.byokPendingMeta(resolved, err, cost, {
               ...built.meta,
               modelId,
               originalModel: model,
@@ -391,7 +439,9 @@ export class StudioService {
   }
 
   async generateImageVariation(userId: string, prompt: string, basePrompt?: string, model?: string) {
-    await this.points.consume(userId, 10, '图像变体')
+    const cost = 10
+    const chargeReason = '图像变体'
+    await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const combined = basePrompt ? `${basePrompt}。变体要求：${prompt}` : prompt
     try {
@@ -409,15 +459,24 @@ export class StudioService {
           model: model ?? resolved.modelName,
           url,
           status: 'completed',
-          metadata: JSON.stringify({
-            variation: true,
-            basePrompt,
-            channelId: resolved.channelId,
-          }),
+          metadata: JSON.stringify(
+            applyChargeMeta(
+              {
+                variation: true,
+                basePrompt,
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+          ),
         },
       })
     } catch (err) {
-      if (resolved.source !== 'user') throw err
+      if (resolved.source !== 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        throw err
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -427,7 +486,7 @@ export class StudioService {
           url: null,
           status: 'fallback_pending',
           metadata: JSON.stringify(
-            this.pendingMeta(resolved, err, {
+            this.byokPendingMeta(resolved, err, cost, {
               originalModel: model,
               variation: true,
               basePrompt,
@@ -449,8 +508,9 @@ export class StudioService {
     resolution = '720p',
     crop = 'none',
   ) {
-    const durationCredits = duration >= 15 ? 70 : duration >= 10 ? 50 : 30
-    await this.points.consume(userId, durationCredits, '视频生成')
+    const durationCredits = this.videoDurationCredits(duration)
+    const chargeReason = '视频生成'
+    await this.points.consume(userId, durationCredits, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -479,23 +539,31 @@ export class StudioService {
         prompt: effectivePrompt,
         model: storeModel,
         status: 'generating',
-        metadata: JSON.stringify({
-          ...built.meta,
-          duration,
-          aspectRatio,
-          resolution,
-          crop,
-          referenceImages,
-          skippedMerge,
-          mergedText,
-          channelId: resolved.channelId,
-          originalModel: model,
-          providerSource: resolved.source,
-        }),
+        metadata: JSON.stringify(
+          applyChargeMeta(
+            {
+              ...built.meta,
+              duration,
+              aspectRatio,
+              resolution,
+              crop,
+              referenceImages,
+              skippedMerge,
+              mergedText,
+              channelId: resolved.channelId,
+              originalModel: model,
+              providerSource: resolved.source,
+            },
+            durationCredits,
+          ),
+        ),
       },
     })
     this.completeVideo(
       record.id,
+      userId,
+      durationCredits,
+      chargeReason,
       effectivePrompt,
       {
         model: gatewayModel,
@@ -525,7 +593,9 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
   ) {
-    await this.points.consume(userId, 5, '音频生成')
+    const cost = 5
+    const chargeReason = '音频生成'
+    await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, options.model, 'audio')
     const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
       text,
@@ -568,23 +638,32 @@ export class StudioService {
           model: storeModel,
           url: storeUrl,
           status: 'completed',
-          metadata: JSON.stringify({
-            ...built.meta,
-            skippedMerge,
-            voice: built.options.voice ?? options.voice ?? 'default',
-            emotion: options.emotion ?? 'neutral',
-            language: options.language ?? 'zh',
-            speed: options.speed ?? 1,
-            volume: options.volume,
-            pitch: options.pitch,
-            hasTtsData: url.startsWith('data:'),
-            channelId: resolved.channelId,
-          }),
+          metadata: JSON.stringify(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                skippedMerge,
+                voice: built.options.voice ?? options.voice ?? 'default',
+                emotion: options.emotion ?? 'neutral',
+                language: options.language ?? 'zh',
+                speed: options.speed ?? 1,
+                volume: options.volume,
+                pitch: options.pitch,
+                hasTtsData: url.startsWith('data:'),
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+          ),
         },
       })
       return { ...record, url }
     } catch (err) {
-      if (resolved.source !== 'user') throw err
+      if (resolved.source !== 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        throw err
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       const record = await this.prisma.generationRecord.create({
         data: {
           userId,
@@ -594,7 +673,7 @@ export class StudioService {
           url: null,
           status: 'fallback_pending',
           metadata: JSON.stringify(
-            this.pendingMeta(resolved, err, {
+            this.byokPendingMeta(resolved, err, cost, {
               ...built.meta,
               originalModel: options.model,
               skippedMerge,
@@ -619,144 +698,171 @@ export class StudioService {
       throw new BadRequestException('当前状态不可确认平台回退')
     }
     const meta = parseMeta(record.metadata)
+    const platformCost = this.platformFallbackCost(record.type, meta)
+    await this.points.consume(userId, platformCost, '平台回退生成')
+    const chargedMeta = { ...meta, chargedPoints: platformCost, priorByokRefunded: true }
 
-    if (record.type === 'image') {
-      const size = String(meta.size ?? '1024x1024')
-      const n = Number(meta.count ?? 1) || 1
-      // Never reuse user-channel modelName against platform credentials.
-      const modelId = this.platformGatewayModelId('image', meta)
-      const { url, urls } = await createImageProvider(undefined).generate(record.prompt, {
-        size,
-        n,
-        modelId,
-      })
-      const imageUrls = urls?.length ? urls : [url]
-      return this.prisma.generationRecord.update({
-        where: { id: record.id },
-        data: {
-          url: imageUrls[0],
-          status: 'completed',
-          metadata: JSON.stringify({
-            ...meta,
-            urls: imageUrls,
-            gatewayModelId: modelId,
-            providerFallback: true,
-            channelId: 'platform',
-          }),
-        },
-      })
-    }
-
-    if (record.type === 'text' || record.type === 'prompt') {
-      // Never reuse user-channel modelName against platform credentials.
-      const gatewayModelId = this.platformGatewayModelId('text', meta)
-      const referenceImages = Array.isArray(meta.referenceImages)
-        ? (meta.referenceImages as string[])
-        : []
-      let text: string
-      let promptMeta: Record<string, unknown> = {}
-      if (record.type === 'prompt') {
-        const { mode, content } = await generatePromptFromUserInput(record.prompt, {
-          model: gatewayModelId,
-          apiKey: process.env.OPENAI_API_KEY,
-          baseUrl: process.env.OPENAI_BASE_URL,
+    try {
+      if (record.type === 'image') {
+        const size = String(meta.size ?? '1024x1024')
+        const n = Number(meta.count ?? 1) || 1
+        const modelId = this.platformGatewayModelId('image', meta)
+        const { url, urls } = await createImageProvider(undefined).generate(record.prompt, {
+          size,
+          n,
+          modelId,
         })
-        text = content
-        promptMeta = { mode, content }
-      } else if (referenceImages.length > 0) {
-        const result = await generateTextWithImages(record.prompt, referenceImages, {
-          model: gatewayModelId,
-          apiKey: process.env.OPENAI_API_KEY,
-          baseUrl: process.env.OPENAI_BASE_URL,
+        const imageUrls = urls?.length ? urls : [url]
+        return this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            url: imageUrls[0],
+            status: 'completed',
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              urls: imageUrls,
+              gatewayModelId: modelId,
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
         })
-        text = result.text
-      } else {
-        const result = await createTextProvider(undefined).generate(record.prompt, gatewayModelId)
-        text = result.text
       }
-      return this.prisma.generationRecord.update({
-        where: { id: record.id },
-        data: {
-          status: 'completed',
-          metadata: JSON.stringify({
-            ...meta,
-            ...promptMeta,
-            text: record.type === 'text' ? text : meta.text,
-            gatewayModelId,
-            providerFallback: true,
-            channelId: 'platform',
-          }),
-        },
-      })
-    }
 
-    if (record.type === 'audio') {
-      const platformModel = this.platformGatewayModelId('audio', meta)
-      const prevAudio = (meta.audioOptions as Record<string, unknown> | undefined) ?? {}
-      const audioOptions = {
-        ...prevAudio,
-        model: platformModel,
-        voice: prevAudio.voice ?? meta.voice,
-        speed: prevAudio.speed ?? meta.speed,
-        volume: prevAudio.volume ?? meta.volume,
-        pitch: prevAudio.pitch ?? meta.pitch,
+      if (record.type === 'text' || record.type === 'prompt') {
+        const gatewayModelId = this.platformGatewayModelId('text', meta)
+        const referenceImages = Array.isArray(meta.referenceImages)
+          ? (meta.referenceImages as string[])
+          : []
+        let text: string
+        let promptMeta: Record<string, unknown> = {}
+        if (record.type === 'prompt') {
+          const { mode, content } = await generatePromptFromUserInput(record.prompt, {
+            model: gatewayModelId,
+            apiKey: process.env.OPENAI_API_KEY,
+            baseUrl: process.env.OPENAI_BASE_URL,
+          })
+          text = content
+          promptMeta = { mode, content }
+        } else if (referenceImages.length > 0) {
+          const result = await generateTextWithImages(record.prompt, referenceImages, {
+            model: gatewayModelId,
+            apiKey: process.env.OPENAI_API_KEY,
+            baseUrl: process.env.OPENAI_BASE_URL,
+          })
+          text = result.text
+        } else {
+          const result = await createTextProvider(undefined).generate(record.prompt, gatewayModelId)
+          text = result.text
+        }
+        return this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            status: 'completed',
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              ...promptMeta,
+              text: record.type === 'text' ? text : meta.text,
+              gatewayModelId,
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
+        })
       }
-      const { url } = await createAudioProvider(undefined).generate(
-        record.prompt,
-        audioOptions as { model?: string; voice?: string; speed?: number; volume?: number; pitch?: number },
-      )
-      const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
-      return this.prisma.generationRecord.update({
+
+      if (record.type === 'audio') {
+        const platformModel = this.platformGatewayModelId('audio', meta)
+        const prevAudio = (meta.audioOptions as Record<string, unknown> | undefined) ?? {}
+        const audioOptions = {
+          ...prevAudio,
+          model: platformModel,
+          voice: prevAudio.voice ?? meta.voice,
+          speed: prevAudio.speed ?? meta.speed,
+          volume: prevAudio.volume ?? meta.volume,
+          pitch: prevAudio.pitch ?? meta.pitch,
+        }
+        const { url } = await createAudioProvider(undefined).generate(
+          record.prompt,
+          audioOptions as { model?: string; voice?: string; speed?: number; volume?: number; pitch?: number },
+        )
+        const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
+        return this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            url: storeUrl,
+            status: 'completed',
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              audioOptions,
+              gatewayModelId: platformModel,
+              hasTtsData: url.startsWith('data:'),
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
+        })
+      }
+
+      if (record.type === 'video') {
+        const platformModel = this.platformGatewayModelId('video', meta)
+        const { url } = await createVideoProvider(undefined).generate(record.prompt, {
+          model: platformModel,
+          duration: Number(meta.duration ?? 5),
+          aspectRatio: String(meta.aspectRatio ?? '16:9'),
+          resolution: String(meta.resolution ?? '720p'),
+          crop: meta.crop === undefined ? undefined : String(meta.crop),
+          image: Array.isArray(meta.referenceImages)
+            ? (meta.referenceImages as string[])[0]
+            : undefined,
+        })
+        return this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            url,
+            status: 'completed',
+            metadata: JSON.stringify({
+              ...chargedMeta,
+              gatewayModelId: platformModel,
+              providerFallback: true,
+              channelId: 'platform',
+            }),
+          },
+        })
+      }
+
+      throw new BadRequestException('不支持的生成类型')
+    } catch (err) {
+      if (err instanceof BadRequestException && err.message === '不支持的生成类型') {
+        await this.points.refund(userId, platformCost, '平台回退失败退款')
+        throw err
+      }
+      await this.points.refund(userId, platformCost, '平台回退失败退款')
+      await this.prisma.generationRecord.update({
         where: { id: record.id },
         data: {
-          url: storeUrl,
-          status: 'completed',
-          metadata: JSON.stringify({
-            ...meta,
-            audioOptions,
-            gatewayModelId: platformModel,
-            hasTtsData: url.startsWith('data:'),
-            providerFallback: true,
-            channelId: 'platform',
-          }),
+          status: 'failed',
+          metadata: JSON.stringify(
+            applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
+          ),
         },
       })
+      throw err
     }
-
-    if (record.type === 'video') {
-      const platformModel = this.platformGatewayModelId('video', meta)
-      const { url } = await createVideoProvider(undefined).generate(record.prompt, {
-        model: platformModel,
-        duration: Number(meta.duration ?? 5),
-        aspectRatio: String(meta.aspectRatio ?? '16:9'),
-        resolution: String(meta.resolution ?? '720p'),
-        crop: meta.crop === undefined ? undefined : String(meta.crop),
-        image: Array.isArray(meta.referenceImages)
-          ? (meta.referenceImages as string[])[0]
-          : undefined,
-      })
-      return this.prisma.generationRecord.update({
-        where: { id: record.id },
-        data: {
-          url,
-          status: 'completed',
-          metadata: JSON.stringify({
-            ...meta,
-            gatewayModelId: platformModel,
-            providerFallback: true,
-            channelId: 'platform',
-          }),
-        },
-      })
-    }
-
-    throw new BadRequestException('不支持的生成类型')
   }
 
   async cancelPlatformFallback(userId: string, recordId: string) {
     const record = await this.getGeneration(userId, recordId)
     if (record.status !== 'fallback_pending') {
       throw new BadRequestException('当前状态不可取消平台回退')
+    }
+    const meta = parseMeta(record.metadata)
+    if (!alreadyRefunded(meta)) {
+      const cost =
+        typeof meta.chargedPoints === 'number'
+          ? meta.chargedPoints
+          : this.platformFallbackCost(record.type, meta)
+      await this.points.refund(userId, cost, '平台回退取消退款')
     }
     return this.prisma.generationRecord.update({
       where: { id: record.id },
@@ -766,6 +872,9 @@ export class StudioService {
 
   private async completeVideo(
     id: string,
+    userId: string,
+    cost: number,
+    chargeReason: string,
     prompt: string,
     options: {
       model?: string
@@ -792,17 +901,19 @@ export class StudioService {
     } catch (err) {
       console.error('Video generation failed:', err)
       if (resolved.source === 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
         const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
         const meta = parseMeta(existing?.metadata)
         await this.prisma.generationRecord.update({
           where: { id },
           data: {
             status: 'fallback_pending',
-            metadata: JSON.stringify(this.pendingMeta(resolved, err, meta)),
+            metadata: JSON.stringify(this.byokPendingMeta(resolved, err, cost, meta)),
           },
         })
         return
       }
+      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
       await this.prisma.generationRecord.update({ where: { id }, data: { status: 'failed' } })
     }
   }

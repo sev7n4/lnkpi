@@ -57,11 +57,15 @@ describe('StudioService BYOK fallback_pending', () => {
   let generationCreate: ReturnType<typeof vi.fn>
   let generationUpdate: ReturnType<typeof vi.fn>
   let generationFindFirst: ReturnType<typeof vi.fn>
+  let pointsConsume: ReturnType<typeof vi.fn>
+  let pointsRefund: ReturnType<typeof vi.fn>
   let stored: Record<string, unknown>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     stored = {}
+    pointsConsume = vi.fn(async () => {})
+    pointsRefund = vi.fn(async () => {})
     resolveForGeneration = vi.fn(async () => userResolved)
     generationCreate = vi.fn(async (args: { data: Record<string, unknown> }) => {
       stored = { id: 'g1', createdAt: new Date(), ...args.data }
@@ -84,7 +88,8 @@ describe('StudioService BYOK fallback_pending', () => {
         {
           provide: PointsService,
           useValue: {
-            consume: vi.fn(async () => {}),
+            consume: pointsConsume,
+            refund: pointsRefund,
           },
         },
         {
@@ -111,6 +116,8 @@ describe('StudioService BYOK fallback_pending', () => {
   it.each([
     {
       name: 'image',
+      cost: 10,
+      refundReason: '图像生成-BYOK失败退款',
       failOnce: () => imageGenerate.mockRejectedValueOnce(new Error('upstream 502')),
       run: () => svc.generateImage('u1', 'a cat', 'ch_user::custom-model'),
       createProvider: createImageProvider,
@@ -119,6 +126,8 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'text',
+      cost: 5,
+      refundReason: '文本生成-BYOK失败退款',
       failOnce: () => textGenerate.mockRejectedValueOnce(new Error('unauthorized api key')),
       run: () => svc.generateText('u1', 'hello', 'ch_user::custom-model'),
       createProvider: createTextProvider,
@@ -127,6 +136,8 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'audio',
+      cost: 5,
+      refundReason: '音频生成-BYOK失败退款',
       failOnce: () => audioGenerate.mockRejectedValueOnce(new Error('network timeout')),
       run: () => svc.generateAudio('u1', 'hi', { model: 'ch_user::custom-model' }),
       createProvider: createAudioProvider,
@@ -135,7 +146,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
   ] as const)(
     '$name: user channel failure → fallback_pending without platform provider',
-    async ({ failOnce, run, createProvider, generate }) => {
+    async ({ failOnce, run, createProvider, generate, cost, refundReason }) => {
       failOnce()
       const record = await run()
 
@@ -144,6 +155,10 @@ describe('StudioService BYOK fallback_pending', () => {
       expect(meta.channelId).toBe('ch_user')
       expect(meta.failureClass).toBeTruthy()
       expect(meta.confirmMessage).toBe(BYOK_FALLBACK_CONFIRM_MESSAGE)
+      expect(meta.chargedPoints).toBe(cost)
+      expect(meta.refundedPoints).toBe(cost)
+      expect(meta.refundReason).toBe('byok_failed')
+      expect(pointsRefund).toHaveBeenCalledWith('u1', cost, refundReason)
       expect(createProvider).toHaveBeenCalledTimes(1)
       expect(createProvider).toHaveBeenCalledWith({
         apiKey: 'user-key',
@@ -168,6 +183,8 @@ describe('StudioService BYOK fallback_pending', () => {
     const meta = JSON.parse(String(updateData.metadata))
     expect(meta.channelId).toBe('ch_user')
     expect(meta.failureClass).toBeTruthy()
+    expect(meta.refundedPoints).toBe(30)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
 
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
@@ -179,6 +196,7 @@ describe('StudioService BYOK fallback_pending', () => {
   it.each([
     {
       name: 'image',
+      platformCost: 10,
       setupPending: async () => {
         imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
         await svc.generateImage('u1', 'a cat', 'ch_user::custom-model', '16:9', [], [], '1K', 1)
@@ -192,6 +210,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'text',
+      platformCost: 5,
       setupPending: async () => {
         textGenerate.mockRejectedValueOnce(new Error('unauthorized'))
         await svc.generateText('u1', 'hello', 'ch_user::custom-model')
@@ -202,6 +221,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'audio',
+      platformCost: 5,
       setupPending: async () => {
         audioGenerate.mockRejectedValueOnce(new Error('network'))
         await svc.generateAudio('u1', 'hi', { model: 'ch_user::custom-model' })
@@ -210,7 +230,7 @@ describe('StudioService BYOK fallback_pending', () => {
       createProvider: createAudioProvider,
       generate: audioGenerate,
     },
-  ] as const)('$name: confirm → platform generate called', async ({ setupPending, createProvider, generate }) => {
+  ] as const)('$name: confirm → platform generate called', async ({ setupPending, createProvider, generate, platformCost }) => {
     await setupPending()
     vi.clearAllMocks()
     resolveForGeneration.mockImplementation(async (_uid: string, model?: string) => ({
@@ -222,6 +242,9 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
+    expect(meta.chargedPoints).toBe(platformCost)
+    expect(meta.priorByokRefunded).toBe(true)
+    expect(pointsConsume).toHaveBeenCalledWith('u1', platformCost, '平台回退生成')
 
     expect(createProvider).toHaveBeenCalled()
     const credCall = vi.mocked(createProvider).mock.calls.find((c) => c[0] == null || c.length === 0 || !c[0]?.apiKey)
@@ -321,10 +344,13 @@ describe('StudioService BYOK fallback_pending', () => {
     expect((opts as { modelId?: string }).modelId).toBeTruthy()
   })
 
-  it('cancel-platform-fallback → failed', async () => {
+  it('cancel-platform-fallback → failed without double refund', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('fail'))
     await svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    pointsRefund.mockClear()
     const result = await svc.cancelPlatformFallback('u1', 'g1')
     expect(result.status).toBe('failed')
+    expect(pointsRefund).not.toHaveBeenCalled()
   })
 })
