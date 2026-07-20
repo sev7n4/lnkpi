@@ -96,10 +96,7 @@ import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
 import CanvasAgentFab from '@/components/agent/CanvasAgentFab.vue'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
-import {
-  formatGenerationFailureMessage,
-  parseRefundedPointsFromMetadata,
-} from '@/utils/generationPointsMessage'
+import { buildPollingFailurePatch } from '@/utils/generationDiagnostic'
 
 const PlayCanvasView = defineAsyncComponent(
   () => import('@/canvas/playcanvas/PlayCanvasView.vue'),
@@ -340,23 +337,15 @@ const shotPolling = useShotPolling((shots) => {
       if (material.status === 'failed') {
         const nodeId = findLinkedMediaNodeId(shot.id, material.id)
         const childNode = nodes.value.find((n) => n.id === nodeId)
-        const refundedPoints = parseRefundedPointsFromMetadata(
-          (material as { metadata?: string | null }).metadata,
-        )
-        const errorMessage = refundedPoints
-          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
-          : '生成失败'
+        const failurePatch = buildPollingFailurePatch({
+          metadata: (material as { metadata?: string | null }).metadata,
+          materialId: material.id,
+        })
         if (childNode && acceptsPollWrite(childNode.data?.status)) {
-          patchNodeData(nodeId, {
-            status: NODE_GENERATION_STATUS.error,
-            errorMessage,
-          })
+          patchNodeData(nodeId, failurePatch)
         }
         if (acceptsPollWrite(shotNode?.data?.status)) {
-          patchNodeData(shot.id, {
-            status: NODE_GENERATION_STATUS.error,
-            errorMessage,
-          })
+          patchNodeData(shot.id, failurePatch)
         }
         void auth.refreshPoints()
         continue
@@ -410,13 +399,13 @@ const generationPolling = useGenerationPolling((results) => {
       }
       patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
-      const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
-      patchNodeData(task.nodeId, {
-        status: NODE_GENERATION_STATUS.error,
-        errorMessage: refundedPoints
-          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
-          : '生成失败',
-      })
+      patchNodeData(
+        task.nodeId,
+        buildPollingFailurePatch({
+          metadata: record.metadata,
+          generationRecordId: record.id,
+        }),
+      )
     }
   }
   void saveCanvas()

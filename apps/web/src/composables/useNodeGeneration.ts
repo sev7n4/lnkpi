@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import type { ErrorCode, VideoSettings } from '@lnkpi/shared'
+import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
@@ -36,10 +36,11 @@ import {
 import {
   extractRefundedPointsFromError,
   formatCancelledMessage,
-  formatGenerationFailureMessage,
-  parseRefundedPointsFromMetadata,
 } from '@/utils/generationPointsMessage'
-import { parseShortGenerationError } from '@/utils/generationDiagnostic'
+import {
+  buildPollingFailurePatch,
+  parseShortGenerationError,
+} from '@/utils/generationDiagnostic'
 import { useAuthStore } from '@/stores/auth'
 
 export type FallbackConfirmDecision = 'confirm' | 'cancel'
@@ -168,18 +169,6 @@ function parseConfirmMessage(metadata?: string | null): string | undefined {
   try {
     const meta = JSON.parse(metadata) as { confirmMessage?: string }
     return typeof meta.confirmMessage === 'string' ? meta.confirmMessage : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function parseErrorCodeFromMetadata(metadata?: string | null): ErrorCode | undefined {
-  if (!metadata) return undefined
-  try {
-    const meta = JSON.parse(metadata) as { errorCode?: unknown }
-    return parseShortGenerationError({
-      response: { data: { errorCode: meta.errorCode } },
-    }).errorCode
   } catch {
     return undefined
   }
@@ -459,17 +448,13 @@ async function cancelRemoteGeneration(nodeId: string) {
       deps.startGenerationPolling([{ recordId: record.id, nodeId }])
       return true
     }
-    const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
-    const errorCode = parseErrorCodeFromMetadata(record.metadata)
-    const patch: Record<string, unknown> = {
-      status: NODE_GENERATION_STATUS.error,
-      errorMessage: refundedPoints
-        ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
-        : '生成失败',
-      generationRecordId: record.id,
-    }
-    if (errorCode) patch.errorCode = errorCode
-    deps.patchNodeData(nodeId, patch)
+    deps.patchNodeData(
+      nodeId,
+      buildPollingFailurePatch({
+        metadata: record.metadata,
+        generationRecordId: record.id,
+      }),
+    )
     return true
   }
 

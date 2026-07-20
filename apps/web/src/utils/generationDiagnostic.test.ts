@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createDiagnosticCache, parseShortGenerationError } from './generationDiagnostic'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import {
+  buildPollingFailurePatch,
+  createDiagnosticCache,
+  parseErrorCodeFromMetadata,
+  parseShortGenerationError,
+} from './generationDiagnostic'
 
 describe('parseShortGenerationError', () => {
   it('reads structured body', () => {
@@ -41,6 +47,62 @@ describe('parseShortGenerationError', () => {
       userMessage: '已取消，8 积分已返回',
       refundedPoints: 8,
     })
+  })
+})
+
+describe('parseErrorCodeFromMetadata', () => {
+  it('reads valid errorCode from metadata JSON', () => {
+    expect(
+      parseErrorCodeFromMetadata(JSON.stringify({ errorCode: 'upstream_timeout' })),
+    ).toBe('upstream_timeout')
+  })
+
+  it('returns undefined for missing or invalid metadata', () => {
+    expect(parseErrorCodeFromMetadata(null)).toBeUndefined()
+    expect(parseErrorCodeFromMetadata('{')).toBeUndefined()
+    expect(parseErrorCodeFromMetadata(JSON.stringify({ errorCode: 'nope' }))).toBeUndefined()
+  })
+})
+
+describe('buildPollingFailurePatch', () => {
+  it('persists generationRecordId and errorCode from studio metadata', () => {
+    expect(
+      buildPollingFailurePatch({
+        metadata: JSON.stringify({ errorCode: 'upstream_timeout', refundedPoints: 5 }),
+        generationRecordId: 'rec-1',
+      }),
+    ).toEqual({
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '生成失败，5 积分已返回',
+      generationRecordId: 'rec-1',
+      errorCode: 'upstream_timeout',
+    })
+  })
+
+  it('persists materialId on shot/material failures', () => {
+    expect(
+      buildPollingFailurePatch({
+        metadata: JSON.stringify({ errorCode: 'upstream_error' }),
+        materialId: 'mat-1',
+      }),
+    ).toEqual({
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '生成失败',
+      materialId: 'mat-1',
+      errorCode: 'upstream_error',
+    })
+  })
+
+  it('omits errorCode when metadata has none', () => {
+    const patch = buildPollingFailurePatch({
+      generationRecordId: 'rec-2',
+    })
+    expect(patch).toEqual({
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '生成失败',
+      generationRecordId: 'rec-2',
+    })
+    expect(patch).not.toHaveProperty('errorCode')
   })
 })
 

@@ -1,9 +1,11 @@
 import type { ErrorCode, GenerationDiagnostic, TaskKind } from '@lnkpi/shared'
 import { formatDiagnosticCopy } from '@lnkpi/shared'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import {
   extractRefundedPointsFromError,
   extractStructuredGenerationFields,
   formatGenerationFailureMessage,
+  parseRefundedPointsFromMetadata,
 } from '@/utils/generationPointsMessage'
 
 export type { ErrorCode, GenerationDiagnostic, TaskKind }
@@ -33,6 +35,37 @@ export function parseShortGenerationError(err: unknown): ShortGenerationError {
     taskId: structured.taskId,
     refundedPoints,
   }
+}
+
+export function parseErrorCodeFromMetadata(metadata?: string | null): ErrorCode | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as { errorCode?: unknown }
+    return parseShortGenerationError({
+      response: { data: { errorCode: meta.errorCode } },
+    }).errorCode
+  } catch {
+    return undefined
+  }
+}
+
+export function buildPollingFailurePatch(opts: {
+  metadata?: string | null
+  generationRecordId?: string
+  materialId?: string
+}): Record<string, unknown> {
+  const refundedPoints = parseRefundedPointsFromMetadata(opts.metadata)
+  const errorCode = parseErrorCodeFromMetadata(opts.metadata)
+  const patch: Record<string, unknown> = {
+    status: NODE_GENERATION_STATUS.error,
+    errorMessage: refundedPoints
+      ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
+      : '生成失败',
+  }
+  if (opts.generationRecordId) patch.generationRecordId = opts.generationRecordId
+  if (opts.materialId) patch.materialId = opts.materialId
+  if (errorCode) patch.errorCode = errorCode
+  return patch
 }
 
 export interface DiagnosticCache {
