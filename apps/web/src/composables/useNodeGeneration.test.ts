@@ -686,6 +686,31 @@ describe('useNodeGeneration', () => {
     expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
   })
 
+  it('does not addNode after cancel during no-child generateShot hang', async () => {
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(canvasApi.editShot).mockResolvedValue(mockAxiosResponse({ data: {} }))
+    vi.mocked(canvasApi.generateImage).mockImplementationOnce(() => hang as never)
+
+    // auto mode + no media children → else branch that addNode/addEdge
+    const shot = createNode('shot', { title: 'Shot', prompt: 'lonely', shotGenerateMode: 'auto' }, 'shot-1')
+    const { api, deps } = createDeps([shot])
+
+    const pending = api.generateForNode(shot)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    api.cancelGeneration('shot-1')
+    expect(shot.data?.status).toBe(NODE_GENERATION_STATUS.draft)
+
+    resolveHang(mockAxiosResponse({ data: { data: { id: 'mat-late' } } }))
+    await pending
+
+    expect(deps.addNode).not.toHaveBeenCalled()
+    expect(deps.addEdge).not.toHaveBeenCalled()
+    expect(deps.startShotPolling).not.toHaveBeenCalled()
+  })
+
   it('does not restart shot polling after cancel during shot-linked generate hang', async () => {
     let resolveHang!: (v: unknown) => void
     const hang = new Promise((r) => { resolveHang = r })

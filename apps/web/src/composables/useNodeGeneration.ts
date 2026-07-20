@@ -668,8 +668,10 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     try {
       await canvasApi.editShot(node.id, { title, prompt })
     } catch {
+      if (signal?.aborted || !nodeAcceptsWrite(node.id)) return
       const shotRes = await canvasApi.createShot(deps.sessionId.value, { title, prompt })
       const shot = shotRes.data.data as { id: string }
+      if (signal?.aborted || !nodeAcceptsWrite(node.id)) return
       if (shot.id !== node.id) {
         deps.patchNodeData(node.id, {
           ...startedAtPatch(),
@@ -679,6 +681,8 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         })
       }
     }
+
+    if (signal?.aborted || !nodeAcceptsWrite(node.id)) return
 
     const hasVideoChild = shotHasChildType(deps.nodes.value, deps.edges.value, node.id, 'video')
     const hasImageChild = shotHasChildType(deps.nodes.value, deps.edges.value, node.id, 'image')
@@ -698,6 +702,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     } else {
       const params = resolveCanvasImageParams({})
       const matRes = await canvasApi.generateImage(node.id, prompt, { ...params, refs, mentionedKeys })
+      if (signal?.aborted || !nodeAcceptsWrite(node.id)) return
       const material = matRes.data.data as { id: string }
       deps.addNode('image', {
         url: '',
