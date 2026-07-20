@@ -42,18 +42,26 @@ export const studioApi = {
     api.post<{ data: GenerationRecord }>(
       '/studio/image/generate',
       { prompt, model, aspectRatio, refs, mentionedKeys, resolution, count },
-      { timeout: 120_000, signal },
+      { timeout: 300_000, signal },
     ),
   generateImageVariation: (prompt: string, basePrompt?: string, model?: string, signal?: AbortSignal) =>
-    api.post<{ data: GenerationRecord }>('/studio/image/variation', { prompt, basePrompt, model }, { timeout: 120_000, signal }),
-  generateText: (prompt: string, model?: string, refs?: StudioRefPayload[], mentionedKeys?: string[], signal?: AbortSignal) =>
+    api.post<{ data: GenerationRecord }>('/studio/image/variation', { prompt, basePrompt, model }, { timeout: 300_000, signal }),
+  generateText: (
+    prompt: string,
+    model?: string,
+    refs?: StudioRefPayload[],
+    mentionedKeys?: string[],
+    signal?: AbortSignal,
+    thinking?: boolean,
+    thinkingEffort?: 'high' | 'max',
+  ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/text/generate',
-      { prompt, model, refs, mentionedKeys },
-      { timeout: 90_000, signal },
+      { prompt, model, refs, mentionedKeys, thinking, thinkingEffort },
+      { timeout: thinking ? 300_000 : 180_000, signal },
     ),
   generatePrompt: (prompt: string, model?: string, signal?: AbortSignal) =>
-    api.post<{ data: GenerationRecord }>('/studio/prompt/generate', { prompt, model }, { timeout: 90_000, signal }),
+    api.post<{ data: GenerationRecord }>('/studio/prompt/generate', { prompt, model }, { timeout: 180_000, signal }),
   generateVideo: (
     prompt: string,
     model?: string,

@@ -113,7 +113,10 @@ describe('StudioService integration (provider params)', () => {
     await svc.generateText('u1', 'hello world', 'gemini-3.1-flash')
 
     expect(createTextProvider).toHaveBeenCalled()
-    expect(textGenerate).toHaveBeenCalledWith('hello world', 'gemini-3.1-flash')
+    expect(textGenerate).toHaveBeenCalledWith('hello world', 'gemini-3.1-flash', {
+      thinking: false,
+      thinkingEffort: 'high',
+    })
     expect(generateTextWithImages).not.toHaveBeenCalled()
   })
 

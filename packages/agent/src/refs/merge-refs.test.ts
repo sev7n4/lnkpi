@@ -123,4 +123,25 @@ describe('mergeRefsToPrompt LLM merge', () => {
     expect(user).toContain('【优先参考】')
     expect(user).toContain('T1、I2')
   })
+
+  it('passes model and disables deepseek thinking on merge', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'merged' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mergeRefsToPrompt({
+      sources: [{ refKey: 'T1', label: 'L1', text: 'A' }],
+      localPrompt: 'B',
+      downstreamType: 'text',
+      apiKey: 'test-key',
+      model: 'deepseek-v4-pro',
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as Record<string, unknown>
+    expect(body.model).toBe('deepseek-v4-pro')
+    expect(body.thinking).toEqual({ type: 'disabled' })
+  })
 })

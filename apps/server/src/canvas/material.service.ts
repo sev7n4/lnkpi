@@ -515,6 +515,7 @@ export class MaterialService {
     downstreamType: 'image' | 'video',
     mentionedKeys?: string[],
     credentials?: { apiKey?: string; baseUrl?: string },
+    model?: string,
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
@@ -523,6 +524,7 @@ export class MaterialService {
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
+      model,
     })
     return {
       mergedText,
@@ -551,6 +553,7 @@ export class MaterialService {
       'image',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      resolved.modelName,
     )
     this.logger.log(
       JSON.stringify({
@@ -692,6 +695,7 @@ export class MaterialService {
       'video',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      resolved.modelName,
     )
     this.logger.log(
       JSON.stringify({

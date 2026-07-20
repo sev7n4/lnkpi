@@ -48,3 +48,9 @@ export function resolveGenerationModel(
 export function catalogModelKeyFromValue(value: string): string {
   return decodeChannelModel(value)?.modelName ?? value
 }
+
+/** DeepSeek V4 family (pro/flash) — used for Dock thinking UI visibility. */
+export function isDeepSeekV4Model(model?: string | null): boolean {
+  if (!model) return false
+  return /deepseek-v4/i.test(model)
+}
