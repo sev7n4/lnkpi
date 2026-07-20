@@ -8,7 +8,9 @@ import {
   createVideoProvider,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
+import { BadRequestException } from '@nestjs/common'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
+import { createCancelFlag } from '../points/charge-session'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
@@ -418,5 +420,25 @@ describe('StudioService BYOK fallback_pending', () => {
     const result = await svc.cancelPlatformFallback('u1', 'g1')
     expect(result.status).toBe('failed')
     expect(pointsRefund).not.toHaveBeenCalled()
+  })
+
+  it('text: client abort after generate → refund and throw 已取消', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    textGenerate.mockReset()
+    textGenerate.mockResolvedValue({ text: 'done' })
+    const listeners: Record<string, (() => void)[]> = {}
+    const req = {
+      aborted: false,
+      on(event: string, cb: () => void) {
+        listeners[event] = listeners[event] ?? []
+        listeners[event].push(cb)
+      },
+    }
+    const cancel = createCancelFlag(req)
+    const promise = svc.generateText('u1', 'hello', undefined, undefined, undefined, cancel)
+    listeners.close?.forEach((cb) => cb())
+    await expect(promise).rejects.toThrow(BadRequestException)
+    await expect(promise).rejects.toThrow('已取消')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-取消退款')
   })
 })

@@ -32,16 +32,28 @@ const userResolved = {
   source: 'user' as const,
 }
 
+const platformResolved = {
+  channelId: 'platform',
+  modelName: 'seedream-5.0-pro',
+  apiFormat: 'openai' as const,
+  credentials: { apiKey: 'plat-key', baseUrl: 'https://platform.example.com/v1' },
+  source: 'platform' as const,
+}
+
 describe('MaterialService BYOK fallback_pending', () => {
   let svc: MaterialService
   let resolveForGeneration: ReturnType<typeof vi.fn>
   let materialUpdate: ReturnType<typeof vi.fn>
   let materialFindFirst: ReturnType<typeof vi.fn>
+  let pointsConsume: ReturnType<typeof vi.fn>
+  let pointsRefund: ReturnType<typeof vi.fn>
   let stored: Record<string, unknown>
 
   beforeEach(async () => {
     vi.clearAllMocks()
     stored = { id: 'm1', shotId: 'shot-1', type: 'image', prompt: 'a cat', status: 'generating' }
+    pointsConsume = vi.fn(async () => {})
+    pointsRefund = vi.fn(async () => {})
     resolveForGeneration = vi.fn(async () => userResolved)
     materialUpdate = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       stored = { ...stored, ...args.data, id: args.where.id }
@@ -55,7 +67,13 @@ describe('MaterialService BYOK fallback_pending', () => {
     const moduleRef = await Test.createTestingModule({
       providers: [
         MaterialService,
-        { provide: PointsService, useValue: { consume: vi.fn(async () => {}) } },
+        {
+          provide: PointsService,
+          useValue: {
+            consume: pointsConsume,
+            refund: pointsRefund,
+          },
+        },
         {
           provide: PrismaService,
           useValue: {
@@ -85,7 +103,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     svc = moduleRef.get(MaterialService)
   })
 
-  it('image: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+  it('image: user fail → fallback_pending retains effectivePrompt/refs and refunds', async () => {
     vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
       mergedText: 'merged cat prompt',
       skippedMerge: false,
@@ -117,6 +135,10 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.effectivePrompt).toContain('merged cat prompt')
     expect(meta.effectivePrompt).toContain('https://cdn.example.com/ref.png')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/ref.png'])
+    expect(meta.chargedPoints).toBe(10)
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('byok_failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-BYOK失败退款')
     expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createImageProvider).toHaveBeenCalledTimes(1)
     expect(createImageProvider).toHaveBeenCalledWith({
@@ -125,7 +147,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
-  it('video: user fail → fallback_pending retains effectivePrompt/refs', async () => {
+  it('video: user fail → fallback_pending retains effectivePrompt/refs and refunds', async () => {
     vi.mocked(mergeRefsToPrompt).mockResolvedValueOnce({
       mergedText: 'merged walk prompt',
       skippedMerge: false,
@@ -155,6 +177,8 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.effectivePrompt).toBe('merged walk prompt')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
     expect(meta.image).toBe('https://cdn.example.com/frame.png')
+    expect(meta.refundedPoints).toBe(30)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
     expect(call.data.prompt).toBe('merged walk prompt')
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
@@ -163,7 +187,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
-  it('image confirm → platform generate called', async () => {
+  it('image confirm → platform generate called and consumes points', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateImage({
       userId: 'u1',
@@ -189,11 +213,14 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     expect(createImageProvider).toHaveBeenCalledWith(undefined)
     expect(imageGenerate).toHaveBeenCalled()
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
+    expect(meta.chargedPoints).toBe(10)
+    expect(meta.priorByokRefunded).toBe(true)
   })
 
-  it('video confirm → platform generate called with catalog model', async () => {
+  it('video confirm → platform generate called with catalog model and consumes points', async () => {
     videoGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateVideo({
       userId: 'u1',
@@ -231,11 +258,55 @@ describe('MaterialService BYOK fallback_pending', () => {
         image: 'https://cdn.example.com/frame.png',
       }),
     )
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 30, '平台回退生成')
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
   })
 
-  it('cancel → failed', async () => {
+  it('image: platform source failure → refund after consume', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+    })
+    await vi.waitFor(() =>
+      expect(materialUpdate.mock.calls.some((c) => c[0].data.status === 'failed')).toBe(true),
+    )
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像生成')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-失败退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')!
+    const meta = JSON.parse(String(failedUpdate[0].data.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_failed')
+  })
+
+  it('confirmPlatformFallback: platform generate failure → refund, failed, refundedPoints', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+      model: 'ch_user::custom-model',
+    })
+    await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    vi.clearAllMocks()
+    imageGenerate.mockRejectedValueOnce(new Error('platform confirm failed'))
+
+    await expect(svc.confirmPlatformFallback('u1', 'm1')).rejects.toThrow('platform confirm failed')
+
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退失败退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_fallback_failed')
+    expect(meta.priorByokRefunded).toBe(true)
+  })
+
+  it('cancel → failed without double refund', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('fail'))
     await svc.generateImage({
       userId: 'u1',
@@ -244,7 +315,10 @@ describe('MaterialService BYOK fallback_pending', () => {
       model: 'ch_user::custom-model',
     })
     await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    pointsRefund.mockClear()
     const result = await svc.cancelPlatformFallback('u1', 'm1')
     expect(result.status).toBe('failed')
+    expect(pointsRefund).not.toHaveBeenCalled()
   })
 })

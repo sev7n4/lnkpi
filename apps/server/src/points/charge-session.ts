@@ -1,3 +1,14 @@
+export function createCancelFlag(req: {
+  on(event: string, cb: () => void): void
+  aborted?: boolean
+}) {
+  let cancelled = Boolean(req.aborted)
+  req.on('close', () => {
+    cancelled = true
+  })
+  return { isCancelled: () => cancelled }
+}
+
 export function applyChargeMeta(meta: Record<string, unknown>, chargedPoints: number) {
   return { ...meta, chargedPoints }
 }

@@ -2,6 +2,7 @@ import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } fro
 import { Type } from 'class-transformer'
 import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
+import { createCancelFlag } from '../points/charge-session'
 import { StudioService } from './studio.service'
 
 class StudioRefDto {
@@ -191,32 +192,46 @@ export class StudioController {
 
   @Post('text/generate')
   @UseGuards(AuthGuard)
-  async generateText(@Req() req: { user: { sub: string } }, @Body() dto: GenerateTextDto) {
+  async generateText(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: GenerateTextDto,
+  ) {
+    const cancel = createCancelFlag(req)
     const data = await this.studioService.generateText(
       req.user.sub,
       dto.prompt,
       dto.model,
       dto.refs,
       dto.mentionedKeys,
+      cancel,
     )
     return { code: 0, message: 'ok', data }
   }
 
   @Post('prompt/generate')
   @UseGuards(AuthGuard)
-  async generatePrompt(@Req() req: { user: { sub: string } }, @Body() dto: GeneratePromptDto) {
-    const data = await this.studioService.generatePrompt(req.user.sub, dto.prompt, dto.model)
+  async generatePrompt(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: GeneratePromptDto,
+  ) {
+    const cancel = createCancelFlag(req)
+    const data = await this.studioService.generatePrompt(req.user.sub, dto.prompt, dto.model, cancel)
     return { code: 0, message: 'ok', data }
   }
 
   @Post('image/variation')
   @UseGuards(AuthGuard)
-  async imageVariation(@Req() req: { user: { sub: string } }, @Body() dto: ImageVariationDto) {
+  async imageVariation(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: ImageVariationDto,
+  ) {
+    const cancel = createCancelFlag(req)
     const data = await this.studioService.generateImageVariation(
       req.user.sub,
       dto.prompt,
       dto.basePrompt,
       dto.model,
+      cancel,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -230,7 +245,11 @@ export class StudioController {
 
   @Post('image/generate')
   @UseGuards(AuthGuard)
-  async generateImage(@Req() req: { user: { sub: string } }, @Body() dto: GenerateImageDto) {
+  async generateImage(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: GenerateImageDto,
+  ) {
+    const cancel = createCancelFlag(req)
     const data = await this.studioService.generateImage(
       req.user.sub,
       dto.prompt,
@@ -240,6 +259,7 @@ export class StudioController {
       dto.mentionedKeys,
       dto.resolution,
       dto.count,
+      cancel,
     )
     return { code: 0, message: 'ok', data }
   }
@@ -263,7 +283,11 @@ export class StudioController {
 
   @Post('audio/generate')
   @UseGuards(AuthGuard)
-  async generateAudio(@Req() req: { user: { sub: string } }, @Body() dto: GenerateAudioDto) {
+  async generateAudio(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: GenerateAudioDto,
+  ) {
+    const cancel = createCancelFlag(req)
     const data = await this.studioService.generateAudio(
       req.user.sub,
       dto.text,
@@ -278,6 +302,7 @@ export class StudioController {
       },
       dto.refs,
       dto.mentionedKeys,
+      cancel,
     )
     return { code: 0, message: 'ok', data }
   }

@@ -83,6 +83,8 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
   }
 }
 
+type CancelFlag = { isCancelled(): boolean }
+
 @Injectable()
 export class StudioService {
   constructor(
@@ -180,6 +182,7 @@ export class StudioService {
     model?: string,
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
+    cancel?: CancelFlag,
   ) {
     const cost = 5
     const chargeReason = '文本生成'
@@ -220,6 +223,10 @@ export class StudioService {
               baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
             })
           : await createTextProvider(opts).generate(mergedText, gatewayModelId)
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throw new BadRequestException('已取消')
+      }
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -256,7 +263,7 @@ export class StudioService {
     }
   }
 
-  async generatePrompt(userId: string, prompt: string, model?: string) {
+  async generatePrompt(userId: string, prompt: string, model?: string, cancel?: CancelFlag) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     const cost = 5
@@ -284,6 +291,10 @@ export class StudioService {
         apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
         baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
       })
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throw new BadRequestException('已取消')
+      }
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -339,6 +350,7 @@ export class StudioService {
     mentionedKeys?: string[],
     resolution = '1K',
     count = 1,
+    cancel?: CancelFlag,
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
     const cost = 10 * n
@@ -379,6 +391,10 @@ export class StudioService {
         },
       )
       const imageUrls = urls?.length ? urls : [url]
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throw new BadRequestException('已取消')
+      }
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -438,7 +454,13 @@ export class StudioService {
     }
   }
 
-  async generateImageVariation(userId: string, prompt: string, basePrompt?: string, model?: string) {
+  async generateImageVariation(
+    userId: string,
+    prompt: string,
+    basePrompt?: string,
+    model?: string,
+    cancel?: CancelFlag,
+  ) {
     const cost = 10
     const chargeReason = '图像变体'
     await this.points.consume(userId, cost, chargeReason)
@@ -451,6 +473,10 @@ export class StudioService {
       const { url } = await createImageProvider(userProviderOpts(resolved)).generate(combined, {
         modelId: resolved.modelName || undefined,
       })
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throw new BadRequestException('已取消')
+      }
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -592,6 +618,7 @@ export class StudioService {
     } = {},
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
+    cancel?: CancelFlag,
   ) {
     const cost = 5
     const chargeReason = '音频生成'
@@ -630,6 +657,10 @@ export class StudioService {
         audioOpts,
       )
       const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throw new BadRequestException('已取消')
+      }
       const record = await this.prisma.generationRecord.create({
         data: {
           userId,

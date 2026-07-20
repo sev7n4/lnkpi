@@ -8,6 +8,7 @@ import type {
   VideoCompositionExportRequest,
 } from '@lnkpi/shared'
 import { AuthGuard } from '../auth/auth.guard'
+import { createCancelFlag } from '../points/charge-session'
 import { CanvasService } from './canvas.service'
 import { MaterialService } from './material.service'
 import { SceneComposerService } from './scene-composer.service'
@@ -441,10 +442,11 @@ export class CanvasController {
   @Post('material/:id/confirm-platform-fallback')
   @UseGuards(AuthGuard)
   async confirmMaterialPlatformFallback(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
     @Param('id') id: string,
   ) {
-    const data = await this.materialService.confirmPlatformFallback(req.user.sub, id)
+    const cancel = createCancelFlag(req)
+    const data = await this.materialService.confirmPlatformFallback(req.user.sub, id, cancel)
     return { code: 0, message: 'ok', data }
   }
 
