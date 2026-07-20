@@ -742,7 +742,15 @@ describe('useNodeGeneration', () => {
     }, 'img-1')
     const { api } = createDeps([node], { stopGenerationPolling, stopShotPolling })
     vi.mocked(studioApi.cancelGeneration).mockResolvedValue(
-      mockAxiosResponse({ data: { id: 'rec-cancel-1', status: 'failed' } }),
+      mockAxiosResponse({
+        data: {
+          id: 'rec-cancel-1',
+          type: 'image',
+          prompt: 'x',
+          status: 'failed',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
     )
 
     api.cancelGeneration('img-1')
