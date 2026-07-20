@@ -53,7 +53,10 @@ export function createDiagnosticCache(): DiagnosticCache {
       const existing = inflight.get(key)
       if (existing) return existing
 
-      const promise = fetcher()
+      const promise = fetcher().catch((error) => {
+        inflight.delete(key)
+        throw error
+      })
       inflight.set(key, promise)
       return promise
     },

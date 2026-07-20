@@ -54,6 +54,19 @@ describe('createDiagnosticCache', () => {
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
+  it('retries after fetch rejection', async () => {
+    const cache = createDiagnosticCache()
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ taskId: 'g1', code: 'unknown' })
+
+    await expect(cache.get('generation', 'g1', fetcher)).rejects.toThrow('network')
+    const result = await cache.get('generation', 'g1', fetcher)
+    expect(result).toEqual({ taskId: 'g1', code: 'unknown' })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
   it('clears by taskId', async () => {
     const cache = createDiagnosticCache()
     const fetcher = vi.fn().mockResolvedValue({ taskId: 'g1', code: 'unknown' })
