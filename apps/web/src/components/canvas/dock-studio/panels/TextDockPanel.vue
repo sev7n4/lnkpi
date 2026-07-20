@@ -75,17 +75,6 @@ watch(
   () => syncFromNode(),
 )
 
-watch(
-  () => props.upstream,
-  (ctx) => {
-    if (!prompt.value.trim() && ctx.textPrompt) {
-      prompt.value = ctx.textPrompt
-      emit('patch', { prompt: ctx.textPrompt })
-    }
-  },
-  { immediate: true },
-)
-
 function onPromptInput(value: string) {
   prompt.value = value
   emit('patch', { prompt: value })

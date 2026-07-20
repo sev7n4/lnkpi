@@ -58,17 +58,6 @@ function syncFromNode() {
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 
-watch(
-  () => props.upstream,
-  (ctx) => {
-    if (!payload.value.prompt?.trim() && ctx.textPrompt) {
-      payload.value.prompt = ctx.textPrompt
-      commitPatch()
-    }
-  },
-  { immediate: true },
-)
-
 function commitPatch() {
   emit('patch', sceneComposerToNodePatch(payload.value))
 }
