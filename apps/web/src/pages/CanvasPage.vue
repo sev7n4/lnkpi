@@ -81,7 +81,12 @@ import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import { downloadMediaPackage, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
-import { CANVAS_NODE_PATCH_KEY, CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
+import {
+  CANVAS_NODE_CANCEL_KEY,
+  CANVAS_NODE_PATCH_KEY,
+  CANVAS_NODE_RENAME_KEY,
+  CANVAS_NODE_RETRY_KEY,
+} from '@/composables/canvasNodeActions'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -1647,6 +1652,25 @@ const {
   requestFallbackConfirm,
   isModelSelectable,
 })
+
+function retryNodeGeneration(nodeId: string) {
+  const node = nodes.value.find((n) => n.id === nodeId)
+  if (!node) return
+  const data = node.data ?? {}
+  const prompt = String(data.prompt ?? '').trim()
+  if (!prompt && String(node.type) !== 'sceneComposer') {
+    patchNodeData(nodeId, {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '请先填写提示词',
+    })
+    return
+  }
+  patchNodeData(nodeId, { errorMessage: null })
+  return generateForNode(node as EditableFlowNode)
+}
+
+provide(CANVAS_NODE_CANCEL_KEY, (id) => cancelGeneration(id))
+provide(CANVAS_NODE_RETRY_KEY, (id) => { void retryNodeGeneration(id) })
 
 const selectedNodeGenerating = computed(() => {
   const node = editorNode.value
