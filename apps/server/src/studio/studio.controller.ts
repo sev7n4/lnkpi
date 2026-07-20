@@ -246,6 +246,13 @@ export class StudioController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Get('generations/:id/diagnostic')
+  @UseGuards(AuthGuard)
+  async generationDiagnostic(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    const data = await this.studioService.getGenerationDiagnostic(req.user.sub, id)
+    return { data }
+  }
+
   @Get('generations/:id')
   @UseGuards(AuthGuard)
   async getGeneration(@Req() req: { user: { sub: string } }, @Param('id') id: string) {

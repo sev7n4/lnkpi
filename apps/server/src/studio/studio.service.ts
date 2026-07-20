@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import {
   buildAudioRequest,
   buildImageProviderOptions,
@@ -14,8 +14,12 @@ import {
 } from '@lnkpi/agent'
 import {
   BYOK_FALLBACK_CONFIRM_MESSAGE,
+  mapMessageToErrorCode,
+  redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
+  type ErrorCode,
+  type GenerationDiagnostic,
   type ImageResolutionTier,
   type StudioModality,
 } from '@lnkpi/shared'
@@ -85,6 +89,98 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function hintForCode(code: ErrorCode): string | undefined {
+  switch (code) {
+    case 'upstream_timeout':
+      return '请稍后重试'
+    case 'insufficient_points':
+      return '请充值后再试'
+    case 'cancelled':
+      return '可重新发起生成'
+    case 'upload_required':
+      return '请先上传参考图'
+    case 'model_unavailable':
+      return '请更换可用模型'
+    case 'upstream_error':
+      return '请稍后重试或更换模型'
+    case 'fallback_pending':
+      return '可确认使用平台通道或取消'
+    case 'invalid_input':
+      return '请检查输入后重试'
+    default:
+      return undefined
+  }
+}
+
+function userMessageForCode(code: ErrorCode, fallback: string): string {
+  switch (code) {
+    case 'insufficient_points':
+      return '积分不足'
+    case 'upstream_timeout':
+      return '上游超时，请稍后重试'
+    case 'cancelled':
+      return '已取消'
+    case 'upload_required':
+      return '参考图尚未上传'
+    case 'model_unavailable':
+      return '模型不可用'
+    case 'upstream_error':
+      return '上游服务异常'
+    case 'fallback_pending':
+      return '需要确认是否使用平台回退'
+    case 'invalid_input':
+      return '输入无效'
+    default:
+      return fallback.trim() || '生成失败'
+  }
+}
+
+function errMessage(err: unknown): string {
+  if (err instanceof BadRequestException) {
+    const response = err.getResponse()
+    if (typeof response === 'string') return response
+    if (response && typeof response === 'object') {
+      const message = (response as { message?: unknown }).message
+      if (typeof message === 'string') return message
+      if (Array.isArray(message)) return message.map(String).join('; ')
+    }
+  }
+  if (err instanceof Error) return err.message
+  return '生成失败'
+}
+
+function applyFailureDiagnosticMeta(
+  existingMeta: Record<string, unknown>,
+  err: unknown,
+  overrides: { userMessage?: string; errorCode?: ErrorCode } = {},
+): Record<string, unknown> {
+  const errMsg = errMessage(err)
+  const errorCode = overrides.errorCode ?? mapMessageToErrorCode(errMsg)
+  const userMessage = overrides.userMessage ?? userMessageForCode(errorCode, errMsg)
+  return {
+    ...existingMeta,
+    errorCode,
+    errorRaw: errMsg.slice(0, 8000),
+    userMessage,
+    failedAt: new Date().toISOString(),
+  }
+}
+
+function throwGenerationFailure(opts: {
+  userMessage: string
+  errorCode: ErrorCode
+  taskId: string
+  refundedPoints?: number
+}): never {
+  throw new BadRequestException({
+    message: opts.userMessage,
+    errorCode: opts.errorCode,
+    taskKind: 'generation',
+    taskId: opts.taskId,
+    ...(opts.refundedPoints != null ? { refundedPoints: opts.refundedPoints } : {}),
+  })
 }
 
 type CancelFlag = { isCancelled(): boolean }
@@ -257,7 +353,27 @@ export class StudioService {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        rethrowWithRefundedPoints(err, cost)
+        const failedMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(applyChargeMeta({ ...baseMeta }, cost), cost, 'platform_failed'),
+          err,
+        )
+        const failed = await this.prisma.generationRecord.create({
+          data: {
+            userId,
+            type: 'text',
+            prompt: mergedText,
+            model: storeModel,
+            url: null,
+            status: 'failed',
+            metadata: JSON.stringify(failedMeta),
+          },
+        })
+        throwGenerationFailure({
+          userMessage: String(failedMeta.userMessage ?? '生成失败'),
+          errorCode: failedMeta.errorCode as ErrorCode,
+          taskId: failed.id,
+          refundedPoints: cost,
+        })
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -326,7 +442,27 @@ export class StudioService {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        rethrowWithRefundedPoints(err, cost)
+        const failedMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(applyChargeMeta({ ...baseMeta }, cost), cost, 'platform_failed'),
+          err,
+        )
+        const failed = await this.prisma.generationRecord.create({
+          data: {
+            userId,
+            type: 'prompt',
+            prompt: trimmed,
+            model: storeModel,
+            url: null,
+            status: 'failed',
+            metadata: JSON.stringify(failedMeta),
+          },
+        })
+        throwGenerationFailure({
+          userMessage: String(failedMeta.userMessage ?? '生成失败'),
+          errorCode: failedMeta.errorCode as ErrorCode,
+          taskId: failed.id,
+          refundedPoints: cost,
+        })
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -356,6 +492,41 @@ export class StudioService {
       throw new BadRequestException('生成记录不存在')
     }
     return record
+  }
+
+  async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {
+    const record = await this.getGeneration(userId, id)
+    if (record.status !== 'failed' && record.status !== 'error') {
+      throw new NotFoundException('诊断不可用')
+    }
+    const meta = parseMeta(record.metadata)
+    const errRaw = meta.errorRaw != null ? String(meta.errorRaw) : ''
+    const code =
+      (typeof meta.errorCode === 'string' ? (meta.errorCode as ErrorCode) : undefined) ??
+      mapMessageToErrorCode(errRaw)
+    const defaultMessage = '生成失败'
+    const userMessage =
+      (typeof meta.userMessage === 'string' && meta.userMessage.trim()
+        ? meta.userMessage
+        : undefined) ?? defaultMessage
+    const occurredAt =
+      typeof meta.failedAt === 'string' && meta.failedAt
+        ? meta.failedAt
+        : record.createdAt.toISOString()
+
+    return {
+      userMessage,
+      code,
+      taskKind: 'generation',
+      taskId: record.id,
+      model: record.model ?? (typeof meta.model === 'string' ? meta.model : null) ?? null,
+      channelId: typeof meta.channelId === 'string' ? meta.channelId : null,
+      apiFormat: typeof meta.apiFormat === 'string' ? meta.apiFormat : null,
+      httpStatus: typeof meta.httpStatus === 'number' ? meta.httpStatus : null,
+      occurredAt,
+      providerSnippet: errRaw ? redactProviderSnippet(errRaw) : null,
+      hint: hintForCode(code),
+    }
   }
 
   async generateImage(
@@ -444,7 +615,44 @@ export class StudioService {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        rethrowWithRefundedPoints(err, cost)
+        const failedMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                modelId,
+                aspectRatio,
+                resolution,
+                count: n,
+                size: built.size,
+                referenceImages,
+                skippedMerge,
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+            cost,
+            'platform_failed',
+          ),
+          err,
+        )
+        const failed = await this.prisma.generationRecord.create({
+          data: {
+            userId,
+            type: 'image',
+            prompt: effectivePrompt,
+            model: storeModel,
+            url: null,
+            status: 'failed',
+            metadata: JSON.stringify(failedMeta),
+          },
+        })
+        throwGenerationFailure({
+          userMessage: String(failedMeta.userMessage ?? '生成失败'),
+          errorCode: failedMeta.errorCode as ErrorCode,
+          taskId: failed.id,
+          refundedPoints: cost,
+        })
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -520,7 +728,38 @@ export class StudioService {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        rethrowWithRefundedPoints(err, cost)
+        const failedMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(
+            applyChargeMeta(
+              {
+                variation: true,
+                basePrompt,
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+            cost,
+            'platform_failed',
+          ),
+          err,
+        )
+        const failed = await this.prisma.generationRecord.create({
+          data: {
+            userId,
+            type: 'image',
+            prompt: combined,
+            model: model ?? resolved.modelName,
+            url: null,
+            status: 'failed',
+            metadata: JSON.stringify(failedMeta),
+          },
+        })
+        throwGenerationFailure({
+          userMessage: String(failedMeta.userMessage ?? '生成失败'),
+          errorCode: failedMeta.errorCode as ErrorCode,
+          taskId: failed.id,
+          refundedPoints: cost,
+        })
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -715,7 +954,44 @@ export class StudioService {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        rethrowWithRefundedPoints(err, cost)
+        const failedMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(
+            applyChargeMeta(
+              {
+                ...built.meta,
+                skippedMerge,
+                voice: built.options.voice ?? options.voice ?? 'default',
+                emotion: options.emotion ?? 'neutral',
+                language: options.language ?? 'zh',
+                speed: options.speed ?? 1,
+                volume: options.volume,
+                pitch: options.pitch,
+                channelId: resolved.channelId,
+              },
+              cost,
+            ),
+            cost,
+            'platform_failed',
+          ),
+          err,
+        )
+        const failed = await this.prisma.generationRecord.create({
+          data: {
+            userId,
+            type: 'audio',
+            prompt: mergedText,
+            model: storeModel,
+            url: null,
+            status: 'failed',
+            metadata: JSON.stringify(failedMeta),
+          },
+        })
+        throwGenerationFailure({
+          userMessage: String(failedMeta.userMessage ?? '生成失败'),
+          errorCode: failedMeta.errorCode as ErrorCode,
+          taskId: failed.id,
+          refundedPoints: cost,
+        })
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       const record = await this.prisma.generationRecord.create({
@@ -904,13 +1180,16 @@ export class StudioService {
       throw new BadRequestException('不支持的生成类型')
     } catch (err) {
       if (isCancelledException(err)) {
+        const cancelledMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta(chargedMeta, platformCost, 'cancelled'),
+          err,
+          { errorCode: 'cancelled', userMessage: '已取消' },
+        )
         await this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
             status: 'failed',
-            metadata: JSON.stringify(
-              applyRefundMeta(chargedMeta, platformCost, 'cancelled'),
-            ),
+            metadata: JSON.stringify(cancelledMeta),
           },
         })
         throw err
@@ -920,16 +1199,23 @@ export class StudioService {
         rethrowWithRefundedPoints(err, platformCost)
       }
       await this.points.refund(userId, platformCost, '平台回退失败退款')
+      const failedMeta = applyFailureDiagnosticMeta(
+        applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
+        err,
+      )
       await this.prisma.generationRecord.update({
         where: { id: record.id },
         data: {
           status: 'failed',
-          metadata: JSON.stringify(
-            applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
-          ),
+          metadata: JSON.stringify(failedMeta),
         },
       })
-      rethrowWithRefundedPoints(err, platformCost)
+      throwGenerationFailure({
+        userMessage: String(failedMeta.userMessage ?? '生成失败'),
+        errorCode: failedMeta.errorCode as ErrorCode,
+        taskId: record.id,
+        refundedPoints: platformCost,
+      })
     }
   }
 
@@ -946,9 +1232,17 @@ export class StudioService {
           : this.platformFallbackCost(record.type, meta)
       await this.points.refund(userId, cost, '平台回退取消退款')
     }
+    const cancelledMeta = applyFailureDiagnosticMeta(
+      { ...meta, cancelled: true },
+      new Error('已取消'),
+      { errorCode: 'cancelled', userMessage: '已取消' },
+    )
     return this.prisma.generationRecord.update({
       where: { id: record.id },
-      data: { status: 'failed' },
+      data: {
+        status: 'failed',
+        metadata: JSON.stringify(cancelledMeta),
+      },
     })
   }
 
@@ -966,6 +1260,10 @@ export class StudioService {
       await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
       updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
     }
+    updatedMeta = applyFailureDiagnosticMeta(updatedMeta, new Error('已取消'), {
+      errorCode: 'cancelled',
+      userMessage: '已取消',
+    })
     return this.prisma.generationRecord.update({
       where: { id: record.id },
       data: {
@@ -1026,11 +1324,15 @@ export class StudioService {
         return
       }
       await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      const failedMeta = applyFailureDiagnosticMeta(
+        applyRefundMeta(meta, cost, 'platform_failed'),
+        err,
+      )
       await this.prisma.generationRecord.update({
         where: { id },
         data: {
           status: 'failed',
-          metadata: JSON.stringify(applyRefundMeta(meta, cost, 'platform_failed')),
+          metadata: JSON.stringify(failedMeta),
         },
       })
     }
