@@ -4,9 +4,12 @@ export type TaskCornerAction = 'cancel' | 'retry' | null
 
 export type TaskBadgeTone = 'running' | 'error' | 'success' | 'pending'
 
-export type TaskBadge = {
-  text: string
+export type TaskChromeView = {
+  action: TaskCornerAction
+  showSpinner: boolean
+  elapsedText: string | null
   tone: TaskBadgeTone
+  flashSuccess?: boolean
 }
 
 /** Elapsed time as m:ss. Missing/invalid startedAt → "0:00". */
@@ -20,47 +23,55 @@ export function formatElapsed(startedAt: string | undefined, nowMs: number): str
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
-/**
- * Title badge for Layout C. Status-driven (works for text/image/video/audio/shot).
- * completed only shows while completedFlash is true.
- */
-export function resolveTaskBadge(input: {
+/** Unified chrome view for circular corner controls + elapsed. */
+export function resolveTaskChrome(input: {
   status: unknown
   startedAt?: string
   nowMs: number
   completedFlash?: boolean
-}): TaskBadge | null {
+}): TaskChromeView | null {
   const { status, startedAt, nowMs, completedFlash } = input
 
   if (status === NODE_GENERATION_STATUS.generating) {
     return {
-      text: `生成中 · ${formatElapsed(startedAt, nowMs)}`,
+      action: 'cancel',
+      showSpinner: true,
+      elapsedText: formatElapsed(startedAt, nowMs),
       tone: 'running',
     }
   }
 
   if (status === NODE_GENERATION_STATUS.error || status === NODE_GENERATION_STATUS.failed) {
-    return { text: '失败', tone: 'error' }
+    return {
+      action: 'retry',
+      showSpinner: false,
+      elapsedText: null,
+      tone: 'error',
+    }
   }
 
   if (status === NODE_GENERATION_STATUS.fallback_pending) {
-    return { text: '待确认', tone: 'pending' }
+    return {
+      action: null,
+      showSpinner: false,
+      elapsedText: null,
+      tone: 'pending',
+    }
   }
 
   if (status === NODE_GENERATION_STATUS.completed) {
-    if (completedFlash) return { text: '已完成', tone: 'success' }
+    if (completedFlash) {
+      return {
+        action: null,
+        showSpinner: false,
+        elapsedText: null,
+        tone: 'success',
+        flashSuccess: true,
+      }
+    }
     return null
   }
 
-  return null
-}
-
-/** Corner action: cancel while generating, retry on error/failed. */
-export function resolveCornerAction(status: unknown): TaskCornerAction {
-  if (status === NODE_GENERATION_STATUS.generating) return 'cancel'
-  if (status === NODE_GENERATION_STATUS.error || status === NODE_GENERATION_STATUS.failed) {
-    return 'retry'
-  }
   return null
 }
 

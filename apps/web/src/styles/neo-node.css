@@ -56,23 +56,7 @@
   white-space: nowrap;
 }
 
-.neo-task-badge {
-  margin-left: 6px;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  border-radius: 999px;
-  padding: 1px 7px;
-  font-size: 10px;
-  font-weight: 600;
-}
-.neo-task-badge.is-running { background: rgba(59,130,246,0.2); color: #93c5fd; }
-.neo-task-badge.is-error { background: rgba(239,68,68,0.2); color: #fca5a5; }
-.neo-task-badge.is-success { background: rgba(34,197,94,0.2); color: #86efac; }
-.neo-task-badge.is-pending { background: rgba(245,158,11,0.2); color: #fcd34d; }
-
-.neo-task-corner {
+.neo-task-chrome {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -84,24 +68,112 @@
   max-width: 70%;
 }
 
-.neo-task-corner-btn {
+.neo-task-chrome-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.neo-task-elapsed {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #93c5fd;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.neo-task-chrome-btn {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
   border: none;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  cursor: pointer;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  cursor: default;
+  transition:
+    transform 0.15s ease,
+    background 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.neo-task-corner-btn.is-cancel {
-  background: #fff;
-  color: #111;
+.neo-task-chrome-btn.is-clickable {
+  cursor: pointer;
 }
 
-.neo-task-corner-btn.is-retry {
+.neo-task-chrome-btn.is-clickable:hover {
+  transform: scale(1.05);
+}
+
+.neo-task-chrome-btn.is-running {
+  background: #111;
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+.neo-task-chrome-btn.is-running.is-clickable:hover {
+  background: #333;
+}
+
+.neo-task-chrome-btn.is-error {
   background: #ef4444;
   color: #fff;
+}
+
+.neo-task-chrome-btn.is-error.is-clickable:hover {
+  background: #dc2626;
+}
+
+.neo-task-chrome-btn.is-pending {
+  background: rgba(245, 158, 11, 0.95);
+  color: #fff;
+}
+
+.neo-task-chrome-btn.is-success,
+.neo-task-chrome-btn.is-flash {
+  background: rgba(34, 197, 94, 0.95);
+  color: #fff;
+}
+
+.neo-task-chrome-btn.is-flash {
+  animation: neo-task-flash 2s ease-out forwards;
+}
+
+@keyframes neo-task-flash {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+
+.neo-task-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: neo-task-spin 0.8s linear infinite;
+}
+
+@keyframes neo-task-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .neo-task-error {
