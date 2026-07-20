@@ -9,7 +9,7 @@ import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; prompt?: string; label?: string; errorMessage?: string }
+  data: { url?: string; status: string; prompt?: string; label?: string; errorMessage?: string; generationStartedAt?: string }
 }>()
 
 const editor = useCanvasEditorStore()

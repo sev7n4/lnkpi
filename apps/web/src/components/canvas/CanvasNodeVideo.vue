@@ -8,7 +8,7 @@ import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; duration?: number; label?: string; errorMessage?: string }
+  data: { url?: string; status: string; duration?: number; label?: string; errorMessage?: string; generationStartedAt?: string }
 }>()
 
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))

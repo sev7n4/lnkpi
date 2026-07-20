@@ -7,7 +7,7 @@ import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
 
 const props = defineProps<{
   selected?: boolean
-  data: { content: string; label?: string; status?: string; errorMessage?: string }
+  data: { content: string; label?: string; status?: string; errorMessage?: string; generationStartedAt?: string }
 }>()
 
 const nodeId = useNodeId()

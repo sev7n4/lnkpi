@@ -11,6 +11,7 @@ defineProps<{
     coverUrl?: string
     label?: string
     errorMessage?: string
+    generationStartedAt?: string
   }
 }>()
 </script>
