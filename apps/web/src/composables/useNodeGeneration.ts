@@ -36,9 +36,11 @@ import {
 import {
   extractRefundedPointsFromError,
   formatCancelledMessage,
-  formatGenerationFailureMessage,
-  parseRefundedPointsFromMetadata,
 } from '@/utils/generationPointsMessage'
+import {
+  buildPollingFailurePatch,
+  parseShortGenerationError,
+} from '@/utils/generationDiagnostic'
 import { useAuthStore } from '@/stores/auth'
 
 export type FallbackConfirmDecision = 'confirm' | 'cancel'
@@ -211,13 +213,17 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
     if (isAbortError(err)) return
-    const errorMessage = formatGenerationFailureMessage(err, refundedPoints)
-    if (errorMessage.includes('积分不足')) deps.onInsufficientPoints?.()
+    const short = parseShortGenerationError(err)
+    if (short.userMessage.includes('积分不足')) deps.onInsufficientPoints?.()
     if (!nodeAcceptsWrite(nodeId)) return
-    deps.patchNodeData(nodeId, {
+    const patch: Record<string, unknown> = {
       status: NODE_GENERATION_STATUS.error,
-      errorMessage,
-    })
+      errorMessage: short.userMessage,
+    }
+    if (short.errorCode) patch.errorCode = short.errorCode
+    if (short.taskKind === 'generation' && short.taskId) patch.generationRecordId = short.taskId
+    if (short.taskKind === 'material' && short.taskId) patch.materialId = short.taskId
+    deps.patchNodeData(nodeId, patch)
   }
 
   function isNodeBusy(nodeId: string): boolean {
@@ -442,16 +448,13 @@ async function cancelRemoteGeneration(nodeId: string) {
       deps.startGenerationPolling([{ recordId: record.id, nodeId }])
       return true
     }
-    deps.patchNodeData(nodeId, {
-      status: NODE_GENERATION_STATUS.error,
-      errorMessage: (() => {
-        const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
-        return refundedPoints
-          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
-          : '生成失败'
-      })(),
-      generationRecordId: record.id,
-    })
+    deps.patchNodeData(
+      nodeId,
+      buildPollingFailurePatch({
+        metadata: record.metadata,
+        generationRecordId: record.id,
+      }),
+    )
     return true
   }
 

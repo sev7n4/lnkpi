@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { TaskKind } from '@lnkpi/shared'
+import DockFailureChip from './DockFailureChip.vue'
 import DockTypeIcon from './DockTypeIcon.vue'
 import { DOCK_TYPE_LABELS, dockTypeToIcon } from './dockIcons'
 
@@ -12,6 +14,14 @@ const props = defineProps<{
   title?: string
   titlePlaceholder?: string
   readonly?: boolean
+  /** Selected node id — enables quiet failure chip under header */
+  failureNodeId?: string
+  failureStatus?: unknown
+  failureMessage?: string
+  failureErrorCode?: string
+  failureTaskKind?: TaskKind
+  failureTaskId?: string
+  failureNodeLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +34,8 @@ const tooltip = computed(() => {
   if (props.type && DOCK_TYPE_LABELS[props.type]) return DOCK_TYPE_LABELS[props.type]
   return props.typeLabel ?? '节点'
 })
+
+const showDefaultFailureChip = computed(() => Boolean(props.failureNodeId))
 </script>
 
 <template>
@@ -52,6 +64,18 @@ const tooltip = computed(() => {
         </svg>
       </button>
     </div>
+    <slot name="failure">
+      <DockFailureChip
+        v-if="showDefaultFailureChip && failureNodeId"
+        :node-id="failureNodeId"
+        :status="failureStatus"
+        :error-message="failureMessage"
+        :error-code="failureErrorCode"
+        :task-kind="failureTaskKind"
+        :task-id="failureTaskId"
+        :node-label="failureNodeLabel"
+      />
+    </slot>
     <slot />
   </div>
 </template>

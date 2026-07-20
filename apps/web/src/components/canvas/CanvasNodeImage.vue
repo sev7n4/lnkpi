@@ -4,15 +4,41 @@ import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 
 const props = defineProps<{
   id: string
   selected?: boolean
-  data: { url?: string; status: string; prompt?: string; label?: string; errorMessage?: string; generationStartedAt?: string }
+  data: {
+    url?: string
+    status: string
+    prompt?: string
+    label?: string
+    errorMessage?: string
+    errorCode?: string
+    generationStartedAt?: string
+    generationRecordId?: string
+    materialId?: string
+  }
 }>()
 
 const editor = useCanvasEditorStore()
+const route = useRoute()
+const sessionId = computed(() => route.params.sessionId as string | undefined)
+const taskId = computed(
+  () =>
+    (typeof props.data.generationRecordId === 'string' && props.data.generationRecordId) ||
+    (typeof props.data.materialId === 'string' && props.data.materialId) ||
+    undefined,
+)
+const taskKind = computed(() =>
+  typeof props.data.generationRecordId === 'string' && props.data.generationRecordId
+    ? ('generation' as const)
+    : typeof props.data.materialId === 'string' && props.data.materialId
+      ? ('material' as const)
+      : undefined,
+)
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
 const {
   accept,
@@ -113,6 +139,11 @@ function openEdit() {
         :status="data.status"
         :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
         :error-message="data.errorMessage as string | undefined"
+        :error-code="data.errorCode as string | undefined"
+        :task-kind="taskKind"
+        :task-id="taskId"
+        :node-label="typeof data.label === 'string' ? data.label : undefined"
+        :session-id="sessionId"
       />
     </div>
   </NeoBaseNode>

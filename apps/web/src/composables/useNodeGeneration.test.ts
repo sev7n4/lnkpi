@@ -156,6 +156,68 @@ describe('useNodeGeneration', () => {
     expect(mockRefreshPoints).toHaveBeenCalled()
   })
 
+  it('persists short failure errorCode and generationRecordId from structured axios error', async () => {
+    const node = createNode('image', {
+      prompt: 'a cat',
+      generationRecordId: 'rec-existing',
+    })
+    vi.mocked(studioApi.generateImage).mockRejectedValue({
+      response: {
+        data: {
+          message: '上游超时',
+          errorCode: 'upstream_timeout',
+          taskKind: 'generation',
+          taskId: 'rec-timeout-1',
+        },
+      },
+    })
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '上游超时',
+        errorCode: 'upstream_timeout',
+        generationRecordId: 'rec-timeout-1',
+      }),
+    )
+  })
+
+  it('keeps existing generationRecordId when structured error omits taskId', async () => {
+    const node = createNode('image', {
+      prompt: 'a cat',
+      generationRecordId: 'rec-keep-me',
+    })
+    vi.mocked(studioApi.generateImage).mockRejectedValue({
+      response: {
+        data: {
+          message: '上游错误',
+          errorCode: 'upstream_error',
+        },
+      },
+    })
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '上游错误',
+        errorCode: 'upstream_error',
+      }),
+    )
+    const errorPatch = deps.patchNodeData.mock.calls.find(
+      (call) => call[1]?.status === NODE_GENERATION_STATUS.error,
+    )?.[1] as Record<string, unknown>
+    expect(errorPatch).not.toHaveProperty('generationRecordId')
+    expect(node.data?.generationRecordId).toBe('rec-keep-me')
+  })
+
   it('refreshes points after successful generation', async () => {
     const node = createNode('image', { prompt: 'a cat' })
     const { api } = createDeps([node])
@@ -383,6 +445,41 @@ describe('useNodeGeneration', () => {
         status: NODE_GENERATION_STATUS.error,
         errorMessage: '生成失败，10 积分已返回',
         generationRecordId: 'rec-failed-refund',
+      }),
+    )
+  })
+
+  it('applyStudioRecord failed persists errorCode from metadata', async () => {
+    const node = createNode('image', {
+      prompt: 'failed image',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    })
+    vi.mocked(studioApi.generateImage).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          id: 'rec-failed-code',
+          type: 'image',
+          prompt: 'failed image',
+          status: NODE_GENERATION_STATUS.failed,
+          url: null,
+          metadata: JSON.stringify({ errorCode: 'upstream_timeout', refundedPoints: 5 }),
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    )
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '生成失败，5 积分已返回',
+        errorCode: 'upstream_timeout',
+        generationRecordId: 'rec-failed-code',
       }),
     )
   })

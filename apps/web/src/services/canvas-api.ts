@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { GenerationRefPayload, VideoSettings } from '@lnkpi/shared'
+import type { GenerationDiagnostic, GenerationRefPayload, VideoSettings } from '@lnkpi/shared'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerSaveRequest,
@@ -78,4 +78,8 @@ export const canvasApi = {
   cancelMaterialPlatformFallback: (id: string) =>
     api.post(`/agent/canvas/material/${id}/cancel-platform-fallback`),
   cancelMaterial: (id: string) => api.post(`/agent/canvas/material/${id}/cancel`),
+  getMaterialDiagnostic: (id: string) =>
+    api
+      .get<{ data: GenerationDiagnostic }>(`/agent/canvas/material/${id}/diagnostic`)
+      .then((r) => r.data.data),
 }

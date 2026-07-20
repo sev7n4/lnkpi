@@ -470,6 +470,13 @@ export class CanvasController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Get('material/:id/diagnostic')
+  @UseGuards(AuthGuard)
+  async materialDiagnostic(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    const data = await this.materialService.getMaterialDiagnostic(req.user.sub, id)
+    return { data }
+  }
+
   @Get('shot/status/batch')
   @UseGuards(AuthGuard)
   async statusBatch(@Query('ids') ids: string) {
