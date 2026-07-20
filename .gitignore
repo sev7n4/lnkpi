@@ -11,6 +11,10 @@ coverage
 *.tsbuildinfo
 uploads/
 
+# Superpowers / worktrees
+.superpowers/
+.worktrees/
+
 # Prisma
 apps/server/prisma/*.db
 apps/server/prisma/*.db-journal

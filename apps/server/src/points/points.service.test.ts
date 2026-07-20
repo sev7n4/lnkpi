@@ -55,4 +55,40 @@ describe('PointsService', () => {
     )
     expect(create).not.toHaveBeenCalled()
   })
+
+  it('increments points and writes positive transaction on refund', async () => {
+    const updateMany = vi.fn(async () => ({ count: 1 }))
+    const create = vi.fn(async (args: { data: Record<string, unknown> }) => ({ id: 'pt2', ...args.data }))
+    const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ user: { updateMany }, pointTransaction: { create } }),
+    )
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        PointsService,
+        { provide: PrismaService, useValue: { $transaction } },
+      ],
+    }).compile()
+
+    await moduleRef.get(PointsService).refund('u1', 5, '文本生成退款')
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: { points: { increment: 5 } },
+    })
+    expect(create).toHaveBeenCalledWith({
+      data: { userId: 'u1', amount: 5, reason: '文本生成退款' },
+    })
+  })
+
+  it('no-ops when refund amount <= 0', async () => {
+    const $transaction = vi.fn()
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        PointsService,
+        { provide: PrismaService, useValue: { $transaction } },
+      ],
+    }).compile()
+    await moduleRef.get(PointsService).refund('u1', 0, 'x')
+    expect($transaction).not.toHaveBeenCalled()
+  })
 })
