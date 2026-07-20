@@ -111,6 +111,7 @@ export class StudioService {
     downstreamType: 'text' | 'image' | 'video' | 'audio',
     mentionedKeys?: string[],
     credentials?: { apiKey?: string; baseUrl?: string },
+    model?: string,
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
@@ -119,6 +120,7 @@ export class StudioService {
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
+      model,
     })
     return {
       mergedText,
@@ -187,22 +189,29 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
     cancel?: CancelFlag,
+    thinking?: boolean,
+    thinkingEffort?: 'high' | 'max',
   ) {
     const cost = 5
     const chargeReason = '文本生成'
     await this.points.consume(userId, cost, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
+    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
+    const gatewayModelId =
+      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'text',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      gatewayModelId,
     )
-    const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
-    const gatewayModelId =
-      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
+    const textOpts = {
+      thinking: !!thinking,
+      thinkingEffort: thinkingEffort === 'max' ? ('max' as const) : ('high' as const),
+    }
     const baseMeta = {
       modelKey: resolvedKey,
       gatewayModelId,
@@ -211,6 +220,8 @@ export class StudioService {
       refsCount: refs?.length ?? 0,
       visionUsed: referenceImages.length > 0,
       referenceImages,
+      thinking: textOpts.thinking,
+      thinkingEffort: textOpts.thinking ? textOpts.thinkingEffort : undefined,
       ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
     }
 
@@ -226,7 +237,7 @@ export class StudioService {
               apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
               baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
             })
-          : await createTextProvider(opts).generate(mergedText, gatewayModelId)
+          : await createTextProvider(opts).generate(mergedText, gatewayModelId, textOpts)
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
         throwCancelledException(cost)
@@ -369,6 +380,7 @@ export class StudioService {
       'image',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      resolved.modelName,
     )
     const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
     const built = buildImageProviderOptions({
@@ -552,6 +564,7 @@ export class StudioService {
       'video',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      resolved.modelName,
     )
     const built = buildVideoProviderOptions({
       modelKey: resolved.modelName,
@@ -638,6 +651,7 @@ export class StudioService {
       'audio',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
+      resolved.modelName,
     )
     const built = buildAudioRequest({
       mergedText,

@@ -1,5 +1,32 @@
+export type TextThinkingEffort = 'high' | 'max'
+
+export type TextGenerateOptions = {
+  thinking?: boolean
+  thinkingEffort?: TextThinkingEffort
+}
+
 export interface TextProvider {
-  generate(prompt: string, model?: string): Promise<{ text: string }>
+  generate(prompt: string, model?: string, options?: TextGenerateOptions): Promise<{ text: string }>
+}
+
+/** Match deepseek-v4 / deepseek-v4-pro / channel::deepseek-v4-flash / provider/deepseek-v4-pro */
+export function isDeepSeekV4Model(model?: string | null): boolean {
+  if (!model) return false
+  return /deepseek-v4/i.test(model)
+}
+
+/** Extra chat.completions fields for DeepSeek V4 thinking control. */
+export function buildDeepSeekThinkingFields(
+  options?: TextGenerateOptions,
+): Record<string, unknown> {
+  if (!options?.thinking) {
+    return { thinking: { type: 'disabled' } }
+  }
+  const effort = options.thinkingEffort === 'max' ? 'max' : 'high'
+  return {
+    thinking: { type: 'enabled' },
+    reasoning_effort: effort,
+  }
 }
 
 export class PlaceholderTextProvider implements TextProvider {
@@ -17,21 +44,27 @@ export class OpenAITextProvider implements TextProvider {
     private model = 'gpt-4o',
   ) {}
 
-  async generate(prompt: string, model?: string): Promise<{ text: string }> {
+  async generate(prompt: string, model?: string, options?: TextGenerateOptions): Promise<{ text: string }> {
+    const resolvedModel = model ?? this.model
+    const body: Record<string, unknown> = {
+      model: resolvedModel,
+      messages: [
+        { role: 'system', content: '你是专业 AI 创作助手，擅长脚本、旁白与分镜描述。用中文回复，结构清晰。' },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.8,
+    }
+    if (isDeepSeekV4Model(resolvedModel)) {
+      Object.assign(body, buildDeepSeekThinkingFields(options))
+    }
+
     const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({
-        model: model ?? this.model,
-        messages: [
-          { role: 'system', content: '你是专业 AI 创作助手，擅长脚本、旁白与分镜描述。用中文回复，结构清晰。' },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.8,
-      }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error(`Text API ${res.status}: ${await res.text()}`)
     const json = await res.json() as { choices: Array<{ message: { content: string } }> }

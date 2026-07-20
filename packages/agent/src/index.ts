@@ -2,11 +2,18 @@ export { CanvasAgent, RuleBasedAgent, OpenAIAgent } from './agent'
 export { CANVAS_TOOLS } from './tools/canvas-tools'
 export { CanvasToolExecutor, applyCanvasActions } from './tools/executor'
 export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } from './tools/image-provider'
-export { createTextProvider, PlaceholderTextProvider, OpenAITextProvider } from './tools/text-provider'
+export {
+  createTextProvider,
+  PlaceholderTextProvider,
+  OpenAITextProvider,
+  isDeepSeekV4Model,
+  buildDeepSeekThinkingFields,
+} from './tools/text-provider'
+
 export { createVideoProvider, PlaceholderVideoProvider, AgnesVideoProvider, resolveVideoParams } from './tools/video-provider'
 export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, FallbackAudioProvider } from './tools/audio-provider'
 export type { ImageProvider, ProviderCredentialOpts } from './tools/image-provider'
-export type { TextProvider } from './tools/text-provider'
+export type { TextProvider, TextGenerateOptions, TextThinkingEffort } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'
 export type { AgentStreamEvent, AgentMessage, AgentToolCall, AgentContext, AgentToolDefinition } from './types'

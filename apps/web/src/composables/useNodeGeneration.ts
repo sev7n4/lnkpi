@@ -539,12 +539,16 @@ async function cancelRemoteGeneration(nodeId: string) {
           status: NODE_GENERATION_STATUS.generating,
           prompt: local,
         })
+        const thinking = data.textThinking === true
+        const thinkingEffort = data.textThinkingEffort === 'max' ? 'max' : 'high'
         const { data: res } = await studioApi.generateText(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
           refs,
           mentionedKeys,
           signal,
+          thinking,
+          thinking ? thinkingEffort : undefined,
         )
         if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)

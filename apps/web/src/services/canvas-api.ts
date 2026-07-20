@@ -29,16 +29,20 @@ export const canvasApi = {
       mentionedKeys?: string[]
     },
   ) =>
-    api.post('/agent/canvas/material/generate-image', {
-      shotId,
-      prompt,
-      model: opts?.model,
-      aspectRatio: opts?.aspectRatio,
-      resolution: opts?.resolution,
-      count: 1,
-      refs: opts?.refs,
-      mentionedKeys: opts?.mentionedKeys,
-    }),
+    api.post(
+      '/agent/canvas/material/generate-image',
+      {
+        shotId,
+        prompt,
+        model: opts?.model,
+        aspectRatio: opts?.aspectRatio,
+        resolution: opts?.resolution,
+        count: 1,
+        refs: opts?.refs,
+        mentionedKeys: opts?.mentionedKeys,
+      },
+      { timeout: 300_000 },
+    ),
   generateVideo: (
     shotId: string,
     prompt: string,

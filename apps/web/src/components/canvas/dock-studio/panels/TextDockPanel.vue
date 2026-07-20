@@ -14,7 +14,7 @@ import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vu
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveGenerationModel } from '@/constants/studioModels'
+import { resolveGenerationModel, isDeepSeekV4Model } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateTextCredits } from '@/constants/credits'
 
@@ -38,6 +38,8 @@ const emit = defineEmits<{
 /** Dock input only — never sync from generated `content` after prompt exists. */
 const prompt = ref('')
 const textModel = ref(getConfig('text').model)
+const textThinking = ref(false)
+const textThinkingEffort = ref<'high' | 'max'>('high')
 /** One-shot legacy content→prompt seed for the current node visit. */
 const legacySeededForId = ref<string | null>(null)
 
@@ -45,6 +47,7 @@ const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
+const showThinkingControls = computed(() => isDeepSeekV4Model(textModel.value))
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -60,6 +63,8 @@ function syncFromNode() {
   }
 
   textModel.value = resolveGenerationModel('text', data.textModel as string | undefined)
+  textThinking.value = data.textThinking === true
+  textThinkingEffort.value = data.textThinkingEffort === 'max' ? 'max' : 'high'
 }
 
 watch(
@@ -71,7 +76,13 @@ watch(
   { immediate: true },
 )
 watch(
-  () => [props.node.data?.prompt, props.node.data?.textModel] as const,
+  () =>
+    [
+      props.node.data?.prompt,
+      props.node.data?.textModel,
+      props.node.data?.textThinking,
+      props.node.data?.textThinkingEffort,
+    ] as const,
   () => syncFromNode(),
 )
 
@@ -85,8 +96,27 @@ function onOptimized(value: string) {
   emit('patch', { prompt: value })
 }
 
+function setThinking(enabled: boolean) {
+  textThinking.value = enabled
+  emit('patch', {
+    textThinking: enabled,
+    textThinkingEffort: enabled ? textThinkingEffort.value : undefined,
+  })
+}
+
+function setThinkingEffort(effort: 'high' | 'max') {
+  textThinkingEffort.value = effort
+  emit('patch', { textThinking: true, textThinkingEffort: effort })
+}
+
 function onGenerate() {
-  emit('patch', { prompt: prompt.value, textModel: textModel.value })
+  emit('patch', {
+    prompt: prompt.value,
+    textModel: textModel.value,
+    textThinking: showThinkingControls.value ? textThinking.value : false,
+    textThinkingEffort:
+      showThinkingControls.value && textThinking.value ? textThinkingEffort.value : undefined,
+  })
   emit('generate')
 }
 
@@ -134,6 +164,41 @@ function onRefRemove(ref: NodeRef) {
         type="text"
         @update:model-value="emit('patch', { textModel: $event })"
       />
+      <div
+        v-if="showThinkingControls"
+        class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1"
+      >
+        <button
+          type="button"
+          class="text-[10px] transition"
+          :class="textThinking ? 'text-[#818cf8]' : 'text-white/50 hover:text-white/70'"
+          :disabled="readonly"
+          title="深度思考（DeepSeek V4）"
+          @click="setThinking(!textThinking)"
+        >
+          深度思考 {{ textThinking ? '开' : '关' }}
+        </button>
+        <template v-if="textThinking">
+          <button
+            type="button"
+            class="rounded px-1.5 py-0.5 text-[10px] transition"
+            :class="textThinkingEffort === 'high' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45 hover:bg-white/10'"
+            :disabled="readonly"
+            @click="setThinkingEffort('high')"
+          >
+            high
+          </button>
+          <button
+            type="button"
+            class="rounded px-1.5 py-0.5 text-[10px] transition"
+            :class="textThinkingEffort === 'max' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45 hover:bg-white/10'"
+            :disabled="readonly"
+            @click="setThinkingEffort('max')"
+          >
+            max
+          </button>
+        </template>
+      </div>
       <DockOptimizePrompt
         :prompt="prompt"
         optimize-style="copywriting"

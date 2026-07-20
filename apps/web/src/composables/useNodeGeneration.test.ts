@@ -648,6 +648,8 @@ describe('useNodeGeneration', () => {
       [],
       [],
       expect.any(AbortSignal),
+      false,
+      undefined,
     )
     expect(deps.patchNodeData).toHaveBeenCalledWith(
       'text-1',

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
-import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { createCancelFlag } from '../points/charge-session'
 import { StudioService } from './studio.service'
@@ -155,6 +155,14 @@ class GenerateTextDto {
   @IsArray()
   @IsString({ each: true })
   mentionedKeys?: string[]
+
+  @IsOptional()
+  @IsBoolean()
+  thinking?: boolean
+
+  @IsOptional()
+  @IsIn(['high', 'max'])
+  thinkingEffort?: 'high' | 'max'
 }
 
 class GeneratePromptDto {
@@ -204,6 +212,8 @@ export class StudioController {
       dto.refs,
       dto.mentionedKeys,
       cancel,
+      dto.thinking,
+      dto.thinkingEffort,
     )
     return { code: 0, message: 'ok', data }
   }

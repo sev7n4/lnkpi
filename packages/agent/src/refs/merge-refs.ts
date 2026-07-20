@@ -1,3 +1,5 @@
+import { buildDeepSeekThinkingFields, isDeepSeekV4Model } from '../tools/text-provider'
+
 export interface MergeTextSource {
   refKey: string
   label: string
@@ -72,18 +74,25 @@ export async function mergeRefsToPrompt(input: {
     return { mergedText: fallbackConcat(entries), skippedMerge: false }
   }
 
+  const model = input.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
+  const body: Record<string, unknown> = {
+    model,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: buildSystemPrompt(input.downstreamType, input.mentionedKeys) },
+      { role: 'user', content: buildMergeUserMessage(entries, input.downstreamType, input.mentionedKeys) },
+    ],
+  }
+  // Merge is latency-sensitive: always disable DeepSeek V4 thinking when applicable.
+  if (isDeepSeekV4Model(model)) {
+    Object.assign(body, buildDeepSeekThinkingFields({ thinking: false }))
+  }
+
   const baseUrl = (input.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '')
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model: input.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o',
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: buildSystemPrompt(input.downstreamType, input.mentionedKeys) },
-        { role: 'user', content: buildMergeUserMessage(entries, input.downstreamType, input.mentionedKeys) },
-      ],
-    }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) {
     throw new Error(`LLM 请求失败: ${res.status} ${res.statusText}`)
