@@ -10,10 +10,8 @@ import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
 import {
   buildCopyForNode,
-  createDiagnosticCache,
+  sharedDiagnosticCache,
 } from '@/utils/generationDiagnostic'
-
-const diagnosticCache = createDiagnosticCache()
 
 const props = defineProps<{
   status?: unknown
@@ -141,7 +139,7 @@ async function fetchDiagnostic(): Promise<GenerationDiagnostic> {
   const taskKind = props.taskKind
   if (!taskId || !taskKind) return buildFallbackDiagnostic()
 
-  return diagnosticCache.get(taskKind, taskId, () =>
+  return sharedDiagnosticCache.get(taskKind, taskId, () =>
     taskKind === 'material'
       ? canvasApi.getMaterialDiagnostic(taskId)
       : studioApi.getGenerationDiagnostic(taskId),

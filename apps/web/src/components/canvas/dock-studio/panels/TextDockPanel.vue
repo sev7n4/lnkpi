@@ -5,6 +5,7 @@ import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
@@ -45,6 +46,7 @@ const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const failureBind = computed(() => dockFailureBindFromNode(props.node))
 const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
 const showThinkingControls = computed(() => isDeepSeekV4Model(textModel.value))
@@ -143,7 +145,7 @@ function onRefRemove(ref: NodeRef) {
 </script>
 
 <template>
-  <DockToolbarShell type="text" @close="emit('close')">
+  <DockToolbarShell type="text" v-bind="failureBind" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
       @reorder="onRefReorder"

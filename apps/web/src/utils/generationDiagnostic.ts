@@ -124,3 +124,6 @@ export function createDiagnosticCache(): DiagnosticCache {
     },
   }
 }
+
+/** Session-scoped cache shared by node ⓘ popover and Dock failure chip. */
+export const sharedDiagnosticCache = createDiagnosticCache()

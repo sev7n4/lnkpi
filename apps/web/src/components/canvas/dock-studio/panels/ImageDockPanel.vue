@@ -10,6 +10,7 @@ import ImageParamsSelector, {
   type ImageResolution,
 } from '@/components/canvas/ImageParamsSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
@@ -53,6 +54,7 @@ const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const failureBind = computed(() => dockFailureBindFromNode(props.node))
 const credits = computed(() => estimateImageCredits(imageCount.value))
 
 const effectiveRefUrl = computed(() => {
@@ -217,7 +219,7 @@ function clearReferenceImage() {
 </script>
 
 <template>
-  <DockToolbarShell type="image" @close="emit('close')">
+  <DockToolbarShell type="image" v-bind="failureBind" @close="emit('close')">
     <DockRefStrip
       :refs="stripRefs"
       @reorder="onRefReorder"

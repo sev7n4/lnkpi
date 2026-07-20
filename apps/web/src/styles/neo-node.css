@@ -766,6 +766,49 @@
   min-height: 24px;
 }
 
+/* Quiet ~28px failure capsule under dock header (C2) */
+.dock-failure-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  margin-bottom: 8px;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(248, 113, 113, 0.28);
+  background: rgba(248, 113, 113, 0.1);
+  color: rgba(254, 226, 226, 0.92);
+  font-size: 12px;
+  line-height: 1;
+  min-width: 0;
+}
+
+.dock-failure-chip__msg {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-failure-chip__copy {
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dock-failure-chip__copy:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.92);
+}
+
 .bottom-toolbar-type-icon {
   display: inline-flex;
   width: 24px;
