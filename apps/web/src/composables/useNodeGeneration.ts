@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import type { VideoSettings } from '@lnkpi/shared'
+import type { ErrorCode, VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
@@ -39,6 +39,7 @@ import {
   formatGenerationFailureMessage,
   parseRefundedPointsFromMetadata,
 } from '@/utils/generationPointsMessage'
+import { parseShortGenerationError } from '@/utils/generationDiagnostic'
 import { useAuthStore } from '@/stores/auth'
 
 export type FallbackConfirmDecision = 'confirm' | 'cancel'
@@ -172,6 +173,18 @@ function parseConfirmMessage(metadata?: string | null): string | undefined {
   }
 }
 
+function parseErrorCodeFromMetadata(metadata?: string | null): ErrorCode | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as { errorCode?: unknown }
+    return parseShortGenerationError({
+      response: { data: { errorCode: meta.errorCode } },
+    }).errorCode
+  } catch {
+    return undefined
+  }
+}
+
 function modalityForNodeType(nodeType: string): StudioModality | null {
   if (nodeType === 'image') return 'image'
   if (nodeType === 'video') return 'video'
@@ -211,13 +224,17 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
     if (isAbortError(err)) return
-    const errorMessage = formatGenerationFailureMessage(err, refundedPoints)
-    if (errorMessage.includes('积分不足')) deps.onInsufficientPoints?.()
+    const short = parseShortGenerationError(err)
+    if (short.userMessage.includes('积分不足')) deps.onInsufficientPoints?.()
     if (!nodeAcceptsWrite(nodeId)) return
-    deps.patchNodeData(nodeId, {
+    const patch: Record<string, unknown> = {
       status: NODE_GENERATION_STATUS.error,
-      errorMessage,
-    })
+      errorMessage: short.userMessage,
+    }
+    if (short.errorCode) patch.errorCode = short.errorCode
+    if (short.taskKind === 'generation' && short.taskId) patch.generationRecordId = short.taskId
+    if (short.taskKind === 'material' && short.taskId) patch.materialId = short.taskId
+    deps.patchNodeData(nodeId, patch)
   }
 
   function isNodeBusy(nodeId: string): boolean {
@@ -442,16 +459,17 @@ async function cancelRemoteGeneration(nodeId: string) {
       deps.startGenerationPolling([{ recordId: record.id, nodeId }])
       return true
     }
-    deps.patchNodeData(nodeId, {
+    const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
+    const errorCode = parseErrorCodeFromMetadata(record.metadata)
+    const patch: Record<string, unknown> = {
       status: NODE_GENERATION_STATUS.error,
-      errorMessage: (() => {
-        const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
-        return refundedPoints
-          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
-          : '生成失败'
-      })(),
+      errorMessage: refundedPoints
+        ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
+        : '生成失败',
       generationRecordId: record.id,
-    })
+    }
+    if (errorCode) patch.errorCode = errorCode
+    deps.patchNodeData(nodeId, patch)
     return true
   }
 
