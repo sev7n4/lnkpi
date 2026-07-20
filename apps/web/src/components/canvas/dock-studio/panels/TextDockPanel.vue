@@ -35,9 +35,11 @@ const emit = defineEmits<{
   removeRef: [ref: NodeRef]
 }>()
 
-/** Dock input only — never sync from generated `content`. */
+/** Dock input only — never sync from generated `content` after prompt exists. */
 const prompt = ref('')
 const textModel = ref(getConfig('text').model)
+/** One-shot legacy content→prompt seed for the current node visit. */
+const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
@@ -46,21 +48,28 @@ const credits = computed(() => estimateTextCredits())
 
 function syncFromNode() {
   const data = props.node.data ?? {}
-  // Prefer explicit prompt; fall back to content only when prompt was never set (legacy nodes).
-  const storedPrompt = String(data.prompt ?? '').trim()
-  const storedContent = String(data.content ?? '').trim()
-  if (storedPrompt) {
-    prompt.value = String(data.prompt ?? '')
-  } else if (!storedContent) {
-    prompt.value = ''
-  } else if (!prompt.value.trim()) {
-    // Legacy: older nodes used content as the only field; seed dock once without coupling.
-    prompt.value = storedContent
+  const nodeId = props.node.id
+
+  // Prefer `prompt` whenever the key is present as a string — including "" after clear.
+  // Only fall back to `content` when `prompt` is truly absent (legacy nodes).
+  if (typeof data.prompt === 'string') {
+    prompt.value = data.prompt
+  } else if (legacySeededForId.value !== nodeId) {
+    prompt.value = String(data.content ?? '')
+    legacySeededForId.value = nodeId
   }
+
   textModel.value = resolveGenerationModel('text', data.textModel as string | undefined)
 }
 
-watch(() => props.node.id, syncFromNode, { immediate: true })
+watch(
+  () => props.node.id,
+  () => {
+    legacySeededForId.value = null
+    syncFromNode()
+  },
+  { immediate: true },
+)
 watch(
   () => [props.node.data?.prompt, props.node.data?.textModel] as const,
   () => syncFromNode(),
