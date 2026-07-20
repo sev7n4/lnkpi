@@ -1,5 +1,5 @@
 import { api } from './api'
-import type { GenerationRefPayload } from '@lnkpi/shared'
+import type { GenerationDiagnostic, GenerationRefPayload } from '@lnkpi/shared'
 
 export type StudioRefPayload = GenerationRefPayload
 
@@ -92,4 +92,8 @@ export const studioApi = {
     api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/cancel-platform-fallback`),
   cancelGeneration: (id: string) =>
     api.post<{ data: GenerationRecord }>(`/studio/generations/${id}/cancel`),
+  getGenerationDiagnostic: (id: string) =>
+    api
+      .get<{ data: GenerationDiagnostic }>(`/studio/generations/${id}/diagnostic`)
+      .then((r) => r.data.data),
 }
