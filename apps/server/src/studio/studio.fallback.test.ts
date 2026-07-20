@@ -422,7 +422,7 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(pointsRefund).not.toHaveBeenCalled()
   })
 
-  it('text: client abort after generate → refund and throw 已取消', async () => {
+  it('text: client abort after generate → refund once and throw 已取消', async () => {
     resolveForGeneration.mockResolvedValue(platformResolved)
     textGenerate.mockReset()
     textGenerate.mockResolvedValue({ text: 'done' })
@@ -439,6 +439,68 @@ describe('StudioService BYOK fallback_pending', () => {
     listeners.close?.forEach((cb) => cb())
     await expect(promise).rejects.toThrow(BadRequestException)
     await expect(promise).rejects.toThrow('已取消')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
     expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-取消退款')
+    expect(generationCreate).not.toHaveBeenCalled()
+  })
+
+  it('image: BYOK client abort after generate → refund once, no fallback_pending', async () => {
+    imageGenerate.mockResolvedValueOnce({
+      url: 'https://example.com/i.png',
+      urls: ['https://example.com/i.png'],
+    })
+    const listeners: Record<string, (() => void)[]> = {}
+    const cancel = createCancelFlag({
+      aborted: false,
+      on(event: string, cb: () => void) {
+        listeners[event] = listeners[event] ?? []
+        listeners[event].push(cb)
+      },
+    })
+    const promise = svc.generateImage(
+      'u1',
+      'a cat',
+      'ch_user::custom-model',
+      '16:9',
+      [],
+      [],
+      '1K',
+      1,
+      cancel,
+    )
+    listeners.close?.forEach((cb) => cb())
+    await expect(promise).rejects.toThrow('已取消')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-取消退款')
+    expect(generationCreate).not.toHaveBeenCalled()
+  })
+
+  it('confirmPlatformFallback: client abort after generate → refund once, failed', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+    vi.clearAllMocks()
+    imageGenerate.mockResolvedValueOnce({
+      url: 'https://example.com/plat.png',
+      urls: ['https://example.com/plat.png'],
+    })
+    const listeners: Record<string, (() => void)[]> = {}
+    const cancel = createCancelFlag({
+      aborted: false,
+      on(event: string, cb: () => void) {
+        listeners[event] = listeners[event] ?? []
+        listeners[event].push(cb)
+      },
+    })
+    const promise = svc.confirmPlatformFallback('u1', 'g1', cancel)
+    listeners.close?.forEach((cb) => cb())
+    await expect(promise).rejects.toThrow('已取消')
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')
+    const failedUpdate = generationUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundReason).toBe('cancelled')
+    expect(meta.refundedPoints).toBe(10)
   })
 })

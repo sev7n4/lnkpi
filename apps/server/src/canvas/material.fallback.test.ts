@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@lnkpi/agent'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
+import { BadRequestException } from '@nestjs/common'
+import { createCancelFlag } from '../points/charge-session'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -320,5 +322,39 @@ describe('MaterialService BYOK fallback_pending', () => {
     const result = await svc.cancelPlatformFallback('u1', 'm1')
     expect(result.status).toBe('failed')
     expect(pointsRefund).not.toHaveBeenCalled()
+  })
+
+  it('confirmPlatformFallback: client abort after generate → refund once, failed', async () => {
+    imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
+    await svc.generateImage({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'a cat',
+      model: 'ch_user::custom-model',
+    })
+    await vi.waitFor(() => expect(stored.status).toBe('fallback_pending'))
+    vi.clearAllMocks()
+    imageGenerate.mockResolvedValueOnce({ url: 'https://example.com/plat.png' })
+
+    const listeners: Record<string, (() => void)[]> = {}
+    const cancel = createCancelFlag({
+      aborted: false,
+      on(event: string, cb: () => void) {
+        listeners[event] = listeners[event] ?? []
+        listeners[event].push(cb)
+      },
+    })
+    const promise = svc.confirmPlatformFallback('u1', 'm1', cancel)
+    listeners.close?.forEach((cb) => cb())
+    await expect(promise).rejects.toThrow(BadRequestException)
+    await expect(promise).rejects.toThrow('已取消')
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')
+    const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
+    expect(failedUpdate).toBeTruthy()
+    const meta = JSON.parse(String(failedUpdate![0].data.metadata))
+    expect(meta.refundReason).toBe('cancelled')
+    expect(meta.refundedPoints).toBe(10)
   })
 })

@@ -239,6 +239,7 @@ export class StudioService {
         },
       })
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
         throw err
@@ -307,6 +308,7 @@ export class StudioService {
         },
       })
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
         throw err
@@ -423,6 +425,7 @@ export class StudioService {
         },
       })
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
         throw err
@@ -498,6 +501,7 @@ export class StudioService {
         },
       })
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
         throw err
@@ -690,6 +694,7 @@ export class StudioService {
       })
       return { ...record, url }
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
         throw err
@@ -723,7 +728,7 @@ export class StudioService {
     }
   }
 
-  async confirmPlatformFallback(userId: string, recordId: string) {
+  async confirmPlatformFallback(userId: string, recordId: string, cancel?: CancelFlag) {
     const record = await this.getGeneration(userId, recordId)
     if (record.status !== 'fallback_pending') {
       throw new BadRequestException('当前状态不可确认平台回退')
@@ -744,6 +749,10 @@ export class StudioService {
           modelId,
         })
         const imageUrls = urls?.length ? urls : [url]
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throw new BadRequestException('已取消')
+        }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
@@ -786,6 +795,10 @@ export class StudioService {
           const result = await createTextProvider(undefined).generate(record.prompt, gatewayModelId)
           text = result.text
         }
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throw new BadRequestException('已取消')
+        }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
@@ -818,6 +831,10 @@ export class StudioService {
           audioOptions as { model?: string; voice?: string; speed?: number; volume?: number; pitch?: number },
         )
         const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throw new BadRequestException('已取消')
+        }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
@@ -847,6 +864,10 @@ export class StudioService {
             ? (meta.referenceImages as string[])[0]
             : undefined,
         })
+        if (cancel?.isCancelled()) {
+          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          throw new BadRequestException('已取消')
+        }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
@@ -864,6 +885,18 @@ export class StudioService {
 
       throw new BadRequestException('不支持的生成类型')
     } catch (err) {
+      if (err instanceof BadRequestException && err.message === '已取消') {
+        await this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            status: 'failed',
+            metadata: JSON.stringify(
+              applyRefundMeta(chargedMeta, platformCost, 'cancelled'),
+            ),
+          },
+        })
+        throw err
+      }
       if (err instanceof BadRequestException && err.message === '不支持的生成类型') {
         await this.points.refund(userId, platformCost, '平台回退失败退款')
         throw err

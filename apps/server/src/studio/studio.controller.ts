@@ -310,10 +310,11 @@ export class StudioController {
   @Post('generations/:id/confirm-platform-fallback')
   @UseGuards(AuthGuard)
   async confirmPlatformFallback(
-    @Req() req: { user: { sub: string } },
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
     @Param('id') id: string,
   ) {
-    const data = await this.studioService.confirmPlatformFallback(req.user.sub, id)
+    const cancel = createCancelFlag(req)
+    const data = await this.studioService.confirmPlatformFallback(req.user.sub, id, cancel)
     return { code: 0, message: 'ok', data }
   }
 
