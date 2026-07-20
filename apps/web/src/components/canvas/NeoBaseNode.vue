@@ -7,6 +7,7 @@ import {
   resolveNeoNodeTitle,
   type NeoNodeStatus,
 } from '@/components/canvas/neoNodeMeta'
+import NodeTaskBadge from '@/components/canvas/NodeTaskBadge.vue'
 import { CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
 
 const props = withDefaults(
@@ -127,6 +128,10 @@ function cancelRename() {
         @mousedown.stop
       >
       <span v-else class="neo-node-title">{{ displayTitle }}</span>
+      <NodeTaskBadge
+        :status="data?.status"
+        :started-at="typeof data?.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
+      />
       <span class="neo-node-status" :class="nodeStatus" />
     </div>
 
