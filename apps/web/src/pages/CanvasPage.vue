@@ -48,6 +48,7 @@ import CanvasNodeWorldModel from '@/components/canvas/CanvasNodeWorldModel.vue'
 import NodePanelDock from '@/components/canvas/NodePanelDock.vue'
 import DockStudioToolbar from '@/components/canvas/DockStudioToolbar.vue'
 import CanvasFloatingChrome from '@/components/canvas/CanvasFloatingChrome.vue'
+import CanvasAccountChrome from '@/components/canvas/CanvasAccountChrome.vue'
 import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftControls.vue'
 import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
@@ -95,6 +96,10 @@ import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
 import CanvasAgentFab from '@/components/agent/CanvasAgentFab.vue'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
+import {
+  formatGenerationFailureMessage,
+  parseRefundedPointsFromMetadata,
+} from '@/utils/generationPointsMessage'
 
 const PlayCanvasView = defineAsyncComponent(
   () => import('@/canvas/playcanvas/PlayCanvasView.vue'),
@@ -132,6 +137,7 @@ const showModelSettings = ref(false)
 const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string } | null>(null)
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
+const showMembership = ref(false)
 
 const DEFAULT_DARK_GRID_COLOR = 'rgba(255,255,255,0.08)'
 const effectiveGridColor = computed(() => {
@@ -380,7 +386,13 @@ const generationPolling = useGenerationPolling((results) => {
       }
       patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
-      patchNodeData(task.nodeId, { status: NODE_GENERATION_STATUS.error })
+      const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
+      patchNodeData(task.nodeId, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: refundedPoints
+          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
+          : '生成失败',
+      })
     }
   }
   void saveCanvas()
@@ -1662,6 +1674,9 @@ const {
   }),
   requestFallbackConfirm,
   isModelSelectable,
+  onInsufficientPoints: () => {
+    showMembership.value = true
+  },
 })
 
 function retryNodeGeneration(nodeId: string) {
@@ -1971,22 +1986,25 @@ onMounted(() => {
           @asset-upload="triggerMediaUpload()"
         />
 
-        <button
-          type="button"
-          class="canvas-theme-toggle pointer-events-auto absolute right-3 top-3 z-[50] flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:text-white"
-          :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
-          @click="toggleCanvasTheme"
-        >
-          <!-- 太阳 -->
-          <svg v-if="canvasTheme === 'dark'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <circle cx="12" cy="12" r="4" />
-            <path stroke-linecap="round" d="M12 3v2m0 14v2M5.64 5.64l1.41 1.41m9.9 9.9 1.41 1.41M3 12h2m14 0h2M5.64 18.36l1.41-1.41m9.9-9.9 1.41-1.41" />
-          </svg>
-          <!-- 月亮 -->
-          <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-          </svg>
-        </button>
+        <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
+          <button
+            type="button"
+            class="canvas-theme-toggle pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:text-white"
+            :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
+            @click="toggleCanvasTheme"
+          >
+            <!-- 太阳 -->
+            <svg v-if="canvasTheme === 'dark'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <circle cx="12" cy="12" r="4" />
+              <path stroke-linecap="round" d="M12 3v2m0 14v2M5.64 5.64l1.41 1.41m9.9 9.9 1.41 1.41M3 12h2m14 0h2M5.64 18.36l1.41-1.41m9.9-9.9 1.41-1.41" />
+            </svg>
+            <!-- 月亮 -->
+            <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <CanvasAccountChrome v-model:show-membership="showMembership" />
+        </div>
 
         <input
           ref="mediaInputRef"
