@@ -698,13 +698,8 @@
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.bottom-toolbar-container.is-dock-readonly {
-  opacity: 0.88;
-}
-
 .dock-studio-toolbar.is-dock-locked .bottom-toolbar-actions button:not(.bottom-toolbar-close):not(.dock-generate-btn) {
   pointer-events: none;
-  opacity: 0.55;
 }
 
 .dock-studio-toolbar.is-dock-locked .dock-generate-btn,
@@ -715,7 +710,6 @@
 
 .bottom-toolbar-container.is-dock-readonly .bottom-toolbar-actions :not(.bottom-toolbar-close):not(.dock-generate-btn) {
   pointer-events: none;
-  opacity: 0.55;
 }
 
 .group-node-container {
