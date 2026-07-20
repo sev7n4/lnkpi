@@ -64,6 +64,10 @@ function localPrompt(data: Record<string, unknown>): string {
   return String(data.prompt ?? data.content ?? '').trim()
 }
 
+function startedAtPatch(): Record<string, unknown> {
+  return { generationStartedAt: new Date().toISOString() }
+}
+
 function normalizeEdges(edges: CanvasEdgeLike[]) {
   return edges.map((edge) => ({
     id: edge.id ?? `${edge.source}->${edge.target}`,
@@ -372,7 +376,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
 
     try {
       if (nodeType === 'prompt') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+        deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
         const { data: res } = await studioApi.generatePrompt(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
@@ -384,7 +388,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'text') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
+        deps.patchNodeData(node.id, {
+          ...startedAtPatch(),
+          status: NODE_GENERATION_STATUS.generating,
+          prompt: local,
+        })
         const { data: res } = await studioApi.generateText(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
@@ -398,7 +406,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'audio') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
+        deps.patchNodeData(node.id, {
+          ...startedAtPatch(),
+          status: NODE_GENERATION_STATUS.generating,
+          prompt: local,
+        })
         const { data: res } = await studioApi.generateAudio(local, {
           model: resolveGenerationModel('audio', data.audioModel as string | undefined),
           voice: String(data.audioVoice ?? DEFAULT_AUDIO_VOICE),
@@ -453,8 +465,16 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
 
     if (shotNode?.type === 'shot' && shotId) {
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
-      deps.patchNodeData(shotId, { status: NODE_GENERATION_STATUS.generating, prompt })
+      deps.patchNodeData(node.id, {
+        ...startedAtPatch(),
+        status: NODE_GENERATION_STATUS.generating,
+        prompt,
+      })
+      deps.patchNodeData(shotId, {
+        ...startedAtPatch(),
+        status: NODE_GENERATION_STATUS.generating,
+        prompt,
+      })
       if (nodeType === 'video') {
         const params = resolveCanvasVideoParams(data)
         await canvasApi.generateVideo(shotId, prompt, { ...params, refs, mentionedKeys })
@@ -467,7 +487,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       return
     }
 
-    deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
+    deps.patchNodeData(node.id, {
+      ...startedAtPatch(),
+      status: NODE_GENERATION_STATUS.generating,
+      prompt,
+    })
 
     const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
 
@@ -574,7 +598,11 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
   async function generateShot(node: EditableFlowNode, prompt: string, data: Record<string, unknown>) {
     const refs = resolveStudioRefs(node, deps.nodes.value, deps.edges.value)
     const mentionedKeys = parseRefMentions(prompt)
-    deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt })
+    deps.patchNodeData(node.id, {
+      ...startedAtPatch(),
+      status: NODE_GENERATION_STATUS.generating,
+      prompt,
+    })
     const title = String(data.title ?? (prompt.slice(0, 24) || '新分镜'))
     try {
       await canvasApi.editShot(node.id, { title, prompt })
@@ -582,7 +610,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const shotRes = await canvasApi.createShot(deps.sessionId.value, { title, prompt })
       const shot = shotRes.data.data as { id: string }
       if (shot.id !== node.id) {
-        deps.patchNodeData(node.id, { title, prompt, status: NODE_GENERATION_STATUS.generating })
+        deps.patchNodeData(node.id, {
+          ...startedAtPatch(),
+          title,
+          prompt,
+          status: NODE_GENERATION_STATUS.generating,
+        })
       }
     }
 
@@ -605,7 +638,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       const params = resolveCanvasImageParams({})
       const matRes = await canvasApi.generateImage(node.id, prompt, { ...params, refs, mentionedKeys })
       const material = matRes.data.data as { id: string }
-      deps.addNode('image', { url: '', status: NODE_GENERATION_STATUS.generating, prompt }, {
+      deps.addNode('image', {
+        url: '',
+        ...startedAtPatch(),
+        status: NODE_GENERATION_STATUS.generating,
+        prompt,
+      }, {
         id: material.id,
         position: { x: node.position.x + 280, y: node.position.y },
       })
@@ -696,9 +734,13 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         }
       }
 
-      deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })
+      deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
       for (const item of items) {
-        deps.patchNodeData(item.shotNodeId, { status: NODE_GENERATION_STATUS.generating, prompt: item.prompt })
+        deps.patchNodeData(item.shotNodeId, {
+          ...startedAtPatch(),
+          status: NODE_GENERATION_STATUS.generating,
+          prompt: item.prompt,
+        })
       }
 
       await canvasApi.batchGenerateSceneComposer({

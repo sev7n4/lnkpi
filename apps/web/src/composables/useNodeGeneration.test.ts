@@ -621,6 +621,55 @@ describe('useNodeGeneration', () => {
     expect(api.isNodeBusy('img-b')).toBe(false)
   })
 
+  it('writes generationStartedAt when generation begins', async () => {
+    const node = createNode('image', { prompt: 'cat' }, 'img-1')
+    let resolveHang!: (v: unknown) => void
+    const hang = new Promise((r) => { resolveHang = r })
+    vi.mocked(studioApi.generateImage).mockImplementationOnce(() => hang as never)
+    const { api, deps } = createDeps([node])
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.generating,
+        generationStartedAt: expect.stringMatching(/^\d{4}-/),
+      }),
+    )
+    resolveHang(mockAxiosResponse({ data: completedRecord }))
+    await pending
+  })
+
+  it('cancel keeps existing content and url', async () => {
+    const node = createNode('image', {
+      prompt: 'x',
+      url: 'https://example.com/keep.png',
+      content: 'keep-me',
+      status: NODE_GENERATION_STATUS.generating,
+    }, 'img-keep')
+    let rejectHang!: (e: unknown) => void
+    const hang = new Promise((_r, j) => { rejectHang = j })
+    vi.mocked(studioApi.generateImage).mockImplementation((_a, _b, _c, _d, _e, _f, _g, signal?: AbortSignal) => {
+      signal?.addEventListener('abort', () => {
+        const err = new Error('canceled')
+        ;(err as { code?: string }).code = 'ERR_CANCELED'
+        rejectHang(err)
+      })
+      return hang as never
+    })
+    const { api, deps } = createDeps([node])
+    const pending = api.generateForNode(node)
+    await Promise.resolve()
+    await api.generateForNode(node) // cancel
+    await pending
+    const draftPatch = deps.patchNodeData.mock.calls.find(
+      (c) => c[1]?.status === NODE_GENERATION_STATUS.draft,
+    )?.[1] as Record<string, unknown>
+    expect(draftPatch).toBeTruthy()
+    expect(draftPatch).not.toHaveProperty('url')
+    expect(draftPatch).not.toHaveProperty('content')
+  })
+
   it('second generate click cancels in-flight generation', async () => {
     let rejectHang!: (err: unknown) => void
     const hang = new Promise((_resolve, reject) => {
