@@ -1,11 +1,42 @@
 import { apiErrorMessage } from '@/utils/apiError'
 
-export function extractRefundedPointsFromError(err: unknown): number | undefined {
-  const ax = err as {
-    response?: { data?: { refundedPoints?: unknown; data?: { refundedPoints?: unknown } } }
-  }
-  const raw = ax.response?.data?.refundedPoints ?? ax.response?.data?.data?.refundedPoints
+type ErrorResponseData = {
+  refundedPoints?: unknown
+  message?: unknown
+  data?: { refundedPoints?: unknown }
+}
+
+function readPositiveRefundedPoints(raw: unknown): number | undefined {
   return typeof raw === 'number' && raw > 0 ? raw : undefined
+}
+
+function readRefundedPointsFromData(data?: ErrorResponseData): number | undefined {
+  if (!data) return undefined
+  const message = data.message
+  const fromMessage =
+    message && typeof message === 'object' && message !== null
+      ? readPositiveRefundedPoints((message as { refundedPoints?: unknown }).refundedPoints)
+      : undefined
+  return (
+    readPositiveRefundedPoints(data.refundedPoints) ??
+    fromMessage ??
+    readPositiveRefundedPoints(data.data?.refundedPoints)
+  )
+}
+
+export function extractRefundedPointsFromError(err: unknown): number | undefined {
+  const ax = err as { response?: { data?: ErrorResponseData } }
+  return readRefundedPointsFromData(ax.response?.data)
+}
+
+export function parseRefundedPointsFromMetadata(metadata?: string | null): number | undefined {
+  if (!metadata) return undefined
+  try {
+    const meta = JSON.parse(metadata) as { refundedPoints?: unknown }
+    return readPositiveRefundedPoints(meta.refundedPoints)
+  } catch {
+    return undefined
+  }
 }
 
 export function formatCancelledMessage(refundedPoints?: number): string {

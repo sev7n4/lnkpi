@@ -346,8 +346,10 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
     const promise = svc.confirmPlatformFallback('u1', 'm1', cancel)
     listeners.close?.forEach((cb) => cb())
-    await expect(promise).rejects.toThrow(BadRequestException)
-    await expect(promise).rejects.toThrow('已取消')
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException)
+    await expect(promise).rejects.toMatchObject({
+      response: { message: '已取消', refundedPoints: 10 },
+    })
     expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
     expect(pointsRefund).toHaveBeenCalledTimes(1)
     expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')

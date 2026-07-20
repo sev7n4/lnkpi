@@ -37,6 +37,7 @@ import {
   extractRefundedPointsFromError,
   formatCancelledMessage,
   formatGenerationFailureMessage,
+  parseRefundedPointsFromMetadata,
 } from '@/utils/generationPointsMessage'
 import { useAuthStore } from '@/stores/auth'
 
@@ -385,7 +386,12 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
     }
     deps.patchNodeData(nodeId, {
       status: NODE_GENERATION_STATUS.error,
-      errorMessage: '生成失败',
+      errorMessage: (() => {
+        const refundedPoints = parseRefundedPointsFromMetadata(record.metadata)
+        return refundedPoints
+          ? formatGenerationFailureMessage(new Error('生成失败'), refundedPoints)
+          : '生成失败'
+      })(),
       generationRecordId: record.id,
     })
     return true

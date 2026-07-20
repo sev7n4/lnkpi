@@ -351,6 +351,40 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('applyStudioRecord failed with metadata.refundedPoints shows refund message', async () => {
+    const node = createNode('image', {
+      prompt: 'failed image',
+      imageAspect: '16:9',
+      imageResolution: '1K',
+      imageCount: 1,
+    })
+    vi.mocked(studioApi.generateImage).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          id: 'rec-failed-refund',
+          type: 'image',
+          prompt: 'failed image',
+          status: NODE_GENERATION_STATUS.failed,
+          url: null,
+          metadata: JSON.stringify({ refundedPoints: 10 }),
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    )
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '生成失败，10 积分已返回',
+        generationRecordId: 'rec-failed-refund',
+      }),
+    )
+  })
+
   it('sets node error when onFallbackPending confirm API fails', async () => {
     const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
     vi.mocked(studioApi.confirmPlatformFallback).mockRejectedValue(new Error('confirm failed'))

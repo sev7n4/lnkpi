@@ -23,6 +23,9 @@ import {
   alreadyRefunded,
   applyChargeMeta,
   applyRefundMeta,
+  isCancelledException,
+  rethrowWithRefundedPoints,
+  throwCancelledException,
 } from '../points/charge-session'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -225,7 +228,7 @@ export class StudioService {
           : await createTextProvider(opts).generate(mergedText, gatewayModelId)
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throw new BadRequestException('已取消')
+        throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
         data: {
@@ -239,10 +242,10 @@ export class StudioService {
         },
       })
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') throw err
+      if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        throw err
+        rethrowWithRefundedPoints(err, cost)
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -294,7 +297,7 @@ export class StudioService {
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throw new BadRequestException('已取消')
+        throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
         data: {
@@ -308,10 +311,10 @@ export class StudioService {
         },
       })
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') throw err
+      if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        throw err
+        rethrowWithRefundedPoints(err, cost)
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -395,7 +398,7 @@ export class StudioService {
       const imageUrls = urls?.length ? urls : [url]
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throw new BadRequestException('已取消')
+        throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
         data: {
@@ -425,10 +428,10 @@ export class StudioService {
         },
       })
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') throw err
+      if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        throw err
+        rethrowWithRefundedPoints(err, cost)
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -478,7 +481,7 @@ export class StudioService {
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throw new BadRequestException('已取消')
+        throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
         data: {
@@ -501,10 +504,10 @@ export class StudioService {
         },
       })
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') throw err
+      if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        throw err
+        rethrowWithRefundedPoints(err, cost)
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       return this.prisma.generationRecord.create({
@@ -663,7 +666,7 @@ export class StudioService {
       const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throw new BadRequestException('已取消')
+        throwCancelledException(cost)
       }
       const record = await this.prisma.generationRecord.create({
         data: {
@@ -694,10 +697,10 @@ export class StudioService {
       })
       return { ...record, url }
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') throw err
+      if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
         await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        throw err
+        rethrowWithRefundedPoints(err, cost)
       }
       await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
       const record = await this.prisma.generationRecord.create({
@@ -751,7 +754,7 @@ export class StudioService {
         const imageUrls = urls?.length ? urls : [url]
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
@@ -797,7 +800,7 @@ export class StudioService {
         }
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
@@ -833,7 +836,7 @@ export class StudioService {
         const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
@@ -866,7 +869,7 @@ export class StudioService {
         })
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
           where: { id: record.id },
@@ -885,7 +888,7 @@ export class StudioService {
 
       throw new BadRequestException('不支持的生成类型')
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') {
+      if (isCancelledException(err)) {
         await this.prisma.generationRecord.update({
           where: { id: record.id },
           data: {
@@ -899,7 +902,7 @@ export class StudioService {
       }
       if (err instanceof BadRequestException && err.message === '不支持的生成类型') {
         await this.points.refund(userId, platformCost, '平台回退失败退款')
-        throw err
+        rethrowWithRefundedPoints(err, platformCost)
       }
       await this.points.refund(userId, platformCost, '平台回退失败退款')
       await this.prisma.generationRecord.update({
@@ -911,7 +914,7 @@ export class StudioService {
           ),
         },
       })
-      throw err
+      rethrowWithRefundedPoints(err, platformCost)
     }
   }
 

@@ -24,6 +24,9 @@ import {
   alreadyRefunded,
   applyChargeMeta,
   applyRefundMeta,
+  isCancelledException,
+  rethrowWithRefundedPoints,
+  throwCancelledException,
 } from '../points/charge-session'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
@@ -366,7 +369,7 @@ export class MaterialService {
         })
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.material.update({
           where: { id: material.id },
@@ -407,7 +410,7 @@ export class MaterialService {
         })
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
-          throw new BadRequestException('已取消')
+          throwCancelledException(platformCost)
         }
         return this.prisma.material.update({
           where: { id: material.id },
@@ -428,7 +431,7 @@ export class MaterialService {
 
       throw new BadRequestException('不支持的素材类型')
     } catch (err) {
-      if (err instanceof BadRequestException && err.message === '已取消') {
+      if (isCancelledException(err)) {
         await this.prisma.material.update({
           where: { id: material.id },
           data: {
@@ -442,7 +445,7 @@ export class MaterialService {
       }
       if (err instanceof BadRequestException && err.message === '不支持的素材类型') {
         await this.points.refund(userId, platformCost, '平台回退失败退款')
-        throw err
+        rethrowWithRefundedPoints(err, platformCost)
       }
       await this.points.refund(userId, platformCost, '平台回退失败退款')
       await this.prisma.material.update({
@@ -454,7 +457,7 @@ export class MaterialService {
           ),
         },
       })
-      throw err
+      rethrowWithRefundedPoints(err, platformCost)
     }
   }
 

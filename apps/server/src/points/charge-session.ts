@@ -1,3 +1,5 @@
+import { BadRequestException } from '@nestjs/common'
+
 export function createCancelFlag(req: {
   on(event: string, cb: () => void): void
   aborted?: boolean
@@ -23,4 +25,31 @@ export function applyRefundMeta(
   refundReason: string,
 ) {
   return { ...meta, refundedPoints, refundReason }
+}
+
+export function throwCancelledException(refundedPoints: number): never {
+  throw new BadRequestException({ message: '已取消', refundedPoints })
+}
+
+export function isCancelledException(err: unknown): boolean {
+  if (!(err instanceof BadRequestException)) return false
+  const response = err.getResponse()
+  if (typeof response === 'string') return response === '已取消'
+  if (response && typeof response === 'object') {
+    return (response as { message?: unknown }).message === '已取消'
+  }
+  return false
+}
+
+export function rethrowWithRefundedPoints(err: unknown, refundedPoints: number): never {
+  if (err instanceof BadRequestException) {
+    const response = err.getResponse()
+    if (typeof response === 'object' && response !== null && !Array.isArray(response)) {
+      throw new BadRequestException({ ...(response as Record<string, unknown>), refundedPoints })
+    }
+    const message = typeof response === 'string' ? response : '请求失败'
+    throw new BadRequestException({ message, refundedPoints })
+  }
+  const message = err instanceof Error ? err.message : '生成失败'
+  throw new BadRequestException({ message, refundedPoints })
 }

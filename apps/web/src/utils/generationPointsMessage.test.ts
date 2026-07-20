@@ -70,6 +70,14 @@ describe('extractRefundedPointsFromError', () => {
     ).toBe(6)
   })
 
+  it('reads refundedPoints from Nest object message', () => {
+    expect(
+      extractRefundedPointsFromError({
+        response: { data: { message: { message: '已取消', refundedPoints: 8 } } },
+      }),
+    ).toBe(8)
+  })
+
   it('returns undefined when missing or non-positive', () => {
     expect(extractRefundedPointsFromError(new Error('canceled'))).toBeUndefined()
     expect(extractRefundedPointsFromError(axiosLikeError('fail', { refundedPoints: 0 }))).toBeUndefined()
