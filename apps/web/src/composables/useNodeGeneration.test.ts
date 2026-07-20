@@ -531,6 +531,57 @@ describe('useNodeGeneration', () => {
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
   })
 
+  it('text generate writes result to content without overwriting prompt', async () => {
+    const node = createNode('text', {
+      prompt: '写一句广告语',
+      content: '',
+    })
+    const { api, deps } = createDeps([node])
+    vi.mocked(studioApi.generateText).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'text',
+          prompt: '写一句广告语',
+          metadata: JSON.stringify({ text: '买它！限时优惠。' }),
+        },
+      }),
+    )
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateText).toHaveBeenCalledWith(
+      '写一句广告语',
+      expect.any(String),
+      [],
+      [],
+      expect.any(AbortSignal),
+    )
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.generating,
+        prompt: '写一句广告语',
+      }),
+    )
+    const generatingPatch = deps.patchNodeData.mock.calls.find(
+      (call) => call[1]?.status === NODE_GENERATION_STATUS.generating,
+    )?.[1] as Record<string, unknown>
+    expect(generatingPatch).not.toHaveProperty('content')
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        content: '买它！限时优惠。',
+      }),
+    )
+    const completedPatch = deps.patchNodeData.mock.calls.find(
+      (call) => call[1]?.status === NODE_GENERATION_STATUS.completed,
+    )?.[1] as Record<string, unknown>
+    expect(completedPatch).not.toHaveProperty('prompt')
+  })
+
   it('allows parallel generation on two nodes', async () => {
     let resolveA!: (v: unknown) => void
     let resolveB!: (v: unknown) => void

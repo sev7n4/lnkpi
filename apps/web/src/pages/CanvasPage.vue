@@ -1422,10 +1422,21 @@ function handleRemoveRef(ref: NodeRef) {
 }
 
 async function handleNodeGenerate() {
-  await debouncedNodePatch.flush()
   const node = editorNode.value
   if (!node) return
-  await generateForNode(node)
+  // Cancel before flush so a second click isn't delayed by pending patches.
+  if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    cancelGeneration(node.id)
+    return
+  }
+  await debouncedNodePatch.flush()
+  const fresh = editorNode.value
+  if (!fresh) return
+  if (isNodeBusy(fresh.id) || isNodeGenerating(fresh.data?.status)) {
+    cancelGeneration(fresh.id)
+    return
+  }
+  await generateForNode(fresh)
 }
 
 async function handleSceneComposerSave() {
@@ -1603,6 +1614,7 @@ async function saveCanvas() {
 
 const {
   isNodeBusy,
+  cancelGeneration,
   generateForNode,
   saveSceneComposer,
   expandSceneComposer,

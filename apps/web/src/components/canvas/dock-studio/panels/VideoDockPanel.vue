@@ -290,7 +290,7 @@ function onRefRemove(ref: NodeRef) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!prompt.trim() || (videoMode === 'image_to_video' && !effectiveRefUrl)"
+          :disabled="!generating && (!prompt.trim() || (videoMode === 'image_to_video' && !effectiveRefUrl))"
           @generate="onGenerate"
         />
       </div>

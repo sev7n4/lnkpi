@@ -280,7 +280,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
         } else {
           const content = parseRecordText(record)
           patch.content = content
-          patch.prompt = content
+          // Keep dock prompt intact — result lives on the node card via `content`.
         }
       } else {
         patch.url = urls[0] ?? parseRecordUrl(record)
@@ -384,7 +384,7 @@ export function useNodeGeneration(deps: NodeGenerationDeps) {
       }
 
       if (nodeType === 'text') {
-        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, content: local, prompt: local })
+        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating, prompt: local })
         const { data: res } = await studioApi.generateText(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
