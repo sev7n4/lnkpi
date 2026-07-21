@@ -195,7 +195,7 @@ watch(
     <!-- 缩略图浮层 -->
     <div
       v-if="showMinimapPopover && settings.minimapExpanded === 1"
-      class="minimap-popover pointer-events-auto absolute bottom-full left-0 mb-1.5 overflow-hidden rounded-xl border border-white/10 bg-[rgba(20,20,20,0.96)] shadow-xl backdrop-blur-md"
+      class="minimap-popover neo-popover pointer-events-auto absolute bottom-full left-0 mb-1.5 overflow-hidden rounded-xl"
       @click.stop
     >
       <div
@@ -207,8 +207,8 @@ watch(
           :pannable="true"
           :zoomable="true"
           :node-color="miniMapNodeColor"
-          mask-color="rgba(99, 102, 241, 0.15)"
-          mask-stroke-color="rgba(129, 140, 248, 0.7)"
+          mask-color="rgba(109, 93, 252, 0.14)"
+          mask-stroke-color="rgba(138, 125, 255, 0.7)"
           :mask-stroke-width="1.5"
           class="popover-minimap"
         />
@@ -218,24 +218,24 @@ watch(
     <!-- 列表浮层 -->
     <div
       v-if="showListPanel && settings.minimapExpanded === 2"
-      class="list-popover pointer-events-auto absolute bottom-full left-0 mb-1.5 w-[200px] rounded-xl border border-white/10 bg-[rgba(20,20,20,0.96)] p-2 shadow-xl backdrop-blur-md"
+      class="list-popover neo-popover pointer-events-auto absolute bottom-full left-0 mb-1.5 w-[200px] rounded-xl p-2"
       @click.stop
     >
       <input
         v-model="search"
-        class="mb-2 w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs outline-none focus:border-[#6366f1]/40"
+        class="list-search mb-2 w-full rounded-lg px-2 py-1.5 text-xs outline-none"
         placeholder="搜索节点..."
       >
       <div class="max-h-[220px] overflow-y-auto space-y-2">
         <div v-for="[type, items] in groupedNodes" :key="type">
-          <p class="mb-0.5 text-[9px] uppercase tracking-wider text-white/30">
+          <p class="list-caption mb-0.5 text-[9px] uppercase tracking-wider">
             {{ typeLabels[type] ?? type }} · {{ items.length }}
           </p>
           <button
             v-for="node in items"
             :key="node.id"
             type="button"
-            class="mb-0.5 flex w-full rounded-lg px-2 py-1 text-left text-[11px] text-white/70 hover:bg-white/5"
+            class="neo-popover-item mb-0.5 flex w-full rounded-lg px-2 py-1 text-left text-[11px]"
             @click="focusNode(node.id)"
           >
             {{ nodeLabel(node) }}
@@ -245,12 +245,12 @@ watch(
     </div>
 
     <!-- 单行底栏 -->
-    <div class="toolbar-row pointer-events-auto flex flex-nowrap items-center gap-1 rounded-xl border border-white/10 bg-[rgba(20,20,20,0.94)] px-1.5 py-1 shadow-xl backdrop-blur-md">
+    <div class="toolbar-row neo-chrome pointer-events-auto flex flex-nowrap items-center gap-1 rounded-xl px-1.5 py-1">
       <!-- 小地图切换 -->
       <button
         type="button"
         class="bar-btn"
-        :class="mapActive ? 'bg-[#6366f1]/15 text-[#818cf8]' : ''"
+        :class="mapActive ? 'is-accent' : ''"
         title="小地图 / 列表"
         @click="onMapToggle"
       >
@@ -291,7 +291,7 @@ watch(
           <button
             type="button"
             class="bar-btn"
-            :class="showGridPanel ? 'bg-white/10 text-white' : ''"
+            :class="showGridPanel ? 'is-accent' : ''"
             title="网格设置"
             @click="showGridPanel = !showGridPanel"
           >
@@ -301,15 +301,15 @@ watch(
           </button>
           <div
             v-if="showGridPanel"
-            class="grid-settings-popover pointer-events-auto absolute bottom-full left-0 z-10 mb-1.5 w-[200px] rounded-xl border border-white/10 bg-[#242424] p-3 shadow-xl"
+            class="grid-settings-popover neo-popover pointer-events-auto absolute bottom-full left-0 z-10 mb-1.5 w-[200px] rounded-xl p-3"
             @click.stop
           >
             <div class="mb-2 flex items-center justify-between">
-              <span class="text-xs text-white/80">网格底纹</span>
+              <span class="panel-label text-xs">网格底纹</span>
               <button
                 type="button"
-                class="rounded-md px-2 py-0.5 text-[10px]"
-                :class="settings.gridVisible ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'bg-white/5 text-white/40'"
+                class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
+                :class="settings.gridVisible ? 'is-on' : ''"
                 @click="patch({ gridVisible: !settings.gridVisible })"
               >
                 {{ settings.gridVisible ? '显示' : '隐藏' }}
@@ -318,53 +318,53 @@ watch(
             <div class="mb-3 flex gap-1">
               <button
                 type="button"
-                class="flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.gridVariant === 'dots' ? 'bg-[#6366f1]/25 text-[#818cf8]' : 'bg-white/5 text-white/50'"
+                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+                :class="settings.gridVariant === 'dots' ? 'is-on' : ''"
                 @click="patch({ gridVariant: 'dots' })"
               >
                 点阵
               </button>
               <button
                 type="button"
-                class="flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.gridVariant === 'lines' ? 'bg-[#6366f1]/25 text-[#818cf8]' : 'bg-white/5 text-white/50'"
+                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+                :class="settings.gridVariant === 'lines' ? 'is-on' : ''"
                 @click="patch({ gridVariant: 'lines' })"
               >
                 线格
               </button>
             </div>
-            <label class="mb-2 block text-[10px] text-white/40">
+            <label class="panel-caption mb-2 block text-[10px]">
               间距 {{ settings.gridGap }}px
               <input
                 type="range"
                 min="8"
                 max="48"
                 step="2"
-                class="mt-1 w-full"
+                class="mt-1 w-full accent-[var(--neo-accent)]"
                 :value="settings.gridGap"
                 @input="patch({ gridGap: Number(($event.target as HTMLInputElement).value) })"
               >
             </label>
-            <label class="block text-[10px] text-white/40">
+            <label class="panel-caption block text-[10px]">
               点大小 {{ settings.gridDotSize.toFixed(1) }}
               <input
                 type="range"
                 min="0.5"
                 max="4"
                 step="0.1"
-                class="mt-1 w-full"
+                class="mt-1 w-full accent-[var(--neo-accent)]"
                 :value="settings.gridDotSize"
                 @input="patch({ gridDotSize: Number(($event.target as HTMLInputElement).value) })"
               >
             </label>
-            <label class="mt-3 block text-[10px] text-white/40">
+            <label class="panel-caption mt-3 block text-[10px]">
               Dock 缩放 {{ settings.bottomToolbarScale.toFixed(1) }}x
               <input
                 type="range"
                 min="0.8"
                 max="2"
                 step="0.1"
-                class="mt-1 w-full accent-[#6366f1]"
+                class="mt-1 w-full accent-[var(--neo-accent)]"
                 :value="settings.bottomToolbarScale"
                 @input="patch({ bottomToolbarScale: Number(($event.target as HTMLInputElement).value) })"
               >
@@ -375,7 +375,7 @@ watch(
         <button
           type="button"
           class="bar-btn"
-          :class="settings.snapToGrid ? 'bg-[#6366f1]/20 text-[#818cf8]' : ''"
+          :class="settings.snapToGrid ? 'is-accent' : ''"
           title="节点吸附网格"
           @click="patch({ snapToGrid: !settings.snapToGrid })"
         >
@@ -387,7 +387,7 @@ watch(
         <button
           type="button"
           class="bar-btn"
-          :class="settings.edgeAnimated ? 'bg-[#6366f1]/20 text-[#818cf8]' : ''"
+          :class="settings.edgeAnimated ? 'is-accent' : ''"
           title="连线动画"
           @click="patch({ edgeAnimated: !settings.edgeAnimated })"
         >
@@ -419,11 +419,61 @@ watch(
 }
 
 .toolbar-divider {
-  @apply mx-0.5 h-4 w-px shrink-0 bg-white/10;
+  @apply mx-0.5 h-4 w-px shrink-0;
+  background: var(--neo-border);
 }
 
 .bar-btn {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm leading-none text-white/55 transition hover:bg-white/10 hover:text-white;
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm leading-none transition;
+  color: var(--neo-text-muted);
+}
+
+.bar-btn:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.bar-btn.is-accent {
+  background: var(--neo-accent-soft);
+  color: var(--neo-accent-text);
+}
+
+.list-search {
+  border: 1px solid var(--neo-border);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.list-search:focus {
+  border-color: var(--neo-accent-border);
+}
+
+.list-search::placeholder {
+  color: var(--neo-text-muted);
+}
+
+.list-caption,
+.panel-caption {
+  color: var(--neo-text-muted);
+}
+
+.panel-label {
+  color: var(--neo-text-secondary);
+}
+
+.seg-btn {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.seg-btn:hover {
+  background: var(--neo-active-bg);
+}
+
+.seg-btn.is-on {
+  background: var(--neo-accent-soft);
+  color: var(--neo-accent-text);
 }
 
 .zoom-group {
@@ -433,13 +483,14 @@ watch(
 .zoom-slider {
   width: 64px;
   flex-shrink: 0;
-  accent-color: #6366f1;
+  accent-color: var(--neo-accent);
   height: 4px;
   margin: 0;
 }
 
 .zoom-label {
-  @apply w-8 shrink-0 text-center text-[10px] tabular-nums text-white/50;
+  @apply w-8 shrink-0 text-center text-[10px] tabular-nums;
+  color: var(--neo-text-muted);
 }
 
 .minimap-popover-body {
@@ -451,7 +502,7 @@ watch(
   width: 156px !important;
   height: 100px !important;
   margin: 0 !important;
-  background: rgba(255, 255, 255, 0.03) !important;
+  background: var(--neo-hover-bg) !important;
   border: none !important;
   border-radius: 0 !important;
 }

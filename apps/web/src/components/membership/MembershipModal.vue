@@ -75,13 +75,19 @@ async function upgrade(plan: string) {
 <template>
   <el-dialog v-model="visible" title="积分与会员" width="560px" class="membership-dialog">
     <div v-if="auth.isLoggedIn" class="space-y-4">
-      <div class="rounded-xl border border-white/10 bg-[#242424] p-4">
-        <p class="text-xs text-white/50">当前积分</p>
-        <p class="text-3xl font-semibold text-[#818cf8]">{{ points }}</p>
-        <p class="mt-1 text-xs text-white/40">
+      <!-- 积分总览：品牌渐变能量卡 -->
+      <div class="membership-hero relative overflow-hidden rounded-xl p-4">
+        <p class="text-xs text-white/75">当前积分</p>
+        <p class="mt-0.5 flex items-baseline gap-1.5 text-3xl font-semibold text-white">
+          <svg class="h-5 w-5 self-center text-[var(--neo-warm)]" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M13 2 4.5 13.5h5.6L11 22l8.5-11.5h-5.6L13 2z" />
+          </svg>
+          {{ points }}
+        </p>
+        <p class="mt-1 text-xs text-white/70">
           会员：{{ membership === 'pro' ? '专业版' : membership === 'studio' ? '工作室版' : '免费版' }}
         </p>
-        <el-button class="mt-3" size="small" :loading="loading" @click="claimDaily">
+        <el-button class="membership-claim-btn mt-3" size="small" :loading="loading" @click="claimDaily">
           领取每日积分 (+100)
         </el-button>
       </div>
@@ -90,12 +96,12 @@ async function upgrade(plan: string) {
         <div
           v-for="plan in plans"
           :key="plan.id"
-          class="rounded-xl border p-4"
-          :class="membership === plan.id ? 'border-[#6366f1]/50 bg-[#6366f1]/10' : 'border-white/10 bg-[#1a1a1a]'"
+          class="membership-plan rounded-xl border p-4"
+          :class="membership === plan.id ? 'is-current' : ''"
         >
-          <h3 class="font-medium">{{ plan.name }}</h3>
-          <p class="mt-1 text-lg">{{ plan.price ? `¥${plan.price}/月` : '免费' }}</p>
-          <ul class="mt-2 space-y-1 text-[11px] text-white/50">
+          <h3 class="font-medium" style="color: var(--neo-text-primary)">{{ plan.name }}</h3>
+          <p class="mt-1 text-lg" style="color: var(--neo-text-primary)">{{ plan.price ? `¥${plan.price}/月` : '免费' }}</p>
+          <ul class="mt-2 space-y-1 text-[11px]" style="color: var(--neo-text-muted)">
             <li v-for="f in plan.features" :key="f">· {{ f }}</li>
           </ul>
           <el-button
@@ -110,18 +116,56 @@ async function upgrade(plan: string) {
           </el-button>
         </div>
       </div>
-      <p v-if="message" class="text-sm text-[#818cf8]">{{ message }}</p>
+      <p v-if="message" class="text-sm" style="color: var(--neo-accent-text)">{{ message }}</p>
     </div>
-    <p v-else class="py-8 text-center text-white/50">请先登录</p>
+    <p v-else class="py-8 text-center" style="color: var(--neo-text-muted)">请先登录</p>
   </el-dialog>
 </template>
 
 <style>
 .membership-dialog .el-dialog {
-  background: #1a1a1a;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--neo-surface-card);
+  border: 1px solid var(--neo-border);
+  border-radius: 16px;
 }
 .membership-dialog .el-dialog__title {
-  color: #fff;
+  color: var(--neo-text-primary);
+}
+.membership-hero {
+  background: var(--neo-brand-gradient);
+  box-shadow: 0 8px 24px rgba(109, 93, 252, 0.28);
+}
+.membership-hero::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -20px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 70%);
+  pointer-events: none;
+}
+.membership-claim-btn {
+  --el-button-bg-color: rgba(255, 255, 255, 0.16);
+  --el-button-border-color: rgba(255, 255, 255, 0.3);
+  --el-button-text-color: #fff;
+  --el-button-hover-bg-color: rgba(255, 255, 255, 0.26);
+  --el-button-hover-border-color: rgba(255, 255, 255, 0.4);
+  --el-button-hover-text-color: #fff;
+}
+.membership-plan {
+  border-color: var(--neo-border);
+  background: var(--neo-surface-elevated);
+}
+.membership-plan.is-current {
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+}
+.membership-dialog .el-button--primary {
+  --el-button-bg-color: var(--neo-accent);
+  --el-button-border-color: var(--neo-accent);
+  --el-button-hover-bg-color: var(--neo-accent-hover);
+  --el-button-hover-border-color: var(--neo-accent-hover);
 }
 </style>

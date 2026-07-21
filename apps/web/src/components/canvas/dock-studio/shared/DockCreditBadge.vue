@@ -6,20 +6,8 @@ defineProps<{
 
 <template>
   <span class="dock-credit-badge" :title="`预估消耗积分 ${credits}`">
-    <svg
-      viewBox="0 0 24 24"
-      width="12"
-      height="12"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v10" />
-      <path d="M9.5 9.5c.5-1 1.5-1.5 2.5-1.5s2 .6 2 1.75c0 2.25-4.5 1.25-4.5 3.5 0 1.1 1 1.75 2.5 1.75s1.9-.4 2.4-1.25" />
+    <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true" class="dock-credit-badge__bolt">
+      <path d="M13 2 4.5 13.5h5.6L11 22l8.5-11.5h-5.6L13 2z" />
     </svg>
     <span>{{ credits }}</span>
   </span>
@@ -32,7 +20,12 @@ defineProps<{
   gap: 3px;
   font-size: 11px;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--neo-text-muted);
   user-select: none;
+}
+
+.dock-credit-badge__bolt {
+  color: var(--neo-warm);
+  opacity: 0.9;
 }
 </style>

@@ -114,7 +114,6 @@ function expandSingleShot(
       id: `e-${composerNodeId}-${shotNodeId}`,
       source: composerNodeId,
       target: shotNodeId,
-      style: { stroke: '#f59e0b' },
     })
   }
 
@@ -152,7 +151,6 @@ function expandSingleShot(
     id: `e-${shotNodeId}-${childId}`,
     source: shotNodeId,
     target: childId,
-    style: { stroke: '#6366f1' },
   })
 }
 

@@ -48,16 +48,16 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   <Teleport to="body">
     <div class="connect-node-picker-layer fixed inset-0 z-[120]" @click="emit('close')">
       <div
-        class="connect-node-picker pointer-events-auto fixed w-[268px] max-h-[min(420px,70vh)] overflow-y-auto rounded-2xl border border-white/10 bg-[rgba(36,36,36,0.92)] p-2 shadow-2xl backdrop-blur-xl"
+        class="connect-node-picker neo-popover pointer-events-auto fixed w-[268px] max-h-[min(420px,70vh)] overflow-y-auto rounded-2xl p-2"
         :style="style"
         @click.stop
       >
-        <p class="mb-2 px-2 text-[10px] uppercase tracking-wider text-white/30">选择节点类型</p>
+        <p class="mb-2 px-2 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">选择节点类型</p>
         <button
           v-for="item in items"
           :key="item.type"
           type="button"
-          class="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/5"
+          class="neo-popover-item flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left"
           @click="emit('select', item.type)"
         >
           <span
@@ -68,12 +68,12 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
           </span>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
-              <span class="text-[13px] text-white/90">{{ item.label }}</span>
-              <span v-if="item.badge" class="rounded bg-[#6366f1]/20 px-1.5 py-0.5 text-[9px] text-[#818cf8]">
+              <span class="text-[13px] text-[var(--neo-text-primary)]">{{ item.label }}</span>
+              <span v-if="item.badge" class="rounded bg-[var(--neo-accent-soft)] px-1.5 py-0.5 text-[9px] text-[var(--neo-accent-text)]">
                 {{ item.badge }}
               </span>
             </div>
-            <p v-if="item.desc" class="mt-0.5 text-[10px] text-white/40">{{ item.desc }}</p>
+            <p v-if="item.desc" class="mt-0.5 text-[10px] text-[var(--neo-text-muted)]">{{ item.desc }}</p>
           </div>
         </button>
       </div>
@@ -81,10 +81,3 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
   </Teleport>
 </template>
 
-<style scoped>
-.connect-node-picker {
-  box-shadow:
-    0 12px 48px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-</style>

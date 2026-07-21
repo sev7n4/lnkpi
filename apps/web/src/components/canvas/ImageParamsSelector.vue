@@ -59,35 +59,33 @@ function aspectRect(value: ImageAspectRatio) {
   <div ref="rootRef" class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
       title="尺寸 / 分辨率 / 张数"
       @click="open = !open"
     >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" class="text-white/50">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" class="opacity-60">
         <rect x="3" y="5" width="18" height="14" rx="2" />
       </svg>
       <span class="font-medium">{{ summary }}</span>
-      <svg class="h-3 w-3 shrink-0 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg class="h-3 w-3 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>
     </button>
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-50 mb-1 w-[264px] rounded-xl border border-white/10 bg-[#242424] p-3 shadow-xl"
+      class="neo-popover absolute bottom-full left-0 z-50 mb-1 w-[264px] rounded-xl p-3"
       @click.stop
     >
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">画面比例</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">画面比例</p>
         <div class="grid grid-cols-4 gap-1">
           <button
             v-for="opt in aspectOptions"
             :key="opt"
             type="button"
-            class="flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px] transition"
-            :class="aspect === opt
-              ? 'bg-[#6366f1]/30 text-[#818cf8]'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'"
+            class="neo-chip flex flex-col items-center gap-0.5 rounded-md px-1 py-1.5 text-[10px]"
+            :class="aspect === opt ? 'is-on' : ''"
             @click="emit('update:aspect', opt)"
           >
             <svg viewBox="0 0 18 18" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -99,16 +97,14 @@ function aspectRect(value: ImageAspectRatio) {
       </div>
 
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">分辨率</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">分辨率</p>
         <div class="flex gap-1">
           <button
             v-for="opt in resolutionOptions"
             :key="opt"
             type="button"
-            class="flex-1 rounded-md px-2 py-1 text-[10px] transition"
-            :class="resolution === opt
-              ? 'bg-[#6366f1]/30 text-[#818cf8]'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'"
+            class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
+            :class="resolution === opt ? 'is-on' : ''"
             @click="emit('update:resolution', opt)"
           >
             {{ opt }}
@@ -117,16 +113,14 @@ function aspectRect(value: ImageAspectRatio) {
       </div>
 
       <div>
-        <p class="mb-1.5 text-[10px] text-white/40">生成张数</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">生成张数</p>
         <div class="flex gap-1">
           <button
             v-for="opt in countOptions"
             :key="opt"
             type="button"
-            class="flex-1 rounded-md px-2 py-1 text-[10px] transition"
-            :class="count === opt
-              ? 'bg-[#6366f1]/30 text-[#818cf8]'
-              : 'bg-white/5 text-white/60 hover:bg-white/10'"
+            class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
+            :class="count === opt ? 'is-on' : ''"
             @click="emit('update:count', opt)"
           >
             ×{{ opt }}

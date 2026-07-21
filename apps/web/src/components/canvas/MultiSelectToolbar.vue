@@ -27,10 +27,10 @@ const emit = defineEmits<{
     }"
   >
     <div
-      class="pointer-events-auto flex items-center gap-1 rounded-xl border border-white/10 bg-[#242424]/98 px-1.5 py-1 shadow-xl backdrop-blur-md"
+      class="neo-chrome pointer-events-auto flex items-center gap-1 rounded-xl px-1.5 py-1"
       @click.stop
     >
-      <span class="px-2 text-[10px] text-white/40">已选 {{ selectedIds.length }}</span>
+      <span class="px-2 text-[10px] text-[var(--neo-text-muted)]">已选 {{ selectedIds.length }}</span>
       <button
         v-if="canGenerateVideo"
         type="button"
@@ -78,12 +78,20 @@ const emit = defineEmits<{
 
 <style scoped>
 .toolbar-action {
-  @apply rounded-lg px-2.5 py-1 text-xs text-white/70 transition hover:bg-white/10 hover:text-white;
+  @apply rounded-lg px-2.5 py-1 text-xs transition;
+  color: var(--neo-text-secondary);
+}
+.toolbar-action:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 .toolbar-action.danger {
-  @apply text-red-400 hover:text-red-300;
+  color: #f87171;
+}
+.toolbar-action.danger:hover {
+  color: #fca5a5;
 }
 .toolbar-action.accent {
-  @apply text-violet-300 hover:text-violet-200;
+  color: var(--neo-accent-text);
 }
 </style>

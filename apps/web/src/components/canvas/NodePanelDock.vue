@@ -81,7 +81,7 @@ useClickOutside(rootRef, closePopovers)
     <div class="pointer-events-auto relative">
       <!-- 竖向面板：添加节点 + 资产库 + 任务历史 + 模型设置 -->
       <div
-        class="vertical-capsule flex flex-col items-stretch gap-0.5 rounded-2xl border border-white/[0.08] bg-[rgba(22,22,22,0.94)] p-1 shadow-[0_8px_28px_rgba(0,0,0,0.42)] backdrop-blur-xl"
+        class="vertical-capsule neo-chrome flex flex-col items-stretch gap-0.5 rounded-2xl p-1"
       >
         <button
           type="button"
@@ -101,7 +101,7 @@ useClickOutside(rootRef, closePopovers)
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.25" d="M12 4v16m8-8H4" />
             </svg>
           </span>
-          <span class="rail-btn-label text-white/85">添加</span>
+          <span class="rail-btn-label rail-btn-label-primary">添加</span>
         </button>
 
         <button
@@ -124,7 +124,7 @@ useClickOutside(rootRef, closePopovers)
           <span class="rail-btn-label">资产库</span>
           <span
             v-if="assets.length"
-            class="absolute right-1 top-0 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[#6366f1] px-0.5 text-[8px] font-semibold text-white"
+            class="absolute right-1 top-0 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--neo-accent)] px-0.5 text-[8px] font-semibold text-white"
           >
             {{ assets.length > 99 ? '99+' : assets.length }}
           </span>
@@ -146,7 +146,7 @@ useClickOutside(rootRef, closePopovers)
           <span class="rail-btn-label">历史</span>
         </button>
 
-        <span class="mx-auto my-0.5 h-px w-8 bg-white/[0.08]" />
+        <span class="mx-auto my-0.5 h-px w-8 bg-[var(--neo-border)]" />
 
         <button
           type="button"
@@ -172,15 +172,15 @@ useClickOutside(rootRef, closePopovers)
       <Transition name="menu-pop">
         <div
           v-if="showMenu"
-          class="add-menu-popover absolute left-[calc(100%+10px)] top-0 max-h-[min(420px,70vh)] w-[268px] overflow-y-auto rounded-2xl border border-white/10 bg-[#242424] p-2 shadow-2xl"
+          class="add-menu-popover neo-popover absolute left-[calc(100%+10px)] top-0 max-h-[min(420px,70vh)] w-[268px] overflow-y-auto rounded-2xl p-2"
           @click.stop
         >
-          <p class="mb-2 px-2 text-[10px] uppercase tracking-wider text-white/30">添加节点</p>
+          <p class="popover-caption mb-2 px-2 text-[10px] uppercase tracking-wider">添加节点</p>
           <button
             v-for="item in menuItems"
             :key="item.type"
             type="button"
-            class="flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-white/5"
+            class="neo-popover-item flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left"
             @click="add(item.type)"
           >
             <span
@@ -191,12 +191,12 @@ useClickOutside(rootRef, closePopovers)
             </span>
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-2">
-                <span class="text-[13px] text-white/90">{{ item.label }}</span>
-                <span v-if="item.badge" class="rounded bg-[#6366f1]/20 px-1.5 py-0.5 text-[9px] text-[#818cf8]">
+                <span class="popover-item-title text-[13px]">{{ item.label }}</span>
+                <span v-if="item.badge" class="rounded bg-[var(--neo-accent-soft)] px-1.5 py-0.5 text-[9px] text-[var(--neo-accent-text)]">
                   {{ item.badge }}
                 </span>
               </div>
-              <p v-if="item.desc" class="mt-0.5 text-[10px] text-white/40">{{ item.desc }}</p>
+              <p v-if="item.desc" class="popover-item-desc mt-0.5 text-[10px]">{{ item.desc }}</p>
             </div>
           </button>
         </div>
@@ -205,7 +205,7 @@ useClickOutside(rootRef, closePopovers)
       <Transition name="menu-pop">
         <div
           v-if="showAssets"
-          class="asset-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl border border-white/10 bg-[#242424] shadow-2xl"
+          class="asset-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
           <CanvasAssetPanel
@@ -219,7 +219,7 @@ useClickOutside(rootRef, closePopovers)
       <Transition name="menu-pop">
         <div
           v-if="showHistory"
-          class="history-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl border border-white/10 bg-[#242424] shadow-2xl"
+          class="history-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
           <CanvasTaskHistoryPanel />
@@ -231,39 +231,64 @@ useClickOutside(rootRef, closePopovers)
 
 <style scoped>
 .rail-btn {
-  @apply relative flex w-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 text-white/55 transition;
+  @apply relative flex w-[52px] flex-col items-center justify-center gap-1 rounded-xl px-1 py-1.5 transition;
+  color: var(--neo-text-muted);
 }
 .rail-btn:hover {
-  @apply bg-white/[0.06] text-[#a5b4fc];
+  background: var(--neo-hover-bg);
+  color: var(--neo-accent-text);
 }
 .rail-btn.is-active {
-  @apply bg-[#6366f1]/15 text-[#a5b4fc];
+  background: var(--neo-accent-soft);
+  color: var(--neo-accent-text);
 }
 
 /* 统一大小的圆形图标底座 */
 .rail-circle {
-  @apply flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.05] transition;
+  @apply flex h-9 w-9 items-center justify-center rounded-full transition;
+  border: 1px solid var(--neo-border);
+  background: var(--neo-hover-bg);
 }
 .rail-btn:hover .rail-circle {
-  @apply border-white/[0.14] bg-white/[0.1];
+  border-color: var(--neo-border-strong);
+  background: var(--neo-active-bg);
 }
 .rail-btn.is-active .rail-circle {
-  @apply border-[#6366f1]/40 bg-[#6366f1]/20;
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
 }
 
-/* 添加节点：白色高亮凸显 */
-.rail-circle-primary {
-  @apply border-transparent bg-white text-[#161616] shadow-[0_0_14px_rgba(255,255,255,0.35)];
+/* 添加节点：品牌渐变凸显 */
+.rail-circle-primary,
+.rail-btn:hover .rail-circle-primary,
+.rail-btn.is-active .rail-circle-primary {
+  border-color: transparent;
+  background: var(--neo-brand-gradient);
+  color: #fff;
+  box-shadow: 0 0 16px rgba(109, 93, 252, 0.45);
 }
 .rail-btn:hover .rail-circle-primary {
-  @apply border-transparent bg-white text-[#161616] shadow-[0_0_20px_rgba(255,255,255,0.5)];
-}
-.rail-btn.is-active .rail-circle-primary {
-  @apply border-transparent bg-white text-[#161616];
+  box-shadow: 0 0 22px rgba(109, 93, 252, 0.6);
 }
 
 .rail-btn-label {
   @apply text-[10px] leading-none;
+}
+
+.rail-btn-label-primary {
+  color: var(--neo-text-primary);
+}
+
+.popover-caption {
+  color: var(--neo-text-muted);
+}
+
+.popover-item-title {
+  color: var(--neo-text-primary);
+}
+
+.popover-item-desc {
+  color: var(--neo-text-muted);
 }
 
 .menu-pop-enter-active,

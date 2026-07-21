@@ -1,40 +1,130 @@
+/* ============================================================
+   NeoWow 品牌设计 Token（单一来源）
+   主色   —— 电光紫 #6d5dfc（创造力 / AI）
+   强调色 —— 电流青 #22d3ee（连线电流 / 能量流动）
+   点缀色 —— 琥珀橙 #f59e0b（积分 / 能量值 / 氛围光）
+   两套主题通过 :root[data-canvas-theme] 切换
+   ============================================================ */
 :root {
-  --neo-bg: #141414;
-  --neo-surface-card: #1a1a1a;
-  --neo-surface-elevated: #242424;
+  /* ---- 品牌色 ---- */
+  --neo-accent: #6d5dfc;
+  --neo-accent-hover: #8a7dff;
+  --neo-accent-strong: #5b4ce6;
+  --neo-accent-soft: rgba(109, 93, 252, 0.16);
+  --neo-accent-border: rgba(109, 93, 252, 0.4);
+  /* 深底上用亮紫、浅底上用深紫，保证可读性 */
+  --neo-accent-text: #a89dff;
+  --neo-brand-gradient: linear-gradient(135deg, #6d5dfc 0%, #8a5cf6 55%, #b45cf0 100%);
+  --neo-electric: #22d3ee;
+  --neo-electric-glow: rgba(34, 211, 238, 0.5);
+  --neo-warm: #f59e0b;
+  --neo-warm-soft: rgba(245, 158, 11, 0.16);
+
+  /* ---- 深色表面层级 ---- */
+  --neo-bg: #131318;
+  --neo-surface-card: #1a1a21;
+  --neo-surface-elevated: #232330;
   --neo-border: rgba(255, 255, 255, 0.08);
-  --neo-accent: #6366f1;
-  --neo-accent-hover: #818cf8;
-  --neo-text-primary: #ffffff;
-  --neo-text-secondary: rgba(255, 255, 255, 0.6);
-  --neo-text-muted: rgba(255, 255, 255, 0.4);
+  --neo-border-strong: rgba(255, 255, 255, 0.14);
+  --neo-hover-bg: rgba(255, 255, 255, 0.06);
+  --neo-active-bg: rgba(255, 255, 255, 0.1);
+
+  /* ---- 文字 ---- */
+  --neo-text-primary: #f4f4f8;
+  --neo-text-secondary: rgba(244, 244, 248, 0.62);
+  --neo-text-muted: rgba(244, 244, 248, 0.4);
+  --neo-text-invert: #16161c;
+
+  /* ---- 浮动 chrome（画布上的悬浮按钮 / pill） ---- */
+  --neo-chrome-bg: rgba(22, 22, 28, 0.88);
+  --neo-chrome-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
+
+  /* ---- 弹出卡片 / 菜单 ---- */
+  --neo-popover-bg: rgba(32, 32, 41, 0.97);
+  --neo-popover-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+
+  /* ---- 布局 ---- */
   --neo-sidebar-width: 240px;
   --neo-agent-rail-width: 56px;
-  --neo-agent-expanded-width: 392px;
+  --neo-agent-expanded-width: 400px;
   --neo-header-height: 64px;
   --neo-radius-md: 12px;
   --neo-radius-lg: 16px;
-  --neo-panel-bg-rgba: rgba(24, 24, 27, 0.92);
-  --neo-node-card-bg: rgba(40, 40, 45, 0.4);
+
+  /* ---- 节点 ---- */
+  --neo-panel-bg-rgba: rgba(24, 24, 30, 0.92);
+  --neo-node-card-bg: rgba(40, 40, 48, 0.4);
   --neo-node-border: rgba(255, 255, 255, 0.08);
-  /* 与 aimarket creation-panel 一致的毛玻璃配方 */
+  --neo-node-selected-ring: rgba(255, 255, 255, 1);
+  --neo-node-title-color: #fff;
+  --neo-node-icon-color: rgba(255, 255, 255, 0.85);
+  --neo-node-text: rgba(255, 255, 255, 0.85);
+  --neo-node-text-muted: rgba(255, 255, 255, 0.5);
+
+  /* ---- 连线 ---- */
+  --neo-edge: rgba(148, 151, 180, 0.3);
+  --neo-edge-hover: rgba(178, 181, 210, 0.55);
+  --neo-edge-selected: #8a7dff;
+
+  /* ---- 毛玻璃 dock（与 aimarket creation-panel 一致的配方） ---- */
   --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.07) 0%, rgba(9, 9, 11, 0.76) 50%, rgba(9, 9, 11, 0.92) 100%);
   --neo-glass-border: rgba(255, 255, 255, 0.12);
+  --neo-glass-border-hover: rgba(255, 255, 255, 0.2);
   --neo-glass-blur: 40px;
+  --neo-glass-topline: rgba(255, 255, 255, 0.25);
   --neo-glass-shadow:
     0 12px 48px rgba(0, 0, 0, 0.5),
     inset 0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 -18px 42px rgba(249, 115, 22, 0.06),
-    0 12px 48px rgba(139, 92, 246, 0.05);
+    0 -18px 42px rgba(245, 158, 11, 0.06),
+    0 12px 48px rgba(109, 93, 252, 0.06);
   --neo-glass-glow: 0 0 18px 1px rgba(170, 178, 205, 0.22);
 }
 
-/* 画布白天模式：仅覆盖画布相关 token（面板/节点内部仍保持深色系） */
+/* ============================================================
+   白天模式 —— 全组件跟随（画布 / dock / 节点 / 弹出卡片 / 小地图）
+   ============================================================ */
 :root[data-canvas-theme='light'] {
-  --neo-bg: #eceef2;
-  --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, rgba(24, 24, 30, 0.68) 50%, rgba(24, 24, 30, 0.86) 100%);
-  --neo-glass-border: rgba(0, 0, 0, 0.12);
+  --neo-accent-text: #5b4ce6;
+  --neo-bg: #eef0f5;
+  --neo-surface-card: #ffffff;
+  --neo-surface-elevated: #ffffff;
+  --neo-border: rgba(23, 25, 35, 0.1);
+  --neo-border-strong: rgba(23, 25, 35, 0.18);
+  --neo-hover-bg: rgba(23, 25, 35, 0.05);
+  --neo-active-bg: rgba(23, 25, 35, 0.09);
+
+  --neo-text-primary: #171923;
+  --neo-text-secondary: rgba(23, 25, 35, 0.64);
+  --neo-text-muted: rgba(23, 25, 35, 0.42);
+  --neo-text-invert: #ffffff;
+
+  --neo-chrome-bg: rgba(255, 255, 255, 0.9);
+  --neo-chrome-shadow: 0 8px 24px rgba(23, 25, 35, 0.12);
+
+  --neo-popover-bg: rgba(255, 255, 255, 0.98);
+  --neo-popover-shadow: 0 18px 44px rgba(23, 25, 35, 0.16);
+
+  --neo-panel-bg-rgba: rgba(255, 255, 255, 0.94);
+  --neo-node-card-bg: rgba(255, 255, 255, 0.92);
+  --neo-node-border: rgba(23, 25, 35, 0.12);
+  --neo-node-selected-ring: rgba(23, 25, 35, 0.9);
+  --neo-node-title-color: #1f2430;
+  --neo-node-icon-color: rgba(24, 24, 30, 0.8);
+  --neo-node-text: rgba(23, 25, 35, 0.85);
+  --neo-node-text-muted: rgba(23, 25, 35, 0.5);
+
+  --neo-edge: rgba(23, 25, 35, 0.22);
+  --neo-edge-hover: rgba(23, 25, 35, 0.45);
+  --neo-edge-selected: #6d5dfc;
+
+  --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(255, 255, 255, 0.8) 50%, rgba(246, 247, 251, 0.92) 100%);
+  --neo-glass-border: rgba(23, 25, 35, 0.1);
+  --neo-glass-border-hover: rgba(23, 25, 35, 0.18);
+  --neo-glass-topline: rgba(255, 255, 255, 0.9);
   --neo-glass-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.24),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+    0 12px 40px rgba(23, 25, 35, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.65),
+    0 -18px 42px rgba(245, 158, 11, 0.05),
+    0 12px 48px rgba(109, 93, 252, 0.07);
+  --neo-glass-glow: 0 0 18px 1px rgba(109, 93, 252, 0.14);
 }

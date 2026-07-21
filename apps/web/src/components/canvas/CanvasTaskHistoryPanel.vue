@@ -34,7 +34,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 }
 
 function statusMeta(status: string) {
-  return STATUS_META[status] ?? { label: status, cls: 'bg-white/10 text-white/50' }
+  return STATUS_META[status] ?? { label: status, cls: 'bg-[var(--neo-active-bg)] text-[var(--neo-text-muted)]' }
 }
 
 function recordModel(record: GenerationRecord): string {
@@ -84,12 +84,12 @@ onMounted(load)
 
 <template>
   <div class="canvas-task-history flex max-h-[min(520px,72vh)] w-[404px] flex-col">
-    <div class="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2.5">
-      <span class="text-[13px] font-medium text-white/90">任务历史</span>
-      <span class="text-[10px] text-white/30">最近 {{ records.length }} 条</span>
+    <div class="flex items-center gap-2 border-b border-[var(--neo-border)] px-3 py-2.5">
+      <span class="text-[13px] font-medium text-[var(--neo-text-primary)]">任务历史</span>
+      <span class="text-[10px] text-[var(--neo-text-muted)]">最近 {{ records.length }} 条</span>
       <button
         type="button"
-        class="ml-auto flex h-6 w-6 items-center justify-center rounded-lg text-white/45 transition hover:bg-white/[0.08] hover:text-white"
+        class="ml-auto flex h-6 w-6 items-center justify-center rounded-lg text-[var(--neo-text-muted)] transition hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-primary)]"
         title="刷新"
         :disabled="loading"
         @click="load"
@@ -106,7 +106,7 @@ onMounted(load)
         :key="f.key"
         type="button"
         class="rounded-full px-2.5 py-1 text-[10px] transition"
-        :class="filter === f.key ? 'bg-[#6366f1]/25 text-[#a5b4fc]' : 'bg-white/[0.04] text-white/45 hover:bg-white/[0.08] hover:text-white/70'"
+        :class="filter === f.key ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'bg-[var(--neo-hover-bg)] text-[var(--neo-text-muted)] hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-secondary)]'"
         @click="filter = f.key"
       >
         {{ f.label }}
@@ -114,18 +114,18 @@ onMounted(load)
     </div>
 
     <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-      <p v-if="error" class="py-8 text-center text-[11px] text-white/35">{{ error }}</p>
-      <p v-else-if="loading && !records.length" class="py-8 text-center text-[11px] text-white/35">加载中...</p>
-      <p v-else-if="!filtered.length" class="py-8 text-center text-[11px] text-white/35">暂无任务记录</p>
+      <p v-if="error" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">{{ error }}</p>
+      <p v-else-if="loading && !records.length" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">加载中...</p>
+      <p v-else-if="!filtered.length" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">暂无任务记录</p>
       <div v-else class="grid grid-cols-2 gap-2">
         <div
           v-for="record in filtered"
           :key="record.id"
-          class="rounded-xl border border-white/[0.06] bg-white/[0.03] p-2.5"
+          class="rounded-xl border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] p-2.5"
         >
           <div class="flex items-center gap-1.5">
-            <span class="text-white/55"><DockTypeIcon :type="record.type" :size="13" /></span>
-            <span class="text-[11px] text-white/80">{{ TYPE_LABELS[record.type] ?? record.type }}</span>
+            <span class="text-[var(--neo-text-muted)]"><DockTypeIcon :type="record.type" :size="13" /></span>
+            <span class="text-[11px] text-[var(--neo-text-secondary)]">{{ TYPE_LABELS[record.type] ?? record.type }}</span>
             <span
               class="ml-auto shrink-0 rounded-md px-1.5 py-0.5 text-[9px]"
               :class="statusMeta(record.status).cls"
@@ -140,10 +140,10 @@ onMounted(load)
             alt=""
             loading="lazy"
           />
-          <p class="mt-1.5 line-clamp-2 min-h-[26px] text-[10px] leading-relaxed text-white/50">
+          <p class="mt-1.5 line-clamp-2 min-h-[26px] text-[10px] leading-relaxed text-[var(--neo-text-muted)]">
             {{ record.prompt || '—' }}
           </p>
-          <div class="mt-1.5 flex items-center justify-between gap-2 text-[9px] text-white/35">
+          <div class="mt-1.5 flex items-center justify-between gap-2 text-[9px] text-[var(--neo-text-muted)]">
             <span class="truncate" :title="recordModel(record)">{{ recordModel(record) }}</span>
             <span class="shrink-0 tabular-nums">{{ formatTime(record.createdAt) }}</span>
           </div>

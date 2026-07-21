@@ -7,7 +7,7 @@
 
 @layer base {
   * {
-    @apply border-surface-border;
+    border-color: var(--neo-border);
   }
 
   body {
@@ -26,24 +26,121 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-surface-border;
+    border-radius: 999px;
+    background: var(--neo-border-strong);
   }
 }
 
 @layer components {
   .glass-panel {
-    @apply rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl;
+    border-radius: 1rem;
+    border: 1px solid var(--neo-border);
+    background: var(--neo-hover-bg);
+    backdrop-filter: blur(24px);
   }
 
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-brand-500 disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50;
+    background: var(--neo-brand-gradient);
+    box-shadow: 0 4px 16px rgba(109, 93, 252, 0.32);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 6px 20px rgba(109, 93, 252, 0.42);
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition;
+    border: 1px solid var(--neo-border);
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-secondary);
+  }
+
+  .btn-ghost:hover {
+    background: var(--neo-active-bg);
+    color: var(--neo-text-primary);
   }
 
   .input-field {
-    @apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/40 outline-none transition focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/20;
+    @apply w-full rounded-xl px-4 py-3 text-sm outline-none transition;
+    border: 1px solid var(--neo-border-strong);
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-primary);
+  }
+
+  .input-field::placeholder {
+    color: var(--neo-text-muted);
+  }
+
+  .input-field:focus {
+    border-color: var(--neo-accent-border);
+    box-shadow: 0 0 0 2px var(--neo-accent-soft);
+  }
+
+  /* 画布浮动 chrome：左上返回/标题、右上主题/积分/头像、左侧工具轨 */
+  .neo-chrome {
+    border: 1px solid var(--neo-border);
+    background: var(--neo-chrome-bg);
+    color: var(--neo-text-secondary);
+    box-shadow: var(--neo-chrome-shadow);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .neo-chrome:hover {
+    background: var(--neo-chrome-bg);
+    color: var(--neo-text-primary);
+  }
+
+  /* 弹出卡片 / 下拉菜单 / popover 统一表面 */
+  .neo-popover {
+    border: 1px solid var(--neo-border);
+    background: var(--neo-popover-bg);
+    color: var(--neo-text-primary);
+    box-shadow: var(--neo-popover-shadow);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* popover 内的次级 hover 项 */
+  .neo-popover-item {
+    color: var(--neo-text-secondary);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .neo-popover-item:hover {
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-primary);
+  }
+
+  /* dock / 工具条上的小控件按钮（模型选择、参数选择等触发器） */
+  .neo-ctl {
+    border: 1px solid var(--neo-border);
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-primary);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .neo-ctl:hover {
+    background: var(--neo-active-bg);
+    border-color: var(--neo-border-strong);
+  }
+
+  /* 选项 chip：is-on 时品牌色高亮 */
+  .neo-chip {
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-secondary);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .neo-chip:hover {
+    background: var(--neo-active-bg);
+  }
+
+  .neo-chip.is-on {
+    background: var(--neo-accent-soft);
+    color: var(--neo-accent-text);
   }
 }

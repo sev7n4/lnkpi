@@ -79,12 +79,12 @@ async function handleLogin() {
   <el-dialog v-model="visible" title="欢迎登录" width="420px" align-center>
     <div class="mb-4 flex flex-col items-center gap-2">
       <BrandLogo size="lg" />
-      <p class="text-sm text-white/60">继续你的创作之旅</p>
+      <p class="text-sm text-[var(--neo-text-secondary)]">继续你的创作之旅</p>
     </div>
 
     <div class="space-y-4">
       <div>
-        <label class="mb-1.5 block text-xs text-white/50">手机号</label>
+        <label class="mb-1.5 block text-xs text-[var(--neo-text-muted)]">手机号</label>
         <div class="flex gap-2">
           <span class="input-field flex w-16 items-center justify-center !px-2">+86</span>
           <input v-model="phone" class="input-field" placeholder="请输入手机号" type="tel" />
@@ -92,7 +92,7 @@ async function handleLogin() {
       </div>
 
       <div>
-        <label class="mb-1.5 block text-xs text-white/50">验证码</label>
+        <label class="mb-1.5 block text-xs text-[var(--neo-text-muted)]">验证码</label>
         <div class="flex gap-2">
           <input v-model="code" class="input-field" placeholder="请输入验证码" />
           <button
@@ -113,7 +113,7 @@ async function handleLogin() {
         {{ loading ? '登录中...' : '开始你的旅程' }}
       </button>
 
-      <p class="text-center text-xs text-white/40">
+      <p class="text-center text-xs text-[var(--neo-text-muted)]">
         登录即表示同意《超创平台用户协议》与《隐私政策》
       </p>
     </div>

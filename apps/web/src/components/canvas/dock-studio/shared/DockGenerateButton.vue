@@ -58,19 +58,22 @@ const emit = defineEmits<{
   justify-content: center;
   border: none;
   border-radius: 999px;
-  background: #fff;
-  color: #111;
+  background: var(--neo-brand-gradient);
+  color: #fff;
   cursor: pointer;
   pointer-events: auto;
+  box-shadow: 0 2px 12px rgba(109, 93, 252, 0.45);
   transition:
     transform 0.15s ease,
     opacity 0.15s ease,
-    background 0.15s ease;
+    filter 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .dock-generate-btn:hover:not(:disabled) {
-  background: #f3f3f3;
+  filter: brightness(1.1);
   transform: scale(1.05);
+  box-shadow: 0 3px 16px rgba(109, 93, 252, 0.6);
 }
 
 .dock-generate-btn:disabled {
@@ -79,15 +82,15 @@ const emit = defineEmits<{
 }
 
 .dock-generate-btn.is-generating {
-  background: #111;
-  color: #fff;
+  background: var(--neo-surface-elevated);
+  color: var(--neo-text-primary);
   opacity: 1 !important;
   pointer-events: auto !important;
   cursor: pointer;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 2px var(--neo-accent-border);
 }
 
 .dock-generate-btn.is-generating:hover:not(:disabled) {
-  background: #333;
+  filter: brightness(1.15);
 }
 </style>

@@ -1,20 +1,4 @@
-:root {
-  --neo-panel-bg-rgba: rgba(24, 24, 27, 0.92);
-  --neo-node-selected-ring: rgba(255, 255, 255, 1);
-  --neo-node-border: rgba(255, 255, 255, 0.08);
-  --neo-node-card-bg: rgba(40, 40, 45, 0.4);
-  --neo-node-title-color: #fff;
-  --neo-node-icon-color: rgba(255, 255, 255, 0.85);
-}
-
-/* 画布白天模式：节点卡片保持深色以保证内部白色文字可读，外部标题转深色 */
-:root[data-canvas-theme='light'] {
-  --neo-node-selected-ring: rgba(24, 24, 27, 0.9);
-  --neo-node-border: rgba(0, 0, 0, 0.12);
-  --neo-node-card-bg: rgba(32, 32, 38, 0.88);
-  --neo-node-title-color: #1f2430;
-  --neo-node-icon-color: rgba(24, 24, 27, 0.8);
-}
+/* 主题 token 统一定义在 neowow-tokens.css（--neo-node-* 等） */
 
 .neo-node-wrapper {
   position: relative;
@@ -237,9 +221,9 @@
   width: 228px;
   padding: 10px 11px;
   border-radius: 12px;
-  background: rgba(22, 22, 24, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  background: var(--neo-popover-bg);
+  border: 1px solid var(--neo-border-strong);
+  box-shadow: var(--neo-popover-shadow);
   text-align: left;
 }
 
@@ -247,14 +231,14 @@
   margin: 0 0 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--neo-text-primary);
   line-height: 1.35;
 }
 
 .neo-task-diag-hint {
   margin: 0 0 8px;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.62);
+  color: var(--neo-text-secondary);
   line-height: 1.45;
 }
 
@@ -263,14 +247,14 @@
   border: none;
   border-radius: 8px;
   padding: 7px;
-  background: #6366f1;
+  background: var(--neo-accent);
   color: #fff;
   font-size: 11px;
   cursor: pointer;
 }
 
 .neo-task-diag-copy:hover:not(:disabled) {
-  background: rgba(99, 102, 241, 0.85);
+  background: var(--neo-accent-hover);
 }
 
 .neo-task-diag-copy:disabled {
@@ -282,12 +266,12 @@
   min-width: 80px;
   max-width: 200px;
   border-radius: 6px;
-  border: 1px solid rgba(99, 102, 241, 0.55);
-  background: rgba(24, 24, 27, 0.95);
+  border: 1px solid var(--neo-accent-border);
+  background: var(--neo-popover-bg);
   padding: 2px 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
+  color: var(--neo-text-primary);
   outline: none;
 }
 
@@ -391,16 +375,16 @@
   height: 44px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--neo-border-strong);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.55);
+  background: var(--neo-hover-bg);
+  color: var(--neo-node-text-muted);
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .neo-node-upload-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--neo-active-bg);
+  color: var(--neo-node-text);
 }
 
 .neo-node-replace-btn {
@@ -429,14 +413,14 @@
   min-height: 100%;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border: 1px dashed var(--neo-border-strong);
   border-radius: 16px;
 }
 
 .neo-node-placeholder.is-generating {
-  border-color: rgba(139, 92, 246, 0.55);
-  background: rgba(99, 102, 241, 0.14);
-  box-shadow: inset 0 0 0 1px rgba(129, 140, 248, 0.2);
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(138, 125, 255, 0.2);
 }
 
 .neo-node-placeholder.is-failed {
@@ -455,12 +439,13 @@
 .neo-placeholder-icon {
   width: 48px;
   height: 48px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--neo-node-text-muted);
+  opacity: 0.7;
 }
 
 .neo-placeholder-text {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--neo-node-text-muted);
   text-align: center;
 }
 
@@ -482,7 +467,7 @@
   margin: 0;
   font-size: 13px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.85);
+  color: var(--neo-node-text);
   white-space: pre-wrap;
 }
 
@@ -503,10 +488,10 @@
 /* Neo handle — global CSS (no :deep(); imported from main.css) */
 .neo-node-wrapper .vue-flow__handle.neo-flow-handle {
   z-index: 3;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 8px;
+  height: 8px;
+  min-width: 8px;
+  min-height: 8px;
   opacity: 1;
   background: transparent !important;
   border: none !important;
@@ -517,46 +502,61 @@
   content: none;
 }
 
+/* 连线锚点 = handle 盒朝外的那条边缘（vue-flow 的取点规则）。
+   这里让盒子朝外的边缘恰好贴住节点边，连线就从上游节点右边到下游节点左边、边到边不断裂。
+   --ex / --ey：handle 盒中心到节点边缘的向量（用于把「+」圈校正回边上）；
+   --fx / --fy：「+」圈显示时向外偏离节点边缘的距离（纯视觉，不影响连线锚点） */
 .neo-node-wrapper .vue-flow__handle-left.neo-flow-handle {
-  left: -20px;
-  --fx: -14px;
+  left: 0;
+  transform: translate(0, -50%);
+  --ex: -4px;
+  --fx: -16px;
 }
 
 .neo-node-wrapper .vue-flow__handle-right.neo-flow-handle {
-  right: -20px;
-  --fx: 14px;
+  right: 0;
+  transform: translate(0, -50%);
+  --ex: 4px;
+  --fx: 16px;
 }
 
 .neo-node-wrapper .vue-flow__handle-top.neo-flow-handle {
-  top: -20px;
-  --fy: -14px;
+  top: 0;
+  transform: translate(-50%, 0);
+  --ey: -4px;
+  --fy: -16px;
 }
 
 .neo-node-wrapper .vue-flow__handle-bottom.neo-flow-handle {
-  bottom: -20px;
-  --fy: 14px;
+  bottom: 0;
+  transform: translate(-50%, 0);
+  --ey: 4px;
+  --fy: 16px;
 }
 
+/* 命中区覆盖到外偏后的「+」圈（圈中心离盒中心约 20px、半径 12px） */
 .neo-node-wrapper .handle-hitbox {
   position: absolute;
-  inset: -16px;
+  inset: -32px;
   border-radius: 50%;
   pointer-events: inherit;
   z-index: 1;
 }
 
+/* 隐藏态：端点圈贴在节点边缘上（--ex/--ey 把盒中心校正到边），透明缩小 */
 .neo-node-wrapper .handle-plus {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, -50%) translate(var(--fx, 0px), var(--fy, 0px));
+  transform: translate(-50%, -50%) translate(var(--ex, 0px), var(--ey, 0px));
   transition: transform 0.16s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
   pointer-events: none;
   z-index: 0;
   opacity: 0;
 }
 
-/* 由 .show-handles（选中/hover）或 .connecting（拖出连线中）控制显示 */
+/* 显示态（hover / 选中 / 拖线中）：端点圈从节点边缘向外「长出」，
+   与节点边保持一段距离，连线锚点仍留在边上 */
 .neo-node-wrapper.show-handles .handle-plus,
 .neo-node-wrapper .vue-flow__handle.neo-flow-handle.connecting .handle-plus {
   opacity: 1;
@@ -564,7 +564,8 @@
 
 .neo-node-wrapper.show-handles .vue-flow__handle.neo-flow-handle .handle-plus,
 .neo-node-wrapper .vue-flow__handle.neo-flow-handle.connecting .handle-plus {
-  transform: translate(-50%, -50%) translate(0, 0);
+  transform: translate(-50%, -50%)
+    translate(calc(var(--ex, 0px) + var(--fx, 0px)), calc(var(--ey, 0px) + var(--fy, 0px)));
 }
 
 .neo-node-wrapper.show-handles .vue-flow__handle.neo-flow-handle .handle-plus-inner,
@@ -584,8 +585,8 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.6);
-  background: rgba(24, 24, 27, 0.35);
+  border: 2px solid var(--neo-handle-ring, rgba(255, 255, 255, 0.6));
+  background: var(--neo-handle-bg, rgba(24, 24, 27, 0.35));
   transform-origin: center center;
   opacity: 0.55;
   transition:
@@ -601,7 +602,16 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--neo-handle-plus, rgba(255, 255, 255, 0.88));
+}
+
+:root[data-canvas-theme='light'] .neo-node-wrapper .handle-plus-inner {
+  border-color: rgba(23, 25, 35, 0.45);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+:root[data-canvas-theme='light'] .neo-node-wrapper .handle-plus-inner::before {
+  color: rgba(23, 25, 35, 0.85);
 }
 
 .neo-node-wrapper .vue-flow__handle-left .handle-plus-inner {
@@ -626,7 +636,7 @@
 
 .neo-node-wrapper.show-handles .vue-flow__handle.neo-flow-handle:hover .handle-plus,
 .neo-node-wrapper .vue-flow__handle.neo-flow-handle.connecting .handle-plus {
-  transform: translate(-50%, -50%) translate(0, 0);
+  transform: translate(-50%, -50%) translate(var(--fx, 0px), var(--fy, 0px));
 }
 
 .neo-node-wrapper.show-handles .vue-flow__handle.neo-flow-handle:hover .handle-plus-inner,
@@ -641,8 +651,9 @@
 }
 
 .neo-node-wrapper .vue-flow__handle.neo-flow-handle.connecting .handle-plus-inner {
-  border-color: rgba(255, 255, 255, 0.85);
-  background: rgba(162, 162, 162, 0.55);
+  border-color: var(--neo-electric);
+  background: rgba(34, 211, 238, 0.28);
+  box-shadow: 0 0 12px var(--neo-electric-glow);
 }
 
 /* 多选批量连线端点：与单节点端点同款，略大一号；始终 show-handles */
@@ -656,12 +667,16 @@
   overflow: visible;
 }
 
+/* 批量端点是独立悬浮圆，不贴节点边：不需要边缘校正，也不做向外偏移 */
 .multi-select-batch-handle .vue-flow__handle.neo-flow-handle {
   width: 48px;
   height: 48px;
   min-width: 48px;
   min-height: 48px;
-  --fx: 16px;
+  --ex: 0px;
+  --ey: 0px;
+  --fx: 0px;
+  --fy: 0px;
 }
 
 .multi-select-batch-handle .vue-flow__handle-right.neo-flow-handle {
@@ -736,10 +751,10 @@
   left: 24px;
   height: 1px;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  background: linear-gradient(90deg, transparent, var(--neo-glass-topline), transparent);
 }
 
-/* aimarket 两侧氛围光斑（橙/紫） */
+/* aimarket 两侧氛围光斑（暖橙 / 品牌紫） */
 .bottom-toolbar-container::after {
   content: '';
   position: absolute;
@@ -749,13 +764,13 @@
   height: 112px;
   pointer-events: none;
   background:
-    radial-gradient(56px 56px at 48px 56px, rgba(249, 115, 22, 0.08), transparent 70%),
-    radial-gradient(48px 48px at calc(100% - 44px) 52px, rgba(139, 92, 246, 0.08), transparent 70%);
+    radial-gradient(56px 56px at 48px 56px, rgba(245, 158, 11, 0.08), transparent 70%),
+    radial-gradient(48px 48px at calc(100% - 44px) 52px, rgba(109, 93, 252, 0.1), transparent 70%);
   filter: blur(28px);
 }
 
 .bottom-toolbar-container:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--neo-glass-border-hover);
 }
 
 .bottom-toolbar-header {
@@ -797,16 +812,16 @@
   padding: 0 8px;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
 .dock-failure-chip__copy:hover {
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--neo-active-bg);
+  color: var(--neo-text-primary);
 }
 
 .bottom-toolbar-type-icon {
@@ -815,7 +830,7 @@
   height: 24px;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--neo-text-secondary);
 }
 
 .bottom-toolbar-close {
@@ -827,13 +842,13 @@
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--neo-text-muted);
   transition: all 0.2s ease;
 }
 
 .bottom-toolbar-close:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.85);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 
 .bottom-toolbar-actions {
@@ -843,7 +858,7 @@
   gap: 6px;
   padding: 8px 0 0;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--neo-border);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -859,13 +874,13 @@
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--neo-text-secondary);
   transition: all 0.2s ease;
 }
 
 .bottom-toolbar-actions .dock-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 
 .bottom-toolbar-container .prompt-input-section {
@@ -889,19 +904,19 @@
 }
 
 .bottom-toolbar-container .bottom-toolbar-title-input {
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--neo-border);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--neo-hover-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   padding: 4px 8px;
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--neo-text-primary);
   outline: none;
 }
 
 .bottom-toolbar-container .bottom-toolbar-title-input:focus {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: var(--neo-border-strong);
 }
 
 .dock-studio-toolbar.is-dock-locked .bottom-toolbar-actions button:not(.bottom-toolbar-close):not(.dock-generate-btn) {
@@ -923,14 +938,69 @@
   min-width: 280px;
   min-height: 160px;
   padding: 12px;
-  border: 2px dashed rgba(255, 255, 255, 0.16);
+  border: 2px dashed var(--neo-border-strong);
   border-radius: 20px;
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(109, 93, 252, 0.06);
   pointer-events: none;
 }
 
 .group-node-wrapper.is-active .group-node-container {
-  border-color: rgba(167, 139, 250, 0.45);
-  background: rgba(99, 102, 241, 0.1);
-  box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.35);
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+  box-shadow: 0 0 0 1px var(--neo-accent-border);
+}
+
+/* ============================================================
+   连线（edge）视觉体系
+   - 默认：低饱和淡化，让画面重心留给节点内容
+   - hover：轻微提亮
+   - 选中连线：品牌紫加粗
+   - 拖线过程（connectionline）：电流青突出 + 流动虚线
+   - 选中节点的上游连线（.neo-edge-upstream）：电流脉冲动画，
+     方向沿 dash 流动，帮助视觉回溯上游节点
+   ============================================================ */
+.vue-flow__edge .vue-flow__edge-path {
+  stroke: var(--neo-edge) !important;
+  stroke-width: 1.5px;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.vue-flow__edge:hover .vue-flow__edge-path {
+  stroke: var(--neo-edge-hover) !important;
+}
+
+.vue-flow__edge.selected .vue-flow__edge-path {
+  stroke: var(--neo-edge-selected) !important;
+  stroke-width: 2px;
+}
+
+/* 连线过程中的预览线：电流青、发光、流动 */
+.vue-flow__connection-path {
+  stroke: var(--neo-electric) !important;
+  stroke-width: 2px !important;
+  stroke-dasharray: 8 5;
+  filter: drop-shadow(0 0 5px var(--neo-electric-glow));
+  animation: neo-edge-flow 0.5s linear infinite;
+}
+
+/* 选中节点后其上游链路：电流进入效果 */
+.vue-flow__edge.neo-edge-upstream .vue-flow__edge-path {
+  stroke: var(--neo-electric) !important;
+  stroke-width: 2px;
+  stroke-dasharray: 6 10;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px var(--neo-electric-glow));
+  animation: neo-edge-flow 0.9s linear infinite;
+}
+
+@keyframes neo-edge-flow {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+/* 开启「连线动画」设置时 vue-flow 自带的 animated dash 也统一节奏 */
+.vue-flow__edge.animated .vue-flow__edge-path {
+  stroke-dasharray: 5 7;
+  animation: neo-edge-flow 1.4s linear infinite;
 }
