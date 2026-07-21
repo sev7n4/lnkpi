@@ -36,6 +36,17 @@ export function useNodeMediaUpload(nodeId: string, kind: NodeMediaKind) {
       return
     }
     const payload = await fileToPersistedPayload(file)
+    // 登录态下上传失败会回退成 blob 本地地址：立即报错，
+    // 避免静默落下 blob 后在下游生成时才报「参考图尚未上传」
+    if (payload.url.startsWith('blob:') && localStorage.getItem('token')) {
+      flashReject()
+      patchNode(nodeId, {
+        status: 'error',
+        errorMessage: '文件上传失败，请重试',
+        errorCode: 'upload_required',
+      })
+      return
+    }
     patchNode(nodeId, {
       url: payload.url,
       status: 'idle',

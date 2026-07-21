@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { assetsApi } from '@/services/assets-api'
+import { assetLibraryVersion, bumpAssetLibrary, saveAssetToLibrary } from '@/composables/useAssetLibrary'
+import { fileToPersistedPayload } from '@/composables/useMediaUpload'
+import { resolveMediaUrl } from '@/services/api-base'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
 export interface CanvasAssetItem {
   id: string
@@ -10,18 +15,15 @@ export interface CanvasAssetItem {
   kind: 'image' | 'video' | 'audio' | 'other'
   /** 资产产生时间（毫秒时间戳），用于时间线分组 */
   createdAt?: number
-  /** user = 画布同步的用户资产；public = 平台发布的公共资产 */
+  /** user = 用户全局资产库；public = 平台发布的公共资产 */
   source?: 'user' | 'public'
 }
 
-const props = defineProps<{
-  assets: CanvasAssetItem[]
-}>()
-
 const emit = defineEmits<{
   apply: [asset: CanvasAssetItem]
-  upload: []
 }>()
+
+const editor = useCanvasEditorStore()
 
 type AssetTab = 'user' | 'public'
 type AssetKindFilter = 'all' | 'image' | 'video' | 'audio'
@@ -30,9 +32,15 @@ const tab = ref<AssetTab>('user')
 const kindFilter = ref<AssetKindFilter>('all')
 const search = ref('')
 
+const userAssets = ref<CanvasAssetItem[]>([])
+const userLoading = ref(false)
 const publicAssets = ref<CanvasAssetItem[]>([])
 const publicLoading = ref(false)
 const publicLoaded = ref(false)
+const uploading = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+
+const loggedIn = computed(() => Boolean(localStorage.getItem('token')))
 
 const kindOptions: Array<{ value: AssetKindFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -40,6 +48,30 @@ const kindOptions: Array<{ value: AssetKindFilter; label: string }> = [
   { value: 'video', label: '视频' },
   { value: 'audio', label: '音频' },
 ]
+
+async function loadUserAssets() {
+  if (!loggedIn.value) {
+    userAssets.value = []
+    return
+  }
+  userLoading.value = true
+  try {
+    const res = await assetsApi.listMine()
+    userAssets.value = (res.data?.data?.items ?? []).map((item) => ({
+      id: item.id,
+      nodeId: item.sourceNodeId ?? '',
+      url: item.url,
+      label: item.label,
+      kind: item.kind,
+      createdAt: Date.parse(item.createdAt) || undefined,
+      source: 'user' as const,
+    }))
+  } catch {
+    // 加载失败留空，切换 tab 或保存资产后会重试
+  } finally {
+    userLoading.value = false
+  }
+}
 
 async function loadPublicAssets() {
   if (publicLoaded.value || publicLoading.value) return
@@ -64,16 +96,23 @@ async function loadPublicAssets() {
 }
 
 onMounted(() => {
+  void loadUserAssets()
   void loadPublicAssets()
+})
+
+// 节点侧「存入资产库」成功后自动刷新
+watch(assetLibraryVersion, () => {
+  void loadUserAssets()
 })
 
 function switchTab(next: AssetTab) {
   tab.value = next
   if (next === 'public') void loadPublicAssets()
+  if (next === 'user') void loadUserAssets()
 }
 
 const activeAssets = computed<CanvasAssetItem[]>(() =>
-  tab.value === 'user' ? props.assets : publicAssets.value,
+  tab.value === 'user' ? userAssets.value : publicAssets.value,
 )
 
 const filtered = computed(() => {
@@ -128,6 +167,89 @@ const timeline = computed<TimelineGroup[]>(() => {
   return groups
 })
 
+function displayUrl(asset: CanvasAssetItem) {
+  return resolveMediaUrl(asset.url)
+}
+
+/** 点击 = 预览 */
+function preview(asset: CanvasAssetItem) {
+  if (asset.kind === 'other') return
+  editor.openMediaPreview({
+    url: displayUrl(asset),
+    kind: asset.kind,
+    label: asset.label,
+  })
+}
+
+/** hover 操作：加载到当前画布（选中节点则作为引用，否则新建节点） */
+function apply(asset: CanvasAssetItem) {
+  emit('apply', asset)
+}
+
+async function removeAsset(asset: CanvasAssetItem) {
+  try {
+    await assetsApi.removeMine(asset.id)
+    bumpAssetLibrary()
+  } catch {
+    ElMessage.error('删除失败，请稍后重试')
+  }
+}
+
+async function renameAsset(asset: CanvasAssetItem) {
+  if (asset.kind === 'other') return
+  let value: string
+  try {
+    const result = await ElMessageBox.prompt('输入新的资产名称', '重命名', {
+      inputValue: asset.label,
+      inputPattern: /\S/,
+      inputErrorMessage: '名称不能为空',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    })
+    value = result.value.trim()
+  } catch {
+    return
+  }
+  if (!value || value === asset.label) return
+  try {
+    // POST /assets/mine 对同一 url 幂等 upsert，直接用于更新标签
+    await assetsApi.saveMine({ kind: asset.kind, url: asset.url, label: value })
+    bumpAssetLibrary()
+  } catch {
+    ElMessage.error('重命名失败，请稍后重试')
+  }
+}
+
+function openUploadPicker() {
+  if (!loggedIn.value) {
+    ElMessage.warning('登录后才能上传到资产库')
+    return
+  }
+  fileInput.value?.click()
+}
+
+async function onUploadChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  uploading.value = true
+  try {
+    const payload = await fileToPersistedPayload(file)
+    if (payload.kind !== 'image' && payload.kind !== 'video' && payload.kind !== 'audio') {
+      ElMessage.warning('仅支持图片、视频、音频文件')
+      return
+    }
+    if (payload.url.startsWith('blob:')) {
+      ElMessage.error('文件上传失败，请重试')
+      return
+    }
+    await saveAssetToLibrary({ kind: payload.kind, url: payload.url, label: payload.fileName })
+  } finally {
+    uploading.value = false
+  }
+}
+
 function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
   event.dataTransfer?.setData('application/lnkpi-asset', JSON.stringify(asset))
   event.dataTransfer?.setData('text/plain', asset.url)
@@ -137,7 +259,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
 
 <template>
   <div class="flex max-h-[min(480px,60vh)] w-[312px] flex-col">
-    <!-- 用户资产 / 公共资产 tab -->
+    <!-- 我的资产（全局） / 公共资产 tab -->
     <div class="flex items-center gap-1 border-b border-[var(--neo-border)] px-3 pt-2.5 pb-2">
       <button
         type="button"
@@ -146,7 +268,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
         @click="switchTab('user')"
       >
         我的资产
-        <span class="ml-0.5 text-[9px] font-normal opacity-60">{{ assets.length }}</span>
+        <span class="ml-0.5 text-[9px] font-normal opacity-60">{{ userAssets.length }}</span>
       </button>
       <button
         type="button"
@@ -161,14 +283,22 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
         v-if="tab === 'user'"
         type="button"
         class="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-[var(--neo-accent-text)] hover:bg-[var(--neo-hover-bg)]"
-        title="上传素材"
-        @click="emit('upload')"
+        :disabled="uploading"
+        title="上传素材到资产库"
+        @click="openUploadPicker"
       >
         <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
         </svg>
-        上传
+        {{ uploading ? '上传中...' : '上传' }}
       </button>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*,video/*,audio/*"
+        class="hidden"
+        @change="onUploadChange"
+      >
     </div>
 
     <!-- 分类检索：类型 chips + 关键词搜索 -->
@@ -196,11 +326,14 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
 
     <!-- 历史时间线 + 网格 -->
     <div class="min-h-0 flex-1 overflow-y-auto px-3 py-2">
-      <p v-if="tab === 'public' && publicLoading" class="py-6 text-center text-[11px] text-[var(--neo-text-muted)]">
-        加载公共资产中...
+      <p v-if="tab === 'user' && !loggedIn" class="py-6 text-center text-[11px] text-[var(--neo-text-muted)]">
+        登录后可使用全局资产库
+      </p>
+      <p v-else-if="(tab === 'user' && userLoading) || (tab === 'public' && publicLoading)" class="py-6 text-center text-[11px] text-[var(--neo-text-muted)]">
+        加载中...
       </p>
       <p v-else-if="!timeline.length" class="py-6 text-center text-[11px] text-[var(--neo-text-muted)]">
-        {{ tab === 'user' ? '画布中生成或上传的素材会同步到这里' : '暂无公共资产' }}
+        {{ tab === 'user' ? '在节点上点「存入资产库」或在此上传素材' : '暂无公共资产' }}
       </p>
 
       <div v-for="group in timeline" :key="group.label" class="mb-3 last:mb-1">
@@ -209,26 +342,28 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
           {{ group.label }}
         </p>
         <div class="grid grid-cols-3 gap-1.5">
-          <button
+          <div
             v-for="asset in group.items"
             :key="asset.id"
-            type="button"
+            role="button"
+            tabindex="0"
             draggable="true"
-            class="group relative aspect-square overflow-hidden rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] transition hover:border-[var(--neo-accent-border)]"
-            :title="asset.label"
+            class="group relative aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] transition hover:border-[var(--neo-accent-border)]"
+            :title="`${asset.label}（点击预览 · 可拖到画布新建节点 / 拖到底部工具条作引用）`"
             @dragstart="onDragStart($event, asset)"
-            @click="emit('apply', asset)"
+            @click="preview(asset)"
+            @keydown.enter="preview(asset)"
           >
             <img
               v-if="asset.kind === 'image'"
-              :src="asset.url"
+              :src="displayUrl(asset)"
               alt=""
               loading="lazy"
               class="h-full w-full object-cover"
             >
             <video
               v-else-if="asset.kind === 'video'"
-              :src="asset.url"
+              :src="displayUrl(asset)"
               muted
               preload="metadata"
               class="h-full w-full object-cover"
@@ -242,7 +377,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
             <!-- 类型角标 -->
             <span
               v-if="asset.kind !== 'image'"
-              class="absolute left-1 top-1 rounded bg-black/60 px-1 py-px text-[8px] text-[var(--neo-text-secondary)]"
+              class="absolute left-1 top-1 rounded bg-black/60 px-1 py-px text-[8px] text-white/85"
             >
               {{ asset.kind === 'video' ? '视频' : '音频' }}
             </span>
@@ -253,13 +388,42 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
               公共
             </span>
 
-            <!-- hover 显示名称 -->
-            <span
-              class="absolute inset-x-0 bottom-0 truncate bg-gradient-to-t from-black/80 to-transparent px-1 pb-0.5 pt-3 text-left text-[9px] text-[var(--neo-text-primary)] opacity-0 transition group-hover:opacity-100"
+            <!-- hover 操作层：加载到画布 / 删除 -->
+            <div
+              class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/85 to-transparent px-1 pb-1 pt-4 opacity-0 transition group-hover:opacity-100"
             >
-              {{ asset.label }}
-            </span>
-          </button>
+              <button
+                type="button"
+                class="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-black transition hover:bg-white"
+                title="加载到当前画布"
+                @click.stop="apply(asset)"
+              >
+                加载到画布
+              </button>
+              <button
+                v-if="asset.source === 'user'"
+                type="button"
+                class="flex h-4 w-4 items-center justify-center rounded-md bg-black/60 text-white/80 transition hover:bg-black/85 hover:text-white"
+                title="重命名"
+                @click.stop="renameAsset(asset)"
+              >
+                <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z" />
+                </svg>
+              </button>
+              <button
+                v-if="asset.source === 'user'"
+                type="button"
+                class="flex h-4 w-4 items-center justify-center rounded-md bg-black/60 text-white/80 transition hover:bg-red-500/90 hover:text-white"
+                title="从资产库删除"
+                @click.stop="removeAsset(asset)"
+              >
+                <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

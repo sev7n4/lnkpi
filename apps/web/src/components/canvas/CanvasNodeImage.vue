@@ -6,6 +6,8 @@ import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
+import { downloadMediaFile, mediaDownloadName } from '@/composables/useCanvasMedia'
+import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 
 const props = defineProps<{
   id: string
@@ -60,6 +62,34 @@ function openEdit() {
     prompt: props.data.prompt,
   })
 }
+
+function openPreview() {
+  if (!displayUrl.value) return
+  editor.openMediaPreview({
+    url: displayUrl.value,
+    kind: 'image',
+    label: props.data.label ?? props.data.prompt,
+  })
+}
+
+function download() {
+  if (!displayUrl.value) return
+  void downloadMediaFile(
+    displayUrl.value,
+    mediaDownloadName(displayUrl.value, 'image', props.data.label ?? props.data.prompt),
+  )
+}
+
+function saveToLibrary() {
+  const url = String(props.data.url ?? '').trim()
+  if (!url) return
+  void saveAssetToLibrary({
+    kind: 'image',
+    url,
+    label: props.data.label ?? props.data.prompt ?? '',
+    sourceNodeId: props.id,
+  })
+}
 </script>
 
 <template>
@@ -74,7 +104,7 @@ function openEdit() {
       @dragleave="onDragLeave"
       @drop="onDrop"
     >
-      <div v-if="data.url" class="neo-gen-preview">
+      <div v-if="data.url" class="neo-gen-preview" title="双击预览大图" @dblclick.stop="openPreview">
         <img :src="displayUrl" alt="">
         <button
           type="button"
@@ -88,6 +118,32 @@ function openEdit() {
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="neo-node-download-btn nodrag"
+          title="下载图片"
+          @pointerdown.stop
+          @mousedown.stop
+          @click.stop="download"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="neo-node-save-btn nodrag"
+          title="存入资产库"
+          @pointerdown.stop
+          @mousedown.stop
+          @click.stop="saveToLibrary"
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
         </button>
         <button

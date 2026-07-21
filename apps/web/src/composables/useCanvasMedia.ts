@@ -1,4 +1,5 @@
 import type { Ref } from 'vue'
+import { resolveMediaUrl } from '@/services/api-base'
 
 export type FileNodeKind = 'text' | 'image' | 'video' | 'audio'
 
@@ -99,7 +100,7 @@ export async function downloadMediaPackage(
 
   for (const item of items) {
     try {
-      const res = await fetch(item.url)
+      const res = await fetch(resolveMediaUrl(item.url))
       const blob = await res.blob()
       triggerDownload(blob, item.fileName)
       await delay(280)
@@ -117,6 +118,27 @@ function triggerDownload(blob: Blob, filename: string) {
   anchor.download = filename
   anchor.click()
   URL.revokeObjectURL(url)
+}
+
+/** 下载单个媒体文件；跨域 fetch 失败时退化为新标签页打开 */
+export async function downloadMediaFile(url: string, filename: string) {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(String(res.status))
+    triggerDownload(await res.blob(), filename)
+  } catch {
+    window.open(url, '_blank', 'noopener')
+  }
+}
+
+const EXT_BY_KIND: Record<string, string> = { image: 'png', video: 'mp4', audio: 'mp3' }
+
+/** 由 URL / label 推导下载文件名 */
+export function mediaDownloadName(url: string, kind: string, label?: string) {
+  const urlExt = /\.([a-z0-9]{2,5})(?:\?|#|$)/i.exec(url)?.[1]
+  const ext = urlExt ?? EXT_BY_KIND[kind] ?? 'bin'
+  const base = (label ?? 'lnkpi-media').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 48) || 'lnkpi-media'
+  return base.toLowerCase().endsWith(`.${ext.toLowerCase()}`) ? base : `${base}.${ext}`
 }
 
 function delay(ms: number) {

@@ -403,8 +403,51 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
-.neo-node-upload-target:hover .neo-node-replace-btn {
+/* 与替换按钮同款的下载按钮：错开位置，hover 时一起浮现 */
+.neo-node-download-btn {
+  position: absolute;
+  top: 6px;
+  right: 34px;
+  z-index: 2;
+  display: none;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 存入资产库按钮：排在下载按钮左侧 */
+.neo-node-save-btn {
+  position: absolute;
+  top: 6px;
+  right: 62px;
+  z-index: 2;
+  display: none;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.neo-node-upload-target:hover .neo-node-replace-btn,
+.neo-node-upload-target:hover .neo-node-download-btn,
+.neo-node-upload-target:hover .neo-node-save-btn {
   display: inline-flex;
+}
+
+.neo-node-replace-btn:hover,
+.neo-node-download-btn:hover,
+.neo-node-save-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
 }
 
 .neo-node-placeholder {
@@ -983,13 +1026,23 @@
   animation: neo-edge-flow 0.5s linear infinite;
 }
 
-/* 选中节点后其上游链路：电流进入效果 */
+/* 选中节点后其上游链路：电流进入效果（电流青） */
 .vue-flow__edge.neo-edge-upstream .vue-flow__edge-path {
   stroke: var(--neo-electric) !important;
   stroke-width: 2px;
   stroke-dasharray: 6 10;
   stroke-linecap: round;
   filter: drop-shadow(0 0 4px var(--neo-electric-glow));
+  animation: neo-edge-flow 0.9s linear infinite;
+}
+
+/* 选中节点后其下游链路：电流流出效果（暖橙），与上游青色区分 */
+.vue-flow__edge.neo-edge-downstream .vue-flow__edge-path {
+  stroke: var(--neo-warm) !important;
+  stroke-width: 2px;
+  stroke-dasharray: 6 10;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 4px var(--neo-warm-soft));
   animation: neo-edge-flow 0.9s linear infinite;
 }
 

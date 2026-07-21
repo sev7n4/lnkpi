@@ -19,18 +19,11 @@ export type DockNodeType =
   | 'group'
   | 'shot'
 
-withDefaults(
-  defineProps<{
-    assets?: CanvasAssetItem[]
-  }>(),
-  { assets: () => [] },
-)
-
 const emit = defineEmits<{
   add: [type: DockNodeType]
   'open-settings': []
   'asset-apply': [asset: CanvasAssetItem]
-  'asset-upload': []
+  'history-locate': [recordId: string]
 }>()
 
 const showMenu = ref(false)
@@ -81,7 +74,7 @@ useClickOutside(rootRef, closePopovers)
     <div class="pointer-events-auto relative">
       <!-- 竖向面板：添加节点 + 资产库 + 任务历史 + 模型设置 -->
       <div
-        class="vertical-capsule neo-chrome flex flex-col items-stretch gap-0.5 rounded-2xl p-1"
+        class="vertical-capsule neo-glass-lite flex flex-col items-stretch gap-0.5 rounded-2xl p-1"
       >
         <button
           type="button"
@@ -122,12 +115,6 @@ useClickOutside(rootRef, closePopovers)
             </svg>
           </span>
           <span class="rail-btn-label">资产库</span>
-          <span
-            v-if="assets.length"
-            class="absolute right-1 top-0 flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-[var(--neo-accent)] px-0.5 text-[8px] font-semibold text-white"
-          >
-            {{ assets.length > 99 ? '99+' : assets.length }}
-          </span>
         </button>
 
         <button
@@ -208,11 +195,7 @@ useClickOutside(rootRef, closePopovers)
           class="asset-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
-          <CanvasAssetPanel
-            :assets="assets"
-            @apply="emit('asset-apply', $event)"
-            @upload="emit('asset-upload')"
-          />
+          <CanvasAssetPanel @apply="emit('asset-apply', $event)" />
         </div>
       </Transition>
 
@@ -222,7 +205,7 @@ useClickOutside(rootRef, closePopovers)
           class="history-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
-          <CanvasTaskHistoryPanel />
+          <CanvasTaskHistoryPanel @locate="emit('history-locate', $event)" />
         </div>
       </Transition>
     </div>
@@ -258,17 +241,17 @@ useClickOutside(rootRef, closePopovers)
   background: var(--neo-accent-soft);
 }
 
-/* 添加节点：品牌渐变凸显 */
+/* 添加节点：白色高亮凸显（浅色主题下自动转深色高亮） */
 .rail-circle-primary,
 .rail-btn:hover .rail-circle-primary,
 .rail-btn.is-active .rail-circle-primary {
   border-color: transparent;
-  background: var(--neo-brand-gradient);
-  color: #fff;
-  box-shadow: 0 0 16px rgba(109, 93, 252, 0.45);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 .rail-btn:hover .rail-circle-primary {
-  box-shadow: 0 0 22px rgba(109, 93, 252, 0.6);
+  filter: brightness(1.06);
 }
 
 .rail-btn-label {
