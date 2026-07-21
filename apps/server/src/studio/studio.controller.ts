@@ -262,11 +262,9 @@ export class StudioController {
 
   @Post('image/generate')
   @UseGuards(AuthGuard)
-  async generateImage(
-    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
-    @Body() dto: GenerateImageDto,
-  ) {
-    const cancel = createCancelFlag(req)
+  async generateImage(@Req() req: { user: { sub: string } }, @Body() dto: GenerateImageDto) {
+    // Async mode: returns a `generating` record; client polls. Disconnect must
+    // not cancel the background generation, so no cancel flag here.
     const data = await this.studioService.generateImage(
       req.user.sub,
       dto.prompt,
@@ -276,7 +274,6 @@ export class StudioController {
       dto.mentionedKeys,
       dto.resolution,
       dto.count,
-      cancel,
     )
     return { code: 0, message: 'ok', data }
   }

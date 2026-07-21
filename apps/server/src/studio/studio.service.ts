@@ -43,6 +43,10 @@ import {
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
+// Grace window before returning the async `generating` record: fast image
+// providers usually finish within this, sparing the client a polling round.
+const IMAGE_FAST_PATH_MS = 3000
+
 export interface StudioRefInput {
   refKey: string
   mediaType: string
@@ -539,7 +543,6 @@ export class StudioService {
     mentionedKeys?: string[],
     resolution = '1K',
     count = 1,
-    cancel?: CancelFlag,
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
     const cost = 10 * n
@@ -567,116 +570,120 @@ export class StudioService {
     const primaryRef = built.referenceImages[0]
     const basePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
     const effectivePrompt = [basePrompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
-
-    try {
-      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
-        throw new Error('missing api key')
-      }
-      const { url, urls } = await createImageProvider(userProviderOpts(resolved)).generate(
-        effectivePrompt,
-        {
-          size: built.size,
-          n: built.n,
-          modelId,
-        },
-      )
-      const imageUrls = urls?.length ? urls : [url]
-      if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
-        throwCancelledException(cost)
-      }
-      return this.prisma.generationRecord.create({
-        data: {
-          userId,
-          type: 'image',
-          prompt: effectivePrompt,
-          model: storeModel,
-          url: imageUrls[0],
-          status: 'completed',
-          metadata: JSON.stringify(
-            applyChargeMeta(
-              {
-                ...built.meta,
-                modelId,
-                aspectRatio,
-                resolution,
-                count: n,
-                size: built.size,
-                urls: imageUrls,
-                referenceImages,
-                skippedMerge,
-                channelId: resolved.channelId,
-              },
-              cost,
-            ),
-          ),
-        },
-      })
-    } catch (err) {
-      if (isCancelledException(err)) throw err
-      if (resolved.source !== 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
-        const failedMeta = applyFailureDiagnosticMeta(
-          applyRefundMeta(
-            applyChargeMeta(
-              {
-                ...built.meta,
-                modelId,
-                aspectRatio,
-                resolution,
-                count: n,
-                size: built.size,
-                referenceImages,
-                skippedMerge,
-                channelId: resolved.channelId,
-              },
-              cost,
-            ),
-            cost,
-            'platform_failed',
-          ),
-          err,
-        )
-        const failed = await this.prisma.generationRecord.create({
-          data: {
-            userId,
-            type: 'image',
-            prompt: effectivePrompt,
-            model: storeModel,
-            url: null,
-            status: 'failed',
-            metadata: JSON.stringify(failedMeta),
-          },
-        })
-        throwGenerationFailure({
-          userMessage: String(failedMeta.userMessage ?? '生成失败'),
-          errorCode: failedMeta.errorCode as ErrorCode,
-          taskId: failed.id,
-          refundedPoints: cost,
-        })
-      }
-      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
-      return this.prisma.generationRecord.create({
-        data: {
-          userId,
-          type: 'image',
-          prompt: effectivePrompt,
-          model: storeModel,
-          url: null,
-          status: 'fallback_pending',
-          metadata: JSON.stringify(
-            this.byokPendingMeta(resolved, err, cost, {
+    const record = await this.prisma.generationRecord.create({
+      data: {
+        userId,
+        type: 'image',
+        prompt: effectivePrompt,
+        model: storeModel,
+        status: 'generating',
+        metadata: JSON.stringify(
+          applyChargeMeta(
+            {
               ...built.meta,
               modelId,
-              originalModel: model,
               aspectRatio,
               resolution,
               count: n,
               size: built.size,
               referenceImages,
               skippedMerge,
-            }),
+              channelId: resolved.channelId,
+              originalModel: model,
+              providerSource: resolved.source,
+            },
+            cost,
           ),
+        ),
+      },
+    })
+    const completion = this.completeImage(
+      record.id,
+      userId,
+      cost,
+      chargeReason,
+      effectivePrompt,
+      { modelId, size: built.size, n: built.n },
+      resolved,
+    ).catch((err) => {
+      console.error('Image generation failed:', err)
+      return null
+    })
+    // Fast path: quick providers finish within the grace window, so the client
+    // gets the terminal record directly instead of one extra polling round-trip.
+    let graceTimer: ReturnType<typeof setTimeout> | undefined
+    const fast = await Promise.race([
+      completion,
+      new Promise<null>((resolve) => {
+        graceTimer = setTimeout(() => resolve(null), IMAGE_FAST_PATH_MS)
+      }),
+    ])
+    if (graceTimer) clearTimeout(graceTimer)
+    return fast ?? record
+  }
+
+  private async completeImage(
+    id: string,
+    userId: string,
+    cost: number,
+    chargeReason: string,
+    prompt: string,
+    options: { modelId?: string; size?: string; n?: number },
+    resolved: ResolvedGenerationProvider,
+  ) {
+    try {
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url, urls } = await createImageProvider(userProviderOpts(resolved)).generate(
+        prompt,
+        {
+          size: options.size,
+          n: options.n,
+          modelId: options.modelId,
+        },
+      )
+      const imageUrls = urls?.length ? urls : [url]
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+      if (!existing || existing.status !== 'generating') return null
+      const meta = parseMeta(existing.metadata)
+      if (isCancelledMeta(meta) || alreadyRefunded(meta)) return null
+      const updated = await this.prisma.generationRecord.updateMany({
+        where: { id, status: 'generating' },
+        data: {
+          url: imageUrls[0],
+          status: 'completed',
+          metadata: JSON.stringify({ ...meta, urls: imageUrls }),
+        },
+      })
+      if (updated.count === 0) return null
+      return this.prisma.generationRecord.findFirst({ where: { id } })
+    } catch (err) {
+      console.error('Image generation failed:', err)
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
+      if (!existing || existing.status !== 'generating') return null
+      const meta = parseMeta(existing.metadata)
+      if (isCancelledMeta(meta) || alreadyRefunded(meta)) return null
+      if (resolved.source === 'user') {
+        await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+        return this.prisma.generationRecord.update({
+          where: { id },
+          data: {
+            status: 'fallback_pending',
+            metadata: JSON.stringify(this.byokPendingMeta(resolved, err, cost, meta)),
+          },
+        })
+      }
+      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      const failedMeta = applyFailureDiagnosticMeta(
+        applyRefundMeta(meta, cost, 'platform_failed'),
+        err,
+      )
+      return this.prisma.generationRecord.update({
+        where: { id },
+        data: {
+          status: 'failed',
+          metadata: JSON.stringify(failedMeta),
         },
       })
     }

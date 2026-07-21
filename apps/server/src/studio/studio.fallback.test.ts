@@ -353,31 +353,26 @@ describe('StudioService BYOK fallback_pending', () => {
     expect((opts as { modelId?: string }).modelId).toBeTruthy()
   })
 
-  it.each([
-    {
-      name: 'image',
-      cost: 10,
-      refundReason: '图像生成-失败退款',
-      run: () => svc.generateImage('u1', 'a cat', undefined),
-      failOnce: () => imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502')),
-    },
-    {
-      name: 'text',
-      cost: 5,
-      refundReason: '文本生成-失败退款',
-      run: () => svc.generateText('u1', 'hello'),
-      failOnce: () => textGenerate.mockRejectedValueOnce(new Error('platform upstream 502')),
-    },
-  ] as const)(
-    '$name: platform source failure → refund after consume',
-    async ({ run, failOnce, cost, refundReason }) => {
-      resolveForGeneration.mockResolvedValue(platformResolved)
-      failOnce()
-      await expect(run()).rejects.toThrow('platform upstream 502')
-      expect(pointsConsume).toHaveBeenCalledWith('u1', cost, expect.any(String))
-      expect(pointsRefund).toHaveBeenCalledWith('u1', cost, refundReason)
-    },
-  )
+  it('text: platform source failure → refund after consume', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    textGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    await expect(svc.generateText('u1', 'hello')).rejects.toThrow('platform upstream 502')
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 5, expect.any(String))
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-失败退款')
+  })
+
+  it('image: platform source failure → failed record with refund metadata', async () => {
+    resolveForGeneration.mockResolvedValue(platformResolved)
+    imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    const record = await svc.generateImage('u1', 'a cat', undefined)
+    expect(record.status).toBe('failed')
+    const meta = JSON.parse(String(record.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('platform_failed')
+    expect(meta.errorCode).toBeTruthy()
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, expect.any(String))
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-失败退款')
+  })
 
   it('confirmPlatformFallback: platform generate failure → refund, failed, refundedPoints', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
@@ -491,37 +486,76 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(generationCreate).not.toHaveBeenCalled()
   })
 
-  it('image: BYOK client abort after generate → refund once, no fallback_pending', async () => {
+  it('image fast path: provider finishes within grace window → returns completed with urls', async () => {
     imageGenerate.mockResolvedValueOnce({
-      url: 'https://example.com/i.png',
-      urls: ['https://example.com/i.png'],
+      url: 'https://example.com/i1.png',
+      urls: ['https://example.com/i1.png', 'https://example.com/i2.png'],
     })
-    const listeners: Record<string, (() => void)[]> = {}
-    const cancel = createCancelFlag({
-      aborted: false,
-      on(event: string, cb: () => void) {
-        listeners[event] = listeners[event] ?? []
-        listeners[event].push(cb)
-      },
-    })
-    const promise = svc.generateImage(
-      'u1',
-      'a cat',
-      'ch_user::custom-model',
-      '16:9',
-      [],
-      [],
-      '1K',
-      1,
-      cancel,
+    const record = await svc.generateImage('u1', 'a cat', 'ch_user::custom-model', '16:9', [], [], '1K', 2)
+    expect(record.status).toBe('completed')
+    expect(record.url).toBe('https://example.com/i1.png')
+    const meta = JSON.parse(String(record.metadata))
+    expect(meta.urls).toEqual(['https://example.com/i1.png', 'https://example.com/i2.png'])
+    expect(meta.chargedPoints).toBe(20)
+    expect(pointsRefund).not.toHaveBeenCalled()
+  })
+
+  it('image slow path: provider still running after grace window → returns generating, completes later', async () => {
+    vi.useFakeTimers()
+    try {
+      let resolveImage!: (v: { url: string; urls: string[] }) => void
+      imageGenerate.mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveImage = r
+          }),
+      )
+      const promise = svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+      await vi.advanceTimersByTimeAsync(3000)
+      const record = await promise
+      expect(record.status).toBe('generating')
+      expect(generationCreate).toHaveBeenCalledTimes(1)
+
+      resolveImage({ url: 'https://example.com/late.png', urls: ['https://example.com/late.png'] })
+      await vi.advanceTimersByTimeAsync(10)
+      expect(generationUpdateMany).toHaveBeenCalled()
+      const updateData = generationUpdateMany.mock.calls[0][0].data
+      expect(updateData.status).toBe('completed')
+      expect(updateData.url).toBe('https://example.com/late.png')
+      expect(JSON.parse(String(updateData.metadata)).urls).toEqual(['https://example.com/late.png'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('image: cancel before completeImage success → ignore late completed write', async () => {
+    let resolveImage!: (v: { url: string; urls: string[] }) => void
+    imageGenerate.mockImplementationOnce(
+      () =>
+        new Promise((r) => {
+          resolveImage = r
+        }),
     )
-    listeners.close?.forEach((cb) => cb())
-    await expect(promise).rejects.toMatchObject({
-      response: { message: '已取消', refundedPoints: 10 },
-    })
-    expect(pointsRefund).toHaveBeenCalledTimes(1)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-取消退款')
-    expect(generationCreate).not.toHaveBeenCalled()
+    vi.useFakeTimers()
+    let promise!: Promise<unknown>
+    try {
+      promise = svc.generateImage('u1', 'a cat', 'ch_user::custom-model')
+      await vi.advanceTimersByTimeAsync(3000)
+    } finally {
+      vi.useRealTimers()
+    }
+    const record = (await promise) as { status: string }
+    expect(record.status).toBe('generating')
+    stored = {
+      ...stored,
+      status: 'failed',
+      metadata: JSON.stringify({ chargedPoints: 10, cancelled: true, refundedPoints: 10 }),
+    }
+    resolveImage({ url: 'https://example.com/i.png', urls: ['https://example.com/i.png'] })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(generationUpdateMany).not.toHaveBeenCalled()
+    expect(stored.status).toBe('failed')
+    expect(pointsRefund).not.toHaveBeenCalled()
   })
 
   it('confirmPlatformFallback: client abort after generate → refund once, failed', async () => {
