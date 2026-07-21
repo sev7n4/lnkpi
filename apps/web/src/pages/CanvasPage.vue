@@ -27,7 +27,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { useShotPolling } from '@/composables/useShotPolling'
-import { useGenerationPolling, parseRecordText, parseRecordUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { useGenerationPolling, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -390,12 +390,15 @@ const generationPolling = useGenerationPolling((results) => {
       continue
     }
     if (record.status === NODE_GENERATION_STATUS.completed) {
+      const urls = parseRecordUrls(record)
       const patch: Record<string, unknown> = {
-        url: parseRecordUrl(record),
+        url: urls[0] ?? parseRecordUrl(record),
         status: NODE_GENERATION_STATUS.completed,
       }
       if (record.type === 'text') {
         patch.content = parseRecordText(record)
+      } else if (urls.length) {
+        patch.images = urls
       }
       patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
@@ -421,10 +424,10 @@ function startPollingForGeneratingShots() {
   if (generatingIds.length) shotPolling.start(generatingIds)
 }
 
-function startPollingForGeneratingVideos() {
+function startPollingForGeneratingRecords() {
   const tasks: GenerationPollTask[] = []
   for (const n of nodes.value) {
-    if (n.type !== 'video') continue
+    if (n.type !== 'video' && n.type !== 'image') continue
     const data = n.data as Record<string, unknown>
     if (data.status === NODE_GENERATION_STATUS.generating && data.generationRecordId) {
       tasks.push({ recordId: String(data.generationRecordId), nodeId: n.id })
@@ -1803,7 +1806,7 @@ async function loadSession() {
     nodeCounter = 1
   }
   startPollingForGeneratingShots()
-  startPollingForGeneratingVideos()
+  startPollingForGeneratingRecords()
 }
 
 async function loadSessions() {
