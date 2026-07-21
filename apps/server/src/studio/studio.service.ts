@@ -35,6 +35,7 @@ import {
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
+import { mergeChatModel } from '../provider/merge-chat-model'
 import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
@@ -216,7 +217,7 @@ export class StudioService {
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
-      model,
+      model: mergeChatModel(downstreamType, model),
     })
     return {
       mergedText,
