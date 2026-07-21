@@ -40,7 +40,8 @@ df -h / /var/lib/docker 2>/dev/null || df -h /
 
 log "=== Prune unused Docker data ==="
 docker image prune -f >/dev/null 2>&1 || true
-docker builder prune -f --filter 'until=24h' >/dev/null 2>&1 || true
+# 保留一周内的构建缓存以复用 pnpm/编译层，磁盘充足时不要激进清理
+docker builder prune -f --filter 'until=168h' >/dev/null 2>&1 || true
 docker images lnkpi-api --format '{{.Tag}}' 2>/dev/null | while read -r tag; do
   [[ -z "$tag" || "$tag" == "<none>" ]] && continue
   [[ "$tag" == "$IMAGE_TAG" || "$tag" == "latest" ]] && continue

@@ -21,7 +21,8 @@ pkill -f "docker compose.*build" 2>/dev/null || true
 sleep 2
 
 log "=== Docker cleanup (prune builder + dangling) ==="
-docker builder prune -f --filter 'until=2h' 2>/dev/null || true
+# 保留一周内的构建缓存以加速后续 CVM 构建，只清理更早的
+docker builder prune -f --filter 'until=168h' 2>/dev/null || true
 docker image prune -f 2>/dev/null || true
 
 log "=== Restart lnkpi-api with existing image if present ==="
