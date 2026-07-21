@@ -31,7 +31,7 @@ useClickOutside(menuRef, closeMenu)
   <div class="canvas-floating-chrome pointer-events-none absolute left-3 top-3 z-[50] flex items-start gap-2">
     <button
       type="button"
-      class="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:bg-white/[0.06] hover:text-white"
+      class="neo-chrome pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl transition"
       title="返回画布列表"
       @click="router.push('/workflow')"
     >
@@ -40,17 +40,17 @@ useClickOutside(menuRef, closeMenu)
       </svg>
     </button>
 
-    <div class="pointer-events-auto flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] px-2 py-1 shadow-lg backdrop-blur-xl">
+    <div class="neo-chrome pointer-events-auto flex items-center gap-1.5 rounded-xl px-2 py-1">
       <input
         :value="title"
-        class="w-[110px] truncate bg-transparent px-1 py-1 text-sm font-medium text-white/90 outline-none transition-all duration-200 placeholder:text-white/30 focus:w-[200px]"
+        class="chrome-title-input w-[110px] truncate bg-transparent px-1 py-1 text-sm font-medium outline-none transition-all duration-200 focus:w-[200px]"
         placeholder="未命名画布"
         @input="emit('update:title', ($event.target as HTMLInputElement).value)"
       >
       <div ref="menuRef" class="relative">
         <button
           type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/[0.06] hover:text-white/80"
+          class="chrome-more-btn flex h-7 w-7 items-center justify-center rounded-lg transition"
           title="更多操作"
           @click.stop="menuOpen = !menuOpen"
         >
@@ -62,26 +62,26 @@ useClickOutside(menuRef, closeMenu)
         </button>
         <div
           v-if="menuOpen"
-          class="absolute left-0 top-full z-10 mt-1.5 min-w-[140px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-2xl"
+          class="neo-popover absolute left-0 top-full z-10 mt-1.5 min-w-[140px] rounded-xl py-1"
           @click.stop
         >
           <button
             type="button"
-            class="flex w-full px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"
+            class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
             @click="emit('save'); closeMenu()"
           >
             {{ saving ? '保存中...' : '保存画布' }}
           </button>
           <button
             type="button"
-            class="flex w-full px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"
+            class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
             @click="emit('storyboard'); closeMenu()"
           >
             分镜板
           </button>
           <button
             type="button"
-            class="flex w-full px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5 hover:text-white"
+            class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
             @click="emit('publish'); closeMenu()"
           >
             发布作品
@@ -91,3 +91,22 @@ useClickOutside(menuRef, closeMenu)
     </div>
   </div>
 </template>
+
+<style scoped>
+.chrome-title-input {
+  color: var(--neo-text-primary);
+}
+
+.chrome-title-input::placeholder {
+  color: var(--neo-text-muted);
+}
+
+.chrome-more-btn {
+  color: var(--neo-text-muted);
+}
+
+.chrome-more-btn:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
+}
+</style>

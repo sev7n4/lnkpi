@@ -32,7 +32,7 @@ async function optimize() {
 <template>
   <button
     type="button"
-    class="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[10px] text-white/60 transition hover:bg-white/10 hover:text-white/80"
+    class="neo-ctl rounded-lg px-2.5 py-1.5 text-[10px]"
     :disabled="disabled || !prompt.trim() || loading"
     @click="optimize"
   >

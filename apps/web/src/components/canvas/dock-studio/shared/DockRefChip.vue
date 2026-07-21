@@ -52,6 +52,7 @@ function onChipClick(event: MouseEvent) {
       'is-stale': refItem.stale,
       'is-dragging': dragging,
       'is-drag-over': dragOver,
+      'has-media': !!thumbUrl,
     }"
     :draggable="draggable"
     :title="`${refItem.refKey} · ${refItem.label}`"
@@ -113,10 +114,10 @@ function onChipClick(event: MouseEvent) {
   width: 32px;
   height: 32px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--neo-border-strong);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.35);
-  color: rgba(255, 255, 255, 0.75);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
   cursor: pointer;
   user-select: none;
   transition:
@@ -134,15 +135,15 @@ function onChipClick(event: MouseEvent) {
 }
 
 .dock-ref-chip.is-drag-over {
-  border-color: rgba(129, 140, 248, 0.55);
-  background: rgba(99, 102, 241, 0.12);
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
 }
 
 .dock-ref-chip.is-stale {
   border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.3);
+  border-color: var(--neo-border);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-muted);
   cursor: default;
 }
 
@@ -156,9 +157,14 @@ function onChipClick(event: MouseEvent) {
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  color: var(--neo-text-primary);
   pointer-events: none;
+}
+
+/* 缩略图上叠字时保持白字 + 阴影确保可读 */
+.dock-ref-chip.has-media .dock-ref-chip__key {
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .dock-ref-chip__media {

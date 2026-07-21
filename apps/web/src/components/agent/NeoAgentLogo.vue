@@ -3,10 +3,11 @@ import { BRAND_LOGO_URL } from '@/constants/brand'
 
 defineProps<{
   active?: boolean
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'xs' | 'sm' | 'md' | 'lg'
 }>()
 
 const sizeMap = {
+  xs: 30,
   sm: 40,
   md: 46,
   lg: 56,

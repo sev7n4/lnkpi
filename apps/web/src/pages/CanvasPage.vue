@@ -94,7 +94,6 @@ import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
-import CanvasAgentFab from '@/components/agent/CanvasAgentFab.vue'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
 import { buildPollingFailurePatch } from '@/utils/generationDiagnostic'
 
@@ -122,7 +121,35 @@ const edges = ref<CanvasEdge[]>([])
 
 /** 受控模式：:nodes + apply-default=false，由 onNodesChange 落地变更，避免内部/外部状态互相覆盖 */
 const flowNodes = computed(() => nodes.value as unknown as Node[])
-const flowEdges = computed(() => edges.value as unknown as Edge[])
+
+/** 选中单个节点时，回溯其全部上游连线（电流高亮，便于追踪数据来源） */
+const upstreamEdgeIds = computed(() => {
+  const ids = new Set<string>()
+  const target = multiSelectedIds.value.length === 1 ? multiSelectedIds.value[0] : null
+  if (!target) return ids
+  const visited = new Set<string>([target])
+  const queue = [target]
+  while (queue.length) {
+    const nodeId = queue.pop()!
+    for (const edge of edges.value) {
+      if (edge.target !== nodeId || ids.has(edge.id)) continue
+      ids.add(edge.id)
+      if (!visited.has(edge.source)) {
+        visited.add(edge.source)
+        queue.push(edge.source)
+      }
+    }
+  }
+  return ids
+})
+
+const flowEdges = computed(() => {
+  const upstream = upstreamEdgeIds.value
+  if (!upstream.size) return edges.value as unknown as Edge[]
+  return edges.value.map((edge) =>
+    upstream.has(edge.id) ? { ...edge, class: 'neo-edge-upstream' } : edge,
+  ) as unknown as Edge[]
+})
 
 const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
@@ -228,9 +255,9 @@ function patchViewportSettings(patch: Partial<CanvasViewportSettings>) {
 }
 
 function addEdge(partial: Pick<CanvasEdge, 'id' | 'source' | 'target'> & Partial<CanvasEdge>) {
+  // 连线颜色统一由全局 CSS token（--neo-edge 系列）控制，不再写死 inline stroke
   edges.value.push({
     animated: viewportSettings.value.edgeAnimated,
-    style: { stroke: '#7c3aed' },
     ...partial,
   })
 }
@@ -1336,7 +1363,6 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
     id: `e-${node.id}-${childId}`,
     source: node.id,
     target: childId,
-    style: { stroke: '#6366f1' },
   })
   selectOnlyNode(childId)
   await saveCanvas()
@@ -1768,7 +1794,6 @@ function hydrateCanvasEdges(
       sourceHandle: edge.sourceHandle,
       targetHandle: edge.targetHandle,
       animated,
-      style: { stroke: '#7c3aed', ...(edge.style ?? {}) },
     })
   }
   return out
@@ -2005,7 +2030,7 @@ onMounted(() => {
         <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
           <button
             type="button"
-            class="canvas-theme-toggle pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:text-white"
+            class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl transition"
             :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
             @click="toggleCanvasTheme"
           >
@@ -2056,7 +2081,6 @@ onMounted(() => {
           @close="closeBlankNodePicker"
         />
 
-        <CanvasAgentFab @open="agentRailRef?.openPanel()" />
       </div>
 
       <AgentSideRail
@@ -2113,18 +2137,13 @@ onMounted(() => {
 
 :deep(.vue-flow__selection),
 :deep(.vue-flow__nodesselection-rect) {
-  background: rgba(99, 102, 241, 0.08);
-  border: 1.5px dashed rgba(129, 140, 248, 0.7);
+  background: var(--neo-accent-soft);
+  border: 1.5px dashed var(--neo-accent-border);
   border-radius: 4px;
 }
 
 :deep(.vue-flow__node) {
   overflow: visible !important;
-}
-
-:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
-  stroke: #a5b4fc !important;
-  stroke-width: 2.5px;
 }
 
 :deep(.vue-flow__handle.neo-flow-handle) {

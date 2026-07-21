@@ -110,11 +110,11 @@ function onKeydown(e: KeyboardEvent) {
     <div class="mention-input-shell">
       <div
         ref="backdropRef"
-        class="mention-input-backdrop input-field min-h-[96px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5] text-white/85"
+        class="mention-input-backdrop input-field min-h-[96px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5]"
         aria-hidden="true"
       >
         <template v-for="(segment, idx) in highlightSegments" :key="idx">
-          <span v-if="segment.kind === 'mention'" class="font-medium text-[#818cf8]">{{ segment.value }}</span>
+          <span v-if="segment.kind === 'mention'" class="font-medium text-[var(--neo-accent-text)]">{{ segment.value }}</span>
           <span v-else>{{ segment.value }}</span>
         </template>
         <span v-if="!modelValue">&nbsp;</span>
@@ -123,7 +123,7 @@ function onKeydown(e: KeyboardEvent) {
       <textarea
         ref="textareaRef"
         :value="modelValue"
-        class="mention-input-field input-field min-h-[96px] w-full resize-none text-sm leading-[1.5] text-transparent caret-white"
+        class="mention-input-field input-field min-h-[96px] w-full resize-none text-sm leading-[1.5] !text-transparent caret-[var(--neo-text-primary)]"
         rows="4"
         :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
         @input="onInput"
@@ -135,17 +135,17 @@ function onKeydown(e: KeyboardEvent) {
 
     <ul
       v-if="showMenu && filteredMentions.length"
-      class="absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-y-auto rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
+      class="neo-popover absolute bottom-full left-0 z-20 mb-1 max-h-48 w-full overflow-y-auto rounded-xl py-1"
     >
       <li
         v-for="(item, idx) in filteredMentions"
         :key="item.id"
-        class="cursor-pointer px-3 py-2 text-sm"
-        :class="idx === selectedIndex ? 'bg-[#6366f1]/25 text-[#818cf8]' : 'text-white/80 hover:bg-white/5'"
+        class="neo-popover-item cursor-pointer px-3 py-2 text-sm"
+        :class="idx === selectedIndex ? '!bg-[var(--neo-accent-soft)] !text-[var(--neo-accent-text)]' : ''"
         @mousedown.prevent="insertMention(item)"
       >
-        <span class="text-white/40">@</span>{{ item.label }}
-        <span v-if="item.type" class="ml-2 text-[10px] text-white/30">{{ item.type }}</span>
+        <span class="opacity-50">@</span>{{ item.label }}
+        <span v-if="item.type" class="ml-2 text-[10px] opacity-45">{{ item.type }}</span>
       </li>
     </ul>
   </div>

@@ -111,45 +111,45 @@ function select(id: string) {
   <div ref="rootRef" class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
       :title="typeTitle"
       @click="open = !open"
     >
-      <DockTypeIcon :icon="typeIcon" :size="13" class="text-white/55" />
-      <span class="max-w-[140px] truncate font-medium" :class="current?.disabled ? 'text-amber-300/90' : ''">
+      <DockTypeIcon :icon="typeIcon" :size="13" class="opacity-60" />
+      <span class="max-w-[140px] truncate font-medium" :class="current?.disabled ? 'text-amber-400/90' : ''">
         {{ currentLabel }}
       </span>
-      <svg class="h-3 w-3 shrink-0 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <svg class="h-3 w-3 shrink-0 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
       </svg>
     </button>
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-50 mb-1 min-w-[220px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
+      class="neo-popover absolute bottom-full left-0 z-50 mb-1 min-w-[220px] rounded-xl py-1"
       @click.stop
     >
       <button
         v-if="current?.disabled"
         type="button"
-        class="flex w-full items-center justify-between px-3 py-2 text-xs text-amber-300/90"
+        class="flex w-full items-center justify-between px-3 py-2 text-xs text-amber-400/90"
         disabled
       >
         <span class="truncate">{{ labelForValue(current.id) }}</span>
-        <span class="ml-2 shrink-0 text-amber-300/60">已停用</span>
+        <span class="ml-2 shrink-0 text-amber-400/60">已停用</span>
       </button>
       <button
         v-for="model in selectableOptions"
         :key="model.id"
         type="button"
-        class="flex w-full items-center justify-between px-3 py-2 text-xs transition hover:bg-white/5"
-        :class="model.id === modelValue ? 'text-[#818cf8]' : 'text-white/70'"
+        class="neo-popover-item flex w-full items-center justify-between px-3 py-2 text-xs"
+        :class="model.id === modelValue ? '!text-[var(--neo-accent-text)]' : ''"
         @click="select(model.id)"
       >
         <span class="truncate">{{ model.name }}</span>
-        <span class="ml-2 shrink-0 text-white/30">{{ model.channelName }}</span>
+        <span class="ml-2 shrink-0 opacity-45">{{ model.channelName }}</span>
       </button>
-      <p v-if="!selectableOptions.length" class="px-3 py-2 text-[11px] text-white/40">
+      <p v-if="!selectableOptions.length" class="px-3 py-2 text-[11px] text-[var(--neo-text-muted)]">
         暂无可选模型，请先在配置中设置
       </p>
     </div>

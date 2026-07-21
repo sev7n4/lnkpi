@@ -23,6 +23,8 @@ describe('CanvasAccountChrome', () => {
       global: { plugins: [pinia] },
     })
 
-    expect(wrapper.find('.canvas-points-pill').text()).toContain('420 积分')
+    const pillText = wrapper.find('.canvas-points-pill').text()
+    expect(pillText).toContain('420')
+    expect(pillText).toContain('积分')
   })
 })

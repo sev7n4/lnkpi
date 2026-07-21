@@ -47,7 +47,7 @@ const emit = defineEmits<{
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--neo-text-muted);
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -55,8 +55,8 @@ const emit = defineEmits<{
 }
 
 .dock-mic-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 
 .dock-mic-btn:disabled {

@@ -61,11 +61,11 @@ function bumpPitch(delta: number) {
   <div ref="rootRef" class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
       title="语音参数"
       @click="open = !open"
     >
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" class="text-white/50">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" class="opacity-60">
         <circle cx="12" cy="12" r="9" />
         <path d="M8 14s1.5 2 4 2 4-2 4-2" />
         <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -81,18 +81,18 @@ function bumpPitch(delta: number) {
     </button>
     <div
       v-if="open"
-      class="absolute bottom-full right-0 z-50 mb-1 w-[220px] rounded-xl border border-white/10 bg-[#242424] p-3 shadow-xl"
+      class="absolute bottom-full right-0 z-50 mb-1 w-[220px] neo-popover rounded-xl p-3"
       @click.stop
     >
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">情感</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">情感</p>
         <div class="flex flex-wrap gap-1">
           <button
             v-for="opt in AUDIO_EMOTION_OPTIONS"
             :key="opt.value"
             type="button"
-            class="rounded-md px-2 py-1 text-[10px] transition"
-            :class="modelValue.emotion === opt.value ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'bg-white/5 text-white/60'"
+            class="neo-chip rounded-md px-2 py-1 text-[10px]"
+            :class="modelValue.emotion === opt.value ? 'is-on' : ''"
             @click="patch({ emotion: opt.value })"
           >
             {{ opt.label }}
@@ -100,14 +100,14 @@ function bumpPitch(delta: number) {
         </div>
       </div>
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">语言</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">语言</p>
         <div class="flex flex-wrap gap-1">
           <button
             v-for="opt in AUDIO_LANGUAGE_OPTIONS"
             :key="opt.value"
             type="button"
-            class="rounded-md px-2 py-1 text-[10px] transition"
-            :class="modelValue.language === opt.value ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'bg-white/5 text-white/60'"
+            class="neo-chip rounded-md px-2 py-1 text-[10px]"
+            :class="modelValue.language === opt.value ? 'is-on' : ''"
             @click="patch({ language: opt.value })"
           >
             {{ opt.label }}
@@ -115,11 +115,11 @@ function bumpPitch(delta: number) {
         </div>
       </div>
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">语速 {{ modelValue.speed.toFixed(1) }}x</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">语速 {{ modelValue.speed.toFixed(1) }}x</p>
         <div class="flex items-center gap-1">
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpSpeed(-0.1)"
           >
             −
@@ -130,12 +130,12 @@ function bumpPitch(delta: number) {
             max="2"
             step="0.1"
             :value="modelValue.speed"
-            class="min-w-0 flex-1 accent-[#6366f1]"
+            class="min-w-0 flex-1 accent-[var(--neo-accent)]"
             @input="patch({ speed: Number(($event.target as HTMLInputElement).value) })"
           >
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpSpeed(0.1)"
           >
             +
@@ -143,11 +143,11 @@ function bumpPitch(delta: number) {
         </div>
       </div>
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-white/40">音量 {{ modelValue.volume.toFixed(1) }}</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">音量 {{ modelValue.volume.toFixed(1) }}</p>
         <div class="flex items-center gap-1">
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpVolume(-0.1)"
           >
             −
@@ -158,12 +158,12 @@ function bumpPitch(delta: number) {
             max="2"
             step="0.1"
             :value="modelValue.volume"
-            class="min-w-0 flex-1 accent-[#6366f1]"
+            class="min-w-0 flex-1 accent-[var(--neo-accent)]"
             @input="patch({ volume: Number(($event.target as HTMLInputElement).value) })"
           >
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpVolume(0.1)"
           >
             +
@@ -171,11 +171,11 @@ function bumpPitch(delta: number) {
         </div>
       </div>
       <div>
-        <p class="mb-1.5 text-[10px] text-white/40">音调 {{ modelValue.pitch > 0 ? '+' : '' }}{{ modelValue.pitch }}</p>
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">音调 {{ modelValue.pitch > 0 ? '+' : '' }}{{ modelValue.pitch }}</p>
         <div class="flex items-center gap-1">
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpPitch(-1)"
           >
             −
@@ -186,12 +186,12 @@ function bumpPitch(delta: number) {
             max="12"
             step="1"
             :value="modelValue.pitch"
-            class="min-w-0 flex-1 accent-[#6366f1]"
+            class="min-w-0 flex-1 accent-[var(--neo-accent)]"
             @input="patch({ pitch: Number(($event.target as HTMLInputElement).value) })"
           >
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-white/40 hover:bg-white/10 hover:text-white/80"
+            class="neo-popover-item rounded px-1.5 py-0.5"
             @click="bumpPitch(1)"
           >
             +

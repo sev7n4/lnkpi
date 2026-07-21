@@ -50,7 +50,6 @@ export function applyActionsToFlow(
             source: parentNode.id,
             target: nodeId,
             animated: true,
-            style: { stroke: '#7c3aed' },
           })
         }
         break
@@ -80,7 +79,6 @@ export function applyActionsToFlow(
           source: action.payload.source!,
           target: action.payload.target!,
           animated: true,
-          style: { stroke: '#7c3aed' },
         })
         break
     }
@@ -102,7 +100,6 @@ export function canvasDataToFlow(data: CanvasData): { nodes: FlowNode[]; edges: 
       source: e.source,
       target: e.target,
       animated: true,
-      style: { stroke: '#7c3aed' },
     })),
   }
 }

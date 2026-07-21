@@ -16,6 +16,8 @@ const theme = ref<CanvasTheme>(loadTheme())
 
 function applyTheme(value: CanvasTheme) {
   document.documentElement.setAttribute('data-canvas-theme', value)
+  // 同步 Element Plus 明暗主题（el-dialog / el-input 等跟随画布主题）
+  document.documentElement.classList.toggle('dark', value === 'dark')
 }
 
 applyTheme(theme.value)

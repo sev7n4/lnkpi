@@ -43,24 +43,24 @@ function select(id: string) {
   <div ref="rootRef" class="relative">
     <button
       type="button"
-      class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs transition hover:bg-white/10"
+      class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
       title="音色"
       @click="open = !open"
     >
-      <DockTypeIcon icon="audio" :size="12" class="text-white/50" />
+      <DockTypeIcon icon="audio" :size="12" class="opacity-60" />
       <span class="max-w-[88px] truncate font-medium">{{ current?.label ?? DEFAULT_AUDIO_VOICE }}</span>
     </button>
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-50 mb-1 min-w-[160px] rounded-xl border border-white/10 bg-[#242424] py-1 shadow-xl"
+      class="absolute bottom-full left-0 z-50 mb-1 min-w-[160px] neo-popover rounded-xl py-1"
       @click.stop
     >
       <button
         v-for="voice in voiceOptions"
         :key="voice.id"
         type="button"
-        class="flex w-full px-3 py-2 text-xs transition hover:bg-white/5"
-        :class="voice.id === modelValue ? 'text-[#818cf8]' : 'text-white/70'"
+        class="neo-popover-item flex w-full px-3 py-2 text-xs"
+        :class="voice.id === modelValue ? '!text-[var(--neo-accent-text)]' : ''"
         @click="select(voice.id)"
       >
         {{ voice.label }}
