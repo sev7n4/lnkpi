@@ -24,6 +24,22 @@ model User {
   providerChannels ProviderChannel[]
   aiPreferences    UserAiPreferences?
   webdavConfig     UserWebdavConfig?
+  assets           UserAsset[]
+}
+
+// 用户全局资产库：跨画布可用，用户在节点上主动保存或面板上传入库
+model UserAsset {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind         String   @default("image") // image | video | audio
+  url          String
+  label        String   @default("")
+  sourceNodeId String?
+  createdAt    DateTime @default(now())
+
+  @@unique([userId, url])
+  @@index([userId, createdAt])
 }
 
 model ProviderChannel {

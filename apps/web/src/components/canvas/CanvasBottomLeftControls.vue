@@ -245,7 +245,7 @@ watch(
     </div>
 
     <!-- 单行底栏 -->
-    <div class="toolbar-row neo-chrome pointer-events-auto flex flex-nowrap items-center gap-1 rounded-xl px-1.5 py-1">
+    <div class="toolbar-row neo-glass-lite pointer-events-auto flex flex-nowrap items-center gap-1 rounded-xl px-1.5 py-1">
       <!-- 小地图切换 -->
       <button
         type="button"
@@ -340,7 +340,7 @@ watch(
                 min="8"
                 max="48"
                 step="2"
-                class="mt-1 w-full accent-[var(--neo-accent)]"
+                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
                 :value="settings.gridGap"
                 @input="patch({ gridGap: Number(($event.target as HTMLInputElement).value) })"
               >
@@ -352,7 +352,7 @@ watch(
                 min="0.5"
                 max="4"
                 step="0.1"
-                class="mt-1 w-full accent-[var(--neo-accent)]"
+                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
                 :value="settings.gridDotSize"
                 @input="patch({ gridDotSize: Number(($event.target as HTMLInputElement).value) })"
               >
@@ -364,7 +364,7 @@ watch(
                 min="0.8"
                 max="2"
                 step="0.1"
-                class="mt-1 w-full accent-[var(--neo-accent)]"
+                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
                 :value="settings.bottomToolbarScale"
                 @input="patch({ bottomToolbarScale: Number(($event.target as HTMLInputElement).value) })"
               >
@@ -434,8 +434,9 @@ watch(
 }
 
 .bar-btn.is-accent {
-  background: var(--neo-accent-soft);
-  color: var(--neo-accent-text);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 
 .list-search {
@@ -483,7 +484,7 @@ watch(
 .zoom-slider {
   width: 64px;
   flex-shrink: 0;
-  accent-color: var(--neo-accent);
+  accent-color: var(--neo-slider-accent);
   height: 4px;
   margin: 0;
 }

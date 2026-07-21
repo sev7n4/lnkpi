@@ -58,11 +58,11 @@ const emit = defineEmits<{
   justify-content: center;
   border: none;
   border-radius: 999px;
-  background: var(--neo-brand-gradient);
-  color: #fff;
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 2px 12px rgba(109, 93, 252, 0.45);
+  box-shadow: var(--neo-hi-shadow);
   transition:
     transform 0.15s ease,
     opacity 0.15s ease,
@@ -71,9 +71,8 @@ const emit = defineEmits<{
 }
 
 .dock-generate-btn:hover:not(:disabled) {
-  filter: brightness(1.1);
+  filter: brightness(1.06);
   transform: scale(1.05);
-  box-shadow: 0 3px 16px rgba(109, 93, 252, 0.6);
 }
 
 .dock-generate-btn:disabled {

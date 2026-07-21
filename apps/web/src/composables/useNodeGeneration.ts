@@ -123,13 +123,17 @@ function firstImageRefUrl(refs: StudioRefPayload[]): string {
   return ''
 }
 
-function hasBlobReference(refs: StudioRefPayload[], data: Record<string, unknown>): boolean {
+/** 找出仍是 blob 本地地址（未持久化上传）的引用，返回可读的错误消息；无问题时返回 null */
+function blobReferenceError(refs: StudioRefPayload[], data: Record<string, unknown>): string | null {
   const direct = String(data.referenceImageUrl ?? '').trim()
-  if (direct.startsWith('blob:')) return true
+  if (direct.startsWith('blob:')) return '参考图尚未上传，请先上传后再生成'
   for (const ref of refs) {
-    if (ref.url?.trim().startsWith('blob:')) return true
+    if (ref.url?.trim().startsWith('blob:')) {
+      const label = ref.label ? `（${ref.label}）` : ''
+      return `参考图 @${ref.refKey}${label}未上传成功，请在来源节点重新上传后再生成`
+    }
   }
-  return false
+  return null
 }
 
 function findNodeById(nodes: EditableFlowNode[], id: string) {
@@ -506,10 +510,12 @@ async function cancelRemoteGeneration(nodeId: string) {
       return
     }
 
-    if (hasBlobReference(refs, data)) {
+    const blobError = blobReferenceError(refs, data)
+    if (blobError) {
       deps.patchNodeData(node.id, {
         status: NODE_GENERATION_STATUS.error,
-        errorMessage: '参考图尚未上传，请先上传后再生成',
+        errorMessage: blobError,
+        errorCode: 'upload_required',
       })
       return
     }
@@ -915,10 +921,12 @@ async function cancelRemoteGeneration(nodeId: string) {
       if (!items.length) return
 
       for (const item of items) {
-        if (hasBlobReference(item.refs ?? [], {})) {
+        const itemBlobError = blobReferenceError(item.refs ?? [], {})
+        if (itemBlobError) {
           deps.patchNodeData(node.id, {
             status: NODE_GENERATION_STATUS.error,
-            errorMessage: '参考图尚未上传，请先上传后再生成',
+            errorMessage: itemBlobError,
+            errorCode: 'upload_required',
           })
           return
         }

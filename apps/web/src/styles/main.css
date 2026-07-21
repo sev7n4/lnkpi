@@ -94,6 +94,16 @@
     color: var(--neo-text-primary);
   }
 
+  /* 轻量玻璃轨道：左侧小菜单 / 底部小地图工具条，比 dock 更透、能看清画布 */
+  .neo-glass-lite {
+    border: 1px solid var(--neo-glass-lite-border);
+    background: var(--neo-glass-lite-bg);
+    box-shadow: var(--neo-glass-lite-shadow);
+    backdrop-filter: blur(var(--neo-glass-lite-blur)) saturate(1.4);
+    -webkit-backdrop-filter: blur(var(--neo-glass-lite-blur)) saturate(1.4);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
   /* 弹出卡片 / 下拉菜单 / popover 统一表面 */
   .neo-popover {
     border: 1px solid var(--neo-border);

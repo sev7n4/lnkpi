@@ -22,6 +22,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction } from '@lnkpi/shared'
+import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
@@ -90,6 +91,7 @@ import {
 } from '@/composables/canvasNodeActions'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
+import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
@@ -143,12 +145,37 @@ const upstreamEdgeIds = computed(() => {
   return ids
 })
 
+/** 选中单个节点时，顺流其全部下游连线（暖橙高亮，与上游电流青区分） */
+const downstreamEdgeIds = computed(() => {
+  const ids = new Set<string>()
+  const source = multiSelectedIds.value.length === 1 ? multiSelectedIds.value[0] : null
+  if (!source) return ids
+  const visited = new Set<string>([source])
+  const queue = [source]
+  while (queue.length) {
+    const nodeId = queue.pop()!
+    for (const edge of edges.value) {
+      if (edge.source !== nodeId || ids.has(edge.id)) continue
+      ids.add(edge.id)
+      if (!visited.has(edge.target)) {
+        visited.add(edge.target)
+        queue.push(edge.target)
+      }
+    }
+  }
+  return ids
+})
+
 const flowEdges = computed(() => {
   const upstream = upstreamEdgeIds.value
-  if (!upstream.size) return edges.value as unknown as Edge[]
-  return edges.value.map((edge) =>
-    upstream.has(edge.id) ? { ...edge, class: 'neo-edge-upstream' } : edge,
-  ) as unknown as Edge[]
+  const downstream = downstreamEdgeIds.value
+  if (!upstream.size && !downstream.size) return edges.value as unknown as Edge[]
+  return edges.value.map((edge) => {
+    // 环路中同属上下游时，上游电流优先
+    if (upstream.has(edge.id)) return { ...edge, class: 'neo-edge-upstream' }
+    if (downstream.has(edge.id)) return { ...edge, class: 'neo-edge-downstream' }
+    return edge
+  }) as unknown as Edge[]
 })
 
 const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
@@ -268,32 +295,6 @@ watch(
     edges.value = edges.value.map((edge) => ({ ...edge, animated }))
   },
 )
-
-const canvasAssets = computed((): CanvasAssetItem[] => {
-  const out: CanvasAssetItem[] = []
-  for (const node of nodes.value) {
-    const data = node.data as Record<string, unknown>
-    const url = String(data.url ?? '').trim()
-    if (!url) continue
-    const type = String(node.type ?? '')
-    if (!['image', 'video', 'audio'].includes(type)) continue
-    let kind: CanvasAssetItem['kind'] = 'other'
-    if (type === 'image') kind = url.match(/\.(mp4|webm|mov)/i) ? 'video' : 'image'
-    else if (type === 'video') kind = 'video'
-    else if (type === 'audio') kind = 'audio'
-    const createdAt = Number(data.createdAt ?? 0)
-    out.push({
-      id: `${node.id}-asset`,
-      nodeId: node.id,
-      url,
-      label: String(data.title ?? data.fileName ?? data.prompt ?? node.id),
-      kind,
-      createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : undefined,
-      source: 'user',
-    })
-  }
-  return out
-})
 
 const canvasInteractionEnabled = computed(() => canvasMode.value === 'vueflow' && !viewportSettings.value.viewLocked)
 
@@ -1247,6 +1248,10 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
     mimeType: payload.mimeType,
     title,
   }
+  // 媒体文件上传失败（url 为空）时创建 error 节点提示重传，而不是静默落 blob
+  const mediaStatus = payload.url
+    ? { url: payload.url, status: 'completed' }
+    : { status: 'error', errorMessage: '文件上传失败，请重试', errorCode: 'upload_required' }
   let id: string | null = null
 
   switch (payload.kind) {
@@ -1260,8 +1265,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
       break
     case 'image':
       id = addNode('image', {
-        url: payload.url,
-        status: 'completed',
+        ...mediaStatus,
         ...meta,
         prompt: '',
         imageModel: getProviderConfig('image').model,
@@ -1269,8 +1273,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
       break
     case 'video':
       id = addNode('video', {
-        url: payload.url,
-        status: 'completed',
+        ...mediaStatus,
         ...meta,
         prompt: '',
         videoModel: getProviderConfig('video').model,
@@ -1278,8 +1281,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
       break
     case 'audio':
       id = addNode('audio', {
-        url: payload.url,
-        status: 'completed',
+        ...mediaStatus,
         ...meta,
         prompt: '',
         audioModel: getProviderConfig('audio').model,
@@ -1295,16 +1297,13 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
 
 async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) {
   const payload = await fileToPersistedPayload(file)
-  if (tryApplyUploadToSelectedNode(payload)) return
-  await createFileNodeAt(payload, clientPos)
-}
-
-function triggerMediaUpload(clientX?: number, clientY?: number) {
-  pendingMediaPos.value = {
-    x: clientX ?? window.innerWidth / 2,
-    y: clientY ?? window.innerHeight / 2,
+  // 登录态下媒体上传失败会回退成 blob 本地地址：清空 url 走 error 节点提示，
+  // 避免 blob 引用在下游生成时才报「参考图尚未上传」
+  if (payload.kind !== 'text' && payload.url.startsWith('blob:') && localStorage.getItem('token')) {
+    payload.url = ''
   }
-  mediaInputRef.value?.click()
+  if (payload.url && tryApplyUploadToSelectedNode(payload)) return
+  await createFileNodeAt(payload, clientPos)
 }
 
 async function onMediaFileSelected(event: Event) {
@@ -1324,6 +1323,14 @@ async function handleMediaInputUpload(file: File) {
   try {
     const payload = await fileToPersistedPayload(file)
     if (payload.kind === 'other' || payload.kind === 'text') return
+    if (payload.url.startsWith('blob:') && localStorage.getItem('token')) {
+      patchNodeData(node.id, {
+        status: 'error',
+        errorMessage: '文件上传失败，请重试',
+        errorCode: 'upload_required',
+      })
+      return
+    }
     const mediaKind = inferMediaInputKind(payload.mimeType, payload.url)
     patchNodeData(node.id, {
       url: payload.url,
@@ -1367,6 +1374,20 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
   selectOnlyNode(childId)
   await saveCanvas()
   await focusNodeById(childId)
+}
+
+/** 历史记录「定位」：按 generationRecordId / materialId 反查画布节点并聚焦 */
+async function handleHistoryLocate(recordId: string) {
+  const node = nodes.value.find((n) => {
+    const data = n.data as Record<string, unknown>
+    return data.generationRecordId === recordId || data.materialId === recordId
+  })
+  if (!node) {
+    ElMessage.warning('当前画布中没有找到该任务对应的节点')
+    return
+  }
+  selectOnlyNode(node.id)
+  await focusNodeById(node.id)
 }
 
 async function handleAssetApply(asset: CanvasAssetItem) {
@@ -1860,14 +1881,29 @@ onMounted(() => {
 
   const area = canvasAreaRef.value
   if (area) {
-    area.addEventListener('dragover', mediaHandlers.onDragOver)
+    area.addEventListener('dragover', (event) => {
+      // 资产库条目拖入画布 / dock-studio 时允许 drop
+      if (event.dataTransfer?.types.includes('application/lnkpi-asset')) {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        return
+      }
+      mediaHandlers.onDragOver(event)
+    })
     area.addEventListener('drop', (event) => {
       const assetRaw = event.dataTransfer?.getData('application/lnkpi-asset')
       if (assetRaw) {
         event.preventDefault()
         try {
           const asset = JSON.parse(assetRaw) as CanvasAssetItem
-          if (tryApplyAssetToSelectedNode(asset)) return
+          // 落在 dock-studio 上 = 作为芯片引用挂到当前编辑节点；落在画布上 = 新建节点
+          const onDock = (event.target as HTMLElement | null)?.closest('.dock-studio-toolbar')
+          if (onDock) {
+            if (!tryApplyAssetToSelectedNode(asset)) {
+              ElMessage.warning('当前节点不支持该类型的引用')
+            }
+            return
+          }
           const payload = assetPayloadFromItem(asset)
           if (payload) {
             void createFileNodeAt(payload, { x: event.clientX, y: event.clientY })
@@ -2020,11 +2056,10 @@ onMounted(() => {
         />
 
         <NodePanelDock
-          :assets="canvasAssets"
           @add="handleDockAdd"
           @open-settings="showModelSettings = true"
           @asset-apply="handleAssetApply"
-          @asset-upload="triggerMediaUpload()"
+          @history-locate="handleHistoryLocate"
         />
 
         <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
@@ -2111,6 +2146,7 @@ onMounted(() => {
       @published="loadSessions"
     />
     <AIImageEditor @apply="handleImageEditorApply" />
+    <MediaPreviewOverlay />
     <CanvasContextMenu
       v-if="contextMenu"
       :x="contextMenu.x"

@@ -564,6 +564,7 @@ describe('useNodeGeneration', () => {
     expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
       status: NODE_GENERATION_STATUS.error,
       errorMessage: '参考图尚未上传，请先上传后再生成',
+      errorCode: 'upload_required',
     })
   })
 
@@ -580,10 +581,11 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(node)
 
     expect(studioApi.generateImage).not.toHaveBeenCalled()
-    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', expect.objectContaining({
       status: NODE_GENERATION_STATUS.error,
-      errorMessage: '参考图尚未上传，请先上传后再生成',
-    })
+      errorMessage: expect.stringContaining('未上传成功'),
+      errorCode: 'upload_required',
+    }))
   })
 
   it('passes shot-linked image child params to canvasApi.generateImage', async () => {
@@ -657,10 +659,11 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(image)
 
     expect(canvasApi.generateImage).not.toHaveBeenCalled()
-    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', {
+    expect(deps.patchNodeData).toHaveBeenCalledWith('image-1', expect.objectContaining({
       status: NODE_GENERATION_STATUS.error,
-      errorMessage: '参考图尚未上传，请先上传后再生成',
-    })
+      errorMessage: expect.stringContaining('未上传成功'),
+      errorCode: 'upload_required',
+    }))
   })
 
   it('generateShot uses shot local prompt with shot refs', async () => {
