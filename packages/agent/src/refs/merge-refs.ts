@@ -89,18 +89,28 @@ export async function mergeRefsToPrompt(input: {
   }
 
   const baseUrl = (input.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '')
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    throw new Error(`LLM 请求失败: ${res.status} ${res.statusText}`)
+  // Merge is best-effort: any LLM failure degrades to concat instead of failing the whole generation
+  // (points are already consumed by the caller at this stage).
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      throw new Error(`LLM 请求失败: ${res.status} ${res.statusText}`)
+    }
+    const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
+    const mergedText = json.choices[0]?.message?.content?.trim()
+    if (!mergedText) {
+      throw new Error('LLM 返回空内容')
+    }
+    return { mergedText, skippedMerge: false }
+  } catch (err) {
+    console.warn(
+      '[merge-refs] LLM merge failed, falling back to concat:',
+      err instanceof Error ? err.message : err,
+    )
+    return { mergedText: fallbackConcat(entries), skippedMerge: false }
   }
-  const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
-  const mergedText = json.choices[0]?.message?.content?.trim()
-  if (!mergedText) {
-    throw new Error('LLM 返回空内容')
-  }
-  return { mergedText, skippedMerge: false }
 }

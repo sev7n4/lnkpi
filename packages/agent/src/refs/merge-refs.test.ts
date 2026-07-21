@@ -80,22 +80,52 @@ describe('mergeRefsToPrompt LLM merge', () => {
     expect(body.messages.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('throws when API returns !ok', async () => {
+  it('falls back to concat when API returns !ok', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
-      status: 500,
-      statusText: 'Internal Server Error',
+      status: 403,
+      statusText: 'Forbidden',
     }))
-    await expect(
-      mergeRefsToPrompt({
-        sources: [
-          { refKey: 'T1', label: 'A', text: 'one' },
-          { refKey: 'T2', label: 'B', text: 'two' },
-        ],
-        downstreamType: 'text',
-        apiKey: 'test-key',
-      }),
-    ).rejects.toThrow(/LLM 请求失败/)
+    const result = await mergeRefsToPrompt({
+      sources: [
+        { refKey: 'T1', label: 'A', text: 'one' },
+        { refKey: 'T2', label: 'B', text: 'two' },
+      ],
+      downstreamType: 'text',
+      apiKey: 'test-key',
+    })
+    expect(result.skippedMerge).toBe(false)
+    expect(result.mergedText).toContain('【T1·A】')
+    expect(result.mergedText).toContain('one')
+    expect(result.mergedText).toContain('【T2·B】')
+    expect(result.mergedText).toContain('two')
+  })
+
+  it('falls back to concat when fetch rejects or content is empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    const rejected = await mergeRefsToPrompt({
+      sources: [
+        { refKey: 'T1', label: 'A', text: 'one' },
+        { refKey: 'T2', label: 'B', text: 'two' },
+      ],
+      downstreamType: 'video',
+      apiKey: 'test-key',
+    })
+    expect(rejected.mergedText).toContain('【T1·A】')
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '   ' } }] }),
+    }))
+    const empty = await mergeRefsToPrompt({
+      sources: [
+        { refKey: 'T1', label: 'A', text: 'one' },
+        { refKey: 'T2', label: 'B', text: 'two' },
+      ],
+      downstreamType: 'video',
+      apiKey: 'test-key',
+    })
+    expect(empty.mergedText).toContain('【T2·B】')
   })
 
   it('includes mentionedKeys in LLM system and user messages', async () => {
