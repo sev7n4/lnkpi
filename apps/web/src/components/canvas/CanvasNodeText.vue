@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeId, useVueFlow } from '@vue-flow/core'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
 import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
+import { CANVAS_NODE_PATCH_KEY } from '@/composables/canvasNodeActions'
 
 const props = defineProps<{
   selected?: boolean
@@ -22,6 +23,9 @@ const props = defineProps<{
 
 const nodeId = useNodeId()
 const { updateNodeData } = useVueFlow()
+// 画布是受控模式(nodes.value 为真源),必须走页面级 patch 才能持久化并让下游引用可见;
+// updateNodeData 只写 Vue Flow 内部 store,会在下一次页面 patch 时被旧数据覆盖。
+const patchCanvasNode = inject(CANVAS_NODE_PATCH_KEY, null)
 const route = useRoute()
 const sessionId = computed(() => route.params.sessionId as string | undefined)
 const taskId = computed(
@@ -47,14 +51,18 @@ function openEditor() {
 }
 
 function onSave(md: string) {
-  updateNodeData(nodeId, { content: md })
+  if (patchCanvasNode && nodeId) {
+    patchCanvasNode(nodeId, { content: md })
+  } else {
+    updateNodeData(nodeId, { content: md })
+  }
 }
 </script>
 
 <template>
   <NeoBaseNode node-type="text" :selected="selected" :data="data" :status="data.status">
     <div class="neo-text-card" @dblclick.stop="openEditor">
-      <p>{{ data.content || '点击下方 Dock Studio 编辑...' }}</p>
+      <p>{{ data.content || '双击编辑文本,或在下方 Dock 生成' }}</p>
       <NodeTaskCornerActions
         :status="data.status"
         :started-at="typeof data.generationStartedAt === 'string' ? data.generationStartedAt : undefined"
