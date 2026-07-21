@@ -27,7 +27,8 @@ useClickOutside(menuRef, closeMenu)
 </script>
 
 <template>
-  <div class="canvas-floating-chrome pointer-events-none absolute left-[52px] top-3 z-[50] flex items-start gap-2">
+  <!-- left-3：工具竖排面板已下移到标题栏下方，返回按钮回到左上角原点不再被遮挡 -->
+  <div class="canvas-floating-chrome pointer-events-none absolute left-3 top-3 z-[50] flex items-start gap-2">
     <button
       type="button"
       class="pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-[rgba(22,22,22,0.88)] text-white/70 shadow-lg backdrop-blur-xl transition hover:bg-white/[0.06] hover:text-white"

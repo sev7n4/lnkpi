@@ -50,6 +50,32 @@ const px = computed(() => props.size ?? 16)
       <polyline points="17 8 12 3 7 8" />
       <line x1="12" y1="3" x2="12" y2="15" />
     </template>
+    <template v-else-if="kind === 'shot'">
+      <rect x="2.5" y="5" width="19" height="14" rx="2" stroke-width="1.5" />
+      <line x1="7" y1="5" x2="7" y2="19" stroke-width="1.5" />
+      <line x1="17" y1="5" x2="17" y2="19" stroke-width="1.5" />
+    </template>
+    <template v-else-if="kind === 'director'">
+      <path d="M4 11l16-4v4L4 15v-4z" stroke-width="1.5" />
+      <path d="M6 15l-2 6M12 13.5L10 21M18 12l2 6" stroke-width="1.5" />
+    </template>
+    <template v-else-if="kind === 'composition'">
+      <rect x="2.5" y="4" width="19" height="16" rx="2" stroke-width="1.5" />
+      <line x1="2.5" y1="12" x2="21.5" y2="12" stroke-width="1.5" />
+      <line x1="8" y1="4" x2="8" y2="12" stroke-width="1.5" />
+      <line x1="14" y1="12" x2="14" y2="20" stroke-width="1.5" />
+    </template>
+    <template v-else-if="kind === 'world'">
+      <circle cx="12" cy="12" r="9" stroke-width="1.5" />
+      <ellipse cx="12" cy="12" rx="4" ry="9" stroke-width="1.5" />
+      <line x1="3" y1="12" x2="21" y2="12" stroke-width="1.5" />
+    </template>
+    <template v-else-if="kind === 'group'">
+      <rect x="3" y="3" width="8" height="8" rx="2" stroke-width="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="2" stroke-width="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="2" stroke-width="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="2" stroke-width="1.5" />
+    </template>
     <template v-else>
       <rect x="3" y="3" width="18" height="18" rx="4" />
     </template>

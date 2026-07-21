@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, inject, ref } from 'vue'
 import { useNodeId, useVueFlow } from '@vue-flow/core'
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
+import { CANVAS_NODE_PATCH_KEY } from '@/composables/canvasNodeActions'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 
 const props = defineProps<{
@@ -12,6 +13,8 @@ const props = defineProps<{
 
 const nodeId = useNodeId()
 const { updateNodeData } = useVueFlow()
+// 同 CanvasNodeText:受控模式下必须走页面级 patch 才能持久化并让下游引用可见。
+const patchCanvasNode = inject(CANVAS_NODE_PATCH_KEY, null)
 
 const editorOpen = ref(false)
 const draft = ref('')
@@ -32,7 +35,11 @@ function openEditor() {
 }
 
 function onSave(md: string) {
-  updateNodeData(nodeId, { content: md })
+  if (patchCanvasNode && nodeId) {
+    patchCanvasNode(nodeId, { content: md })
+  } else {
+    updateNodeData(nodeId, { content: md })
+  }
 }
 </script>
 
