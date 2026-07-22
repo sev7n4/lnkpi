@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Work } from '@lnkpi/shared'
 import { WORK_CATEGORIES } from '@lnkpi/shared'
 import { api } from '@/services/api'
+import { sessionsApi } from '@/services/sessions-api'
 import { useAuthStore } from '@/stores/auth'
 import { useSessionRedirect } from '@/composables/useSessionRedirect'
 import WorkCard from '@/components/works/WorkCard.vue'
@@ -25,6 +27,8 @@ const loading = ref(false)
 const showPublish = ref(false)
 const userSessions = ref<Session[]>([])
 const mySessions = ref<Session[]>([])
+const openMenuId = ref<string | null>(null)
+const menuRefs = new Map<string, HTMLElement>()
 const greeting = getGreeting()
 
 function getGreeting() {
@@ -82,10 +86,90 @@ async function fetchMySessions() {
     return
   }
   try {
-    const { data } = await api.get<{ data: Session[] }>('/sessions')
+    const { data } = await sessionsApi.list()
     mySessions.value = data.data
   } catch {
     mySessions.value = []
+  }
+}
+
+function setMenuRef(id: string, el: HTMLElement | null) {
+  if (el) menuRefs.set(id, el)
+  else menuRefs.delete(id)
+}
+
+function toggleMenu(sessionId: string) {
+  openMenuId.value = openMenuId.value === sessionId ? null : sessionId
+}
+
+function closeMenu() {
+  openMenuId.value = null
+}
+
+function onDocumentPointerDown(event: PointerEvent) {
+  if (!openMenuId.value) return
+  const el = menuRefs.get(openMenuId.value)
+  if (el && !el.contains(event.target as Node)) closeMenu()
+}
+
+async function renameSession(session: Session) {
+  closeMenu()
+  let value: string
+  try {
+    const result = await ElMessageBox.prompt('输入新的画布名称', '重命名', {
+      inputValue: session.title || '未命名画布',
+      inputPattern: /\S/,
+      inputErrorMessage: '名称不能为空',
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    })
+    value = result.value.trim()
+  } catch {
+    return
+  }
+  if (!value || value === session.title) return
+  try {
+    await sessionsApi.update(session.id, { title: value })
+    await fetchMySessions()
+    ElMessage.success('已重命名')
+  } catch {
+    ElMessage.error('重命名失败，请稍后重试')
+  }
+}
+
+async function duplicateSession(session: Session) {
+  closeMenu()
+  try {
+    const { data } = await sessionsApi.duplicate(session.id)
+    await fetchMySessions()
+    ElMessage.success('已复制副本')
+    router.push(`/workflow/${data.data.id}`)
+  } catch {
+    ElMessage.error('复制失败，请稍后重试')
+  }
+}
+
+async function deleteSession(session: Session) {
+  closeMenu()
+  try {
+    await ElMessageBox.confirm(
+      `确定删除「${session.title || '未命名画布'}」？此操作不可恢复。`,
+      '删除画布',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+  try {
+    await sessionsApi.remove(session.id)
+    await fetchMySessions()
+    ElMessage.success('已删除')
+  } catch {
+    ElMessage.error('删除失败，请稍后重试')
   }
 }
 
@@ -113,7 +197,7 @@ async function createCanvas() {
     return
   }
   try {
-    const { data } = await api.post<{ data: { id: string } }>('/sessions', {
+    const { data } = await sessionsApi.create({
       title: prompt.value || '未命名画布',
       prompt: prompt.value,
     })
@@ -146,7 +230,7 @@ async function openPublish() {
     return
   }
   try {
-    const { data } = await api.get<{ data: Session[] }>('/sessions')
+    const { data } = await sessionsApi.list()
     userSessions.value = data.data
     if (!userSessions.value.length) {
       await createCanvas()
@@ -161,6 +245,11 @@ async function openPublish() {
 onMounted(() => {
   fetchWorks()
   void fetchMySessions()
+  document.addEventListener('pointerdown', onDocumentPointerDown, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerDown, true)
 })
 
 watch(() => auth.isLoggedIn, () => {
@@ -204,25 +293,74 @@ watch(() => auth.isLoggedIn, () => {
           </svg>
           <span class="text-xs font-medium">新建画布</span>
         </button>
-        <button
+        <div
           v-for="session in mySessions.slice(0, 11)"
           :key="session.id"
-          type="button"
-          class="group flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] p-3 text-left transition hover:border-[#6366f1]/40 hover:bg-[#1f1f24]"
-          @click="openCanvas(session.id)"
+          class="group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] p-3 text-left transition hover:border-[#6366f1]/40 hover:bg-[#1f1f24]"
         >
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6366f1]/15 text-[#818cf8]">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 2h6m-3-3v6" />
-            </svg>
+          <div
+            :ref="(el) => setMenuRef(session.id, el as HTMLElement | null)"
+            class="absolute right-2 top-2 z-10"
+          >
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-lg bg-black/50 text-white/70 opacity-0 transition hover:bg-black/70 hover:text-white group-hover:opacity-100"
+              :class="{ 'opacity-100': openMenuId === session.id }"
+              title="更多操作"
+              @click.stop="toggleMenu(session.id)"
+            >
+              <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                <circle cx="5" cy="12" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="19" cy="12" r="2" />
+              </svg>
+            </button>
+            <div
+              v-if="openMenuId === session.id"
+              class="neo-popover absolute right-0 top-full mt-1 min-w-[120px] rounded-xl py-1"
+              @click.stop
+            >
+              <button
+                type="button"
+                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
+                @click="renameSession(session)"
+              >
+                重命名
+              </button>
+              <button
+                type="button"
+                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
+                @click="duplicateSession(session)"
+              >
+                复制副本
+              </button>
+              <button
+                type="button"
+                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs text-red-400"
+                @click="deleteSession(session)"
+              >
+                删除
+              </button>
+            </div>
           </div>
-          <div class="min-w-0">
-            <p class="truncate text-[13px] font-medium text-white/85 group-hover:text-white">
-              {{ session.title || '未命名画布' }}
-            </p>
-            <p class="mt-0.5 text-[10px] text-white/35">{{ formatSessionTime(session.updatedAt) }}</p>
-          </div>
-        </button>
+          <button
+            type="button"
+            class="flex flex-1 flex-col justify-between text-left"
+            @click="openCanvas(session.id)"
+          >
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6366f1]/15 text-[#818cf8]">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 2h6m-3-3v6" />
+              </svg>
+            </div>
+            <div class="min-w-0">
+              <p class="truncate text-[13px] font-medium text-white/85 group-hover:text-white">
+                {{ session.title || '未命名画布' }}
+              </p>
+              <p class="mt-0.5 text-[10px] text-white/35">{{ formatSessionTime(session.updatedAt) }}</p>
+            </div>
+          </button>
+        </div>
       </div>
     </section>
 
