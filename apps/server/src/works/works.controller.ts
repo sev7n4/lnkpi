@@ -20,6 +20,9 @@ class PublishWorkDto {
   @IsString()
   title!: string
 
+  @IsString()
+  primaryNodeId!: string
+
   @IsOptional()
   @IsString()
   category?: string
@@ -39,6 +42,26 @@ export class WorksController {
   @UseGuards(AuthGuard)
   async publish(@Req() req: { user: { sub: string } }, @Body() dto: PublishWorkDto) {
     const data = await this.worksService.publish(req.user.sub, dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Get(':id/canvas')
+  async getCanvas(@Param('id') id: string) {
+    const data = await this.worksService.getCanvas(id)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post(':id/like')
+  @UseGuards(AuthGuard)
+  async like(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
+    const data = await this.worksService.like(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post(':id/fork-canvas')
+  @UseGuards(AuthGuard)
+  async forkCanvas(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
+    const data = await this.worksService.forkCanvas(req.user.sub, id)
     return { code: 0, message: 'ok', data }
   }
 

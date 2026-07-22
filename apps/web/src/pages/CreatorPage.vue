@@ -24,8 +24,24 @@ onMounted(async () => {
   }
 })
 
-function viewProcess(sessionId: string) {
-  router.push(`/replay/${sessionId}`)
+function viewWork(workId: string) {
+  router.push(`/share/${workId}`)
+}
+
+function viewWatch(workId: string) {
+  router.push(`/share/${workId}`)
+}
+
+function viewProcess(workId: string) {
+  router.push(`/share/${workId}/process`)
+}
+
+function viewAuthor(authorId: string) {
+  router.push(`/creator/${authorId}`)
+}
+
+function viewShare(workId: string) {
+  router.push(`/share/${workId}`)
 }
 </script>
 
@@ -58,7 +74,11 @@ function viewProcess(sessionId: string) {
           v-for="work in profile.works"
           :key="work.id"
           :work="{ ...work, authorId: profile.user.id, authorName: profile.user.nickname }"
+          @view-work="viewWork"
+          @view-watch="viewWatch"
           @view-process="viewProcess"
+          @view-author="viewAuthor"
+          @view-share="viewShare"
         />
       </div>
       <p v-if="!profile.works.length" class="py-16 text-center text-white/40">暂无发布作品</p>

@@ -42,6 +42,8 @@ export interface Work {
   id: string
   title: string
   coverUrl: string
+  playbackUrl?: string
+  playbackKind?: 'image' | 'video'
   type: WorkType
   authorId: string
   authorName: string

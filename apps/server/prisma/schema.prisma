@@ -189,18 +189,20 @@ model AgentMessage {
 }
 
 model Work {
-  id         String   @id @default(cuid())
-  title      String
-  coverUrl   String
-  type       String   @default("canvas")
-  authorId   String
-  author     User     @relation(fields: [authorId], references: [id])
-  sessionId  String?
-  session    Session? @relation(fields: [sessionId], references: [id])
-  likes      Int      @default(0)
-  views      Int      @default(0)
-  category   String?
-  createdAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  title        String
+  coverUrl     String
+  playbackUrl  String?
+  playbackKind String?
+  type         String   @default("canvas")
+  authorId     String
+  author       User     @relation(fields: [authorId], references: [id])
+  sessionId    String?
+  session      Session? @relation(fields: [sessionId], references: [id])
+  likes        Int      @default(0)
+  views        Int      @default(0)
+  category     String?
+  createdAt    DateTime @default(now())
 }
 
 model VerificationCode {

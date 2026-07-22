@@ -38,6 +38,11 @@ const router = createRouter({
       component: () => import('@/pages/SharePage.vue'),
     },
     {
+      path: '/share/:id/process',
+      name: 'share-process',
+      component: () => import('@/pages/CanvasReadonlyPage.vue'),
+    },
+    {
       path: '/stories',
       name: 'stories',
       component: () => import('@/pages/StoriesPage.vue'),
