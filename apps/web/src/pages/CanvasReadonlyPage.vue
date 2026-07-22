@@ -122,4 +122,9 @@ function backToShare() {
 .canvas-flow :deep(.vue-flow__pane) {
   cursor: grab;
 }
+
+/* Block node edit chrome (upload/replace/save/edit/rename) while keeping pan/zoom on the pane */
+.canvas-flow :deep(.vue-flow__node) {
+  pointer-events: none;
+}
 </style>

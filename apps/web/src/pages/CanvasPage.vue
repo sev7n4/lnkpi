@@ -1482,18 +1482,17 @@ async function onMediaFileSelected(event: Event) {
 async function handleMediaInputUpload(file: File) {
   const node = editorNode.value
   if (!node || node.type !== 'mediaInput') return
-  patchNodeData(node.id, { status: 'uploading' })
+  patchNodeData(node.id, {
+    status: 'uploading',
+    uploadProgress: 0,
+    errorMessage: undefined,
+    errorCode: undefined,
+  })
   try {
-    const payload = await fileToPersistedPayload(file)
+    const payload = await fileToPersistedPayload(file, {
+      onProgress: (p) => patchNodeData(node.id, { uploadProgress: p }),
+    })
     if (payload.kind === 'other' || payload.kind === 'text') return
-    if (payload.url.startsWith('blob:') && localStorage.getItem('token')) {
-      patchNodeData(node.id, {
-        status: 'error',
-        errorMessage: '文件上传失败，请重试',
-        errorCode: 'upload_required',
-      })
-      return
-    }
     const mediaKind = inferMediaInputKind(payload.mimeType, payload.url)
     patchNodeData(node.id, {
       url: payload.url,
@@ -1502,10 +1501,17 @@ async function handleMediaInputUpload(file: File) {
       mediaKind,
       title: payload.fileName.replace(/\.[^.]+$/, '') || payload.fileName,
       status: 'completed',
+      uploadProgress: undefined,
     })
     await saveCanvas()
-  } catch {
-    patchNodeData(node.id, { status: 'error' })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '上传失败'
+    patchNodeData(node.id, {
+      status: 'error',
+      errorMessage: msg,
+      errorCode: 'upload_required',
+      uploadProgress: undefined,
+    })
   }
 }
 
