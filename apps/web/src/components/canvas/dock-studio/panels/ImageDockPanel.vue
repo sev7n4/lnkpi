@@ -258,7 +258,9 @@ function clearReferenceImage() {
           @click="pickReferenceImage"
         >
           <DockTypeIcon v-if="!refUploading" icon="image" :size="13" />
-          <span v-else class="text-[9px] text-white/60">…</span>
+          <span v-else class="whitespace-nowrap text-[9px] text-white/60">
+            {{ refUploadProgress > 0 ? `上传中 ${refUploadProgress}%` : '上传中...' }}
+          </span>
         </button>
         <div
           v-if="effectiveRefUrl"

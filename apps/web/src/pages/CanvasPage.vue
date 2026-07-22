@@ -1345,20 +1345,38 @@ async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) 
       ? canAcceptLocalRef(String(selectedNode.type ?? ''), 'text')
       : canAcceptLocalRef(String(selectedNode.type ?? ''), kind))
 
+  const selectedNodeId = wouldApplyToSelected ? selectedNode!.id : null
+  const isMediaKind = kind === 'image' || kind === 'video' || kind === 'audio'
+
   let uploadingNodeId: string | null = null
-  if (!wouldApplyToSelected && (kind === 'image' || kind === 'video' || kind === 'audio')) {
+  if (!wouldApplyToSelected && isMediaKind) {
     uploadingNodeId = createUploadingMediaNodeAt(file, clientPos, kind)
     if (uploadingNodeId) selectOnlyNode(uploadingNodeId)
+  }
+
+  if (selectedNodeId && isMediaKind) {
+    patchNodeData(selectedNodeId, {
+      status: 'uploading',
+      uploadProgress: 0,
+      errorMessage: undefined,
+      errorCode: undefined,
+    })
   }
 
   try {
     const payload = await fileToPersistedPayload(file, {
       onProgress: (p) => {
         if (uploadingNodeId) patchNodeData(uploadingNodeId, { uploadProgress: p })
+        if (selectedNodeId && isMediaKind) patchNodeData(selectedNodeId, { uploadProgress: p })
       },
     })
 
-    if (payload.url && tryApplyUploadToSelectedNode(payload)) return
+    if (payload.url && tryApplyUploadToSelectedNode(payload)) {
+      if (selectedNodeId && isMediaKind) {
+        patchNodeData(selectedNodeId, { uploadProgress: undefined, status: 'idle' })
+      }
+      return
+    }
 
     if (uploadingNodeId) {
       patchNodeData(uploadingNodeId, {
@@ -1384,6 +1402,13 @@ async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) 
         uploadProgress: undefined,
       })
       void saveCanvas()
+      return
+    }
+    if (wouldApplyToSelected) {
+      if (selectedNodeId && isMediaKind) {
+        patchNodeData(selectedNodeId, { uploadProgress: undefined, status: 'idle' })
+      }
+      ElMessage.error(msg)
       return
     }
     if (kind === 'text') {
