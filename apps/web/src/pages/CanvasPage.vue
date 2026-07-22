@@ -27,6 +27,7 @@ import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
+import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
@@ -166,17 +167,13 @@ const downstreamEdgeIds = computed(() => {
   return ids
 })
 
-const flowEdges = computed(() => {
-  const upstream = upstreamEdgeIds.value
-  const downstream = downstreamEdgeIds.value
-  if (!upstream.size && !downstream.size) return edges.value as unknown as Edge[]
-  return edges.value.map((edge) => {
-    // 环路中同属上下游时，上游电流优先
-    if (upstream.has(edge.id)) return { ...edge, class: 'neo-edge-upstream' }
-    if (downstream.has(edge.id)) return { ...edge, class: 'neo-edge-downstream' }
-    return edge
-  }) as unknown as Edge[]
-})
+const flowEdges = computed(() =>
+  annotateEdgesForSelection(
+    edges.value,
+    upstreamEdgeIds.value,
+    downstreamEdgeIds.value,
+  ) as unknown as Edge[],
+)
 
 const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
@@ -1113,6 +1110,8 @@ function onPaneDoubleClick(event: MouseEvent) {
 }
 
 function onEdgeClick({ edge, event }: EdgeMouseEvent) {
+  multiSelectedIds.value = []
+  clearSelection()
   selectedEdgeId.value = edge.id
   const coords = getEventCoords(event)
   selectedEdgePos.value = { x: coords.x, y: coords.y }
