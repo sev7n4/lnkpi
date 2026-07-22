@@ -190,6 +190,19 @@ function throwGenerationFailure(opts: {
 
 type CancelFlag = { isCancelled(): boolean }
 
+export type CanvasGenerationScope = {
+  sessionId?: string
+  nodeId?: string
+}
+
+function withCanvasScope(scope?: CanvasGenerationScope) {
+  if (!scope?.sessionId && !scope?.nodeId) return {}
+  return {
+    ...(scope.sessionId ? { sessionId: scope.sessionId } : {}),
+    ...(scope.nodeId ? { nodeId: scope.nodeId } : {}),
+  }
+}
+
 @Injectable()
 export class StudioService {
   constructor(
@@ -198,9 +211,13 @@ export class StudioService {
     @Inject(ProviderResolverService) private readonly resolver: ProviderResolverService,
   ) {}
 
-  async listGenerations(userId: string, type?: string) {
+  async listGenerations(userId: string, type?: string, sessionId?: string) {
     return this.prisma.generationRecord.findMany({
-      where: { userId, ...(type ? { type } : {}) },
+      where: {
+        userId,
+        ...(type ? { type } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: 50,
     })
@@ -292,6 +309,7 @@ export class StudioService {
     cancel?: CancelFlag,
     thinking?: boolean,
     thinkingEffort?: 'high' | 'max',
+    scope?: CanvasGenerationScope,
   ) {
     const cost = 5
     const chargeReason = '文本生成'
@@ -352,6 +370,7 @@ export class StudioService {
           url: null,
           status: 'completed',
           metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, text }, cost)),
+          ...withCanvasScope(scope),
         },
       })
     } catch (err) {
@@ -371,6 +390,7 @@ export class StudioService {
             url: null,
             status: 'failed',
             metadata: JSON.stringify(failedMeta),
+            ...withCanvasScope(scope),
           },
         })
         throwGenerationFailure({
@@ -395,12 +415,19 @@ export class StudioService {
               ...baseMeta,
             }),
           ),
+          ...withCanvasScope(scope),
         },
       })
     }
   }
 
-  async generatePrompt(userId: string, prompt: string, model?: string, cancel?: CancelFlag) {
+  async generatePrompt(
+    userId: string,
+    prompt: string,
+    model?: string,
+    cancel?: CancelFlag,
+    scope?: CanvasGenerationScope,
+  ) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     const cost = 5
@@ -441,6 +468,7 @@ export class StudioService {
           url: null,
           status: 'completed',
           metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, mode, content }, cost)),
+          ...withCanvasScope(scope),
         },
       })
     } catch (err) {
@@ -460,6 +488,7 @@ export class StudioService {
             url: null,
             status: 'failed',
             metadata: JSON.stringify(failedMeta),
+            ...withCanvasScope(scope),
           },
         })
         throwGenerationFailure({
@@ -484,6 +513,7 @@ export class StudioService {
               ...baseMeta,
             }),
           ),
+          ...withCanvasScope(scope),
         },
       })
     }
@@ -543,6 +573,7 @@ export class StudioService {
     mentionedKeys?: string[],
     resolution = '1K',
     count = 1,
+    scope?: CanvasGenerationScope,
   ) {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
     const cost = 10 * n
@@ -595,6 +626,7 @@ export class StudioService {
             cost,
           ),
         ),
+        ...withCanvasScope(scope),
       },
     })
     const completion = this.completeImage(
@@ -695,6 +727,7 @@ export class StudioService {
     basePrompt?: string,
     model?: string,
     cancel?: CancelFlag,
+    scope?: CanvasGenerationScope,
   ) {
     const cost = 10
     const chargeReason = '图像变体'
@@ -730,6 +763,7 @@ export class StudioService {
               cost,
             ),
           ),
+          ...withCanvasScope(scope),
         },
       })
     } catch (err) {
@@ -760,6 +794,7 @@ export class StudioService {
             url: null,
             status: 'failed',
             metadata: JSON.stringify(failedMeta),
+            ...withCanvasScope(scope),
           },
         })
         throwGenerationFailure({
@@ -785,6 +820,7 @@ export class StudioService {
               basePrompt,
             }),
           ),
+          ...withCanvasScope(scope),
         },
       })
     }
@@ -800,6 +836,7 @@ export class StudioService {
     mentionedKeys?: string[],
     resolution = '720p',
     crop = 'none',
+    scope?: CanvasGenerationScope,
   ) {
     const durationCredits = this.videoDurationCredits(duration)
     const chargeReason = '视频生成'
@@ -851,6 +888,7 @@ export class StudioService {
             durationCredits,
           ),
         ),
+        ...withCanvasScope(scope),
       },
     })
     this.completeVideo(
@@ -887,6 +925,7 @@ export class StudioService {
     refs?: StudioRefInput[],
     mentionedKeys?: string[],
     cancel?: CancelFlag,
+    scope?: CanvasGenerationScope,
   ) {
     const cost = 5
     const chargeReason = '音频生成'
@@ -955,6 +994,7 @@ export class StudioService {
               cost,
             ),
           ),
+          ...withCanvasScope(scope),
         },
       })
       return { ...record, url }
@@ -992,6 +1032,7 @@ export class StudioService {
             url: null,
             status: 'failed',
             metadata: JSON.stringify(failedMeta),
+            ...withCanvasScope(scope),
           },
         })
         throwGenerationFailure({
@@ -1024,6 +1065,7 @@ export class StudioService {
               audioOptions: audioOpts,
             }),
           ),
+          ...withCanvasScope(scope),
         },
       })
       return record

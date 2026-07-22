@@ -25,7 +25,17 @@ class StudioRefDto {
   url?: string
 }
 
-class GenerateImageDto {
+class CanvasScopeFields {
+  @IsOptional()
+  @IsString()
+  sessionId?: string
+
+  @IsOptional()
+  @IsString()
+  nodeId?: string
+}
+
+class GenerateImageDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
@@ -57,7 +67,7 @@ class GenerateImageDto {
   mentionedKeys?: string[]
 }
 
-class GenerateVideoDto {
+class GenerateVideoDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
@@ -93,7 +103,7 @@ class GenerateVideoDto {
   mentionedKeys?: string[]
 }
 
-class GenerateAudioDto {
+class GenerateAudioDto extends CanvasScopeFields {
   @IsString()
   text!: string
 
@@ -137,7 +147,7 @@ class GenerateAudioDto {
   mentionedKeys?: string[]
 }
 
-class GenerateTextDto {
+class GenerateTextDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
@@ -165,7 +175,7 @@ class GenerateTextDto {
   thinkingEffort?: 'high' | 'max'
 }
 
-class GeneratePromptDto {
+class GeneratePromptDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
@@ -174,7 +184,7 @@ class GeneratePromptDto {
   model?: string
 }
 
-class ImageVariationDto {
+class ImageVariationDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
@@ -193,8 +203,12 @@ export class StudioController {
 
   @Get('generations')
   @UseGuards(AuthGuard)
-  async list(@Req() req: { user: { sub: string } }, @Query('type') type?: string) {
-    const data = await this.studioService.listGenerations(req.user.sub, type)
+  async list(
+    @Req() req: { user: { sub: string } },
+    @Query('type') type?: string,
+    @Query('sessionId') sessionId?: string,
+  ) {
+    const data = await this.studioService.listGenerations(req.user.sub, type, sessionId)
     return { code: 0, message: 'ok', data }
   }
 
@@ -214,6 +228,7 @@ export class StudioController {
       cancel,
       dto.thinking,
       dto.thinkingEffort,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
   }
@@ -225,7 +240,13 @@ export class StudioController {
     @Body() dto: GeneratePromptDto,
   ) {
     const cancel = createCancelFlag(req)
-    const data = await this.studioService.generatePrompt(req.user.sub, dto.prompt, dto.model, cancel)
+    const data = await this.studioService.generatePrompt(
+      req.user.sub,
+      dto.prompt,
+      dto.model,
+      cancel,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
+    )
     return { code: 0, message: 'ok', data }
   }
 
@@ -242,6 +263,7 @@ export class StudioController {
       dto.basePrompt,
       dto.model,
       cancel,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
   }
@@ -274,6 +296,7 @@ export class StudioController {
       dto.mentionedKeys,
       dto.resolution,
       dto.count,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
   }
@@ -291,6 +314,7 @@ export class StudioController {
       dto.mentionedKeys,
       dto.resolution,
       dto.crop,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
   }
@@ -317,6 +341,7 @@ export class StudioController {
       dto.refs,
       dto.mentionedKeys,
       cancel,
+      { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
   }

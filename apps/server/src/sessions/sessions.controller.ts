@@ -63,4 +63,11 @@ export class SessionsController {
     const data = await this.sessionsService.remove(id, req.user.sub)
     return { code: 0, message: 'ok', data }
   }
+
+  @Post(':id/duplicate')
+  @UseGuards(AuthGuard)
+  async duplicate(@Param('id') id: string, @Req() req: { user: { sub: string } }) {
+    const data = await this.sessionsService.duplicate(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
 }

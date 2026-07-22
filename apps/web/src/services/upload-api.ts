@@ -8,11 +8,14 @@ export interface UploadResult {
 }
 
 export const uploadApi = {
-  upload: (file: File) => {
+  upload: (file: File, opts?: { onProgress?: (pct: number) => void }) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post<{ data: UploadResult }>('/upload', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    return api.post<{ code?: number; message?: string; data: UploadResult }>('/upload', form, {
+      onUploadProgress: (e) => {
+        if (!opts?.onProgress || !e.total) return
+        opts.onProgress(Math.min(100, Math.round((e.loaded / e.total) * 100)))
+      },
     })
   },
 }

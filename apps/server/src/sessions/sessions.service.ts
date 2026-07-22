@@ -69,6 +69,19 @@ export class SessionsService {
     return { message: '已删除' }
   }
 
+  async duplicate(userId: string, id: string) {
+    const src = await this.prisma.session.findFirst({ where: { id, userId } })
+    if (!src) throw new NotFoundException('会话不存在')
+    const session = await this.prisma.session.create({
+      data: {
+        userId,
+        title: `${src.title || '未命名画布'} 副本`,
+        canvasData: src.canvasData,
+      },
+    })
+    return this.formatSession(session)
+  }
+
   private formatSession(session: {
     id: string
     title: string

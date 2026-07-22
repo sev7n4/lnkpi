@@ -1,5 +1,11 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
+
+type CanvasNode = {
+  id?: string
+  type?: string
+  data?: { url?: string; coverUrl?: string }
+}
 
 @Injectable()
 export class WorksService {
@@ -47,18 +53,24 @@ export class WorksService {
     return this.formatWork(work)
   }
 
-  async publish(userId: string, data: { sessionId: string; title: string; category?: string }) {
+  async publish(
+    userId: string,
+    data: { sessionId: string; title: string; category?: string; primaryNodeId: string },
+  ) {
     const session = await this.prisma.session.findFirst({
       where: { id: data.sessionId, userId },
-      include: { shots: { include: { materials: true }, orderBy: { order: 'asc' } } },
     })
     if (!session) throw new NotFoundException('会话不存在')
 
-    const coverUrl = this.resolveCoverUrl(session)
+    const primary = this.resolvePrimaryNode(session.canvasData, data.primaryNodeId)
+    if (!primary) throw new BadRequestException('请选择主成片节点')
+
     const work = await this.prisma.work.create({
       data: {
         title: data.title,
-        coverUrl,
+        coverUrl: primary.coverUrl,
+        playbackUrl: primary.playbackUrl,
+        playbackKind: primary.playbackKind,
         authorId: userId,
         sessionId: data.sessionId,
         category: data.category ?? '精选作品',
@@ -69,37 +81,80 @@ export class WorksService {
     return this.formatWork(work)
   }
 
-  private resolveCoverUrl(session: {
-    canvasData: string | null
-    shots: Array<{ materials: Array<{ url: string | null; thumbnail: string | null }> }>
-  }) {
-    const fallback = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800&q=80'
-    if (session.canvasData) {
-      try {
-        const canvas = JSON.parse(session.canvasData) as {
-          nodes?: Array<{ type?: string; data?: { url?: string; coverUrl?: string } }>
-        }
-        for (const node of canvas.nodes ?? []) {
-          if (node.data?.coverUrl) return node.data.coverUrl
-          if (node.type === 'image' && node.data?.url) return node.data.url
-        }
-      } catch {
-        // ignore parse errors
-      }
+  async like(_userId: string, workId: string) {
+    const existing = await this.prisma.work.findUnique({ where: { id: workId } })
+    if (!existing) throw new NotFoundException('作品不存在')
+    const work = await this.prisma.work.update({
+      where: { id: workId },
+      data: { likes: { increment: 1 } },
+      include: { author: true },
+    })
+    return this.formatWork(work)
+  }
+
+  async getCanvas(workId: string) {
+    const work = await this.prisma.work.findUnique({
+      where: { id: workId },
+      include: { session: true },
+    })
+    if (!work?.session?.canvasData) throw new NotFoundException('画布不存在')
+    try {
+      return JSON.parse(work.session.canvasData)
+    } catch {
+      throw new NotFoundException('画布数据无效')
     }
-    for (const shot of session.shots) {
-      for (const material of shot.materials) {
-        if (material.url) return material.url
-        if (material.thumbnail) return material.thumbnail
-      }
+  }
+
+  async forkCanvas(userId: string, workId: string) {
+    const work = await this.prisma.work.findUnique({
+      where: { id: workId },
+      include: { session: true },
+    })
+    if (!work?.session?.canvasData) throw new NotFoundException('作品不存在')
+
+    const session = await this.prisma.session.create({
+      data: {
+        userId,
+        title: `${work.title} 副本`,
+        canvasData: work.session.canvasData,
+      },
+    })
+
+    return {
+      id: session.id,
+      title: session.title,
+      userId: session.userId,
+      canvasData: session.canvasData ? JSON.parse(session.canvasData) : undefined,
+      createdAt: session.createdAt.toISOString(),
+      updatedAt: session.updatedAt.toISOString(),
     }
-    return fallback
+  }
+
+  private resolvePrimaryNode(canvasData: string | null, primaryNodeId: string) {
+    if (!primaryNodeId || !canvasData) return null
+    try {
+      const canvas = JSON.parse(canvasData) as { nodes?: CanvasNode[] }
+      const node = canvas.nodes?.find((n) => n.id === primaryNodeId)
+      if (!node) return null
+      if (node.type !== 'image' && node.type !== 'video') return null
+      const url = node.data?.url
+      if (!url) return null
+      return {
+        playbackUrl: url,
+        playbackKind: node.type as 'image' | 'video',
+        coverUrl: node.data?.coverUrl || url,
+      }
+    } catch {
+      return null
+    }
   }
 
   private formatWork(work: {
     id: string
     title: string
     coverUrl: string
+    playbackUrl?: string | null
+    playbackKind?: string | null
     type: string
     authorId: string
     sessionId: string | null
@@ -113,6 +168,8 @@ export class WorksService {
       id: work.id,
       title: work.title,
       coverUrl: work.coverUrl,
+      playbackUrl: work.playbackUrl ?? undefined,
+      playbackKind: (work.playbackKind as 'image' | 'video' | null) ?? undefined,
       type: work.type,
       authorId: work.authorId,
       authorName: work.author.nickname,

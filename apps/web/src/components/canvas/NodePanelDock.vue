@@ -72,7 +72,7 @@ useClickOutside(rootRef, closePopovers)
     class="node-panel-dock pointer-events-none absolute left-3 top-[60px] z-[50]"
   >
     <div class="pointer-events-auto relative">
-      <!-- 竖向面板：添加节点 + 资产库 + 任务历史 + 模型设置 -->
+      <!-- 竖向面板：添加节点 + 资产库 + 任务 + 模型设置 -->
       <div
         class="vertical-capsule neo-glass-lite flex flex-col items-stretch gap-0.5 rounded-2xl p-1"
       >
@@ -121,16 +121,20 @@ useClickOutside(rootRef, closePopovers)
           type="button"
           class="rail-btn"
           :class="showHistory ? 'is-active' : ''"
-          title="任务历史"
+          title="任务"
           @click.stop="toggleHistory"
         >
           <span class="rail-circle">
             <svg class="h-[16px] w-[16px]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <circle cx="12" cy="12" r="9" stroke-width="1.75" />
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M12 7v5l3 2" />
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.75"
+                d="M9 5h11M9 12h11M9 19h11M5 5h.01M5 12h.01M5 19h.01"
+              />
             </svg>
           </span>
-          <span class="rail-btn-label">历史</span>
+          <span class="rail-btn-label">任务</span>
         </button>
 
         <span class="mx-auto my-0.5 h-px w-8 bg-[var(--neo-border)]" />

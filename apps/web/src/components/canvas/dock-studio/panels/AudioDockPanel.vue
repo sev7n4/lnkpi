@@ -7,7 +7,6 @@ import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.v
 import VoiceModelSelector from '@/components/canvas/VoiceModelSelector.vue'
 import AudioVoiceSettingsSelector from '@/components/canvas/AudioVoiceSettingsSelector.vue'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
-import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
@@ -65,7 +64,6 @@ const modelVoices = computed(() => getModelEntry(catalogModelKeyFromValue(audioM
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
-const failureBind = computed(() => dockFailureBindFromNode(props.node))
 const credits = computed(() => estimateAudioCredits())
 
 function syncVoiceToCatalog(emitPatch: boolean) {
@@ -158,7 +156,7 @@ function onRefRemove(ref: NodeRef) {
 </script>
 
 <template>
-  <DockToolbarShell type="audio" v-bind="failureBind" @close="emit('close')">
+  <DockToolbarShell type="audio" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
       @reorder="onRefReorder"

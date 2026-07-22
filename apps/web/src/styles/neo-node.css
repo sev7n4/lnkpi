@@ -466,6 +466,11 @@
   box-shadow: inset 0 0 0 1px rgba(138, 125, 255, 0.2);
 }
 
+.neo-node-placeholder.is-uploading {
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+}
+
 .neo-node-placeholder.is-failed {
   border-color: rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.05);
@@ -477,6 +482,22 @@
   align-items: center;
   gap: 8px;
   padding: 16px;
+  width: 100%;
+}
+
+.neo-upload-progress {
+  width: min(160px, 80%);
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.neo-upload-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--neo-accent-text, #8a7dff);
+  transition: width 0.15s ease;
 }
 
 .neo-placeholder-icon {

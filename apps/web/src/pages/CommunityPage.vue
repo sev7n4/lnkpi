@@ -24,8 +24,16 @@ async function fetchWorks() {
   }
 }
 
-function viewProcess(sessionId: string) {
-  router.push(`/replay/${sessionId}`)
+function viewWork(workId: string) {
+  router.push(`/share/${workId}`)
+}
+
+function viewWatch(workId: string) {
+  router.push(`/share/${workId}`)
+}
+
+function viewProcess(workId: string) {
+  router.push(`/share/${workId}/process`)
 }
 
 function viewAuthor(authorId: string) {
@@ -67,6 +75,8 @@ onMounted(fetchWorks)
         v-for="work in works"
         :key="work.id"
         :work="work"
+        @view-work="viewWork"
+        @view-watch="viewWatch"
         @view-process="viewProcess"
         @view-author="viewAuthor"
         @view-share="viewShare"
