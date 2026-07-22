@@ -14,6 +14,7 @@ const props = defineProps<{
   data: {
     url?: string
     status: string
+    uploadProgress?: number
     prompt?: string
     label?: string
     errorMessage?: string
@@ -132,12 +133,13 @@ function saveToLibrary() {
         class="neo-node-placeholder"
         :class="{
           'is-generating': data.status === 'generating',
+          'is-uploading': data.status === 'uploading',
           'is-failed': data.status === 'failed' || data.status === 'error',
         }"
       >
         <div class="neo-placeholder-content">
           <button
-            v-if="data.status !== 'generating'"
+            v-if="data.status !== 'generating' && data.status !== 'uploading'"
             type="button"
             class="neo-node-upload-btn nodrag"
             title="上传音频"
@@ -152,8 +154,17 @@ function saveToLibrary() {
             </svg>
           </button>
           <span class="neo-placeholder-text">
-            {{ data.status === 'generating' ? '生成中...' : '上传或等待生成' }}
+            {{
+              data.status === 'uploading'
+                ? `上传中 ${data.uploadProgress ?? 0}%`
+                : data.status === 'generating'
+                  ? '生成中...'
+                  : '上传或等待生成'
+            }}
           </span>
+          <div v-if="data.status === 'uploading'" class="neo-upload-progress">
+            <div class="neo-upload-progress-bar" :style="{ width: `${data.uploadProgress ?? 0}%` }" />
+          </div>
         </div>
       </div>
       <p v-if="data.prompt" class="line-clamp-2 text-[11px] text-white/45">{{ data.prompt }}</p>

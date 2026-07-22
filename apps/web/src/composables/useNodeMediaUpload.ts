@@ -35,25 +35,32 @@ export function useNodeMediaUpload(nodeId: string, kind: NodeMediaKind) {
       flashReject()
       return
     }
-    const payload = await fileToPersistedPayload(file)
-    // 登录态下上传失败会回退成 blob 本地地址：立即报错，
-    // 避免静默落下 blob 后在下游生成时才报「参考图尚未上传」
-    if (payload.url.startsWith('blob:') && localStorage.getItem('token')) {
-      flashReject()
+    patchNode(nodeId, {
+      status: 'uploading',
+      uploadProgress: 0,
+      errorMessage: undefined,
+      errorCode: undefined,
+    })
+    try {
+      const payload = await fileToPersistedPayload(file, {
+        onProgress: (p) => patchNode(nodeId, { uploadProgress: p }),
+      })
+      patchNode(nodeId, {
+        url: payload.url,
+        status: 'idle',
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+        source: 'upload',
+        uploadProgress: undefined,
+      })
+    } catch (err) {
       patchNode(nodeId, {
         status: 'error',
-        errorMessage: '文件上传失败，请重试',
+        errorMessage: err instanceof Error ? err.message : '文件上传失败，请重试',
         errorCode: 'upload_required',
+        uploadProgress: undefined,
       })
-      return
     }
-    patchNode(nodeId, {
-      url: payload.url,
-      status: 'idle',
-      fileName: payload.fileName,
-      mimeType: payload.mimeType,
-      source: 'upload',
-    })
   }
 
   function openPicker() {

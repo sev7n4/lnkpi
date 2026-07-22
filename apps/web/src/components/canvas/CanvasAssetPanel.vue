@@ -38,6 +38,7 @@ const publicAssets = ref<CanvasAssetItem[]>([])
 const publicLoading = ref(false)
 const publicLoaded = ref(false)
 const uploading = ref(false)
+const uploadProgress = ref(0)
 const fileInput = ref<HTMLInputElement | null>(null)
 
 const loggedIn = computed(() => Boolean(localStorage.getItem('token')))
@@ -234,19 +235,23 @@ async function onUploadChange(event: Event) {
   input.value = ''
   if (!file) return
   uploading.value = true
+  uploadProgress.value = 0
   try {
-    const payload = await fileToPersistedPayload(file)
+    const payload = await fileToPersistedPayload(file, {
+      onProgress: (p) => {
+        uploadProgress.value = p
+      },
+    })
     if (payload.kind !== 'image' && payload.kind !== 'video' && payload.kind !== 'audio') {
       ElMessage.warning('仅支持图片、视频、音频文件')
       return
     }
-    if (payload.url.startsWith('blob:')) {
-      ElMessage.error('文件上传失败，请重试')
-      return
-    }
     await saveAssetToLibrary({ kind: payload.kind, url: payload.url, label: payload.fileName })
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '上传失败')
   } finally {
     uploading.value = false
+    uploadProgress.value = 0
   }
 }
 
@@ -290,7 +295,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
         <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4" />
         </svg>
-        {{ uploading ? '上传中...' : '上传' }}
+        {{ uploading ? (uploadProgress > 0 ? `上传 ${uploadProgress}%` : '上传中...') : '上传' }}
       </button>
       <input
         ref="fileInput"

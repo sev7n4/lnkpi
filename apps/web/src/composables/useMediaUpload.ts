@@ -2,7 +2,7 @@ import { uploadApi } from '@/services/upload-api'
 import { resolveMediaUrl } from '@/services/api-base'
 import { detectFileKind, type MediaFilePayload } from '@/composables/useCanvasMedia'
 
-/** 登录态下上传到服务端，失败或未登录时保留 blob URL */
+/** 有 token 时上传到服务端，失败则抛错；未登录时返回 fallbackUrl */
 export async function persistMediaUrl(
   file: File,
   fallbackUrl: string,

@@ -50,6 +50,7 @@ const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
 const refUploading = ref(false)
+const refUploadProgress = ref(0)
 const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
@@ -143,20 +144,18 @@ async function onRefFileChange(event: Event) {
   if (!file || !file.type.startsWith('image/')) return
 
   refUploadError.value = ''
+  refUploadProgress.value = 0
   refUploading.value = true
   const blobUrl = URL.createObjectURL(file)
   referenceImageUrl.value = blobUrl
   videoMode.value = 'image_to_video'
 
   try {
-    const url = await persistMediaUrl(file, blobUrl)
-    const loggedIn = !!localStorage.getItem('token')
-    if (url.startsWith('blob:') && loggedIn) {
-      refUploadError.value = '参考图上传失败，请重试'
-      URL.revokeObjectURL(blobUrl)
-      referenceImageUrl.value = ''
-      return
-    }
+    const url = await persistMediaUrl(file, blobUrl, {
+      onProgress: (p) => {
+        refUploadProgress.value = p
+      },
+    })
     if (url !== blobUrl) URL.revokeObjectURL(blobUrl)
 
     referenceImageUrl.value = url
@@ -173,12 +172,13 @@ async function onRefFileChange(event: Event) {
       referenceImageUrl: url,
       videoMode: 'image_to_video',
     })
-  } catch {
-    refUploadError.value = '参考图上传失败，请重试'
+  } catch (err) {
+    refUploadError.value = err instanceof Error ? err.message : '参考图上传失败，请重试'
     URL.revokeObjectURL(blobUrl)
     referenceImageUrl.value = ''
   } finally {
     refUploading.value = false
+    refUploadProgress.value = 0
   }
 }
 

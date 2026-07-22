@@ -80,7 +80,7 @@ import EdgeScissorsOverlay from '@/components/canvas/EdgeScissorsOverlay.vue'
 import { useCanvasViewportSettings, type CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
 import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
-import { downloadMediaPackage, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
@@ -1248,7 +1248,6 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
     mimeType: payload.mimeType,
     title,
   }
-  // 媒体文件上传失败（url 为空）时创建 error 节点提示重传，而不是静默落 blob
   const mediaStatus = payload.url
     ? { url: payload.url, status: 'completed' }
     : { status: 'error', errorMessage: '文件上传失败，请重试', errorCode: 'upload_required' }
@@ -1295,15 +1294,155 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
   await focusNodeById(id)
 }
 
-async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) {
-  const payload = await fileToPersistedPayload(file)
-  // 登录态下媒体上传失败会回退成 blob 本地地址：清空 url 走 error 节点提示，
-  // 避免 blob 引用在下游生成时才报「参考图尚未上传」
-  if (payload.kind !== 'text' && payload.url.startsWith('blob:') && localStorage.getItem('token')) {
-    payload.url = ''
+function createUploadingMediaNodeAt(
+  file: File,
+  clientPos: { x: number; y: number },
+  kind: 'image' | 'video' | 'audio',
+): string | null {
+  const title = file.name.replace(/\.[^.]+$/, '') || file.name
+  const meta = {
+    fileName: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    title,
   }
-  if (payload.url && tryApplyUploadToSelectedNode(payload)) return
-  await createFileNodeAt(payload, clientPos)
+  const uploading = { status: 'uploading', uploadProgress: 0, prompt: '' }
+
+  switch (kind) {
+    case 'image':
+      return addNode('image', {
+        ...meta,
+        ...uploading,
+        imageModel: getProviderConfig('image').model,
+      }, { position: resolveDropPosition(clientPos, kind) })
+    case 'video':
+      return addNode('video', {
+        ...meta,
+        ...uploading,
+        videoModel: getProviderConfig('video').model,
+      }, { position: resolveDropPosition(clientPos, kind) })
+    case 'audio':
+      return addNode('audio', {
+        ...meta,
+        ...uploading,
+        audioModel: getProviderConfig('audio').model,
+      }, { position: resolveDropPosition(clientPos, kind) })
+    default:
+      return null
+  }
+}
+
+async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) {
+  const kind = detectFileKind(file)
+  if (kind === 'other') {
+    ElMessage.warning('不支持的文件类型')
+    return
+  }
+
+  const selectedNode = editorNode.value
+  const wouldApplyToSelected =
+    !!selectedNode &&
+    (kind === 'text'
+      ? canAcceptLocalRef(String(selectedNode.type ?? ''), 'text')
+      : canAcceptLocalRef(String(selectedNode.type ?? ''), kind))
+
+  let uploadingNodeId: string | null = null
+  if (!wouldApplyToSelected && (kind === 'image' || kind === 'video' || kind === 'audio')) {
+    uploadingNodeId = createUploadingMediaNodeAt(file, clientPos, kind)
+    if (uploadingNodeId) selectOnlyNode(uploadingNodeId)
+  }
+
+  try {
+    const payload = await fileToPersistedPayload(file, {
+      onProgress: (p) => {
+        if (uploadingNodeId) patchNodeData(uploadingNodeId, { uploadProgress: p })
+      },
+    })
+
+    if (payload.url && tryApplyUploadToSelectedNode(payload)) return
+
+    if (uploadingNodeId) {
+      patchNodeData(uploadingNodeId, {
+        url: payload.url,
+        status: 'completed',
+        uploadProgress: undefined,
+        fileName: payload.fileName,
+        mimeType: payload.mimeType,
+      })
+      void saveCanvas()
+      await focusNodeById(uploadingNodeId)
+      return
+    }
+
+    await createFileNodeAt(payload, clientPos)
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '上传失败'
+    if (uploadingNodeId) {
+      patchNodeData(uploadingNodeId, {
+        status: 'error',
+        errorMessage: msg,
+        errorCode: 'upload_required',
+        uploadProgress: undefined,
+      })
+      void saveCanvas()
+      return
+    }
+    if (kind === 'text') {
+      ElMessage.error(msg)
+      return
+    }
+    await createFileNodeAt(
+      {
+        url: '',
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        kind,
+      },
+      clientPos,
+    )
+  }
+}
+
+async function handleDockFileDrop(file: File) {
+  let closeToast: () => void = () => {}
+  const showProgress = (pct: number) => {
+    closeToast()
+    const toast = ElMessage.info({
+      message: pct > 0 ? `上传 ${pct}%` : '上传中...',
+      duration: 0,
+      showClose: false,
+    })
+    closeToast = () => {
+      toast.close()
+    }
+  }
+
+  try {
+    showProgress(0)
+    const payload = await fileToPersistedPayload(file, {
+      onProgress: showProgress,
+    })
+    closeToast()
+
+    if (payload.kind !== 'image' && payload.kind !== 'video' && payload.kind !== 'audio') {
+      ElMessage.warning('当前节点不支持该类型的引用')
+      return
+    }
+
+    const binding: LocalRefBinding = {
+      id: createLocalRefId('upload'),
+      mediaType: payload.kind,
+      sourceKind: 'upload',
+      label: payload.fileName,
+      url: payload.url,
+    }
+
+    if (!applyLocalRefToSelectedNode(binding)) {
+      ElMessage.warning('当前节点不支持该类型的引用')
+    }
+  } catch (err) {
+    closeToast()
+    ElMessage.error(err instanceof Error ? err.message : '上传失败')
+  }
 }
 
 async function onMediaFileSelected(event: Event) {
@@ -1888,6 +2027,12 @@ onMounted(() => {
         event.dataTransfer.dropEffect = 'copy'
         return
       }
+      const onDock = (event.target as HTMLElement | null)?.closest('.dock-studio-toolbar')
+      if (onDock && event.dataTransfer?.types.includes('Files')) {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = 'copy'
+        return
+      }
       mediaHandlers.onDragOver(event)
     })
     area.addEventListener('drop', (event) => {
@@ -1911,6 +2056,13 @@ onMounted(() => {
         } catch {
           // ignore
         }
+        return
+      }
+      const onDock = (event.target as HTMLElement | null)?.closest('.dock-studio-toolbar')
+      const file = event.dataTransfer?.files?.[0]
+      if (onDock && file) {
+        event.preventDefault()
+        void handleDockFileDrop(file)
         return
       }
       void mediaHandlers.onDrop(event)
