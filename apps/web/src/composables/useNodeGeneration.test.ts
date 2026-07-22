@@ -110,6 +110,10 @@ function createDeps(nodes: EditableFlowNode[], overrides: Record<string, unknown
   return { api, deps }
 }
 
+function canvasScope(nodeId: string) {
+  return { sessionId: 'session-1', nodeId }
+}
+
 describe('useNodeGeneration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -253,6 +257,7 @@ describe('useNodeGeneration', () => {
       [],
       [],
       expect.any(AbortSignal),
+      canvasScope('audio-1'),
     )
   })
 
@@ -277,6 +282,7 @@ describe('useNodeGeneration', () => {
       '2K',
       3,
       expect.any(AbortSignal),
+      canvasScope('image-1'),
     )
   })
 
@@ -301,6 +307,7 @@ describe('useNodeGeneration', () => {
       '1K',
       1,
       expect.any(AbortSignal),
+      canvasScope('image-1'),
     )
   })
 
@@ -326,6 +333,7 @@ describe('useNodeGeneration', () => {
       '2K',
       1,
       expect.any(AbortSignal),
+      canvasScope('image-1'),
     )
   })
 
@@ -750,6 +758,7 @@ describe('useNodeGeneration', () => {
       expect.any(AbortSignal),
       false,
       undefined,
+      canvasScope('text-1'),
     )
     expect(deps.patchNodeData).toHaveBeenCalledWith(
       'text-1',
@@ -1160,6 +1169,7 @@ describe('useNodeGeneration', () => {
       '2K',
       2,
       expect.any(AbortSignal),
+      canvasScope('image-1'),
     )
     expect(canvasApi.generateImage).not.toHaveBeenCalled()
   })

@@ -18,7 +18,7 @@ import {
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { canvasApi } from '@/services/canvas-api'
-import { studioApi, type GenerationRecord, type StudioRefPayload } from '@/services/studio-api'
+import { studioApi, type CanvasGenerationScope, type GenerationRecord, type StudioRefPayload } from '@/services/studio-api'
 import {
   resolveGenerationModel,
   type StudioModality,
@@ -491,6 +491,10 @@ async function cancelRemoteGeneration(nodeId: string) {
     return false
   }
 
+  function canvasScope(nodeId: string): CanvasGenerationScope {
+    return { sessionId: deps.sessionId.value, nodeId }
+  }
+
   async function generateForNode(node: EditableFlowNode) {
     if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
       cancelGeneration(node.id)
@@ -536,6 +540,7 @@ async function cancelRemoteGeneration(nodeId: string) {
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
           signal,
+          canvasScope(node.id),
         )
         if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
@@ -558,6 +563,7 @@ async function cancelRemoteGeneration(nodeId: string) {
           signal,
           thinking,
           thinking ? thinkingEffort : undefined,
+          canvasScope(node.id),
         )
         if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
@@ -578,7 +584,7 @@ async function cancelRemoteGeneration(nodeId: string) {
           speed: typeof data.audioSpeed === 'number' ? data.audioSpeed : 1,
           volume: typeof data.audioVolume === 'number' ? data.audioVolume : 1,
           pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
-        }, refs, mentionedKeys, signal)
+        }, refs, mentionedKeys, signal, canvasScope(node.id))
         if (signal.aborted) return
         await resolveStudioRecord(node.id, res.data)
         return
@@ -676,6 +682,7 @@ async function cancelRemoteGeneration(nodeId: string) {
         resolution,
         count,
         signal,
+        canvasScope(node.id),
       )
       if (signal?.aborted) return
       deps.patchNodeData(node.id, {
@@ -699,6 +706,7 @@ async function cancelRemoteGeneration(nodeId: string) {
       settings?.resolution,
       settings?.crop,
       signal,
+      canvasScope(node.id),
     )
     if (signal?.aborted) return
     deps.patchNodeData(node.id, {

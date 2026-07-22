@@ -4,9 +4,7 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
-import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
-import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
@@ -38,8 +36,6 @@ const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
-const failureBind = computed(() => dockFailureBindFromNode(props.node))
-
 const modeLabel = computed(
   () => SHOT_GENERATE_MODE_OPTIONS.find((m) => m.value === shotGenerateMode.value)?.label ?? '自动',
 )
@@ -106,7 +102,7 @@ function toggleVoice() {
     show-title
     :title="title"
     title-placeholder="分镜标题"
-    v-bind="failureBind"
+   
     @update:title="onTitleInput"
     @close="emit('close')"
   >

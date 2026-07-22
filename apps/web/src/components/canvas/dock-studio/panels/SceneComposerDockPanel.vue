@@ -3,9 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
-import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
-import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import {
@@ -41,8 +39,6 @@ const activeSceneId = ref(payload.value.scenes[0]?.id ?? '')
 const locked = computed(
   () => !!props.readonly || isNodeGenerating(props.node.data?.status) || !!props.generating,
 )
-const failureBind = computed(() => dockFailureBindFromNode(props.node))
-
 const activeScene = computed(() =>
   payload.value.scenes.find((scene) => scene.id === activeSceneId.value) ?? payload.value.scenes[0],
 )
@@ -152,7 +148,7 @@ const canBatchGenerate = computed(() =>
     :title="payload.title ?? '场景编排'"
     title-placeholder="编排标题"
     :readonly="locked"
-    v-bind="failureBind"
+   
     @update:title="onTitleInput"
     @close="emit('close')"
   >

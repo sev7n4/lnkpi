@@ -1,21 +1,39 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import type { ErrorCode, GenerationDiagnostic } from '@lnkpi/shared'
+import { modelOptionName } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
+import NodeDiagnosticPopover from '@/components/canvas/NodeDiagnosticPopover.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import {
+  buildCopyForNode,
+  parseErrorCodeFromMetadata,
+  sharedDiagnosticCache,
+} from '@/utils/generationDiagnostic'
 
 const emit = defineEmits<{
-  /** 请求定位到产生该记录的画布节点 */
   locate: [recordId: string]
 }>()
 
+const route = useRoute()
 const editor = useCanvasEditorStore()
+const { allChannels } = useProviderBootstrap()
+
+const sessionId = computed(() => route.params.sessionId as string | undefined)
 
 const loading = ref(false)
 const error = ref('')
 const records = ref<GenerationRecord[]>([])
 const filter = ref<'all' | 'text' | 'image' | 'video' | 'audio'>('all')
 const detailRecord = ref<GenerationRecord | null>(null)
+const failurePopoverId = ref<string | null>(null)
+const failureDiagLoading = ref(false)
+const failureDiag = ref<GenerationDiagnostic | null>(null)
+const failureCopyLabel = ref('复制诊断')
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -42,22 +60,99 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   error: { label: '失败', cls: 'bg-red-500/15 text-red-300' },
 }
 
+interface RecordMeta {
+  aspectRatio?: string
+  resolution?: string
+  size?: string
+  count?: number
+  duration?: number
+  crop?: string
+  voice?: string
+  speed?: number
+  originalModel?: string
+  channelId?: string
+  userMessage?: string
+  text?: string
+  content?: string
+}
+
 function statusMeta(status: string) {
   return STATUS_META[status] ?? { label: status, cls: 'bg-[var(--neo-active-bg)] text-[var(--neo-text-muted)]' }
 }
 
-function recordModel(record: GenerationRecord): string {
-  if (record.model) return record.model
+function parseRecordMeta(record: GenerationRecord): RecordMeta {
   try {
-    const meta = JSON.parse(record.metadata ?? '{}') as {
-      modelId?: string
-      modelKey?: string
-      originalModel?: string
-    }
-    return meta.originalModel ?? meta.modelId ?? meta.modelKey ?? '—'
+    return JSON.parse(record.metadata ?? '{}') as RecordMeta
   } catch {
-    return '—'
+    return {}
   }
+}
+
+function recordModelName(record: GenerationRecord): string {
+  const meta = parseRecordMeta(record)
+  const raw = record.model ?? meta.originalModel ?? ''
+  return raw ? modelOptionName(raw) : '—'
+}
+
+function recordChannelName(record: GenerationRecord): string {
+  const channelId = parseRecordMeta(record).channelId
+  if (!channelId) return '—'
+  const ch = allChannels.value.find((c) => c.id === channelId)
+  return ch?.name || channelId.slice(0, 8)
+}
+
+function recordParamRows(record: GenerationRecord): Array<{ label: string; value: string }> {
+  const meta = parseRecordMeta(record)
+  const rows: Array<{ label: string; value: string }> = []
+  const add = (label: string, v: unknown) => {
+    if (v === undefined || v === null || v === '') return
+    rows.push({ label, value: String(v) })
+  }
+  if (record.type === 'image') {
+    add('比例', meta.aspectRatio)
+    add('分辨率', meta.resolution)
+    add('尺寸', meta.size)
+    add('数量', meta.count)
+  } else if (record.type === 'video') {
+    add('时长', meta.duration != null ? `${meta.duration}s` : undefined)
+    add('分辨率', meta.resolution)
+    add('比例', meta.aspectRatio)
+    add('裁剪', meta.crop)
+  } else if (record.type === 'audio') {
+    add('音色', meta.voice)
+    add('语速', meta.speed)
+  }
+  return rows
+}
+
+function recordFailureMessage(record: GenerationRecord): string | null {
+  if (
+    record.status !== 'failed' &&
+    record.status !== 'error' &&
+    record.status !== NODE_GENERATION_STATUS.fallback_pending
+  ) {
+    return null
+  }
+  const meta = parseRecordMeta(record)
+  if (meta.userMessage) return meta.userMessage
+  if (record.status === NODE_GENERATION_STATUS.fallback_pending) return '平台回退待确认'
+  return '生成失败'
+}
+
+function isFailedStatus(status: string) {
+  return (
+    status === 'failed' ||
+    status === 'error' ||
+    status === NODE_GENERATION_STATUS.fallback_pending
+  )
+}
+
+function recordTextSnippet(record: GenerationRecord): string {
+  if (record.type === 'text' || record.type === 'prompt') {
+    const meta = parseRecordMeta(record)
+    return meta.text || meta.content || record.prompt || '—'
+  }
+  return record.prompt || '—'
 }
 
 function formatTime(iso: string): string {
@@ -86,7 +181,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const { data } = await studioApi.listGenerations()
+    const params = sessionId.value ? { sessionId: sessionId.value } : undefined
+    const { data } = await studioApi.listGenerations(params)
     records.value = data.data
   } catch {
     error.value = '加载失败，请确认已登录'
@@ -96,6 +192,7 @@ async function load() {
 }
 
 function openDetail(record: GenerationRecord) {
+  failurePopoverId.value = null
   detailRecord.value = record
 }
 
@@ -105,12 +202,82 @@ function previewDetailMedia(record: GenerationRecord) {
   editor.openMediaPreview({ url: record.url, kind, label: record.prompt })
 }
 
+function buildFallbackDiagnostic(record: GenerationRecord): GenerationDiagnostic {
+  const meta = parseRecordMeta(record)
+  const isFallback = record.status === NODE_GENERATION_STATUS.fallback_pending
+  return {
+    userMessage: meta.userMessage || recordFailureMessage(record) || '生成失败',
+    code: isFallback ? 'fallback_pending' : ((parseErrorCodeFromMetadata(record.metadata) as ErrorCode | undefined) || 'unknown'),
+    taskKind: 'generation',
+    taskId: record.id,
+    occurredAt: record.createdAt,
+    providerSnippet: null,
+    hint: isFallback ? '请确认是否使用平台回退继续，或取消本次生成。' : undefined,
+  }
+}
+
+async function openFailurePopover(record: GenerationRecord, e: Event) {
+  e.stopPropagation()
+  if (failurePopoverId.value === record.id) {
+    failurePopoverId.value = null
+    return
+  }
+  failurePopoverId.value = record.id
+  failureDiagLoading.value = true
+  failureCopyLabel.value = '复制诊断'
+  try {
+    failureDiag.value = await sharedDiagnosticCache.get('generation', record.id, () =>
+      studioApi.getGenerationDiagnostic(record.id),
+    )
+  } catch {
+    failureDiag.value = buildFallbackDiagnostic(record)
+  } finally {
+    failureDiagLoading.value = false
+  }
+}
+
+function closeFailurePopover() {
+  failurePopoverId.value = null
+}
+
+async function copyFailureDiagnostic(record: GenerationRecord) {
+  const payload = failureDiag.value || buildFallbackDiagnostic(record)
+  const text = buildCopyForNode(payload, {
+    nodeId: record.nodeId ?? undefined,
+    sessionId: sessionId.value,
+  })
+  try {
+    await navigator.clipboard.writeText(text)
+    failureCopyLabel.value = '已复制'
+    setTimeout(() => {
+      failureCopyLabel.value = '复制诊断'
+    }, 1500)
+  } catch {
+    failureCopyLabel.value = '复制失败'
+  }
+}
+
+const failurePopoverMessage = computed(() => {
+  if (!failurePopoverId.value) return ''
+  const record = records.value.find((r) => r.id === failurePopoverId.value)
+  if (!record) return ''
+  return failureDiag.value?.userMessage || recordFailureMessage(record) || '生成失败'
+})
+
+const failurePopoverHint = computed(() => {
+  if (failureDiag.value?.hint) return failureDiag.value.hint
+  const record = records.value.find((r) => r.id === failurePopoverId.value)
+  if (record?.status === NODE_GENERATION_STATUS.fallback_pending) {
+    return '请确认是否使用平台回退继续，或取消本次生成。'
+  }
+  return undefined
+})
+
 onMounted(load)
 </script>
 
 <template>
   <div class="canvas-task-history flex max-h-[min(520px,72vh)] w-[404px] flex-col">
-    <!-- 详情视图 -->
     <template v-if="detailRecord">
       <div class="flex items-center gap-2 border-b border-[var(--neo-border)] px-3 py-2.5">
         <button
@@ -161,19 +328,49 @@ onMounted(load)
               {{ detailRecord.prompt || '—' }}
             </p>
           </div>
+
           <div class="grid grid-cols-2 gap-2">
             <div>
               <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">类型</p>
               <p class="text-[var(--neo-text-secondary)]">{{ TYPE_LABELS[detailRecord.type] ?? detailRecord.type }}</p>
             </div>
             <div>
+              <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">节点</p>
+              <p class="truncate font-mono text-[var(--neo-text-secondary)]">{{ detailRecord.nodeId || '—' }}</p>
+            </div>
+            <div class="col-span-2">
               <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">模型</p>
-              <p class="truncate text-[var(--neo-text-secondary)]" :title="recordModel(detailRecord)">{{ recordModel(detailRecord) }}</p>
+              <p class="truncate text-[var(--neo-text-secondary)]" :title="recordModelName(detailRecord)">
+                {{ recordModelName(detailRecord) }}
+              </p>
+            </div>
+            <div class="col-span-2">
+              <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">渠道</p>
+              <p class="truncate text-[var(--neo-text-secondary)]" :title="recordChannelName(detailRecord)">
+                {{ recordChannelName(detailRecord) }}
+              </p>
             </div>
             <div class="col-span-2">
               <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">创建时间</p>
               <p class="tabular-nums text-[var(--neo-text-secondary)]">{{ formatFullTime(detailRecord.createdAt) }}</p>
             </div>
+          </div>
+
+          <div v-if="recordParamRows(detailRecord).length">
+            <p class="mb-1 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">参数</p>
+            <div class="grid grid-cols-2 gap-2 rounded-lg bg-[var(--neo-hover-bg)] p-2">
+              <div v-for="row in recordParamRows(detailRecord)" :key="row.label">
+                <p class="text-[9px] text-[var(--neo-text-muted)]">{{ row.label }}</p>
+                <p class="text-[var(--neo-text-secondary)]">{{ row.value }}</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="recordFailureMessage(detailRecord)">
+            <p class="mb-1 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">失败原因</p>
+            <p class="whitespace-pre-wrap break-words rounded-lg bg-red-500/10 p-2 text-[11px] leading-relaxed text-red-300">
+              {{ recordFailureMessage(detailRecord) }}
+            </p>
           </div>
         </div>
 
@@ -191,7 +388,6 @@ onMounted(load)
       </div>
     </template>
 
-    <!-- 列表视图 -->
     <template v-else>
       <div class="flex items-center gap-2 border-b border-[var(--neo-border)] px-3 py-2.5">
         <span class="text-[13px] font-medium text-[var(--neo-text-primary)]">任务历史</span>
@@ -239,30 +435,71 @@ onMounted(load)
           >
             <div class="flex items-center gap-1.5">
               <span class="text-[var(--neo-text-muted)]"><DockTypeIcon :type="record.type" :size="13" /></span>
-              <span class="text-[11px] text-[var(--neo-text-secondary)]">{{ TYPE_LABELS[record.type] ?? record.type }}</span>
+              <span class="truncate font-mono text-[11px] text-[var(--neo-text-secondary)]">{{ record.nodeId || '—' }}</span>
               <span
                 class="ml-auto shrink-0 rounded-md px-1.5 py-0.5 text-[9px]"
                 :class="statusMeta(record.status).cls"
               >
                 {{ statusMeta(record.status).label }}
               </span>
+              <button
+                v-if="isFailedStatus(record.status)"
+                type="button"
+                class="relative z-10 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-[10px] font-bold text-red-300 hover:bg-red-500/30"
+                title="查看错误"
+                @click="openFailurePopover(record, $event)"
+              >
+                !
+              </button>
             </div>
+
             <img
               v-if="record.type === 'image' && record.url"
               :src="record.url"
               class="mt-1.5 h-16 w-full rounded-lg object-cover"
               alt=""
               loading="lazy"
+            >
+            <video
+              v-else-if="record.type === 'video' && record.url"
+              :src="record.url"
+              muted
+              playsinline
+              preload="metadata"
+              class="mt-1.5 h-16 w-full rounded-lg object-cover"
             />
-            <p class="mt-1.5 line-clamp-2 min-h-[26px] text-[10px] leading-relaxed text-[var(--neo-text-muted)]">
-              {{ record.prompt || '—' }}
+            <div
+              v-else-if="record.type === 'audio'"
+              class="mt-1.5 flex h-16 w-full items-center justify-center rounded-lg bg-[var(--neo-active-bg)] text-[10px] text-[var(--neo-text-muted)]"
+            >
+              音频
+            </div>
+            <p
+              v-else-if="record.type === 'text' || record.type === 'prompt'"
+              class="mt-1.5 line-clamp-3 min-h-[48px] rounded-lg bg-[var(--neo-active-bg)] p-1.5 text-[10px] leading-relaxed text-[var(--neo-text-muted)]"
+            >
+              {{ recordTextSnippet(record) }}
             </p>
-            <div class="mt-1.5 flex items-center justify-between gap-2 text-[9px] text-[var(--neo-text-muted)]">
-              <span class="truncate" :title="recordModel(record)">{{ recordModel(record) }}</span>
-              <span class="shrink-0 tabular-nums">{{ formatTime(record.createdAt) }}</span>
+
+            <div class="mt-1.5 flex items-center justify-end text-[9px] tabular-nums text-[var(--neo-text-muted)]">
+              {{ formatTime(record.createdAt) }}
             </div>
 
-            <!-- hover 定位按钮 -->
+            <div
+              v-if="failurePopoverId === record.id"
+              class="absolute left-2 right-2 top-10 z-20"
+              @click.stop
+            >
+              <NodeDiagnosticPopover
+                :user-message="failurePopoverMessage"
+                :hint="failurePopoverHint"
+                :loading="failureDiagLoading"
+                :copy-label="failureCopyLabel"
+                @copy="copyFailureDiagnostic(record)"
+                @close="closeFailurePopover"
+              />
+            </div>
+
             <button
               type="button"
               class="absolute right-1.5 top-8 hidden h-6 w-6 items-center justify-center rounded-lg bg-black/60 text-white/85 transition hover:bg-black/85 hover:text-white group-hover:flex"

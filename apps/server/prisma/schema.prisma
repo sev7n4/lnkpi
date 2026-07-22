@@ -113,7 +113,11 @@ model GenerationRecord {
   url       String?
   status    String   @default("completed")
   metadata  String?
+  sessionId String?
+  nodeId    String?
   createdAt DateTime @default(now())
+
+  @@index([userId, sessionId, createdAt])
 }
 
 model Story {

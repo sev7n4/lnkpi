@@ -3,9 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
-import { dockFailureBindFromNode } from '@/components/canvas/dock-studio/shared/dockFailureChip'
-import { inferMediaInputKind, type MediaInputKind } from '@/composables/useMediaUpload'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import { inferMediaInputKind, type MediaInputKind } from '@/composables/useMediaUpload'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
 const props = defineProps<{
@@ -33,8 +31,6 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const locked = computed(
   () => !!props.readonly || isNodeGenerating(props.node.data?.status) || props.node.data?.status === 'uploading',
 )
-const failureBind = computed(() => dockFailureBindFromNode(props.node))
-
 const canConvertVideo = computed(() => mediaKind.value === 'image' || mediaKind.value === 'video')
 const canConvertImage = computed(() => mediaKind.value === 'image')
 const canConvertAudio = computed(() => mediaKind.value === 'audio')
@@ -71,7 +67,7 @@ function onFileChange(event: Event) {
 <template>
   <DockToolbarShell
     type="mediaInput"
-    v-bind="failureBind"
+   
     show-title
     :title="title"
     title-placeholder="素材名称"

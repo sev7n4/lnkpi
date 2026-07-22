@@ -3,6 +3,11 @@ import type { GenerationDiagnostic, GenerationRefPayload } from '@lnkpi/shared'
 
 export type StudioRefPayload = GenerationRefPayload
 
+export interface CanvasGenerationScope {
+  sessionId?: string
+  nodeId?: string
+}
+
 export interface GenerationRecord {
   id: string
   type: string
@@ -11,6 +16,8 @@ export interface GenerationRecord {
   url?: string | null
   status: string
   metadata?: string | null
+  sessionId?: string | null
+  nodeId?: string | null
   createdAt: string
 }
 
@@ -24,9 +31,19 @@ export interface AudioGenerateOptions {
   model?: string
 }
 
+function scopeBody(scope?: CanvasGenerationScope) {
+  if (!scope?.sessionId && !scope?.nodeId) return {}
+  return {
+    ...(scope.sessionId ? { sessionId: scope.sessionId } : {}),
+    ...(scope.nodeId ? { nodeId: scope.nodeId } : {}),
+  }
+}
+
 export const studioApi = {
-  listGenerations: (type?: string) =>
-    api.get<{ data: GenerationRecord[] }>('/studio/generations', { params: { type } }),
+  listGenerations: (opts?: { type?: string; sessionId?: string } | string) => {
+    const params = typeof opts === 'string' ? { type: opts } : opts
+    return api.get<{ data: GenerationRecord[] }>('/studio/generations', { params })
+  },
   getGeneration: (id: string) =>
     api.get<{ data: GenerationRecord }>(`/studio/generations/${id}`),
   generateImage: (
@@ -38,14 +55,25 @@ export const studioApi = {
     resolution?: string,
     count?: number,
     signal?: AbortSignal,
+    scope?: CanvasGenerationScope,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/image/generate',
-      { prompt, model, aspectRatio, refs, mentionedKeys, resolution, count },
+      { prompt, model, aspectRatio, refs, mentionedKeys, resolution, count, ...scopeBody(scope) },
       { timeout: 300_000, signal },
     ),
-  generateImageVariation: (prompt: string, basePrompt?: string, model?: string, signal?: AbortSignal) =>
-    api.post<{ data: GenerationRecord }>('/studio/image/variation', { prompt, basePrompt, model }, { timeout: 300_000, signal }),
+  generateImageVariation: (
+    prompt: string,
+    basePrompt?: string,
+    model?: string,
+    signal?: AbortSignal,
+    scope?: CanvasGenerationScope,
+  ) =>
+    api.post<{ data: GenerationRecord }>(
+      '/studio/image/variation',
+      { prompt, basePrompt, model, ...scopeBody(scope) },
+      { timeout: 300_000, signal },
+    ),
   generateText: (
     prompt: string,
     model?: string,
@@ -54,14 +82,32 @@ export const studioApi = {
     signal?: AbortSignal,
     thinking?: boolean,
     thinkingEffort?: 'high' | 'max',
+    scope?: CanvasGenerationScope,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/text/generate',
-      { prompt, model, refs, mentionedKeys, thinking, thinkingEffort },
+      {
+        prompt,
+        model,
+        refs,
+        mentionedKeys,
+        thinking,
+        thinkingEffort,
+        ...scopeBody(scope),
+      },
       { timeout: thinking ? 300_000 : 180_000, signal },
     ),
-  generatePrompt: (prompt: string, model?: string, signal?: AbortSignal) =>
-    api.post<{ data: GenerationRecord }>('/studio/prompt/generate', { prompt, model }, { timeout: 180_000, signal }),
+  generatePrompt: (
+    prompt: string,
+    model?: string,
+    signal?: AbortSignal,
+    scope?: CanvasGenerationScope,
+  ) =>
+    api.post<{ data: GenerationRecord }>(
+      '/studio/prompt/generate',
+      { prompt, model, ...scopeBody(scope) },
+      { timeout: 180_000, signal },
+    ),
   generateVideo: (
     prompt: string,
     model?: string,
@@ -72,16 +118,34 @@ export const studioApi = {
     resolution?: string,
     crop?: string,
     signal?: AbortSignal,
+    scope?: CanvasGenerationScope,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/video/generate',
-      { prompt, model, duration, aspectRatio, refs, mentionedKeys, resolution, crop },
+      {
+        prompt,
+        model,
+        duration,
+        aspectRatio,
+        refs,
+        mentionedKeys,
+        resolution,
+        crop,
+        ...scopeBody(scope),
+      },
       { timeout: 60_000, signal },
     ),
-  generateAudio: (text: string, options?: AudioGenerateOptions, refs?: StudioRefPayload[], mentionedKeys?: string[], signal?: AbortSignal) =>
+  generateAudio: (
+    text: string,
+    options?: AudioGenerateOptions,
+    refs?: StudioRefPayload[],
+    mentionedKeys?: string[],
+    signal?: AbortSignal,
+    scope?: CanvasGenerationScope,
+  ) =>
     api.post<{ data: GenerationRecord & { url?: string } }>(
       '/studio/audio/generate',
-      { text, ...options, refs, mentionedKeys },
+      { text, ...options, refs, mentionedKeys, ...scopeBody(scope) },
       { timeout: 60_000, signal },
     ),
   confirmPlatformFallback: (id: string) =>
