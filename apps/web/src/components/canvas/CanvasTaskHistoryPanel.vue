@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import type { ErrorCode, GenerationDiagnostic } from '@lnkpi/shared'
 import { modelOptionName } from '@lnkpi/shared'
@@ -28,12 +28,22 @@ const sessionId = computed(() => route.params.sessionId as string | undefined)
 const loading = ref(false)
 const error = ref('')
 const records = ref<GenerationRecord[]>([])
+const lifecycle = ref<'todo' | 'doing' | 'done'>('doing')
 const filter = ref<'all' | 'text' | 'image' | 'video' | 'audio'>('all')
 const detailRecord = ref<GenerationRecord | null>(null)
 const failurePopoverId = ref<string | null>(null)
 const failureDiagLoading = ref(false)
 const failureDiag = ref<GenerationDiagnostic | null>(null)
 const failureCopyLabel = ref('复制诊断')
+
+const LIFECYCLE_TABS = [
+  { key: 'todo', label: '排队' },
+  { key: 'doing', label: '进行中' },
+  { key: 'done', label: '已完成' },
+] as const
+
+const TODO_STATUSES = new Set(['pending'])
+const DOING_STATUSES = new Set(['generating', 'fallback_pending', 'processing', 'running'])
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -42,6 +52,21 @@ const FILTERS = [
   { key: 'video', label: '视频' },
   { key: 'audio', label: '音频' },
 ] as const
+
+const EMPTY_BY_LIFECYCLE: Record<'todo' | 'doing' | 'done', string> = {
+  todo: '暂无排队任务',
+  doing: '暂无进行中的任务',
+  done: '暂无已完成任务',
+}
+
+const POLL_MS = 4000
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+function lifecycleOf(status: string): 'todo' | 'doing' | 'done' {
+  if (TODO_STATUSES.has(status)) return 'todo'
+  if (DOING_STATUSES.has(status)) return 'doing'
+  return 'done'
+}
 
 const TYPE_LABELS: Record<string, string> = {
   text: '文本',
@@ -169,25 +194,51 @@ function formatFullTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-const filtered = computed(() => {
-  if (filter.value === 'all') return records.value
-  if (filter.value === 'text') {
-    return records.value.filter((r) => r.type === 'text' || r.type === 'prompt')
+const lifecycleCounts = computed(() => {
+  const counts = { todo: 0, doing: 0, done: 0 }
+  for (const r of records.value) {
+    counts[lifecycleOf(r.status)] += 1
   }
-  return records.value.filter((r) => r.type === filter.value)
+  return counts
 })
 
-async function load() {
-  loading.value = true
+const filtered = computed(() => {
+  const byLife = records.value.filter((r) => lifecycleOf(r.status) === lifecycle.value)
+  if (filter.value === 'all') return byLife
+  if (filter.value === 'text') {
+    return byLife.filter((r) => r.type === 'text' || r.type === 'prompt')
+  }
+  return byLife.filter((r) => r.type === filter.value)
+})
+
+async function load(opts?: { silent?: boolean }) {
+  if (!opts?.silent) loading.value = true
   error.value = ''
   try {
     const params = sessionId.value ? { sessionId: sessionId.value } : undefined
     const { data } = await studioApi.listGenerations(params)
     records.value = data.data
   } catch {
-    error.value = '加载失败，请确认已登录'
+    if (!opts?.silent) error.value = '加载失败，请确认已登录'
   } finally {
-    loading.value = false
+    if (!opts?.silent) loading.value = false
+  }
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => {
+    if (lifecycle.value === 'done' && lifecycleCounts.value.todo + lifecycleCounts.value.doing === 0) {
+      return
+    }
+    void load({ silent: true })
+  }, POLL_MS)
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
@@ -274,7 +325,17 @@ const failurePopoverHint = computed(() => {
   return undefined
 })
 
-onMounted(load)
+onMounted(() => {
+  void load().then(() => {
+    if (lifecycleCounts.value.doing === 0) {
+      if (lifecycleCounts.value.todo > 0) lifecycle.value = 'todo'
+      else if (lifecycleCounts.value.done > 0) lifecycle.value = 'done'
+    }
+    startPolling()
+  })
+})
+
+onUnmounted(stopPolling)
 </script>
 
 <template>
@@ -391,18 +452,37 @@ onMounted(load)
 
     <template v-else>
       <div class="flex items-center gap-2 border-b border-[var(--neo-border)] px-3 py-2.5">
-        <span class="text-[13px] font-medium text-[var(--neo-text-primary)]">任务历史</span>
-        <span class="text-[10px] text-[var(--neo-text-muted)]">最近 {{ records.length }} 条</span>
+        <span class="text-[13px] font-medium text-[var(--neo-text-primary)]">任务</span>
+        <span class="text-[10px] text-[var(--neo-text-muted)]">本会话 {{ records.length }} 条</span>
         <button
           type="button"
           class="ml-auto flex h-6 w-6 items-center justify-center rounded-lg text-[var(--neo-text-muted)] transition hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-primary)]"
           title="刷新"
           :disabled="loading"
-          @click="load"
+          @click="load()"
         >
           <svg class="h-3.5 w-3.5" :class="loading ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0 1 19 8.5M18.5 15A7.5 7.5 0 0 1 5 15.5" />
           </svg>
+        </button>
+      </div>
+
+      <div class="flex gap-1 border-b border-[var(--neo-border)] px-3 py-2">
+        <button
+          v-for="tab in LIFECYCLE_TABS"
+          :key="tab.key"
+          type="button"
+          class="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] transition"
+          :class="lifecycle === tab.key ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'text-[var(--neo-text-muted)] hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-secondary)]'"
+          @click="lifecycle = tab.key"
+        >
+          <span>{{ tab.label }}</span>
+          <span
+            class="min-w-[1.1rem] rounded-md px-1 text-center text-[9px] tabular-nums"
+            :class="lifecycle === tab.key ? 'bg-[var(--neo-accent-border)]/30' : 'bg-[var(--neo-active-bg)]'"
+          >
+            {{ lifecycleCounts[tab.key] }}
+          </span>
         </button>
       </div>
 
@@ -422,7 +502,7 @@ onMounted(load)
       <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
         <p v-if="error" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">{{ error }}</p>
         <p v-else-if="loading && !records.length" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">加载中...</p>
-        <p v-else-if="!filtered.length" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">暂无任务记录</p>
+        <p v-else-if="!filtered.length" class="py-8 text-center text-[11px] text-[var(--neo-text-muted)]">{{ EMPTY_BY_LIFECYCLE[lifecycle] }}</p>
         <div v-else class="grid grid-cols-2 gap-2">
           <div
             v-for="record in filtered"
