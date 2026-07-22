@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import {
@@ -148,7 +149,6 @@ const canBatchGenerate = computed(() =>
     :title="payload.title ?? '场景编排'"
     title-placeholder="编排标题"
     :readonly="locked"
-   
     @update:title="onTitleInput"
     @close="emit('close')"
   >

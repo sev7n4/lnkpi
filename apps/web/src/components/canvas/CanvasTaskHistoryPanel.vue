@@ -223,6 +223,7 @@ async function openFailurePopover(record: GenerationRecord, e: Event) {
     return
   }
   failurePopoverId.value = record.id
+  failureDiag.value = null
   failureDiagLoading.value = true
   failureCopyLabel.value = '复制诊断'
   try {

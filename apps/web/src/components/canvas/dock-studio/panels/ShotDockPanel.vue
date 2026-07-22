@@ -4,7 +4,8 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import VideoSettingsSelector from '@/components/canvas/VideoSettingsSelector.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
@@ -102,7 +103,6 @@ function toggleVoice() {
     show-title
     :title="title"
     title-placeholder="分镜标题"
-   
     @update:title="onTitleInput"
     @close="emit('close')"
   >

@@ -6,7 +6,8 @@ import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import VoiceModelSelector from '@/components/canvas/VoiceModelSelector.vue'
 import AudioVoiceSettingsSelector from '@/components/canvas/AudioVoiceSettingsSelector.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
@@ -62,7 +63,8 @@ const voiceSettings = ref<AudioVoiceSettings>({
 const modelVoices = computed(() => getModelEntry(catalogModelKeyFromValue(audioModel.value))?.voices)
 
 const speech = useSpeechRecognition()
-const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)const credits = computed(() => estimateAudioCredits())
+const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const credits = computed(() => estimateAudioCredits())
 
 function syncVoiceToCatalog(emitPatch: boolean) {
   const voices = getModelEntry(catalogModelKeyFromValue(audioModel.value))?.voices

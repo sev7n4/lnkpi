@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import { inferMediaInputKind, type MediaInputKind } from '@/composables/useMediaUpload'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import { inferMediaInputKind, type MediaInputKind } from '@/composables/useMediaUpload'
 import { isNodeGenerating } from '@/constants/dockStudio'
 
 const props = defineProps<{
@@ -67,7 +68,6 @@ function onFileChange(event: Event) {
 <template>
   <DockToolbarShell
     type="mediaInput"
-   
     show-title
     :title="title"
     title-placeholder="素材名称"

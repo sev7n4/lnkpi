@@ -4,7 +4,8 @@ import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
-import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
+import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
+import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
@@ -43,7 +44,8 @@ const textThinkingEffort = ref<'high' | 'max'>('high')
 const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
-const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
+const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
 const showThinkingControls = computed(() => isDeepSeekV4Model(textModel.value))
 
