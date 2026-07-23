@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
   Panel,
@@ -105,6 +105,7 @@ const PlayCanvasView = defineAsyncComponent(
 )
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const canvasEditor = useCanvasEditorStore()
 const sessionId = computed(() => route.params.sessionId as string)
@@ -825,6 +826,41 @@ function resolveNewNodePosition(type: string) {
 async function focusNodeById(id: string) {
   await nextTick()
   await vueFlowRef.value?.fitView({ nodes: [id], padding: 0.45, duration: 320, maxZoom: 1.05 })
+}
+
+/** 发布弹窗「定位」：选中节点并聚焦；可选关闭弹窗 */
+async function handlePublishLocateNode(payload: { sessionId: string; nodeId: string }) {
+  if (payload.sessionId !== sessionId.value) {
+    await router.push({
+      name: 'canvas',
+      params: { sessionId: payload.sessionId },
+      query: { focusNode: payload.nodeId },
+    })
+    return
+  }
+  const node = nodes.value.find((n) => n.id === payload.nodeId)
+  if (!node) {
+    ElMessage.warning('当前画布中没有找到该节点')
+    return
+  }
+  showPublish.value = false
+  selectOnlyNode(payload.nodeId)
+  await focusNodeById(payload.nodeId)
+}
+
+async function consumeFocusNodeQuery() {
+  const focusId = typeof route.query.focusNode === 'string' ? route.query.focusNode : ''
+  if (!focusId) return
+  const node = nodes.value.find((n) => n.id === focusId)
+  if (!node) {
+    ElMessage.warning('当前画布中没有找到该节点')
+  } else {
+    selectOnlyNode(focusId)
+    await focusNodeById(focusId)
+  }
+  const nextQuery = { ...route.query }
+  delete nextQuery.focusNode
+  await router.replace({ query: nextQuery })
 }
 
 function handleDockAdd(type: DockNodeType) {
@@ -2024,6 +2060,7 @@ async function loadSession() {
   }
   startPollingForGeneratingShots()
   startPollingForGeneratingRecords()
+  await consumeFocusNodeQuery()
 }
 
 async function loadSessions() {
@@ -2328,6 +2365,7 @@ onMounted(() => {
       :session-id="sessionId"
       :default-title="sessionTitle"
       @published="loadSessions"
+      @locate-node="handlePublishLocateNode"
     />
     <AIImageEditor @apply="handleImageEditorApply" />
     <MediaPreviewOverlay />
