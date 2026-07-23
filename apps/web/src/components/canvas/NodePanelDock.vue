@@ -23,7 +23,8 @@ const emit = defineEmits<{
   add: [type: DockNodeType]
   'open-settings': []
   'asset-apply': [asset: CanvasAssetItem]
-  'history-locate': [recordId: string]
+  'history-locate': [payload: { recordId: string; nodeId?: string | null }]
+  'history-retry': [nodeId: string]
 }>()
 
 const showMenu = ref(false)
@@ -209,7 +210,10 @@ useClickOutside(rootRef, closePopovers)
           class="history-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
-          <CanvasTaskHistoryPanel @locate="emit('history-locate', $event)" />
+          <CanvasTaskHistoryPanel
+            @locate="emit('history-locate', $event)"
+            @retry="emit('history-retry', $event)"
+          />
         </div>
       </Transition>
     </div>

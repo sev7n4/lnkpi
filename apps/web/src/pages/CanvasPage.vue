@@ -1593,18 +1593,26 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
   await focusNodeById(childId)
 }
 
-/** 历史记录「定位」：按 generationRecordId / materialId 反查画布节点并聚焦 */
-async function handleHistoryLocate(recordId: string) {
-  const node = nodes.value.find((n) => {
-    const data = n.data as Record<string, unknown>
-    return data.generationRecordId === recordId || data.materialId === recordId
-  })
+/** 历史记录「定位」：优先 nodeId，再按 generationRecordId / materialId 反查 */
+async function handleHistoryLocate(payload: string | { recordId: string; nodeId?: string | null }) {
+  const recordId = typeof payload === 'string' ? payload : payload.recordId
+  const nodeId = typeof payload === 'string' ? undefined : payload.nodeId
+  const node =
+    (nodeId && nodes.value.find((n) => n.id === nodeId)) ||
+    nodes.value.find((n) => {
+      const data = n.data as Record<string, unknown>
+      return data.generationRecordId === recordId || data.materialId === recordId
+    })
   if (!node) {
     ElMessage.warning('当前画布中没有找到该任务对应的节点')
     return
   }
   selectOnlyNode(node.id)
   await focusNodeById(node.id)
+}
+
+function handleHistoryRetry(nodeId: string) {
+  void retryNodeGeneration(nodeId)
 }
 
 async function handleAssetApply(asset: CanvasAssetItem) {
@@ -2291,6 +2299,7 @@ onMounted(() => {
           @open-settings="showModelSettings = true"
           @asset-apply="handleAssetApply"
           @history-locate="handleHistoryLocate"
+          @history-retry="handleHistoryRetry"
         />
 
         <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
