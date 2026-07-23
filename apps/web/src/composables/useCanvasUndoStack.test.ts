@@ -201,12 +201,12 @@ describe('generation fields session cache (delete → undo)', () => {
       ],
       edges: [],
     }
-    expect(historySnap.nodes[0].data).not.toHaveProperty('url')
-    expect(historySnap.nodes[0].data).toEqual({ prompt: 'scene' })
+    expect(historySnap.nodes[0]!.data).not.toHaveProperty('url')
+    expect(historySnap.nodes[0]!.data).toEqual({ prompt: 'scene' })
 
     // Delete node — live has no v1; undo applies stripped snapshot
     const restored = applyWithCache(cache, historySnap, [])
-    expect(restored[0].data).toMatchObject({
+    expect(restored[0]!.data).toMatchObject({
       prompt: 'scene',
       status: 'completed',
       url: 'https://cdn.example/v.mp4',
@@ -240,7 +240,9 @@ describe('generation fields session cache (delete → undo)', () => {
     ] as CanvasSnapshot['nodes']
 
     const restored = applyWithCache(cache, snapshot, live)
-    expect(restored[0].data.url).toBe('https://new.example/v.mp4')
+    const node = restored[0]
+    expect(node).toBeDefined()
+    expect(node?.data?.url).toBe('https://new.example/v.mp4')
   })
 
   /**
@@ -266,7 +268,7 @@ describe('generation fields session cache (delete → undo)', () => {
     }
     // Live patched url but never remembered; delete removed the node
     const restored = applyWithCache(cache, historySnap, [])
-    expect(restored[0].data).not.toHaveProperty('url')
+    expect(restored[0]!.data).not.toHaveProperty('url')
   })
 
   it('live gen patch + remember (no commit) restores url after delete→undo', () => {
@@ -294,7 +296,7 @@ describe('generation fields session cache (delete → undo)', () => {
 
     // Delete then undo — live empty; cache supplies url
     const restored = applyWithCache(cache, historySnap, [])
-    expect(restored[0].data).toMatchObject({
+    expect(restored[0]!.data).toMatchObject({
       prompt: 'scene',
       status: 'completed',
       url: 'https://cdn.example/gen.mp4',
