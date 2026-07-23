@@ -1,6 +1,6 @@
 # Agent Runtime（LangGraph）技术选型与一期设计
 
-> 状态：**设计待审阅**（修订：一期自动出图 + Skill 目录约定）  
+> 状态：**设计待审阅**（修订：一期自动出图 + Skills 对齐 agentskills.io 市场标准）  
 > 日期：2026-07-23（修订 2026-07-24）  
 > 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
