@@ -1,17 +1,27 @@
 import { ref, toRaw, type Ref } from 'vue'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 
-/** Generation / poll / upload outcome fields — never enter the undo stack. */
+/**
+ * Generation / poll / upload outcome fields — never enter the undo stack.
+ * Restored on apply from live node data, or from session cache after delete-undo.
+ *
+ * Note: `content` / `prompt` stay undoable (user-editable). Generation-written
+ * `content` may roll back with a later unrelated undo — accepted tradeoff.
+ */
 export const GENERATION_HISTORY_SKIP_KEYS = [
   'status',
   'url',
   'urls',
+  'images',
   'coverUrl',
   'generationRecordId',
+  'materialId',
   'errorMessage',
   'errorCode',
   'uploadProgress',
 ] as const
+
+export type GenerationFieldsCache = Map<string, Record<string, unknown>>
 
 export type CanvasSnapshotEdge = {
   id: string
@@ -64,6 +74,35 @@ export function pickGenerationFieldsFromData(
     if (key in data) out[key] = data[key]
   }
   return out
+}
+
+/** Merge picked generation fields into the session cache (live outcomes win on conflict). */
+export function rememberGenerationFields(
+  cache: GenerationFieldsCache,
+  nodeId: string,
+  data: Record<string, unknown> | undefined | null,
+): void {
+  const picked = pickGenerationFieldsFromData(data)
+  if (Object.keys(picked).length === 0) return
+  cache.set(nodeId, { ...(cache.get(nodeId) ?? {}), ...picked })
+}
+
+/**
+ * Resolve generation fields for a restored node: prefer live (so poll/upload
+ * aren't rolled back), fall back to session cache (delete → undo restores url).
+ * Always refreshes the cache when live has fields.
+ */
+export function resolveGenerationFieldsForApply(
+  cache: GenerationFieldsCache,
+  nodeId: string,
+  liveData: Record<string, unknown> | undefined | null,
+): Record<string, unknown> {
+  const live = pickGenerationFieldsFromData(liveData)
+  if (Object.keys(live).length > 0) {
+    cache.set(nodeId, { ...(cache.get(nodeId) ?? {}), ...live })
+    return live
+  }
+  return { ...(cache.get(nodeId) ?? {}) }
 }
 
 function cloneSnapshot(snapshot: CanvasSnapshot): CanvasSnapshot {

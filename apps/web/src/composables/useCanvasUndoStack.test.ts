@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   createCanvasUndoStack,
+  GENERATION_HISTORY_SKIP_KEYS,
+  rememberGenerationFields,
+  resolveGenerationFieldsForApply,
   stripGenerationFieldsFromData,
   type CanvasSnapshot,
+  type GenerationFieldsCache,
 } from './useCanvasUndoStack'
 
 type NodeLike = {
@@ -127,10 +131,114 @@ describe('stripGenerationFieldsFromData', () => {
       duration: 8,
       status: 'completed',
       url: 'https://example.com/a.mp4',
+      urls: ['https://example.com/a.mp4'],
+      images: ['https://example.com/a.png'],
+      coverUrl: 'https://example.com/cover.png',
       generationRecordId: 'rec-1',
+      materialId: 'mat-1',
       errorMessage: 'boom',
       uploadProgress: 40,
     })
     expect(stripped).toEqual({ prompt: 'hello', duration: 8 })
+    expect(stripped).not.toHaveProperty('url')
+  })
+
+  it('includes images and materialId in the skip list', () => {
+    expect(GENERATION_HISTORY_SKIP_KEYS).toContain('images')
+    expect(GENERATION_HISTORY_SKIP_KEYS).toContain('materialId')
+    expect(GENERATION_HISTORY_SKIP_KEYS).toContain('url')
+  })
+})
+
+describe('generation fields session cache (delete → undo)', () => {
+  function applyWithCache(
+    cache: GenerationFieldsCache,
+    snapshot: CanvasSnapshot,
+    liveNodes: CanvasSnapshot['nodes'],
+  ): CanvasSnapshot['nodes'] {
+    const liveById = new Map(liveNodes.map((n) => [n.id, n]))
+    return snapshot.nodes.map((n) => {
+      const live = liveById.get(n.id)
+      const gen = resolveGenerationFieldsForApply(
+        cache,
+        n.id,
+        live?.data as Record<string, unknown> | undefined,
+      )
+      return { ...n, data: { ...(n.data ?? {}), ...gen } }
+    })
+  }
+
+  it('restores url/status/images/materialId from cache after delete undo', () => {
+    const cache: GenerationFieldsCache = new Map()
+    const withGen: CanvasSnapshot = {
+      nodes: [
+        {
+          id: 'v1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: 'scene',
+            status: 'completed',
+            url: 'https://cdn.example/v.mp4',
+            images: ['https://cdn.example/i.png'],
+            materialId: 'mat-9',
+            generationRecordId: 'rec-9',
+          },
+        },
+      ],
+      edges: [],
+    }
+
+    // Snapshot path: remember then strip (as CanvasPage does)
+    rememberGenerationFields(cache, 'v1', withGen.nodes[0].data as Record<string, unknown>)
+    const historySnap: CanvasSnapshot = {
+      nodes: [
+        {
+          ...withGen.nodes[0],
+          data: stripGenerationFieldsFromData(withGen.nodes[0].data as Record<string, unknown>),
+        },
+      ],
+      edges: [],
+    }
+    expect(historySnap.nodes[0].data).not.toHaveProperty('url')
+    expect(historySnap.nodes[0].data).toEqual({ prompt: 'scene' })
+
+    // Delete node — live has no v1; undo applies stripped snapshot
+    const restored = applyWithCache(cache, historySnap, [])
+    expect(restored[0].data).toMatchObject({
+      prompt: 'scene',
+      status: 'completed',
+      url: 'https://cdn.example/v.mp4',
+      images: ['https://cdn.example/i.png'],
+      materialId: 'mat-9',
+      generationRecordId: 'rec-9',
+    })
+  })
+
+  it('prefers live generation fields over stale cache when node still exists', () => {
+    const cache: GenerationFieldsCache = new Map()
+    cache.set('v1', { status: 'completed', url: 'https://old.example/v.mp4' })
+    const snapshot: CanvasSnapshot = {
+      nodes: [
+        {
+          id: 'v1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'scene', duration: 8 },
+        },
+      ],
+      edges: [],
+    }
+    const live = [
+      {
+        id: 'v1',
+        type: 'video',
+        position: { x: 0, y: 0 },
+        data: { status: 'completed', url: 'https://new.example/v.mp4' },
+      },
+    ] as CanvasSnapshot['nodes']
+
+    const restored = applyWithCache(cache, snapshot, live)
+    expect(restored[0].data.url).toBe('https://new.example/v.mp4')
   })
 })

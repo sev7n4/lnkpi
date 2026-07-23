@@ -84,9 +84,11 @@ import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import {
   createCanvasUndoStack,
-  pickGenerationFieldsFromData,
+  rememberGenerationFields,
+  resolveGenerationFieldsForApply,
   stripGenerationFieldsFromData,
   type CanvasSnapshot,
+  type GenerationFieldsCache,
 } from '@/composables/useCanvasUndoStack'
 import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
@@ -195,17 +197,24 @@ const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
 const showMembership = ref(false)
 
+/** Session cache so delete→undo can restore url/status/images/materialId after strip. */
+const generationFieldsCache: GenerationFieldsCache = new Map()
+
 function getCanvasHistorySnapshot(): CanvasSnapshot {
   return {
-    nodes: nodes.value.map((n) => ({
-      id: n.id,
-      type: n.type,
-      position: { x: n.position.x, y: n.position.y },
-      parentNode: n.parentNode,
-      extent: n.extent,
-      expandParent: n.expandParent,
-      data: stripGenerationFieldsFromData(n.data as Record<string, unknown> | undefined),
-    })),
+    nodes: nodes.value.map((n) => {
+      const data = n.data as Record<string, unknown> | undefined
+      rememberGenerationFields(generationFieldsCache, n.id, data)
+      return {
+        id: n.id,
+        type: n.type,
+        position: { x: n.position.x, y: n.position.y },
+        parentNode: n.parentNode,
+        extent: n.extent,
+        expandParent: n.expandParent,
+        data: stripGenerationFieldsFromData(data),
+      }
+    }),
     edges: edges.value.map((e) => ({
       id: e.id,
       source: e.source,
@@ -217,17 +226,22 @@ function getCanvasHistorySnapshot(): CanvasSnapshot {
 }
 
 function applyCanvasHistorySnapshot(snapshot: CanvasSnapshot) {
-  const genById = new Map<string, Record<string, unknown>>()
-  for (const n of nodes.value) {
-    genById.set(n.id, pickGenerationFieldsFromData(n.data as Record<string, unknown> | undefined))
-  }
-  nodes.value = snapshot.nodes.map((n) => ({
-    ...n,
-    data: {
-      ...(n.data ?? {}),
-      ...(genById.get(n.id) ?? {}),
-    },
-  }))
+  const liveById = new Map(nodes.value.map((n) => [n.id, n]))
+  nodes.value = snapshot.nodes.map((n) => {
+    const live = liveById.get(n.id)
+    const gen = resolveGenerationFieldsForApply(
+      generationFieldsCache,
+      n.id,
+      live?.data as Record<string, unknown> | undefined,
+    )
+    return {
+      ...n,
+      data: {
+        ...(n.data ?? {}),
+        ...gen,
+      },
+    }
+  })
   const animated = viewportSettings.value.edgeAnimated
   const ids = new Set(nodes.value.map((n) => n.id))
   edges.value = snapshot.edges
@@ -2154,6 +2168,10 @@ async function loadSession() {
       data: { prompt: '描述你的创意场景...' },
     }]
     nodeCounter = 1
+  }
+  generationFieldsCache.clear()
+  for (const n of nodes.value) {
+    rememberGenerationFields(generationFieldsCache, n.id, n.data as Record<string, unknown> | undefined)
   }
   canvasUndo.clear()
   canvasUndo.commitAfterChange()
