@@ -8,5 +8,6 @@ import { StudioService } from './studio.service'
   imports: [PointsModule, ProviderModule],
   controllers: [StudioController],
   providers: [StudioService],
+  exports: [StudioService],
 })
 export class StudioModule {}
