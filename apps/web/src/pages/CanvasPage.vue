@@ -36,6 +36,7 @@ import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNo
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
 import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
 import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
@@ -401,7 +402,16 @@ const shotPolling = useShotPolling((shots) => {
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
     const node = nodes.value.find((n) => n.id === task.nodeId)
-    if (!acceptsPollWrite(node?.data?.status)) continue
+    if (
+      !shouldApplyGenerationPoll({
+        nodeStatus: node?.data?.status,
+        nodeRecordId: node?.data?.generationRecordId,
+        incomingRecordId: record.id,
+        incomingStatus: record.status,
+      })
+    ) {
+      continue
+    }
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       patchNodeData(task.nodeId, {
         status: NODE_GENERATION_STATUS.fallback_pending,

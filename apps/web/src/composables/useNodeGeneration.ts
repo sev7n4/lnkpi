@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
   mergeReferenceImageUrl,
@@ -413,7 +414,16 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   function applyStudioRecord(nodeId: string, record: GenerationRecord): boolean {
     const current = findNodeById(deps.nodes.value, nodeId)
-    if (!acceptsGenerationWrite(current?.data?.status)) return false
+    if (
+      !shouldApplyGenerationPoll({
+        nodeStatus: current?.data?.status,
+        nodeRecordId: current?.data?.generationRecordId,
+        incomingRecordId: record.id,
+        incomingStatus: record.status,
+      })
+    ) {
+      return false
+    }
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       return false
     }
@@ -464,7 +474,16 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   async function resolveStudioRecord(nodeId: string, record: GenerationRecord) {
     const current = findNodeById(deps.nodes.value, nodeId)
-    if (!acceptsGenerationWrite(current?.data?.status)) return
+    if (
+      !shouldApplyGenerationPoll({
+        nodeStatus: current?.data?.status,
+        nodeRecordId: current?.data?.generationRecordId,
+        incomingRecordId: record.id,
+        incomingStatus: record.status,
+      })
+    ) {
+      return
+    }
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       const handled = await handleStudioFallback(nodeId, record)
       if (!handled) {
