@@ -24,6 +24,18 @@ describe('shouldApplyGenerationPoll', () => {
     ).toBe(false)
   })
 
+  it('rejects newer completed id while node still points at older failed id', () => {
+    // Repro: text/prompt/audio forgot to bump generationRecordId before resolve.
+    expect(
+      shouldApplyGenerationPoll({
+        nodeStatus: 'generating',
+        nodeRecordId: 'cmrxhe8sk005kny01qbl02zky',
+        incomingRecordId: 'cmrxhfe7m005ony013k0s8mxm',
+        incomingStatus: 'completed',
+      }),
+    ).toBe(false)
+  })
+
   it('ignores writes after cancel to draft', () => {
     expect(
       shouldApplyGenerationPoll({

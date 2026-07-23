@@ -562,6 +562,9 @@ async function cancelRemoteGeneration(nodeId: string) {
           canvasScope(node.id),
         )
         if (signal.aborted) return
+        // Bump record id before resolve — otherwise poll gate treats the new
+        // result as stale when the node still holds a prior failed recordId.
+        deps.patchNodeData(node.id, { generationRecordId: res.data.id })
         await resolveStudioRecord(node.id, res.data)
         return
       }
@@ -585,6 +588,7 @@ async function cancelRemoteGeneration(nodeId: string) {
           canvasScope(node.id),
         )
         if (signal.aborted) return
+        deps.patchNodeData(node.id, { generationRecordId: res.data.id })
         await resolveStudioRecord(node.id, res.data)
         return
       }
@@ -605,6 +609,7 @@ async function cancelRemoteGeneration(nodeId: string) {
           pitch: typeof data.audioPitch === 'number' ? data.audioPitch : 0,
         }, refs, mentionedKeys, signal, canvasScope(node.id))
         if (signal.aborted) return
+        deps.patchNodeData(node.id, { generationRecordId: res.data.id })
         await resolveStudioRecord(node.id, res.data)
         return
       }

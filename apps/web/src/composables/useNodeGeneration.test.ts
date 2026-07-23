@@ -1037,6 +1037,50 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('applies new text result after prior failed recordId (model switch)', async () => {
+    const model = encodeChannelModel('ch-user-1', 'deepseek-v4-pro')
+    const node = createNode(
+      'text',
+      {
+        prompt: 'rewrite after fail',
+        content: '',
+        textModel: model,
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '生成失败',
+        generationRecordId: 'cmrxhe8sk005kny01qbl02zky',
+      },
+      'text-9',
+    )
+    const completed = {
+      id: 'cmrxhfe7m005ony013k0s8mxm',
+      type: 'text' as const,
+      prompt: 'rewrite after fail',
+      status: NODE_GENERATION_STATUS.completed,
+      metadata: JSON.stringify({ text: '新模型生成成功内容' }),
+      url: null,
+      createdAt: '2026-07-23T12:23:08.722Z',
+    }
+    vi.mocked(studioApi.generateText).mockResolvedValue(mockAxiosResponse({ data: completed }))
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-9',
+      expect.objectContaining({ generationRecordId: completed.id }),
+    )
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'text-9',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        content: '新模型生成成功内容',
+        generationRecordId: completed.id,
+      }),
+    )
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.completed)
+    expect(node.data?.content).toBe('新模型生成成功内容')
+  })
+
   it('applies terminal studio resolve when node already error with same generationRecordId', async () => {
     const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
     vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
