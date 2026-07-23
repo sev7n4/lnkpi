@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import {
+  clampVideoDuration,
   DEFAULT_VIDEO_SETTINGS,
   VIDEO_ASPECT_RATIO_OPTIONS,
   VIDEO_CROP_OPTIONS,
-  VIDEO_DURATION_OPTIONS,
+  VIDEO_DURATION_MARKS,
   VIDEO_RESOLUTION_OPTIONS,
   type VideoSettings,
 } from '@lnkpi/shared'
@@ -25,8 +26,20 @@ useClickOutside(rootRef, () => {
 })
 
 function patch(partial: Partial<VideoSettings>) {
-  emit('update:modelValue', { ...DEFAULT_VIDEO_SETTINGS, ...props.modelValue, ...partial })
+  const next = { ...DEFAULT_VIDEO_SETTINGS, ...props.modelValue, ...partial }
+  if ('duration' in partial) {
+    next.duration = clampVideoDuration(next.duration)
+  }
+  emit('update:modelValue', next)
 }
+
+watch(open, (isOpen) => {
+  if (!isOpen) return
+  const clamped = clampVideoDuration(props.modelValue.duration)
+  if (clamped !== props.modelValue.duration) {
+    patch({ duration: clamped })
+  }
+})
 </script>
 
 <template>
@@ -91,19 +104,29 @@ function patch(partial: Partial<VideoSettings>) {
       </div>
 
       <div class="mb-3">
-        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">时长</p>
-        <div class="flex gap-1">
+        <p class="mb-1.5 flex items-center justify-between text-[10px] text-[var(--neo-text-muted)]">
+          <span>时长</span>
+          <span class="tabular-nums text-[var(--neo-text-secondary)]">{{ modelValue.duration }}s</span>
+        </p>
+        <input
+          type="range"
+          min="5"
+          max="15"
+          step="1"
+          class="w-full accent-[var(--neo-accent)]"
+          :value="modelValue.duration"
+          @input="patch({ duration: clampVideoDuration(($event.target as HTMLInputElement).value) })"
+        />
+        <div class="mt-1 flex justify-between text-[10px]">
           <button
-            v-for="opt in VIDEO_DURATION_OPTIONS"
-            :key="opt.value"
+            v-for="mark in VIDEO_DURATION_MARKS"
+            :key="mark"
             type="button"
-            class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
-            :class="modelValue.duration === opt.value
-              ? 'is-on'
-              : ''"
-            @click="patch({ duration: opt.value })"
+            class="text-[var(--neo-text-muted)]"
+            :class="mark === 10 || mark === 15 ? 'font-semibold text-[var(--neo-accent-text)]' : ''"
+            @click="patch({ duration: mark })"
           >
-            {{ opt.label }}
+            {{ mark }}
           </button>
         </div>
       </div>

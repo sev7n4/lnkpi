@@ -36,6 +36,7 @@ import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNo
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
 import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
 import CanvasNodeVideo from '@/components/canvas/CanvasNodeVideo.vue'
@@ -81,6 +82,15 @@ import EdgeScissorsOverlay from '@/components/canvas/EdgeScissorsOverlay.vue'
 import { useCanvasViewportSettings, type CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
 import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
+import {
+  createCanvasUndoStack,
+  patchTouchesGenerationFields,
+  rememberGenerationFields,
+  resolveGenerationFieldsForApply,
+  stripGenerationFieldsFromData,
+  type CanvasSnapshot,
+  type GenerationFieldsCache,
+} from '@/composables/useCanvasUndoStack'
 import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
@@ -176,7 +186,13 @@ const flowEdges = computed(() =>
   ) as unknown as Edge[],
 )
 
-const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
+const {
+  selectNode,
+  clearEditorSelection,
+  clearSelection,
+  patchNodeData: patchNodeDataBase,
+  selectedNodeId,
+} = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
 const saving = ref(false)
 const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
@@ -187,6 +203,112 @@ const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: stri
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
 const showMembership = ref(false)
+
+/** Session cache so delete→undo can restore url/status/images/materialId after strip. */
+const generationFieldsCache: GenerationFieldsCache = new Map()
+
+/**
+ * Generation/upload outcomes often patch + saveCanvas without commitAfterChange.
+ * Remember those fields so delete→undo can restore url/status even when the
+ * delete commit snapshot no longer contains the node.
+ */
+function patchNodeData(id: string, patch: Record<string, unknown>) {
+  const touchesGen = patchTouchesGenerationFields(patch)
+  patchNodeDataBase(id, patch)
+  if (!touchesGen) return
+  const node = nodes.value.find((n) => n.id === id)
+  rememberGenerationFields(
+    generationFieldsCache,
+    id,
+    node?.data as Record<string, unknown> | undefined,
+  )
+}
+
+/** Belt-and-suspenders: capture gen fields before nodes leave the graph. */
+function rememberGenerationFieldsBeforeRemove(ids: Iterable<string>) {
+  const toRemember = new Set(ids)
+  for (const n of nodes.value) {
+    if (!toRemember.has(n.id)) continue
+    rememberGenerationFields(
+      generationFieldsCache,
+      n.id,
+      n.data as Record<string, unknown> | undefined,
+    )
+  }
+}
+
+function getCanvasHistorySnapshot(): CanvasSnapshot {
+  return {
+    nodes: nodes.value.map((n) => {
+      const data = n.data as Record<string, unknown> | undefined
+      rememberGenerationFields(generationFieldsCache, n.id, data)
+      return {
+        id: n.id,
+        type: n.type,
+        position: { x: n.position.x, y: n.position.y },
+        parentNode: n.parentNode,
+        extent: n.extent,
+        expandParent: n.expandParent,
+        data: stripGenerationFieldsFromData(data),
+      }
+    }),
+    edges: edges.value.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    })),
+  }
+}
+
+function applyCanvasHistorySnapshot(snapshot: CanvasSnapshot) {
+  const liveById = new Map(nodes.value.map((n) => [n.id, n]))
+  nodes.value = snapshot.nodes.map((n) => {
+    const live = liveById.get(n.id)
+    const gen = resolveGenerationFieldsForApply(
+      generationFieldsCache,
+      n.id,
+      live?.data as Record<string, unknown> | undefined,
+    )
+    return {
+      ...n,
+      data: {
+        ...(n.data ?? {}),
+        ...gen,
+      },
+    }
+  })
+  const animated = viewportSettings.value.edgeAnimated
+  const ids = new Set(nodes.value.map((n) => n.id))
+  edges.value = snapshot.edges
+    .filter((e) => ids.has(e.source) && ids.has(e.target))
+    .map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      animated,
+    }))
+}
+
+const canvasUndo = createCanvasUndoStack({
+  maxDepth: 50,
+  getSnapshot: getCanvasHistorySnapshot,
+  applySnapshot: applyCanvasHistorySnapshot,
+})
+
+/** User graph/param edit: commit undo checkpoint then persist. Skip for generation/poll/upload. */
+function persistUserEdit() {
+  canvasUndo.commitAfterChange()
+  void saveCanvas()
+}
+
+async function persistUserEditAsync() {
+  canvasUndo.commitAfterChange()
+  await saveCanvas()
+}
 
 const DEFAULT_DARK_GRID_COLOR = 'rgba(255,255,255,0.08)'
 const effectiveGridColor = computed(() => {
@@ -401,7 +523,16 @@ const shotPolling = useShotPolling((shots) => {
 const generationPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
     const node = nodes.value.find((n) => n.id === task.nodeId)
-    if (!acceptsPollWrite(node?.data?.status)) continue
+    if (
+      !shouldApplyGenerationPoll({
+        nodeStatus: node?.data?.status,
+        nodeRecordId: node?.data?.generationRecordId,
+        incomingRecordId: record.id,
+        incomingStatus: record.status,
+      })
+    ) {
+      continue
+    }
     if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
       patchNodeData(task.nodeId, {
         status: NODE_GENERATION_STATUS.fallback_pending,
@@ -607,6 +738,7 @@ function onConnect(connection: Connection) {
     sourceHandle: connection.sourceHandle ?? undefined,
     targetHandle: connection.targetHandle ?? undefined,
   })
+  persistUserEdit()
 }
 
 function onConnectStart(params: OnConnectStartParams & { event?: MouseEvent | TouchEvent }) {
@@ -740,7 +872,7 @@ function handleBlankPickerSelect(type: DockNodeType) {
   const id = createNodeAt(type, position)
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -767,7 +899,7 @@ function handleConnectPickerSelect(type: DockNodeType) {
 
   connectSourceToNode(picker.sourceNodeId, id)
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -796,7 +928,7 @@ function handleAgentActions(actions: unknown[]) {
   nodes.value = result.nodes as unknown as EditableFlowNode[]
   edges.value = result.edges as unknown as CanvasEdge[]
   startPollingForGeneratingShots()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function resolveNewNodePosition(type: string) {
@@ -868,7 +1000,7 @@ function handleDockAdd(type: DockNodeType) {
   const id = createNodeAt(type, position)
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -930,6 +1062,7 @@ function onNodesChange(changes: NodeChange[]) {
       )
       changed = true
     } else if (change.type === 'remove') {
+      rememberGenerationFieldsBeforeRemove([change.id])
       next = next.filter((node) => node.id !== change.id)
       changed = true
     } else if (change.type === 'add') {
@@ -971,12 +1104,8 @@ function onNodeDragStop(event: NodeDragEvent) {
   const node = event.node
   if (node.parentNode) {
     nodes.value = resizeGroupToFitChildren(nodes.value as unknown as FlowNode[], node.parentNode) as EditableFlowNode[]
-    void saveCanvas()
-    return
   }
-  if (node.type === 'group') {
-    void saveCanvas()
-  }
+  persistUserEdit()
 }
 
 function onNodeClick(event: NodeMouseEvent) {
@@ -1003,7 +1132,7 @@ function handleGroupSelection() {
   void nextTick().then(() => {
     vueFlowRef.value?.updateNodeInternals?.()
   })
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleUngroupById(groupId: string) {
@@ -1012,7 +1141,7 @@ function handleUngroupById(groupId: string) {
   nodes.value = next as EditableFlowNode[]
   multiSelectedIds.value = []
   clearSelection()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleUngroupSelection() {
@@ -1032,6 +1161,7 @@ function handleDeleteSelection() {
       }
     }
   }
+  rememberGenerationFieldsBeforeRemove(toRemove)
   const nextNodes: EditableFlowNode[] = []
   for (const node of nodes.value) {
     if (!toRemove.has(node.id)) nextNodes.push(node)
@@ -1044,7 +1174,7 @@ function handleDeleteSelection() {
   edges.value = nextEdges
   multiSelectedIds.value = []
   clearSelection()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleLayoutSelection() {
@@ -1052,7 +1182,7 @@ function handleLayoutSelection() {
     nodes.value as unknown as FlowNode[],
     multiSelectedIds.value,
   ) as EditableFlowNode[]
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function findSelectedNodes() {
@@ -1122,7 +1252,7 @@ async function handleGenerateVideoFromSelection() {
   connectNodes(imageNode.id, id)
 
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   await nextTick()
   await focusNodeById(id)
   await handleNodeGenerate()
@@ -1157,7 +1287,7 @@ function onEdgeClick({ edge, event }: EdgeMouseEvent) {
 function deleteEdgeById(edgeId: string) {
   edges.value = edges.value.filter((edge) => edge.id !== edgeId)
   if (selectedEdgeId.value === edgeId) selectedEdgeId.value = null
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function renameNodeById(nodeId: string, title: string) {
@@ -1169,14 +1299,14 @@ function renameNodeById(nodeId: string, title: string) {
   } else {
     patchNodeData(nodeId, { title })
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 provide(CANVAS_NODE_RENAME_KEY, renameNodeById)
 
 function patchNodeMediaById(nodeId: string, patch: Record<string, unknown>) {
   patchNodeData(nodeId, patch)
-  void saveCanvas()
+  persistUserEdit()
 }
 
 provide(CANVAS_NODE_PATCH_KEY, patchNodeMediaById)
@@ -1236,7 +1366,7 @@ function applyLocalRefToSelectedNode(binding: LocalRefBinding): boolean {
   appendLocalRef(node.id, binding)
   const previewPatch = previewPatchForLocalRef(nodeType, binding.mediaType, binding.url ?? '')
   if (Object.keys(previewPatch).length) patchNodeData(node.id, previewPatch)
-  void saveCanvas()
+  persistUserEdit()
   return true
 }
 
@@ -1327,7 +1457,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
 
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   await focusNodeById(id)
 }
 
@@ -1388,7 +1518,11 @@ async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) 
   let uploadingNodeId: string | null = null
   if (!wouldApplyToSelected && isMediaKind) {
     uploadingNodeId = createUploadingMediaNodeAt(file, clientPos, kind)
-    if (uploadingNodeId) selectOnlyNode(uploadingNodeId)
+    if (uploadingNodeId) {
+      selectOnlyNode(uploadingNodeId)
+      // Graph add is undoable; upload progress / url patches skip history.
+      canvasUndo.commitAfterChange()
+    }
   }
 
   if (selectedNodeId && isMediaKind) {
@@ -1579,22 +1713,30 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
     target: childId,
   })
   selectOnlyNode(childId)
-  await saveCanvas()
+  await persistUserEditAsync()
   await focusNodeById(childId)
 }
 
-/** 历史记录「定位」：按 generationRecordId / materialId 反查画布节点并聚焦 */
-async function handleHistoryLocate(recordId: string) {
-  const node = nodes.value.find((n) => {
-    const data = n.data as Record<string, unknown>
-    return data.generationRecordId === recordId || data.materialId === recordId
-  })
+/** 历史记录「定位」：优先 nodeId，再按 generationRecordId / materialId 反查 */
+async function handleHistoryLocate(payload: string | { recordId: string; nodeId?: string | null }) {
+  const recordId = typeof payload === 'string' ? payload : payload.recordId
+  const nodeId = typeof payload === 'string' ? undefined : payload.nodeId
+  const node =
+    (nodeId && nodes.value.find((n) => n.id === nodeId)) ||
+    nodes.value.find((n) => {
+      const data = n.data as Record<string, unknown>
+      return data.generationRecordId === recordId || data.materialId === recordId
+    })
   if (!node) {
     ElMessage.warning('当前画布中没有找到该任务对应的节点')
     return
   }
   selectOnlyNode(node.id)
   await focusNodeById(node.id)
+}
+
+function handleHistoryRetry(nodeId: string) {
+  void retryNodeGeneration(nodeId)
 }
 
 async function handleAssetApply(asset: CanvasAssetItem) {
@@ -1621,7 +1763,7 @@ function connectSelectionToTarget(targetId: string, sourceIds = multiSelectedIds
     if (sourceId === targetId) continue
     connectNodes(sourceId, targetId)
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleMultiConnectTarget(targetId: string) {
@@ -1698,6 +1840,12 @@ useCanvasKeyboard({
   onZoomOut: () => zoomViewport(1 / 1.12),
   onPan: panViewport,
   onDelete: handleKeyboardDelete,
+  onUndo: () => {
+    if (canvasUndo.undo()) void saveCanvas()
+  },
+  onRedo: () => {
+    if (canvasUndo.redo()) void saveCanvas()
+  },
 })
 
 function patchSelectedNode(patch: Record<string, unknown>) {
@@ -1825,7 +1973,7 @@ function handleContextAction(action: string) {
       addNode(String(node.type), { ...(node.data as Record<string, unknown>) }, {
         position: { x: node.position.x + 40, y: node.position.y + 40 },
       })
-      void saveCanvas()
+      persistUserEdit()
     }
     return
   }
@@ -1838,9 +1986,10 @@ function handleContextAction(action: string) {
         if (child.parentNode === menu.nodeId) toRemove.add(child.id)
       }
     }
+    rememberGenerationFieldsBeforeRemove(toRemove)
     nodes.value = nodes.value.filter((entry) => !toRemove.has(entry.id))
     edges.value = edges.value.filter((edge) => !toRemove.has(edge.source) && !toRemove.has(edge.target))
-    void saveCanvas()
+    persistUserEdit()
     return
   }
 
@@ -1868,7 +2017,7 @@ function handleStoryboardUpdated(shots: StoryboardShot[]) {
       order: shot.order,
     }
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?: string }) {
@@ -1880,7 +2029,7 @@ function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?:
       status: 'completed',
       prompt: payload.prompt,
     }
-    void saveCanvas()
+    persistUserEdit()
   }
 }
 
@@ -1979,6 +2128,8 @@ onFallbackPendingFromPoll = onFallbackPending
 const debouncedNodePatch = useDebouncedNodePatch(
   (id, patch) => patchNodeData(id, patch),
   saveCanvas,
+  400,
+  { onHistoryCommit: () => canvasUndo.commitAfterChange() },
 )
 
 watch(
@@ -2058,6 +2209,12 @@ async function loadSession() {
     }]
     nodeCounter = 1
   }
+  generationFieldsCache.clear()
+  for (const n of nodes.value) {
+    rememberGenerationFields(generationFieldsCache, n.id, n.data as Record<string, unknown> | undefined)
+  }
+  canvasUndo.clear()
+  canvasUndo.commitAfterChange()
   startPollingForGeneratingShots()
   startPollingForGeneratingRecords()
   await consumeFocusNodeQuery()
@@ -2281,6 +2438,7 @@ onMounted(() => {
           @open-settings="showModelSettings = true"
           @asset-apply="handleAssetApply"
           @history-locate="handleHistoryLocate"
+          @history-retry="handleHistoryRetry"
         />
 
         <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">

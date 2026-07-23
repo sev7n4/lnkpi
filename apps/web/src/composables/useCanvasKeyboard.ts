@@ -6,6 +6,8 @@ interface CanvasKeyboardOptions {
   onZoomOut: () => void
   onPan: (dx: number, dy: number) => void
   onDelete: () => void
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 export function useCanvasKeyboard(options: CanvasKeyboardOptions) {
@@ -23,6 +25,19 @@ export function useCanvasKeyboard(options: CanvasKeyboardOptions) {
 
     const key = event.key.toLowerCase()
     pressed.add(key)
+
+    const mod = event.metaKey || event.ctrlKey
+    if (mod && key === 'z') {
+      event.preventDefault()
+      if (event.shiftKey) options.onRedo?.()
+      else options.onUndo?.()
+      return
+    }
+    if (event.ctrlKey && !event.metaKey && key === 'y') {
+      event.preventDefault()
+      options.onRedo?.()
+      return
+    }
 
     if (key === 'e') {
       event.preventDefault()

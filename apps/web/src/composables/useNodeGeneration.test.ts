@@ -1037,6 +1037,41 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('applies terminal studio resolve when node already error with same generationRecordId', async () => {
+    const requestFallbackConfirm = vi.fn(async () => 'confirm' as const)
+    vi.mocked(studioApi.confirmPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id: 'rec-1',
+          url: 'https://example.com/recovered.png',
+        },
+      }),
+    )
+    const node = createNode(
+      'image',
+      {
+        prompt: 'x',
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: 'stale local error',
+        generationRecordId: 'rec-1',
+      },
+      'img-recover',
+    )
+    const { api, deps } = createDeps([node], { requestFallbackConfirm })
+
+    await api.onFallbackPending('studio', 'rec-1', 'img-recover')
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'img-recover',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/recovered.png',
+        generationRecordId: 'rec-1',
+      }),
+    )
+  })
+
   it('cancel keeps existing content and url', async () => {
     const node = createNode('image', {
       prompt: 'x',

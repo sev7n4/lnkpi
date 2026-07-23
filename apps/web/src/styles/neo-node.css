@@ -356,6 +356,52 @@
   object-fit: cover;
 }
 
+.neo-gen-video-poster {
+  pointer-events: none;
+}
+
+.neo-gen-video-play-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  width: 52px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding-left: 4px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  transform: translate(-50%, -50%);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.neo-gen-video-play-btn:hover {
+  background: rgba(0, 0, 0, 0.72);
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.neo-gen-video-exit-btn {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 2;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.neo-gen-video-exit-btn:hover {
+  background: rgba(0, 0, 0, 0.72);
+}
+
 .neo-node-upload-target {
   position: relative;
   transition: box-shadow 0.15s ease, border-color 0.15s ease;
