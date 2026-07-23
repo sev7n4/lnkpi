@@ -150,9 +150,15 @@ export type VideoResolution = '480p' | '720p' | '1080p'
 
 export interface VideoSettings {
   aspectRatio: VideoAspectRatio
-  duration: 5 | 10 | 15
+  duration: number // 5–15 整数秒
   crop: VideoCropMode
   resolution: VideoResolution
+}
+
+export function clampVideoDuration(n: unknown): number {
+  const v = typeof n === 'number' ? n : Number(n)
+  if (!Number.isFinite(v)) return 5
+  return Math.min(15, Math.max(5, Math.round(v)))
 }
 
 export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: string }[] = [

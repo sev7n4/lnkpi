@@ -7,12 +7,6 @@ export const BASE_GENERATION_CREDITS = {
 
 export type CreditGenerationType = keyof typeof BASE_GENERATION_CREDITS
 
-const VIDEO_DURATION_CREDITS: Record<number, number> = {
-  5: 30,
-  10: 50,
-  15: 70,
-}
-
 export function estimateTextCredits(): number {
   return BASE_GENERATION_CREDITS.text
 }
@@ -22,7 +16,11 @@ export function estimateImageCredits(count = 1): number {
 }
 
 export function estimateVideoCredits(durationSec = 5): number {
-  return VIDEO_DURATION_CREDITS[durationSec] ?? BASE_GENERATION_CREDITS.video
+  const d = Number(durationSec)
+  if (!Number.isFinite(d)) return BASE_GENERATION_CREDITS.video
+  if (d >= 15) return 70
+  if (d >= 10) return 50
+  return 30
 }
 
 export function estimateAudioCredits(): number {

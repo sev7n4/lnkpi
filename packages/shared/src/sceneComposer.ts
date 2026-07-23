@@ -41,7 +41,7 @@ export interface SceneComposerBatchItem {
   model?: string
   aspectRatio?: string
   resolution?: string
-  duration?: 5 | 10 | 15
+  duration?: number
   crop?: string
   count?: number
   refs?: GenerationRefPayload[]
