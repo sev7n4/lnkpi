@@ -29,7 +29,7 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
-import { useGenerationPolling, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -551,9 +551,15 @@ const generationPolling = useGenerationPolling((results) => {
       const patch: Record<string, unknown> = {
         url: urls[0] ?? parseRecordUrl(record),
         status: NODE_GENERATION_STATUS.completed,
+        errorMessage: null,
+        generationRecordId: record.id,
       }
       if (record.type === 'text') {
         patch.content = parseRecordText(record)
+      } else if (record.type === 'prompt') {
+        const parsed = parseRecordPromptContent(record)
+        patch.content = parsed.content
+        patch.promptMode = parsed.mode
       } else if (urls.length) {
         patch.images = urls
       }
@@ -584,7 +590,15 @@ function startPollingForGeneratingShots() {
 function startPollingForGeneratingRecords() {
   const tasks: GenerationPollTask[] = []
   for (const n of nodes.value) {
-    if (n.type !== 'video' && n.type !== 'image') continue
+    if (
+      n.type !== 'video' &&
+      n.type !== 'image' &&
+      n.type !== 'text' &&
+      n.type !== 'prompt' &&
+      n.type !== 'audio'
+    ) {
+      continue
+    }
     const data = n.data as Record<string, unknown>
     if (data.status === NODE_GENERATION_STATUS.generating && data.generationRecordId) {
       tasks.push({ recordId: String(data.generationRecordId), nodeId: n.id })
