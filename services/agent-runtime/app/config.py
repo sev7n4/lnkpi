@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     skills_dir: str = "skills"
-    nest_base_url: str = "http://127.0.0.1:3000"
+    nest_base_url: str = "http://127.0.0.1:3000/api"
     nest_service_token: str = "dev-token"
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
