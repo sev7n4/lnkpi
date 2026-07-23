@@ -84,6 +84,7 @@ import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
 import {
   createCanvasUndoStack,
+  patchTouchesGenerationFields,
   rememberGenerationFields,
   resolveGenerationFieldsForApply,
   stripGenerationFieldsFromData,
@@ -185,7 +186,13 @@ const flowEdges = computed(() =>
   ) as unknown as Edge[],
 )
 
-const { selectNode, clearEditorSelection, clearSelection, patchNodeData, selectedNodeId } = useSelectedNodeEditor(nodes)
+const {
+  selectNode,
+  clearEditorSelection,
+  clearSelection,
+  patchNodeData: patchNodeDataBase,
+  selectedNodeId,
+} = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
 const saving = ref(false)
 const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
@@ -199,6 +206,36 @@ const showMembership = ref(false)
 
 /** Session cache so delete→undo can restore url/status/images/materialId after strip. */
 const generationFieldsCache: GenerationFieldsCache = new Map()
+
+/**
+ * Generation/upload outcomes often patch + saveCanvas without commitAfterChange.
+ * Remember those fields so delete→undo can restore url/status even when the
+ * delete commit snapshot no longer contains the node.
+ */
+function patchNodeData(id: string, patch: Record<string, unknown>) {
+  const touchesGen = patchTouchesGenerationFields(patch)
+  patchNodeDataBase(id, patch)
+  if (!touchesGen) return
+  const node = nodes.value.find((n) => n.id === id)
+  rememberGenerationFields(
+    generationFieldsCache,
+    id,
+    node?.data as Record<string, unknown> | undefined,
+  )
+}
+
+/** Belt-and-suspenders: capture gen fields before nodes leave the graph. */
+function rememberGenerationFieldsBeforeRemove(ids: Iterable<string>) {
+  const toRemember = new Set(ids)
+  for (const n of nodes.value) {
+    if (!toRemember.has(n.id)) continue
+    rememberGenerationFields(
+      generationFieldsCache,
+      n.id,
+      n.data as Record<string, unknown> | undefined,
+    )
+  }
+}
 
 function getCanvasHistorySnapshot(): CanvasSnapshot {
   return {
@@ -1025,6 +1062,7 @@ function onNodesChange(changes: NodeChange[]) {
       )
       changed = true
     } else if (change.type === 'remove') {
+      rememberGenerationFieldsBeforeRemove([change.id])
       next = next.filter((node) => node.id !== change.id)
       changed = true
     } else if (change.type === 'add') {
@@ -1123,6 +1161,7 @@ function handleDeleteSelection() {
       }
     }
   }
+  rememberGenerationFieldsBeforeRemove(toRemove)
   const nextNodes: EditableFlowNode[] = []
   for (const node of nodes.value) {
     if (!toRemove.has(node.id)) nextNodes.push(node)
@@ -1947,6 +1986,7 @@ function handleContextAction(action: string) {
         if (child.parentNode === menu.nodeId) toRemove.add(child.id)
       }
     }
+    rememberGenerationFieldsBeforeRemove(toRemove)
     nodes.value = nodes.value.filter((entry) => !toRemove.has(entry.id))
     edges.value = edges.value.filter((edge) => !toRemove.has(edge.source) && !toRemove.has(edge.target))
     persistUserEdit()

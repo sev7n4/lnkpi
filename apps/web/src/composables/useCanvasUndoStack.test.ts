@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createCanvasUndoStack,
   GENERATION_HISTORY_SKIP_KEYS,
+  patchTouchesGenerationFields,
   rememberGenerationFields,
   resolveGenerationFieldsForApply,
   stripGenerationFieldsFromData,
@@ -240,5 +241,71 @@ describe('generation fields session cache (delete → undo)', () => {
 
     const restored = applyWithCache(cache, snapshot, live)
     expect(restored[0].data.url).toBe('https://new.example/v.mp4')
+  })
+
+  /**
+   * Contract: generation/upload patches often call saveCanvas without commitAfterChange.
+   * getSnapshot/remember only runs on commit — so if the next commit is delete, the
+   * node is already gone and cache never saw the url. Live patches that touch
+   * GENERATION_HISTORY_SKIP_KEYS must call rememberGenerationFields (CanvasPage
+   * wraps patchNodeData); delete path should remember as belt-and-suspenders.
+   */
+  it('documents: live gen patch without remember loses url on delete→undo', () => {
+    const cache: GenerationFieldsCache = new Map()
+    // History was seeded before generation (no url in strip snapshot)
+    const historySnap: CanvasSnapshot = {
+      nodes: [
+        {
+          id: 'v1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'scene' },
+        },
+      ],
+      edges: [],
+    }
+    // Live patched url but never remembered; delete removed the node
+    const restored = applyWithCache(cache, historySnap, [])
+    expect(restored[0].data).not.toHaveProperty('url')
+  })
+
+  it('live gen patch + remember (no commit) restores url after delete→undo', () => {
+    const cache: GenerationFieldsCache = new Map()
+    const historySnap: CanvasSnapshot = {
+      nodes: [
+        {
+          id: 'v1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'scene' },
+        },
+      ],
+      edges: [],
+    }
+
+    // Simulate wrapped patchNodeData: poll success wrote url without commit
+    const livePatch = {
+      status: 'completed',
+      url: 'https://cdn.example/gen.mp4',
+      materialId: 'mat-gen',
+    }
+    expect(patchTouchesGenerationFields(livePatch)).toBe(true)
+    rememberGenerationFields(cache, 'v1', { prompt: 'scene', ...livePatch })
+
+    // Delete then undo — live empty; cache supplies url
+    const restored = applyWithCache(cache, historySnap, [])
+    expect(restored[0].data).toMatchObject({
+      prompt: 'scene',
+      status: 'completed',
+      url: 'https://cdn.example/gen.mp4',
+      materialId: 'mat-gen',
+    })
+  })
+
+  it('patchTouchesGenerationFields detects outcome keys only', () => {
+    expect(patchTouchesGenerationFields({ prompt: 'x', duration: 8 })).toBe(false)
+    expect(patchTouchesGenerationFields({ url: 'https://x' })).toBe(true)
+    expect(patchTouchesGenerationFields({ status: 'generating' })).toBe(true)
+    expect(patchTouchesGenerationFields({ uploadProgress: 10 })).toBe(true)
   })
 })

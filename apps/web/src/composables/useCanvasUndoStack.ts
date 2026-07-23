@@ -76,6 +76,11 @@ export function pickGenerationFieldsFromData(
   return out
 }
 
+/** True when a live patch writes any generation/upload outcome field. */
+export function patchTouchesGenerationFields(patch: Record<string, unknown>): boolean {
+  return GENERATION_HISTORY_SKIP_KEYS.some((key) => key in patch)
+}
+
 /** Merge picked generation fields into the session cache (live outcomes win on conflict). */
 export function rememberGenerationFields(
   cache: GenerationFieldsCache,
