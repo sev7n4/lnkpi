@@ -1,0 +1,84 @@
+schema_version: 1
+defaults:
+  auto_generate_image: true
+  auto_generate_video: false
+items:
+  - key: copy_main
+    title: 主文案
+    target_type: text
+    source_section: 文案/主文案
+    auto_generate: false
+    depends_on: []
+    prompt_hint_template: "电商详情页主文案，突出卖点与规格…"
+
+  - key: white_bg
+    title: 白底图
+    target_type: image
+    source_section: 视觉资产/白底图
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "卫浴洁具产品白底图，居中，商业摄影，干净背景…"
+
+  - key: hero_main
+    title: 主图
+    target_type: image
+    source_section: 视觉资产/主图
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [white_bg]
+    prompt_hint_template: "基于白底主产品，电商主图，突出卖点与场景感…"
+
+  - key: scene
+    title: 场景图
+    target_type: image
+    source_section: 视觉资产/场景图
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "卫浴空间场景图，产品自然融入环境…"
+
+  - key: banner
+    title: Banner
+    target_type: image
+    source_section: 视觉资产/Banner
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "电商 Banner，品牌调性，促销或新品主题…"
+
+  - key: brand
+    title: 品牌图
+    target_type: image
+    source_section: 视觉资产/品牌
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "品牌视觉，可结合用户上传 logo…"
+
+  - key: model
+    title: 模特/人景
+    target_type: image
+    source_section: 视觉资产/模特
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "模特与产品互动场景，生活方式摄影…"
+
+  - key: detail_cut
+    title: 细节/剖面
+    target_type: image
+    source_section: 视觉资产/细节
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [white_bg]
+    prompt_hint_template: "产品细节或剖面特写，基于白底产品…"
+
+  - key: show_video
+    title: 产品展示视频
+    target_type: video
+    source_section: 视觉资产/视频
+    gen_mode: v_ref
+    auto_generate: false
+    depends_on: [hero_main]
+    prompt_hint_template: "产品旋转展示，一期仅建骨架不出片…"
