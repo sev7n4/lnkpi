@@ -167,6 +167,8 @@ export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: strin
   { value: '1:1', label: '1:1 方形' },
 ]
 
+export const VIDEO_DURATION_MARKS = [5, 10, 15] as const
+
 export const VIDEO_DURATION_OPTIONS: { value: 5 | 10 | 15; label: string }[] = [
   { value: 5, label: '5 秒' },
   { value: 10, label: '10 秒' },
