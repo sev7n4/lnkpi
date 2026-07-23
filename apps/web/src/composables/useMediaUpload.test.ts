@@ -16,11 +16,14 @@ describe('persistMediaUrl', () => {
     vi.mocked(uploadApi.upload).mockReset()
   })
 
-  it('throws when upload returns non-zero code', async () => {
+  it('throws when upload returns empty url', async () => {
     vi.mocked(uploadApi.upload).mockResolvedValue({
-      data: { code: 1, message: '未收到文件', data: undefined as never },
-    } as never)
-    await expect(persistMediaUrl(new File(['x'], 'a.png'), 'blob:x')).rejects.toThrow(/未收到文件|上传/)
+      url: '',
+      fileName: 'a.png',
+      mimeType: 'image/png',
+      size: 1,
+    })
+    await expect(persistMediaUrl(new File(['x'], 'a.png'), 'blob:x')).rejects.toThrow(/上传/)
   })
 
   it('throws when logged-in upload network-fails (no blob fallback)', async () => {
@@ -30,8 +33,11 @@ describe('persistMediaUrl', () => {
 
   it('returns server url on success', async () => {
     vi.mocked(uploadApi.upload).mockResolvedValue({
-      data: { code: 0, data: { url: '/uploads/u/a.png', fileName: 'a.png', mimeType: 'image/png', size: 1 } },
-    } as never)
+      url: '/uploads/u/a.png',
+      fileName: 'a.png',
+      mimeType: 'image/png',
+      size: 1,
+    })
     await expect(persistMediaUrl(new File(['x'], 'a.png'), 'blob:x')).resolves.toBe('/uploads/u/a.png')
   })
 })

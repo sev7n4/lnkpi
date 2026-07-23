@@ -14,14 +14,11 @@ export async function persistMediaUrl(
   const allowBlobFallback = opts?.allowBlobFallback ?? false
 
   try {
-    const { data } = await uploadApi.upload(file, { onProgress: opts?.onProgress })
-    if (data.code !== undefined && data.code !== 0) {
-      throw new Error(data.message || '上传失败')
+    const result = await uploadApi.upload(file, { onProgress: opts?.onProgress })
+    if (!result?.url) {
+      throw new Error('上传失败')
     }
-    if (!data.data?.url) {
-      throw new Error(data.message || '上传失败')
-    }
-    return resolveMediaUrl(data.data.url)
+    return resolveMediaUrl(result.url)
   } catch (err) {
     if (allowBlobFallback) return fallbackUrl
     throw err

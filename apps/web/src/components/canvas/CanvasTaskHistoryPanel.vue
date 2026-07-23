@@ -99,6 +99,9 @@ interface RecordMeta {
   userMessage?: string
   text?: string
   content?: string
+  errorRaw?: string
+  byokErrorRaw?: string
+  failureClass?: string
 }
 
 function statusMeta(status: string) {
@@ -160,7 +163,11 @@ function recordFailureMessage(record: GenerationRecord): string | null {
   }
   const meta = parseRecordMeta(record)
   if (meta.userMessage) return meta.userMessage
-  if (record.status === NODE_GENERATION_STATUS.fallback_pending) return '平台回退待确认'
+  const byok = meta.byokErrorRaw || meta.errorRaw
+  if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
+    return byok ? `平台回退待确认：${byok.slice(0, 240)}` : '平台回退待确认'
+  }
+  if (byok) return byok.slice(0, 240)
   return '生成失败'
 }
 
@@ -256,13 +263,18 @@ function previewDetailMedia(record: GenerationRecord) {
 function buildFallbackDiagnostic(record: GenerationRecord): GenerationDiagnostic {
   const meta = parseRecordMeta(record)
   const isFallback = record.status === NODE_GENERATION_STATUS.fallback_pending
+  const byok = meta.byokErrorRaw || meta.errorRaw || ''
   return {
     userMessage: meta.userMessage || recordFailureMessage(record) || '生成失败',
-    code: isFallback ? 'fallback_pending' : ((parseErrorCodeFromMetadata(record.metadata) as ErrorCode | undefined) || 'unknown'),
+    code: isFallback
+      ? 'fallback_pending'
+      : ((parseErrorCodeFromMetadata(record.metadata) as ErrorCode | undefined) || 'unknown'),
     taskKind: 'generation',
     taskId: record.id,
     occurredAt: record.createdAt,
-    providerSnippet: null,
+    channelId: meta.channelId ?? null,
+    model: record.model ?? meta.originalModel ?? null,
+    providerSnippet: byok ? byok.slice(0, 2048) : null,
     hint: isFallback ? '请确认是否使用平台回退继续，或取消本次生成。' : undefined,
   }
 }

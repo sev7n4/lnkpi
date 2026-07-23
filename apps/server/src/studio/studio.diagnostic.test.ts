@@ -58,6 +58,29 @@ describe('StudioService.getGenerationDiagnostic', () => {
     await expect(svc.getGenerationDiagnostic('u1', 'g1')).rejects.toBeInstanceOf(NotFoundException)
   })
 
+  it('getGenerationDiagnostic allows fallback_pending with BYOK error', async () => {
+    generationFindFirst.mockResolvedValue({
+      id: 'g-fp',
+      userId: 'u1',
+      status: 'fallback_pending',
+      model: 'user-byok',
+      createdAt: new Date('2026-07-21T00:00:00.000Z'),
+      metadata: JSON.stringify({
+        errorCode: 'fallback_pending',
+        byokErrorRaw: 'upstream 502 Bad Gateway',
+        errorRaw: 'upstream 502 Bad Gateway',
+        userMessage: 'BYOK 上游失败（upstream）：upstream 502 Bad Gateway',
+        channelId: 'ch1',
+        failedAt: '2026-07-21T01:00:00.000Z',
+      }),
+    })
+
+    const d = await svc.getGenerationDiagnostic('u1', 'g-fp')
+    expect(d.code).toBe('fallback_pending')
+    expect(d.providerSnippet).toContain('502')
+    expect(d.userMessage).toContain('BYOK')
+  })
+
   it('getGenerationDiagnostic redacts provider snippet', async () => {
     generationFindFirst.mockResolvedValue({
       id: 'g1',
