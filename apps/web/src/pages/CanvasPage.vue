@@ -82,6 +82,12 @@ import EdgeScissorsOverlay from '@/components/canvas/EdgeScissorsOverlay.vue'
 import { useCanvasViewportSettings, type CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
 import { useCanvasTheme } from '@/composables/useCanvasTheme'
 import { useCanvasKeyboard } from '@/composables/useCanvasKeyboard'
+import {
+  createCanvasUndoStack,
+  pickGenerationFieldsFromData,
+  stripGenerationFieldsFromData,
+  type CanvasSnapshot,
+} from '@/composables/useCanvasUndoStack'
 import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
@@ -188,6 +194,70 @@ const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: stri
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
 const showMembership = ref(false)
+
+function getCanvasHistorySnapshot(): CanvasSnapshot {
+  return {
+    nodes: nodes.value.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: { x: n.position.x, y: n.position.y },
+      parentNode: n.parentNode,
+      extent: n.extent,
+      expandParent: n.expandParent,
+      data: stripGenerationFieldsFromData(n.data as Record<string, unknown> | undefined),
+    })),
+    edges: edges.value.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+    })),
+  }
+}
+
+function applyCanvasHistorySnapshot(snapshot: CanvasSnapshot) {
+  const genById = new Map<string, Record<string, unknown>>()
+  for (const n of nodes.value) {
+    genById.set(n.id, pickGenerationFieldsFromData(n.data as Record<string, unknown> | undefined))
+  }
+  nodes.value = snapshot.nodes.map((n) => ({
+    ...n,
+    data: {
+      ...(n.data ?? {}),
+      ...(genById.get(n.id) ?? {}),
+    },
+  }))
+  const animated = viewportSettings.value.edgeAnimated
+  const ids = new Set(nodes.value.map((n) => n.id))
+  edges.value = snapshot.edges
+    .filter((e) => ids.has(e.source) && ids.has(e.target))
+    .map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+      sourceHandle: e.sourceHandle,
+      targetHandle: e.targetHandle,
+      animated,
+    }))
+}
+
+const canvasUndo = createCanvasUndoStack({
+  maxDepth: 50,
+  getSnapshot: getCanvasHistorySnapshot,
+  applySnapshot: applyCanvasHistorySnapshot,
+})
+
+/** User graph/param edit: commit undo checkpoint then persist. Skip for generation/poll/upload. */
+function persistUserEdit() {
+  canvasUndo.commitAfterChange()
+  void saveCanvas()
+}
+
+async function persistUserEditAsync() {
+  canvasUndo.commitAfterChange()
+  await saveCanvas()
+}
 
 const DEFAULT_DARK_GRID_COLOR = 'rgba(255,255,255,0.08)'
 const effectiveGridColor = computed(() => {
@@ -617,6 +687,7 @@ function onConnect(connection: Connection) {
     sourceHandle: connection.sourceHandle ?? undefined,
     targetHandle: connection.targetHandle ?? undefined,
   })
+  persistUserEdit()
 }
 
 function onConnectStart(params: OnConnectStartParams & { event?: MouseEvent | TouchEvent }) {
@@ -750,7 +821,7 @@ function handleBlankPickerSelect(type: DockNodeType) {
   const id = createNodeAt(type, position)
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -777,7 +848,7 @@ function handleConnectPickerSelect(type: DockNodeType) {
 
   connectSourceToNode(picker.sourceNodeId, id)
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -806,7 +877,7 @@ function handleAgentActions(actions: unknown[]) {
   nodes.value = result.nodes as unknown as EditableFlowNode[]
   edges.value = result.edges as unknown as CanvasEdge[]
   startPollingForGeneratingShots()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function resolveNewNodePosition(type: string) {
@@ -878,7 +949,7 @@ function handleDockAdd(type: DockNodeType) {
   const id = createNodeAt(type, position)
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   void focusNodeById(id)
 }
 
@@ -981,12 +1052,8 @@ function onNodeDragStop(event: NodeDragEvent) {
   const node = event.node
   if (node.parentNode) {
     nodes.value = resizeGroupToFitChildren(nodes.value as unknown as FlowNode[], node.parentNode) as EditableFlowNode[]
-    void saveCanvas()
-    return
   }
-  if (node.type === 'group') {
-    void saveCanvas()
-  }
+  persistUserEdit()
 }
 
 function onNodeClick(event: NodeMouseEvent) {
@@ -1013,7 +1080,7 @@ function handleGroupSelection() {
   void nextTick().then(() => {
     vueFlowRef.value?.updateNodeInternals?.()
   })
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleUngroupById(groupId: string) {
@@ -1022,7 +1089,7 @@ function handleUngroupById(groupId: string) {
   nodes.value = next as EditableFlowNode[]
   multiSelectedIds.value = []
   clearSelection()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleUngroupSelection() {
@@ -1054,7 +1121,7 @@ function handleDeleteSelection() {
   edges.value = nextEdges
   multiSelectedIds.value = []
   clearSelection()
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleLayoutSelection() {
@@ -1062,7 +1129,7 @@ function handleLayoutSelection() {
     nodes.value as unknown as FlowNode[],
     multiSelectedIds.value,
   ) as EditableFlowNode[]
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function findSelectedNodes() {
@@ -1132,7 +1199,7 @@ async function handleGenerateVideoFromSelection() {
   connectNodes(imageNode.id, id)
 
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   await nextTick()
   await focusNodeById(id)
   await handleNodeGenerate()
@@ -1167,7 +1234,7 @@ function onEdgeClick({ edge, event }: EdgeMouseEvent) {
 function deleteEdgeById(edgeId: string) {
   edges.value = edges.value.filter((edge) => edge.id !== edgeId)
   if (selectedEdgeId.value === edgeId) selectedEdgeId.value = null
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function renameNodeById(nodeId: string, title: string) {
@@ -1179,14 +1246,14 @@ function renameNodeById(nodeId: string, title: string) {
   } else {
     patchNodeData(nodeId, { title })
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 provide(CANVAS_NODE_RENAME_KEY, renameNodeById)
 
 function patchNodeMediaById(nodeId: string, patch: Record<string, unknown>) {
   patchNodeData(nodeId, patch)
-  void saveCanvas()
+  persistUserEdit()
 }
 
 provide(CANVAS_NODE_PATCH_KEY, patchNodeMediaById)
@@ -1246,7 +1313,7 @@ function applyLocalRefToSelectedNode(binding: LocalRefBinding): boolean {
   appendLocalRef(node.id, binding)
   const previewPatch = previewPatchForLocalRef(nodeType, binding.mediaType, binding.url ?? '')
   if (Object.keys(previewPatch).length) patchNodeData(node.id, previewPatch)
-  void saveCanvas()
+  persistUserEdit()
   return true
 }
 
@@ -1337,7 +1404,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
 
   if (!id) return
   selectOnlyNode(id)
-  void saveCanvas()
+  persistUserEdit()
   await focusNodeById(id)
 }
 
@@ -1398,7 +1465,11 @@ async function ingestMediaFile(file: File, clientPos: { x: number; y: number }) 
   let uploadingNodeId: string | null = null
   if (!wouldApplyToSelected && isMediaKind) {
     uploadingNodeId = createUploadingMediaNodeAt(file, clientPos, kind)
-    if (uploadingNodeId) selectOnlyNode(uploadingNodeId)
+    if (uploadingNodeId) {
+      selectOnlyNode(uploadingNodeId)
+      // Graph add is undoable; upload progress / url patches skip history.
+      canvasUndo.commitAfterChange()
+    }
   }
 
   if (selectedNodeId && isMediaKind) {
@@ -1589,7 +1660,7 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
     target: childId,
   })
   selectOnlyNode(childId)
-  await saveCanvas()
+  await persistUserEditAsync()
   await focusNodeById(childId)
 }
 
@@ -1639,7 +1710,7 @@ function connectSelectionToTarget(targetId: string, sourceIds = multiSelectedIds
     if (sourceId === targetId) continue
     connectNodes(sourceId, targetId)
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleMultiConnectTarget(targetId: string) {
@@ -1716,6 +1787,12 @@ useCanvasKeyboard({
   onZoomOut: () => zoomViewport(1 / 1.12),
   onPan: panViewport,
   onDelete: handleKeyboardDelete,
+  onUndo: () => {
+    if (canvasUndo.undo()) void saveCanvas()
+  },
+  onRedo: () => {
+    if (canvasUndo.redo()) void saveCanvas()
+  },
 })
 
 function patchSelectedNode(patch: Record<string, unknown>) {
@@ -1843,7 +1920,7 @@ function handleContextAction(action: string) {
       addNode(String(node.type), { ...(node.data as Record<string, unknown>) }, {
         position: { x: node.position.x + 40, y: node.position.y + 40 },
       })
-      void saveCanvas()
+      persistUserEdit()
     }
     return
   }
@@ -1858,7 +1935,7 @@ function handleContextAction(action: string) {
     }
     nodes.value = nodes.value.filter((entry) => !toRemove.has(entry.id))
     edges.value = edges.value.filter((edge) => !toRemove.has(edge.source) && !toRemove.has(edge.target))
-    void saveCanvas()
+    persistUserEdit()
     return
   }
 
@@ -1886,7 +1963,7 @@ function handleStoryboardUpdated(shots: StoryboardShot[]) {
       order: shot.order,
     }
   }
-  void saveCanvas()
+  persistUserEdit()
 }
 
 function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?: string }) {
@@ -1898,7 +1975,7 @@ function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?:
       status: 'completed',
       prompt: payload.prompt,
     }
-    void saveCanvas()
+    persistUserEdit()
   }
 }
 
@@ -1997,6 +2074,8 @@ onFallbackPendingFromPoll = onFallbackPending
 const debouncedNodePatch = useDebouncedNodePatch(
   (id, patch) => patchNodeData(id, patch),
   saveCanvas,
+  400,
+  { onHistoryCommit: () => canvasUndo.commitAfterChange() },
 )
 
 watch(
@@ -2076,6 +2155,8 @@ async function loadSession() {
     }]
     nodeCounter = 1
   }
+  canvasUndo.clear()
+  canvasUndo.commitAfterChange()
   startPollingForGeneratingShots()
   startPollingForGeneratingRecords()
   await consumeFocusNodeQuery()
