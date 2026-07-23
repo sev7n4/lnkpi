@@ -1,10 +1,10 @@
 # Agent Runtime（LangGraph）技术选型与一期设计
 
-> 状态：**设计待审阅**  
-> 日期：2026-07-23  
-> 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills；贯穿场景为**企业营销方案 → 画布资产拆解**  
-> 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData`  
-> 非范围：一期不实现自动级联出图/出视频；不引入 Temporal；不把画布全量镜像进 LangGraph State
+> 状态：**设计待审阅**（修订：一期自动出图 + Skill 目录约定）  
+> 日期：2026-07-23（修订 2026-07-24）  
+> 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
+> 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
+> 非范围：一期不实现自动出视频；不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）
 
 ---
 
@@ -16,12 +16,13 @@
 | 画布真相源 | **Nest `Session.canvasData` + 前端 Vue Flow**；LangGraph **不**持有全量画布镜像 |
 | 控制流 vs 数据流 | LangGraph 边 = **阶段/逻辑**；画布边 + RefChip = **资产依赖** |
 | 一期 HITL | **轻量澄清**（多轮口头确认）；预留 `interrupt()` + checkpointer 演进到生产级 durable |
-| Skills | 一期即要：**目录化 `SKILL.md`，可热加载**；企业营销 brainstorm/拆解规则进 Skill，不写死 system prompt |
-| 一期验收 | Skill 驱动规划 + 对话确认 + 向画布落 **prompt（方案）** 与下游骨架（text/image/video + 边 + refs/prompt） |
-| 自动生成编排 | **二期**；一期在 `split` 后 `done`，用户可手动点 Dock 生成 |
+| Skills | 一期即要：见 **§7 Skill 目录约定**（`SKILL.md` + YAML frontmatter，可热加载） |
+| 一期验收 | Skill 规划 → 确认 → 拆骨架（边/prompt/refs）→ **按拓扑自动出图**（URI 回写节点） |
+| 自动生成编排 | **一期包含自动出图**（`orchestrate_gen`）；**自动出视频留二期** |
+| 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
 | 现有 `@lnkpi/agent` | 保留为 Nest 侧兼容/工具适配层；新控制面迁到 Python Runtime，不一夜删除 |
 
-**贯穿场景（企业营销）**：用户：「帮我设计一套卫生洁具的营销方案。」→ Agent 规划并征询确认 → 画布落方案节点 → 确认后拆解为下游文/图/视骨架并连线、注入提示词与上游芯片引用。
+**贯穿场景（企业营销）**：用户：「帮我设计一套卫生洁具的营销方案。」→ Agent 规划并征询确认 → 画布落方案节点 → 确认后拆解下游文/图骨架并连线、注入提示词与芯片 → **按依赖自动文生图/图生图**，节点缩略图刷新。
 
 ---
 
@@ -30,14 +31,16 @@
 ### 1.1 目标
 
 1. 明确 Agent Runtime 技术栈，使「对话 Agent」能驱动无限画布，服务**企业营销内容生产**工作流。
-2. 一期跑通闭环：**对话 ↔ Skills ↔ LangGraph ↔ Nest Canvas Tools ↔ 画布节点**。
-3. 架构上预留：联网研究 Skill、审批门 HITL、按画布拓扑自动调用文生图/图生图/视频。
+2. 一期跑通闭环：**对话 ↔ Skills ↔ LangGraph ↔ Nest Canvas Tools ↔ 画布节点 ↔ Studio 出图**。
+3. 用户确认后，Agent 按画布边 / `depends_on` **拓扑排序**，自动调用现有文生图、图生图能力，URI 写回 Nest。
+4. 架构上预留：联网研究 Skill、审批门 HITL、自动出视频。
 
 ### 1.2 非目标（一期）
 
 - 不在 LangGraph State 中同步完整 `nodes/edges` 作为真相源。
-- 不实现生产级 durable workflow（跨天恢复、队列重试）；只留接口与演进路径。
-- 不自动级联执行全部媒体生成（与既有「手动点生成」产品决策兼容；Agent 自动跑生成属二期显式能力）。
+- 不实现生产级 durable workflow（跨天恢复、队列重试）；只留 checkpointer 插槽。
+- **不自动出视频**（可建 video 骨架节点 + prompt/refs，生成由用户 Dock 手动或二期编排）。
+- 不因上游 Ref 变更而静默级联重跑（保持既有产品默认；与 Agent 显式 `orchestrate_gen` 区分）。
 - 不引入 CrewAI/AutoGen 作为 Runtime 内核；不以 Temporal 作为一期依赖。
 - 不要求一期上线联网搜索（可作为后续 Skill/Tool）。
 
@@ -49,21 +52,21 @@
 
 ```
 Vue 画布 / Agent 对话
-        ↕ SSE（已有 canvas_action / text_delta）
+        ↕ SSE（已有 canvas_action / text_delta / 节点状态）
 NestJS（鉴权、会话、canvas 落库、Studio 生成、Agent 网关）
         ↕ HTTP/SSE（或日后队列）
 Python Agent Runtime（LangGraph）
-        ├─ Skills Loader（SKILL.md）
-        ├─ StateGraph（阶段控制）
-        └─ Tools → 回调 Nest Canvas/Generation API
+        ├─ Skills Loader（§7 目录约定）
+        ├─ StateGraph（阶段控制含 orchestrate_gen）
+        └─ Tools → 回调 Nest Canvas / Studio Generation API
 ```
 
 **选用理由（企业营销场景加固）：**
 
 - 营销方案多轮评审、日后审批门 → LangGraph checkpoint / `interrupt()` 演进清晰。
-- 资产量大（主图/详情/Banner/模特/视频）→ 全量进 Graph State 不可接受 → Nest 为画布真相源。
+- 资产量大（主图/详情/Banner/模特等）→ 全量进 Graph State 不可接受 → Nest 为画布真相源。
 - 品类/品牌规范可沉淀 → Markdown Skills 热加载比硬编码节点函数更贴企业交付。
-- 与现有 Vue 3 + NestJS monorepo 边界清晰：Python 只扩「控制面」服务。
+- 出图仍走 Nest Studio（积分、BYOK、轮询已有）→ Runtime 只编排，不另接一套生图栈。
 
 ### 2.2 明确不采用（本期）
 
@@ -81,18 +84,20 @@ Python Agent Runtime（LangGraph）
 ### 3.1 铁律
 
 1. **画布是资产与依赖的可视化文件系统**（nodes / edges / refs），真相源在 **Nest**。
-2. **LangGraph 是操作员与流水线**，State 只保留对话、阶段、Skill、焦点节点 id、拆解工作单等**控制面**数据。
-3. 读写画布一律经 **Tools → Nest**；Nest 负责持久化并向前端推送已有 **`CanvasAction`**。
+2. **LangGraph 是操作员与流水线**，State 只保留对话、阶段、Skill、焦点节点 id、拆解工作单、出图队列等**控制面**数据。
+3. 读写画布与触发生成一律经 **Tools → Nest**；Nest 负责持久化、计费/BYOK，并向前端推送 **`CanvasAction`** / 节点状态。
 4. 「芯片」复用现有 **RefChip / `resolveNodeRefs` / `refOrder`**，不在 Graph State 另造一套长文本 `prompt_library` 拷贝。
+5. Runtime **不**持有图片二进制；只传 `node_id`，结果以 **URL** 写回节点。
 
 ### 3.2 与既有规格的关系
 
 | 既有能力 | Agent Runtime 如何用 |
 | --- | --- |
-| RefChip 数据贯通 | `split` 时建边 + `attach_refs`；生成时仍实时解析上游 |
+| RefChip 数据贯通 | `split` 时建边 + `attach_refs`；出图时 Nest 按既有规则解析上游 |
 | `prompt` 节点 | **方案正文载体**（短需求 + 长文 `content`）；对外可显示为 T1 |
-| Dock 手动生成 | 一期结束后用户仍可点生成；二期 Agent 调同一套生成 API |
-| `@lnkpi/agent` tools | Nest 侧适配；逐步对齐 `upsert_prompt_node` 等新工具契约 |
+| Dock 手动生成 | 仍可用；Agent `orchestrate_gen` 调用**同一套** Studio 生成入口 |
+| 不静默级联 | Ref 变更不自动重跑；仅 `confirm` 后的显式编排会出图 |
+| `@lnkpi/agent` tools | Nest 侧适配；对齐新工具契约 |
 
 ---
 
@@ -101,26 +106,30 @@ Python Agent Runtime（LangGraph）
 ```python
 class AgentRuntimeState(TypedDict):
     # 对话
-    messages: list  # 对用户可见的规划摘要、澄清、确认话术
+    messages: list  # 对用户可见的规划摘要、澄清、确认、出图进度话术
 
     # 控制
     phase: Literal[
-        "intake",         # 理解意图、选择 Skill
-        "plan",          # 生成企业营销方案
-        "await_confirm", # 已输出待确认；等待下一轮用户消息
-        "split",         # 拆节点 + 连线 + 注入 prompt/refs
-        "done",          # 一期结束
+        "intake",          # 理解意图、选择 Skill
+        "plan",            # 生成企业营销方案
+        "await_confirm",   # 已输出待确认；等待下一轮用户消息
+        "split",           # 拆节点 + 连线 + 注入 prompt/refs
+        "orchestrate_gen", # 按拓扑自动出图
+        "done",
         "error",
     ]
     skill_id: str | None
-    thread_id: str          # 日后 checkpoint 键；可与 agent_run_id 对齐
-    session_id: str         # Nest 会话；所有 canvas tool 必带
+    thread_id: str
+    session_id: str
 
     # 工作记忆（轻量）
     plan_summary: str
     plan_node_id: str | None
     focus_node_ids: list[str]
     split_manifest: list[SplitManifestItem]
+    gen_queue: list[str]       # 待出图 node_id 拓扑序（仅 image）
+    gen_completed: list[str]   # 已成功出图的 node_id
+    gen_failed: list[dict]     # {node_id, error}；允许部分失败后 done
     last_error: str | None
 
     # 一期轻量人机
@@ -136,18 +145,18 @@ class AgentRuntimeState(TypedDict):
 | `title` | 节点标题 |
 | `target_type` | `text` \| `image` \| `video` |
 | `source_section` | 对应方案中的章节名 |
-| `gen_mode` | `t2i` \| `i2i` \| `v_flf` \| `v_ref` 等（二期生成用） |
-| `depends_on` | 其他 `key` 列表（指导建边与日后拓扑） |
+| `gen_mode` | `t2i` \| `i2i`（一期出图）；`v_*` 仅占位，一期不跑 |
+| `auto_generate` | `bool`；一期默认：`image=true`，`text/video=false` |
+| `depends_on` | 其他 `key` 列表（建边 + 拓扑） |
 | `prompt_hint` | 注入下游的提示词草稿 |
 | `node_id` | Nest 创建成功后回填 |
 
-**禁止**在 State 中长期存放：方案全文副本、Base64 媒体、完整 edges 列表。方案正文以 `plan_node_id` 指向画布节点为准；需要时 `get_node`。
+**禁止**在 State 中长期存放：方案全文副本、Base64 媒体、完整 edges 列表。
 
-### 4.2 二期 State 扩展（仅预留，本期不实现）
+### 4.2 二期 State 扩展（预留）
 
-- checkpointer（Sqlite → Postgres）
-- `interrupt()` 载荷替代 `await_confirm` 轮次猜测
-- `gen_queue: list[str]`（待生成 `node_id` 拓扑序）
+- 持久 checkpointer + `interrupt()` 载荷
+- `gen_queue` 扩展含 video；失败重试策略字段
 
 ---
 
@@ -155,19 +164,28 @@ class AgentRuntimeState(TypedDict):
 
 ```text
 intake → plan → await_confirm ─┬─ revise → plan
-                               └─ confirm → split → done
+                               └─ confirm → split → orchestrate_gen → done
 ```
 
 | Graph 节点 | 职责 | 主要副作用 |
 | --- | --- | --- |
 | `intake` | 识别企业营销意图；加载 Skill；必要时追问品类/渠道/投放位 | 更新 `skill_id` / `messages` |
-| `plan` | 按 Skill 生成方案 Markdown；写摘要到对话 | `upsert_prompt_node` → 得到 `plan_node_id` |
-| `await_confirm` | 征询确认/修改；`awaiting_user=True` | 无画布写（或仅更新状态文案） |
-| `split` | `get_node(plan_node_id)`；生成 `split_manifest`；批量建下游 | `add_*` / `connect_nodes` / `set_node_prompt` / `attach_refs` |
-| `done` | 一期收尾话术 | `phase=done` |
+| `plan` | 按 Skill 生成方案 Markdown；写摘要到对话 | `upsert_prompt_node` → `plan_node_id` |
+| `await_confirm` | 征询确认/修改；`awaiting_user=True` | 无强制画布写 |
+| `split` | 读方案；写 `split_manifest`；批量建下游 | 建节点/边/prompt/refs |
+| `orchestrate_gen` | 从 manifest + 边得到 `gen_queue`；逐个/有限并发出图 | `run_image_generation`；进度写入对话 |
+| `done` | 汇总成功/失败；提示可手动补跑或改 prompt | `phase=done` |
 
-**一期不做**独立 `HumanGate` 空节点；确认靠下一轮用户消息解析为 `confirm` | `revise`。  
-**二期**可将 `await_confirm` 替换为节点内 `interrupt({plan_node_id, plan_summary})`。
+**出图规则（一期）：**
+
+1. 仅处理 `target_type=image` 且 `auto_generate=true` 的项。
+2. 拓扑：`depends_on` 映射为边；依赖未成功出图则跳过下游并记入 `gen_failed`（可配置），不无限等待。
+3. `t2i`：依赖文本/方案 refs；`i2i`：上游 image 节点须已有 `url`。
+4. 单节点超时/失败不阻断其它无依赖任务；对话中报告部分失败。
+5. 并发上限建议 ≤3（可配置），避免打爆 Provider/积分。
+
+**一期不做**独立 `HumanGate` 空节点。  
+**二期**可将 `await_confirm` 换成 `interrupt()`；并为 video 扩展同一 `orchestrate_gen`。
 
 ---
 
@@ -177,60 +195,168 @@ intake → plan → await_confirm ─┬─ revise → plan
 
 | 步骤 | 用户 / Agent | Graph | State 要点 | Nest / 画布 |
 | --- | --- | --- | --- | --- |
-| 1 | 「帮我设计一套卫生洁具的营销方案。」 | `intake` → `plan` | `skill_id=enterprise-marketing-campaign`（示例） | — |
-| 2 | Agent 输出方案并请确认 | `plan` → `await_confirm` | `plan_summary`；`plan_node_id`；`awaiting_user=True` | 新建/更新 **prompt 节点**（方案全文，UI 可标 T1） |
+| 1 | 「帮我设计一套卫生洁具的营销方案。」 | `intake` → `plan` | `skill_id=enterprise-marketing-campaign` | — |
+| 2 | Agent 输出方案并请确认 | `plan` → `await_confirm` | `plan_summary`；`plan_node_id`；`awaiting_user=True` | 新建/更新 **prompt 节点**（T1） |
 | 3a | 「改成更偏天猫详情页」 | → `plan` | `user_decision=revise` | **更新同一** `plan_node_id` |
-| 3b | 「确认，按这个拆」 | → `split` | `user_decision=confirm` | — |
-| 4 | 拆解资产骨架 | `split` → `done` | `split_manifest` 回填各 `node_id` | 下游 text/image/video + **edges** + **prompt** + **refs** |
-| 5（二期） | 自动生成 | `orchestrate_gen` | 拓扑队列 | 调 Studio；URI 写回节点 |
+| 3b | 「确认，按这个拆并出图」 | → `split` | `user_decision=confirm` | — |
+| 4 | 拆解资产骨架 | `split` | `split_manifest` 回填 `node_id` | 下游 text/image（+可选 video 骨架）+ edges + prompt + refs |
+| 5 | 按拓扑自动出图 | `orchestrate_gen` | `gen_queue` / `gen_completed` / `gen_failed` | Studio 文生图/图生图；节点 `url` + 状态 SSE/轮询 |
+| 6 | 汇报结果 | `done` | `phase=done` | 用户可手动重跑失败节点或改 prompt |
 
 ### 6.2 建议的一期 `split_manifest` 键（洁具企业营销示例）
 
-| key | target_type | depends_on | 说明 |
-| --- | --- | --- | --- |
-| `copy_main` | text | [] | 主文案/卖点（可选） |
-| `white_bg` | image | [] | 白底图，文生图 |
-| `hero_main` | image | [`white_bg`] | 主图，可图生图 |
-| `scene` | image | [] | 场景图 |
-| `banner` | image | [] | Banner |
-| `brand` | image | [] | 品牌图（可提示上传 logo 到 localRefs） |
-| `model` | image | [] | 模特/人景 |
-| `detail_cut` | image | [`white_bg`] | 细节/剖面 |
-| `show_video` | video | [`hero_main`] | 展示视频（首尾帧/参考，二期） |
+| key | target_type | auto_generate | depends_on | gen_mode | 说明 |
+| --- | --- | --- | --- | --- | --- |
+| `copy_main` | text | false | [] | — | 主文案（可选，不出图） |
+| `white_bg` | image | **true** | [] | t2i | 白底图 |
+| `hero_main` | image | **true** | [`white_bg`] | i2i | 主图 |
+| `scene` | image | **true** | [] | t2i | 场景图 |
+| `banner` | image | **true** | [] | t2i | Banner |
+| `brand` | image | **true** | [] | t2i | 品牌图（可提示上传 logo） |
+| `model` | image | **true** | [] | t2i | 模特/人景 |
+| `detail_cut` | image | **true** | [`white_bg`] | i2i | 细节/剖面 |
+| `show_video` | video | **false** | [`hero_main`] | v_ref | 一期只建骨架，不出片 |
 
-具体键集由 **Skill** 定义，不写死在 Graph 节点代码里；上表为验收用默认模板。
+键集与默认 `auto_generate` 由 Skill 的 `manifest.yaml` 定义。
 
 ### 6.3 画布边与芯片
 
-- 边：`plan_node` → 各下游；以及 `white_bg` → `hero_main` 等 `depends_on` 映射边。
-- 芯片：下游 `refOrder` 引用上游节点；**不**把上游全文复制进下游 `data`。
-- 若需品牌 logo：在对应节点提示用户上传，写入既有 `localRefs`。
+- 边：`plan_node` → 各下游；`depends_on` → 数据边（如 `white_bg` → `hero_main`）。
+- 芯片：下游 `refOrder` 引用上游；出图时 Nest `resolveNodeRefs`。
+- Logo：对话提示上传到 `brand` 等节点的 `localRefs`；若缺失仍可 t2i 降级，并在话术中说明。
 
 ---
 
-## 7. Skills 协议（一期）
+## 7. Skills 目录约定（一期规范）
 
-### 7.1 布局（建议）
+### 7.1 根路径与发现
+
+| 项 | 约定 |
+| --- | --- |
+| 根目录 | `services/agent-runtime/skills/`（可用环境变量 `LNKPI_SKILLS_DIR` 覆盖） |
+| 发现规则 | 根下**一层子目录**，且内含 `SKILL.md` 即为一个 Skill |
+| skill_id | **目录名**；须 `^[a-z0-9]+(-[a-z0-9]+)*$`，≤64 字符 |
+| 热加载 | 启动全量扫描；运行中按 `SKILL.md` mtime 变更重载该 Skill（失败则保留上一份并打日志） |
+| 禁用 | 目录名以 `_` 开头，或 frontmatter `enabled: false` → 不参与路由 |
+
+### 7.2 单 Skill 目录布局
 
 ```text
 services/agent-runtime/skills/
   enterprise-marketing-campaign/
-    SKILL.md          # 名称、描述、何时触发、输出结构、拆解键模板
-  ...
+    SKILL.md              # 必需：frontmatter + 正文指令
+    manifest.yaml         # 必需（营销类）：默认 split_manifest 模板
+    references/           # 可选：长文规范，按需载入，勿默认塞进每轮
+      brand-tone.md
+      shot-list.md
+    examples/             # 可选：少样本
+      sanitary-ware.md
+    _draft/               # 可选：本地草稿，加载器忽略
 ```
 
-### 7.2 `SKILL.md` 最低字段（约定）
+**规则：**
 
-- 标题与一句话描述（供 `intake` 路由）
-- 适用意图（企业营销方案、品类不限）
-- 规划输出结构（章节：目标人群、卖点、渠道、视觉资产清单…）
-- `split_manifest` 模板（或生成该模板的指令）
-- 禁止事项（如一期不直接调用生成 API）
+- 除 `SKILL.md` / `manifest.yaml` 外，其它文件**默认不注入**上下文；仅当 frontmatter `includes` 列出相对路径时才加载。
+- 单次注入总 token 预算由 Runtime 配置（超出截断并告警）。
 
-### 7.3 加载
+### 7.3 `SKILL.md` 格式
 
-- 进程启动扫描 + 可选 mtime 热加载。
-- `intake` / `plan` 将匹配 Skill 正文注入 LLM 上下文；**不**把所有 Skill 全文塞进每轮。
+YAML frontmatter + Markdown 正文：
+
+```markdown
+---
+name: enterprise-marketing-campaign
+description: >-
+  企业商品营销方案规划与画布资产拆解。在用户要求营销方案、投放物料、
+  主图/详情/Banner 等视觉资产时使用。
+version: 1
+enabled: true
+triggers:
+  - 营销方案
+  - 主图
+  - 详情页
+  - banner
+  - 投放物料
+phases: [intake, plan, split, orchestrate_gen]
+includes: []
+max_downstream: 12
+---
+
+# 企业营销方案
+
+## 何时使用
+…
+
+## 规划输出结构
+（章节：目标人群、卖点、渠道、视觉资产清单…）
+
+## 拆解与出图
+- 遵守同目录 `manifest.yaml`
+- 确认前只写方案节点；确认后 split + 自动出图
+- 不要在 plan 阶段调用 run_image_generation
+
+## 禁止
+- 一期不要自动出视频
+- 不要把上游全文复制进下游节点 data
+```
+
+| Frontmatter 字段 | 必需 | 说明 |
+| --- | --- | --- |
+| `name` | 是 | 须与目录名 / skill_id 一致 |
+| `description` | 是 | ≤1024 字；供 `intake` 路由 |
+| `version` | 是 | 整数；便于缓存失效 |
+| `enabled` | 否 | 默认 `true` |
+| `triggers` | 否 | 关键词辅助路由 |
+| `phases` | 否 | 声明参与的阶段 |
+| `includes` | 否 | 额外 md 相对路径列表 |
+| `max_downstream` | 否 | 覆盖全局默认下游上限 |
+
+### 7.4 `manifest.yaml` 格式（营销拆解）
+
+```yaml
+schema_version: 1
+defaults:
+  auto_generate_image: true
+  auto_generate_video: false
+items:
+  - key: white_bg
+    title: 白底图
+    target_type: image
+    source_section: 视觉资产/白底图
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "卫浴洁具产品白底图，居中，商业摄影…"
+  - key: hero_main
+    title: 主图
+    target_type: image
+    source_section: 视觉资产/主图
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [white_bg]
+    prompt_hint_template: "基于白底主产品，电商主图…"
+  - key: show_video
+    title: 产品展示视频
+    target_type: video
+    gen_mode: v_ref
+    auto_generate: false
+    depends_on: [hero_main]
+    prompt_hint_template: "产品旋转展示…"
+```
+
+`split`：以 `manifest.yaml` 为骨架，可用 LLM 按方案填充/裁剪 `prompt_hint`，但不得突破 `max_downstream`。
+
+### 7.5 路由与加载
+
+1. `intake`：用各 Skill 的 `name`+`description`（+可选 triggers）选中一个 `skill_id`。
+2. 加载：`SKILL.md` 正文 + `includes` + 解析后的 `manifest.yaml` 摘要。
+3. **禁止**把 `skills/` 下全部 Skill 全文塞进同一轮上下文。
+
+### 7.6 一期内置 Skill
+
+| skill_id | 用途 |
+| --- | --- |
+| `enterprise-marketing-campaign` | 验收用默认企业营销 Skill（可含洁具 examples） |
 
 ---
 
@@ -238,21 +364,20 @@ services/agent-runtime/skills/
 
 | Tool | 方向 | 说明 |
 | --- | --- | --- |
-| `load_skill` | Runtime 本地 | 读 Skill 文件 |
-| `upsert_prompt_node` | → Nest | 创建/更新方案 prompt 节点；返回 `node_id` |
-| `get_node` | → Nest | 按 id 读节点 data（拆解用） |
-| `get_canvas_summary` | → Nest | 可选：节点 id/类型/标题列表，禁止默认拉全量 content |
-| `add_nodes_batch` | → Nest | 按 manifest 建 text/image/video 骨架 |
+| `load_skill` | Runtime 本地 | 按 §7 读 Skill + manifest |
+| `upsert_prompt_node` | → Nest | 创建/更新方案 prompt 节点 |
+| `get_node` | → Nest | 读节点 data（含 image `url` 供 i2i） |
+| `get_canvas_summary` | → Nest | id/类型/标题/状态；禁止默认拉全量 content |
+| `add_nodes_batch` | → Nest | 按 manifest 建骨架 |
 | `connect_nodes` | → Nest | 建数据边 |
 | `set_node_prompt` | → Nest | 写下游 `prompt` |
-| `attach_refs` | → Nest | 设置 `refOrder` / 保证边存在 |
+| `attach_refs` | → Nest | `refOrder` / 边 |
+| `run_image_generation` | → Nest | 对指定 `node_id` 触发与 Dock 等价的文生图/图生图 |
+| `get_generation_status` | → Nest | 查询节点生成状态 / 最终 `url` |
 
-Nest 在工具成功后：
+Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `canvas_action` 与节点状态。
 
-1. 更新 `Session.canvasData`
-2. 经现有 Agent SSE 通道推送 `canvas_action`（或等价事件）供前端合并
-
-**鉴权**：Runtime → Nest 使用服务间凭证 + `session_id` 归属校验；用户 JWT 仍由 Nest 在入口对话 API 校验。
+**鉴权**：Runtime → Nest 服务间凭证 + `session_id` 归属；用户 JWT 在 Nest 对话入口校验。出图走既有积分/BYOK。
 
 ---
 
@@ -260,21 +385,21 @@ Nest 在工具成功后：
 
 | 组件 | 建议 |
 | --- | --- |
-| `services/agent-runtime` | FastAPI（或同等）承载 LangGraph；流式事件回 Nest |
-| Nest `AgentGateway` | 现有 `/api/agent/chat/...` 改为转发 Runtime，并合并 canvas 事件 |
-| 配置 | 模型 Key、Runtime URL、Skills 路径 |
-| 本地开发 | docker-compose 增加 runtime 服务；或本机 uvicorn |
+| `services/agent-runtime` | FastAPI（或同等）+ LangGraph；挂载 `skills/` |
+| Nest `AgentGateway` | 转发 Runtime，合并 canvas / 生成状态事件 |
+| 配置 | 模型 Key、Runtime URL、`LNKPI_SKILLS_DIR`、出图并发上限 |
+| 本地开发 | docker-compose 增加 runtime；Skills 目录挂载便于热更 |
 
-一期 checkpointer：`MemorySaver` 或 Sqlite 即可；**编译 Graph 时保留 checkpointer 插槽**，便于二期 Postgres。
+一期 checkpointer：`MemorySaver` 或 Sqlite；**保留插槽**便于二期 Postgres。
 
 ---
 
-## 10. 二期演进（明确路径，不在一期交付）
+## 10. 二期演进（不在一期交付）
 
-1. **HITL**：`interrupt()` + 持久 checkpointer；前端「确认方案」按钮 → `Command(resume=…)`。
-2. **`orchestrate_gen`**：读 Nest 边做拓扑排序；按节点调用现有 Studio 文生图/图生图/视频；只传 `node_id` 与 URI。
-3. **Research Skill**：联网搜索/竞品洞察，结果写入方案节点或独立 research 文本节点。
-4. **自动级联策略**：仅在用户/Agent 显式「执行工作流」时启用，避免与历史「不自动级联」产品默认冲突。
+1. **HITL**：`interrupt()` + 持久 checkpointer；「确认方案」按钮 → `Command(resume=…)`。
+2. **自动出视频**：扩展 `orchestrate_gen` 支持 `v_flf` / `v_ref`。
+3. **Research Skill**：联网搜索/竞品洞察 → 文本节点或写入方案。
+4. **出图失败重试 / 部分重跑**：用户「只重跑失败节点」→ 重建 `gen_queue` 子集。
 
 ---
 
@@ -282,29 +407,34 @@ Nest 在工具成功后：
 
 | 风险 | 缓解 |
 | --- | --- |
-| 双写画布 | 禁止 Runtime 本地 canvas 镜像；只信 Nest |
-| 用户拖拽与 Agent 并发 | Nest 串行化同 session 写；冲突时以版本号/时间戳拒绝或合并策略（一期可会话级锁） |
-| Skill 质量不稳 | 默认内置 `enterprise-marketing-campaign` 验收 Skill + 契约测试 |
-| 拆解过多节点 | Skill 限制一期最大下游数（如 ≤12）；超出则对话确认子集 |
-| Python 运维成本 | 单一 runtime 镜像；接口窄（对话 + tools） |
+| 双写画布 | Runtime 不镜像全量 canvas |
+| 出图耗时长阻塞对话 | Nest 异步任务 + 状态事件；Runtime 等待带超时；对话流式报进度 |
+| 积分/BYOK 中断 | 失败写入 `gen_failed`；话术引导处理后重跑 |
+| i2i 上游无图 | 拓扑保证；上游失败则跳过下游并记录 |
+| Skill 质量不稳 | 内置验收 Skill + manifest 契约测试 |
+| 拆解过多 | `max_downstream`（默认 12） |
+| 与手动生成竞态 | 同 `node_id` Nest 侧生成锁 |
 
 ---
 
 ## 12. 一期验收标准
 
-1. 用户输入企业营销类需求（洁具案例），Agent 加载营销 Skill 并输出可评审方案文本。
-2. 画布出现方案 **prompt 节点**，内容与对话一致（或对话为摘要、节点为全文）。
-3. 用户确认后，自动出现至少一类下游骨架（image 或 text）并与方案节点**连线**，下游含 **prompt** 与**上游 ref 芯片**。
-4. LangGraph State 中无完整画布 JSON；通过 Nest 可查询到上述节点。
-5. 修改方案走 `revise` 时更新同一 `plan_node_id`，不产生无关联的重复方案节点。
+1. 企业营销需求（洁具案例）→ 加载 `enterprise-marketing-campaign` → 输出可评审方案。
+2. 画布出现方案 **prompt 节点**（对话可为摘要）。
+3. 用户确认后：下游 **image 骨架** + **连线** + **prompt** + **上游 ref 芯片**。
+4. **自动出图**：至少 **2** 张图成功回写 `url`（建议含 1×t2i + 1×依赖它的 i2i，如白底→主图），前端可见。
+5. 部分失败时会话有明确失败列表，其它成功节点不受影响。
+6. LangGraph State 无完整画布 JSON、无 Base64。
+7. `revise` 更新同一 `plan_node_id`；Skills 目录符合 §7，缺 `SKILL.md` 的目录不被加载。
 
 ---
 
 ## 13. 开放问题（实现计划阶段再拍）
 
-1. Runtime 与 Nest 的事件桥：Nest 聚合 SSE vs Runtime 直推前端（倾向 Nest 聚合，复用鉴权）。
+1. Runtime↔Nest 事件桥：Nest 聚合 SSE vs Runtime 直推（倾向 Nest 聚合）。
 2. `thread_id` 与 `session_id` / `agent_run_id` 是否 1:1。
-3. 旧 `@lnkpi/agent` RuleBased 降级路径是否在 Runtime 不可用时回退。
+3. `run_image_generation` 同步等待上限 vs 纯轮询；与现有 `useGenerationPolling` 对齐方式。
+4. 旧 `@lnkpi/agent` RuleBased 在 Runtime 不可用时是否回退。
 
 ---
 
@@ -312,5 +442,5 @@ Nest 在工具成功后：
 
 | 日期 | 说明 |
 | --- | --- |
-| 2026-07-23 | 初稿：方案一拍板 + Nest 真相源 + State/拓扑/Skills/洁具企业营销贯穿场景 |
-`)
+| 2026-07-23 | 初稿：方案一 + Nest 真相源 + State/拓扑/Skills 草案 |
+| 2026-07-24 | 一期纳入 `orchestrate_gen` 自动出图；视频仍二期；§7 定为 Skill 目录/frontmatter/`manifest.yaml` 正式约定 |
