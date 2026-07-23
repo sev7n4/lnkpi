@@ -31,6 +31,14 @@ const openMenuId = ref<string | null>(null)
 const menuRefs = new Map<string, HTMLElement>()
 const greeting = getGreeting()
 
+function handlePublishLocateNode(payload: { sessionId: string; nodeId: string }) {
+  showPublish.value = false
+  void router.push({
+    name: 'canvas',
+    params: { sessionId: payload.sessionId },
+    query: { focusNode: payload.nodeId },
+  })
+}
 function getGreeting() {
   const hour = new Date().getHours()
   if (hour < 12) return '上午好'
@@ -409,6 +417,7 @@ watch(() => auth.isLoggedIn, () => {
       :sessions="userSessions"
       :default-title="prompt || userSessions[0]?.title"
       @published="fetchWorks"
+      @locate-node="handlePublishLocateNode"
     />
   </div>
 </template>

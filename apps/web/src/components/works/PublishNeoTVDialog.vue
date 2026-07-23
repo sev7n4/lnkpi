@@ -3,6 +3,9 @@ import { computed, ref, watch } from 'vue'
 import { WORK_CATEGORIES } from '@lnkpi/shared'
 import { api } from '@/services/api'
 import { worksApi } from '@/services/works-api'
+import { resolveMediaUrl } from '@/services/api-base'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -14,6 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [v: boolean]
   published: []
+  'locate-node': [payload: { sessionId: string; nodeId: string }]
 }>()
 
 interface PrimaryNodeOption {
@@ -22,6 +26,8 @@ interface PrimaryNodeOption {
   label: string
   preview: string
 }
+
+const editor = useCanvasEditorStore()
 
 const visible = computed({
   get: () => props.modelValue,
@@ -58,7 +64,7 @@ async function loadPrimaryNodes(sid: string) {
         id: n.id,
         type: n.type as 'image' | 'video',
         label: `${n.id} · ${n.type === 'video' ? '视频' : '图片'}`,
-        preview: n.data?.coverUrl || n.data?.url || '',
+        preview: resolveMediaUrl(n.data?.coverUrl || n.data?.url || ''),
       }))
     if (!primaryNodes.value.some((n) => n.id === primaryNodeId.value)) {
       primaryNodeId.value = primaryNodes.value[0]?.id ?? ''
@@ -88,6 +94,25 @@ watch(
 watch(activeSessionId, (sid) => {
   if (props.modelValue) void loadPrimaryNodes(sid)
 })
+
+function previewNode(node: PrimaryNodeOption, e: Event) {
+  e.preventDefault()
+  e.stopPropagation()
+  if (!node.preview) return
+  editor.openMediaPreview({
+    url: node.preview,
+    kind: node.type === 'video' ? 'video' : 'image',
+    label: node.label,
+  })
+}
+
+function locateNode(node: PrimaryNodeOption, e: Event) {
+  e.preventDefault()
+  e.stopPropagation()
+  const sid = activeSessionId.value
+  if (!sid) return
+  emit('locate-node', { sessionId: sid, nodeId: node.id })
+}
 
 async function handlePublish() {
   const sid = activeSessionId.value
@@ -162,24 +187,42 @@ async function handlePublish() {
             v-for="node in primaryNodes"
             :key="node.id"
             :value="node.id"
-            class="!mr-0 !h-auto w-full rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2"
+            class="primary-node-radio !mr-0 !h-auto w-full rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2"
           >
-            <div class="flex items-center gap-3">
+            <div class="flex w-full min-w-0 items-center gap-3">
               <video
                 v-if="node.type === 'video'"
                 :src="node.preview"
                 muted
                 playsinline
                 preload="metadata"
-                class="h-10 w-16 rounded object-cover bg-black/40"
+                class="h-10 w-16 shrink-0 rounded object-cover bg-black/40"
               />
               <img
                 v-else
                 :src="node.preview"
                 :alt="node.label"
-                class="h-10 w-16 rounded object-cover"
+                class="h-10 w-16 shrink-0 rounded object-cover"
               />
-              <span class="text-sm">{{ node.label }}</span>
+              <span class="min-w-0 flex-1 truncate text-sm">{{ node.label }}</span>
+              <div class="flex shrink-0 items-center gap-1" @click.stop>
+                <button
+                  type="button"
+                  class="rounded-md px-2 py-1 text-[11px] text-white/55 transition hover:bg-white/10 hover:text-white"
+                  title="预览"
+                  @click="previewNode(node, $event)"
+                >
+                  预览
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md px-2 py-1 text-[11px] text-white/55 transition hover:bg-white/10 hover:text-white"
+                  title="定位到画布"
+                  @click="locateNode(node, $event)"
+                >
+                  定位
+                </button>
+              </div>
             </div>
           </el-radio>
         </el-radio-group>
@@ -191,6 +234,7 @@ async function handlePublish() {
       </div>
     </form>
   </el-dialog>
+  <MediaPreviewOverlay />
 </template>
 
 <style>
@@ -200,5 +244,9 @@ async function handlePublish() {
 }
 .publish-dialog .el-dialog__title {
   color: #fff;
+}
+.publish-dialog .primary-node-radio .el-radio__label {
+  width: 100%;
+  padding-left: 8px;
 }
 </style>
