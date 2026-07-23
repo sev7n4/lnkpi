@@ -16,7 +16,7 @@
 | 画布真相源 | **Nest `Session.canvasData` + 前端 Vue Flow**；LangGraph **不**持有全量画布镜像 |
 | 控制流 vs 数据流 | LangGraph 边 = **阶段/逻辑**；画布边 + RefChip = **资产依赖** |
 | 一期 HITL | **轻量澄清**（多轮口头确认）；预留 `interrupt()` + checkpointer 演进到生产级 durable |
-| Skills | 一期即要：见 **§7 Skill 目录约定**（`SKILL.md` + YAML frontmatter，可热加载） |
+| Skills | 一期即要：见 **§7**，目录与 `SKILL.md` **对齐 [Agent Skills](https://agentskills.io/specification) 开放标准**，可兼容 skills 市场生态；lnkpi 扩展仅放 `metadata` / `assets/` |
 | 一期验收 | Skill 规划 → 确认 → 拆骨架（边/prompt/refs）→ **按拓扑自动出图**（URI 回写节点） |
 | 自动生成编排 | **一期包含自动出图**（`orchestrate_gen`）；**自动出视频留二期** |
 | 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
@@ -56,7 +56,7 @@ Vue 画布 / Agent 对话
 NestJS（鉴权、会话、canvas 落库、Studio 生成、Agent 网关）
         ↕ HTTP/SSE（或日后队列）
 Python Agent Runtime（LangGraph）
-        ├─ Skills Loader（§7 目录约定）
+        ├─ Skills Loader（agentskills.io 兼容）
         ├─ StateGraph（阶段控制含 orchestrate_gen）
         └─ Tools → 回调 Nest Canvas / Studio Generation API
 ```
@@ -217,7 +217,7 @@ intake → plan → await_confirm ─┬─ revise → plan
 | `detail_cut` | image | **true** | [`white_bg`] | i2i | 细节/剖面 |
 | `show_video` | video | **false** | [`hero_main`] | v_ref | 一期只建骨架，不出片 |
 
-键集与默认 `auto_generate` 由 Skill 的 `manifest.yaml` 定义。
+键集与默认 `auto_generate` 由 Skill 的 `assets/canvas-manifest.yaml`（lnkpi 扩展资源）定义。
 
 ### 6.3 画布边与芯片
 
@@ -227,93 +227,117 @@ intake → plan → await_confirm ─┬─ revise → plan
 
 ---
 
-## 7. Skills 目录约定（一期规范）
+## 7. Skills 目录约定（对齐 Agent Skills 开放标准）
 
-### 7.1 根路径与发现
+> **规范源：** [agentskills.io/specification](https://agentskills.io/specification)（Anthropic 发布的 Agent Skills 开放标准；Cursor / Claude Code / Codex 等共用同一 `SKILL.md` 包格式）。  
+> **原则：** 包结构与 frontmatter **只使用标准字段**；lnkpi 画布/出图专用配置放在 `metadata` 与 `assets/`，保证可从 skills 市场安装、也可对外分发。
+
+### 7.1 标准包结构（与市场生态一致）
+
+每个 Skill 是一个目录，**至少**包含 `SKILL.md`：
+
+```text
+enterprise-marketing-campaign/
+  SKILL.md                 # 必需：YAML frontmatter + Markdown 指令
+  scripts/                 # 可选：可执行脚本（按需调用，源码默认不进上下文）
+  references/              # 可选：长文档，按需加载
+    brand-tone.md
+    shot-list.md
+  assets/                  # 可选：模板与结构化资源（市场包常用）
+    canvas-manifest.yaml   # lnkpi 扩展：画布拆解/出图工作单（非标准必需文件）
+    examples/
+      sanitary-ware.md
+```
+
+| 路径 | 标准角色 | lnkpi 用法 |
+| --- | --- | --- |
+| `SKILL.md` | 必需 | 规划/拆解/出图流程指令 |
+| `scripts/` | 可选 | 校验 manifest、后处理等（一期可空） |
+| `references/` | 可选 | 品牌语气、镜头规范等，progressive disclosure |
+| `assets/` | 可选 | 模板与数据；**画布 manifest 放这里** |
+
+**禁止**把 lnkpi 专有必需文件放在包根（例如根级 `manifest.yaml`），以免与市场包约定冲突、安装器误判。
+
+### 7.2 安装根目录与发现
 
 | 项 | 约定 |
 | --- | --- |
-| 根目录 | `services/agent-runtime/skills/`（可用环境变量 `LNKPI_SKILLS_DIR` 覆盖） |
-| 发现规则 | 根下**一层子目录**，且内含 `SKILL.md` 即为一个 Skill |
-| skill_id | **目录名**；须 `^[a-z0-9]+(-[a-z0-9]+)*$`，≤64 字符 |
-| 热加载 | 启动全量扫描；运行中按 `SKILL.md` mtime 变更重载该 Skill（失败则保留上一份并打日志） |
-| 禁用 | 目录名以 `_` 开头，或 frontmatter `enabled: false` → 不参与路由 |
+| 运行时技能根 | `services/agent-runtime/skills/`（`LNKPI_SKILLS_DIR` 可覆盖） |
+| 发现规则 | 根下**一层子目录**且含 `SKILL.md` → 一个 Skill（与标准一致） |
+| 目录名 = `name` | 须匹配 frontmatter `name`；`^[a-z0-9]+(-[a-z0-9]+)*$`，≤64，首尾非 `-` |
+| 市场安装 | 支持将 agentskills / skills.sh 等生态的 Skill 包**解压/链接**到技能根；无 `assets/canvas-manifest.yaml` 的通用 Skill 仍可作纯指令 Skill 使用 |
+| 热加载 | 扫描 `SKILL.md` mtime；重载失败保留上一份 |
+| 本地草稿 | 目录名以 `_` 开头 → 发现器跳过（加载器约定，非标准字段） |
 
-### 7.2 单 Skill 目录布局
+### 7.3 `SKILL.md` frontmatter（仅标准字段）
 
-```text
-services/agent-runtime/skills/
-  enterprise-marketing-campaign/
-    SKILL.md              # 必需：frontmatter + 正文指令
-    manifest.yaml         # 必需（营销类）：默认 split_manifest 模板
-    references/           # 可选：长文规范，按需载入，勿默认塞进每轮
-      brand-tone.md
-      shot-list.md
-    examples/             # 可选：少样本
-      sanitary-ware.md
-    _draft/               # 可选：本地草稿，加载器忽略
-```
-
-**规则：**
-
-- 除 `SKILL.md` / `manifest.yaml` 外，其它文件**默认不注入**上下文；仅当 frontmatter `includes` 列出相对路径时才加载。
-- 单次注入总 token 预算由 Runtime 配置（超出截断并告警）。
-
-### 7.3 `SKILL.md` 格式
-
-YAML frontmatter + Markdown 正文：
+按 Agent Skills 规范，frontmatter **必需**仅 `name`、`description`；其余为规范已定义的可选字段。
 
 ```markdown
 ---
 name: enterprise-marketing-campaign
 description: >-
-  企业商品营销方案规划与画布资产拆解。在用户要求营销方案、投放物料、
-  主图/详情/Banner 等视觉资产时使用。
-version: 1
-enabled: true
-triggers:
-  - 营销方案
-  - 主图
-  - 详情页
-  - banner
-  - 投放物料
-phases: [intake, plan, split, orchestrate_gen]
-includes: []
-max_downstream: 12
+  Plans enterprise product marketing campaigns and splits deliverables onto
+  an infinite canvas (copy, hero, scene, banner). Use when the user asks for
+  营销方案, 主图, 详情页, Banner, or campaign visual assets.
+license: Apache-2.0
+compatibility: >-
+  Designed for lnkpi agent-runtime with Nest canvas tools and image generation.
+metadata:
+  author: lnkpi
+  lnkpi.canvas_manifest: assets/canvas-manifest.yaml
+  lnkpi.max_downstream: "12"
+allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt attach_refs run_image_generation get_generation_status
 ---
 
-# 企业营销方案
+# Enterprise marketing campaign
 
-## 何时使用
+## Instructions
 …
 
-## 规划输出结构
-（章节：目标人群、卖点、渠道、视觉资产清单…）
+## Split and image generation
+- Follow `assets/canvas-manifest.yaml` when splitting the canvas.
+- Do not call `run_image_generation` during plan; only after user confirm → split → orchestrate_gen.
+- Phase-1: do not auto-generate video nodes.
 
-## 拆解与出图
-- 遵守同目录 `manifest.yaml`
-- 确认前只写方案节点；确认后 split + 自动出图
-- 不要在 plan 阶段调用 run_image_generation
-
-## 禁止
-- 一期不要自动出视频
-- 不要把上游全文复制进下游节点 data
+## Progressive disclosure
+- Keep this file concise; put long brand rules in `references/`.
 ```
 
-| Frontmatter 字段 | 必需 | 说明 |
+| 字段 | 标准 | 约束 / 用法 |
 | --- | --- | --- |
-| `name` | 是 | 须与目录名 / skill_id 一致 |
-| `description` | 是 | ≤1024 字；供 `intake` 路由 |
-| `version` | 是 | 整数；便于缓存失效 |
-| `enabled` | 否 | 默认 `true` |
-| `triggers` | 否 | 关键词辅助路由 |
-| `phases` | 否 | 声明参与的阶段 |
-| `includes` | 否 | 额外 md 相对路径列表 |
-| `max_downstream` | 否 | 覆盖全局默认下游上限 |
+| `name` | **必需** | ≤64；小写字母/数字/连字符；与目录名一致 |
+| `description` | **必需** | ≤1024；写清 **做什么 + 何时用**（含触发关键词）；第三人称 |
+| `license` | 可选 | 许可证名或包内 LICENSE 引用；便于市场上架 |
+| `compatibility` | 可选 | ≤500；环境/产品依赖说明 |
+| `metadata` | 可选 | 任意键值；**lnkpi 扩展只放这里**（见下） |
+| `allowed-tools` | 可选（实验） | 空格分隔的预授权工具名 |
 
-### 7.4 `manifest.yaml` 格式（营销拆解）
+**不得**在 frontmatter 顶层发明非标准键（如 `version` / `enabled` / `triggers` / `phases` / `includes` / `max_downstream`），以免校验器/市场工具拒收或忽略行为不一致。
+
+**lnkpi `metadata` 扩展（约定前缀 `lnkpi.`）：**
+
+| 键 | 说明 |
+| --- | --- |
+| `lnkpi.canvas_manifest` | 相对 Skill 根的路径，默认 `assets/canvas-manifest.yaml` |
+| `lnkpi.max_downstream` | 字符串数字，下游节点上限（默认 `"12"`） |
+
+未识别的 `metadata` 键忽略，保证第三方 Skill 可加载。
+
+### 7.4 Progressive disclosure（与标准一致）
+
+1. **Metadata（~100 tokens/Skill）**：启动只索引全部 Skill 的 `name` + `description`。  
+2. **Instructions**：命中后再加载完整 `SKILL.md` 正文（建议 < 5000 tokens / < 500 行）。  
+3. **Resources**：仅当指令需要时再读 `references/`、`assets/`、执行 `scripts/`（脚本**输出**可进上下文，源码默认不进）。
+
+**禁止**把技能根下所有 Skill 全文塞进同一轮上下文。
+
+### 7.5 `assets/canvas-manifest.yaml`（lnkpi 扩展，非标准必需）
+
+营销画布拆解专用；通用市场 Skill 可无此文件。
 
 ```yaml
+# assets/canvas-manifest.yaml
 schema_version: 1
 defaults:
   auto_generate_image: true
@@ -344,19 +368,22 @@ items:
     prompt_hint_template: "产品旋转展示…"
 ```
 
-`split`：以 `manifest.yaml` 为骨架，可用 LLM 按方案填充/裁剪 `prompt_hint`，但不得突破 `max_downstream`。
+`split`：以该文件为骨架；可用 LLM 填充/裁剪 `prompt_hint`；受 `lnkpi.max_downstream` 约束。若文件缺失：仅执行 `SKILL.md` 文本流程，**不**自动批量建营销画布（或对话降级为手写少量节点）。
 
-### 7.5 路由与加载
+### 7.6 市场生态兼容性
 
-1. `intake`：用各 Skill 的 `name`+`description`（+可选 triggers）选中一个 `skill_id`。
-2. 加载：`SKILL.md` 正文 + `includes` + 解析后的 `manifest.yaml` 摘要。
-3. **禁止**把 `skills/` 下全部 Skill 全文塞进同一轮上下文。
-
-### 7.6 一期内置 Skill
-
-| skill_id | 用途 |
+| 能力 | 一期做法 |
 | --- | --- |
-| `enterprise-marketing-campaign` | 验收用默认企业营销 Skill（可含洁具 examples） |
+| 安装第三方 Skill | 将标准包放入技能根即可被发现；无 canvas-manifest 则当通用指令 Skill |
+| 导出本产品 Skill | 包结构符合 agentskills.io，可提交市场；`compatibility` 声明 lnkpi 依赖 |
+| 校验 | Loader 按标准校验 `name`/`description`；额外用可选 schema 校验 `assets/canvas-manifest.yaml` |
+| Cursor 联调 | 同一包可复制到 `.cursor/skills/` 做编辑期预览（路径不同，包内结构相同） |
+
+### 7.7 一期内置 Skill
+
+| skill_id（目录名） | 用途 |
+| --- | --- |
+| `enterprise-marketing-campaign` | 验收用企业营销 Skill（含 `assets/canvas-manifest.yaml`，可选 `references/` / `assets/examples/`） |
 
 ---
 
@@ -364,7 +391,7 @@ items:
 
 | Tool | 方向 | 说明 |
 | --- | --- | --- |
-| `load_skill` | Runtime 本地 | 按 §7 读 Skill + manifest |
+| `load_skill` | Runtime 本地 | 按 agentskills 标准发现/加载；按需读 `assets/canvas-manifest.yaml` |
 | `upsert_prompt_node` | → Nest | 创建/更新方案 prompt 节点 |
 | `get_node` | → Nest | 读节点 data（含 image `url` 供 i2i） |
 | `get_canvas_summary` | → Nest | id/类型/标题/状态；禁止默认拉全量 content |
@@ -411,8 +438,8 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 出图耗时长阻塞对话 | Nest 异步任务 + 状态事件；Runtime 等待带超时；对话流式报进度 |
 | 积分/BYOK 中断 | 失败写入 `gen_failed`；话术引导处理后重跑 |
 | i2i 上游无图 | 拓扑保证；上游失败则跳过下游并记录 |
-| Skill 质量不稳 | 内置验收 Skill + manifest 契约测试 |
-| 拆解过多 | `max_downstream`（默认 12） |
+| Skill 质量不稳 | 内置验收 Skill + 标准 frontmatter 校验 + `assets/canvas-manifest.yaml` 契约测试 |
+| 拆解过多 | `metadata.lnkpi.max_downstream`（默认 12） |
 | 与手动生成竞态 | 同 `node_id` Nest 侧生成锁 |
 
 ---
@@ -425,7 +452,7 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 4. **自动出图**：至少 **2** 张图成功回写 `url`（建议含 1×t2i + 1×依赖它的 i2i，如白底→主图），前端可见。
 5. 部分失败时会话有明确失败列表，其它成功节点不受影响。
 6. LangGraph State 无完整画布 JSON、无 Base64。
-7. `revise` 更新同一 `plan_node_id`；Skills 目录符合 §7，缺 `SKILL.md` 的目录不被加载。
+7. `revise` 更新同一 `plan_node_id`；Skills 包符合 agentskills.io（`SKILL.md` + 可选 `scripts/`/`references/`/`assets/`）；缺 `SKILL.md` 的目录不被加载；顶层无非标准 frontmatter 也能被索引。
 
 ---
 
@@ -443,4 +470,5 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 日期 | 说明 |
 | --- | --- |
 | 2026-07-23 | 初稿：方案一 + Nest 真相源 + State/拓扑/Skills 草案 |
-| 2026-07-24 | 一期纳入 `orchestrate_gen` 自动出图；视频仍二期；§7 定为 Skill 目录/frontmatter/`manifest.yaml` 正式约定 |
+| 2026-07-24 | 一期纳入 `orchestrate_gen` 自动出图；视频仍二期；Skills 目录初稿 |
+| 2026-07-24 | §7 对齐 agentskills.io：标准 `SKILL.md`/`scripts`/`references`/`assets`；画布清单迁入 `assets/canvas-manifest.yaml`；扩展仅 `metadata.lnkpi.*` |
