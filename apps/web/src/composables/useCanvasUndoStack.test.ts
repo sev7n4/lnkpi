@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { reactive } from 'vue'
 import {
   createCanvasUndoStack,
   GENERATION_HISTORY_SKIP_KEYS,
@@ -43,6 +44,46 @@ function makeStack(initial: CanvasSnapshot, maxDepth = 3) {
 }
 
 describe('canvas undo stack', () => {
+  it('commitAfterChange tolerates nested Vue reactive node data', () => {
+    const nested = reactive({
+      prompt: 'scene',
+      settings: { duration: 5, aspectRatio: '16:9' },
+      localRefs: [{ id: 'r1', label: 'A' }],
+    })
+    // Shallow spread mimics getCanvasHistorySnapshot / stripGenerationFieldsFromData
+    let current: CanvasSnapshot = {
+      nodes: [
+        {
+          id: 'v1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: { ...nested },
+        },
+      ],
+      edges: [],
+    }
+    const stack = createCanvasUndoStack({
+      maxDepth: 10,
+      getSnapshot: () => current,
+      applySnapshot: (s) => {
+        current = s
+      },
+    })
+    expect(() => stack.commitAfterChange()).not.toThrow()
+    current = {
+      ...current,
+      nodes: [
+        {
+          ...current.nodes[0]!,
+          data: { ...nested, settings: reactive({ duration: 10, aspectRatio: '16:9' }) },
+        },
+      ],
+    }
+    expect(() => stack.commitAfterChange()).not.toThrow()
+    expect(stack.undo()).toBe(true)
+    expect((current.nodes[0]!.data as { settings: { duration: number } }).settings.duration).toBe(5)
+  })
+
   it('undo restores previous snapshot', () => {
     const ctx = makeStack({
       nodes: [{ id: 'a', position: { x: 0, y: 0 } }],

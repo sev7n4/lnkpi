@@ -110,8 +110,14 @@ export function resolveGenerationFieldsForApply(
   return { ...(cache.get(nodeId) ?? {}) }
 }
 
+/**
+ * Deep-clone snapshots without structuredClone.
+ * Node `data` is often a shallow copy of Vue reactive state, so nested fields
+ * remain Proxies — structuredClone throws DataCloneError and aborts callers
+ * (e.g. generate → flush → commitAfterChange).
+ */
 function cloneSnapshot(snapshot: CanvasSnapshot): CanvasSnapshot {
-  return structuredClone(toRaw(snapshot)) as CanvasSnapshot
+  return JSON.parse(JSON.stringify(toRaw(snapshot))) as CanvasSnapshot
 }
 
 function snapshotKey(snapshot: CanvasSnapshot): string {
