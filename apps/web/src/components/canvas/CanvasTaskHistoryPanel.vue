@@ -283,7 +283,11 @@ const detailTitle = computed(() => {
 
 watch(detailGroup, (g) => {
   if (!g) return
-  if (!expandedAttemptId.value || !g.attempts.some((a) => a.id === expandedAttemptId.value)) {
+  // Only clear stale expansion (id no longer in group). Leave null if user collapsed all.
+  if (
+    expandedAttemptId.value != null
+    && !g.attempts.some((a) => a.id === expandedAttemptId.value)
+  ) {
     expandedAttemptId.value = g.latest.id
   }
 })
@@ -530,10 +534,13 @@ onUnmounted(stopPolling)
             :key="attempt.id"
             class="overflow-hidden rounded-xl border border-[var(--neo-border)] bg-[var(--neo-hover-bg)]"
           >
-            <button
-              type="button"
-              class="flex w-full items-start gap-2 px-2.5 py-2 text-left transition hover:bg-[var(--neo-active-bg)]/40"
+            <div
+              role="button"
+              tabindex="0"
+              class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 text-left transition hover:bg-[var(--neo-active-bg)]/40"
               @click="toggleAttempt(attempt.id)"
+              @keydown.enter.prevent="toggleAttempt(attempt.id)"
+              @keydown.space.prevent="toggleAttempt(attempt.id)"
             >
               <svg
                 class="mt-0.5 h-3 w-3 shrink-0 text-[var(--neo-text-muted)] transition"
@@ -583,7 +590,7 @@ onUnmounted(stopPolling)
                   {{ attemptSummary(attempt) }}
                 </p>
               </div>
-            </button>
+            </div>
 
             <div
               v-if="expandedAttemptId === attempt.id"
