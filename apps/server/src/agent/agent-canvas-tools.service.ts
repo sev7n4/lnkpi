@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions } from '@lnkpi/agent'
 import {
   resolveNodeRefs,
@@ -91,7 +91,7 @@ export class AgentCanvasToolsService {
     content: string
     position?: { x: number; y: number }
   }): Promise<{ nodeId: string; actions: CanvasAction[] }> {
-    const { canvas } = await this.loadSession(input.sessionId)
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const existing = input.nodeId
       ? canvas.nodes.find((n) => n.id === input.nodeId)
       : undefined
@@ -165,7 +165,7 @@ export class AgentCanvasToolsService {
       position?: { x: number; y: number }
     }>
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
-    const { canvas } = await this.loadSession(input.sessionId)
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const actions: CanvasAction[] = []
     const mapping: Array<{ key: string; nodeId: string }> = []
     const baseIndex = canvas.nodes.length
@@ -286,7 +286,7 @@ export class AgentCanvasToolsService {
     userId: string
     nodeId: string
   }): Promise<{ url?: string; status: string; actions: CanvasAction[] }> {
-    const { canvas } = await this.loadSession(input.sessionId)
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const node = canvas.nodes.find((n) => n.id === input.nodeId)
     if (!node) throw new NotFoundException('节点不存在')
 
@@ -308,57 +308,81 @@ export class AgentCanvasToolsService {
     let current = await this.persist(input.sessionId, canvas, started)
     const allActions = [...started]
 
-    const refs = toStudioRefs(node, current)
-    const aspectRatio = String(node.data?.imageAspect ?? '16:9')
-    const resolution = String(node.data?.imageResolution ?? '1K')
-    const count = Number(node.data?.imageCount ?? 1)
-    const model =
-      typeof node.data?.imageModel === 'string' ? (node.data.imageModel as string) : undefined
+    try {
+      const refs = toStudioRefs(node, current)
+      const aspectRatio = String(node.data?.imageAspect ?? '16:9')
+      const resolution = String(node.data?.imageResolution ?? '1K')
+      const count = Number(node.data?.imageCount ?? 1)
+      const model =
+        typeof node.data?.imageModel === 'string' ? (node.data.imageModel as string) : undefined
 
-    const record = await this.studio.generateImage(
-      input.userId,
-      prompt,
-      model,
-      aspectRatio,
-      refs,
-      undefined,
-      resolution,
-      count,
-      { sessionId: input.sessionId, nodeId: input.nodeId },
-    )
+      const record = await this.studio.generateImage(
+        input.userId,
+        prompt,
+        model,
+        aspectRatio,
+        refs,
+        undefined,
+        resolution,
+        count,
+        { sessionId: input.sessionId, nodeId: input.nodeId },
+      )
 
-    const recordId = record.id
-    allActions.push({
-      type: 'update_node',
-      payload: { id: input.nodeId, data: { generationRecordId: recordId } },
-    })
-    current = await this.persist(input.sessionId, current, [
-      { type: 'update_node', payload: { id: input.nodeId, data: { generationRecordId: recordId } } },
-    ])
+      const recordId = record.id
+      allActions.push({
+        type: 'update_node',
+        payload: { id: input.nodeId, data: { generationRecordId: recordId } },
+      })
+      current = await this.persist(input.sessionId, current, [
+        {
+          type: 'update_node',
+          payload: { id: input.nodeId, data: { generationRecordId: recordId } },
+        },
+      ])
 
-    const terminal = await this.pollGeneration(input.userId, recordId, record)
-    const status = String(terminal.status)
-    const url = typeof terminal.url === 'string' && terminal.url ? terminal.url : undefined
+      const terminal = await this.pollGeneration(input.userId, recordId, record)
+      const status = String(terminal.status)
+      const url = typeof terminal.url === 'string' && terminal.url ? terminal.url : undefined
 
-    const finishData: Record<string, unknown> = {
-      status: status === 'completed' ? 'completed' : status === 'failed' || status === 'error' ? 'error' : status,
-      generationRecordId: recordId,
-    }
-    if (url) finishData.url = url
-    if (status !== 'completed') {
-      finishData.errorMessage = '图像生成未完成或超时'
-    }
+      const finishData: Record<string, unknown> = {
+        status:
+          status === 'completed'
+            ? 'completed'
+            : status === 'failed' || status === 'error'
+              ? 'error'
+              : status,
+        generationRecordId: recordId,
+      }
+      if (url) finishData.url = url
+      if (status !== 'completed') {
+        finishData.errorMessage = '图像生成未完成或超时'
+      }
 
-    const finishActions: CanvasAction[] = [
-      { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
-    ]
-    await this.persist(input.sessionId, current, finishActions)
-    allActions.push(...finishActions)
+      const finishActions: CanvasAction[] = [
+        { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
+      ]
+      await this.persist(input.sessionId, current, finishActions)
+      allActions.push(...finishActions)
 
-    return {
-      url,
-      status: String(finishData.status),
-      actions: allActions,
+      return {
+        url,
+        status: String(finishData.status),
+        actions: allActions,
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '图像生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, current, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', actions: allActions }
     }
   }
 
@@ -390,10 +414,27 @@ export class AgentCanvasToolsService {
     return { ...latest, status: latest.status === 'generating' ? 'timeout' : latest.status }
   }
 
-  private async loadSession(sessionId: string): Promise<{ id: string; canvas: CanvasData }> {
+  private async loadSession(sessionId: string): Promise<{
+    id: string
+    userId: string
+    canvas: CanvasData
+  }> {
     const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
     if (!session) throw new NotFoundException('会话不存在')
-    return { id: session.id, canvas: parseCanvas(session.canvasData) }
+    return {
+      id: session.id,
+      userId: session.userId,
+      canvas: parseCanvas(session.canvasData),
+    }
+  }
+
+  private async loadOwnedSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<{ id: string; userId: string; canvas: CanvasData }> {
+    const session = await this.loadSession(sessionId)
+    if (session.userId !== userId) throw new ForbiddenException()
+    return session
   }
 
   private async persist(

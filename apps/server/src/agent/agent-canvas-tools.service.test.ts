@@ -1,5 +1,5 @@
 import 'reflect-metadata'
-import { NotFoundException } from '@nestjs/common'
+import { ForbiddenException, NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import type { CanvasData } from '@lnkpi/shared'
@@ -228,6 +228,69 @@ describe('AgentCanvasToolsService', () => {
     expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/img.png')
     expect(canvas.nodes[0].data.status).toBe('completed')
+  })
+
+  it('runImageGeneration persists error status when Studio fails after generating', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'img-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: { prompt: '洁具白底图', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    generateImage.mockRejectedValueOnce(new Error('studio unavailable'))
+    const result = await svc.runImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-1',
+    })
+    expect(result.status).toBe('error')
+    expect(canvas.nodes[0].data.status).toBe('error')
+    expect(canvas.nodes[0].data.errorMessage).toBe('studio unavailable')
+    expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
+  })
+
+  it('write paths reject when session.userId mismatches input.userId', async () => {
+    await expect(
+      svc.upsertPromptNode({
+        sessionId: 's1',
+        userId: 'other-user',
+        prompt: 'x',
+        content: 'y',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException)
+
+    await expect(
+      svc.addNodesBatch({
+        sessionId: 's1',
+        userId: 'other-user',
+        items: [{ key: 'k', title: 't', targetType: 'image' }],
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException)
+
+    canvas = {
+      nodes: [
+        {
+          id: 'img-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'p', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    await expect(
+      svc.runImageGeneration({
+        sessionId: 's1',
+        userId: 'other-user',
+        nodeId: 'img-1',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException)
+    expect(generateImage).not.toHaveBeenCalled()
   })
 
   it('getGenerationStatus returns node status and url', async () => {
