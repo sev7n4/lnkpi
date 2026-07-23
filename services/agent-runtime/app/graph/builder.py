@@ -9,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 from app.graph.nodes.await_confirm import make_await_confirm_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.intake import make_intake_node
+from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.graph.nodes.plan import make_plan_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
@@ -36,7 +37,7 @@ def build_agent_graph(
     skills_dir: str | Path,
     checkpointer: Any | None = None,
 ):
-    """Compile intake → plan → await_confirm → (revise→plan | confirm→split→done)."""
+    """Compile intake → plan → await_confirm → (revise→plan | confirm→split→orchestrate_gen→done)."""
     skills_path = Path(skills_dir)
     graph = StateGraph(AgentRuntimeState)
 
@@ -44,6 +45,7 @@ def build_agent_graph(
     graph.add_node("plan", make_plan_node(nest=nest, llm=llm, skills_dir=skills_path))
     graph.add_node("await_confirm", make_await_confirm_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
+    graph.add_node("orchestrate_gen", make_orchestrate_gen_node(nest=nest))
     graph.add_node("done", make_done_node())
 
     graph.add_conditional_edges(
@@ -58,8 +60,8 @@ def build_agent_graph(
         route_after_confirm,
         {"split": "split", "plan": "plan", "end": END},
     )
-    # Task 7 will insert orchestrate_gen between split and done
-    graph.add_edge("split", "done")
+    graph.add_edge("split", "orchestrate_gen")
+    graph.add_edge("orchestrate_gen", "done")
     graph.add_edge("done", END)
 
     saver = checkpointer if checkpointer is not None else MemorySaver()

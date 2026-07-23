@@ -12,7 +12,7 @@ def make_done_node() -> Callable:
         if completed or failed:
             msg = f"流程结束。出图成功 {len(completed)}，失败 {len(failed)}。"
         else:
-            msg = "拆解完成。出图编排将在后续步骤接入；你也可手动在画布上生成。"
+            msg = "流程结束。本次无可汇总的出图结果；你也可手动在画布上生成。"
         return {
             "phase": "done",
             "awaiting_user": False,
