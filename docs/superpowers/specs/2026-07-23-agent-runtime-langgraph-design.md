@@ -1,6 +1,6 @@
 # Agent Runtime（LangGraph）技术选型与一期设计
 
-> 状态：**设计待审阅**（修订：一期自动出图 + Skills 对齐 agentskills.io 市场标准）  
+> 状态：**已确认**（2026-07-24）；实现计划见 `docs/superpowers/plans/2026-07-24-agent-runtime-langgraph.md`  
 > 日期：2026-07-23（修订 2026-07-24）  
 > 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
@@ -456,12 +456,14 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 
 ---
 
-## 13. 开放问题（实现计划阶段再拍）
+## 13. 开放问题（已在实现计划锁定）
 
-1. Runtime↔Nest 事件桥：Nest 聚合 SSE vs Runtime 直推（倾向 Nest 聚合）。
-2. `thread_id` 与 `session_id` / `agent_run_id` 是否 1:1。
-3. `run_image_generation` 同步等待上限 vs 纯轮询；与现有 `useGenerationPolling` 对齐方式。
-4. 旧 `@lnkpi/agent` RuleBased 在 Runtime 不可用时是否回退。
+| # | 问题 | 锁定结论 |
+| --- | --- | --- |
+| 1 | Runtime↔Nest 事件桥 | **Nest 聚合 SSE**：Runtime 回传事件给 Nest，Nest 写库并 `res.write` 给前端 |
+| 2 | `thread_id` 关系 | 一期：`thread_id === session_id`；二期可拆 `agent_run_id` |
+| 3 | 出图等待 | Nest tool `run_image_generation`：**启动 Studio 任务 + 服务端轮询至完成/超时**（默认 180s）；中间可推 `node_status` 事件 |
+| 4 | Runtime 不可用 | `AGENT_RUNTIME_URL` 未配置或健康检查失败 → **回退**现有 `@lnkpi/agent` `CanvasAgent` |
 
 ---
 
@@ -472,3 +474,4 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 2026-07-23 | 初稿：方案一 + Nest 真相源 + State/拓扑/Skills 草案 |
 | 2026-07-24 | 一期纳入 `orchestrate_gen` 自动出图；视频仍二期；Skills 目录初稿 |
 | 2026-07-24 | §7 对齐 agentskills.io：标准 `SKILL.md`/`scripts`/`references`/`assets`；画布清单迁入 `assets/canvas-manifest.yaml`；扩展仅 `metadata.lnkpi.*` |
+| 2026-07-24 | 规格确认；§13 开放问题锁定；进入实现计划 |
