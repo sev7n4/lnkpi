@@ -1173,7 +1173,7 @@ function canAcceptLocalRef(nodeType: string, mediaType: LocalRefBinding['mediaTy
   if (mediaType === 'text') return nodeType === 'text' || nodeType === 'prompt'
   if (mediaType === 'image') return nodeType === 'text' || nodeType === 'image' || nodeType === 'video'
   if (mediaType === 'video') return nodeType === 'video'
-  if (mediaType === 'audio') return nodeType === 'audio'
+  if (mediaType === 'audio') return nodeType === 'audio' || nodeType === 'video'
   return false
 }
 
@@ -1186,6 +1186,8 @@ function previewPatchForLocalRef(
   if (mediaType === 'image' && nodeType === 'video') return { referenceImageUrl: url }
   if (mediaType === 'video' && nodeType === 'video') return { url, status: 'completed' }
   if (mediaType === 'audio' && nodeType === 'audio') return { url, status: 'completed' }
+  // audio → video：仅作引用芯片，不覆盖成片 url
+  if (mediaType === 'audio' && nodeType === 'video') return {}
   return {}
 }
 

@@ -165,7 +165,20 @@ async function handlePublish() {
             class="!mr-0 !h-auto w-full rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2"
           >
             <div class="flex items-center gap-3">
-              <img :src="node.preview" :alt="node.label" class="h-10 w-16 rounded object-cover" />
+              <video
+                v-if="node.type === 'video'"
+                :src="node.preview"
+                muted
+                playsinline
+                preload="metadata"
+                class="h-10 w-16 rounded object-cover bg-black/40"
+              />
+              <img
+                v-else
+                :src="node.preview"
+                :alt="node.label"
+                class="h-10 w-16 rounded object-cover"
+              />
               <span class="text-sm">{{ node.label }}</span>
             </div>
           </el-radio>

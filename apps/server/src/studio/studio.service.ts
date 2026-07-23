@@ -252,12 +252,21 @@ export class StudioService {
     err: unknown,
     extra: Record<string, unknown> = {},
   ) {
+    const raw = errMessage(err).slice(0, 8000)
+    const failureClass = classifyByokFailure(err)
     return {
       ...extra,
       channelId: resolved.channelId,
-      failureClass: classifyByokFailure(err),
+      failureClass,
       confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
       originalModel: extra.originalModel,
+      byokErrorRaw: raw,
+      errorRaw: raw,
+      errorCode: 'fallback_pending' as ErrorCode,
+      userMessage: raw
+        ? `BYOK 上游失败（${failureClass}）：${raw.slice(0, 240)}`
+        : 'BYOK 上游失败，可改用平台模型继续',
+      failedAt: new Date().toISOString(),
     }
   }
 
@@ -531,15 +540,24 @@ export class StudioService {
 
   async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {
     const record = await this.getGeneration(userId, id)
-    if (record.status !== 'failed' && record.status !== 'error') {
+    if (
+      record.status !== 'failed'
+      && record.status !== 'error'
+      && record.status !== 'fallback_pending'
+    ) {
       throw new NotFoundException('诊断不可用')
     }
     const meta = parseMeta(record.metadata)
-    const errRaw = meta.errorRaw != null ? String(meta.errorRaw) : ''
+    const errRaw =
+      (typeof meta.byokErrorRaw === 'string' && meta.byokErrorRaw.trim()
+        ? meta.byokErrorRaw
+        : '')
+      || (meta.errorRaw != null ? String(meta.errorRaw) : '')
     const code =
       (typeof meta.errorCode === 'string' ? (meta.errorCode as ErrorCode) : undefined) ??
       mapMessageToErrorCode(errRaw)
-    const defaultMessage = '生成失败'
+    const defaultMessage =
+      record.status === 'fallback_pending' ? '平台回退待确认' : '生成失败'
     const userMessage =
       (typeof meta.userMessage === 'string' && meta.userMessage.trim()
         ? meta.userMessage
@@ -560,7 +578,10 @@ export class StudioService {
       httpStatus: typeof meta.httpStatus === 'number' ? meta.httpStatus : null,
       occurredAt,
       providerSnippet: errRaw ? redactProviderSnippet(errRaw) : null,
-      hint: hintForCode(code),
+      hint:
+        record.status === 'fallback_pending'
+          ? '请确认是否使用平台回退继续，或取消本次生成。'
+          : hintForCode(code),
     }
   }
 
@@ -1282,11 +1303,23 @@ export class StudioService {
           : this.platformFallbackCost(record.type, meta)
       await this.points.refund(userId, cost, '平台回退取消退款')
     }
-    const cancelledMeta = applyFailureDiagnosticMeta(
-      { ...meta, cancelled: true },
-      new Error('已取消'),
-      { errorCode: 'cancelled', userMessage: '已取消' },
-    )
+    const byokErrorRaw =
+      (typeof meta.byokErrorRaw === 'string' && meta.byokErrorRaw.trim()
+        ? meta.byokErrorRaw
+        : undefined)
+      ?? (typeof meta.errorRaw === 'string' && meta.errorRaw.trim() && meta.errorRaw !== '已取消'
+        ? meta.errorRaw
+        : undefined)
+    const cancelledMeta: Record<string, unknown> = {
+      ...meta,
+      cancelled: true,
+      ...(byokErrorRaw ? { byokErrorRaw, errorRaw: byokErrorRaw } : {}),
+      errorCode: 'cancelled',
+      userMessage: byokErrorRaw
+        ? `已取消平台回退。原 BYOK 错误：${byokErrorRaw.slice(0, 500)}`
+        : '已取消',
+      failedAt: new Date().toISOString(),
+    }
     return this.prisma.generationRecord.update({
       where: { id: record.id },
       data: {

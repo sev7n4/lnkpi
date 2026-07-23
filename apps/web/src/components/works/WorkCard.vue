@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import type { Work } from '@lnkpi/shared'
+import { resolveMediaUrl } from '@/services/api-base'
 
-defineProps<{
+const props = defineProps<{
   work: Work
 }>()
 
@@ -12,16 +14,61 @@ defineEmits<{
   viewAuthor: [authorId: string]
   viewShare: [workId: string]
 }>()
+
+const videoRef = ref<HTMLVideoElement | null>(null)
+
+const isVideoPlayback = computed(
+  () => props.work.playbackKind === 'video' && !!(props.work.playbackUrl || props.work.coverUrl),
+)
+
+const mediaSrc = computed(() =>
+  resolveMediaUrl(props.work.playbackUrl || props.work.coverUrl || ''),
+)
+
+async function onHoverEnter() {
+  const el = videoRef.value
+  if (!el) return
+  try {
+    el.currentTime = 0
+    await el.play()
+  } catch {
+    /* autoplay may be blocked */
+  }
+}
+
+function onHoverLeave() {
+  const el = videoRef.value
+  if (!el) return
+  el.pause()
+  try {
+    el.currentTime = 0
+  } catch {
+    /* ignore */
+  }
+}
 </script>
 
 <template>
   <article
     class="group cursor-pointer overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] transition hover:border-[#6366f1]/30 hover:shadow-lg hover:shadow-[#6366f1]/5"
     @click="$emit('viewWork', work.id)"
+    @mouseenter="onHoverEnter"
+    @mouseleave="onHoverLeave"
   >
     <div class="relative aspect-video overflow-hidden bg-[#242424]">
+      <video
+        v-if="isVideoPlayback"
+        ref="videoRef"
+        :src="mediaSrc"
+        muted
+        playsinline
+        loop
+        preload="metadata"
+        class="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+      />
       <img
-        :src="work.coverUrl"
+        v-else
+        :src="resolveMediaUrl(work.coverUrl)"
         :alt="work.title"
         class="h-full w-full object-cover transition duration-500 group-hover:scale-105"
       />

@@ -249,11 +249,20 @@ export class MaterialService {
     err: unknown,
     extra: Record<string, unknown> = {},
   ) {
+    const raw = errMessage(err).slice(0, 8000)
+    const failureClass = classifyByokFailure(err)
     return {
       ...extra,
       channelId: resolved.channelId,
-      failureClass: classifyByokFailure(err),
+      failureClass,
       confirmMessage: BYOK_FALLBACK_CONFIRM_MESSAGE,
+      byokErrorRaw: raw,
+      errorRaw: raw,
+      errorCode: 'fallback_pending' as ErrorCode,
+      userMessage: raw
+        ? `BYOK 上游失败（${failureClass}）：${raw.slice(0, 240)}`
+        : 'BYOK 上游失败，可改用平台模型继续',
+      failedAt: new Date().toISOString(),
     }
   }
 
@@ -585,11 +594,25 @@ export class MaterialService {
           : this.platformFallbackCost(material.type, meta)
       await this.points.refund(userId, cost, '平台回退取消退款')
     }
-    const cancelledMeta = applyFailureDiagnosticMeta(
-      { ...meta, cancelled: true },
-      new Error('已取消'),
-      { errorCode: 'cancelled', userMessage: '已取消' },
-    )
+    const cancelledMeta: Record<string, unknown> = (() => {
+      const byokErrorRaw =
+        (typeof meta.byokErrorRaw === 'string' && meta.byokErrorRaw.trim()
+          ? meta.byokErrorRaw
+          : undefined)
+        ?? (typeof meta.errorRaw === 'string' && meta.errorRaw.trim() && meta.errorRaw !== '已取消'
+          ? meta.errorRaw
+          : undefined)
+      return {
+        ...meta,
+        cancelled: true,
+        ...(byokErrorRaw ? { byokErrorRaw, errorRaw: byokErrorRaw } : {}),
+        errorCode: 'cancelled',
+        userMessage: byokErrorRaw
+          ? `已取消平台回退。原 BYOK 错误：${byokErrorRaw.slice(0, 500)}`
+          : '已取消',
+        failedAt: new Date().toISOString(),
+      }
+    })()
     return this.prisma.material.update({
       where: { id: material.id },
       data: {
@@ -634,15 +657,24 @@ export class MaterialService {
       include: { shot: { include: { session: true } } },
     })
     if (!material) throw new NotFoundException('素材不存在')
-    if (material.status !== 'failed' && material.status !== 'error') {
+    if (
+      material.status !== 'failed'
+      && material.status !== 'error'
+      && material.status !== 'fallback_pending'
+    ) {
       throw new NotFoundException('诊断不可用')
     }
     const meta = parseMeta(material.metadata)
-    const errRaw = meta.errorRaw != null ? String(meta.errorRaw) : ''
+    const errRaw =
+      (typeof meta.byokErrorRaw === 'string' && meta.byokErrorRaw.trim()
+        ? meta.byokErrorRaw
+        : '')
+      || (meta.errorRaw != null ? String(meta.errorRaw) : '')
     const code =
       (typeof meta.errorCode === 'string' ? (meta.errorCode as ErrorCode) : undefined) ??
       mapMessageToErrorCode(errRaw)
-    const defaultMessage = '生成失败'
+    const defaultMessage =
+      material.status === 'fallback_pending' ? '平台回退待确认' : '生成失败'
     const userMessage =
       (typeof meta.userMessage === 'string' && meta.userMessage.trim()
         ? meta.userMessage
@@ -668,7 +700,10 @@ export class MaterialService {
       httpStatus: typeof meta.httpStatus === 'number' ? meta.httpStatus : null,
       occurredAt,
       providerSnippet: errRaw ? redactProviderSnippet(errRaw) : null,
-      hint: hintForCode(code),
+      hint:
+        material.status === 'fallback_pending'
+          ? '请确认是否使用平台回退继续，或取消本次生成。'
+          : hintForCode(code),
     }
   }
 
