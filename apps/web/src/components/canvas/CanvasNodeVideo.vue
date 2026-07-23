@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
@@ -66,6 +66,42 @@ function saveToLibrary() {
   if (!url) return
   void saveAssetToLibrary({ kind: 'video', url, label: props.data.label ?? '', sourceNodeId: props.id })
 }
+
+const mode = ref<'drag' | 'play'>('drag')
+
+watch(
+  () => props.selected,
+  (sel) => {
+    if (!sel) mode.value = 'drag'
+  },
+)
+
+function enterPlay(e: Event) {
+  e.stopPropagation()
+  mode.value = 'play'
+}
+
+function onPreviewDblclick(e: Event) {
+  if (mode.value === 'drag') enterPlay(e)
+}
+
+function exitPlay() {
+  mode.value = 'drag'
+}
+
+function onEscape(e: KeyboardEvent) {
+  if (e.key === 'Escape' && mode.value === 'play') exitPlay()
+}
+
+watch(mode, (m, _prev, onCleanup) => {
+  if (m !== 'play') return
+  window.addEventListener('keydown', onEscape)
+  onCleanup(() => window.removeEventListener('keydown', onEscape))
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onEscape)
+})
 </script>
 
 <template>
@@ -80,8 +116,41 @@ function saveToLibrary() {
       @dragleave="onDragLeave"
       @drop="onDrop"
     >
-      <div v-if="data.url" class="neo-gen-preview">
-        <video :src="displayUrl" controls class="nodrag nowheel" />
+      <div v-if="data.url" class="neo-gen-preview" @dblclick.stop="onPreviewDblclick">
+        <template v-if="mode === 'drag'">
+          <video
+            :src="displayUrl"
+            muted
+            playsinline
+            preload="metadata"
+            class="neo-gen-video-poster"
+          />
+          <button
+            type="button"
+            class="neo-gen-video-play-btn nodrag"
+            title="播放视频"
+            @pointerdown.stop
+            @mousedown.stop
+            @click.stop="enterPlay"
+          >
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
+        </template>
+        <template v-else>
+          <video :src="displayUrl" controls autoplay class="nodrag nowheel" />
+          <button
+            type="button"
+            class="neo-gen-video-exit-btn nodrag"
+            title="退出播放"
+            @pointerdown.stop
+            @mousedown.stop
+            @click.stop="exitPlay"
+          >
+            退出
+          </button>
+        </template>
         <button
           type="button"
           class="neo-node-replace-btn nodrag"
