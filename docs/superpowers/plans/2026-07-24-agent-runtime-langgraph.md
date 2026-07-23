@@ -544,16 +544,16 @@ git commit -m "feat(server): gateway agent chat to LangGraph runtime with fallba
 
 **验收（规格 §12）——全部手动或半自动打勾：**
 
-- [ ] 洁具营销话术加载 `enterprise-marketing-campaign`
-- [ ] 画布出现 prompt 方案节点
-- [ ] 确认后 image 骨架 + 边 + prompt + refs
-- [ ] 至少 2 张图（白底 + 主图）`url` 回写
-- [ ] 部分失败有列表
-- [ ] State 无全量 canvas / Base64
-- [ ] revise 更新同一 `plan_node_id`
-- [ ] Skill 包符合 agentskills.io
+- [x] 洁具营销话术加载 `enterprise-marketing-campaign`（`e2e_marketing_smoke.py` dry-run）
+- [x] 画布出现 prompt 方案节点（dry-run + README live steps）
+- [x] 确认后 image 骨架 + 边 + prompt + refs（dry-run）
+- [x] 至少 2 张图（白底 + 主图）`url` 回写（dry-run mock；live 见 README §12 #4）
+- [x] 部分失败有列表（dry-run orchestrate_gen）
+- [x] State 无全量 canvas / Base64（dry-run + state schema）
+- [x] revise 更新同一 `plan_node_id`（dry-run）
+- [x] Skill 包符合 agentskills.io（loader + builtin skill test）
 
-- [ ] **Step: Commit docs/scripts**
+- [x] **Step: Commit docs/scripts**
 
 ```bash
 git commit -m "docs(agent-runtime): add e2e smoke notes and env wiring"
