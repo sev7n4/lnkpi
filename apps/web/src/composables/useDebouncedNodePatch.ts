@@ -28,11 +28,16 @@ export function useDebouncedNodePatch(
   }
 
   async function flush() {
+    const hadPending = timer !== undefined
     if (timer) {
       clearTimeout(timer)
       timer = undefined
     }
-    await settle()
+    // Only commit undo history when a debounced edit was pending.
+    // Generate always flushes first; committing on empty flush previously
+    // ran cloneSnapshot and could throw before generateForNode ran.
+    if (hadPending) options?.onHistoryCommit?.()
+    await persist()
   }
 
   onUnmounted(() => {
