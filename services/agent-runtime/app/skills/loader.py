@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 import yaml
 
 from app.skills.models import LoadedSkill, SkillIndexEntry
+
+logger = logging.getLogger(__name__)
 
 _NAME_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 _DEFAULT_CANVAS_MANIFEST = "assets/canvas-manifest.yaml"
@@ -23,17 +26,21 @@ def discover_skills(root: Path) -> list[SkillIndexEntry]:
         skill_md = child / "SKILL.md"
         if not skill_md.is_file():
             continue
-        frontmatter, _ = _parse_skill_md(skill_md.read_text(encoding="utf-8"))
-        name = frontmatter.get("name", "")
-        description = frontmatter.get("description", "")
-        entries.append(
-            SkillIndexEntry(
-                skill_id=child.name,
-                name=str(name),
-                description=str(description),
-                path=child,
+        try:
+            frontmatter, _ = _parse_skill_md(skill_md.read_text(encoding="utf-8"))
+            name = frontmatter.get("name", "")
+            description = frontmatter.get("description", "")
+            entries.append(
+                SkillIndexEntry(
+                    skill_id=child.name,
+                    name=str(name),
+                    description=str(description),
+                    path=child,
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001 — skip bad skills, keep discovery going
+            logger.warning("Skipping skill %s: %s", child.name, exc)
+            continue
     return entries
 
 

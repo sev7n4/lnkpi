@@ -68,7 +68,10 @@ export class AgentService {
 
   /** Overridable in unit tests */
   createRuntimeClient(baseUrl: string): AgentRuntimeClient {
-    return new AgentRuntimeClient(baseUrl)
+    return new AgentRuntimeClient(
+      baseUrl,
+      process.env.AGENT_RUNTIME_SERVICE_TOKEN?.trim(),
+    )
   }
 
   private async *streamFromRuntime(

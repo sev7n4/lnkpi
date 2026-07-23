@@ -142,6 +142,33 @@ async def test_run_image_generation(nest_client, captured):
 
 
 @pytest.mark.asyncio
+async def test_run_image_generation_uses_long_timeout(monkeypatch):
+    """Nest polls Studio up to image_gen_timeout_sec; client must outlive that (+30s)."""
+    from app.config import settings
+    from app.tools.nest_client import IMAGE_GEN_TIMEOUT_BUFFER_SEC, NestCanvasClient
+
+    captured: dict = {}
+
+    async def fake_post(self, path, body, *, timeout=None):
+        captured["path"] = path
+        captured["timeout"] = timeout
+        return {"status": "completed", "url": "https://cdn.example/img.png"}
+
+    monkeypatch.setattr(NestCanvasClient, "_post", fake_post)
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+    )
+    await client.run_image_generation("n1")
+    expected = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+    assert captured["path"] == "/agent/internal/run-image-generation"
+    assert captured["timeout"] == expected
+    assert captured["timeout"] >= 210
+
+
+@pytest.mark.asyncio
 async def test_get_generation_status(nest_client, captured):
     result = await nest_client.get_generation_status("n1")
     assert result["status"] == "completed"

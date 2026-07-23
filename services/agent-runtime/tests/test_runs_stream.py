@@ -11,9 +11,11 @@ from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 
+from app.config import settings
 from app.main import app, clear_run_overrides, configure_run_overrides
 
 SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
+AUTH_HEADERS = {"x-lnkpi-service-token": settings.effective_runtime_auth_token}
 
 PLAN_MARKDOWN = """# 卫生洁具企业营销方案
 
@@ -106,6 +108,7 @@ def test_runs_stream_ndjson_smoke():
     with client.stream(
         "POST",
         "/v1/runs",
+        headers=AUTH_HEADERS,
         json={
             "session_id": "sess-stream-1",
             "user_id": "user-1",

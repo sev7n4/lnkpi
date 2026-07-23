@@ -38,6 +38,7 @@ pnpm --filter @lnkpi/server dev
 cd services/agent-runtime
 # .env: LNKPI_NEST_BASE_URL=http://127.0.0.1:3000/api
 #       LNKPI_NEST_SERVICE_TOKEN=dev-token   # same as AGENT_RUNTIME_SERVICE_TOKEN
+#       # optional: LNKPI_RUNTIME_AUTH_TOKEN=dev-token  # Nest→Runtime; defaults to NEST token
 
 uv run uvicorn app.main:app --reload --port 8000
 ```
@@ -48,7 +49,8 @@ uv run uvicorn app.main:app --reload --port 8000
 |-------|------------------|
 | Runtime up | `curl -s http://127.0.0.1:8000/health` → `{"ok":true,"service":"agent-runtime"}` |
 | Nest up | `curl -s http://127.0.0.1:3000/api/health` (or your Nest health route) |
-| Token match | `LNKPI_NEST_SERVICE_TOKEN` (Runtime) = `AGENT_RUNTIME_SERVICE_TOKEN` (Nest) |
+| Token match | `LNKPI_NEST_SERVICE_TOKEN` (Runtime→Nest) = `AGENT_RUNTIME_SERVICE_TOKEN` (Nest) |
+| Runs auth | Nest `POST /v1/runs` sends `x-lnkpi-service-token`; Runtime checks `LNKPI_RUNTIME_AUTH_TOKEN` or falls back to `LNKPI_NEST_SERVICE_TOKEN`. `GET /health` stays open. |
 | Fallback | Unset `AGENT_RUNTIME_URL` → Nest uses `@lnkpi/agent` `CanvasAgent` |
 
 **Web UI smoke**
@@ -67,15 +69,15 @@ uv run uvicorn app.main:app --reload --port 8000
 
 Health: `GET http://127.0.0.1:8000/health` → `{ "ok": true, "service": "agent-runtime" }`
 
-Stream a turn (NDJSON): `POST http://127.0.0.1:8000/v1/runs`
+Stream a turn (NDJSON): `POST http://127.0.0.1:8000/v1/runs`  
+Requires header `x-lnkpi-service-token` matching Runtime auth token (see env table).
 
-```json
-{
-  "session_id": "...",
-  "user_id": "...",
-  "message": "帮我设计一套卫生洁具的营销方案",
-  "thread_id": "..."
-}
+```bash
+curl -N -X POST http://127.0.0.1:8000/v1/runs \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/x-ndjson" \
+  -H "x-lnkpi-service-token: dev-token" \
+  -d '{"session_id":"...","user_id":"...","message":"帮我设计一套卫生洁具的营销方案","thread_id":"..."}'
 ```
 
 Events: `text_delta` | `canvas_action` | `node_status` | `done` | `error`.
@@ -115,6 +117,7 @@ Settings use the `LNKPI_` prefix (see `app/config.py` and `.env.example`).
 | `LNKPI_SKILLS_DIR` | `skills` | Directory containing agent skill packages |
 | `LNKPI_NEST_BASE_URL` | `http://127.0.0.1:3000/api` | Nest API base **including** `/api` |
 | `LNKPI_NEST_SERVICE_TOKEN` | `dev-token` | Service token for Runtime → Nest internal canvas tools |
+| `LNKPI_RUNTIME_AUTH_TOKEN` | `""` | Nest → Runtime auth for `POST /v1/runs`; **empty** → use `LNKPI_NEST_SERVICE_TOKEN` |
 | `LNKPI_OPENAI_API_KEY` | `""` | OpenAI API key (plan LLM; empty uses placeholder in dev) |
 | `LNKPI_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible API base URL |
 | `LNKPI_IMAGE_GEN_CONCURRENCY` | `3` | Max concurrent image generation jobs |
@@ -127,7 +130,7 @@ Configure in `apps/server/.env` (see `apps/server/.env.example`).
 | Variable | Example | Description |
 |----------|---------|-------------|
 | `AGENT_RUNTIME_URL` | `http://127.0.0.1:8000` | Runtime base URL; **empty** → always `CanvasAgent` fallback |
-| `AGENT_RUNTIME_SERVICE_TOKEN` | `dev-token` | Validates Runtime calls to internal canvas tools |
+| `AGENT_RUNTIME_SERVICE_TOKEN` | `dev-token` | Shared secret: validates Runtime→Nest internal tools **and** Nest→Runtime `POST /v1/runs` header |
 
 ## Acceptance checklist (spec §12)
 

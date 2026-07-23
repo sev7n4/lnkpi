@@ -12,6 +12,20 @@ from app.graph.topo import topo_sort_image_keys
 DEFAULT_MAX_CONCURRENCY = 3
 
 
+def _is_gen_success(result: Any) -> bool:
+    """Nest may return HTTP 200 with soft `{status:'error'}` — treat as failure.
+
+    Success when status is completed/success and/or a non-empty url is present
+    (matches agent-canvas-tools.service runImageGeneration return shape).
+    """
+    if not isinstance(result, dict):
+        return False
+    status = str(result.get("status") or "").lower()
+    url = result.get("url")
+    has_url = isinstance(url, str) and bool(url.strip())
+    return status in ("completed", "success") or has_url
+
+
 def make_orchestrate_gen_node(
     *,
     nest: Any,
@@ -62,7 +76,14 @@ def make_orchestrate_gen_node(
                 return key, "fail", "missing_node_id"
             async with sem:
                 try:
-                    await nest.run_image_generation(str(node_id))
+                    result = await nest.run_image_generation(str(node_id))
+                    if not _is_gen_success(result):
+                        status = (
+                            str(result.get("status"))
+                            if isinstance(result, dict) and result.get("status") is not None
+                            else "error"
+                        )
+                        return key, "fail", f"nest_status:{status}"
                     return key, "ok", None
                 except Exception as exc:  # noqa: BLE001 — record per-node failure
                     return key, "fail", str(exc)

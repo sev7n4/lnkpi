@@ -11,8 +11,14 @@ from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 
 
 class FakeNest:
-    def __init__(self, *, fail_keys: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        fail_keys: set[str] | None = None,
+        soft_error_keys: set[str] | None = None,
+    ) -> None:
         self.fail_keys = fail_keys or set()
+        self.soft_error_keys = soft_error_keys or set()
         self.calls: list[str] = []
         self.key_by_node: dict[str, str] = {}
 
@@ -21,6 +27,9 @@ class FakeNest:
         self.calls.append(key)
         if key in self.fail_keys:
             raise RuntimeError(f"gen failed: {key}")
+        if key in self.soft_error_keys:
+            # Nest soft-fail: HTTP ok, body {status:'error'} without raising
+            return {"nodeId": node_id, "status": "error", "actions": []}
         return {"nodeId": node_id, "status": "completed"}
 
 
@@ -101,4 +110,31 @@ async def test_orchestrate_white_bg_fail_skips_hero():
     assert result["gen_completed"] == []
     by_key = {f["key"]: f for f in result["gen_failed"]}
     assert "white_bg" in by_key
+    assert by_key["hero_main"]["reason"] == "dependency_failed"
+
+
+@pytest.mark.asyncio
+async def test_orchestrate_soft_error_status_skips_dependents():
+    nest = FakeNest(soft_error_keys={"white_bg"})
+    nest.key_by_node = {"node-white_bg": "white_bg", "node-hero_main": "hero_main"}
+    node = make_orchestrate_gen_node(nest=nest)
+    manifest = _manifest(
+        ("hero_main", ["white_bg"]),
+        ("white_bg", []),
+    )
+
+    result = await node(
+        {
+            "split_manifest": manifest,
+            "gen_completed": [],
+            "gen_failed": [],
+            "messages": [],
+        }
+    )
+
+    assert nest.calls == ["white_bg"]
+    assert "hero_main" not in nest.calls
+    assert result["gen_completed"] == []
+    by_key = {f["key"]: f for f in result["gen_failed"]}
+    assert by_key["white_bg"]["reason"] == "nest_status:error"
     assert by_key["hero_main"]["reason"] == "dependency_failed"

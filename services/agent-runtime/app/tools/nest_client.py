@@ -4,6 +4,11 @@ from typing import Any
 
 import httpx
 
+from app.config import settings
+
+DEFAULT_HTTP_TIMEOUT_SEC = 30.0
+IMAGE_GEN_TIMEOUT_BUFFER_SEC = 30.0
+
 
 class NestCanvasClient:
     """HTTP client for Nest internal canvas tool endpoints."""
@@ -33,7 +38,7 @@ class NestCanvasClient:
             self._http = httpx.AsyncClient(
                 base_url=self._base_url,
                 headers=self._headers,
-                timeout=httpx.Timeout(30.0),
+                timeout=httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SEC),
             )
         return self._http
 
@@ -42,9 +47,20 @@ class NestCanvasClient:
             await self._http.aclose()
             self._http = None
 
-    async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def _post(
+        self,
+        path: str,
+        body: dict[str, Any],
+        *,
+        timeout: float | httpx.Timeout | None = None,
+    ) -> dict[str, Any]:
         http = await self._get_http()
-        response = await http.post(path, json=body, headers=self._headers)
+        response = await http.post(
+            path,
+            json=body,
+            headers=self._headers,
+            timeout=timeout,
+        )
         response.raise_for_status()
         payload = response.json()
         if payload.get("code", 0) != 0:
@@ -100,9 +116,12 @@ class NestCanvasClient:
         )
 
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
+        # Nest polls Studio up to image_gen_timeout_sec; httpx must outlive that.
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
         return await self._post(
             "/agent/internal/run-image-generation",
             {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+            timeout=timeout_sec,
         )
 
     async def get_generation_status(self, node_id: str) -> dict[str, Any]:

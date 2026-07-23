@@ -17,6 +17,19 @@ def test_discover_skips_underscore_and_requires_skill_md(tmp_path: Path):
     assert [e.skill_id for e in found] == ["valid-skill"]
 
 
+def test_discover_skips_bad_yaml_beside_good_skill(tmp_path: Path):
+    bad = tmp_path / "broken-skill"
+    bad.mkdir()
+    (bad / "SKILL.md").write_text("---\nname: [unterminated\ndescription: bad\n---\n# Broken\n")
+    good = tmp_path / "valid-skill"
+    good.mkdir()
+    (good / "SKILL.md").write_text(
+        "---\nname: valid-skill\ndescription: A valid skill for tests.\n---\n# Valid\n"
+    )
+    found = discover_skills(tmp_path)
+    assert [e.skill_id for e in found] == ["valid-skill"]
+
+
 def test_load_skill_reads_canvas_manifest(tmp_path: Path):
     skill_dir = tmp_path / "valid-skill"
     skill_dir.mkdir()
