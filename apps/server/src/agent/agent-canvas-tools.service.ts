@@ -499,6 +499,124 @@ export class AgentCanvasToolsService {
     }
   }
 
+  async runVideoGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{ url?: string; status: string; actions: CanvasAction[] }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const prompt = String(node.data?.prompt ?? node.data?.content ?? '').trim()
+    if (!prompt) throw new NotFoundException('节点缺少 prompt')
+
+    const started: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: {
+            status: 'generating',
+            generationStartedAt: new Date().toISOString(),
+          },
+        },
+      },
+    ]
+    let current = await this.persist(input.sessionId, canvas, started)
+    const allActions = [...started]
+
+    try {
+      const prefs = await this.loadAccountGenPrefs(input.userId)
+      const refs = toStudioRefs(node, current)
+      const settings =
+        node.data?.videoSettings && typeof node.data.videoSettings === 'object'
+          ? (node.data.videoSettings as Record<string, unknown>)
+          : {}
+      const aspectRatio = pickString(
+        settings.aspectRatio,
+        prefs.defaultVideoAspect || '16:9',
+      )
+      const resolution = pickString(
+        settings.resolution,
+        prefs.defaultVideoResolution || '720p',
+      )
+      const crop = pickString(settings.crop, prefs.defaultVideoCrop || 'none')
+      const durationRaw = settings.duration ?? prefs.defaultVideoDuration ?? 5
+      const duration = typeof durationRaw === 'number' ? durationRaw : Number(durationRaw) || 5
+      const model = pickString(node.data?.videoModel, prefs.defaultVideoModel) || undefined
+
+      const record = await this.studio.generateVideo(
+        input.userId,
+        prompt,
+        model,
+        duration,
+        aspectRatio,
+        refs,
+        undefined,
+        resolution,
+        crop,
+        { sessionId: input.sessionId, nodeId: input.nodeId },
+      )
+
+      const recordId = record.id
+      allActions.push({
+        type: 'update_node',
+        payload: { id: input.nodeId, data: { generationRecordId: recordId } },
+      })
+      current = await this.persist(input.sessionId, current, [
+        {
+          type: 'update_node',
+          payload: { id: input.nodeId, data: { generationRecordId: recordId } },
+        },
+      ])
+
+      const terminal = await this.pollGeneration(input.userId, recordId, record)
+      const status = String(terminal.status)
+      const url = typeof terminal.url === 'string' && terminal.url ? terminal.url : undefined
+
+      const finishData: Record<string, unknown> = {
+        status:
+          status === 'completed'
+            ? 'completed'
+            : status === 'failed' || status === 'error'
+              ? 'error'
+              : status,
+        generationRecordId: recordId,
+      }
+      if (url) finishData.url = url
+      if (status !== 'completed') {
+        finishData.errorMessage = '视频生成未完成或超时'
+      }
+
+      const finishActions: CanvasAction[] = [
+        { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
+      ]
+      await this.persist(input.sessionId, current, finishActions)
+      allActions.push(...finishActions)
+
+      return {
+        url,
+        status: String(finishData.status),
+        actions: allActions,
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '视频生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, current, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', actions: allActions }
+    }
+  }
+
   async getGenerationStatus(input: {
     sessionId: string
     nodeId: string

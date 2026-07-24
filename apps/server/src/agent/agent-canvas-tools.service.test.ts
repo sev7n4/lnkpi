@@ -16,6 +16,7 @@ describe('AgentCanvasToolsService', () => {
   const sessionUpdate = vi.fn()
   const prefsFindUnique = vi.fn()
   const generateImage = vi.fn()
+  const generateVideo = vi.fn()
   const getGeneration = vi.fn()
 
   const defaultPrefs = {
@@ -55,6 +56,11 @@ describe('AgentCanvasToolsService', () => {
       status: 'completed',
       url: 'https://cdn.example/img.png',
     })
+    generateVideo.mockResolvedValue({
+      id: 'gen-v1',
+      status: 'completed',
+      url: 'https://cdn.example/vid.mp4',
+    })
     getGeneration.mockResolvedValue({
       id: 'gen-1',
       status: 'completed',
@@ -73,7 +79,7 @@ describe('AgentCanvasToolsService', () => {
         },
         {
           provide: StudioService,
-          useValue: { generateImage, getGeneration },
+          useValue: { generateImage, generateVideo, getGeneration },
         },
       ],
     }).compile()
@@ -281,6 +287,46 @@ describe('AgentCanvasToolsService', () => {
       2,
       { sessionId: 's1', nodeId: 'img-1' },
     )
+  })
+
+  it('runVideoGeneration falls back to account default video prefs when node lacks fields', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'vid-1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: { prompt: '产品展示视频', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    getGeneration.mockResolvedValue({
+      id: 'gen-v1',
+      status: 'completed',
+      url: 'https://cdn.example/vid.mp4',
+    })
+    const result = await svc.runVideoGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'vid-1',
+    })
+    expect(prefsFindUnique).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+    expect(generateVideo).toHaveBeenCalledWith(
+      'u1',
+      '产品展示视频',
+      'platform::user-default-video',
+      10,
+      '9:16',
+      expect.any(Array),
+      undefined,
+      '1080p',
+      'center',
+      { sessionId: 's1', nodeId: 'vid-1' },
+    )
+    expect(result.status).toBe('completed')
+    expect(result.url).toBe('https://cdn.example/vid.mp4')
+    expect(canvas.nodes[0].data.url).toBe('https://cdn.example/vid.mp4')
   })
 
   it('runImageGeneration prefers node image fields over account defaults', async () => {

@@ -176,6 +176,12 @@ export class AgentCanvasToolsController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Post('run-video-generation')
+  async runVideoGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.runVideoGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('get-generation-status')
   async getGenerationStatus(@Body() dto: SessionNodeDto) {
     const data = await this.tools.getGenerationStatus(dto)
