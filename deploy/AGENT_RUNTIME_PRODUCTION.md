@@ -174,7 +174,14 @@ cd /opt/lnkpi && docker compose -f deploy/docker-compose.prod.yml up -d --force-
 | 4 | Nest 日志 / 行为 | 配置 `AGENT_RUNTIME_URL` 且健康时，对话走 Runtime；否则旧 Agent |
 | 5 | 无公网 8000 | `ss -lntp \| grep 8000` 仅 127.0.0.1 或无宿主机监听 |
 
-> 说明：当前 GitHub `deploy.yml` 的 path 过滤**不含** `services/agent-runtime/**`；合并后不会自动构建 Runtime。上线 Runtime 需按本文 **手动** compose/systemd 一次（或后续再改 CI）。
+> 说明：当前 GitHub `deploy.yml` 的 path 过滤**不含** `services/agent-runtime/**`；合并后不会自动构建 Runtime。上线 Runtime 可用：
+>
+> ```bash
+> # GitHub → Actions → Deploy API to Tencent Cloud → Run workflow
+> # enable_agent_runtime = true（会 sync 源码 + 写 .env token + compose build/up Runtime + recreate api）
+> ```
+>
+> 或在 CVM 手工执行 `bash /opt/lnkpi/deploy/enable-agent-runtime.sh`（见 `deploy/enable-agent-runtime.sh`）。
 
 ---
 
