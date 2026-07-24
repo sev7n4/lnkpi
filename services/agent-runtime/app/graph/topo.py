@@ -1,4 +1,4 @@
-"""Topological sort for auto-generate image keys in a split manifest."""
+"""Topological sort for auto-generate image/video keys in a split manifest."""
 
 from __future__ import annotations
 
@@ -6,15 +6,20 @@ from collections import defaultdict, deque
 from typing import Any, Iterable
 
 
-def topo_sort_image_keys(manifest: Iterable[dict[str, Any]]) -> list[str]:
-    """Return keys for image items with auto_generate=True in dependency order.
+def topo_sort_gen_keys(
+    manifest: Iterable[dict[str, Any]],
+    *,
+    types: tuple[str, ...] = ("image", "video"),
+) -> list[str]:
+    """Return keys for auto_generate items of given types in dependency order.
 
     Only edges among those keys are considered. Raises ValueError on cycles.
     """
+    allowed = set(types)
     items = [
         item
         for item in manifest
-        if item.get("target_type") == "image" and bool(item.get("auto_generate"))
+        if item.get("target_type") in allowed and bool(item.get("auto_generate"))
     ]
     keys = {str(item["key"]) for item in items if item.get("key")}
     indegree: dict[str, int] = {k: 0 for k in keys}
@@ -38,10 +43,14 @@ def topo_sort_image_keys(manifest: Iterable[dict[str, Any]]) -> list[str]:
             indegree[child] -= 1
             if indegree[child] == 0:
                 ready.append(child)
-        # keep ready queue sorted for deterministic order across inserts
         if len(ready) > 1:
             ready = deque(sorted(ready))
 
     if len(ordered) != len(keys):
-        raise ValueError("cycle detected in image depends_on graph")
+        raise ValueError("cycle detected in depends_on graph")
     return ordered
+
+
+def topo_sort_image_keys(manifest: Iterable[dict[str, Any]]) -> list[str]:
+    """Backward-compatible: image-only auto_generate keys."""
+    return topo_sort_gen_keys(manifest, types=("image",))

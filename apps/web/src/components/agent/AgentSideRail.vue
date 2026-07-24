@@ -4,6 +4,12 @@ import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
+import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
+import {
+  applyTaskEvent,
+  emptyTaskProgress,
+  type AgentTaskProgressState,
+} from '@/components/agent/agentTaskProgress'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -15,6 +21,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   canvasActions: [actions: unknown[]]
+  /** Agent 一轮结束后由画布从服务端回拉 SoT，避免本地旧图覆盖 Nest 拆图结果 */
+  turnComplete: []
+  focusNode: [nodeId: string]
   expandedChange: [expanded: boolean]
 }>()
 
@@ -24,6 +33,8 @@ const input = ref('')
 const chatContainer = ref<HTMLElement>()
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
 const agentThreadId = ref(`${props.sessionId}:main`)
+const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
+const showTaskCard = computed(() => taskProgress.value.items.length > 0)
 
 /** 方案确认门：侧栏展示快捷钮（一期口头 HITL，不打通 skillId） */
 const awaitingConfirm = computed(() => {
@@ -172,6 +183,7 @@ function startResize(event: MouseEvent) {
 function newAgentSession() {
   agent.clear()
   input.value = ''
+  taskProgress.value = emptyTaskProgress()
   agentThreadId.value = `${props.sessionId}:${crypto.randomUUID()}`
 }
 
@@ -272,21 +284,41 @@ async function sendMessage(message: string) {
     await reconcileLatestAssistant()
     const actions = agent.flushActions()
     if (actions.length) emit('canvasActions', actions)
+    // 始终回拉：Runtime 已写 Session.canvasData；本地 save 不得用旧节点覆盖
+    emit('turnComplete')
     scrollToBottom()
   }
 }
 
+const BUSY_TIP_SNIPPET = '上一轮仍在处理中'
+
 /** 流结束后用 DB 历史补齐（避免只看到 busy / 截断） */
 async function reconcileLatestAssistant() {
-  try {
+  const pull = async () => {
     const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
     const json = await res.json()
     const rows = (json.data || []) as Array<{ role: string; content: string }>
     const lastDb = [...rows].reverse().find((m) => m.role === 'assistant')
-    if (!lastDb?.content?.trim()) return
+    if (!lastDb?.content?.trim()) return null
     const lastLocal = agent.messages[agent.messages.length - 1]
     if (lastLocal?.role === 'assistant' && lastDb.content.length > (lastLocal.content?.length || 0)) {
       lastLocal.content = lastDb.content
+    }
+    return lastDb.content
+  }
+
+  try {
+    let content = await pull()
+    // 若刚落到 busy tip，首轮拆图可能仍在写 DB：短轮询补齐长进度文案
+    if (content?.includes(BUSY_TIP_SNIPPET)) {
+      for (let i = 0; i < 24; i++) {
+        await new Promise((r) => setTimeout(r, 5_000))
+        content = await pull()
+        if (content && !content.includes(BUSY_TIP_SNIPPET) && content.length > 40) {
+          scrollToBottom()
+          break
+        }
+      }
     }
   } catch {
     // ignore
@@ -310,6 +342,15 @@ function handleEvent(event: { type: string; data: unknown }) {
       break
     case 'canvas_action':
       agent.addCanvasAction(event.data as Parameters<typeof agent.addCanvasAction>[0])
+      break
+    case 'task_list':
+    case 'task_update':
+    case 'task_summary':
+      taskProgress.value = applyTaskEvent(
+        taskProgress.value,
+        event as Parameters<typeof applyTaskEvent>[1],
+      )
+      scrollToBottom()
       break
     case 'error':
       agent.appendText(`\n\n⚠️ ${(event.data as { message: string }).message}`)
@@ -480,6 +521,11 @@ defineExpose({ openPanel })
                 </div>
               </div>
             </div>
+            <AgentTaskProgressCard
+              v-if="showTaskCard"
+              :progress="taskProgress"
+              @focus-node="emit('focusNode', $event)"
+            />
           </div>
 
           <!-- 底部输入 dock：与节点 dock-studio 同款毛玻璃 -->

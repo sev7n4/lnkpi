@@ -1,8 +1,14 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http'
+import {
+  MAX_ATTEMPTS,
+  buildUpstreamPath,
+  isStreamProxyPath,
+  isStudioGeneratePost,
+  resolveUpstreamTimeoutMs,
+  shouldRetryUpstream,
+} from './proxy-routing'
 
 const API_ORIGIN = process.env.LNKPI_API_ORIGIN ?? 'http://119.29.173.89:5100'
-const DEFAULT_UPSTREAM_TIMEOUT_MS = 20_000
-const MAX_ATTEMPTS = 3
 
 /** Vercel Serverless：关闭 bodyParser，保留 multipart / 二进制原始流 */
 export const config = {
@@ -12,15 +18,12 @@ export const config = {
   maxDuration: 120,
 }
 
-const LONG_RUNNING_PATHS: Array<{ pattern: RegExp; timeoutMs: number }> = [
-  { pattern: /\/studio\/text\/generate$/i, timeoutMs: 120_000 },
-  { pattern: /\/studio\/prompt\/generate$/i, timeoutMs: 120_000 },
-  { pattern: /\/studio\/image\/generate$/i, timeoutMs: 120_000 },
-  { pattern: /\/studio\/image\/variation$/i, timeoutMs: 120_000 },
-  { pattern: /\/studio\/video\/generate$/i, timeoutMs: 90_000 },
-  { pattern: /\/studio\/audio\/generate$/i, timeoutMs: 60_000 },
-  { pattern: /\/upload(\/|$)/i, timeoutMs: 120_000 },
-]
+export {
+  buildUpstreamPath,
+  isStreamProxyPath,
+  resolveUpstreamTimeoutMs,
+  shouldRetryUpstream,
+} from './proxy-routing'
 
 type VercelRequest = IncomingMessage & {
   method?: string
@@ -34,31 +37,10 @@ type VercelResponse = {
   setHeader: (name: string, value: string) => void
   send: (body: string | Buffer) => void
   json: (body: unknown) => void
-}
-
-function buildUpstreamPath(query: VercelRequest['query']) {
-  const raw = query?.path
-  if (!raw) return '/api'
-  const parts = Array.isArray(raw) ? raw : [raw]
-  const joined = parts
-    .flatMap((part) => String(part).split('/'))
-    .filter(Boolean)
-    .join('/')
-  return joined ? `/api/${joined}` : '/api'
-}
-
-function resolveUpstreamTimeoutMs(upstreamPath: string): number {
-  for (const { pattern, timeoutMs } of LONG_RUNNING_PATHS) {
-    if (pattern.test(upstreamPath)) return timeoutMs
-  }
-  return DEFAULT_UPSTREAM_TIMEOUT_MS
-}
-
-function isStudioGeneratePost(method: string, upstreamPath: string): boolean {
-  return (
-    method === 'POST'
-    && /\/studio\/(text|prompt|image|video|audio)\/(generate|variation)$/i.test(upstreamPath)
-  )
+  writeHead?: (code: number, headers?: Record<string, string | number | string[]>) => void
+  write?: (chunk: string | Buffer) => boolean
+  end?: (chunk?: string | Buffer) => void
+  flushHeaders?: () => void
 }
 
 function buildUpstreamUrl(req: VercelRequest) {
@@ -98,12 +80,60 @@ async function readRawBody(req: VercelRequest): Promise<Buffer | undefined> {
   if (typeof req.body === 'string') {
     return req.body.length ? Buffer.from(req.body) : undefined
   }
-  // bodyParser:false → 从请求流读取原始字节（multipart / JSON / octet-stream）
   const chunks: Buffer[] = []
   for await (const chunk of req) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
   }
   return chunks.length ? Buffer.concat(chunks) : undefined
+}
+
+function copyUpstreamHeaders(upstream: Response, res: VercelResponse) {
+  upstream.headers.forEach((value, key) => {
+    const lower = key.toLowerCase()
+    if (lower === 'transfer-encoding' || lower === 'connection') return
+    res.setHeader(key, value)
+  })
+}
+
+async function pipeUpstreamStream(
+  upstream: Response,
+  res: VercelResponse,
+  status: number,
+): Promise<void> {
+  copyUpstreamHeaders(upstream, res)
+  if (typeof res.writeHead === 'function') {
+    res.writeHead(status)
+  } else {
+    res.status(status)
+  }
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders()
+  }
+
+  const body = upstream.body
+  if (!body || typeof res.write !== 'function' || typeof res.end !== 'function') {
+    const buf = Buffer.from(await upstream.arrayBuffer())
+    if (typeof res.end === 'function') res.end(buf)
+    else res.send(buf)
+    return
+  }
+
+  const reader = body.getReader()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value?.byteLength) res.write(Buffer.from(value))
+    }
+    res.end()
+  } catch (err) {
+    try {
+      res.end()
+    } catch {
+      // ignore
+    }
+    throw err
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -113,7 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const headers = buildUpstreamHeaders(req)
   const body = await readRawBody(req)
   const timeoutMs = resolveUpstreamTimeoutMs(upstreamPath)
-  const maxAttempts = isStudioGeneratePost(method, upstreamPath) ? 1 : MAX_ATTEMPTS
+  const maxAttempts = shouldRetryUpstream(method, upstreamPath) ? MAX_ATTEMPTS : 1
+  const streamProxy = isStreamProxyPath(upstreamPath)
 
   if (body != null && body.length > 0 && !headers.has('content-type')) {
     headers.set('content-type', 'application/json')
@@ -132,12 +163,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         redirect: 'manual',
         signal: AbortSignal.timeout(timeoutMs),
       })
+
+      if (streamProxy) {
+        await pipeUpstreamStream(upstream, res, upstream.status)
+        return
+      }
+
       const responseBody = Buffer.from(await upstream.arrayBuffer())
       res.status(upstream.status)
-      upstream.headers.forEach((value, key) => {
-        if (key.toLowerCase() === 'transfer-encoding') return
-        res.setHeader(key, value)
-      })
+      copyUpstreamHeaders(upstream, res)
       res.send(responseBody)
       return
     } catch (error) {
