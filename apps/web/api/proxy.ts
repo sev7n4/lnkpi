@@ -1,14 +1,14 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http'
-import {
-  MAX_ATTEMPTS,
-  buildUpstreamPath,
-  isStreamProxyPath,
-  isStudioGeneratePost,
-  resolveUpstreamTimeoutMs,
-  shouldRetryUpstream,
-} from './proxy-routing'
+
+/**
+ * NOTE: keep routing helpers in sync with `./proxy-routing.ts` (unit-tested).
+ * This file stays self-contained so Vercel Node ESM does not depend on sibling
+ * module resolution (which previously caused FUNCTION_INVOCATION_FAILED).
+ */
 
 const API_ORIGIN = process.env.LNKPI_API_ORIGIN ?? 'http://119.29.173.89:5100'
+const DEFAULT_UPSTREAM_TIMEOUT_MS = 20_000
+const MAX_ATTEMPTS = 3
 
 /** Vercel Serverless：关闭 bodyParser，保留 multipart / 二进制原始流 */
 export const config = {
@@ -18,12 +18,54 @@ export const config = {
   maxDuration: 120,
 }
 
-export {
-  buildUpstreamPath,
-  isStreamProxyPath,
-  resolveUpstreamTimeoutMs,
-  shouldRetryUpstream,
-} from './proxy-routing'
+const LONG_RUNNING_PATHS: Array<{ pattern: RegExp; timeoutMs: number }> = [
+  { pattern: /\/agent\/chat\/conversation$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/text\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/prompt\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/image\/generate$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/image\/variation$/i, timeoutMs: 120_000 },
+  { pattern: /\/studio\/video\/generate$/i, timeoutMs: 90_000 },
+  { pattern: /\/studio\/audio\/generate$/i, timeoutMs: 60_000 },
+  { pattern: /\/upload(\/|$)/i, timeoutMs: 120_000 },
+]
+
+export function buildUpstreamPath(
+  query: Record<string, string | string[] | undefined> | undefined,
+): string {
+  const raw = query?.path
+  if (!raw) return '/api'
+  const parts = Array.isArray(raw) ? raw : [raw]
+  const joined = parts
+    .flatMap((part) => String(part).split('/'))
+    .filter(Boolean)
+    .join('/')
+  return joined ? `/api/${joined}` : '/api'
+}
+
+export function resolveUpstreamTimeoutMs(upstreamPath: string): number {
+  for (const { pattern, timeoutMs } of LONG_RUNNING_PATHS) {
+    if (pattern.test(upstreamPath)) return timeoutMs
+  }
+  return DEFAULT_UPSTREAM_TIMEOUT_MS
+}
+
+export function isStreamProxyPath(upstreamPath: string): boolean {
+  return /\/agent\/chat\/conversation$/i.test(upstreamPath)
+}
+
+export function isStudioGeneratePost(method: string, upstreamPath: string): boolean {
+  return (
+    method === 'POST'
+    && /\/studio\/(text|prompt|image|video|audio)\/(generate|variation)$/i.test(upstreamPath)
+  )
+}
+
+/** 非幂等：失败重试会重复写 user message / 占 thread 锁 */
+export function shouldRetryUpstream(method: string, upstreamPath: string): boolean {
+  if (isStreamProxyPath(upstreamPath)) return false
+  if (isStudioGeneratePost(method, upstreamPath)) return false
+  return true
+}
 
 type VercelRequest = IncomingMessage & {
   method?: string
