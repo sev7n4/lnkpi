@@ -136,5 +136,5 @@ async def test_orchestrate_soft_error_status_skips_dependents():
     assert "hero_main" not in nest.calls
     assert result["gen_completed"] == []
     by_key = {f["key"]: f for f in result["gen_failed"]}
-    assert by_key["white_bg"]["reason"] == "nest_status:error"
+    assert by_key["white_bg"]["reason"] == "error"
     assert by_key["hero_main"]["reason"] == "dependency_failed"

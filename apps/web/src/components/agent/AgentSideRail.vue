@@ -4,14 +4,10 @@ import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
-import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
-import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
-import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { useClickOutside } from '@/composables/useClickOutside'
-import { estimateTextCredits } from '@/constants/credits'
 
 const props = defineProps<{
   sessionId: string
@@ -28,6 +24,13 @@ const input = ref('')
 const chatContainer = ref<HTMLElement>()
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
 const agentThreadId = ref(`${props.sessionId}:main`)
+
+/** 方案确认门：侧栏展示快捷钮（一期口头 HITL，不打通 skillId） */
+const awaitingConfirm = computed(() => {
+  if (agent.isStreaming) return false
+  const last = [...agent.messages].reverse().find((m) => m.role === 'assistant')
+  return Boolean(last?.content?.includes('请确认是否按此方案拆解画布并出图'))
+})
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -50,10 +53,7 @@ function clamp(v: number, min: number, max: number) {
   return Math.min(Math.max(v, min), max)
 }
 
-const { getConfig } = useModelProviderSettings()
-const agentModel = ref(getConfig('text').model)
 const speech = useSpeechRecognition()
-const credits = estimateTextCredits()
 
 /* ---- 技能选择 ---- */
 interface AgentSkill {
@@ -207,6 +207,20 @@ async function send() {
   const skillPrefix = activeSkillId.value === 'canvas' ? '' : `【技能：${activeSkill.value.label}】`
   const message = `${skillPrefix}${input.value.trim()}`
   input.value = ''
+  await sendMessage(message)
+}
+
+async function sendPreset(text: string) {
+  if (agent.isStreaming || !text.trim()) return
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  input.value = ''
+  await sendMessage(text.trim())
+}
+
+async function sendMessage(message: string) {
   agent.addUserMessage(message)
   agent.isStreaming = true
   agent.startAssistantMessage()
@@ -224,7 +238,6 @@ async function send() {
       body: JSON.stringify({
         sessionId: props.sessionId,
         message,
-        model: agentModel.value,
         threadId: agentThreadId.value,
       }),
     })
@@ -256,9 +269,27 @@ async function send() {
       agent.appendText('（本轮无文本回复。若在确认方案，可再发「确认」；或点「新建对话」后重试。）')
     }
     agent.finishStreaming()
+    await reconcileLatestAssistant()
     const actions = agent.flushActions()
     if (actions.length) emit('canvasActions', actions)
     scrollToBottom()
+  }
+}
+
+/** 流结束后用 DB 历史补齐（避免只看到 busy / 截断） */
+async function reconcileLatestAssistant() {
+  try {
+    const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
+    const json = await res.json()
+    const rows = (json.data || []) as Array<{ role: string; content: string }>
+    const lastDb = [...rows].reverse().find((m) => m.role === 'assistant')
+    if (!lastDb?.content?.trim()) return
+    const lastLocal = agent.messages[agent.messages.length - 1]
+    if (lastLocal?.role === 'assistant' && lastDb.content.length > (lastLocal.content?.length || 0)) {
+      lastLocal.content = lastDb.content
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -453,6 +484,24 @@ defineExpose({ openPanel })
 
           <!-- 底部输入 dock：与节点 dock-studio 同款毛玻璃 -->
           <div class="agent-input-area px-2.5 pb-2.5 pt-1">
+            <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认')"
+              >
+                确认拆图
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('我要修改：')"
+              >
+                要修改
+              </button>
+            </div>
             <div class="agent-input-dock">
               <textarea
                 v-model="input"
@@ -464,15 +513,15 @@ defineExpose({ openPanel })
               />
 
               <div class="agent-dock-actions">
-                <!-- 模型选择 -->
-                <UniversalModelSelector v-model="agentModel" type="text" />
+                <!-- 一期不打通规划模型选择：避免停用模型误导 -->
+                <span class="px-1 text-[10px] opacity-50">规划模型由服务端配置</span>
 
-                <!-- 技能选择 -->
+                <!-- 技能选择（一期仅文案前缀装饰，未打通 Runtime skillId） -->
                 <div ref="skillMenuRef" class="relative">
                   <button
                     type="button"
                     class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
-                    title="技能"
+                    title="技能（一期未打通 Runtime）"
                     @click="skillMenuOpen = !skillMenuOpen"
                   >
                     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-[var(--neo-accent-text)]" fill="none" stroke="currentColor" stroke-width="1.75">
@@ -517,15 +566,11 @@ defineExpose({ openPanel })
                 </div>
 
                 <div class="ml-auto flex items-center gap-2">
-                  <!-- 积分消耗 -->
-                  <DockCreditBadge :credits="credits" />
-                  <!-- 语音输入 -->
                   <DockMicButton
                     :listening="speech.listening.value"
                     :disabled="agent.isStreaming"
                     @toggle="toggleVoice"
                   />
-                  <!-- 生成 -->
                   <DockGenerateButton
                     :generating="agent.isStreaming"
                     :disabled="!agent.isStreaming && !input.trim()"

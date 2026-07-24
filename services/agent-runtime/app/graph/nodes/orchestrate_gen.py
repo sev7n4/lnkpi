@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
 from app.graph.topo import topo_sort_image_keys
 
 DEFAULT_MAX_CONCURRENCY = 3
@@ -21,6 +22,8 @@ def _is_gen_success(result: Any) -> bool:
     if not isinstance(result, dict):
         return False
     status = str(result.get("status") or "").lower()
+    if status == "fallback_pending":
+        return False
     url = result.get("url")
     has_url = isinstance(url, str) and bool(url.strip())
     return status in ("completed", "success") or has_url
@@ -65,9 +68,16 @@ def make_orchestrate_gen_node(
         failed_keys: set[str] = set()
         gen_completed: list[str] = []
         gen_failed: list[dict] = []
+        progress_lines: list[str] = []
+        fallback_n = 0
         sem = asyncio.Semaphore(max(1, max_concurrency))
         remaining = set(ordered_keys)
         in_flight: dict[str, asyncio.Task] = {}
+
+        async def emit_line(text: str) -> None:
+            emit = getattr(nest, "emit_text", None)
+            if emit is not None:
+                await emit(text if text.endswith("\n") else text + "\n")
 
         async def run_one(key: str) -> tuple[str, str, str | None]:
             item = by_key[key]
@@ -83,7 +93,7 @@ def make_orchestrate_gen_node(
                             if isinstance(result, dict) and result.get("status") is not None
                             else "error"
                         )
-                        return key, "fail", f"nest_status:{status}"
+                        return key, "fail", status
                     return key, "ok", None
                 except Exception as exc:  # noqa: BLE001 — record per-node failure
                     return key, "fail", str(exc)
@@ -94,13 +104,18 @@ def make_orchestrate_gen_node(
                 if any(d in failed_keys for d in deps):
                     remaining.discard(key)
                     failed_keys.add(key)
+                    title = str(by_key[key].get("title") or key)
                     gen_failed.append(
                         {
                             "key": key,
                             "node_id": by_key[key].get("node_id"),
+                            "title": title,
                             "reason": "dependency_failed",
                         }
                     )
+                    line = format_gen_progress_line(title=title, status="dependency_failed")
+                    progress_lines.append(line)
+                    await emit_line(line)
                     continue
                 if not all(d in completed_keys for d in deps):
                     continue
@@ -108,16 +123,20 @@ def make_orchestrate_gen_node(
                 in_flight[key] = asyncio.create_task(run_one(key))
 
             if not in_flight:
-                # unmet deps that never failed (e.g. missing keys) — skip rest
                 for key in sorted(remaining):
                     failed_keys.add(key)
+                    title = str(by_key[key].get("title") or key)
                     gen_failed.append(
                         {
                             "key": key,
                             "node_id": by_key[key].get("node_id"),
+                            "title": title,
                             "reason": "dependency_failed",
                         }
                     )
+                    line = format_gen_progress_line(title=title, status="dependency_failed")
+                    progress_lines.append(line)
+                    await emit_line(line)
                 remaining.clear()
                 break
 
@@ -129,20 +148,37 @@ def make_orchestrate_gen_node(
                 del in_flight[key]
                 item = by_key[key]
                 node_id = str(item.get("node_id") or key)
+                title = str(item.get("title") or key)
                 if status == "ok":
                     completed_keys.add(key)
                     gen_completed.append(node_id)
+                    line = format_gen_progress_line(title=title, status="completed")
                 else:
                     failed_keys.add(key)
+                    reason = err or "failed"
+                    if str(reason).lower() == "fallback_pending":
+                        fallback_n += 1
                     gen_failed.append(
-                        {"key": key, "node_id": node_id, "reason": err or "failed"}
+                        {
+                            "key": key,
+                            "node_id": node_id,
+                            "title": title,
+                            "reason": reason,
+                        }
                     )
+                    line = format_gen_progress_line(title=title, status=str(reason))
+                progress_lines.append(line)
+                await emit_line(line)
 
-        msg = (
-            f"自动出图完成：成功 {len(gen_completed)}，失败/跳过 {len(gen_failed)}。"
-            if gen_queue
-            else "无可自动出图的图片节点。"
-        )
+        if gen_queue:
+            msg = format_gen_summary(
+                lines=progress_lines,
+                success_n=len(gen_completed),
+                fail_n=len(gen_failed),
+                fallback_n=fallback_n,
+            )
+        else:
+            msg = "无可自动出图的图片节点。"
         return {
             "phase": "orchestrate_gen",
             "gen_queue": gen_queue,
