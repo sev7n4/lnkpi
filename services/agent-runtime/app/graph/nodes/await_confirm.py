@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Callable, Literal
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 Decision = Literal["none", "confirm", "revise"]
+
+# When user reply is neither confirm nor revise, still surface a visible tip
+# (otherwise stream ends with only `done` and the UI looks empty).
+_NONE_DECISION_TIP = "请确认方案或说明修改；也可回复「确认」继续拆解画布并出图。"
 
 _CONFIRM_HINTS = (
     "确认",
@@ -103,10 +107,13 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
             decision = await _llm_classify(llm, text)
 
         awaiting = decision == "none"
-        return {
+        out: dict[str, Any] = {
             "user_decision": decision,
             "awaiting_user": awaiting,
             "phase": "await_confirm" if awaiting else state.get("phase") or "await_confirm",
         }
+        if decision == "none":
+            out["messages"] = [AIMessage(content=_NONE_DECISION_TIP)]
+        return out
 
     return await_confirm

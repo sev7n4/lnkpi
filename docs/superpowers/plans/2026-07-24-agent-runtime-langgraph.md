@@ -20,6 +20,7 @@
 - `AGENT_RUNTIME_URL` 缺失/不健康 → 回退 `@lnkpi/agent` `CanvasAgent`
 - `run_image_generation`：Nest 启动生成并轮询至完成/超时（默认 180s）
 - 出图并发 ≤3；`max_downstream` 默认 12
+- **Out of scope（一期遗留 → 二期）**：Agent 侧栏底栏 dock 的 `model` / `skillId` / 文本积分端到端（DTO → Runtime 覆盖规划 LLM 或用户 BYOK → `intake` 对齐 → 真实计费）。规划 LLM 仅用部署侧 `LNKPI_OPENAI_*`；勿把前端模型选择器当验收项。详见规格 §1.2 / §10。
 - 提交前：Runtime `pytest`；涉及 Nest/agent 时 `pnpm --filter @lnkpi/server` / `@lnkpi/agent` 相关 test；勿直接 push main
 
 ---

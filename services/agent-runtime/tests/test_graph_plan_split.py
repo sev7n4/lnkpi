@@ -204,3 +204,43 @@ async def test_revise_returns_to_plan():
     assert state2["user_decision"] == "none"
     assert state2["phase"] == "await_confirm"
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_await_confirm_none_emits_tip_message():
+    """Ambiguous replies while awaiting confirm must not end the turn silently."""
+    from app.graph.nodes.await_confirm import _NONE_DECISION_TIP
+
+    nest = FakeNest()
+    llm = FakeLLM(
+        responses=[
+            PLAN_MARKDOWN,
+            "none",  # LLM classify for ambiguous user text
+        ]
+    )
+    graph = build_agent_graph(nest=nest, llm=llm, skills_dir=SKILLS_DIR)
+    config = {"configurable": {"thread_id": "thread-none-tip-1"}}
+
+    await graph.ainvoke(
+        {
+            "messages": [HumanMessage(content="帮我设计卫生洁具营销方案")],
+            "session_id": "session-none-tip",
+            "thread_id": "thread-none-tip-1",
+            "user_id": "user-1",
+        },
+        config,
+    )
+
+    state2 = await graph.ainvoke(
+        {"messages": [HumanMessage(content="请只回复：在线")]},
+        config,
+    )
+    assert state2["user_decision"] == "none"
+    assert state2["awaiting_user"] is True
+    assert state2["phase"] == "await_confirm"
+    texts = [
+        str(getattr(m, "content", "") or "")
+        for m in (state2.get("messages") or [])
+        if getattr(m, "type", None) == "ai" or isinstance(m, AIMessage)
+    ]
+    assert any(_NONE_DECISION_TIP in t for t in texts)
