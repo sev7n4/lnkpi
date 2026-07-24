@@ -127,7 +127,11 @@ export LNKPI_AGENT_RUNTIME_IMAGE="${LNKPI_AGENT_RUNTIME_IMAGE:-lnkpi-agent-runti
 export DOCKER_BUILDKIT=1
 
 log "=== Build agent-runtime ==="
-$COMPOSE build --progress=plain agent-runtime
+if ! $COMPOSE build --progress=plain agent-runtime; then
+  log "WARN: first build failed; retrying once"
+  sleep 5
+  $COMPOSE build --progress=plain agent-runtime
+fi
 
 log "=== Up api + agent-runtime (force-recreate) ==="
 $COMPOSE up -d --no-build --force-recreate --remove-orphans api agent-runtime
