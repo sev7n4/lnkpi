@@ -136,6 +136,10 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
         }
         if decision == "none":
             out["messages"] = [AIMessage(content=_NONE_DECISION_TIP)]
+        elif decision == "confirm":
+            # Immediate tip so SSE stays visibly busy while split/orchestrate_gen runs
+            out["messages"] = [
+                AIMessage(content="正在按方案拆解画布并出图，请稍候…")
+            ]
         return out
-
     return await_confirm

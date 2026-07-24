@@ -33,7 +33,18 @@ async def test_none_decision_adds_tip_message():
 
 
 @pytest.mark.asyncio
-async def test_post_plan_ai_turn_skips_tip():
+async def test_confirm_decision_adds_progress_tip():
+    node = make_await_confirm_node(llm=_FakeLLM())
+    out = await node(
+        {
+            "messages": [HumanMessage(content="确认")],
+            "awaiting_user": True,
+            "phase": "await_confirm",
+        }
+    )
+    assert out["user_decision"] == "confirm"
+    assert out["awaiting_user"] is False
+    assert "拆解" in out["messages"][0].content
     """Same-turn plan → await_confirm must not re-prompt before user replies."""
     node = make_await_confirm_node(llm=_FakeLLM())
     out = await node(
