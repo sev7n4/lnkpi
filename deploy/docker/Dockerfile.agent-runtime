@@ -7,12 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
   && rm -rf /var/lib/apt/lists/*
 
+# 依赖层先装：app/skills 变更不重装 pip（CVM 访问 PyPI 易超时）
 COPY services/agent-runtime/pyproject.toml ./
-COPY services/agent-runtime/app ./app
-COPY services/agent-runtime/skills ./skills
-
-# pyproject 无 setuptools 包声明时，直接按依赖安装即可
-RUN pip install --no-cache-dir \
+RUN pip install --no-cache-dir --default-timeout=120 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple \
+    --trusted-host pypi.tuna.tsinghua.edu.cn \
     "fastapi>=0.115" \
     "uvicorn[standard]>=0.32" \
     "langgraph>=0.2" \
@@ -20,6 +19,9 @@ RUN pip install --no-cache-dir \
     "httpx>=0.27" \
     "pyyaml>=6.0" \
     "pydantic-settings>=2.0"
+
+COPY services/agent-runtime/app ./app
+COPY services/agent-runtime/skills ./skills
 
 ENV LNKPI_SKILLS_DIR=/app/skills
 ENV PYTHONPATH=/app
