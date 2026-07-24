@@ -5,7 +5,8 @@
 # 服务器（CVM 本地 build，推荐）:
 #   export IMAGE_TAG=<git-sha> LNKPI_API_IMAGE=lnkpi-api:<git-sha>
 #   docker compose -f deploy/docker-compose.prod.yml build api
-#   docker compose -f deploy/docker-compose.prod.yml up -d --no-build
+#   docker compose -f deploy/docker-compose.prod.yml up -d --no-build api
+#   # agent-runtime 勿随 api 自动 up；见 AGENT_RUNTIME_PRODUCTION.md
 # 服务器（TCR 镜像，备选）:
 #   export IMAGE_TAG=<git-sha> TCR_REGISTRY=ccr.ccs.tencentyun.com TCR_NAMESPACE=lnkpi
 #   docker compose -f deploy/docker-compose.prod.yml -f deploy/docker-compose.prod.images.yml pull
