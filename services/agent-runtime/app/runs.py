@@ -95,7 +95,7 @@ def default_llm() -> Any:
     return ChatOpenAI(
         api_key=settings.openai_api_key or "sk-placeholder",
         base_url=settings.openai_base_url,
-        model="gpt-4o",
+        model=settings.openai_chat_model or "gpt-4o",
         temperature=0.4,
     )
 
