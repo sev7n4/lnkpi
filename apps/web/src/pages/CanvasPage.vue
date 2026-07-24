@@ -2596,6 +2596,7 @@ onMounted(() => {
         :session-id="sessionId"
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
+        @focus-node="focusNodeById"
       />
     </div>
 

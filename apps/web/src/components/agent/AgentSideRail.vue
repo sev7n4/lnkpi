@@ -4,6 +4,12 @@ import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
+import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
+import {
+  applyTaskEvent,
+  emptyTaskProgress,
+  type AgentTaskProgressState,
+} from '@/components/agent/agentTaskProgress'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -17,6 +23,7 @@ const emit = defineEmits<{
   canvasActions: [actions: unknown[]]
   /** Agent 一轮结束后由画布从服务端回拉 SoT，避免本地旧图覆盖 Nest 拆图结果 */
   turnComplete: []
+  focusNode: [nodeId: string]
   expandedChange: [expanded: boolean]
 }>()
 
@@ -26,6 +33,8 @@ const input = ref('')
 const chatContainer = ref<HTMLElement>()
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
 const agentThreadId = ref(`${props.sessionId}:main`)
+const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
+const showTaskCard = computed(() => taskProgress.value.items.length > 0)
 
 /** 方案确认门：侧栏展示快捷钮（一期口头 HITL，不打通 skillId） */
 const awaitingConfirm = computed(() => {
@@ -333,6 +342,15 @@ function handleEvent(event: { type: string; data: unknown }) {
     case 'canvas_action':
       agent.addCanvasAction(event.data as Parameters<typeof agent.addCanvasAction>[0])
       break
+    case 'task_list':
+    case 'task_update':
+    case 'task_summary':
+      taskProgress.value = applyTaskEvent(
+        taskProgress.value,
+        event as Parameters<typeof applyTaskEvent>[1],
+      )
+      scrollToBottom()
+      break
     case 'error':
       agent.appendText(`\n\n⚠️ ${(event.data as { message: string }).message}`)
       break
@@ -502,6 +520,11 @@ defineExpose({ openPanel })
                 </div>
               </div>
             </div>
+            <AgentTaskProgressCard
+              v-if="showTaskCard"
+              :progress="taskProgress"
+              @focus-node="emit('focusNode', $event)"
+            />
           </div>
 
           <!-- 底部输入 dock：与节点 dock-studio 同款毛玻璃 -->
