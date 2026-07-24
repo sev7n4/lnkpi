@@ -4,7 +4,7 @@
 > 日期：2026-07-23（修订 2026-07-24）  
 > 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
-> 非范围：一期不实现自动出视频；不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）
+> 非范围：一期不实现自动出视频；不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）
 
 ---
 
@@ -19,6 +19,8 @@
 | Skills | 一期即要：见 **§7**，目录与 `SKILL.md` **对齐 [Agent Skills](https://agentskills.io/specification) 开放标准**，可兼容 skills 市场生态；lnkpi 扩展仅放 `metadata` / `assets/` |
 | 一期验收 | Skill 规划 → 确认 → 拆骨架（边/prompt/refs）→ **按拓扑自动出图**（URI 回写节点） |
 | 自动生成编排 | **一期包含自动出图**（`orchestrate_gen`）；**自动出视频留二期** |
+| 规划 LLM | **一期平台配置**：Runtime `LNKPI_OPENAI_*`（密钥/base_url/model）；**非**用户 UI 选择 / 对话 BYOK |
+| Agent 底栏 dock 参数 | **一期不打通**（模型选择器、技能下拉、文本积分徽章等为旧 UI 遗留；见 §1.2 / §10） |
 | 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
 | 现有 `@lnkpi/agent` | 保留为 Nest 侧兼容/工具适配层；新控制面迁到 Python Runtime，不一夜删除 |
 
@@ -43,6 +45,11 @@
 - 不因上游 Ref 变更而静默级联重跑（保持既有产品默认；与 Agent 显式 `orchestrate_gen` 区分）。
 - 不引入 CrewAI/AutoGen 作为 Runtime 内核；不以 Temporal 作为一期依赖。
 - 不要求一期上线联网搜索（可作为后续 Skill/Tool）。
+- **不打通 Agent 侧栏底部 dock 参数链路**（旧 `@lnkpi/agent` / `AgentSideRail` UI 遗留，**明确不在一期范围**，二期再做）：
+  - 前端 `UniversalModelSelector` → Nest `ConversationDto.model` → Runtime **覆盖规划 LLM**（或用户对话 BYOK）
+  - 前端技能选择 → 请求 `skillId` → Runtime **`intake` 与 Skill 包对齐**（今日仅为文案前缀 / 关键词启发式）
+  - 底部文本 **积分徽章与真实计费对齐**（今日为静态估算示意；出图积分/BYOK 仍走 Nest Studio，与底栏无关）
+  - 一期现状约定：规划模型只认部署侧 `LNKPI_OPENAI_*`；前端若带 `model` 字段，Nest `ValidationPipe({ whitelist: true })` **可丢弃**；勿将底栏选择当作 Runtime 行为验收项。
 
 ---
 
@@ -427,6 +434,12 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 2. **自动出视频**：扩展 `orchestrate_gen` 支持 `v_flf` / `v_ref`。
 3. **Research Skill**：联网搜索/竞品洞察 → 文本节点或写入方案。
 4. **出图失败重试 / 部分重跑**：用户「只重跑失败节点」→ 重建 `gen_queue` 子集。
+5. **Agent 底栏 dock 参数端到端（一期遗留）**：
+   - DTO：`ConversationDto`（及 Runtime `/v1/runs`）增加 `model` / `skillId`（命名与校验与前端一致）。
+   - Runtime：按请求覆盖规划 LLM（平台路由或 **用户 BYOK**）；与 `LNKPI_OPENAI_*` 默认值的优先级写清。
+   - 技能：UI `skillId` 驱动 `intake` 选包，替代/补强纯关键词启发式；去掉仅作装饰的「【技能：…】」前缀语义。
+   - 积分：底栏徽章与对话/规划真实扣费（若有）对齐；与 Studio 出图计费边界写清，避免双计或空示意。
+   - UX：停用/无渠道模型不得表现为「发送无回复」；未打通前可考虑隐藏或标注「规划模型由服务端配置」。
 
 ---
 
@@ -475,3 +488,4 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 2026-07-24 | 一期纳入 `orchestrate_gen` 自动出图；视频仍二期；Skills 目录初稿 |
 | 2026-07-24 | §7 对齐 agentskills.io：标准 `SKILL.md`/`scripts`/`references`/`assets`；画布清单迁入 `assets/canvas-manifest.yaml`；扩展仅 `metadata.lnkpi.*` |
 | 2026-07-24 | 规格确认；§13 开放问题锁定；进入实现计划 |
+| 2026-07-24 | 明确 **Agent 底栏 dock（model/skillId/积分）不在一期**；列入 §1.2 非目标与 §10 二期遗留 |
