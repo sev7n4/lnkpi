@@ -111,6 +111,10 @@ class FakeNest:
         self.calls.append(("run_image_generation", {"node_id": node_id}))
         return {"nodeId": node_id, "status": "completed", "actions": []}
 
+    async def run_video_generation(self, node_id: str) -> dict[str, Any]:
+        self.calls.append(("run_video_generation", {"node_id": node_id}))
+        return {"nodeId": node_id, "status": "completed", "url": "https://cdn.example/v.mp4", "actions": []}
+
 
 def _batch_keys(nest: FakeNest) -> set[str]:
     for name, payload in nest.calls:
@@ -157,15 +161,16 @@ async def test_confirm_then_split_creates_image_skeletons():
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])
     gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
+    video_calls = [c for c in nest.calls if c[0] == "run_video_generation"]
     assert gen_calls  # orchestrate_gen ran for auto_generate images
     assert state2.get("gen_completed")
-    # video auto_generate=false must not be generated
     video_ids = {
         item["node_id"]
         for item in state2["split_manifest"]
         if item.get("key") == "show_video"
     }
-    assert not any(c[1]["node_id"] in video_ids for c in gen_calls)
+    assert video_calls
+    assert any(c[1]["node_id"] in video_ids for c in video_calls)
     # State must not hold full canvas nodes/edges
     assert "nodes" not in state2
     assert "edges" not in state2

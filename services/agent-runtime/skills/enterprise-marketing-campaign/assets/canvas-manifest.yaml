@@ -1,7 +1,7 @@
 schema_version: 1
 defaults:
   auto_generate_image: true
-  auto_generate_video: false
+  auto_generate_video: true
 items:
   - key: copy_main
     title: 主文案
@@ -79,6 +79,6 @@ items:
     target_type: video
     source_section: 视觉资产/视频
     gen_mode: v_ref
-    auto_generate: false
+    auto_generate: true
     depends_on: [hero_main]
-    prompt_hint_template: "产品旋转展示，一期仅建骨架不出片…"
+    prompt_hint_template: "产品旋转展示短视频，突出质感与卖点…"

@@ -1,4 +1,4 @@
-"""Orchestrate topological image generation with bounded concurrency."""
+"""Orchestrate topological image/video generation with retry and task events."""
 
 from __future__ import annotations
 
@@ -8,17 +8,13 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
-from app.graph.topo import topo_sort_image_keys
+from app.graph.task_events import hint_for_error, is_recoverable, max_auto_retries
+from app.graph.topo import topo_sort_gen_keys
 
 DEFAULT_MAX_CONCURRENCY = 3
 
 
 def _is_gen_success(result: Any) -> bool:
-    """Nest may return HTTP 200 with soft `{status:'error'}` — treat as failure.
-
-    Success when status is completed/success and/or a non-empty url is present
-    (matches agent-canvas-tools.service runImageGeneration return shape).
-    """
     if not isinstance(result, dict):
         return False
     status = str(result.get("status") or "").lower()
@@ -29,6 +25,26 @@ def _is_gen_success(result: Any) -> bool:
     return status in ("completed", "success") or has_url
 
 
+def _result_status(result: Any, exc: BaseException | None = None) -> str:
+    if exc is not None:
+        return str(exc)
+    if isinstance(result, dict) and result.get("status") is not None:
+        return str(result.get("status"))
+    return "error"
+
+
+async def _emit_task_update(nest: Any, **payload: Any) -> None:
+    fn = getattr(nest, "emit_task_update", None)
+    if fn is not None:
+        await fn(**payload)
+
+
+async def _emit_task_summary(nest: Any, **payload: Any) -> None:
+    fn = getattr(nest, "emit_task_summary", None)
+    if fn is not None:
+        await fn(**payload)
+
+
 def make_orchestrate_gen_node(
     *,
     nest: Any,
@@ -37,9 +53,10 @@ def make_orchestrate_gen_node(
     async def orchestrate_gen(state: dict) -> dict:
         manifest = list(state.get("split_manifest") or [])
         by_key = {str(item["key"]): item for item in manifest if item.get("key")}
+        retries = max_auto_retries()
 
         try:
-            ordered_keys = topo_sort_image_keys(manifest)
+            ordered_keys = topo_sort_gen_keys(manifest)
         except ValueError as exc:
             return {
                 "phase": "orchestrate_gen",
@@ -58,6 +75,22 @@ def make_orchestrate_gen_node(
             for k in ordered_keys
             if by_key.get(k) and by_key[k].get("node_id")
         ]
+
+        emit_list = getattr(nest, "emit_task_list", None)
+        if emit_list is not None:
+            await emit_list(
+                [
+                    {
+                        "id": k,
+                        "title": str(by_key[k].get("title") or k),
+                        "nodeId": str(by_key[k].get("node_id") or ""),
+                        "kind": str(by_key[k].get("target_type") or "image"),
+                    }
+                    for k in ordered_keys
+                    if by_key.get(k)
+                ]
+            )
+
         key_set = set(ordered_keys)
         deps_of = {
             k: [str(d) for d in (by_key[k].get("depends_on") or []) if str(d) in key_set]
@@ -66,10 +99,13 @@ def make_orchestrate_gen_node(
 
         completed_keys: set[str] = set()
         failed_keys: set[str] = set()
+        needs_user_keys: set[str] = set()
         gen_completed: list[str] = []
         gen_failed: list[dict] = []
         progress_lines: list[str] = []
         fallback_n = 0
+        needs_user_n = 0
+        summary_lines: list[dict[str, str]] = []
         sem = asyncio.Semaphore(max(1, max_concurrency))
         remaining = set(ordered_keys)
         in_flight: dict[str, asyncio.Task] = {}
@@ -82,26 +118,70 @@ def make_orchestrate_gen_node(
         async def run_one(key: str) -> tuple[str, str, str | None]:
             item = by_key[key]
             node_id = item.get("node_id")
+            title = str(item.get("title") or key)
+            kind = str(item.get("target_type") or "image")
             if not node_id:
                 return key, "fail", "missing_node_id"
+
             async with sem:
-                try:
-                    result = await nest.run_image_generation(str(node_id))
-                    if not _is_gen_success(result):
-                        status = (
-                            str(result.get("status"))
-                            if isinstance(result, dict) and result.get("status") is not None
-                            else "error"
+                await _emit_task_update(
+                    nest, id=key, status="running", attempt=0, maxAttempts=retries
+                )
+                last_status = "error"
+                for attempt in range(retries + 1):
+                    if attempt > 0:
+                        await _emit_task_update(
+                            nest,
+                            id=key,
+                            status="retrying",
+                            attempt=attempt,
+                            maxAttempts=retries,
+                            errorHint=hint_for_error(last_status),
                         )
-                        return key, "fail", status
-                    return key, "ok", None
-                except Exception as exc:  # noqa: BLE001 — record per-node failure
-                    return key, "fail", str(exc)
+                    try:
+                        if kind == "video":
+                            run = getattr(nest, "run_video_generation", None)
+                            if run is None:
+                                return key, "fail", "video_not_supported"
+                            result = await run(str(node_id))
+                        else:
+                            result = await nest.run_image_generation(str(node_id))
+                        if _is_gen_success(result):
+                            await _emit_task_update(nest, id=key, status="done")
+                            return key, "ok", None
+                        last_status = _result_status(result)
+                    except Exception as exc:  # noqa: BLE001
+                        last_status = str(exc)
+                        result = None
+
+                    if not is_recoverable(last_status):
+                        hint = hint_for_error(last_status)
+                        await _emit_task_update(
+                            nest,
+                            id=key,
+                            status="needs_user",
+                            errorCode=last_status,
+                            errorHint=hint,
+                        )
+                        return key, "needs_user", last_status
+
+                    if attempt >= retries:
+                        break
+
+                hint = hint_for_error(last_status)
+                await _emit_task_update(
+                    nest,
+                    id=key,
+                    status="failed",
+                    errorCode=last_status,
+                    errorHint=hint,
+                )
+                return key, "fail", last_status
 
         while remaining or in_flight:
             for key in sorted(remaining):
                 deps = deps_of[key]
-                if any(d in failed_keys for d in deps):
+                if any(d in failed_keys or d in needs_user_keys for d in deps):
                     remaining.discard(key)
                     failed_keys.add(key)
                     title = str(by_key[key].get("title") or key)
@@ -112,6 +192,21 @@ def make_orchestrate_gen_node(
                             "title": title,
                             "reason": "dependency_failed",
                         }
+                    )
+                    summary_lines.append(
+                        {
+                            "id": key,
+                            "status": "failed",
+                            "title": title,
+                            "hint": hint_for_error("dep_failed"),
+                        }
+                    )
+                    await _emit_task_update(
+                        nest,
+                        id=key,
+                        status="failed",
+                        errorCode="dependency_failed",
+                        errorHint=hint_for_error("dep_failed"),
                     )
                     line = format_gen_progress_line(title=title, status="dependency_failed")
                     progress_lines.append(line)
@@ -153,9 +248,10 @@ def make_orchestrate_gen_node(
                     completed_keys.add(key)
                     gen_completed.append(node_id)
                     line = format_gen_progress_line(title=title, status="completed")
-                else:
-                    failed_keys.add(key)
-                    reason = err or "failed"
+                elif status == "needs_user":
+                    needs_user_keys.add(key)
+                    needs_user_n += 1
+                    reason = err or "needs_user"
                     if str(reason).lower() == "fallback_pending":
                         fallback_n += 1
                     gen_failed.append(
@@ -166,9 +262,47 @@ def make_orchestrate_gen_node(
                             "reason": reason,
                         }
                     )
+                    summary_lines.append(
+                        {
+                            "id": key,
+                            "status": "needs_user",
+                            "title": title,
+                            "hint": hint_for_error(reason),
+                        }
+                    )
+                    line = format_gen_progress_line(title=title, status=str(reason))
+                else:
+                    failed_keys.add(key)
+                    reason = err or "failed"
+                    gen_failed.append(
+                        {
+                            "key": key,
+                            "node_id": node_id,
+                            "title": title,
+                            "reason": reason,
+                        }
+                    )
+                    summary_lines.append(
+                        {
+                            "id": key,
+                            "status": "failed",
+                            "title": title,
+                            "hint": hint_for_error(reason),
+                        }
+                    )
                     line = format_gen_progress_line(title=title, status=str(reason))
                 progress_lines.append(line)
                 await emit_line(line)
+
+        fail_only = max(0, len(gen_failed) - needs_user_n)
+        await _emit_task_summary(
+            nest,
+            success=len(gen_completed),
+            failed=fail_only,
+            needsUser=needs_user_n,
+            skipped=0,
+            lines=summary_lines,
+        )
 
         if gen_queue:
             msg = format_gen_summary(
@@ -178,7 +312,7 @@ def make_orchestrate_gen_node(
                 fallback_n=fallback_n,
             )
         else:
-            msg = "无可自动出图的图片节点。"
+            msg = "无可自动生成的图片/视频节点。"
         return {
             "phase": "orchestrate_gen",
             "gen_queue": gen_queue,

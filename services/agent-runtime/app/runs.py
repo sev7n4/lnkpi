@@ -103,10 +103,34 @@ class NestEventProxy:
         await self._emit({"type": "node_status", "data": payload})
         return result
 
+    async def run_video_generation(self, node_id: str) -> dict[str, Any]:
+        await self._emit(
+            {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
+        )
+        inner = getattr(self._inner, "run_video_generation", None)
+        if inner is None:
+            raise RuntimeError("video_not_supported")
+        result = await self._forward_actions(await inner(node_id))
+        status = str(result.get("status") or "completed")
+        payload: dict[str, Any] = {"nodeId": node_id, "status": status}
+        if result.get("url"):
+            payload["url"] = result["url"]
+        await self._emit({"type": "node_status", "data": payload})
+        return result
+
     async def emit_text(self, text: str) -> None:
         """Push a user-visible progress line mid-node (orchestrate_gen)."""
         if text:
             await self._emit({"type": "text_delta", "data": {"text": str(text)}})
+
+    async def emit_task_list(self, items: list[dict[str, Any]]) -> None:
+        await self._emit({"type": "task_list", "data": {"items": items}})
+
+    async def emit_task_update(self, **payload: Any) -> None:
+        await self._emit({"type": "task_update", "data": payload})
+
+    async def emit_task_summary(self, **payload: Any) -> None:
+        await self._emit({"type": "task_summary", "data": payload})
 
     async def get_generation_status(self, node_id: str) -> dict[str, Any]:
         return await self._inner.get_generation_status(node_id)

@@ -25,7 +25,7 @@ allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt 
 
 - Follow `assets/canvas-manifest.yaml` when splitting the canvas.
 - Do not call `run_image_generation` during plan; only after user confirm → split → orchestrate_gen.
-- Phase-1: do not auto-generate video nodes (`show_video` is skeleton only).
+- Phase-1: auto-generate image and video nodes after confirm (see task progress card spec).
 
 ## Progressive disclosure
 

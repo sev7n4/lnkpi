@@ -124,6 +124,14 @@ class NestCanvasClient:
             timeout=timeout_sec,
         )
 
+    async def run_video_generation(self, node_id: str) -> dict[str, Any]:
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/run-video-generation",
+            {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+            timeout=timeout_sec,
+        )
+
     async def get_generation_status(self, node_id: str) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/get-generation-status",
