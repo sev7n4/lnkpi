@@ -1,4 +1,8 @@
-/** Pure routing helpers for Vercel `/api/proxy` — kept free of Node HTTP types for vitest. */
+/**
+ * Pure routing helpers for vitest.
+ * Keep in sync with the inlined copies in `./proxy.ts` (Vercel handler is self-contained
+ * to avoid sibling-module ESM load failures on serverless).
+ */
 
 export const DEFAULT_UPSTREAM_TIMEOUT_MS = 20_000
 export const MAX_ATTEMPTS = 3
