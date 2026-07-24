@@ -5,6 +5,7 @@ import { IMAGE_MODELS, TEXT_MODELS, VIDEO_MODELS } from '@lnkpi/shared'
 import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { AgentRuntimeClient } from './agent-runtime.client'
 
 @Injectable()
 export class AgentService {
@@ -49,11 +50,64 @@ export class AgentService {
     userMessage: string,
     userId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
-    // 保存用户消息
     await this.prisma.agentMessage.create({
       data: { sessionId, role: 'user', content: userMessage },
     })
 
+    const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
+    if (runtimeUrl && userId) {
+      const client = this.createRuntimeClient(runtimeUrl)
+      if (await client.healthOk()) {
+        yield* this.streamFromRuntime(client, sessionId, userMessage, userId)
+        return
+      }
+    }
+
+    yield* this.streamFromCanvasAgent(sessionId, userId)
+  }
+
+  /** Overridable in unit tests */
+  createRuntimeClient(baseUrl: string): AgentRuntimeClient {
+    return new AgentRuntimeClient(
+      baseUrl,
+      process.env.AGENT_RUNTIME_SERVICE_TOKEN?.trim(),
+    )
+  }
+
+  private async *streamFromRuntime(
+    client: AgentRuntimeClient,
+    sessionId: string,
+    userMessage: string,
+    userId: string,
+  ): AsyncGenerator<AgentStreamEvent> {
+    let assistantText = ''
+    const canvasActions: CanvasAction[] = []
+
+    for await (const event of client.streamRun({
+      sessionId,
+      userId,
+      message: userMessage,
+      threadId: sessionId,
+    })) {
+      if (event.type === 'text_delta') {
+        assistantText += (event.data as { text: string }).text
+      }
+      if (event.type === 'canvas_action') {
+        canvasActions.push(event.data as CanvasAction)
+      }
+      yield event
+    }
+
+    await this.finalizeTurn(sessionId, userId, assistantText, canvasActions, {
+      // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
+      rewriteCanvasData: false,
+    })
+  }
+
+  private async *streamFromCanvasAgent(
+    sessionId: string,
+    userId?: string,
+  ): AsyncGenerator<AgentStreamEvent> {
     const history = await this.prisma.agentMessage.findMany({
       where: { sessionId },
       orderBy: { createdAt: 'asc' },
@@ -100,7 +154,18 @@ export class AgentService {
       yield event
     }
 
-    // 保存 assistant 消息
+    await this.finalizeTurn(sessionId, userId, assistantText, canvasActions, {
+      rewriteCanvasData: true,
+    })
+  }
+
+  private async finalizeTurn(
+    sessionId: string,
+    userId: string | undefined,
+    assistantText: string,
+    canvasActions: CanvasAction[],
+    opts: { rewriteCanvasData: boolean },
+  ) {
     if (assistantText) {
       await this.prisma.agentMessage.create({
         data: {
@@ -112,20 +177,21 @@ export class AgentService {
       })
     }
 
-    // 应用 canvas actions 到 session 并持久化 Shot/Material
     if (canvasActions.length > 0 && userId) {
       await this.persistCanvasEntities(sessionId, canvasActions)
 
-      const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
-      if (session) {
-        const currentData: CanvasData = session.canvasData
-          ? JSON.parse(session.canvasData)
-          : { nodes: [], edges: [] }
-        const updated = applyCanvasActions(currentData, canvasActions)
-        await this.prisma.session.update({
-          where: { id: sessionId },
-          data: { canvasData: JSON.stringify(updated) },
-        })
+      if (opts.rewriteCanvasData) {
+        const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
+        if (session) {
+          const currentData: CanvasData = session.canvasData
+            ? JSON.parse(session.canvasData)
+            : { nodes: [], edges: [] }
+          const updated = applyCanvasActions(currentData, canvasActions)
+          await this.prisma.session.update({
+            where: { id: sessionId },
+            data: { canvasData: JSON.stringify(updated) },
+          })
+        }
       }
     }
   }

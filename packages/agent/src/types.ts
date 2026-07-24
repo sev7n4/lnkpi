@@ -34,7 +34,14 @@ export interface AgentContext {
 }
 
 export interface AgentStreamEvent {
-  type: 'text_delta' | 'tool_call' | 'tool_result' | 'canvas_action' | 'done' | 'error'
+  type:
+    | 'text_delta'
+    | 'tool_call'
+    | 'tool_result'
+    | 'canvas_action'
+    | 'node_status'
+    | 'done'
+    | 'error'
   data: unknown
 }
 
