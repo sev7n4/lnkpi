@@ -55,7 +55,8 @@ fi
 docker tag "${LNKPI_API_IMAGE}" lnkpi-api:latest
 
 log "=== Starting container ==="
-$COMPOSE up -d --no-build --force-recreate --remove-orphans
+# 只起 api：agent-runtime 需按 AGENT_RUNTIME_PRODUCTION.md 手动 build/up，避免缺镜像时 up 阻塞
+$COMPOSE up -d --no-build --force-recreate --remove-orphans api
 
 log "=== Port binding ==="
 ss -tlnp | grep ':5100' || true

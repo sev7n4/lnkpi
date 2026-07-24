@@ -42,7 +42,8 @@ if [[ -d "${DEPLOY_DIR}/deploy" ]]; then
       export LNKPI_API_IMAGE="lnkpi-api:${LATEST_TAG}"
     fi
     log "using image ${LNKPI_API_IMAGE}"
-    docker compose -f deploy/docker-compose.prod.yml up -d --no-build --force-recreate --remove-orphans 2>/dev/null || true
+    # 只起 api，避免缺 agent-runtime 镜像时整次 recover 卡住
+    docker compose -f deploy/docker-compose.prod.yml up -d --no-build --force-recreate --remove-orphans api 2>/dev/null || true
   fi
 fi
 

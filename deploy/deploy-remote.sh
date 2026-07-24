@@ -23,14 +23,15 @@ done
 set -euo pipefail
 
 for i in 1 2 3 4 5; do
-  if TCR_REGISTRY="$TCR_REGISTRY" TCR_NAMESPACE="$TCR_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" $COMPOSE pull; then
+  if TCR_REGISTRY="$TCR_REGISTRY" TCR_NAMESPACE="$TCR_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" $COMPOSE pull api; then
     break
   fi
   [[ "$i" -eq 5 ]] && { echo "pull failed"; exit 1; }
   sleep $((i * 20))
 done
 
-TCR_REGISTRY="$TCR_REGISTRY" TCR_NAMESPACE="$TCR_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-build
+# 只起 api；agent-runtime 不走 TCR 自动部署
+TCR_REGISTRY="$TCR_REGISTRY" TCR_NAMESPACE="$TCR_NAMESPACE" IMAGE_TAG="$IMAGE_TAG" $COMPOSE up -d --no-build api
 
 echo "等待健康检查..."
 for i in 1 2 3 4 5 6 7 8 9 10; do
