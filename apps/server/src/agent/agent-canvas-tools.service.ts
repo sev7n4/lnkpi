@@ -72,6 +72,89 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function clampImageGenCount(n: unknown): number {
+  const v = typeof n === 'number' ? n : Number(n)
+  if (!Number.isFinite(v)) return 1
+  return Math.max(1, Math.min(4, Math.round(v)))
+}
+
+type AccountGenPrefs = {
+  defaultImageModel: string
+  defaultVideoModel: string
+  defaultTextModel: string
+  defaultAudioModel: string
+  canvasImageCount: number
+  defaultImageAspect: string
+  defaultImageResolution: string
+  defaultVideoAspect: string
+  defaultVideoDuration: number
+  defaultVideoResolution: string
+  defaultVideoCrop: string
+  audioVoice: string
+  audioFormat: string
+  audioSpeed: number
+  audioInstructions: string | null
+}
+
+const HARDCODE_PREFS: AccountGenPrefs = {
+  defaultImageModel: '',
+  defaultVideoModel: '',
+  defaultTextModel: '',
+  defaultAudioModel: '',
+  canvasImageCount: 1,
+  defaultImageAspect: '16:9',
+  defaultImageResolution: '1K',
+  defaultVideoAspect: '16:9',
+  defaultVideoDuration: 5,
+  defaultVideoResolution: '720p',
+  defaultVideoCrop: 'none',
+  audioVoice: 'female-shaonv',
+  audioFormat: 'mp3',
+  audioSpeed: 1,
+  audioInstructions: null,
+}
+
+function pickString(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+function modalityDefaults(nodeType: NodeType | string, prefs: AccountGenPrefs): Record<string, unknown> {
+  switch (nodeType) {
+    case 'image':
+      return {
+        imageModel: prefs.defaultImageModel || undefined,
+        imageAspect: prefs.defaultImageAspect || '16:9',
+        imageResolution: prefs.defaultImageResolution || '1K',
+        imageCount: clampImageGenCount(prefs.canvasImageCount),
+      }
+    case 'video':
+      return {
+        videoModel: prefs.defaultVideoModel || undefined,
+        videoSettings: {
+          aspectRatio: prefs.defaultVideoAspect || '16:9',
+          duration: prefs.defaultVideoDuration || 5,
+          resolution: prefs.defaultVideoResolution || '720p',
+          crop: prefs.defaultVideoCrop || 'none',
+        },
+      }
+    case 'text':
+    case 'prompt':
+      return {
+        textModel: prefs.defaultTextModel || undefined,
+      }
+    case 'audio':
+      return {
+        audioModel: prefs.defaultAudioModel || undefined,
+        audioVoice: prefs.audioVoice || 'female-shaonv',
+        audioFormat: prefs.audioFormat || 'mp3',
+        audioSpeed: prefs.audioSpeed ?? 1,
+        ...(prefs.audioInstructions ? { audioInstructions: prefs.audioInstructions } : {}),
+      }
+    default:
+      return {}
+  }
+}
+
 @Injectable()
 export class AgentCanvasToolsService {
   /** Overridable in unit tests */
@@ -82,6 +165,28 @@ export class AgentCanvasToolsService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(StudioService) private readonly studio: StudioService,
   ) {}
+
+  private async loadAccountGenPrefs(userId: string): Promise<AccountGenPrefs> {
+    const row = await this.prisma.userAiPreferences.findUnique({ where: { userId } })
+    if (!row) return { ...HARDCODE_PREFS }
+    return {
+      defaultImageModel: row.defaultImageModel || '',
+      defaultVideoModel: row.defaultVideoModel || '',
+      defaultTextModel: row.defaultTextModel || '',
+      defaultAudioModel: row.defaultAudioModel || '',
+      canvasImageCount: row.canvasImageCount ?? 1,
+      defaultImageAspect: row.defaultImageAspect || '16:9',
+      defaultImageResolution: row.defaultImageResolution || '1K',
+      defaultVideoAspect: row.defaultVideoAspect || '16:9',
+      defaultVideoDuration: row.defaultVideoDuration || 5,
+      defaultVideoResolution: row.defaultVideoResolution || '720p',
+      defaultVideoCrop: row.defaultVideoCrop || 'none',
+      audioVoice: row.audioVoice || 'female-shaonv',
+      audioFormat: row.audioFormat || 'mp3',
+      audioSpeed: row.audioSpeed ?? 1,
+      audioInstructions: row.audioInstructions ?? null,
+    }
+  }
 
   async upsertPromptNode(input: {
     sessionId: string
@@ -166,6 +271,7 @@ export class AgentCanvasToolsService {
     }>
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const prefs = await this.loadAccountGenPrefs(input.userId)
     const actions: CanvasAction[] = []
     const mapping: Array<{ key: string; nodeId: string }> = []
     const baseIndex = canvas.nodes.length
@@ -180,6 +286,7 @@ export class AgentCanvasToolsService {
           x: 80 + ((baseIndex + i) % 4) * GRID_X,
           y: 80 + Math.floor((baseIndex + i) / 4) * GRID_Y,
         }
+      const defaults = modalityDefaults(nodeType, prefs)
       actions.push({
         type: 'add_node',
         payload: {
@@ -191,6 +298,7 @@ export class AgentCanvasToolsService {
             manifestKey: item.key,
             prompt: item.prompt ?? '',
             status: 'draft',
+            ...defaults,
           },
         },
       })
@@ -309,12 +417,17 @@ export class AgentCanvasToolsService {
     const allActions = [...started]
 
     try {
+      const prefs = await this.loadAccountGenPrefs(input.userId)
       const refs = toStudioRefs(node, current)
-      const aspectRatio = String(node.data?.imageAspect ?? '16:9')
-      const resolution = String(node.data?.imageResolution ?? '1K')
-      const count = Number(node.data?.imageCount ?? 1)
-      const model =
-        typeof node.data?.imageModel === 'string' ? (node.data.imageModel as string) : undefined
+      const aspectRatio = pickString(node.data?.imageAspect, prefs.defaultImageAspect || '16:9')
+      const resolution = pickString(
+        node.data?.imageResolution,
+        prefs.defaultImageResolution || '1K',
+      )
+      const count = clampImageGenCount(
+        node.data?.imageCount ?? prefs.canvasImageCount ?? 1,
+      )
+      const model = pickString(node.data?.imageModel, prefs.defaultImageModel) || undefined
 
       const record = await this.studio.generateImage(
         input.userId,

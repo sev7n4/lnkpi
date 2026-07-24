@@ -123,6 +123,30 @@ class UpdatePreferencesDto {
 
   @IsOptional()
   @IsString()
+  defaultImageAspect?: string
+
+  @IsOptional()
+  @IsString()
+  defaultImageResolution?: string
+
+  @IsOptional()
+  @IsString()
+  defaultVideoAspect?: string
+
+  @IsOptional()
+  @IsNumber()
+  defaultVideoDuration?: number
+
+  @IsOptional()
+  @IsString()
+  defaultVideoResolution?: string
+
+  @IsOptional()
+  @IsString()
+  defaultVideoCrop?: string
+
+  @IsOptional()
+  @IsString()
   audioVoice?: string
 
   @IsOptional()

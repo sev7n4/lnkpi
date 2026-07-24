@@ -14,8 +14,28 @@ describe('AgentCanvasToolsService', () => {
   let canvas: CanvasData
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
+  const prefsFindUnique = vi.fn()
   const generateImage = vi.fn()
   const getGeneration = vi.fn()
+
+  const defaultPrefs = {
+    userId: 'u1',
+    defaultImageModel: 'platform::user-default-image',
+    defaultVideoModel: 'platform::user-default-video',
+    defaultTextModel: 'platform::user-default-text',
+    defaultAudioModel: 'platform::user-default-audio',
+    canvasImageCount: 2,
+    defaultImageAspect: '9:16',
+    defaultImageResolution: '2K',
+    defaultVideoAspect: '9:16',
+    defaultVideoDuration: 10,
+    defaultVideoResolution: '1080p',
+    defaultVideoCrop: 'center',
+    audioVoice: 'female-shaonv',
+    audioFormat: 'mp3',
+    audioSpeed: 1,
+    audioInstructions: null,
+  }
 
   beforeEach(async () => {
     vi.clearAllMocks()
@@ -29,6 +49,7 @@ describe('AgentCanvasToolsService', () => {
       canvas = JSON.parse(data.canvasData) as CanvasData
       return { id: 's1', canvasData: data.canvasData }
     })
+    prefsFindUnique.mockResolvedValue(defaultPrefs)
     generateImage.mockResolvedValue({
       id: 'gen-1',
       status: 'completed',
@@ -47,6 +68,7 @@ describe('AgentCanvasToolsService', () => {
           provide: PrismaService,
           useValue: {
             session: { findUnique: sessionFindUnique, update: sessionUpdate },
+            userAiPreferences: { findUnique: prefsFindUnique },
           },
         },
         {
@@ -228,6 +250,113 @@ describe('AgentCanvasToolsService', () => {
     expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/img.png')
     expect(canvas.nodes[0].data.status).toBe('completed')
+  })
+
+  it('runImageGeneration falls back to account default image prefs when node lacks fields', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'img-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: { prompt: '洁具白底图', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    await svc.runImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-1',
+    })
+    expect(prefsFindUnique).toHaveBeenCalledWith({ where: { userId: 'u1' } })
+    expect(generateImage).toHaveBeenCalledWith(
+      'u1',
+      '洁具白底图',
+      'platform::user-default-image',
+      '9:16',
+      expect.any(Array),
+      undefined,
+      '2K',
+      2,
+      { sessionId: 's1', nodeId: 'img-1' },
+    )
+  })
+
+  it('runImageGeneration prefers node image fields over account defaults', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'img-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '洁具白底图',
+            status: 'draft',
+            imageModel: 'platform::node-model',
+            imageAspect: '1:1',
+            imageResolution: '4K',
+            imageCount: 1,
+          },
+        },
+      ],
+      edges: [],
+    }
+    await svc.runImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-1',
+    })
+    expect(generateImage).toHaveBeenCalledWith(
+      'u1',
+      '洁具白底图',
+      'platform::node-model',
+      '1:1',
+      expect.any(Array),
+      undefined,
+      '4K',
+      1,
+      { sessionId: 's1', nodeId: 'img-1' },
+    )
+  })
+
+  it('addNodesBatch stamps account defaults onto image/video/text/audio skeletons', async () => {
+    const result = await svc.addNodesBatch({
+      sessionId: 's1',
+      userId: 'u1',
+      items: [
+        { key: 'white_bg', title: '白底图', targetType: 'image' },
+        { key: 'show_video', title: '视频', targetType: 'video' },
+        { key: 'copy', title: '文案', targetType: 'text' },
+        { key: 'vo', title: '配音', targetType: 'audio' },
+      ],
+    })
+    expect(result.nodes).toHaveLength(4)
+    const byType = Object.fromEntries(canvas.nodes.map((n) => [n.type, n.data]))
+    expect(byType.image).toMatchObject({
+      imageModel: 'platform::user-default-image',
+      imageAspect: '9:16',
+      imageResolution: '2K',
+      imageCount: 2,
+    })
+    expect(byType.video).toMatchObject({
+      videoModel: 'platform::user-default-video',
+      videoSettings: {
+        aspectRatio: '9:16',
+        duration: 10,
+        resolution: '1080p',
+        crop: 'center',
+      },
+    })
+    expect(byType.text).toMatchObject({
+      textModel: 'platform::user-default-text',
+    })
+    expect(byType.audio).toMatchObject({
+      audioModel: 'platform::user-default-audio',
+      audioVoice: 'female-shaonv',
+      audioFormat: 'mp3',
+      audioSpeed: 1,
+    })
   })
 
   it('runImageGeneration persists error status when Studio fails after generating', async () => {

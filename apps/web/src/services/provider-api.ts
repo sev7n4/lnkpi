@@ -29,6 +29,12 @@ export type ProviderPreferencesPublic = {
   defaultTextModel: string
   defaultAudioModel: string
   canvasImageCount: number
+  defaultImageAspect: string
+  defaultImageResolution: string
+  defaultVideoAspect: string
+  defaultVideoDuration: number
+  defaultVideoResolution: string
+  defaultVideoCrop: string
   audioVoice: string
   audioFormat: string
   audioSpeed: number

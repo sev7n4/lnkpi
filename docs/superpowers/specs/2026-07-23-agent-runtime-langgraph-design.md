@@ -4,7 +4,7 @@
 > 日期：2026-07-23（修订 2026-07-24）  
 > 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
-> 非范围：一期不实现自动出视频；不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）
+> 非范围：一期不实现自动出视频编排；不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）。**一期纳入**账户级画布生成默认（全模态）与 Agent 出图回退（见 §0 / §1.1 / §12.8）。
 
 ---
 
@@ -21,6 +21,7 @@
 | 自动生成编排 | **一期包含自动出图**（`orchestrate_gen`）；**自动出视频留二期** |
 | 规划 LLM | **一期平台配置**：Runtime `LNKPI_OPENAI_*`（密钥/base_url/model）；**非**用户 UI 选择 / 对话 BYOK |
 | Agent 底栏 dock 参数 | **一期不打通**（模型选择器、技能下拉、文本积分徽章等为旧 UI 遗留；见 §1.2 / §10） |
+| 账户级画布生成默认 | **一期纳入**：左栏 `UserAiPreferences`（图/视/文/音模型 + 图比例/分辨率/张数 + 视频比例/时长/分辨率/裁剪 + 已有音频参数）；拆骨架/新建节点写入 `node.data`；Agent 自动出图按「节点字段 > 账户默认 > 硬编码」回退 |
 | 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
 | 现有 `@lnkpi/agent` | 保留为 Nest 侧兼容/工具适配层；新控制面迁到 Python Runtime，不一夜删除 |
 
@@ -36,20 +37,22 @@
 2. 一期跑通闭环：**对话 ↔ Skills ↔ LangGraph ↔ Nest Canvas Tools ↔ 画布节点 ↔ Studio 出图**。
 3. 用户确认后，Agent 按画布边 / `depends_on` **拓扑排序**，自动调用现有文生图、图生图能力，URI 写回 Nest。
 4. 架构上预留：联网研究 Skill、审批门 HITL、自动出视频。
+5. **账户级画布生成默认**：左栏偏好覆盖图/视/文/音；拆骨架与新建节点写入 `node.data`；Agent 自动出图在节点缺字段时回退账户默认（与侧栏对话 dock **无关**）。
 
 ### 1.2 非目标（一期）
 
 - 不在 LangGraph State 中同步完整 `nodes/edges` 作为真相源。
 - 不实现生产级 durable workflow（跨天恢复、队列重试）；只留 checkpointer 插槽。
-- **不自动出视频**（可建 video 骨架节点 + prompt/refs，生成由用户 Dock 手动或二期编排）。
+- **不自动出视频**（可建 video 骨架节点并写入账户默认视频参数 + prompt/refs，生成由用户 Dock 手动或二期编排）。
 - 不因上游 Ref 变更而静默级联重跑（保持既有产品默认；与 Agent 显式 `orchestrate_gen` 区分）。
 - 不引入 CrewAI/AutoGen 作为 Runtime 内核；不以 Temporal 作为一期依赖。
 - 不要求一期上线联网搜索（可作为后续 Skill/Tool）。
-- **不打通 Agent 侧栏底部 dock 参数链路**（旧 `@lnkpi/agent` / `AgentSideRail` UI 遗留，**明确不在一期范围**，二期再做）：
+- **不打通 Agent 侧栏底部 dock 参数链路**（旧 `@lnkpi/agent` / `AgentSideRail` UI 遗留，**明确不在一期范围**，二期再做；**勿与「账户级画布生成默认」混淆**）：
   - 前端 `UniversalModelSelector` → Nest `ConversationDto.model` → Runtime **覆盖规划 LLM**（或用户对话 BYOK）
   - 前端技能选择 → 请求 `skillId` → Runtime **`intake` 与 Skill 包对齐**（今日仅为文案前缀 / 关键词启发式）
   - 底部文本 **积分徽章与真实计费对齐**（今日为静态估算示意；出图积分/BYOK 仍走 Nest Studio，与底栏无关）
   - 一期现状约定：规划模型只认部署侧 `LNKPI_OPENAI_*`；前端若带 `model` 字段，Nest `ValidationPipe({ whitelist: true })` **可丢弃**；勿将底栏选择当作 Runtime 行为验收项。
+- 不把**节点 dock 当前临时 UI 状态**当作账户默认（只认 `UserAiPreferences`）。
 
 ---
 
@@ -466,6 +469,7 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 5. 部分失败时会话有明确失败列表，其它成功节点不受影响。
 6. LangGraph State 无完整画布 JSON、无 Base64。
 7. `revise` 更新同一 `plan_node_id`；Skills 包符合 agentskills.io（`SKILL.md` + 可选 `scripts/`/`references/`/`assets/`）；缺 `SKILL.md` 的目录不被加载；顶层无非标准 frontmatter 也能被索引。
+8. **账户默认**：拆骨架 image 节点写入用户 `defaultImageModel` / 比例 / 分辨率 / 张数（`canvasImageCount` clamp 1–4）；`run_image_generation` 在节点缺字段时回退同一偏好；video/text/audio 骨架同样写入对应账户默认（不要求一期自动生成视频）。
 
 ---
 
@@ -489,3 +493,4 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 2026-07-24 | §7 对齐 agentskills.io：标准 `SKILL.md`/`scripts`/`references`/`assets`；画布清单迁入 `assets/canvas-manifest.yaml`；扩展仅 `metadata.lnkpi.*` |
 | 2026-07-24 | 规格确认；§13 开放问题锁定；进入实现计划 |
 | 2026-07-24 | 明确 **Agent 底栏 dock（model/skillId/积分）不在一期**；列入 §1.2 非目标与 §10 二期遗留 |
+| 2026-07-24 | 一期纳入 **账户级画布生成默认（全模态）**：偏好字段、拆骨架写入、`run_image_generation` 回退；与侧栏对话 dock 区分 |
