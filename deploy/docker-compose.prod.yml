@@ -46,6 +46,37 @@ services:
       timeout: 5s
       retries: 3
       start_period: 25s
+    # 启用 LangGraph Runtime 时，在 /opt/lnkpi/.env 设置：
+    #   AGENT_RUNTIME_URL=http://lnkpi-agent-runtime:8000
+    #   AGENT_RUNTIME_SERVICE_TOKEN=<与 Runtime 相同>
+    # 详见 deploy/AGENT_RUNTIME_PRODUCTION.md
+
+  # 仅内网；勿映射 8000 到公网。部署步骤见 deploy/AGENT_RUNTIME_PRODUCTION.md
+  agent-runtime:
+    image: ${LNKPI_AGENT_RUNTIME_IMAGE:-lnkpi-agent-runtime:local}
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile.agent-runtime
+    container_name: lnkpi-agent-runtime
+    restart: unless-stopped
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # Token / OpenAI keys come from env_file ../.env (LNKPI_* + AGENT_RUNTIME_*)
+      LNKPI_NEST_BASE_URL: ${LNKPI_NEST_BASE_URL:-http://lnkpi-api:3001/api}
+      LNKPI_SKILLS_DIR: /app/skills
+    # 无 ports：只通过 lnkpi-net 被 api 访问
+    networks:
+      - lnkpi
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
 
 networks:
   lnkpi:

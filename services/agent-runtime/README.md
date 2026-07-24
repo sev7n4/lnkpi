@@ -2,6 +2,8 @@
 
 FastAPI service that hosts the LangGraph agent runtime for lnkpi.
 
+**生产部署（Compose / systemd）+ 环境变量清单 + 画布人工验收：** 见仓库根目录 [`deploy/AGENT_RUNTIME_PRODUCTION.md`](../../deploy/AGENT_RUNTIME_PRODUCTION.md)。
+
 ## Prerequisites
 
 - Python 3.11+

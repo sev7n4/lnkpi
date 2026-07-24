@@ -1,0 +1,18 @@
+[Unit]
+Description=lnkpi Agent Runtime (LangGraph)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/lnkpi/services/agent-runtime
+EnvironmentFile=-/opt/lnkpi/.env
+# 若用 venv：Environment=PATH=/opt/lnkpi/services/agent-runtime/.venv/bin
+ExecStart=/usr/bin/env uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+# 仅本机回环监听；Nest 用 AGENT_RUNTIME_URL=http://127.0.0.1:8000
+
+[Install]
+WantedBy=multi-user.target
