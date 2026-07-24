@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { encodeChannelModel, decodeChannelModel, inferModelCapability, type ApiCallFormat, type ModelCapability } from '@lnkpi/shared'
+import {
+  encodeChannelModel,
+  decodeChannelModel,
+  inferModelCapability,
+  DEFAULT_VIDEO_SETTINGS,
+  VIDEO_ASPECT_RATIO_OPTIONS,
+  VIDEO_CROP_OPTIONS,
+  VIDEO_DURATION_OPTIONS,
+  VIDEO_RESOLUTION_OPTIONS,
+  type ApiCallFormat,
+  type ModelCapability,
+} from '@lnkpi/shared'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import {
   apiErrorMessage,
@@ -59,6 +70,12 @@ const prefsDraft = reactive({
   defaultTextModel: '',
   defaultAudioModel: '',
   canvasImageCount: 3,
+  defaultImageAspect: '16:9',
+  defaultImageResolution: '1K',
+  defaultVideoAspect: '16:9',
+  defaultVideoDuration: 5,
+  defaultVideoResolution: '720p',
+  defaultVideoCrop: 'none',
   audioVoice: 'female-shaonv',
   audioFormat: 'mp3',
   audioSpeed: 1,
@@ -165,6 +182,12 @@ function hydrateFromBootstrap() {
     prefsDraft.defaultTextModel = prefs.defaultTextModel
     prefsDraft.defaultAudioModel = prefs.defaultAudioModel
     prefsDraft.canvasImageCount = prefs.canvasImageCount
+    prefsDraft.defaultImageAspect = prefs.defaultImageAspect || '16:9'
+    prefsDraft.defaultImageResolution = prefs.defaultImageResolution || '1K'
+    prefsDraft.defaultVideoAspect = prefs.defaultVideoAspect || DEFAULT_VIDEO_SETTINGS.aspectRatio
+    prefsDraft.defaultVideoDuration = prefs.defaultVideoDuration || DEFAULT_VIDEO_SETTINGS.duration
+    prefsDraft.defaultVideoResolution = prefs.defaultVideoResolution || DEFAULT_VIDEO_SETTINGS.resolution
+    prefsDraft.defaultVideoCrop = prefs.defaultVideoCrop || DEFAULT_VIDEO_SETTINGS.crop
     prefsDraft.audioVoice = prefs.audioVoice
     prefsDraft.audioFormat = prefs.audioFormat
     prefsDraft.audioSpeed = prefs.audioSpeed
@@ -373,6 +396,15 @@ function buildPreferencesPayload(): ProviderPreferencesPublic {
     defaultTextModel: prefsDraft.defaultTextModel,
     defaultAudioModel: prefsDraft.defaultAudioModel,
     canvasImageCount: Math.max(1, Math.min(15, Math.floor(Number(prefsDraft.canvasImageCount) || 3))),
+    defaultImageAspect: prefsDraft.defaultImageAspect || '16:9',
+    defaultImageResolution: prefsDraft.defaultImageResolution || '1K',
+    defaultVideoAspect: prefsDraft.defaultVideoAspect || DEFAULT_VIDEO_SETTINGS.aspectRatio,
+    defaultVideoDuration: Math.max(
+      5,
+      Math.min(15, Math.round(Number(prefsDraft.defaultVideoDuration) || DEFAULT_VIDEO_SETTINGS.duration)),
+    ),
+    defaultVideoResolution: prefsDraft.defaultVideoResolution || DEFAULT_VIDEO_SETTINGS.resolution,
+    defaultVideoCrop: prefsDraft.defaultVideoCrop || DEFAULT_VIDEO_SETTINGS.crop,
     audioVoice: prefsDraft.audioVoice,
     audioFormat: prefsDraft.audioFormat,
     audioSpeed: Math.max(0.25, Math.min(4, Number(prefsDraft.audioSpeed) || 1)),
@@ -687,8 +719,64 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                 controls-position="right"
               />
               <span class="mt-1 block text-[10px] leading-4 text-[var(--neo-text-muted)]">
-                新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。
+                新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。Agent 自动出图会 clamp 到 1–4。
               </span>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认生图比例</span>
+              <el-select v-model="prefsDraft.defaultImageAspect" class="w-full">
+                <el-option v-for="v in ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9']" :key="v" :label="v" :value="v" />
+              </el-select>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认生图分辨率</span>
+              <el-select v-model="prefsDraft.defaultImageResolution" class="w-full">
+                <el-option v-for="v in ['1K', '2K', '4K']" :key="v" :label="v" :value="v" />
+              </el-select>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认视频比例</span>
+              <el-select v-model="prefsDraft.defaultVideoAspect" class="w-full">
+                <el-option
+                  v-for="opt in VIDEO_ASPECT_RATIO_OPTIONS"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认视频时长</span>
+              <el-select v-model="prefsDraft.defaultVideoDuration" class="w-full">
+                <el-option
+                  v-for="opt in VIDEO_DURATION_OPTIONS"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认视频分辨率</span>
+              <el-select v-model="prefsDraft.defaultVideoResolution" class="w-full">
+                <el-option
+                  v-for="opt in VIDEO_RESOLUTION_OPTIONS"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认视频裁剪</span>
+              <el-select v-model="prefsDraft.defaultVideoCrop" class="w-full">
+                <el-option
+                  v-for="opt in VIDEO_CROP_OPTIONS"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
+              </el-select>
             </label>
             <label class="block">
               <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">默认音频声音</span>

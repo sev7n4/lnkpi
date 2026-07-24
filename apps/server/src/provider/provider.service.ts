@@ -49,6 +49,12 @@ export type PreferencesPublic = {
   defaultTextModel: string
   defaultAudioModel: string
   canvasImageCount: number
+  defaultImageAspect: string
+  defaultImageResolution: string
+  defaultVideoAspect: string
+  defaultVideoDuration: number
+  defaultVideoResolution: string
+  defaultVideoCrop: string
   audioVoice: string
   audioFormat: string
   audioSpeed: number
@@ -92,6 +98,12 @@ export type UpdatePreferencesInput = {
   defaultTextModel?: string
   defaultAudioModel?: string
   canvasImageCount?: number
+  defaultImageAspect?: string
+  defaultImageResolution?: string
+  defaultVideoAspect?: string
+  defaultVideoDuration?: number
+  defaultVideoResolution?: string
+  defaultVideoCrop?: string
   audioVoice?: string
   audioFormat?: string
   audioSpeed?: number
@@ -179,6 +191,12 @@ function defaultPreferencesData(userId: string) {
     defaultTextModel: encodeChannelModel(PLATFORM_CHANNEL_ID, defaultModelKey('text')),
     defaultAudioModel: encodeChannelModel(PLATFORM_CHANNEL_ID, defaultModelKey('audio')),
     canvasImageCount: 3,
+    defaultImageAspect: '16:9',
+    defaultImageResolution: '1K',
+    defaultVideoAspect: '16:9',
+    defaultVideoDuration: 5,
+    defaultVideoResolution: '720p',
+    defaultVideoCrop: 'none',
     audioVoice: 'female-shaonv',
     audioFormat: 'mp3',
     audioSpeed: 1,
@@ -388,6 +406,15 @@ export class ProviderService {
         throw new BadRequestException('canvasImageCount must be an integer between 1 and 15')
       }
     }
+    if (input.defaultVideoDuration !== undefined) {
+      if (
+        !Number.isInteger(input.defaultVideoDuration) ||
+        input.defaultVideoDuration < 5 ||
+        input.defaultVideoDuration > 15
+      ) {
+        throw new BadRequestException('defaultVideoDuration must be an integer between 5 and 15')
+      }
+    }
 
     const data: Record<string, unknown> = {}
     if (input.selectableImageModels !== undefined) {
@@ -408,6 +435,12 @@ export class ProviderService {
       'defaultTextModel',
       'defaultAudioModel',
       'canvasImageCount',
+      'defaultImageAspect',
+      'defaultImageResolution',
+      'defaultVideoAspect',
+      'defaultVideoDuration',
+      'defaultVideoResolution',
+      'defaultVideoCrop',
       'audioVoice',
       'audioFormat',
       'audioSpeed',
@@ -687,6 +720,12 @@ export class ProviderService {
     defaultTextModel: string
     defaultAudioModel: string
     canvasImageCount: number
+    defaultImageAspect: string
+    defaultImageResolution: string
+    defaultVideoAspect: string
+    defaultVideoDuration: number
+    defaultVideoResolution: string
+    defaultVideoCrop: string
     audioVoice: string
     audioFormat: string
     audioSpeed: number
@@ -703,6 +742,12 @@ export class ProviderService {
       defaultTextModel: row.defaultTextModel,
       defaultAudioModel: row.defaultAudioModel,
       canvasImageCount: row.canvasImageCount,
+      defaultImageAspect: row.defaultImageAspect || '16:9',
+      defaultImageResolution: row.defaultImageResolution || '1K',
+      defaultVideoAspect: row.defaultVideoAspect || '16:9',
+      defaultVideoDuration: row.defaultVideoDuration || 5,
+      defaultVideoResolution: row.defaultVideoResolution || '720p',
+      defaultVideoCrop: row.defaultVideoCrop || 'none',
       audioVoice: row.audioVoice,
       audioFormat: row.audioFormat,
       audioSpeed: row.audioSpeed,

@@ -814,10 +814,20 @@ function screenToFlowPoint(x: number, y: number) {
 }
 
 function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
+  const prefs = preferences.value
   const textModel = getProviderConfig('text').model
   const imageModel = getProviderConfig('image').model
   const videoModel = getProviderConfig('video').model
   const audioModel = getProviderConfig('audio').model
+  const imageCount = Math.max(1, Math.min(4, Math.round(Number(prefs?.canvasImageCount) || 1)))
+  const imageAspect = prefs?.defaultImageAspect || '16:9'
+  const imageResolution = prefs?.defaultImageResolution || '1K'
+  const videoSettings = {
+    aspectRatio: prefs?.defaultVideoAspect || '16:9',
+    duration: prefs?.defaultVideoDuration || 5,
+    resolution: prefs?.defaultVideoResolution || '720p',
+    crop: prefs?.defaultVideoCrop || 'none',
+  }
   let id: string
   switch (type) {
     case 'text':
@@ -827,13 +837,42 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
       id = addNode('prompt', { prompt: '', label: '提示词', status: 'idle', textModel }, { position })
       break
     case 'image':
-      id = addNode('image', { url: '', status: 'idle', prompt: '', imageModel }, { position })
+      id = addNode(
+        'image',
+        {
+          url: '',
+          status: 'idle',
+          prompt: '',
+          imageModel,
+          imageAspect,
+          imageResolution,
+          imageCount,
+        },
+        { position },
+      )
       break
     case 'video':
-      id = addNode('video', { url: '', status: 'idle', prompt: '', videoModel }, { position })
+      id = addNode(
+        'video',
+        { url: '', status: 'idle', prompt: '', videoModel, videoSettings },
+        { position },
+      )
       break
     case 'audio':
-      id = addNode('audio', { url: '', status: 'idle', prompt: '', audioModel }, { position })
+      id = addNode(
+        'audio',
+        {
+          url: '',
+          status: 'idle',
+          prompt: '',
+          audioModel,
+          audioVoice: prefs?.audioVoice || 'female-shaonv',
+          audioFormat: prefs?.audioFormat || 'mp3',
+          audioSpeed: prefs?.audioSpeed ?? 1,
+          ...(prefs?.audioInstructions ? { audioInstructions: prefs.audioInstructions } : {}),
+        },
+        { position },
+      )
       break
     case 'sceneComposer':
       id = addNode('sceneComposer', createInitialSceneComposerNodeData(), { position })
@@ -1449,6 +1488,9 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
         ...meta,
         prompt: '',
         imageModel: getProviderConfig('image').model,
+        imageAspect: preferences.value?.defaultImageAspect || '16:9',
+        imageResolution: preferences.value?.defaultImageResolution || '1K',
+        imageCount: Math.max(1, Math.min(4, Math.round(Number(preferences.value?.canvasImageCount) || 1))),
       }, { position: resolveDropPosition(clientPos, 'image') })
       break
     case 'video':
@@ -1457,6 +1499,12 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
         ...meta,
         prompt: '',
         videoModel: getProviderConfig('video').model,
+        videoSettings: {
+          aspectRatio: preferences.value?.defaultVideoAspect || '16:9',
+          duration: preferences.value?.defaultVideoDuration || 5,
+          resolution: preferences.value?.defaultVideoResolution || '720p',
+          crop: preferences.value?.defaultVideoCrop || 'none',
+        },
       }, { position: resolveDropPosition(clientPos, 'video') })
       break
     case 'audio':
@@ -1465,6 +1513,12 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
         ...meta,
         prompt: '',
         audioModel: getProviderConfig('audio').model,
+        audioVoice: preferences.value?.audioVoice || 'female-shaonv',
+        audioFormat: preferences.value?.audioFormat || 'mp3',
+        audioSpeed: preferences.value?.audioSpeed ?? 1,
+        ...(preferences.value?.audioInstructions
+          ? { audioInstructions: preferences.value.audioInstructions }
+          : {}),
       }, { position: resolveDropPosition(clientPos, 'audio') })
       break
   }
@@ -1494,18 +1548,33 @@ function createUploadingMediaNodeAt(
         ...meta,
         ...uploading,
         imageModel: getProviderConfig('image').model,
+        imageAspect: preferences.value?.defaultImageAspect || '16:9',
+        imageResolution: preferences.value?.defaultImageResolution || '1K',
+        imageCount: Math.max(1, Math.min(4, Math.round(Number(preferences.value?.canvasImageCount) || 1))),
       }, { position: resolveDropPosition(clientPos, kind) })
     case 'video':
       return addNode('video', {
         ...meta,
         ...uploading,
         videoModel: getProviderConfig('video').model,
+        videoSettings: {
+          aspectRatio: preferences.value?.defaultVideoAspect || '16:9',
+          duration: preferences.value?.defaultVideoDuration || 5,
+          resolution: preferences.value?.defaultVideoResolution || '720p',
+          crop: preferences.value?.defaultVideoCrop || 'none',
+        },
       }, { position: resolveDropPosition(clientPos, kind) })
     case 'audio':
       return addNode('audio', {
         ...meta,
         ...uploading,
         audioModel: getProviderConfig('audio').model,
+        audioVoice: preferences.value?.audioVoice || 'female-shaonv',
+        audioFormat: preferences.value?.audioFormat || 'mp3',
+        audioSpeed: preferences.value?.audioSpeed ?? 1,
+        ...(preferences.value?.audioInstructions
+          ? { audioInstructions: preferences.value.audioInstructions }
+          : {}),
       }, { position: resolveDropPosition(clientPos, kind) })
     default:
       return null
