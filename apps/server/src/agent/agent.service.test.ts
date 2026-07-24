@@ -65,33 +65,46 @@ describe('AgentService streamConversation', () => {
   it('uses Runtime when AGENT_RUNTIME_URL healthy', async () => {
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
     const runSpy = vi.spyOn(CanvasAgent.prototype, 'run')
+    const streamRun = vi.fn(async function* () {
+      yield { type: 'text_delta', data: { text: 'from-runtime' } }
+      yield {
+        type: 'canvas_action',
+        data: {
+          type: 'add_node',
+          payload: {
+            id: 'prompt-1',
+            nodeType: 'prompt',
+            data: { prompt: '方案' },
+            position: { x: 0, y: 0 },
+          },
+        },
+      }
+      yield { type: 'done', data: {} }
+    })
 
     vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
       healthOk: vi.fn().mockResolvedValue(true),
-      streamRun: async function* () {
-        yield { type: 'text_delta', data: { text: 'from-runtime' } }
-        yield {
-          type: 'canvas_action',
-          data: {
-            type: 'add_node',
-            payload: {
-              id: 'prompt-1',
-              nodeType: 'prompt',
-              data: { prompt: '方案' },
-              position: { x: 0, y: 0 },
-            },
-          },
-        }
-        yield { type: 'done', data: {} }
-      },
+      streamRun,
     } as unknown as AgentRuntimeClient)
 
     const events: Array<{ type: string; data?: unknown }> = []
-    for await (const event of service.streamConversation('s1', '营销', 'u1')) {
+    for await (const event of service.streamConversation(
+      's1',
+      '营销',
+      'u1',
+      's1:thread-a',
+    )) {
       events.push(event)
     }
 
     expect(runSpy).not.toHaveBeenCalled()
+    expect(streamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 's1',
+        threadId: 's1:thread-a',
+        message: '营销',
+      }),
+    )
     expect(events.map((e) => e.type)).toEqual([
       'text_delta',
       'canvas_action',
