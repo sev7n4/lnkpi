@@ -15,6 +15,8 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   canvasActions: [actions: unknown[]]
+  /** Agent 一轮结束后由画布从服务端回拉 SoT，避免本地旧图覆盖 Nest 拆图结果 */
+  turnComplete: []
   expandedChange: [expanded: boolean]
 }>()
 
@@ -272,21 +274,41 @@ async function sendMessage(message: string) {
     await reconcileLatestAssistant()
     const actions = agent.flushActions()
     if (actions.length) emit('canvasActions', actions)
+    // 始终回拉：Runtime 已写 Session.canvasData；本地 save 不得用旧节点覆盖
+    emit('turnComplete')
     scrollToBottom()
   }
 }
 
+const BUSY_TIP_SNIPPET = '上一轮仍在处理中'
+
 /** 流结束后用 DB 历史补齐（避免只看到 busy / 截断） */
 async function reconcileLatestAssistant() {
-  try {
+  const pull = async () => {
     const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
     const json = await res.json()
     const rows = (json.data || []) as Array<{ role: string; content: string }>
     const lastDb = [...rows].reverse().find((m) => m.role === 'assistant')
-    if (!lastDb?.content?.trim()) return
+    if (!lastDb?.content?.trim()) return null
     const lastLocal = agent.messages[agent.messages.length - 1]
     if (lastLocal?.role === 'assistant' && lastDb.content.length > (lastLocal.content?.length || 0)) {
       lastLocal.content = lastDb.content
+    }
+    return lastDb.content
+  }
+
+  try {
+    let content = await pull()
+    // 若刚落到 busy tip，首轮拆图可能仍在写 DB：短轮询补齐长进度文案
+    if (content?.includes(BUSY_TIP_SNIPPET)) {
+      for (let i = 0; i < 24; i++) {
+        await new Promise((r) => setTimeout(r, 5_000))
+        content = await pull()
+        if (content && !content.includes(BUSY_TIP_SNIPPET) && content.length > 40) {
+          scrollToBottom()
+          break
+        }
+      }
     }
   } catch {
     // ignore

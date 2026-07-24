@@ -981,7 +981,18 @@ function handleAgentActions(actions: unknown[]) {
   nodes.value = result.nodes as unknown as EditableFlowNode[]
   edges.value = result.edges as unknown as CanvasEdge[]
   startPollingForGeneratingShots()
-  persistUserEdit()
+  // 勿 persistUserEdit：Nest Agent tools 已写 Session.canvasData；
+  // 用本地旧图 + 部分 action 回写会抹掉追加拆图节点。
+}
+
+async function handleAgentTurnComplete() {
+  await loadSession()
+  await nextTick()
+  try {
+    await vueFlowRef.value?.fitView({ padding: 0.24, duration: 360 })
+  } catch {
+    // ignore
+  }
 }
 
 function resolveNewNodePosition(type: string) {
@@ -2584,6 +2595,7 @@ onMounted(() => {
         ref="agentRailRef"
         :session-id="sessionId"
         @canvas-actions="handleAgentActions"
+        @turn-complete="handleAgentTurnComplete"
       />
     </div>
 
