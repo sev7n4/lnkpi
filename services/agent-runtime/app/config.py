@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     runtime_auth_token: str = ""
     openai_api_key: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
+    openai_chat_model: str = "gpt-4o"
     image_gen_concurrency: int = 3
     image_gen_timeout_sec: int = 180
 
