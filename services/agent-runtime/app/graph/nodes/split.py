@@ -111,6 +111,22 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             + (f"（{title_hint}…）" if title_hint else "。")
             + "\n开始按依赖自动出图，请稍候…"
         )
+        # Pin task card as soon as skeleton exists (before long orchestrate_gen),
+        # so Vercel 120s SSE cutoff still leaves the card visible.
+        emit_list = getattr(nest, "emit_task_list", None)
+        if emit_list is not None:
+            await emit_list(
+                [
+                    {
+                        "id": str(item["key"]),
+                        "title": str(item.get("title") or item["key"]),
+                        "nodeId": str(item.get("node_id") or ""),
+                        "kind": str(item.get("target_type") or "image"),
+                    }
+                    for item in manifest
+                    if item.get("key")
+                ]
+            )
         return {
             "phase": "split",
             "split_manifest": manifest,

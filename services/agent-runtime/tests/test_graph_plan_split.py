@@ -115,6 +115,18 @@ class FakeNest:
         self.calls.append(("run_video_generation", {"node_id": node_id}))
         return {"nodeId": node_id, "status": "completed", "url": "https://cdn.example/v.mp4", "actions": []}
 
+    async def emit_task_list(self, items: list[dict[str, Any]]) -> None:
+        self.calls.append(("emit_task_list", items))
+
+    async def emit_task_update(self, **payload: Any) -> None:
+        self.calls.append(("emit_task_update", payload))
+
+    async def emit_task_summary(self, **payload: Any) -> None:
+        self.calls.append(("emit_task_summary", payload))
+
+    async def emit_text(self, text: str) -> None:
+        self.calls.append(("emit_text", text))
+
 
 def _batch_keys(nest: FakeNest) -> set[str]:
     for name, payload in nest.calls:
@@ -171,6 +183,10 @@ async def test_confirm_then_split_creates_image_skeletons():
     }
     assert video_calls
     assert any(c[1]["node_id"] in video_ids for c in video_calls)
+    # task card list must be pinned at end of split (before long gen)
+    task_lists = [c for c in nest.calls if c[0] == "emit_task_list"]
+    assert task_lists
+    assert any(item.get("id") == "white_bg" for item in task_lists[0][1])
     # State must not hold full canvas nodes/edges
     assert "nodes" not in state2
     assert "edges" not in state2

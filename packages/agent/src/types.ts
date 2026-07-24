@@ -40,6 +40,9 @@ export interface AgentStreamEvent {
     | 'tool_result'
     | 'canvas_action'
     | 'node_status'
+    | 'task_list'
+    | 'task_update'
+    | 'task_summary'
     | 'done'
     | 'error'
   data: unknown

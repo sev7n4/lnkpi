@@ -165,7 +165,11 @@ async function pipeUpstreamStream(
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-      if (value?.byteLength) res.write(Buffer.from(value))
+      if (value?.byteLength) {
+        res.write(Buffer.from(value))
+        const flush = (res as VercelResponse & { flush?: () => void }).flush
+        if (typeof flush === 'function') flush()
+      }
     }
     res.end()
   } catch (err) {
