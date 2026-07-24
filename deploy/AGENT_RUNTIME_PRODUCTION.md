@@ -41,6 +41,7 @@
 | `LNKPI_RUNTIME_AUTH_TOKEN` | 否 | 可省略 | Nest → Runtime 校验用；空则回退用 `LNKPI_NEST_SERVICE_TOKEN` |
 | `LNKPI_OPENAI_API_KEY` | 建议填 | 平台文本模型 Key | **仅**供 Runtime 规划/拆解 LLM（一期不读左栏 BYOK） |
 | `LNKPI_OPENAI_BASE_URL` | 否 | `https://api.openai.com/v1` 或兼容网关 | 规划 LLM 的 base |
+| `LNKPI_OPENAI_CHAT_MODEL` | 否 | 默认 `gpt-4o`；可与 Nest `OPENAI_CHAT_MODEL` 相同 | 规划 LLM 模型名 |
 | `LNKPI_SKILLS_DIR` | 否 | `/app/skills`（镜像内默认） | Skill 包目录 |
 | `LNKPI_IMAGE_GEN_CONCURRENCY` | 否 | `3` | 编排出图并发上限 |
 | `LNKPI_IMAGE_GEN_TIMEOUT_SEC` | 否 | `180` | 单图等待上限（秒） |
