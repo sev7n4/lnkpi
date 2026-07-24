@@ -17,14 +17,52 @@ def _latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
+def _positioning_line(plan_md: str) -> str:
+    lines = [ln.strip() for ln in (plan_md or "").splitlines() if ln.strip()]
+    for i, ln in enumerate(lines):
+        if "定位" in ln.lstrip("# ").strip():
+            for nxt in lines[i + 1 : i + 4]:
+                cleaned = nxt.lstrip("#>*- ").strip()
+                if cleaned and "定位" not in cleaned:
+                    return cleaned[:120]
+    for ln in lines:
+        if not ln.startswith("#"):
+            return ln.lstrip("#>*- ").strip()[:120]
+    if lines:
+        return lines[0].lstrip("# ").strip()[:120]
+    return "（见画布方案节点）"
+
+
+def _manifest_titles(canvas_manifest: dict | None) -> list[str]:
+    if not canvas_manifest or not isinstance(canvas_manifest.get("items"), list):
+        return []
+    titles: list[str] = []
+    for raw in canvas_manifest["items"]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or raw.get("key") or "").strip()
+        if title:
+            titles.append(title)
+    return titles
+
+
+def build_confirm_message(*, plan_md: str, canvas_manifest: dict | None) -> str:
+    """Readable confirm gate: positioning + asset list + N + canvas pointer."""
+    positioning = _positioning_line(plan_md)
+    titles = _manifest_titles(canvas_manifest)
+    n = len(titles)
+    asset_lines = "\n".join(f"- {t}" for t in titles) if titles else "- （Skill 未声明资产清单）"
+    return (
+        f"定位：{positioning}\n"
+        f"确认后将拆解 {n} 个画布节点并自动出图：\n"
+        f"{asset_lines}\n"
+        "完整方案已写入画布「营销方案」节点，可在画布查看全文。\n"
+        "请确认是否按此方案拆解画布并出图；如需修改请直接说明。"
+    )
+
+
 def _summarize(plan_md: str, limit: int = 280) -> str:
-    lines = [ln.strip() for ln in plan_md.splitlines() if ln.strip()]
-    if not lines:
-        return ""
-    summary = lines[0].lstrip("# ").strip()
-    if len(plan_md) > limit:
-        return summary + "…"
-    return summary or plan_md[:limit]
+    return _positioning_line(plan_md)[:limit]
 
 
 def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
@@ -58,9 +96,9 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
         )
         plan_node_id = result["nodeId"]
         summary = _summarize(plan_md)
-        confirm_msg = (
-            f"已生成方案摘要：{summary}\n"
-            "请确认是否按此方案拆解画布并出图；如需修改请直接说明。"
+        confirm_msg = build_confirm_message(
+            plan_md=plan_md,
+            canvas_manifest=skill.canvas_manifest,
         )
 
         return {

@@ -20,8 +20,10 @@
 | 一期验收 | Skill 规划 → 确认 → 拆骨架（边/prompt/refs）→ **按拓扑自动出图**（URI 回写节点） |
 | 自动生成编排 | **一期包含自动出图**（`orchestrate_gen`）；**自动出视频留二期** |
 | 规划 LLM | **一期平台配置**：Runtime `LNKPI_OPENAI_*`（密钥/base_url/model）；**非**用户 UI 选择 / 对话 BYOK |
-| Agent 底栏 dock 参数 | **一期不打通**（模型选择器、技能下拉、文本积分徽章等为旧 UI 遗留；见 §1.2 / §10） |
+| Agent 底栏 dock 参数 | **一期不打通**（见 §1.2 / §10）；**一期须去误导**：隐藏模型选择器与积分徽章（见 `2026-07-24-agent-chat-ux-phase1-design.md`） |
 | 账户级画布生成默认 | **一期纳入**：左栏 `UserAiPreferences`（图/视/文/音模型 + 图比例/分辨率/张数 + 视频比例/时长/分辨率/裁剪 + 已有音频参数）；拆骨架/新建节点写入 `node.data`；Agent 自动出图按「节点字段 > 账户默认 > 硬编码」回退 |
+| Skill 门控 | **一期**：仅强营销意图进入营销 Skill；否则 **日常对话**（`chat`）；**禁止** fallback 到唯一 Skill 包。`/技能名` 与侧栏 `skillId` 仍二期（见 UX 规格 §2） |
+| 对话 UX（进度/摘要/结果） | **一期纳入**：见 `2026-07-24-agent-chat-ux-phase1-design.md`（P0–P2） |
 | 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
 | 现有 `@lnkpi/agent` | 保留为 Nest 侧兼容/工具适配层；新控制面迁到 Python Runtime，不一夜删除 |
 
@@ -173,18 +175,25 @@ class AgentRuntimeState(TypedDict):
 ## 5. 一期 Graph 拓扑
 
 ```text
-intake → plan → await_confirm ─┬─ revise → plan
-                               └─ confirm → split → orchestrate_gen → done
+START
+  ├─ (await_confirm 续轮) → await_confirm → …
+  └─ intake
+        ├─ 强营销意图 → plan → await_confirm ─┬─ revise → plan
+        │                                      └─ confirm → split → orchestrate_gen → done
+        └─ 否则 → chat → END
 ```
 
 | Graph 节点 | 职责 | 主要副作用 |
 | --- | --- | --- |
-| `intake` | 识别企业营销意图；加载 Skill；必要时追问品类/渠道/投放位 | 更新 `skill_id` / `messages` |
-| `plan` | 按 Skill 生成方案 Markdown；写摘要到对话 | `upsert_prompt_node` → `plan_node_id` |
+| `intake` | **门控**：强营销意图才设 `skill_id`；否则进入日常对话。**禁止**唯一 Skill 兜底 | 更新 `skill_id`（可 null） |
+| `chat` | 非 Skill 短答（同规划 LLM）；可提示如何发起营销方案 | 仅对话 `messages` |
+| `plan` | 按 Skill 生成方案 Markdown；写**可读摘要**（定位 + 将拆资产列表 + N + 画布指引） | `upsert_prompt_node` → `plan_node_id` |
 | `await_confirm` | 征询确认/修改；`awaiting_user=True` | 无强制画布写 |
-| `split` | 读方案；写 `split_manifest`；批量建下游 | 建节点/边/prompt/refs |
-| `orchestrate_gen` | 从 manifest + 边得到 `gen_queue`；逐个/有限并发出图 | `run_image_generation`；进度写入对话 |
-| `done` | 汇总成功/失败；提示可手动补跑或改 prompt | `phase=done` |
+| `split` | 读方案；写 `split_manifest`；批量建下游；独立进度话术 | 建节点/边/prompt/refs |
+| `orchestrate_gen` | 从 manifest + 边得到 `gen_queue`；逐个/有限并发出图；**按张进度** | `run_image_generation`；进度写入对话 |
+| `done` | **按节点**汇总成功/失败/平台兜底；提示画布操作 | `phase=done` |
+
+详情与验收见 `2026-07-24-agent-chat-ux-phase1-design.md`。
 
 **出图规则（一期）：**
 
@@ -470,6 +479,8 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 6. LangGraph State 无完整画布 JSON、无 Base64。
 7. `revise` 更新同一 `plan_node_id`；Skills 包符合 agentskills.io（`SKILL.md` + 可选 `scripts/`/`references/`/`assets/`）；缺 `SKILL.md` 的目录不被加载；顶层无非标准 frontmatter 也能被索引。
 8. **账户默认**：拆骨架 image 节点写入用户 `defaultImageModel` / 比例 / 分辨率 / 张数（`canvasImageCount` clamp 1–4）；`run_image_generation` 在节点缺字段时回退同一偏好；video/text/audio 骨架同样写入对应账户默认（不要求一期自动生成视频）。
+9. **Skill 门控**：非营销闲聊走 `chat`，不建方案/不拆图；强营销意图才进 Skill（见 UX 规格 §2 / §6）。
+10. **对话 UX**：确认后有分段进度；摘要可读；出图汇总可行动；Dock 去误导；确认快捷钮；流结束可补齐历史（见 UX 规格 §4 / §6）。
 
 ---
 
@@ -494,3 +505,4 @@ Nest 在工具成功后：更新 `Session.canvasData`；经 Agent SSE 推送 `ca
 | 2026-07-24 | 规格确认；§13 开放问题锁定；进入实现计划 |
 | 2026-07-24 | 明确 **Agent 底栏 dock（model/skillId/积分）不在一期**；列入 §1.2 非目标与 §10 二期遗留 |
 | 2026-07-24 | 一期纳入 **账户级画布生成默认（全模态）**：偏好字段、拆骨架写入、`run_image_generation` 回退；与侧栏对话 dock 区分 |
+| 2026-07-24 | 增补 **对话 UX P0–P2** 与 **Skill 门控（非营销→chat）**：见 `2026-07-24-agent-chat-ux-phase1-design.md`；修订 §0/§5/§12 |

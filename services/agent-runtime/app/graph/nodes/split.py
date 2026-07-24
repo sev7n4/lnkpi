@@ -104,16 +104,19 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             await nest.attach_refs(nid, ref_order)
 
         focus = [i["node_id"] for i in manifest if i.get("node_id")]
+        titles = [str(i.get("title") or i.get("key") or "") for i in manifest]
+        title_hint = "、".join(t for t in titles if t)[:80]
+        split_msg = (
+            f"已按方案拆解 {len(manifest)} 个画布节点骨架"
+            + (f"（{title_hint}…）" if title_hint else "。")
+            + "\n开始按依赖自动出图，请稍候…"
+        )
         return {
             "phase": "split",
             "split_manifest": manifest,
             "focus_node_ids": focus,
             "awaiting_user": False,
-            "messages": [
-                AIMessage(
-                    content=f"已按方案拆解 {len(manifest)} 个画布节点骨架（含 white_bg / hero_main 等）。"
-                )
-            ],
+            "messages": [AIMessage(content=split_msg)],
         }
 
     return split

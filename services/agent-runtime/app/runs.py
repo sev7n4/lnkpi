@@ -103,6 +103,11 @@ class NestEventProxy:
         await self._emit({"type": "node_status", "data": payload})
         return result
 
+    async def emit_text(self, text: str) -> None:
+        """Push a user-visible progress line mid-node (orchestrate_gen)."""
+        if text:
+            await self._emit({"type": "text_delta", "data": {"text": str(text)}})
+
     async def get_generation_status(self, node_id: str) -> dict[str, Any]:
         return await self._inner.get_generation_status(node_id)
 

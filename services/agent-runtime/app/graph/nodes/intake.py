@@ -14,7 +14,20 @@ _MARKETING_HINTS = (
     "洁具",
     "卫浴",
     "电商",
+    "天猫",
+    "拆画布",
+    "出图",
+    "分镜",
 )
+
+
+def marketing_intent(text: str) -> bool:
+    """True when the user asks for marketing/campaign canvas orchestration."""
+    lowered = (text or "").strip().lower()
+    if not lowered:
+        return False
+    # Require at least one campaign-ish signal; bare product nouns are not enough.
+    return any(h in lowered for h in _MARKETING_HINTS)
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -28,16 +41,18 @@ def _latest_user_text(messages: list[Any]) -> str:
 
 def make_intake_node(skills_dir: Path) -> Callable:
     async def intake(state: dict) -> dict:
-        text = _latest_user_text(state.get("messages") or []).lower()
+        text = _latest_user_text(state.get("messages") or [])
         entries = discover_skills(skills_dir)
-        skill_id = state.get("skill_id")
-        if not skill_id:
+        skill_id: str | None = None
+        if marketing_intent(text):
             preferred = "enterprise-marketing-campaign"
             by_id = {e.skill_id: e for e in entries}
-            if preferred in by_id and any(h in text for h in _MARKETING_HINTS):
+            if preferred in by_id:
                 skill_id = preferred
             elif entries:
+                # Only when intent matched: pick first available skill package
                 skill_id = entries[0].skill_id
+        # No unique-skill fallback when intent is weak — skill_id stays None → chat
 
         return {
             "phase": "intake",

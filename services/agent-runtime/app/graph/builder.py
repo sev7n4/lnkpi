@@ -7,6 +7,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.await_confirm import make_await_confirm_node
+from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
@@ -19,6 +20,12 @@ def route_entry(state: AgentRuntimeState) -> str:
     if state.get("awaiting_user") and state.get("phase") == "await_confirm":
         return "await_confirm"
     return "intake"
+
+
+def route_after_intake(state: AgentRuntimeState) -> str:
+    if state.get("skill_id"):
+        return "plan"
+    return "chat"
 
 
 def route_after_confirm(state: AgentRuntimeState) -> str:
@@ -37,11 +44,12 @@ def build_agent_graph(
     skills_dir: str | Path,
     checkpointer: Any | None = None,
 ):
-    """Compile intake → plan → await_confirm → (revise→plan | confirm→split→orchestrate_gen→done)."""
+    """Compile intake → (chat | plan → await_confirm → …)."""
     skills_path = Path(skills_dir)
     graph = StateGraph(AgentRuntimeState)
 
     graph.add_node("intake", make_intake_node(skills_path))
+    graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("plan", make_plan_node(nest=nest, llm=llm, skills_dir=skills_path))
     graph.add_node("await_confirm", make_await_confirm_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
@@ -53,7 +61,12 @@ def build_agent_graph(
         route_entry,
         {"intake": "intake", "await_confirm": "await_confirm"},
     )
-    graph.add_edge("intake", "plan")
+    graph.add_conditional_edges(
+        "intake",
+        route_after_intake,
+        {"plan": "plan", "chat": "chat"},
+    )
+    graph.add_edge("chat", END)
     graph.add_edge("plan", "await_confirm")
     graph.add_conditional_edges(
         "await_confirm",
