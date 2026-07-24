@@ -183,6 +183,7 @@ function startResize(event: MouseEvent) {
 function newAgentSession() {
   agent.clear()
   input.value = ''
+  taskProgress.value = emptyTaskProgress()
   agentThreadId.value = `${props.sessionId}:${crypto.randomUUID()}`
 }
 
