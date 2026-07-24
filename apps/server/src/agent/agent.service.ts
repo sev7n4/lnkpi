@@ -49,6 +49,7 @@ export class AgentService {
     sessionId: string,
     userMessage: string,
     userId?: string,
+    threadId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     await this.prisma.agentMessage.create({
       data: { sessionId, role: 'user', content: userMessage },
@@ -58,7 +59,13 @@ export class AgentService {
     if (runtimeUrl && userId) {
       const client = this.createRuntimeClient(runtimeUrl)
       if (await client.healthOk()) {
-        yield* this.streamFromRuntime(client, sessionId, userMessage, userId)
+        yield* this.streamFromRuntime(
+          client,
+          sessionId,
+          userMessage,
+          userId,
+          threadId,
+        )
         return
       }
     }
@@ -79,6 +86,7 @@ export class AgentService {
     sessionId: string,
     userMessage: string,
     userId: string,
+    threadId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -87,7 +95,8 @@ export class AgentService {
       sessionId,
       userId,
       message: userMessage,
-      threadId: sessionId,
+      // 新建对话应换 thread，避免 MemorySaver 把旧 await_confirm 状态续上
+      threadId: threadId?.trim() || sessionId,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

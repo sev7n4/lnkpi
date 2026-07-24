@@ -26,6 +26,8 @@ const agent = useAgentStore()
 const auth = useAuthStore()
 const input = ref('')
 const chatContainer = ref<HTMLElement>()
+/** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
+const agentThreadId = ref(`${props.sessionId}:main`)
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -170,6 +172,7 @@ function startResize(event: MouseEvent) {
 function newAgentSession() {
   agent.clear()
   input.value = ''
+  agentThreadId.value = `${props.sessionId}:${crypto.randomUUID()}`
 }
 
 async function loadHistory() {
@@ -218,7 +221,12 @@ async function send() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ sessionId: props.sessionId, message, model: agentModel.value }),
+      body: JSON.stringify({
+        sessionId: props.sessionId,
+        message,
+        model: agentModel.value,
+        threadId: agentThreadId.value,
+      }),
     })
 
     const reader = res.body?.getReader()
@@ -243,6 +251,10 @@ async function send() {
   } catch (err) {
     agent.appendText(`\n\n⚠️ 请求失败: ${err}`)
   } finally {
+    const last = agent.messages[agent.messages.length - 1]
+    if (last?.role === 'assistant' && !last.content.trim()) {
+      agent.appendText('（本轮无文本回复。若在确认方案，可再发「确认」；或点「新建对话」后重试。）')
+    }
     agent.finishStreaming()
     const actions = agent.flushActions()
     if (actions.length) emit('canvasActions', actions)

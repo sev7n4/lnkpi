@@ -32,7 +32,22 @@ _REVISE_HINTS = (
     "重新",
     "revise",
     "改一下",
-    "偏",
+    "更偏",
+)
+# 「等我确认」出现在长需求里时，应视为新 brief，而非对本轮方案确认
+_FRESH_BRIEF_HINTS = (
+    "请为",
+    "写一份",
+    "帮我设计",
+    "帮我做",
+    "帮我写",
+)
+_CONFIRM_NEGATIONS = (
+    "无修改",
+    "不修改",
+    "不用改",
+    "无需修改",
+    "没有修改",
 )
 
 
@@ -51,10 +66,17 @@ def classify_user_decision(text: str) -> Decision | None:
     if not lowered:
         return "none"
 
+    # 「无修改 / 不修改」是确认，不能因子串「修改」误判为 revise
+    if any(n in lowered for n in _CONFIRM_NEGATIONS):
+        return "confirm"
+
     # Prefer revise when both signals appear (e.g. "确认前先改成…")
     if any(h in lowered for h in _REVISE_HINTS):
         return "revise"
     if any(h in lowered for h in _CONFIRM_HINTS):
+        # 长需求里的「先等我确认」是未来动作，不是对本轮方案的确认
+        if len(lowered) > 24 and any(h in lowered for h in _FRESH_BRIEF_HINTS):
+            return None
         return "confirm"
 
     # Fresh planning requests are not confirmations

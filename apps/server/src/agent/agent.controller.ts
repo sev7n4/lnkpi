@@ -10,6 +10,11 @@ class ConversationDto {
 
   @IsString()
   message!: string
+
+  /** LangGraph thread；新建对话时前端换新 id，与画布 sessionId 解耦 */
+  @IsOptional()
+  @IsString()
+  threadId?: string
 }
 
 class OptimizePromptDto {
@@ -59,6 +64,7 @@ export class AgentController {
         dto.sessionId,
         dto.message,
         req.user.sub,
+        dto.threadId,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }
