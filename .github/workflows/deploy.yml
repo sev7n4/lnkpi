@@ -23,6 +23,11 @@ on:
         required: false
         default: false
         type: boolean
+      enable_agent_runtime:
+        description: Sync + enable Agent Runtime on CVM (Compose; see deploy/AGENT_RUNTIME_PRODUCTION.md)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -120,7 +125,8 @@ jobs:
           fi
 
       - name: Sync source to CVM
-        if: ${{ github.event.inputs.recover_only != true }}
+        # workflow_dispatch booleans arrive as strings ("true"/"false")
+        if: ${{ github.event.inputs.recover_only != 'true' }}
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
@@ -132,10 +138,28 @@ jobs:
               --exclude='**/dist' \
               --exclude='.cursor' \
               --exclude='docs' \
-              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
+              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh ${DEPLOY_DIR}/deploy/enable-agent-runtime.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
+
+      - name: Enable Agent Runtime on CVM
+        if: ${{ github.event.inputs.enable_agent_runtime == 'true' }}
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "bash -s" < deploy/enable-agent-runtime.sh
+          echo "=== post-enable: Nest token gate (external) ==="
+          MSG=$(curl -sS --connect-timeout 5 --max-time 10 -X POST \
+            "http://${{ env.SSH_HOST }}:${{ env.API_PORT }}/api/agent/internal/get-canvas-summary" \
+            -H 'Content-Type: application/json' -d '{"sessionId":"x"}' || true)
+          echo "$MSG" | head -c 300
+          echo ""
+          if echo "$MSG" | grep -q 'not configured'; then
+            echo "ERROR: AGENT_RUNTIME_SERVICE_TOKEN still not configured on Nest"
+            exit 1
+          fi
+          ssh -T deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS http://127.0.0.1:8000/health"
 
       - name: Launch background build on CVM
-        if: ${{ github.event.inputs.recover_only != true }}
+        if: ${{ github.event.inputs.recover_only != 'true' && github.event.inputs.enable_agent_runtime != 'true' }}
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
@@ -158,7 +182,7 @@ jobs:
           echo "Build started on CVM (pid=${PID}, log=${LOG_FILE})"
 
       - name: Wait for CVM build
-        if: ${{ github.event.inputs.recover_only != true }}
+        if: ${{ github.event.inputs.recover_only != 'true' && github.event.inputs.enable_agent_runtime != 'true' }}
         run: |
           set -euo pipefail
           IMAGE_TAG="${{ env.IMAGE_TAG }}"

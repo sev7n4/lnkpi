@@ -41,6 +41,7 @@
 | `LNKPI_RUNTIME_AUTH_TOKEN` | 否 | 可省略 | Nest → Runtime 校验用；空则回退用 `LNKPI_NEST_SERVICE_TOKEN` |
 | `LNKPI_OPENAI_API_KEY` | 建议填 | 平台文本模型 Key | **仅**供 Runtime 规划/拆解 LLM（一期不读左栏 BYOK） |
 | `LNKPI_OPENAI_BASE_URL` | 否 | `https://api.openai.com/v1` 或兼容网关 | 规划 LLM 的 base |
+| `LNKPI_OPENAI_CHAT_MODEL` | 否 | 默认 `gpt-4o`；可与 Nest `OPENAI_CHAT_MODEL` 相同 | 规划 LLM 模型名 |
 | `LNKPI_SKILLS_DIR` | 否 | `/app/skills`（镜像内默认） | Skill 包目录 |
 | `LNKPI_IMAGE_GEN_CONCURRENCY` | 否 | `3` | 编排出图并发上限 |
 | `LNKPI_IMAGE_GEN_TIMEOUT_SEC` | 否 | `180` | 单图等待上限（秒） |
@@ -174,7 +175,14 @@ cd /opt/lnkpi && docker compose -f deploy/docker-compose.prod.yml up -d --force-
 | 4 | Nest 日志 / 行为 | 配置 `AGENT_RUNTIME_URL` 且健康时，对话走 Runtime；否则旧 Agent |
 | 5 | 无公网 8000 | `ss -lntp \| grep 8000` 仅 127.0.0.1 或无宿主机监听 |
 
-> 说明：当前 GitHub `deploy.yml` 的 path 过滤**不含** `services/agent-runtime/**`；合并后不会自动构建 Runtime。上线 Runtime 需按本文 **手动** compose/systemd 一次（或后续再改 CI）。
+> 说明：当前 GitHub `deploy.yml` 的 path 过滤**不含** `services/agent-runtime/**`；合并后不会自动构建 Runtime。上线 Runtime 可用：
+>
+> ```bash
+> # GitHub → Actions → Deploy API to Tencent Cloud → Run workflow
+> # enable_agent_runtime = true（会 sync 源码 + 写 .env token + compose build/up Runtime + recreate api）
+> ```
+>
+> 或在 CVM 手工执行 `bash /opt/lnkpi/deploy/enable-agent-runtime.sh`（见 `deploy/enable-agent-runtime.sh`）。
 
 ---
 
