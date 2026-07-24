@@ -19,6 +19,29 @@ EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
 
 _checkpointer = MemorySaver()
 
+# Same-thread concurrent turns (e.g. double「确认」while orchestrate_gen runs)
+# must not start a second graph — that clears await_confirm and re-plans.
+THREAD_BUSY_TIP = "上一轮仍在处理中，请稍候；拆解出图通常需要一两分钟。"
+
+_thread_locks: dict[str, asyncio.Lock] = {}
+_thread_locks_meta = asyncio.Lock()
+
+
+async def _try_acquire_thread(thread_id: str) -> bool:
+    """Acquire per-thread lock without waiting. False if another run holds it."""
+    async with _thread_locks_meta:
+        lock = _thread_locks.setdefault(thread_id, asyncio.Lock())
+        if lock.locked():
+            return False
+        await lock.acquire()
+        return True
+
+
+def _release_thread(thread_id: str) -> None:
+    lock = _thread_locks.get(thread_id)
+    if lock is not None and lock.locked():
+        lock.release()
+
 
 class RunRequest(BaseModel):
     session_id: str
@@ -119,6 +142,11 @@ async def stream_run_events(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield AgentStreamEvent-shaped dicts for one user turn."""
     thread_id = req.thread_id or req.session_id
+    if not await _try_acquire_thread(thread_id):
+        yield {"type": "text_delta", "data": {"text": THREAD_BUSY_TIP}}
+        yield {"type": "done", "data": {}}
+        return
+
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
     async def emit(event: dict[str, Any]) -> None:
@@ -185,6 +213,7 @@ async def stream_run_events(
                 break
             yield item
     finally:
+        _release_thread(thread_id)
         if not task.done():
             task.cancel()
             try:
