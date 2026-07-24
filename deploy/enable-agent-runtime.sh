@@ -101,6 +101,15 @@ if [[ -z "$RT_BASE" || "$RT_BASE" == "https://api.openai.com/v1" ]]; then
   fi
 fi
 
+OPENAI_MODEL="$(get_env OPENAI_CHAT_MODEL)"
+RT_MODEL="$(get_env LNKPI_OPENAI_CHAT_MODEL)"
+if [[ -z "$RT_MODEL" && -n "$OPENAI_MODEL" ]]; then
+  upsert_env LNKPI_OPENAI_CHAT_MODEL "$OPENAI_MODEL"
+  log "copied OPENAI_CHAT_MODEL -> LNKPI_OPENAI_CHAT_MODEL"
+elif [[ -z "$RT_MODEL" ]]; then
+  log "WARN: LNKPI_OPENAI_CHAT_MODEL empty — Runtime defaults to gpt-4o"
+fi
+
 # Optional tunables if missing
 [[ -n "$(get_env LNKPI_IMAGE_GEN_CONCURRENCY)" ]] || upsert_env LNKPI_IMAGE_GEN_CONCURRENCY "3"
 [[ -n "$(get_env LNKPI_IMAGE_GEN_TIMEOUT_SEC)" ]] || upsert_env LNKPI_IMAGE_GEN_TIMEOUT_SEC "180"
