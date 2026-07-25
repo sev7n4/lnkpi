@@ -6,6 +6,15 @@ describe('detectAgentChipSet', () => {
   it('detects plan structured options', () => {
     expect(
       detectAgentChipSet(
+        '定位：高端\n请选择：\n1. 采纳推荐并确认方案\n2. 换个方向',
+      ),
+    ).toBe('plan')
+  })
+
+  it('detects plan structured options (legacy 1 / A format)', () => {
+    // 旧历史消息可能仍然是 "1 / A" 格式，前端需向后兼容
+    expect(
+      detectAgentChipSet(
         '定位：高端\n请选择：\n1 / A：采纳推荐并确认方案\n2 / B：换个方向',
       ),
     ).toBe('plan')
@@ -44,7 +53,7 @@ describe('detectAgentChipSet', () => {
       // 此时 assistant 可能仍然包含"请选择"等 plan 关键词，但前端不应该再显示 1/A 按钮
       expect(
         detectAgentChipSet(
-          '定位：运动鞋\n请选择：\n1 / A：采纳推荐并确认方案',
+          '定位：运动鞋\n请选择：\n1. 采纳推荐并确认方案',
           { latestUserText: '3' },
         ),
       ).toBe(null)
@@ -53,7 +62,7 @@ describe('detectAgentChipSet', () => {
     it('suppresses plan chip when user typed explicit modify instructions', () => {
       expect(
         detectAgentChipSet(
-          '定位：运动鞋\n请选择：\n1 / A：采纳推荐并确认方案',
+          '定位：运动鞋\n请选择：\n1. 采纳推荐并确认方案',
           { latestUserText: '请把模特定妆改为双人模特，增加产品材质特写图' },
         ),
       ).toBe(null)
@@ -63,7 +72,7 @@ describe('detectAgentChipSet', () => {
       // 用户说"1" 或"确认方案" → agent 走 confirm 分支 → 应该显示 plan chip
       expect(
         detectAgentChipSet(
-          '正在写入确认方案并拆解画布骨架（先不出图）\n请选择：1 / A',
+          '正在写入确认方案并拆解画布骨架（先不出图）\n请选择：1. 采纳',
           { latestUserText: '1' },
         ),
       ).toBe('plan')
@@ -71,7 +80,7 @@ describe('detectAgentChipSet', () => {
 
     it('suppresses chip on lowercase "c" modify', () => {
       expect(
-        detectAgentChipSet('请选择：\n1 / A', { latestUserText: 'c' }),
+        detectAgentChipSet('请选择：\n1. 采纳', { latestUserText: 'c' }),
       ).toBe(null)
     })
   })

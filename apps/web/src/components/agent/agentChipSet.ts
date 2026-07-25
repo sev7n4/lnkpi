@@ -2,7 +2,7 @@
 
 export type AgentChipSet = 'plan' | 'copy' | 'topo' | null
 
-const PLAN_SNIPPETS = ['1 / A', '确认方案', '请选择：'] as const
+const PLAN_SNIPPETS = ['1 / A', '1. 采纳', '确认方案', '请选择：'] as const
 const COPY_SNIPPETS = ['【主文案草稿】', '写入主文案'] as const
 const TOPO_SNIPPETS = ['确认出图', '当前资产拓扑', '要改拓扑'] as const
 
