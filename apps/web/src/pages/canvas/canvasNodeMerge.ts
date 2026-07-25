@@ -4,7 +4,6 @@ export type MergeNode = {
   id: string
   type?: string
   data?: Record<string, unknown> | null
-  [key: string]: unknown
 }
 
 export function mergeCanvasNodesFromServer<T extends MergeNode>(

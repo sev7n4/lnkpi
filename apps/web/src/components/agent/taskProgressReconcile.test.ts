@@ -1,6 +1,6 @@
 /** @vitest-environment node */
 import { describe, expect, it } from 'vitest'
-import { emptyTaskProgress } from './agentTaskProgress'
+import { emptyTaskProgress, type AgentTaskProgressState } from './agentTaskProgress'
 import {
   reconcileTaskProgress,
   shouldFinishTaskCard,
@@ -9,7 +9,7 @@ import {
 
 describe('taskProgressReconcile', () => {
   it('maps completed+url to done and finishes when no generating images', () => {
-    let state = emptyTaskProgress()
+    let state: AgentTaskProgressState = emptyTaskProgress()
     state = {
       ...state,
       items: [
@@ -38,7 +38,7 @@ describe('taskProgressReconcile', () => {
   })
 
   it('does not finish while an image is generating', () => {
-    const state = {
+    const state: AgentTaskProgressState = {
       ...emptyTaskProgress(),
       items: [{ id: 'banner', title: 'Banner', nodeId: 'i1', kind: 'image', status: 'running' }],
     }
