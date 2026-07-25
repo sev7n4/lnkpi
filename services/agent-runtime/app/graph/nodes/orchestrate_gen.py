@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.chain_refs import build_chain_ref_order
 from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
 from app.graph.task_events import hint_for_error, is_recoverable, max_auto_retries
 from app.graph.topo import topo_sort_gen_keys
@@ -124,6 +125,15 @@ def make_orchestrate_gen_node(
                             errorHint=hint_for_error(last_status),
                         )
                     try:
+                        plan_node_id = state.get("plan_node_id")
+                        ref_order = build_chain_ref_order(
+                            item=dict(item),
+                            by_key=by_key,
+                            plan_node_id=str(plan_node_id) if plan_node_id else None,
+                        )
+                        attach = getattr(nest, "attach_refs", None)
+                        if attach is not None and ref_order:
+                            await attach(str(node_id), ref_order)
                         if kind == "video":
                             run = getattr(nest, "run_video_generation", None)
                             if run is None:
