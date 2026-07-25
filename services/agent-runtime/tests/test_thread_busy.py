@@ -113,3 +113,57 @@ async def test_concurrent_same_thread_returns_busy_tip():
     # Second turn must not kick another plan LLM while first holds the lock
     assert llm.calls == 1
     assert nest.upserts == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_modify_intent_returns_friendly_tip():
+    """修复 P0-2：出图过程中用户发送修改意见 → 友好提示（而非生硬 busy tip）。"""
+    from app.runs import _MODIFY_DURING_GEN_TIP
+
+    gate = asyncio.Event()
+    release = asyncio.Event()
+    nest = _Nest()
+    llm = _SlowLLM(gate, release)
+    tid = "thread-busy-modify-1"
+    sid = "sess-busy-modify-1"
+
+    async def first() -> list[dict[str, Any]]:
+        return await _collect(
+            RunRequest(
+                session_id=sid,
+                user_id="u1",
+                thread_id=tid,
+                message="帮我规划蓝牙音箱电商主图",
+            ),
+            nest,
+            llm,
+        )
+
+    task1 = asyncio.create_task(first())
+    await asyncio.wait_for(gate.wait(), timeout=5)
+
+    # 第二轮：用户发送修改意见（应返回友好提示）
+    events2 = await _collect(
+        RunRequest(
+            session_id=sid,
+            user_id="u1",
+            thread_id=tid,
+            message="把主图改成更鲜艳的配色",
+        ),
+        nest,
+        llm,
+    )
+    release.set()
+    await task1
+
+    texts = [
+        str((e.get("data") or {}).get("text") or "")
+        for e in events2
+        if e.get("type") == "text_delta"
+    ]
+    # 应该返回友好提示，而不是生硬的 busy tip
+    assert any(_MODIFY_DURING_GEN_TIP in t for t in texts)
+    assert any(e.get("type") == "done" for e in events2)
+    # 不应该启动第二轮 plan LLM
+    assert llm.calls == 1
+    assert nest.upserts == 0

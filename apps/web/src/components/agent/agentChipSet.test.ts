@@ -3,16 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { detectAgentChipSet } from './agentChipSet'
 
 describe('detectAgentChipSet', () => {
-  it('detects plan structured options', () => {
+  it('detects plan structured options (new format)', () => {
     expect(
       detectAgentChipSet(
-        '定位：高端\n请选择：\n1. 采纳推荐并确认方案\n2. 换个方向',
+        '定位：高端\n请选择：\n1. 采纳推荐并确认方案\n2. 换个方向再改一版\n3. 我自己说明修改',
       ),
     ).toBe('plan')
   })
 
-  it('detects plan structured options (legacy 1 / A format)', () => {
-    // 旧历史消息可能仍然是 "1 / A" 格式，前端需向后兼容
+  it('detects plan structured options (legacy format)', () => {
     expect(
       detectAgentChipSet(
         '定位：高端\n请选择：\n1 / A：采纳推荐并确认方案\n2 / B：换个方向',
@@ -46,41 +45,52 @@ describe('detectAgentChipSet', () => {
     expect(detectAgentChipSet('出图成功')).toBe(null)
   })
 
-  // 修复 P1-4：modify intent 检测
-  describe('P1-4: modify intent suppresses plan chip', () => {
-    it('suppresses plan chip when user typed "3" (modify branch)', () => {
-      // 用户在 plan 阶段输入"3"=选择 C 自己说明修改 → agent 重新进入 modify 模式
-      // 此时 assistant 可能仍然包含"请选择"等 plan 关键词，但前端不应该再显示 1/A 按钮
+  // 修复 P1-4 + P2-1：modify intent 检测的新优先级逻辑
+  describe('P1-4 + P2-1: modify intent 与 confirm 选项的优先级', () => {
+    it('shows plan chip when agent replies with new confirm after modify', () => {
+      // 用户输入"3" → agent 重新生成 → 回复新 confirm 选项
+      // 这时应该显示 plan 按钮，让用户确认新方案
       expect(
         detectAgentChipSet(
-          '定位：运动鞋\n请选择：\n1. 采纳推荐并确认方案',
+          '定位：运动鞋\n请选择：\n1. 采纳推荐并确认方案\n2. 换个方向再改一版',
           { latestUserText: '3' },
         ),
-      ).toBe(null)
+      ).toBe('plan')
     })
 
-    it('suppresses plan chip when user typed explicit modify instructions', () => {
+    it('shows plan chip when agent replies after explicit modify instructions', () => {
+      // 用户输入"把模特定妆改为双人模特" → agent 重新生成 → 回复新 confirm
       expect(
         detectAgentChipSet(
-          '定位：运动鞋\n请选择：\n1. 采纳推荐并确认方案',
-          { latestUserText: '请把模特定妆改为双人模特，增加产品材质特写图' },
+          '定位：蓝牙耳机\n请选择：\n1. 采纳推荐并确认方案',
+          { latestUserText: '把模特定妆改为双人模特，增加产品材质特写图' },
+        ),
+      ).toBe('plan')
+    })
+
+    it('suppresses chip when agent is still transitioning (no confirm options)', () => {
+      // 用户输入 modify intent → agent 回复过渡消息（"正在调整…"）
+      // 此时不含 confirm 选项 → 抑制 chip
+      expect(
+        detectAgentChipSet(
+          '好的，正在基于当前方案调整您提到的部分，保留其余节点不变，请稍候…',
+          { latestUserText: '把模特定妆改为双人模特' },
         ),
       ).toBe(null)
     })
 
     it('still shows plan chip for "1/A" confirmation reply', () => {
-      // 用户说"1" 或"确认方案" → agent 走 confirm 分支 → 应该显示 plan chip
       expect(
         detectAgentChipSet(
-          '正在写入确认方案并拆解画布骨架（先不出图）\n请选择：1. 采纳',
+          '正在写入确认方案并拆解画布骨架（先不出图）\n请选择：1. 采纳推荐',
           { latestUserText: '1' },
         ),
       ).toBe('plan')
     })
 
-    it('suppresses chip on lowercase "c" modify', () => {
+    it('suppresses chip on lowercase "c" modify with transition message', () => {
       expect(
-        detectAgentChipSet('请选择：\n1. 采纳', { latestUserText: 'c' }),
+        detectAgentChipSet('好的，正在基于当前方案调整…', { latestUserText: 'c' }),
       ).toBe(null)
     })
   })
