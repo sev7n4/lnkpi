@@ -20,6 +20,7 @@ def test_build_confirm_message_lists_assets_and_n():
     assert "白底图" in msg
     assert "主图" in msg
     assert "场景图" in msg
-    assert "将拆解 3" in msg or "拆解 3" in msg
-    assert "营销方案" in msg
-    assert "请确认是否按此方案拆解画布并出图" in msg
+    assert "拟定拆解约 3" in msg or "拆解约 3" in msg
+    assert "1 / A" in msg
+    assert "确认方案" in msg
+    assert "确认前不会写入画布" in msg

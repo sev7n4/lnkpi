@@ -121,17 +121,14 @@ def test_runs_stream_ndjson_smoke():
         events = [json.loads(line) for line in response.iter_lines() if line]
 
     types = [e["type"] for e in events]
-    assert "canvas_action" in types
+    # plan 确认前不写画布，首轮只有文本门
     assert "text_delta" in types
     assert "done" in types
     assert "error" not in types
-    assert "upsert_prompt_node" in nest.calls
-
-    canvas = next(e for e in events if e["type"] == "canvas_action")
-    assert canvas["data"]["type"] == "add_node"
-    assert canvas["data"]["payload"]["nodeType"] == "prompt"
+    assert "upsert_prompt_node" not in nest.calls
+    assert "canvas_action" not in types
 
     text = "".join(
         e["data"]["text"] for e in events if e["type"] == "text_delta"
     )
-    assert "确认" in text or "方案" in text
+    assert "1 / A" in text or "确认方案" in text or "方案" in text

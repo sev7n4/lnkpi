@@ -11,12 +11,8 @@ from langchain_core.messages import AIMessage
 from app.runs import RunRequest, stream_run_events
 
 
-class _SlowNest:
-    """Blocks inside upsert so a second concurrent turn can race."""
-
-    def __init__(self, gate: asyncio.Event, release: asyncio.Event) -> None:
-        self.gate = gate
-        self.release = release
+class _Nest:
+    def __init__(self) -> None:
         self.upserts = 0
 
     async def close(self) -> None:
@@ -24,8 +20,6 @@ class _SlowNest:
 
     async def upsert_prompt_node(self, **kwargs: Any) -> dict[str, Any]:
         self.upserts += 1
-        self.gate.set()
-        await self.release.wait()
         return {"nodeId": "plan-1", "actions": []}
 
     async def get_node(self, node_id: str) -> dict[str, Any]:
@@ -47,8 +41,18 @@ class _SlowNest:
         return {"nodeId": node_id, "status": "completed", "actions": []}
 
 
-class _FakeLLM:
+class _SlowLLM:
+    """Blocks inside plan LLM so a second concurrent turn can race."""
+
+    def __init__(self, gate: asyncio.Event, release: asyncio.Event) -> None:
+        self.gate = gate
+        self.release = release
+        self.calls = 0
+
     async def ainvoke(self, messages: Any, **kwargs: Any) -> AIMessage:
+        self.calls += 1
+        self.gate.set()
+        await self.release.wait()
         return AIMessage(content="# 方案\n蓝牙音箱\n")
 
 
@@ -66,8 +70,8 @@ async def test_concurrent_same_thread_returns_busy_tip():
 
     gate = asyncio.Event()
     release = asyncio.Event()
-    nest = _SlowNest(gate, release)
-    llm = _FakeLLM()
+    nest = _Nest()
+    llm = _SlowLLM(gate, release)
     tid = "thread-busy-1"
     sid = "sess-busy-1"
 
@@ -106,5 +110,6 @@ async def test_concurrent_same_thread_returns_busy_tip():
     ]
     assert any(THREAD_BUSY_TIP in t for t in texts)
     assert any(e.get("type") == "done" for e in events2)
-    # Second turn must not kick another upsert/plan while first holds the lock
-    assert nest.upserts == 1
+    # Second turn must not kick another plan LLM while first holds the lock
+    assert llm.calls == 1
+    assert nest.upserts == 0

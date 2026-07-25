@@ -48,17 +48,21 @@ def _manifest_titles(canvas_manifest: dict | None) -> list[str]:
 
 
 def build_confirm_message(*, plan_md: str, canvas_manifest: dict | None) -> str:
-    """Readable confirm gate: positioning + asset list + N + canvas pointer."""
+    """Readable confirm gate: summary + structured options (no canvas write yet)."""
     positioning = _positioning_line(plan_md)
     titles = _manifest_titles(canvas_manifest)
     n = len(titles)
     asset_lines = "\n".join(f"- {t}" for t in titles) if titles else "- （Skill 未声明资产清单）"
     return (
         f"定位：{positioning}\n"
-        f"确认后将拆解 {n} 个画布节点并自动出图：\n"
+        f"拟定拆解约 {n} 个画布节点（确认方案后写入画布，确认出图后再生成）：\n"
         f"{asset_lines}\n"
-        "完整方案已写入画布「营销方案」节点，可在画布查看全文。\n"
-        "请确认是否按此方案拆解画布并出图；如需修改请直接说明。"
+        "方案全文见上方摘要（确认前不会写入画布节点）。\n\n"
+        "请选择：\n"
+        "1 / A：采纳推荐并确认方案（推荐：按当前摘要落稿，进入骨架预览）\n"
+        "2 / B：换个方向再改一版（例如更偏天猫详情页 / 更强调卖点）\n"
+        "3 / C：我自己说明修改\n"
+        "也可直接回复编号或具体修改意见。"
     )
 
 
@@ -90,13 +94,6 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
         ]
         ai = await llm.ainvoke(messages)
         plan_md = strip_plan_preamble(str(getattr(ai, "content", ai) or ""))
-
-        result = await nest.upsert_prompt_node(
-            prompt="营销方案",
-            content=plan_md,
-            node_id=state.get("plan_node_id"),
-        )
-        plan_node_id = result["nodeId"]
         summary = _summarize(plan_md)
         confirm_msg = build_confirm_message(
             plan_md=plan_md,
@@ -106,7 +103,8 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
         return {
             "phase": "await_confirm",
             "plan_summary": summary,
-            "plan_node_id": plan_node_id,
+            "plan_draft": plan_md,
+            # Do not upsert canvas until write_plan_node after confirm
             "awaiting_user": True,
             "user_decision": "none",
             "messages": [AIMessage(content=confirm_msg)],

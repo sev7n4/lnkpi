@@ -6,18 +6,16 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 Decision = Literal["none", "confirm", "revise"]
 
-# When user reply is neither confirm nor revise, still surface a visible tip
-# (otherwise stream ends with only `done` and the UI looks empty).
-_NONE_DECISION_TIP = "请确认方案或说明修改；也可回复「确认」继续拆解画布并出图。"
+_NONE_DECISION_TIP = "请选择 1/A 确认方案，或 2/B、3/C / 说明修改后再确认。"
 
 _CONFIRM_HINTS = (
+    "确认方案",
     "确认",
     "同意",
     "可以",
     "没问题",
     "按这个",
     "开始拆",
-    "出图",
     "ok",
     "okay",
     "yes",
@@ -33,8 +31,9 @@ _REVISE_HINTS = (
     "revise",
     "改一下",
     "更偏",
+    "要修改",
+    "自己说",
 )
-# 「等我确认」出现在长需求里时，应视为新 brief，而非对本轮方案确认
 _FRESH_BRIEF_HINTS = (
     "请为",
     "写一份",
@@ -62,24 +61,28 @@ def _latest_user_text(messages: list[Any]) -> str:
 
 def classify_user_decision(text: str) -> Decision | None:
     """Heuristic classifier. Returns None when ambiguous (caller may use LLM)."""
-    lowered = text.strip().lower()
+    raw = text.strip()
+    lowered = raw.lower()
     if not lowered:
         return "none"
 
-    # 「无修改 / 不修改」是确认，不能因子串「修改」误判为 revise
+    token = raw.split()[0].strip().rstrip(".).、）") if raw else ""
+    token_u = token.upper()
+    if token in ("1",) or token_u in ("A", "Ａ"):
+        return "confirm"
+    if token in ("2", "3") or token_u in ("B", "C", "Ｂ", "Ｃ"):
+        return "revise"
+
     if any(n in lowered for n in _CONFIRM_NEGATIONS):
         return "confirm"
 
-    # Prefer revise when both signals appear (e.g. "确认前先改成…")
     if any(h in lowered for h in _REVISE_HINTS):
         return "revise"
     if any(h in lowered for h in _CONFIRM_HINTS):
-        # 长需求里的「先等我确认」是未来动作，不是对本轮方案的确认
         if len(lowered) > 24 and any(h in lowered for h in _FRESH_BRIEF_HINTS):
             return None
         return "confirm"
 
-    # Fresh planning requests are not confirmations
     if any(k in lowered for k in ("营销方案", "帮我设计", "帮我做")):
         return "none"
     return None
@@ -114,8 +117,6 @@ def _last_role(messages: list[Any]) -> str | None:
 
 def make_await_confirm_node(*, llm: Any) -> Callable:
     async def await_confirm(state: dict) -> dict:
-        # After plan in the same turn, the latest message is the AI confirm prompt —
-        # do not re-classify the prior user text (avoids revise→plan→revise loops).
         if _last_role(state.get("messages") or []) not in ("human", "user"):
             return {
                 "user_decision": "none",
@@ -137,9 +138,8 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
         if decision == "none":
             out["messages"] = [AIMessage(content=_NONE_DECISION_TIP)]
         elif decision == "confirm":
-            # Immediate tip so SSE stays visibly busy while split/orchestrate_gen runs
             out["messages"] = [
-                AIMessage(content="正在按方案拆解画布并出图，请稍候…")
+                AIMessage(content="正在写入确认方案并拆解画布骨架（先不出图），请稍候…")
             ]
         return out
     return await_confirm
