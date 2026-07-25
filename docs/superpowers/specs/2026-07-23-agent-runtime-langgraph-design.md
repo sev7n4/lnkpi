@@ -242,7 +242,7 @@ START
 | `scene` | image | true | [] | t2i | 场景图 |
 | `banner` | image | true | [] | t2i | Banner |
 | `brand` | image | true | [] | t2i | 品牌图 |
-| `model` | image | true | [] | t2i | 模特/人景（**B** 将拆为一致性链） |
+| `model_*` | image | true | 见 B 规格 | t2i/i2i | 定妆→四视图→人景（**B**：`2026-07-25-agent-consistency-chains-design.md`） |
 | `detail_cut` | image | true | [`white_bg`] | i2i | 细节/剖面 |
 | `show_video` | video | true | [`hero_main`] | v_ref | 产品展示视频 |
 
