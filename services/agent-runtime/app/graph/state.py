@@ -63,3 +63,12 @@ class AgentRuntimeState(TypedDict, total=False):
     # 一期轻量人机
     awaiting_user: bool
     user_decision: Literal["none", "confirm", "revise", "confirm_gen", "topo_revise"] | None
+
+    # 修复 P0-1/P0-2/P0-3：brief 锚定 + 修改模式
+    # user_brief: 首轮用户需求锚定，后续 plan 必须围绕这个 brief 展开（防止主题漂移）
+    # mode: "create"（首轮生成新方案）vs "modify"（在已有方案上修改）
+    user_brief: str | None
+    brief_locked: bool  # True 后 user_brief 不再被覆盖
+    mode: Literal["create", "modify"] | None
+    # modify_target: 修改模式下，告诉 LLM 用户想改哪个维度
+    modify_target: Literal["skeleton", "copy", "topology", "plan"] | None

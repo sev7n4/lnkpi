@@ -36,4 +36,43 @@ describe('detectAgentChipSet', () => {
   it('returns null for ordinary replies', () => {
     expect(detectAgentChipSet('出图成功')).toBe(null)
   })
+
+  // 修复 P1-4：modify intent 检测
+  describe('P1-4: modify intent suppresses plan chip', () => {
+    it('suppresses plan chip when user typed "3" (modify branch)', () => {
+      // 用户在 plan 阶段输入"3"=选择 C 自己说明修改 → agent 重新进入 modify 模式
+      // 此时 assistant 可能仍然包含"请选择"等 plan 关键词，但前端不应该再显示 1/A 按钮
+      expect(
+        detectAgentChipSet(
+          '定位：运动鞋\n请选择：\n1 / A：采纳推荐并确认方案',
+          { latestUserText: '3' },
+        ),
+      ).toBe(null)
+    })
+
+    it('suppresses plan chip when user typed explicit modify instructions', () => {
+      expect(
+        detectAgentChipSet(
+          '定位：运动鞋\n请选择：\n1 / A：采纳推荐并确认方案',
+          { latestUserText: '请把模特定妆改为双人模特，增加产品材质特写图' },
+        ),
+      ).toBe(null)
+    })
+
+    it('still shows plan chip for "1/A" confirmation reply', () => {
+      // 用户说"1" 或"确认方案" → agent 走 confirm 分支 → 应该显示 plan chip
+      expect(
+        detectAgentChipSet(
+          '正在写入确认方案并拆解画布骨架（先不出图）\n请选择：1 / A',
+          { latestUserText: '1' },
+        ),
+      ).toBe('plan')
+    })
+
+    it('suppresses chip on lowercase "c" modify', () => {
+      expect(
+        detectAgentChipSet('请选择：\n1 / A', { latestUserText: 'c' }),
+      ).toBe(null)
+    })
+  })
 })

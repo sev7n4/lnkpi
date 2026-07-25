@@ -35,6 +35,8 @@ def _latest_user_text(state: AgentRuntimeState) -> str:
 
 
 def route_entry(state: AgentRuntimeState) -> str:
+    # 修复 P0-1：phase=done 后用户再发消息，必须保留 brief + plan_draft 上下文
+    # 走 intake 重新进入，但 intake 会基于 state.user_brief/plan_draft 决定 modify vs create
     if state.get("awaiting_user") and state.get("phase") == "await_copy_confirm":
         return "await_copy_confirm"
     if state.get("awaiting_user") and state.get("phase") == "await_topo":
@@ -47,6 +49,8 @@ def route_entry(state: AgentRuntimeState) -> str:
         return "await_topo"
     if state.get("awaiting_user") and state.get("phase") == "await_confirm":
         return "await_confirm"
+    # 修复 P0-2：phase=done 但有 user_brief + plan_draft → 走 intake 重新进入
+    # intake 节点会基于 state.mode (modify/create) 决定下一步
     return "intake"
 
 

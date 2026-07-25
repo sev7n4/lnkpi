@@ -51,7 +51,9 @@ const showTaskCard = computed(() => taskProgress.value.items.length > 0)
 const chipSet = computed(() => {
   if (agent.isStreaming) return null
   const last = [...agent.messages].reverse().find((m) => m.role === 'assistant')
-  return detectAgentChipSet(last?.content || '')
+  // 修复 P1-4：把"最近用户消息"传入 detectAgentChipSet，避免 modify 阶段误显示 plan 按钮
+  const lastUser = [...agent.messages].reverse().find((m) => m.role === 'user')
+  return detectAgentChipSet(last?.content || '', { latestUserText: lastUser?.content })
 })
 const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
