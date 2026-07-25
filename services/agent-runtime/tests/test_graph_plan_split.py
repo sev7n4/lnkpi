@@ -138,8 +138,8 @@ def _batch_keys(nest: FakeNest) -> set[str]:
 @pytest.mark.asyncio
 async def test_confirm_then_split_creates_image_skeletons():
     nest = FakeNest()
-    # plan markdown, then classification reply "确认" if heuristic needs LLM fallback
-    llm = FakeLLM(responses=[PLAN_MARKDOWN, "确认"])
+    # plan markdown, confirm classify (unused if heuristic), draft_copy body
+    llm = FakeLLM(responses=[PLAN_MARKDOWN, "确认", "# 主文案\n静音洁净\n"])
     graph = build_agent_graph(
         nest=nest,
         llm=llm,
@@ -168,7 +168,10 @@ async def test_confirm_then_split_creates_image_skeletons():
     keys = _batch_keys(nest)
     assert "white_bg" in keys
     assert "hero_main" in keys
-    assert state2["phase"] == "done"
+    # draft_copy then orchestrate_gen; done preserves copy HITL gate
+    assert state2["phase"] == "await_copy_confirm"
+    assert state2["awaiting_user"] is True
+    assert state2.get("copy_draft")
     assert state2["user_decision"] == "confirm"
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])

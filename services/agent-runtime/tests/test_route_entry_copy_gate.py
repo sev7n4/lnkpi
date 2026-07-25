@@ -1,4 +1,4 @@
-import asyncio
+import pytest
 
 from app.graph.builder import route_entry
 from app.graph.nodes.done import make_done_node
@@ -28,18 +28,17 @@ def test_route_entry_still_supports_plan_confirm():
     )
 
 
-def test_done_preserves_copy_gate():
+@pytest.mark.asyncio
+async def test_done_preserves_copy_gate():
     done = make_done_node()
-    out = asyncio.get_event_loop().run_until_complete(
-        done(
-            {
-                "awaiting_user": True,
-                "phase": "await_copy_confirm",
-                "copy_draft": "主文案草稿",
-                "gen_completed": ["n1"],
-                "gen_failed": [],
-            }
-        )
+    out = await done(
+        {
+            "awaiting_user": True,
+            "phase": "await_copy_confirm",
+            "copy_draft": "主文案草稿",
+            "gen_completed": ["n1"],
+            "gen_failed": [],
+        }
     )
     assert out["awaiting_user"] is True
     assert out["phase"] == "await_copy_confirm"

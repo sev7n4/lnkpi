@@ -50,6 +50,7 @@ class AgentRuntimeState(TypedDict, total=False):
     last_error: str | None
     copy_draft: str | None
     copy_node_id: str | None
+    copy_revise_only: bool
 
     # 一期轻量人机
     awaiting_user: bool
