@@ -107,6 +107,7 @@ import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
+import { mergeCanvasNodesFromServer } from '@/pages/canvas/canvasNodeMerge'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
 import { buildPollingFailurePatch } from '@/utils/generationDiagnostic'
 
@@ -2306,7 +2307,12 @@ async function loadSession() {
     )
     sessionTitle.value = data.data.title
     if (data.data.canvasData?.nodes?.length) {
-      nodes.value = data.data.canvasData.nodes as EditableFlowNode[]
+      const serverNodes = data.data.canvasData.nodes as EditableFlowNode[]
+      nodes.value = (
+        nodes.value.length
+          ? mergeCanvasNodesFromServer(nodes.value, serverNodes)
+          : serverNodes
+      ) as EditableFlowNode[]
       edges.value = hydrateCanvasEdges(
         (data.data.canvasData.edges ?? []) as CanvasEdge[],
         nodes.value,
