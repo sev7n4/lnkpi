@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.graph.builder import build_agent_graph
+from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -41,6 +42,36 @@ def _release_thread(thread_id: str) -> None:
     lock = _thread_locks.get(thread_id)
     if lock is not None and lock.locked():
         lock.release()
+
+
+async def _run_orchestrate_background(
+    *,
+    session_id: str,
+    user_id: str,
+    split_manifest: list[Any],
+    gen_completed: list[Any] | None = None,
+    gen_failed: list[Any] | None = None,
+) -> None:
+    """Image/video topo gen after draft turn ends — must not hold the thread lock."""
+
+    async def _noop_emit(_event: dict[str, Any]) -> None:
+        return None
+
+    inner = default_nest(session_id=session_id, user_id=user_id)
+    proxy = NestEventProxy(inner, _noop_emit)
+    try:
+        node = make_orchestrate_gen_node(nest=proxy)
+        await node(
+            {
+                "split_manifest": split_manifest,
+                "gen_completed": list(gen_completed or []),
+                "gen_failed": list(gen_failed or []),
+            }
+        )
+    except Exception:  # noqa: BLE001 — background; canvas/records still reflect partial progress
+        pass
+    finally:
+        await proxy.close()
 
 
 class RunRequest(BaseModel):
@@ -207,7 +238,11 @@ async def stream_run_events(
         "thread_id": thread_id,
     }
 
+    bg_payload: dict[str, Any] | None = None
+
     async def run_graph() -> None:
+        nonlocal bg_payload
+        saw_pending_orchestrate = False
         try:
             async for update in graph.astream(input_state, config, stream_mode="updates"):
                 if not isinstance(update, dict):
@@ -215,6 +250,8 @@ async def stream_run_events(
                 for _node, delta in update.items():
                     if not isinstance(delta, dict):
                         continue
+                    if delta.get("pending_orchestrate"):
+                        saw_pending_orchestrate = True
                     messages = delta.get("messages")
                     if not messages:
                         continue
@@ -231,6 +268,21 @@ async def stream_run_events(
                         )
                         if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
                             await emit({"type": "text_delta", "data": {"text": str(content)}})
+            if saw_pending_orchestrate:
+                try:
+                    snap = await graph.aget_state(config)
+                    vals = getattr(snap, "values", None) or {}
+                    manifest = list(vals.get("split_manifest") or [])
+                    if manifest:
+                        bg_payload = {
+                            "session_id": req.session_id,
+                            "user_id": req.user_id,
+                            "split_manifest": manifest,
+                            "gen_completed": list(vals.get("gen_completed") or []),
+                            "gen_failed": list(vals.get("gen_failed") or []),
+                        }
+                except Exception:  # noqa: BLE001
+                    bg_payload = None
             await emit({"type": "done", "data": {}})
         except Exception as exc:  # noqa: BLE001 — surface to Nest SSE
             await emit({"type": "error", "data": {"message": str(exc)}})
@@ -248,6 +300,8 @@ async def stream_run_events(
             yield item
     finally:
         _release_thread(thread_id)
+        if bg_payload is not None:
+            asyncio.create_task(_run_orchestrate_background(**bg_payload))
         if not task.done():
             task.cancel()
             try:

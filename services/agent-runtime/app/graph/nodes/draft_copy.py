@@ -81,12 +81,15 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
                 errorHint="请确认主文案后写入",
             )
 
+        was_revise = bool(state.get("copy_revise_only"))
         out: dict[str, Any] = {
             "phase": "await_copy_confirm",
             "awaiting_user": True,
             "copy_draft": draft,
             "copy_node_id": node_id,
             "copy_revise_only": False,
+            # First draft: arm background orchestrate. Revise-only: do not re-kick gens.
+            "pending_orchestrate": not was_revise,
             "messages": [AIMessage(content=body)],
         }
         return out

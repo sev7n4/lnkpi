@@ -168,24 +168,17 @@ async def test_confirm_then_split_creates_image_skeletons():
     keys = _batch_keys(nest)
     assert "white_bg" in keys
     assert "hero_main" in keys
-    # draft_copy then orchestrate_gen; done preserves copy HITL gate
+    # draft_copy then done (orchestrate runs in background outside graph.ainvoke)
     assert state2["phase"] == "await_copy_confirm"
     assert state2["awaiting_user"] is True
     assert state2.get("copy_draft")
     assert state2["user_decision"] == "confirm"
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])
+    # Sync graph path must NOT block on image gen
     gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
-    video_calls = [c for c in nest.calls if c[0] == "run_video_generation"]
-    assert gen_calls  # orchestrate_gen ran for auto_generate images
-    assert state2.get("gen_completed")
-    video_ids = {
-        item["node_id"]
-        for item in state2["split_manifest"]
-        if item.get("key") == "show_video"
-    }
-    assert video_calls
-    assert any(c[1]["node_id"] in video_ids for c in video_calls)
+    assert gen_calls == []
+    assert not state2.get("gen_completed")
     # task card list must be pinned at end of split (before long gen)
     task_lists = [c for c in nest.calls if c[0] == "emit_task_list"]
     assert task_lists

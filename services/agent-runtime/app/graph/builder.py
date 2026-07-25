@@ -12,7 +12,6 @@ from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.draft_copy import make_draft_copy_node
 from app.graph.nodes.intake import make_intake_node
-from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.graph.nodes.plan import make_plan_node
 from app.graph.nodes.split import make_split_node
 from app.graph.nodes.write_copy_node import make_write_copy_node
@@ -28,9 +27,11 @@ def route_entry(state: AgentRuntimeState) -> str:
 
 
 def route_after_draft_copy(state: AgentRuntimeState) -> str:
-    if state.get("copy_revise_only"):
-        return "end"
-    return "orchestrate_gen"
+    # Always end the user turn after draft so「写入主文案」is not blocked by image gen.
+    # First draft sets pending_orchestrate; stream_run_events kicks orchestrate in background.
+    if state.get("pending_orchestrate"):
+        return "done"
+    return "end"
 
 
 def route_after_copy_confirm(state: AgentRuntimeState) -> str:
@@ -74,7 +75,6 @@ def build_agent_graph(
     graph.add_node("await_confirm", make_await_confirm_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
     graph.add_node("draft_copy", make_draft_copy_node(nest=nest, llm=llm))
-    graph.add_node("orchestrate_gen", make_orchestrate_gen_node(nest=nest))
     graph.add_node("done", make_done_node())
     graph.add_node("await_copy_confirm", make_await_copy_confirm_node())
     graph.add_node("write_copy_node", make_write_copy_node(nest=nest))
@@ -104,9 +104,9 @@ def build_agent_graph(
     graph.add_conditional_edges(
         "draft_copy",
         route_after_draft_copy,
-        {"orchestrate_gen": "orchestrate_gen", "end": END},
+        {"done": "done", "end": END},
     )
-    graph.add_edge("orchestrate_gen", "done")
+    # orchestrate_gen runs in background via stream_run_events (not on sync path)
     graph.add_edge("done", END)
     graph.add_conditional_edges(
         "await_copy_confirm",
