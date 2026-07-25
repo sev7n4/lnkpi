@@ -15,6 +15,8 @@ class SplitManifestItem(TypedDict, total=False):
     depends_on: list[str]
     prompt_hint: str
     node_id: str | None
+    chain: Literal["product", "model"] | None
+    role: Literal["seed", "turnaround", "downstream"] | None
 
 
 class AgentRuntimeState(TypedDict, total=False):
