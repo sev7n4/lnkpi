@@ -76,21 +76,6 @@ def make_orchestrate_gen_node(
             if by_key.get(k) and by_key[k].get("node_id")
         ]
 
-        emit_list = getattr(nest, "emit_task_list", None)
-        if emit_list is not None:
-            await emit_list(
-                [
-                    {
-                        "id": k,
-                        "title": str(by_key[k].get("title") or k),
-                        "nodeId": str(by_key[k].get("node_id") or ""),
-                        "kind": str(by_key[k].get("target_type") or "image"),
-                    }
-                    for k in ordered_keys
-                    if by_key.get(k)
-                ]
-            )
-
         key_set = set(ordered_keys)
         deps_of = {
             k: [str(d) for d in (by_key[k].get("depends_on") or []) if str(d) in key_set]
