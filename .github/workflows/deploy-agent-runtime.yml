@@ -1,0 +1,182 @@
+name: Deploy Agent Runtime to Tencent Cloud
+
+# 自动部署 agent-runtime（Python FastAPI）到 CVM
+# 触发条件：push 到 main 且改动 services/agent-runtime/**
+# 与 deploy.yml（部署 Nest API）解耦，两者可独立触发
+#
+# 设计原因：
+# - deploy.yml 的 paths 过滤器不包含 services/agent-runtime/**，导致 agent-runtime 改动不会自动部署
+# - enable_agent_runtime 参数默认 false，需要手动 workflow_dispatch
+# - 此 workflow 解决"遗忘部署 agent-runtime"的问题（PR #64 复测时发现）
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/agent-runtime/**"
+      - "deploy/docker-compose.prod.yml"
+      - "deploy/docker-compose.prod.images.yml"
+      - "deploy/enable-agent-runtime.sh"
+      - ".github/workflows/deploy-agent-runtime.yml"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to deploy
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+concurrency:
+  # 与 deploy.yml 共用 group，避免同时改 apps/server + agent-runtime 时
+  # 两个 workflow 并行操作 CVM Docker 导致冲突
+  group: lnkpi-deploy-production
+  cancel-in-progress: false
+
+env:
+  IMAGE_TAG: ${{ github.sha }}
+  DEPLOY_DIR: /opt/lnkpi
+  API_PORT: "5100"
+
+jobs:
+  deploy-agent-runtime:
+    name: Build on CVM and deploy agent-runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    env:
+      SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER || 'root' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Prepare SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          echo "${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-cvm
+            HostName ${{ env.SSH_HOST }}
+            User ${{ env.SSH_USER }}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            BatchMode yes
+            LogLevel ERROR
+            ServerAliveInterval 15
+            ServerAliveCountMax 30
+            TCPKeepAlive yes
+            ConnectTimeout 30
+          EOF
+          chmod 600 ~/.ssh/config
+
+          cat > /tmp/lnkpi-ssh-retry.sh <<'RETRY'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          label="$1"; shift
+          for attempt in $(seq 1 8); do
+            echo "${label} attempt ${attempt}/8"
+            if "$@"; then
+              exit 0
+            fi
+            sleep $((attempt * 10))
+          done
+          echo "ERROR: ${label} failed after retries"
+          exit 1
+          RETRY
+          chmod +x /tmp/lnkpi-ssh-retry.sh
+
+      - name: Recover CVM (lightweight)
+        run: |
+          set -euo pipefail
+          SSH_HOST="${{ env.SSH_HOST }}"
+          # 只检查连通性 + 容器状态，不执行完整 recover（避免与 deploy.yml 互相干扰）
+          if ! /tmp/lnkpi-ssh-retry.sh "recover-ssh" ssh -T deploy-cvm "bash -s" <<EOF
+          set -euo pipefail
+          echo "=== docker ps ==="
+          docker ps --filter name=lnkpi-api --filter name=lnkpi-agent-runtime --format '{{.Names}}: {{.Status}}' || true
+          echo "=== /opt/lnkpi exists? ==="
+          [[ -d /opt/lnkpi ]] && echo "yes" || echo "no"
+          EOF
+          then
+            echo "WARN: SSH recover check failed; checking external health..."
+            if curl -fsS --connect-timeout 5 --max-time 10 "http://${SSH_HOST}:${API_PORT}/api/health" >/tmp/lnkpi-recover-health.json; then
+              echo "External health OK — continuing deploy"
+              head -c 200 /tmp/lnkpi-recover-health.json
+              echo ""
+            else
+              echo "ERROR: CVM unreachable and API health check failed"
+              exit 1
+            fi
+          fi
+
+      - name: Sync source to CVM
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+
+          # 只同步 agent-runtime 需要的文件（apps/web/docs 等排除，减小传输量）
+          tar --exclude='.git' \
+              --exclude='node_modules' \
+              --exclude='apps/web' \
+              --exclude='**/dist' \
+              --exclude='.cursor' \
+              --exclude='docs' \
+              --exclude='**/__pycache__' \
+              --exclude='**/.venv' \
+              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/enable-agent-runtime.sh && echo sync-done'"
+
+      - name: Enable Agent Runtime on CVM
+        run: |
+          set -euo pipefail
+          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "bash -s" < deploy/enable-agent-runtime.sh
+
+      - name: Verify deployment
+        run: |
+          set -euo pipefail
+          SSH_HOST="${{ env.SSH_HOST }}"
+          API_PORT="${{ env.API_PORT }}"
+
+          echo "=== Agent Runtime health (via docker exec) ==="
+          if ! ssh deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:8000/health" 2>/dev/null | head -c 300; then
+            echo "ERROR: agent-runtime health check failed"
+            ssh deploy-cvm "docker logs lnkpi-agent-runtime --tail 50 2>&1 || true"
+            exit 1
+          fi
+          echo ""
+
+          echo "=== Nest API health (token gate) ==="
+          MSG=$(curl -sS --connect-timeout 5 --max-time 10 -X POST \
+            "http://${SSH_HOST}:${API_PORT}/api/agent/internal/get-canvas-summary" \
+            -H 'Content-Type: application/json' -d '{"sessionId":"x"}' || true)
+          echo "$MSG" | head -c 300
+          echo ""
+          if echo "$MSG" | grep -q 'not configured'; then
+            echo "ERROR: Nest missing AGENT_RUNTIME_SERVICE_TOKEN after deploy"
+            exit 1
+          fi
+          echo ""
+          echo "✅ Agent Runtime deployed and verified"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          {
+            echo "## Agent Runtime Deployment (CVM)"
+            echo "| Item | Value |"
+            echo "|------|-------|"
+            echo "| Status | ${{ job.status }} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
+            echo "| Service | \`lnkpi-agent-runtime\` (port 8000, internal) |"
+            echo "| Health | \`docker exec lnkpi-agent-runtime curl http://127.0.0.1:8000/health\` |"
+            echo ""
+            echo "Triggered by: ${{ github.event_name }} on ${{ github.ref }}"
+          } >> "$GITHUB_STEP_SUMMARY"
