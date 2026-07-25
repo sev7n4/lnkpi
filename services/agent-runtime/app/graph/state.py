@@ -27,6 +27,9 @@ class AgentRuntimeState(TypedDict, total=False):
         "plan",
         "await_confirm",
         "split",
+        "draft_copy",
+        "await_copy_confirm",
+        "write_copy_node",
         "orchestrate_gen",
         "done",
         "error",
@@ -45,6 +48,8 @@ class AgentRuntimeState(TypedDict, total=False):
     gen_completed: list[str]
     gen_failed: list[dict]
     last_error: str | None
+    copy_draft: str | None
+    copy_node_id: str | None
 
     # 一期轻量人机
     awaiting_user: bool
