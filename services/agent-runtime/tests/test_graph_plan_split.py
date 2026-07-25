@@ -175,6 +175,11 @@ async def test_confirm_then_split_creates_image_skeletons():
     keys = _batch_keys(nest)
     assert "white_bg" in keys
     assert "hero_main" in keys
+    assert "product_turnaround" in keys
+    assert "model_portrait" in keys
+    assert "video_product" in keys
+    assert "model" not in keys
+    assert "show_video" not in keys
     assert any(c[0] == "upsert_prompt_node" for c in nest.calls)
     assert state2["plan_node_id"]
     # draft_copy ends turn on await_topo; no auto image gen

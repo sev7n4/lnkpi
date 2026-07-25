@@ -6,6 +6,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.state import SplitManifestItem
+from app.graph.chain_refs import build_chain_ref_order
 from app.graph.mermaid_topo import manifest_to_mermaid
 from app.graph.topo_trim import trim_manifest_items
 from app.skills.loader import discover_skills, load_skill
@@ -23,6 +24,12 @@ def _manifest_items(canvas_manifest: dict | None, max_downstream: int) -> list[S
         if target not in ("text", "image", "video"):
             target = "image"
         hint = str(raw.get("prompt_hint_template") or raw.get("prompt_hint") or "")
+        chain = raw.get("chain") if raw.get("chain") in ("product", "model") else None
+        role = (
+            raw.get("role")
+            if raw.get("role") in ("seed", "turnaround", "downstream")
+            else None
+        )
         items.append(
             SplitManifestItem(
                 key=str(raw["key"]),
@@ -34,6 +41,8 @@ def _manifest_items(canvas_manifest: dict | None, max_downstream: int) -> list[S
                 depends_on=[str(d) for d in (raw.get("depends_on") or [])],
                 prompt_hint=hint,
                 node_id=None,
+                chain=chain,  # type: ignore[arg-type]
+                role=role,  # type: ignore[arg-type]
             )
         )
     return items
@@ -96,6 +105,12 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
                     depends_on=[str(d) for d in (it.get("depends_on") or [])],
                     prompt_hint=str(it.get("prompt_hint") or ""),
                     node_id=it.get("node_id"),
+                    chain=it.get("chain") if it.get("chain") in ("product", "model") else None,  # type: ignore[arg-type]
+                    role=(
+                        it.get("role")
+                        if it.get("role") in ("seed", "turnaround", "downstream")
+                        else None
+                    ),  # type: ignore[arg-type]
                 )
                 for it in trimmed
                 if it.get("key")
@@ -138,6 +153,7 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
         if edges:
             await nest.connect_nodes(edges)
 
+        by_key = {str(i["key"]): dict(i) for i in manifest if i.get("key")}
         for item in manifest:
             nid = item.get("node_id")
             if not nid:
@@ -145,11 +161,9 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             hint = item.get("prompt_hint") or ""
             if hint:
                 await nest.set_node_prompt(nid, hint)
-            ref_order = [plan_node_id]
-            for dep_key in item.get("depends_on") or []:
-                dep_id = key_to_id.get(dep_key)
-                if dep_id and dep_id not in ref_order:
-                    ref_order.append(dep_id)
+            ref_order = build_chain_ref_order(
+                item=dict(item), by_key=by_key, plan_node_id=plan_node_id
+            )
             await nest.attach_refs(nid, ref_order)
 
         focus = [i["node_id"] for i in manifest if i.get("node_id")]
