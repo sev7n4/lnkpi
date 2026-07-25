@@ -2,6 +2,7 @@ schema_version: 1
 defaults:
   auto_generate_image: true
   auto_generate_video: true
+  topology_mode_default: full
 items:
   - key: copy_main
     title: 主文案
