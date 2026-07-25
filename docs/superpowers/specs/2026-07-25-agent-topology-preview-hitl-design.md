@@ -185,7 +185,7 @@ START → route_entry
 
 | 阶段 | 内容 |
 | --- | --- |
-| **B** | 模特：模特图 → 三视图 → 人景；产品：产品三视图链；写入 manifest 依赖 |
+| **B** | 见 `2026-07-25-agent-consistency-chains-design.md`：产品白底→四视图拼图→下游；模特定妆→四视图→人景；`chain`/`role` + 出图前同链 ref |
 | **C** | 用户在画布/Dock 手工增删改 / 改 prompt 后，对话告知「执行生图」 |
 
 ---

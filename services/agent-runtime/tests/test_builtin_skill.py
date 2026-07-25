@@ -11,4 +11,9 @@ def test_builtin_marketing_skill_loads():
     loaded = load_skill(next(e for e in entries if e.skill_id == "enterprise-marketing-campaign"))
     keys = {i["key"] for i in loaded.canvas_manifest["items"]}
     assert "white_bg" in keys and "hero_main" in keys
-    assert any(i["key"] == "show_video" and i["auto_generate"] is True for i in loaded.canvas_manifest["items"])
+    assert "product_turnaround" in keys
+    assert "model_portrait" in keys
+    assert any(
+        i["key"] == "video_product" and i["auto_generate"] is True
+        for i in loaded.canvas_manifest["items"]
+    )

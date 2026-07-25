@@ -28,6 +28,7 @@ class FakeNest:
         self.video_calls: list[str] = []
         self.task_updates: list[dict[str, Any]] = []
         self.key_by_node: dict[str, str] = {}
+        self.ref_calls: list[tuple[str, list[str]]] = []
 
     async def emit_task_update(self, **payload: Any) -> None:
         self.task_updates.append(payload)
@@ -37,6 +38,10 @@ class FakeNest:
 
     async def emit_task_summary(self, **payload: Any) -> None:
         self.task_summary = payload
+
+    async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
+        self.ref_calls.append((node_id, list(ref_order)))
+        return {"nodeId": node_id, "actions": []}
 
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         key = self.key_by_node.get(node_id, node_id)
@@ -230,3 +235,58 @@ async def test_video_auto_generate_invokes_run_video():
     )
     assert nest.video_calls == ["show_video"]
     assert "node-show_video" in result["gen_completed"]
+
+
+@pytest.mark.asyncio
+async def test_orchestrate_attaches_chain_refs_before_gen():
+    nest = FakeNest()
+    nest.key_by_node = {
+        "n-w": "white_bg",
+        "n-ta": "product_turnaround",
+        "n-hero": "hero_main",
+    }
+    node = make_orchestrate_gen_node(nest=nest, max_concurrency=1)
+    out = await node(
+        {
+            "plan_node_id": "n-plan",
+            "split_manifest": [
+                {
+                    "key": "white_bg",
+                    "title": "白底",
+                    "target_type": "image",
+                    "auto_generate": True,
+                    "chain": "product",
+                    "role": "seed",
+                    "depends_on": [],
+                    "node_id": "n-w",
+                },
+                {
+                    "key": "product_turnaround",
+                    "title": "四视图",
+                    "target_type": "image",
+                    "auto_generate": True,
+                    "chain": "product",
+                    "role": "turnaround",
+                    "depends_on": ["white_bg"],
+                    "node_id": "n-ta",
+                },
+                {
+                    "key": "hero_main",
+                    "title": "主图",
+                    "target_type": "image",
+                    "auto_generate": True,
+                    "chain": "product",
+                    "role": "downstream",
+                    "depends_on": ["product_turnaround", "white_bg"],
+                    "node_id": "n-hero",
+                },
+            ],
+            "gen_completed": [],
+            "gen_failed": [],
+        }
+    )
+    assert nest.calls == ["white_bg", "product_turnaround", "hero_main"]
+    hero_refs = [r for r in nest.ref_calls if r[0] == "n-hero"]
+    assert hero_refs
+    assert hero_refs[-1][1] == ["n-plan", "n-w", "n-ta"]
+    assert out.get("gen_completed")

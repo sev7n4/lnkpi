@@ -9,7 +9,7 @@ compatibility: Requires lnkpi Nest canvas tools and image generation.
 metadata:
   author: lnkpi
   lnkpi.canvas_manifest: assets/canvas-manifest.yaml
-  lnkpi.max_downstream: "12"
+  lnkpi.max_downstream: "16"
   lnkpi.topology_mode_default: full
 allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt attach_refs run_image_generation get_generation_status
 ---
@@ -25,6 +25,8 @@ allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt 
 ## Split and image generation
 
 - Follow `assets/canvas-manifest.yaml` when splitting the canvas.
+- Product chain: white_bg → product_turnaround (4-panel) → downstream images; model chain: portrait → turnaround → lifestyle.
+- Three videos: video_product / video_scene / video_lifestyle; voiceover/subtitles only in prompt hints (no TTS/mux yet).
 - Do not call `run_image_generation` during plan; only after user「确认出图」→ orchestrate_gen.
 - Scheme confirm writes the plan node; topology preview (Mermaid + skeleton) comes before image gen.
 - `topology_mode_default` (`full`|`trimmed`) may be overridden by the user.
