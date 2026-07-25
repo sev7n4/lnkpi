@@ -11,6 +11,12 @@ import {
   type AgentTaskProgressState,
 } from '@/components/agent/agentTaskProgress'
 import {
+  reconcileTaskProgress,
+  shouldFinishTaskCard,
+  synthesizeSummary,
+  type CanvasNodeLike,
+} from '@/components/agent/taskProgressReconcile'
+import {
   looksLikeConfirmTurn,
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
@@ -390,7 +396,20 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
-defineExpose({ openPanel })
+function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
+  if (!taskProgress.value.items.length) return
+  let next = reconcileTaskProgress(taskProgress.value, rawNodes)
+  if (shouldFinishTaskCard(next, rawNodes) && !next.finished) {
+    next = {
+      ...next,
+      finished: true,
+      summary: next.summary ?? synthesizeSummary(next),
+    }
+  }
+  taskProgress.value = next
+}
+
+defineExpose({ openPanel, reconcileFromNodes })
 </script>
 
 <template>

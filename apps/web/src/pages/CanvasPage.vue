@@ -993,6 +993,33 @@ async function handleAgentTurnComplete() {
   } catch {
     // ignore
   }
+  const snap = nodes.value.map((n) => ({
+    id: n.id,
+    type: n.type,
+    data: (n.data || {}) as Record<string, unknown>,
+  }))
+  agentRailRef.value?.reconcileFromNodes?.(snap)
+
+  // Poll a few times after SSE may have dropped (~120s) while Nest still finishes gens
+  let polls = 0
+  const maxPolls = 15
+  const timer = window.setInterval(() => {
+    void (async () => {
+      polls += 1
+      try {
+        await loadSession()
+        const nextSnap = nodes.value.map((n) => ({
+          id: n.id,
+          type: n.type,
+          data: (n.data || {}) as Record<string, unknown>,
+        }))
+        agentRailRef.value?.reconcileFromNodes?.(nextSnap)
+      } catch {
+        // ignore
+      }
+      if (polls >= maxPolls) window.clearInterval(timer)
+    })()
+  }, 4000)
 }
 
 function resolveNewNodePosition(type: string) {
