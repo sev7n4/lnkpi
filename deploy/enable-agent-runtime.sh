@@ -126,9 +126,11 @@ fi
 export LNKPI_AGENT_RUNTIME_IMAGE="${LNKPI_AGENT_RUNTIME_IMAGE:-lnkpi-agent-runtime:local}"
 export DOCKER_BUILDKIT=1
 
-log "=== Build agent-runtime ==="
-if ! $COMPOSE build --progress=plain agent-runtime; then
-  log "WARN: first build failed; retrying once"
+log "=== Build agent-runtime (no-cache to ensure code freshness) ==="
+# 修复：Docker COPY 缓存有时不检测到 tar 同步的文件变化，导致容器里是旧代码
+# 用 --no-cache 强制重新构建，确保代码最新（pip install 会重跑，约 3-5 分钟）
+if ! $COMPOSE build --no-cache --progress=plain agent-runtime; then
+  log "WARN: no-cache build failed; retrying with cache"
   sleep 5
   $COMPOSE build --progress=plain agent-runtime
 fi
