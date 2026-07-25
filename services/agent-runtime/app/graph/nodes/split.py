@@ -66,9 +66,20 @@ def _resolve_topology_mode(state: dict, skill: Any, canvas_manifest: dict | None
 
 
 def _select_trimmed_keys(plan_summary: str, items: list[SplitManifestItem]) -> list[str]:
-    """Heuristic trim: always keep copy + white_bg + hero; drop brand/model/banner if summary short."""
+    """Heuristic trim: keep copy + product turnaround core; omit full model chain by default."""
     keys = [str(i["key"]) for i in items]
-    must = [k for k in ("copy_main", "white_bg", "hero_main", "detail_cut", "show_video") if k in keys]
+    must = [
+        k
+        for k in (
+            "copy_main",
+            "white_bg",
+            "product_turnaround",
+            "hero_main",
+            "detail_cut",
+            "video_product",
+        )
+        if k in keys
+    ]
     if len(plan_summary or "") > 80:
         for k in ("scene", "banner"):
             if k in keys and k not in must:
