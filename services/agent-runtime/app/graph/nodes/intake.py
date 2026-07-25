@@ -21,12 +21,12 @@ _MARKETING_HINTS = (
 )
 
 # 修复 P0-1/P0-2：检测用户在已有方案上的修改意图
+# 注意：需与 apps/web/src/components/agent/agentChipSet.ts 的 _MODIFY_INTENT_KEYWORDS 保持同步
 _MODIFY_HINTS = (
     "改成",
     "改一下",
     "修改",
     "调整",
-    "换成",
     "换成",
     "改为",
     "更偏",
@@ -41,6 +41,7 @@ _MODIFY_HINTS = (
     "改一版",
     "自己说明",
     "自己说",
+    "改拓扑",
 )
 
 
@@ -92,21 +93,25 @@ def make_intake_node(skills_dir: Path) -> Callable:
         is_modify = bool(existing_brief and existing_plan and modify_intent(text))
 
         # 锁定 brief：首轮写入后即锁定，避免后续轮次的主题漂移
-        if not state.get("brief_locked") and marketing_intent(text) and not is_modify:
+        # 但用户明确要全新方案（mode=create + marketing_intent）时解锁并重置 brief
+        if is_modify:
+            # modify 模式：保留旧 brief 作为锚定
+            new_brief = existing_brief
+            new_locked = state.get("brief_locked", False)
+        elif marketing_intent(text):
+            # 用户新需求（含明确营销意图）→ 写入/覆盖 brief 并锁定
             new_brief = text
             new_locked = True
-        elif state.get("brief_locked"):
-            new_brief = existing_brief
-            new_locked = True
         else:
+            # 非营销意图（闲聊/确认词）→ 保留现有 brief 状态
             new_brief = existing_brief
             new_locked = state.get("brief_locked", False)
 
-        # 决定 mode：modify 模式必须有 brief + plan
+        # 决定 mode：modify 模式必须有 brief + plan + 显式 modify 意图
+        # 注意：existing_brief+plan 存在但用户无 modify 意图时，走 create 模式
+        # （例如用户在 done 后说"帮我做运动鞋详情页"应生成全新方案，而非锚定到旧主题）
         if is_modify:
             mode = "modify"
-        elif existing_brief and existing_plan:
-            mode = "modify"  # 即使没明显 modify 词，有 brief+plan 也走 modify（避免"3"/"确认"被吞）
         else:
             mode = "create"
 

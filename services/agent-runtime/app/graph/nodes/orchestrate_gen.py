@@ -91,6 +91,9 @@ def make_orchestrate_gen_node(
         progress_lines: list[str] = []
         fallback_n = 0
         needs_user_n = 0
+        # 修复 P1-6：skipped_n 计 dependency_skipped 数量（上游 fallback_pending 导致下游跳过）
+        # 这些节点可恢复（用户确认平台服务后重试），不应计入真失败
+        skipped_n = 0
         summary_lines: list[dict[str, str]] = []
         sem = asyncio.Semaphore(max(1, max_concurrency))
         remaining = set(ordered_keys)
@@ -194,6 +197,7 @@ def make_orchestrate_gen_node(
                         needs_user_keys.add(key)
                         reason = "dependency_skipped"
                         hint_code = "dep_skipped"
+                        skipped_n += 1
                     gen_failed.append(
                         {
                             "key": key,
@@ -312,13 +316,17 @@ def make_orchestrate_gen_node(
                     progress_lines.append(line)
                     await emit_line(line)
 
-        fail_only = max(0, len(gen_failed) - needs_user_n)
+        # 修复 P1-6：fail_only 应排除 needs_user（fallback_pending）和 skipped（dependency_skipped）
+        # 只保留真失败（dependency_failed / 不可恢复错误）
+        fail_only = max(0, len(gen_failed) - needs_user_n - skipped_n)
         await _emit_task_summary(
             nest,
             success=len(gen_completed),
             failed=fail_only,
             needsUser=needs_user_n,
-            skipped=0,
+            # 修复 P1-6：把 dependency_skipped 数量传给前端 task card
+            # 让用户区分"真失败"vs"待恢复跳过"
+            skipped=skipped_n,
             lines=summary_lines,
         )
 

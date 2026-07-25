@@ -135,7 +135,12 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
             "awaiting_user": awaiting,
             "phase": "await_confirm" if awaiting else state.get("phase") or "await_confirm",
         }
-        if decision == "none":
+        # 修复 P0-3 盲点：await_confirm → revise → plan 路径不经过 intake，
+        # mode 不会被更新为 modify。这里在 revise 时同步设 mode=modify，
+        # 让 plan 节点走增量修改分支（保留未提及的节点/文案）。
+        if decision == "revise" and state.get("user_brief") and state.get("plan_draft"):
+            out["mode"] = "modify"
+        elif decision == "none":
             out["messages"] = [AIMessage(content=_NONE_DECISION_TIP)]
         elif decision == "confirm":
             out["messages"] = [

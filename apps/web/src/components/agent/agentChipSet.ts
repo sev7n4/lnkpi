@@ -21,6 +21,8 @@ export interface ChipSetContext {
   latestUserText?: string
 }
 
+// 注意：需与 services/agent-runtime/app/graph/nodes/intake.py 的 _MODIFY_HINTS 保持同步
+// 关键词用于检测用户在已有方案上的修改意图（vs 全新需求）
 const _MODIFY_INTENT_KEYWORDS = [
   '改成',
   '改一下',

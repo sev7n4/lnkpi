@@ -70,5 +70,3 @@ class AgentRuntimeState(TypedDict, total=False):
     user_brief: str | None
     brief_locked: bool  # True 后 user_brief 不再被覆盖
     mode: Literal["create", "modify"] | None
-    # modify_target: 修改模式下，告诉 LLM 用户想改哪个维度
-    modify_target: Literal["skeleton", "copy", "topology", "plan"] | None
