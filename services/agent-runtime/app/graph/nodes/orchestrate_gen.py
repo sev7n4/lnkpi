@@ -91,6 +91,9 @@ def make_orchestrate_gen_node(
         progress_lines: list[str] = []
         fallback_n = 0
         needs_user_n = 0
+        # 修复 P1-6：skipped_n 计 dependency_skipped 数量（上游 fallback_pending 导致下游跳过）
+        # 这些节点可恢复（用户确认平台服务后重试），不应计入真失败
+        skipped_n = 0
         summary_lines: list[dict[str, str]] = []
         sem = asyncio.Semaphore(max(1, max_concurrency))
         remaining = set(ordered_keys)
@@ -176,34 +179,49 @@ def make_orchestrate_gen_node(
         while remaining or in_flight:
             for key in sorted(remaining):
                 deps = deps_of[key]
-                if any(d in failed_keys or d in needs_user_keys for d in deps):
+                # 修复 P1-6：依赖图故障传播策略
+                # - 上游 "failed"（fatal error）→ 下游也 failed（不可恢复）
+                # - 上游 "needs_user" / fallback_pending（可恢复）→ 下游 SKIPPED，等用户确认后可重试
+                upstream_dead = [d for d in deps if d in failed_keys]
+                upstream_pending = [d for d in deps if d in needs_user_keys]
+                if upstream_dead or upstream_pending:
                     remaining.discard(key)
-                    failed_keys.add(key)
                     title = str(by_key[key].get("title") or key)
+                    if upstream_dead:
+                        # 真失败：标 failed
+                        failed_keys.add(key)
+                        reason = "dependency_failed"
+                        hint_code = "dep_failed"
+                    else:
+                        # 上游待确认：标 skipped（不计入 failed），后续可重试
+                        needs_user_keys.add(key)
+                        reason = "dependency_skipped"
+                        hint_code = "dep_skipped"
+                        skipped_n += 1
                     gen_failed.append(
                         {
                             "key": key,
                             "node_id": by_key[key].get("node_id"),
                             "title": title,
-                            "reason": "dependency_failed",
+                            "reason": reason,
                         }
                     )
                     summary_lines.append(
                         {
                             "id": key,
-                            "status": "failed",
+                            "status": "skipped" if reason == "dependency_skipped" else "failed",
                             "title": title,
-                            "hint": hint_for_error("dep_failed"),
+                            "hint": hint_for_error(hint_code),
                         }
                     )
                     await _emit_task_update(
                         nest,
                         id=key,
-                        status="failed",
-                        errorCode="dependency_failed",
-                        errorHint=hint_for_error("dep_failed"),
+                        status="skipped" if reason == "dependency_skipped" else "failed",
+                        errorCode=hint_code,
+                        errorHint=hint_for_error(hint_code),
                     )
-                    line = format_gen_progress_line(title=title, status="dependency_failed")
+                    line = format_gen_progress_line(title=title, status=hint_code)
                     progress_lines.append(line)
                     await emit_line(line)
                     continue
@@ -243,11 +261,14 @@ def make_orchestrate_gen_node(
                     completed_keys.add(key)
                     gen_completed.append(node_id)
                     line = format_gen_progress_line(title=title, status="completed")
+                    progress_lines.append(line)
+                    await emit_line(line)
                 elif status == "needs_user":
                     needs_user_keys.add(key)
                     needs_user_n += 1
                     reason = err or "needs_user"
-                    if str(reason).lower() == "fallback_pending":
+                    reason_lower = str(reason).lower()
+                    if reason_lower == "fallback_pending":
                         fallback_n += 1
                     gen_failed.append(
                         {
@@ -266,6 +287,12 @@ def make_orchestrate_gen_node(
                         }
                     )
                     line = format_gen_progress_line(title=title, status=str(reason))
+                    progress_lines.append(line)
+                    # 修复 P1-5：fallback_pending 不再向聊天流 emit 单行提示
+                    # 这条信息会通过画布 ByokFallbackConfirmDialog 提示用户，
+                    # 聊天中只保留最终汇总，避免与 dialog 通道重复
+                    if reason_lower != "fallback_pending":
+                        await emit_line(line)
                 else:
                     failed_keys.add(key)
                     reason = err or "failed"
@@ -286,16 +313,20 @@ def make_orchestrate_gen_node(
                         }
                     )
                     line = format_gen_progress_line(title=title, status=str(reason))
-                progress_lines.append(line)
-                await emit_line(line)
+                    progress_lines.append(line)
+                    await emit_line(line)
 
-        fail_only = max(0, len(gen_failed) - needs_user_n)
+        # 修复 P1-6：fail_only 应排除 needs_user（fallback_pending）和 skipped（dependency_skipped）
+        # 只保留真失败（dependency_failed / 不可恢复错误）
+        fail_only = max(0, len(gen_failed) - needs_user_n - skipped_n)
         await _emit_task_summary(
             nest,
             success=len(gen_completed),
             failed=fail_only,
             needsUser=needs_user_n,
-            skipped=0,
+            # 修复 P1-6：把 dependency_skipped 数量传给前端 task card
+            # 让用户区分"真失败"vs"待恢复跳过"
+            skipped=skipped_n,
             lines=summary_lines,
         )
 

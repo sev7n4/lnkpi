@@ -166,7 +166,7 @@ async def test_confirm_then_split_creates_image_skeletons():
         for m in (state1.get("messages") or [])
         if getattr(m, "type", None) == "ai" or isinstance(m, AIMessage)
     ]
-    assert any("1 / A" in t for t in texts1)
+    assert any("1. 采纳推荐并确认方案" in t for t in texts1)
 
     state2 = await graph.ainvoke(
         {"messages": [HumanMessage(content="1")]},

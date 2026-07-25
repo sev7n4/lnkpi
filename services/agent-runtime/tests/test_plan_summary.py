@@ -21,6 +21,9 @@ def test_build_confirm_message_lists_assets_and_n():
     assert "主图" in msg
     assert "场景图" in msg
     assert "拟定拆解约 3" in msg or "拆解约 3" in msg
-    assert "1 / A" in msg
+    # UX 优化：选项使用纯数字编号（1./2./3.），不再混用 "1 / A" 双编号
+    assert "1. 采纳推荐并确认方案" in msg
+    assert "2. 换个方向再改一版" in msg
+    assert "3. 我自己说明修改" in msg
     assert "确认方案" in msg
     assert "确认前不会写入画布" in msg

@@ -85,3 +85,41 @@ def test_classify_pianhao_is_not_revise():
     """「偏好」不能因子串「偏」误判为 revise。"""
     assert classify_user_decision("按我的偏好出图，确认") == "confirm"
     assert classify_user_decision("改成更偏天猫详情页") == "revise"
+
+
+@pytest.mark.asyncio
+async def test_revise_decision_sets_modify_mode_when_brief_and_plan_exist():
+    # 修复 P0-3 盲点：await_confirm → revise → plan 路径不经过 intake，
+    # 必须在 await_confirm 节点同步设 mode=modify，否则 plan 会走 create 分支
+    # 重新生成全新方案而非增量修改
+    node = make_await_confirm_node(llm=_FakeLLM())
+    out = await node(
+        {
+            "messages": [HumanMessage(content="改成双人模特")],
+            "awaiting_user": True,
+            "phase": "await_confirm",
+            "user_brief": "帮我做一套洁具详情页营销方案",
+            "plan_draft": "# 洁具详情页方案\n## 定位...",
+        }
+    )
+    assert out["user_decision"] == "revise"
+    assert out["mode"] == "modify", (
+        "revise + 已有 brief/plan 时必须设 mode=modify，"
+        "否则 plan 节点会走 create 分支重新生成全新方案"
+    )
+
+
+@pytest.mark.asyncio
+async def test_revise_decision_does_not_set_mode_without_brief():
+    # 边界 case：revise 但没有 brief/plan（理论上不该发生，但防御性处理）
+    node = make_await_confirm_node(llm=_FakeLLM())
+    out = await node(
+        {
+            "messages": [HumanMessage(content="改成运动鞋")],
+            "awaiting_user": True,
+            "phase": "await_confirm",
+        }
+    )
+    assert out["user_decision"] == "revise"
+    # 没有 brief/plan 时不设 mode（保留原 state 值，让 plan 节点用默认 create）
+    assert "mode" not in out

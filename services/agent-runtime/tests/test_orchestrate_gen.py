@@ -192,6 +192,78 @@ async def test_fallback_pending_needs_user_no_retry():
 
 
 @pytest.mark.asyncio
+async def test_upstream_fallback_pending_marks_downstream_skipped():
+    # 修复 P1-6：上游 fallback_pending（可恢复）→ 下游 dependency_skipped（不计真失败）
+    # task_summary 应把 skipped 数量传给前端，让用户区分"待恢复"vs"真失败"
+    nest = FakeNest(fallback_keys={"white_bg"})
+    nest.key_by_node = {"node-white_bg": "white_bg", "node-hero_main": "hero_main"}
+    node = make_orchestrate_gen_node(nest=nest)
+    manifest = _manifest(
+        ("hero_main", ["white_bg"]),
+        ("white_bg", []),
+    )
+
+    result = await node(
+        {
+            "split_manifest": manifest,
+            "gen_completed": [],
+            "gen_failed": [],
+            "messages": [],
+        }
+    )
+
+    # 上游只跑一次（fallback_pending 不重试），下游根本不调用 run_image_generation
+    assert nest.calls == ["white_bg"]
+    by_key = {f["key"]: f for f in result["gen_failed"]}
+    # 上游：fallback_pending（可恢复）
+    assert by_key["white_bg"]["reason"] == "fallback_pending"
+    # 下游：dependency_skipped（不是 dependency_failed）
+    assert by_key["hero_main"]["reason"] == "dependency_skipped"
+
+    # task_summary 应记录 skipped=1（下游被跳过，可恢复）
+    assert getattr(nest, "task_summary", None) is not None
+    assert nest.task_summary["skipped"] == 1
+    assert nest.task_summary["needsUser"] == 1  # 上游 fallback_pending
+    # 真失败 = 总失败 - needs_user - skipped
+    assert nest.task_summary["failed"] == 0
+
+
+@pytest.mark.asyncio
+async def test_fallback_pending_does_not_emit_chat_line():
+    # 修复 P1-5：fallback_pending 节点不再向聊天流 emit 单行提示
+    # 用户确认入口只走画布 ByokFallbackConfirmDialog，避免通道重复
+    nest = FakeNest(fallback_keys={"banner"})
+    nest.key_by_node = {"node-banner": "banner"}
+    nest.text_chunks: list[str] = []
+    nest.emit_text = _record_text(nest)
+    node = make_orchestrate_gen_node(nest=nest)
+    result = await node(
+        {
+            "split_manifest": _manifest(("banner", [])),
+            "gen_completed": [],
+            "gen_failed": [],
+            "messages": [],
+        }
+    )
+
+    # gen_failed 仍然记录 fallback_pending 原因（供后续 done 节点汇总）
+    assert result["gen_failed"][0]["reason"] == "fallback_pending"
+    # 但聊天流里不应再出现"待确认平台兜底"或任何节点级单行
+    for chunk in nest.text_chunks:
+        assert "待确认平台兜底" not in chunk
+        assert "画布节点上确认平台服务" not in chunk
+        assert "画布对应节点点击确认平台服务" not in chunk
+    # 但最终汇总消息（统计行）会通过 messages 返回
+    assert any(isinstance(m, AIMessage) for m in result["messages"])
+
+
+def _record_text(nest: Any):
+    async def _emit(text: str) -> None:
+        nest.text_chunks.append(text)
+    return _emit
+
+
+@pytest.mark.asyncio
 async def test_retries_recoverable_then_succeeds():
     nest = FakeNest(fail_times={"banner": 2})
     nest.key_by_node = {"node-banner": "banner"}

@@ -59,15 +59,28 @@ def build_confirm_message(*, plan_md: str, canvas_manifest: dict | None) -> str:
         f"{asset_lines}\n"
         "方案全文见上方摘要（确认前不会写入画布节点）。\n\n"
         "请选择：\n"
-        "1 / A：采纳推荐并确认方案（推荐：按当前摘要落稿，进入骨架预览）\n"
-        "2 / B：换个方向再改一版（例如更偏天猫详情页 / 更强调卖点）\n"
-        "3 / C：我自己说明修改\n"
-        "也可直接回复编号或具体修改意见。"
+        "1. 采纳推荐并确认方案（推荐：按当前摘要落稿，进入骨架预览）\n"
+        "2. 换个方向再改一版（例如更偏天猫详情页 / 更强调卖点）\n"
+        "3. 我自己说明修改\n"
+        "回复编号或直接说明修改意见即可。"
     )
 
 
 def _summarize(plan_md: str, limit: int = 280) -> str:
     return _positioning_line(plan_md)[:limit]
+
+
+# 修复 P0-3：create/modify 模式的不同 system prompt
+_CREATE_INSTRUCTION = (
+    "请根据用户需求输出完整企业营销方案 Markdown（含定位、文案与视觉资产章节）。"
+    "只输出方案 Markdown 正文，从一级标题开始，禁止寒暄与过程说明。"
+)
+_MODIFY_INSTRUCTION = (
+    "你正在「修改模式」：用户对已有方案提出调整意见。"
+    "请基于【已有方案】进行【增量修改】，严格保留未被提及的节点与文案，只调整用户明确要求变化的部分。"
+    "禁止重新生成全新主题；禁止换行业/换产品；必须保持与首轮用户需求锚定一致。"
+    "只输出修改后的完整方案 Markdown 正文（包含保留部分），从一级标题开始，禁止寒暄。"
+)
 
 
 def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
@@ -81,16 +94,38 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
             raise RuntimeError(f"unknown skill_id: {skill_id}")
         skill = load_skill(entries[skill_id])
 
+        # 修复 P0-1/P0-2/P0-3：基于 state.mode / user_brief 切换 prompt 模式
         user_text = _latest_user_text(state.get("messages") or [])
+        user_brief = str(state.get("user_brief") or "").strip()
+        mode = state.get("mode") or "create"
+        existing_plan = str(state.get("plan_draft") or "").strip()
+
+        if mode == "modify" and user_brief:
+            # 修复 P0-3：brief 锚定 + 已有方案注入
+            # 强制 LLM 看到"首轮需求"+"已有方案"+"本轮修改意见"
+            system_prompt = skill.body
+            instruction = _MODIFY_INSTRUCTION
+            human_bits = [
+                f"【首轮用户需求锚定 - 不可偏离】\n{user_brief}",
+                f"【已有方案 - 仅修改用户明确要求的部分】\n{existing_plan or '（无）'}",
+                f"【本轮用户修改意见】\n{user_text}",
+            ]
+            human_content = (
+                f"{instruction}\n"
+                + "\n\n".join(human_bits)
+            )
+        else:
+            # 首轮生成模式
+            system_prompt = skill.body
+            instruction = _CREATE_INSTRUCTION
+            human_content = (
+                f"{instruction}\n"
+                f"用户需求：{user_text}"
+            )
+
         messages = [
-            SystemMessage(content=skill.body),
-            HumanMessage(
-                content=(
-                    "请根据用户需求输出完整企业营销方案 Markdown（含定位、文案与视觉资产章节）。"
-                    "只输出方案 Markdown 正文，从一级标题开始，禁止寒暄与过程说明。\n"
-                    f"用户需求：{user_text}"
-                )
-            ),
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_content),
         ]
         ai = await llm.ainvoke(messages)
         plan_md = strip_plan_preamble(str(getattr(ai, "content", ai) or ""))
@@ -107,6 +142,7 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
             # Do not upsert canvas until write_plan_node after confirm
             "awaiting_user": True,
             "user_decision": "none",
+            "mode": mode,
             "messages": [AIMessage(content=confirm_msg)],
         }
 
