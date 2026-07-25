@@ -107,6 +107,7 @@ import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
+import { mergeCanvasNodesFromServer } from '@/pages/canvas/canvasNodeMerge'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
 import { buildPollingFailurePatch } from '@/utils/generationDiagnostic'
 
@@ -993,6 +994,33 @@ async function handleAgentTurnComplete() {
   } catch {
     // ignore
   }
+  const snap = nodes.value.map((n) => ({
+    id: n.id,
+    type: n.type,
+    data: (n.data || {}) as Record<string, unknown>,
+  }))
+  agentRailRef.value?.reconcileFromNodes?.(snap)
+
+  // Poll a few times after SSE may have dropped (~120s) while Nest still finishes gens
+  let polls = 0
+  const maxPolls = 15
+  const timer = window.setInterval(() => {
+    void (async () => {
+      polls += 1
+      try {
+        await loadSession()
+        const nextSnap = nodes.value.map((n) => ({
+          id: n.id,
+          type: n.type,
+          data: (n.data || {}) as Record<string, unknown>,
+        }))
+        agentRailRef.value?.reconcileFromNodes?.(nextSnap)
+      } catch {
+        // ignore
+      }
+      if (polls >= maxPolls) window.clearInterval(timer)
+    })()
+  }, 4000)
 }
 
 function resolveNewNodePosition(type: string) {
@@ -2279,7 +2307,12 @@ async function loadSession() {
     )
     sessionTitle.value = data.data.title
     if (data.data.canvasData?.nodes?.length) {
-      nodes.value = data.data.canvasData.nodes as EditableFlowNode[]
+      const serverNodes = data.data.canvasData.nodes as EditableFlowNode[]
+      nodes.value = (
+        nodes.value.length
+          ? mergeCanvasNodesFromServer(nodes.value, serverNodes)
+          : serverNodes
+      ) as EditableFlowNode[]
       edges.value = hydrateCanvasEdges(
         (data.data.canvasData.edges ?? []) as CanvasEdge[],
         nodes.value,

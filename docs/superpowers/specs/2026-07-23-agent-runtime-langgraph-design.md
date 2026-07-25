@@ -4,7 +4,7 @@
 > 日期：2026-07-23（修订 2026-07-24）  
 > 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
-> 非范围：一期不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）。**一期纳入**账户级画布生成默认（全模态）与 Agent 出图回退（见 §0 / §1.1 / §12.8）。**自动出视频**与**对话任务进度卡**见增补规格 `2026-07-25-agent-task-progress-card-design.md`（待审阅；将修正下文原「视频二期」表述）。
+> 非范围：一期不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）。**一期纳入**账户级画布生成默认（全模态）与 Agent 出图回退（见 §0 / §1.1 / §12.8）。**自动出视频**与**对话任务进度卡**见增补规格 `2026-07-25-agent-task-progress-card-design.md`。**确认后闭环加固 + 主文案 HITL / 节点与边演进**见 `2026-07-25-agent-confirm-loop-hardening-design.md` §7。
 
 ---
 

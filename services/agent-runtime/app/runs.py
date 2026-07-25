@@ -84,6 +84,11 @@ class NestEventProxy:
             await self._inner.set_node_prompt(node_id, prompt)
         )
 
+    async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.set_node_content(node_id, content)
+        )
+
     async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
         return await self._forward_actions(
             await self._inner.attach_refs(node_id, ref_order)

@@ -109,6 +109,17 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id, "prompt": prompt},
         )
 
+    async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/set-node-content",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeId": node_id,
+                "content": content,
+            },
+        )
+
     async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/attach-refs",

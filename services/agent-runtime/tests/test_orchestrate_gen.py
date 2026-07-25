@@ -107,6 +107,7 @@ async def test_orchestrate_white_bg_success_then_hero_called():
 
     assert nest.calls == ["white_bg", "hero_main"]
     assert result["gen_completed"] == ["node-white_bg", "node-hero_main"]
+    assert getattr(nest, "task_list", None) is None  # must not replace split task_list
     assert result["gen_failed"] == []
     assert result["gen_queue"] == ["node-white_bg", "node-hero_main"]
     assert result["phase"] == "orchestrate_gen"

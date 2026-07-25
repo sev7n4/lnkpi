@@ -213,6 +213,22 @@ describe('AgentCanvasToolsService', () => {
     expect(canvas.nodes[0].data.prompt).toBe('白底产品图')
   })
 
+  it('setNodeContent writes content and completed status', async () => {
+    canvas = {
+      nodes: [{ id: 't1', type: 'text', position: { x: 0, y: 0 }, data: { prompt: '主文案' } }],
+      edges: [],
+    }
+    const result = await svc.setNodeContent({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 't1',
+      content: '静音·洁净·极简',
+    })
+    expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
+    expect(canvas.nodes.find((n) => n.id === 't1')?.data.content).toBe('静音·洁净·极简')
+    expect(canvas.nodes.find((n) => n.id === 't1')?.data.status).toBe('completed')
+  })
+
   it('attachRefs sets refOrder and ensures edges exist', async () => {
     canvas = {
       nodes: [

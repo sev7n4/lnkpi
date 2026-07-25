@@ -7,7 +7,9 @@
 > - `2026-07-24-agent-chat-ux-phase1-design.md`（对话 UX / Skill 门控；已确认追加拆图与 Vercel SSE proxy 约束）  
 > 依据：脏画布复测（busy tip / 二轮节点不可见）+ 产品要求「类 Cursor 任务清单」+ **视频纳入一期自动编排**  
 > 范围：确认后侧栏**任务进度卡**、结构化进度事件、可恢复错误自动重试≤2、终局摘要与失败建议、点击定位节点、**自动出视频**（与出图同一编排）  
-> 非范围：卡片内一键确认平台兜底 API、卡片内一键重试出图/出片 API（二期）、`interrupt()` HITL、dock model/skillId 计费、按 brief 裁剪 manifest
+> 非范围：卡片内一键确认平台兜底 API、卡片内一键重试出图/出片 API（二期）、`interrupt()` HITL、dock model/skillId 计费、按 brief 裁剪 manifest  
+>
+> **修订（2026-07-25）：** 主文案入卡且待确认为 `needs_user`（非 `skipped`）；`orchestrate_gen` **禁止**整表替换 `task_list`。闭环与文案 HITL 见 `2026-07-25-agent-confirm-loop-hardening-design.md`。
 
 ---
 
@@ -50,9 +52,10 @@
 
 ```text
 用户确认 → split 成功
-  → emit task_list（含 image + video 可执行项；text 可列 skipped 或不入卡）
+  → emit task_list（全量 manifest，含 text；主文案随后 needs_user）
+  → draft_copy（主文案草稿 HITL，不阻塞出图）
   → 逐项 task_update（running / retrying / done / failed / needs_user / skipped）
-  → emit task_summary + 助手短文
+  → emit task_summary + 助手短文（断流后可由前端对账合成）
   → 卡标题改为「本轮执行结果」
 ```
 

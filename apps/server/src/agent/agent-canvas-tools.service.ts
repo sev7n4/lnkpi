@@ -354,6 +354,29 @@ export class AgentCanvasToolsService {
     return { actions }
   }
 
+  async setNodeContent(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+    content: string
+  }): Promise<{ actions: CanvasAction[] }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    if (!canvas.nodes.some((n) => n.id === input.nodeId)) {
+      throw new NotFoundException('节点不存在')
+    }
+    const actions: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: { content: input.content, status: 'completed' },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, canvas, actions)
+    return { actions }
+  }
+
   async attachRefs(input: {
     sessionId: string
     nodeId: string

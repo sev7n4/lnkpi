@@ -6,6 +6,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.skills.loader import discover_skills, load_skill
+from app.graph.plan_clean import strip_plan_preamble
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -81,13 +82,14 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
             SystemMessage(content=skill.body),
             HumanMessage(
                 content=(
-                    "请根据用户需求输出完整企业营销方案 Markdown（含定位、文案与视觉资产章节）。\n"
+                    "请根据用户需求输出完整企业营销方案 Markdown（含定位、文案与视觉资产章节）。"
+                    "只输出方案 Markdown 正文，从一级标题开始，禁止寒暄与过程说明。\n"
                     f"用户需求：{user_text}"
                 )
             ),
         ]
         ai = await llm.ainvoke(messages)
-        plan_md = str(getattr(ai, "content", ai) or "")
+        plan_md = strip_plan_preamble(str(getattr(ai, "content", ai) or ""))
 
         result = await nest.upsert_prompt_node(
             prompt="营销方案",

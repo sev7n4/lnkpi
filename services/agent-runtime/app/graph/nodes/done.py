@@ -33,6 +33,14 @@ def make_done_node() -> Callable:
             msg = f"流程结束。\n{msg}"
         else:
             msg = "流程结束。本次无可汇总的出图结果；你也可手动在画布上生成。"
+        if state.get("phase") == "await_copy_confirm" or (
+            state.get("awaiting_user") and state.get("copy_draft")
+        ):
+            return {
+                "phase": "await_copy_confirm",
+                "awaiting_user": True,
+                "messages": [AIMessage(content=msg)],
+            }
         return {
             "phase": "done",
             "awaiting_user": False,

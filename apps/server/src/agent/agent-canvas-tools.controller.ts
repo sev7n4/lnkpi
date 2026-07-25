@@ -98,6 +98,20 @@ class SetNodePromptDto {
   prompt!: string
 }
 
+class SetNodeContentDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+
+  @IsString()
+  content!: string
+}
+
 class AttachRefsDto {
   @IsString()
   sessionId!: string
@@ -161,6 +175,12 @@ export class AgentCanvasToolsController {
   @Post('set-node-prompt')
   async setNodePrompt(@Body() dto: SetNodePromptDto) {
     const data = await this.tools.setNodePrompt(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('set-node-content')
+  async setNodeContent(@Body() dto: SetNodeContentDto) {
+    const data = await this.tools.setNodeContent(dto)
     return { code: 0, message: 'ok', data }
   }
 
