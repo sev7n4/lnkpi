@@ -157,33 +157,46 @@ async def test_confirm_then_split_creates_image_skeletons():
         config,
     )
     assert state1["awaiting_user"] is True
-    assert state1["plan_node_id"]
     assert state1["skill_id"] == "enterprise-marketing-campaign"
-    assert any(c[0] == "upsert_prompt_node" for c in nest.calls)
+    assert not state1.get("plan_node_id")
+    # 方案确认前不得写画布
+    assert not any(c[0] == "upsert_prompt_node" for c in nest.calls)
+    texts1 = [
+        str(getattr(m, "content", "") or "")
+        for m in (state1.get("messages") or [])
+        if getattr(m, "type", None) == "ai" or isinstance(m, AIMessage)
+    ]
+    assert any("1 / A" in t for t in texts1)
 
     state2 = await graph.ainvoke(
-        {"messages": [HumanMessage(content="确认，按这个拆并出图")]},
+        {"messages": [HumanMessage(content="1")]},
         config,
     )
     keys = _batch_keys(nest)
     assert "white_bg" in keys
     assert "hero_main" in keys
-    # draft_copy then done (orchestrate runs in background outside graph.ainvoke)
-    assert state2["phase"] == "await_copy_confirm"
+    assert any(c[0] == "upsert_prompt_node" for c in nest.calls)
+    assert state2["plan_node_id"]
+    # draft_copy ends turn on await_topo; no auto image gen
+    assert state2["phase"] == "await_topo"
     assert state2["awaiting_user"] is True
     assert state2.get("copy_draft")
     assert state2["user_decision"] == "confirm"
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])
-    # Sync graph path must NOT block on image gen
+    assert not state2.get("pending_orchestrate")
     gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
     assert gen_calls == []
     assert not state2.get("gen_completed")
-    # task card list must be pinned at end of split (before long gen)
+    texts2 = [
+        str(getattr(m, "content", "") or "")
+        for m in (state2.get("messages") or [])
+        if getattr(m, "type", None) == "ai" or isinstance(m, AIMessage)
+    ]
+    assert any("flowchart" in t or "mermaid" in t.lower() or "资产拓扑" in t for t in texts2)
     task_lists = [c for c in nest.calls if c[0] == "emit_task_list"]
     assert task_lists
     assert any(item.get("id") == "white_bg" for item in task_lists[0][1])
-    # State must not hold full canvas nodes/edges
     assert "nodes" not in state2
     assert "edges" not in state2
 
@@ -209,14 +222,14 @@ async def test_revise_returns_to_plan():
         },
         config,
     )
-    plan_calls_before = sum(1 for c in nest.calls if c[0] == "upsert_prompt_node")
+    assert not any(c[0] == "upsert_prompt_node" for c in nest.calls)
 
     state2 = await graph.ainvoke(
         {"messages": [HumanMessage(content="改成更偏天猫详情页")]},
         config,
     )
-    plan_calls_after = sum(1 for c in nest.calls if c[0] == "upsert_prompt_node")
-    assert plan_calls_after > plan_calls_before
+    # revise 仍不写画布，直到确认方案
+    assert not any(c[0] == "upsert_prompt_node" for c in nest.calls)
     assert state2["awaiting_user"] is True
     assert state2["user_decision"] == "none"
     assert state2["phase"] == "await_confirm"

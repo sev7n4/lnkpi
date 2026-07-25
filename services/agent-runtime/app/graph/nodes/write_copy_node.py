@@ -28,11 +28,13 @@ def make_write_copy_node(*, nest: Any) -> Callable:
         if emit_upd is not None:
             await emit_upd(id=key, status="done")
 
+        stay_topo = bool(state.get("split_manifest"))
         return {
-            "phase": "done",
-            "awaiting_user": False,
+            "phase": "await_topo" if stay_topo else "done",
+            "awaiting_user": stay_topo,
             "copy_revise_only": False,
-            "messages": [AIMessage(content="已将确认的主文案写入画布节点。")],
+            "pending_orchestrate": False,
+            "messages": [AIMessage(content="已将确认的主文案写入画布节点。可继续改拓扑或回复「确认出图」。")],
         }
 
     return write_copy_node

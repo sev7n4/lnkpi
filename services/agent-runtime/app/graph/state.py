@@ -26,10 +26,12 @@ class AgentRuntimeState(TypedDict, total=False):
         "intake",
         "plan",
         "await_confirm",
+        "write_plan_node",
         "split",
         "draft_copy",
         "await_copy_confirm",
         "write_copy_node",
+        "await_topo",
         "orchestrate_gen",
         "done",
         "error",
@@ -41,9 +43,11 @@ class AgentRuntimeState(TypedDict, total=False):
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str
+    plan_draft: str | None
     plan_node_id: str | None
     focus_node_ids: list[str]
     split_manifest: list[SplitManifestItem]
+    topology_mode: Literal["full", "trimmed"] | None
     gen_queue: list[str]
     gen_completed: list[str]
     gen_failed: list[dict]
@@ -51,9 +55,9 @@ class AgentRuntimeState(TypedDict, total=False):
     copy_draft: str | None
     copy_node_id: str | None
     copy_revise_only: bool
-    # After first draft_copy: orchestrate_gen runs in background so write HITL is not blocked
+    # Only arm after「确认出图」(await_topo confirm_gen); not after draft_copy alone
     pending_orchestrate: bool
 
     # 一期轻量人机
     awaiting_user: bool
-    user_decision: Literal["none", "confirm", "revise"] | None
+    user_decision: Literal["none", "confirm", "revise", "confirm_gen", "topo_revise"] | None

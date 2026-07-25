@@ -1,12 +1,13 @@
 # Agent 确认后闭环加固 + 主文案 HITL（设计）
 
-> 状态：**已确认**（2026-07-25）  
+> 状态：**已确认**（2026-07-25）；**修订 2026-07-25**：§7 对齐拓扑预览 HITL（`await_topo` / 方案确认后写节点）  
 > 日期：2026-07-25  
 > 前置：  
 > - `2026-07-23-agent-runtime-langgraph-design.md`（Runtime / 轻量 HITL / 画布 SoT）  
 > - `2026-07-24-agent-chat-ux-phase1-design.md`（对话 UX / Vercel SSE ~120s）  
 > - `2026-07-25-agent-task-progress-card-design.md`（任务卡 / `task_*` / 自动出视频）  
-> 依据：生产干净画布复测（PR #58 + Runtime rebuild）后问题清单 1–6；产品确认主文案 **先草稿交互确认再写入节点**，出图不等文案  
+> - **后续产品编排**：`2026-07-25-agent-topology-preview-hitl-design.md`（A；覆盖原「确认拆图即出图」）  
+> 依据：生产干净画布复测（PR #58 + Runtime rebuild）后问题清单 1–6；产品确认主文案 **先草稿交互确认再写入节点**；方案/拓扑门见拓扑预览规格  
 > 范围：主文案 HITL 编排、任务卡断流关账、画布 url/content 同步、方案节点开场白清洗、**LangGraph 节点与边可持续演进专篇**  
 > 非范围：`task_summary` 落库（方案 B，复测仍丢再加）、卡内一键重试/确认平台、生产级 durable `interrupt()` 跨天恢复、改 Vercel SSE 硬超时本身、Agent dock 模型/技能计费
 
@@ -18,13 +19,13 @@
 | --- | --- |
 | 总体策略 | **方案 A**：编排补齐 + 断流对账；摘要落库留作复测后加码 |
 | 主文案 | **不**在「确认拆图」后静默写入；`draft_copy` → 对话确认/修改 → `write_copy_node` |
-| 出图 vs 文案 | **并行**：`split` 后出图/出视频照常；文案 HITL **不阻塞**出图 |
+| 出图 vs 文案 | 骨架期可写文案；**出图须过出图门**（`await_topo`）；文案不阻塞出图门之后的 gen |
 | 任务卡主文案行 | 草稿待确认期间 = `needs_user`；写入成功 = `done` |
 | 任务清单 | split **一次**发全量项；orchestrate **禁止整表替换**冲掉文案项 |
 | 断流关账 | SSE 优先；断流后用 Session 节点态（+ Record）reconcile，合成终局 `task_summary` 态 |
 | 画布有图 | 确认拆图→关账期间周期性 `loadSession`（服务端 url/content 优先）；禁过期全量 `saveCanvas` 抹结果 |
-| 方案节点 | 写入前剥开场白；**不**改为「先聊后写方案节点」（与既有确认拆图习惯对齐） |
-| Graph 演进 | **专篇 §7**：控制流边 vs 数据流边、门控相位、并行扇出、可插槽 `interrupt()` |
+| 方案节点 | **确认前不写**；方案门确认后 `write_plan_node`（见拓扑预览规格）；写入前剥开场白 |
+| Graph 演进 | **§7**；权威后续演进见 `2026-07-25-agent-topology-preview-hitl-design.md`（`await_topo` / 出图门） |
 
 ---
 
@@ -168,7 +169,7 @@
 2. 后处理：去掉开场白；优先从第一个 `#` 标题截取正文。  
 3. 对话确认摘要仍用 `build_confirm_message`，**不**进节点。
 
-**不在本期**把「营销方案」改为先对话确认再写入节点（避免与确认拆图双重门叠床架屋）。若未来要做，走 §7.5 插槽「资产写入门」，与主文案门同型。
+**不在本期（confirm-loop 原文）**把「营销方案」改为先对话确认再写入——**已由拓扑预览规格推翻并取代**：确认前不写、确认后 `write_plan_node`。若仅清洗开场白，仍适用 `plan_clean`。
 
 ---
 
@@ -211,43 +212,48 @@ else → intake
 
 新增门控时：**只加 phase + route_entry 分支 + 对称节点**，不要把等待逻辑塞进 `orchestrate_gen` 长循环。
 
-### 7.3 目标拓扑（本期选定）
+### 7.3 目标拓扑（修订 2026-07-25：对齐拓扑预览 HITL）
+
+> 产品权威：`2026-07-25-agent-topology-preview-hitl-design.md`。下文替换原「确认拆图后立刻出图」主链。
 
 **入口与门控：**
 
 ```text
 START → route_entry
-          ├─ await_copy_confirm → confirm → write_copy_node → END
-          │                    → revise  → draft_copy → (重新置 await_copy_confirm) → END
-          │                    → none    → END（保持门）
-          ├─ await_confirm      → confirm → split → …
+          ├─ await_copy_confirm → confirm → write_copy_node →（回到 await_topo 语义）END
+          │                    → revise  → draft_copy → END
+          │                    → none    → END
+          ├─ await_topo         → confirm_gen → orchestrate_gen → done
+          │                    → topo_revise → await_topo
+          │                    → none → END
+          ├─ await_confirm      → confirm → write_plan_node → split → …
           │                    → revise  → plan → await_confirm
           │                    → none    → END
           └─ intake → chat → END
-                   → plan → await_confirm → …
+                   → plan（摘要+结构化选项，不写画布）→ await_confirm → …
 ```
 
-**确认拆图后主链（本期落地边，线性但语义并行）：**
+**确认方案后主链：**
 
 ```text
-split → draft_copy → orchestrate_gen → done → END
+write_plan_node → split → draft_copy → await_topo →（确认出图）orchestrate_gen → done → END
 ```
 
 | 节点 | 同 run 内必须完成 | 留给下一 turn |
 | --- | --- | --- |
-| `split` | 骨架 + 一次 `task_list` | — |
-| `draft_copy` | 出草稿、`text_delta`/芯片、`task_update(needs_user)`；置 `phase=await_copy_confirm` 且 `awaiting_user=true` | 用户确认/修改 |
-| `orchestrate_gen` | 出图/出视频 + `task_update` + 尽量发 `task_summary` | 断流后由前端对账 |
-| `done` | 收尾；**不得清除**文案门的 `awaiting_user` / `phase=await_copy_confirm` | 下一消息进 `await_copy_confirm` |
-
-**「并行」含义（产品）：** 用户在出图进行中或结束后，随时可用下一轮消息确认/修改主文案；出图不因文案未写入而暂停。  
-**「并行」含义（实现本期）：** 不要求 LangGraph Send 扇出；`draft_copy` 必须排在长时间 `orchestrate_gen` **之前**，保证草稿先达用户。真正的图级扇出列为 §7.5 性能插槽，不得改变 phase 契约。
+| `write_plan_node` | 确认稿写营销方案节点 + 已确认摘要 | — |
+| `split` | 骨架 + Mermaid + 一次 `task_list`；**不出图** | — |
+| `draft_copy` | 草稿、文案 needs_user；可臂 `await_topo` | 用户写文案 / 改拓扑 / 确认出图 |
+| `await_topo` | 分类出图确认 / 拓扑修订 | 多轮 |
+| `orchestrate_gen` | **仅出图门后**出图/视频 + `task_*` | 断流对账 |
+| `done` | 收尾；不得误清未完成人机门 | — |
 
 **硬约束：**
 
-1. **禁止**在 `orchestrate_gen` 内同步等待用户。  
-2. `done` / checkpoint 持久化后，文案门相位必须仍可被 `route_entry` 命中（单测必覆盖）。  
-3. 若发现 `done` 误清 `awaiting_user`：改为在 thread 元数据备份 `phase`，或 `draft_copy` 后先 END、出图改 Nest 后台作业——属实现修复，不改本章语义。
+1. **禁止** `draft_copy` / `pending_orchestrate` 在出图门前自动后台出图。  
+2. **禁止**在 `orchestrate_gen` 内同步等用户。  
+3. 方案节点仅在 `write_plan_node` 创建/更新。  
+4. 文案门可与 `await_topo` 交错；出图门只管 image/video。
 ### 7.4 门控节点模式（可复制）
 
 所有人机门遵循同一模式（已有 `await_confirm`，文案门照抄）：
@@ -269,6 +275,9 @@ GateNode(state):
 | `await_asset_write` 通用门 | 任意「草稿 → 确认 → 写入节点」 | 主文案是第一个实例 |
 | `interrupt()` + 持久 checkpointer | 跨进程/跨天恢复 | 不替换轻量 Gate 语义，只换持久层 |
 | 审批门 `await_approval` | 企业角色审批方案 | 插在 `plan` 与 `await_confirm` 之间 |
+| 拓扑预览 A | `await_topo` / 方案确认后写节点 / full\|trimmed | **规格已出**：`2026-07-25-agent-topology-preview-hitl-design.md` |
+| 一致性链 B | 人物/产品三视图 | A 完成后 |
+| 手工改后执行 C | 画布/Dock 改完再「生图」 | B 完成后 |
 | 并行 Send 扇出 | 多资产独立子图 | 不改变数据流在 Nest 的事实 |
 | `task_summary` 落库 | 断流必达摘要 | 方案 B，复测加码 |
 

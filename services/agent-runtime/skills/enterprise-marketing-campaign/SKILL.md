@@ -10,6 +10,7 @@ metadata:
   author: lnkpi
   lnkpi.canvas_manifest: assets/canvas-manifest.yaml
   lnkpi.max_downstream: "12"
+  lnkpi.topology_mode_default: full
 allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt attach_refs run_image_generation get_generation_status
 ---
 
@@ -24,8 +25,9 @@ allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt 
 ## Split and image generation
 
 - Follow `assets/canvas-manifest.yaml` when splitting the canvas.
-- Do not call `run_image_generation` during plan; only after user confirm → split → orchestrate_gen.
-- Phase-1: auto-generate image and video nodes after confirm (see task progress card spec).
+- Do not call `run_image_generation` during plan; only after user「确认出图」→ orchestrate_gen.
+- Scheme confirm writes the plan node; topology preview (Mermaid + skeleton) comes before image gen.
+- `topology_mode_default` (`full`|`trimmed`) may be overridden by the user.
 
 ## Progressive disclosure
 

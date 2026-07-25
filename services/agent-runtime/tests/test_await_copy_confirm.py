@@ -46,7 +46,8 @@ async def test_write_copy_persists_draft():
         }
     )
     assert any(c[0] == "set_node_content" and c[1] == ("t1", "正文A") for c in nest.calls)
-    assert out["awaiting_user"] is False
+    assert out["awaiting_user"] is True
+    assert out["phase"] == "await_topo"
     assert any(
         c[0] == "emit_task_update" and c[1].get("status") == "done" for c in nest.calls
     )

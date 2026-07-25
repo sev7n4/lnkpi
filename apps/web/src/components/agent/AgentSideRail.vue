@@ -55,6 +55,7 @@ const chipSet = computed(() => {
 })
 const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
+const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -580,17 +581,51 @@ defineExpose({ openPanel, reconcileFromNodes })
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('确认')"
+                @click="sendPreset('1')"
               >
-                确认拆图
+                1 / A 确认方案
               </button>
               <button
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('我要修改：')"
+                @click="sendPreset('2')"
               >
-                要修改
+                2 / B 换方向
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('3')"
+              >
+                3 / C 自己说明
+              </button>
+            </div>
+            <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认出图')"
+              >
+                确认出图
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('写入主文案')"
+              >
+                写入主文案
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('要改拓扑：')"
+              >
+                要改拓扑
               </button>
             </div>
             <div v-else-if="awaitingCopyConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
@@ -606,7 +641,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('要修改：')"
+                @click="sendPreset('文案要修改：')"
               >
                 要修改
               </button>

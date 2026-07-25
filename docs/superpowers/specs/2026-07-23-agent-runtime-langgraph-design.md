@@ -1,10 +1,10 @@
 # Agent Runtime（LangGraph）技术选型与一期设计
 
-> 状态：**已确认**（2026-07-24）；实现计划见 `docs/superpowers/plans/2026-07-24-agent-runtime-langgraph.md`  
-> 日期：2026-07-23（修订 2026-07-24）  
-> 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认后按拓扑自动出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
+> 状态：**已确认**（2026-07-24）；**修订 2026-07-25**：方案门确认后写节点、`await_topo`、出图门——见 `2026-07-25-agent-topology-preview-hitl-design.md`  
+> 日期：2026-07-23（修订 2026-07-24；拓扑预览 HITL 2026-07-25）  
+> 范围：Agent Runtime 技术选型、控制面/数据面边界、一期 Graph/State/Tools/Skills、**确认方案 → 骨架预览 → 确认出图**；贯穿场景为**企业营销方案 → 画布资产拆解 → 出图**  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（RefChip/数据贯通）、现有 `@lnkpi/agent` SSE + `CanvasAction`、Nest `Session.canvasData` / Studio 文生图·图生图  
-> 非范围：一期不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）。**一期纳入**账户级画布生成默认（全模态）与 Agent 出图回退（见 §0 / §1.1 / §12.8）。**自动出视频**与**对话任务进度卡**见增补规格 `2026-07-25-agent-task-progress-card-design.md`。**确认后闭环加固 + 主文案 HITL / 节点与边演进**见 `2026-07-25-agent-confirm-loop-hardening-design.md` §7。
+> 非范围：一期不引入 Temporal；不把画布全量镜像进 LangGraph State；不做生产级 durable HITL（仅预留）；**不打通 Agent 侧栏底部 dock 的模型/技能/积分参数链路**（遗留，见 §1.2 / §10）。**一期纳入**账户级画布生成默认（全模态）与 Agent 出图回退（见 §0 / §1.1 / §12.8）。**自动出视频**与**对话任务进度卡**见 `2026-07-25-agent-task-progress-card-design.md`。**拓扑预览 / 方案结构化确认**见 `2026-07-25-agent-topology-preview-hitl-design.md`（A；B/C 另文）。
 
 ---
 
@@ -14,10 +14,11 @@
 | --- | --- |
 | Runtime 选型 | **方案一**：Python **LangGraph** + Nest 网关 + **自研 Markdown Skills** |
 | 画布真相源 | **Nest `Session.canvasData` + 前端 Vue Flow**；LangGraph **不**持有全量画布镜像 |
-| 控制流 vs 数据流 | LangGraph 边 = **阶段/逻辑**；画布边 + RefChip = **资产依赖** |
-| 一期 HITL | **轻量澄清**（多轮口头确认）；预留 `interrupt()` + checkpointer 演进到生产级 durable |
-| Skills | 一期即要：见 **§7**，目录与 `SKILL.md` **对齐 [Agent Skills](https://agentskills.io/specification) 开放标准**，可兼容 skills 市场生态；lnkpi 扩展仅放 `metadata` / `assets/` |
-| 一期验收 | Skill 规划 → 确认 → 拆骨架（边/prompt/refs）→ **按拓扑自动出图**（URI 回写节点） |
+| 控制流 vs 数据流 | LangGraph 边 = **阶段/逻辑**；画布边 + RefChip + manifest `depends_on` = **资产依赖**（对话 Mermaid 只画后者） |
+| 一期 HITL | **结构化选项 + 多轮澄清**（方案门 / 拓扑门 / 文案门）；预留 `interrupt()` 演进到 durable |
+| Skills | 一期即要：见 **§7**，目录与 `SKILL.md` **对齐 [Agent Skills](https://agentskills.io/specification) 开放标准**；lnkpi 扩展仅放 `metadata` / `assets/`；含 `topology_mode_default` |
+| 一期验收 | Skill 规划摘要 → **确认后写方案节点** → 拆骨架+拓扑预览 → **确认出图** → 按拓扑出图/出视频 |
+| 拓扑模式 | Skill `topology_mode_default: full\|trimmed` + 用户可覆盖；见拓扑预览规格 |
 | 自动生成编排 | **一期包含自动出图 + 自动出视频**（任务进度卡见 `2026-07-25-agent-task-progress-card-design.md`） |
 | 规划 LLM | **一期平台配置**：Runtime `LNKPI_OPENAI_*`（密钥/base_url/model）；**非**用户 UI 选择 / 对话 BYOK |
 | Agent 底栏 dock 参数 | **一期不打通**（见 §1.2 / §10）；**一期须去误导**：隐藏模型选择器与积分徽章（见 `2026-07-24-agent-chat-ux-phase1-design.md`） |
@@ -27,7 +28,7 @@
 | 与「不自动级联」关系 | 引用变更仍**不**静默重跑下游；仅在用户确认方案后由 Agent **显式**执行出图工作流 |
 | 现有 `@lnkpi/agent` | 保留为 Nest 侧兼容/工具适配层；新控制面迁到 Python Runtime，不一夜删除 |
 
-**贯穿场景（企业营销）**：用户：「帮我设计一套卫生洁具的营销方案。」→ Agent 规划并征询确认 → 画布落方案节点 → 确认后拆解下游文/图骨架并连线、注入提示词与芯片 → **按依赖自动文生图/图生图**，节点缩略图刷新。
+**贯穿场景（企业营销）**：用户要方案 → Agent **多轮摘要 + 结构化选项（1/A、2/B、3/C）** → 用户确认后**才**写入画布「营销方案」节点并给「已确认摘要」→ 拆骨架 + Mermaid 拓扑预览（可 NL 改）→ **确认出图** → 按依赖出图/出视频。详见 `2026-07-25-agent-topology-preview-hitl-design.md`。
 
 ---
 
@@ -174,37 +175,47 @@ class AgentRuntimeState(TypedDict):
 
 ## 5. 一期 Graph 拓扑
 
+> **修订（2026-07-25）：** 方案确认后写节点；`split` 与出图之间插入 `await_topo`。权威细节见 `2026-07-25-agent-topology-preview-hitl-design.md`。
+
 ```text
 START
+  ├─ (await_copy_confirm 续轮) → …
+  ├─ (await_topo 续轮) → await_topo → …
   ├─ (await_confirm 续轮) → await_confirm → …
   └─ intake
-        ├─ 强营销意图 → plan → await_confirm ─┬─ revise → plan
-        │                                      └─ confirm → split → orchestrate_gen → done
+        ├─ 强营销意图 → plan（摘要+选项，不写画布）→ await_confirm
+        │     ├─ revise → plan
+        │     └─ confirm → write_plan_node → split → draft_copy → await_topo
+        │           ├─ NL 改拓扑 / 文案 HITL → 保持 await_topo
+        │           └─ 确认出图 → orchestrate_gen → done
         └─ 否则 → chat → END
 ```
 
 | Graph 节点 | 职责 | 主要副作用 |
 | --- | --- | --- |
-| `intake` | **门控**：强营销意图才设 `skill_id`；否则进入日常对话。**禁止**唯一 Skill 兜底 | 更新 `skill_id`（可 null） |
-| `chat` | 非 Skill 短答（同规划 LLM）；可提示如何发起营销方案 | 仅对话 `messages` |
-| `plan` | 按 Skill 生成方案 Markdown；写**可读摘要**（定位 + 将拆资产列表 + N + 画布指引） | `upsert_prompt_node` → `plan_node_id` |
-| `await_confirm` | 征询确认/修改；`awaiting_user=True` | 无强制画布写 |
-| `split` | 读方案；写 `split_manifest`；批量建下游；独立进度话术 | 建节点/边/prompt/refs |
-| `orchestrate_gen` | 从 manifest + 边得到 `gen_queue`；逐个/有限并发出图；**按张进度** | `run_image_generation`；进度写入对话 |
-| `done` | **按节点**汇总成功/失败/平台兜底；提示画布操作 | `phase=done` |
+| `intake` | **门控**：强营销意图才设 `skill_id`；否则日常对话 | 更新 `skill_id`（可 null） |
+| `chat` | 非 Skill 短答 | 仅对话 `messages` |
+| `plan` | 方案摘要 + **结构化选项（1/A、2/B、3/C + 推荐理由）**；写入 `plan_draft` | **不写画布** |
+| `await_confirm` | 分类 confirm/revise/none | 无画布写 |
+| `write_plan_node` | 确认稿写入「营销方案」+「已确认摘要」话术 | `upsert_prompt_node` → `plan_node_id` |
+| `split` | 按 `topology_mode` 物化骨架；Mermaid；一次 `task_list` | 建节点/边/prompt/refs；**不出图** |
+| `draft_copy` | 主文案草稿；置文案门 | 对话草稿；`task_update(needs_user)` |
+| `await_topo` | 拓扑/出图门；可交错文案确认 | NL 改骨架时写 Nest |
+| `await_copy_confirm` / `write_copy_node` | 主文案 HITL | `set_node_content` |
+| `orchestrate_gen` | 仅出图门后：拓扑出图/出视频 | Studio gen；`task_*` |
+| `done` | 收尾；不得误清未完成的人机门 | `phase` 按门保留 |
 
-详情与验收见 `2026-07-24-agent-chat-ux-phase1-design.md`。
+**控制流边 vs 数据流边：**
 
-**出图规则（一期）：**
+| 种类 | 载体 | 用途 |
+| --- | --- | --- |
+| 控制流边 | LangGraph 节点转移 | 相位、HITL 门 |
+| 数据流边 | Nest `canvasData.edges` + manifest `depends_on` | 资产依赖、出图顺序、**对话 Mermaid** |
 
-1. 仅处理 `target_type=image` 且 `auto_generate=true` 的项。
-2. 拓扑：`depends_on` 映射为边；依赖未成功出图则跳过下游并记入 `gen_failed`（可配置），不无限等待。
-3. `t2i`：依赖文本/方案 refs；`i2i`：上游 image 节点须已有 `url`。
-4. 单节点超时/失败不阻断其它无依赖任务；对话中报告部分失败。
-5. 并发上限建议 ≤3（可配置），避免打爆 Provider/积分。
+**出图规则：** 仅在用户「确认出图」之后执行；依赖未完成则下游 `dependency_failed`（可配置）。并发上限建议 ≤3。
 
-**一期不做**独立 `HumanGate` 空节点。  
-**二期**可将 `await_confirm` 换成 `interrupt()`；并为 video 扩展同一 `orchestrate_gen`。
+**一期不做**独立空 `HumanGate` 节点（门控用 `await_*` 节点表达）。  
+**二期**可将门控换成 `interrupt()`；B/C 见拓扑预览规格 §8。
 
 ---
 
@@ -214,35 +225,34 @@ START
 
 | 步骤 | 用户 / Agent | Graph | State 要点 | Nest / 画布 |
 | --- | --- | --- | --- | --- |
-| 1 | 「帮我设计一套卫生洁具的营销方案。」 | `intake` → `plan` | `skill_id=enterprise-marketing-campaign` | — |
-| 2 | Agent 输出方案并请确认 | `plan` → `await_confirm` | `plan_summary`；`plan_node_id`；`awaiting_user=True` | 新建/更新 **prompt 节点**（T1） |
-| 3a | 「改成更偏天猫详情页」 | → `plan` | `user_decision=revise` | **更新同一** `plan_node_id` |
-| 3b | 「确认，按这个拆并出图」 | → `split` | `user_decision=confirm` | — |
-| 4 | 拆解资产骨架 | `split` | `split_manifest` 回填 `node_id` | 下游 text/image（+可选 video 骨架）+ edges + prompt + refs |
-| 5 | 按拓扑自动出图 | `orchestrate_gen` | `gen_queue` / `gen_completed` / `gen_failed` | Studio 文生图/图生图；节点 `url` + 状态 SSE/轮询 |
-| 6 | 汇报结果 | `done` | `phase=done` | 用户可手动重跑失败节点或改 prompt |
+| 1 | 「帮我设计一套卫生洁具的营销方案。」 | `intake` → `plan` | `skill_id`；`plan_draft`；结构化选项 | **无**方案节点 |
+| 2 | 多轮改方案 / 选 2·B / 3·C | → `plan` | 更新 `plan_draft` | 仍不写方案节点 |
+| 3 | 选 `1`/`A` 确认方案 | → `write_plan_node` | `plan_node_id`；已确认摘要 | **此时**创建/更新营销方案节点 |
+| 4 | 拆骨架 + Mermaid | `split` → `draft_copy` → `await_topo` | `split_manifest`；`topology_mode` | 下游骨架 + 边；不出图 |
+| 5 | NL 改拓扑 / 写主文案 | `await_topo` / copy 门 | 更新 manifest | 即时改节点/边 |
+| 6 | 「确认出图」 | → `orchestrate_gen` → `done` | `gen_*` | Studio 出图/出视频 |
 
-### 6.2 建议的一期 `split_manifest` 键（洁具企业营销示例）
+### 6.2 `split_manifest` 键（洁具示例；`full` 默认全量）
 
-| key | target_type | auto_generate | depends_on | gen_mode | 说明 |
+| key | target_type | auto_generate（出图门后） | depends_on | gen_mode | 说明 |
 | --- | --- | --- | --- | --- | --- |
-| `copy_main` | text | false | [] | — | 主文案（可选，不出图） |
-| `white_bg` | image | **true** | [] | t2i | 白底图 |
-| `hero_main` | image | **true** | [`white_bg`] | i2i | 主图 |
-| `scene` | image | **true** | [] | t2i | 场景图 |
-| `banner` | image | **true** | [] | t2i | Banner |
-| `brand` | image | **true** | [] | t2i | 品牌图（可提示上传 logo） |
-| `model` | image | **true** | [] | t2i | 模特/人景 |
-| `detail_cut` | image | **true** | [`white_bg`] | i2i | 细节/剖面 |
-| `show_video` | video | **false** | [`hero_main`] | v_ref | 一期只建骨架，不出片 |
+| `copy_main` | text | false | [] | — | 主文案（骨架期 HITL） |
+| `white_bg` | image | true | [] | t2i | 白底图 |
+| `hero_main` | image | true | [`white_bg`] | i2i | 主图 |
+| `scene` | image | true | [] | t2i | 场景图 |
+| `banner` | image | true | [] | t2i | Banner |
+| `brand` | image | true | [] | t2i | 品牌图 |
+| `model` | image | true | [] | t2i | 模特/人景（**B** 将拆为一致性链） |
+| `detail_cut` | image | true | [`white_bg`] | i2i | 细节/剖面 |
+| `show_video` | video | true | [`hero_main`] | v_ref | 产品展示视频 |
 
-键集与默认 `auto_generate` 由 Skill 的 `assets/canvas-manifest.yaml`（lnkpi 扩展资源）定义。
+`trimmed`：从上述 key 选子集并做依赖闭包。键集由 Skill `assets/canvas-manifest.yaml` 定义；`topology_mode_default` 见 SKILL metadata。
 
 ### 6.3 画布边与芯片
 
-- 边：`plan_node` → 各下游；`depends_on` → 数据边（如 `white_bg` → `hero_main`）。
-- 芯片：下游 `refOrder` 引用上游；出图时 Nest `resolveNodeRefs`。
-- Logo：对话提示上传到 `brand` 等节点的 `localRefs`；若缺失仍可 t2i 降级，并在话术中说明。
+- 边：`plan_node` → 各下游；`depends_on` → 数据边。  
+- 芯片：下游 `refOrder`；出图时 Nest `resolveNodeRefs`。  
+- 对话 Mermaid 与画布骨架标题对齐。
 
 ---
 

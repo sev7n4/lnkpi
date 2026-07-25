@@ -71,7 +71,7 @@ def make_await_copy_confirm_node() -> Callable:
             }
         return {
             "user_decision": "confirm",
-            "awaiting_user": True,
+            "awaiting_user": False,
             "phase": "await_copy_confirm",
             "copy_revise_only": False,
         }
