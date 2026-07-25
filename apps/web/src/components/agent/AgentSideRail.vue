@@ -20,6 +20,7 @@ import {
   looksLikeConfirmTurn,
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
+import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -46,12 +47,14 @@ const agentThreadId = ref(`${props.sessionId}:main`)
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
 
-/** 方案确认门：侧栏展示快捷钮（一期口头 HITL，不打通 skillId） */
-const awaitingConfirm = computed(() => {
-  if (agent.isStreaming) return false
+/** 方案确认门 / 主文案确认门：侧栏快捷钮 */
+const chipSet = computed(() => {
+  if (agent.isStreaming) return null
   const last = [...agent.messages].reverse().find((m) => m.role === 'assistant')
-  return Boolean(last?.content?.includes('请确认是否按此方案拆解画布并出图'))
+  return detectAgentChipSet(last?.content || '')
 })
+const awaitingConfirm = computed(() => chipSet.value === 'plan')
+const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -580,6 +583,24 @@ defineExpose({ openPanel, reconcileFromNodes })
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('我要修改：')"
+              >
+                要修改
+              </button>
+            </div>
+            <div v-else-if="awaitingCopyConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('写入主文案')"
+              >
+                写入主文案
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('要修改：')"
               >
                 要修改
               </button>
