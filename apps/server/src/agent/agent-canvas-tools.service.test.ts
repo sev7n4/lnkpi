@@ -67,6 +67,24 @@ describe('AgentCanvasToolsService', () => {
       url: 'https://cdn.example/img.png',
     })
 
+    // Serialize concurrent $transaction callbacks. The real Postgres
+    // serializable / read-committed TX chain would queue concurrent
+    // persist() calls so each one sees the post-commit state of the
+    // previous. Without this queue, the mock would let N concurrent
+    // findUnique calls race ahead of any update and the race-condition
+    // regression test would lose updates even though persist() is now
+    // correct.
+    let txChain: Promise<unknown> = Promise.resolve()
+    const $transaction = (fn: (tx: {
+      session: { findUnique: typeof sessionFindUnique; update: typeof sessionUpdate }
+    }) => Promise<unknown>) => {
+      const next = txChain.then(() =>
+        fn({ session: { findUnique: sessionFindUnique, update: sessionUpdate } }),
+      )
+      txChain = next.catch(() => undefined)
+      return next
+    }
+
     const moduleRef = await Test.createTestingModule({
       providers: [
         AgentCanvasToolsService,
@@ -75,6 +93,7 @@ describe('AgentCanvasToolsService', () => {
           useValue: {
             session: { findUnique: sessionFindUnique, update: sessionUpdate },
             userAiPreferences: { findUnique: prefsFindUnique },
+            $transaction,
           },
         },
         {
@@ -505,5 +524,53 @@ describe('AgentCanvasToolsService', () => {
     await expect(
       svc.getNode({ sessionId: 'missing', nodeId: 'x' }),
     ).rejects.toBeInstanceOf(NotFoundException)
+  })
+
+  // Regression test for the production race condition that caused
+  // Session.canvasData to lose update_node patches when multiple
+  // runImageGeneration calls landed concurrently (Phase 2.5 evidence
+  // in debug-task-node-desync.md). With persist() now using a
+  // Prisma $transaction that re-reads canvasData inside the TX,
+  // every concurrent call's update must land in the final canvas.
+  it('runImageGeneration under 3-way concurrency persists all updates to canvasData', async () => {
+    canvas = {
+      nodes: [
+        { id: 'img-a', type: 'image', position: { x: 0, y: 0 }, data: { prompt: 'A', status: 'draft' } },
+        { id: 'img-b', type: 'image', position: { x: 280, y: 0 }, data: { prompt: 'B', status: 'draft' } },
+        { id: 'img-c', type: 'image', position: { x: 560, y: 0 }, data: { prompt: 'C', status: 'draft' } },
+      ],
+      edges: [],
+    }
+    generateImage
+      .mockResolvedValueOnce({ id: 'rec-a', status: 'completed', url: 'https://cdn/a.png' })
+      .mockResolvedValueOnce({ id: 'rec-b', status: 'completed', url: 'https://cdn/b.png' })
+      .mockResolvedValueOnce({ id: 'rec-c', status: 'completed', url: 'https://cdn/c.png' })
+
+    const results = await Promise.all([
+      svc.runImageGeneration({ sessionId: 's1', userId: 'u1', nodeId: 'img-a' }),
+      svc.runImageGeneration({ sessionId: 's1', userId: 'u1', nodeId: 'img-b' }),
+      svc.runImageGeneration({ sessionId: 's1', userId: 'u1', nodeId: 'img-c' }),
+    ])
+
+    expect(results.every((r) => r.status === 'completed')).toBe(true)
+
+    // The critical assertion: every node must carry all three persisted
+    // patches (started, recordId, finish) in the final canvas. Before
+    // the TX re-read fix, the in-memory canvas was used to compute the
+    // patch, so concurrent writers would clobber each other and
+    // recordId / url / status would be missing on some nodes.
+    const byNode = new Map(canvas.nodes.map((n) => [n.id, n]))
+    for (const [nodeId, recordId, url] of [
+      ['img-a', 'rec-a', 'https://cdn/a.png'],
+      ['img-b', 'rec-b', 'https://cdn/b.png'],
+      ['img-c', 'rec-c', 'https://cdn/c.png'],
+    ] as const) {
+      const node = byNode.get(nodeId)
+      expect(node, `node ${nodeId} should be in final canvas`).toBeTruthy()
+      expect(node!.data.status, `${nodeId} status`).toBe('completed')
+      expect(node!.data.generationRecordId, `${nodeId} recordId`).toBe(recordId)
+      expect(node!.data.url, `${nodeId} url`).toBe(url)
+      expect(node!.data.generationStartedAt, `${nodeId} startedAt`).toBeTruthy()
+    }
   })
 })

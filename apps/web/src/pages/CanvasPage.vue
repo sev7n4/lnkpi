@@ -32,6 +32,7 @@ import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
+import { studioApi } from '@/services/studio-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
@@ -601,7 +602,10 @@ function startPollingForGeneratingRecords() {
       continue
     }
     const data = n.data as Record<string, unknown>
-    if (data.status === NODE_GENERATION_STATUS.generating && data.generationRecordId) {
+    // Fix #1: accept any node with generationRecordId, regardless of status,
+    // so terminal-state records (completed/failed) get fetched and re-applied
+    // to nodes that lost recordId/url on loadSession().
+    if (data.generationRecordId) {
       tasks.push({ recordId: String(data.generationRecordId), nodeId: n.id })
     }
   }
@@ -982,6 +986,9 @@ function handleAgentActions(actions: unknown[]) {
   nodes.value = result.nodes as unknown as EditableFlowNode[]
   edges.value = result.edges as unknown as CanvasEdge[]
   startPollingForGeneratingShots()
+  // Fix #3: also start generation polling so any record-id-bearing nodes
+  // (status:generating now) get polled to terminal state.
+  startPollingForGeneratingRecords()
   // 勿 persistUserEdit：Nest Agent tools 已写 Session.canvasData；
   // 用本地旧图 + 部分 action 回写会抹掉追加拆图节点。
 }
@@ -2327,7 +2334,7 @@ async function loadSession() {
       }]
       nodeCounter = 1
     }
-  } catch {
+  } catch (e) {
     nodes.value = [{
       id: 'prompt-1',
       type: 'prompt',
@@ -2344,7 +2351,91 @@ async function loadSession() {
   canvasUndo.commitAfterChange()
   startPollingForGeneratingShots()
   startPollingForGeneratingRecords()
+  // Fix #2: Reconcile any media nodes whose session canvasData is missing
+  // generationRecordId / url — fetch their Studio records and re-apply.
+  // This recovers from the bug where Agent `update_node` actions weren't
+  // persisted back to session.canvasData in the streamFromRuntime path.
+  void reconcileMissingGenerationRecords()
   await consumeFocusNodeQuery()
+}
+
+/**
+ * Walk media nodes (image/video/text/prompt/audio) that lack
+ * `generationRecordId` and re-attach the matching Studio record by nodeId.
+ * Tolerates empty / partial Studio responses.
+ */
+async function reconcileMissingGenerationRecords() {
+  if (!sessionId.value) return
+  const mediaTypes = new Set(['image', 'video', 'text', 'prompt', 'audio'])
+  const missing = nodes.value.filter((n) => {
+    if (!mediaTypes.has(String(n.type))) return false
+    const data = n.data as Record<string, unknown>
+    return !data?.generationRecordId
+  })
+  if (!missing.length) return
+  try {
+    const { data } = await studioApi.listGenerations({ sessionId: sessionId.value })
+    const records = data.data ?? []
+    if (!records.length) return
+    const byNodeId = new Map<string, typeof records[number]>()
+    for (const r of records) {
+      if (r.nodeId) byNodeId.set(r.nodeId, r)
+    }
+    let patched = 0
+    for (const node of missing) {
+      const rec = byNodeId.get(node.id)
+      if (!rec) continue
+      const patch = buildStudioRecordPatch(node, rec)
+      if (!patch) continue
+      patchNodeData(node.id, patch)
+      patched += 1
+    }
+    if (patched > 0) {
+      // Persist the recovered state so a reload does not regress.
+      void saveCanvas()
+    }
+  } catch {
+    // Best-effort: never fail loadSession because of a reconcile miss.
+  }
+}
+
+function buildStudioRecordPatch(
+  _node: EditableFlowNode,
+  record: { id: string; status: string; type: string; url?: string | null; metadata?: string | null; prompt: string },
+): Record<string, unknown> | null {
+  // Skip non-terminal records — polling will catch them.
+  if (record.status !== 'completed' && record.status !== 'failed' && record.status !== 'error') {
+    return null
+  }
+  const status =
+    record.status === 'completed'
+      ? NODE_GENERATION_STATUS.completed
+      : record.status === 'failed' || record.status === 'error'
+        ? NODE_GENERATION_STATUS.error
+        : record.status
+  const patch: Record<string, unknown> = {
+    status,
+    generationRecordId: record.id,
+    errorMessage: status === NODE_GENERATION_STATUS.error ? '图像生成未完成或超时' : null,
+  }
+  if (record.type === 'text' || record.type === 'prompt') {
+    if (record.type === 'prompt') {
+      const parsed = parseRecordPromptContent(record as { metadata?: string | null; prompt: string })
+      patch.content = parsed.content
+      patch.promptMode = parsed.mode
+    } else {
+      patch.content = parseRecordText(record as { metadata?: string | null; prompt: string })
+    }
+  } else {
+    const urls = parseRecordUrls(record as { url?: string | null; metadata?: string | null })
+    if (urls.length) {
+      patch.url = urls[0]
+      patch.images = urls
+    } else if (record.url) {
+      patch.url = record.url
+    }
+  }
+  return patch
 }
 
 async function loadSessions() {

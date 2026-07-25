@@ -211,7 +211,7 @@ export class AgentCanvasToolsService {
           },
         },
       ]
-      await this.persist(input.sessionId, canvas, actions)
+      await this.persist(input.sessionId, actions)
       return { nodeId: existing.id, actions }
     }
 
@@ -234,8 +234,8 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    await this.persist(input.sessionId, canvas, actions)
-    return { nodeId, actions }
+    await this.persist(input.sessionId, actions)
+      return { nodeId, actions }
   }
 
   async getNode(input: { sessionId: string; nodeId: string }): Promise<CanvasNode> {
@@ -305,7 +305,7 @@ export class AgentCanvasToolsService {
       mapping.push({ key: item.key, nodeId })
     }
 
-    await this.persist(input.sessionId, canvas, actions)
+    await this.persist(input.sessionId, actions)
     return { nodes: mapping, actions }
   }
 
@@ -331,7 +331,7 @@ export class AgentCanvasToolsService {
       })
     }
 
-    await this.persist(input.sessionId, canvas, actions)
+    await this.persist(input.sessionId, actions)
     return { actions }
   }
 
@@ -350,7 +350,7 @@ export class AgentCanvasToolsService {
         payload: { id: input.nodeId, data: { prompt: input.prompt } },
       },
     ]
-    await this.persist(input.sessionId, canvas, actions)
+    await this.persist(input.sessionId, actions)
     return { actions }
   }
 
@@ -373,7 +373,7 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    await this.persist(input.sessionId, canvas, actions)
+    await this.persist(input.sessionId, actions)
     return { actions }
   }
 
@@ -408,7 +408,7 @@ export class AgentCanvasToolsService {
       payload: { id: input.nodeId, data: { refOrder: edgeIds } },
     })
 
-    await this.persist(input.sessionId, canvas, actions)
+    await this.persist(input.sessionId, actions)
     return { actions }
   }
 
@@ -436,7 +436,7 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    let current = await this.persist(input.sessionId, canvas, started)
+    let current = await this.persist(input.sessionId, started)
     const allActions = [...started]
 
     try {
@@ -469,7 +469,7 @@ export class AgentCanvasToolsService {
         type: 'update_node',
         payload: { id: input.nodeId, data: { generationRecordId: recordId } },
       })
-      current = await this.persist(input.sessionId, current, [
+      await this.persist(input.sessionId, [
         {
           type: 'update_node',
           payload: { id: input.nodeId, data: { generationRecordId: recordId } },
@@ -497,7 +497,7 @@ export class AgentCanvasToolsService {
       const finishActions: CanvasAction[] = [
         { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
       ]
-      await this.persist(input.sessionId, current, finishActions)
+      await this.persist(input.sessionId, finishActions)
       allActions.push(...finishActions)
 
       return {
@@ -516,7 +516,7 @@ export class AgentCanvasToolsService {
           },
         },
       ]
-      await this.persist(input.sessionId, current, errorActions)
+      await this.persist(input.sessionId, errorActions)
       allActions.push(...errorActions)
       return { status: 'error', actions: allActions }
     }
@@ -546,7 +546,7 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    let current = await this.persist(input.sessionId, canvas, started)
+    let current = await this.persist(input.sessionId, started)
     const allActions = [...started]
 
     try {
@@ -587,7 +587,7 @@ export class AgentCanvasToolsService {
         type: 'update_node',
         payload: { id: input.nodeId, data: { generationRecordId: recordId } },
       })
-      current = await this.persist(input.sessionId, current, [
+      await this.persist(input.sessionId, [
         {
           type: 'update_node',
           payload: { id: input.nodeId, data: { generationRecordId: recordId } },
@@ -615,7 +615,7 @@ export class AgentCanvasToolsService {
       const finishActions: CanvasAction[] = [
         { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
       ]
-      await this.persist(input.sessionId, current, finishActions)
+      await this.persist(input.sessionId, finishActions)
       allActions.push(...finishActions)
 
       return {
@@ -634,7 +634,7 @@ export class AgentCanvasToolsService {
           },
         },
       ]
-      await this.persist(input.sessionId, current, errorActions)
+      await this.persist(input.sessionId, errorActions)
       allActions.push(...errorActions)
       return { status: 'error', actions: allActions }
     }
@@ -691,17 +691,45 @@ export class AgentCanvasToolsService {
     return session
   }
 
+  /**
+   * Atomic canvas patch — re-reads canvasData inside a Prisma transaction so
+   * concurrent calls on the same session never lose each other's updates.
+   *
+   * Caller MUST NOT rely on the in-memory `canvas` it loaded earlier; pass only
+   * the actions. The returned `CanvasData` is the post-apply snapshot (== DB
+   * state right after this call), safe to consume for downstream computations
+   * such as `toStudioRefs`.
+   *
+   * Concurrency contract: under N concurrent `persist` calls on the same
+   * session, every action lands in DB exactly once; final canvas = the
+   * sequential composition of all N action lists.
+   */
   private async persist(
     sessionId: string,
-    canvas: CanvasData,
     actions: CanvasAction[],
   ): Promise<CanvasData> {
-    if (actions.length === 0) return canvas
-    const updated = applyCanvasActions(canvas, actions)
-    await this.prisma.session.update({
-      where: { id: sessionId },
-      data: { canvasData: JSON.stringify(updated) },
+    if (actions.length === 0) {
+      // Dedup-to-empty fast path (e.g. connectNodes with all edges already
+      // present). Skip the transaction and just return the current canvas.
+      const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
+      if (!session) throw new NotFoundException('会话不存在')
+      return parseCanvas(session.canvasData)
+    }
+    return this.prisma.$transaction(async (tx) => {
+      // Re-read inside the TX so concurrent persist() calls compose correctly
+      // rather than clobbering each other with stale in-memory snapshots.
+      const session = await tx.session.findUnique({
+        where: { id: sessionId },
+        select: { canvasData: true },
+      })
+      if (!session) throw new NotFoundException('会话不存在')
+      const current = parseCanvas(session.canvasData)
+      const updated = applyCanvasActions(current, actions)
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { canvasData: JSON.stringify(updated) },
+      })
+      return updated
     })
-    return updated
   }
 }
