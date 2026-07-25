@@ -28,6 +28,13 @@ def test_route_entry_still_supports_plan_confirm():
     )
 
 
+def test_route_entry_await_topo():
+    assert (
+        route_entry({"awaiting_user": True, "phase": "await_topo", "messages": []})
+        == "await_topo"
+    )
+
+
 @pytest.mark.asyncio
 async def test_done_preserves_copy_gate():
     done = make_done_node()
@@ -45,18 +52,17 @@ async def test_done_preserves_copy_gate():
 
 
 @pytest.mark.asyncio
-async def test_done_pending_orchestrate_copy_ready_tip():
+async def test_done_after_gen_is_done():
     done = make_done_node()
     out = await done(
         {
-            "awaiting_user": True,
-            "phase": "await_copy_confirm",
+            "awaiting_user": False,
+            "phase": "orchestrate_gen",
             "copy_draft": "主文案草稿",
-            "pending_orchestrate": True,
-            "gen_completed": [],
+            "pending_orchestrate": False,
+            "gen_completed": ["n1"],
             "gen_failed": [],
         }
     )
-    assert out["phase"] == "await_copy_confirm"
+    assert out["phase"] == "done"
     assert out["pending_orchestrate"] is False
-    assert "后台生成" in out["messages"][0].content
