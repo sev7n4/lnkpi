@@ -16,70 +16,141 @@ items:
     title: 白底图
     target_type: image
     source_section: 视觉资产/白底图
+    chain: product
+    role: seed
     gen_mode: t2i
     auto_generate: true
     depends_on: []
-    prompt_hint_template: "卫浴洁具产品白底图，居中，商业摄影，干净背景…"
+    prompt_hint_template: "产品白底主图，居中，商业摄影，干净纯白背景，同一 SKU 外观清晰可见…"
+
+  - key: product_turnaround
+    title: 产品四视图
+    target_type: image
+    source_section: 视觉资产/产品四视图
+    chain: product
+    role: turnaround
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [white_bg]
+    prompt_hint_template: "单张横排四格拼图（一次出图）：最左近景特写，后接正/侧/背；同一产品锁定材质比例与外观，禁止每格换款；干净背景，商业摄影…"
 
   - key: hero_main
     title: 主图
     target_type: image
     source_section: 视觉资产/主图
+    chain: product
+    role: downstream
     gen_mode: i2i
     auto_generate: true
-    depends_on: [white_bg]
-    prompt_hint_template: "基于白底主产品，电商主图，突出卖点与场景感…"
-
-  - key: scene
-    title: 场景图
-    target_type: image
-    source_section: 视觉资产/场景图
-    gen_mode: t2i
-    auto_generate: true
-    depends_on: []
-    prompt_hint_template: "卫浴空间场景图，产品自然融入环境…"
-
-  - key: banner
-    title: Banner
-    target_type: image
-    source_section: 视觉资产/Banner
-    gen_mode: t2i
-    auto_generate: true
-    depends_on: []
-    prompt_hint_template: "电商 Banner，品牌调性，促销或新品主题…"
-
-  - key: brand
-    title: 品牌图
-    target_type: image
-    source_section: 视觉资产/品牌
-    gen_mode: t2i
-    auto_generate: true
-    depends_on: []
-    prompt_hint_template: "品牌视觉，可结合用户上传 logo…"
-
-  - key: model
-    title: 模特/人景
-    target_type: image
-    source_section: 视觉资产/模特
-    gen_mode: t2i
-    auto_generate: true
-    depends_on: []
-    prompt_hint_template: "模特与产品互动场景，生活方式摄影…"
+    depends_on: [product_turnaround, white_bg]
+    prompt_hint_template: "电商主图，与产品四视图同一产品身份，突出卖点与场景感…"
 
   - key: detail_cut
     title: 细节/剖面
     target_type: image
     source_section: 视觉资产/细节
+    chain: product
+    role: downstream
     gen_mode: i2i
     auto_generate: true
-    depends_on: [white_bg]
-    prompt_hint_template: "产品细节或剖面特写，基于白底产品…"
+    depends_on: [product_turnaround, white_bg]
+    prompt_hint_template: "产品细节或剖面特写，与四视图同一产品身份…"
 
-  - key: show_video
+  - key: scene
+    title: 场景图
+    target_type: image
+    source_section: 视觉资产/场景图
+    chain: product
+    role: downstream
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [product_turnaround]
+    prompt_hint_template: "产品自然融入环境的场景图，与四视图同一产品身份…"
+
+  - key: banner
+    title: Banner
+    target_type: image
+    source_section: 视觉资产/Banner
+    chain: product
+    role: downstream
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [product_turnaround]
+    prompt_hint_template: "电商 Banner，品牌调性，与四视图同一产品身份…"
+
+  - key: brand
+    title: 品牌图
+    target_type: image
+    source_section: 视觉资产/品牌
+    chain: product
+    role: downstream
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [product_turnaround]
+    prompt_hint_template: "品牌视觉，可结合 logo；产品形象与四视图一致…"
+
+  - key: model_portrait
+    title: 模特定妆
+    target_type: image
+    source_section: 视觉资产/模特定妆
+    chain: model
+    role: seed
+    gen_mode: t2i
+    auto_generate: true
+    depends_on: []
+    prompt_hint_template: "模特定妆半身或全身肖像，清晰五官发型服装，干净背景，商业摄影…"
+
+  - key: model_turnaround
+    title: 模特四视图
+    target_type: image
+    source_section: 视觉资产/模特四视图
+    chain: model
+    role: turnaround
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [model_portrait]
+    prompt_hint_template: "单张横排四格拼图（一次出图）：最左近景面部/妆容特写，后接正/侧/背全身；同一模特锁定脸、发型、服装，禁止每格换人换装；干净背景…"
+
+  - key: model_lifestyle
+    title: 人景
+    target_type: image
+    source_section: 视觉资产/人景
+    chain: model
+    role: downstream
+    gen_mode: i2i
+    auto_generate: true
+    depends_on: [model_turnaround, model_portrait]
+    prompt_hint_template: "同一模特与产品互动的生活方式场景，身份与四视图定妆一致…"
+
+  - key: video_product
     title: 产品展示视频
     target_type: video
-    source_section: 视觉资产/视频
+    source_section: 视觉资产/产品视频
+    chain: product
+    role: downstream
     gen_mode: v_ref
     auto_generate: true
-    depends_on: [hero_main]
-    prompt_hint_template: "产品旋转展示短视频，突出质感与卖点…"
+    depends_on: [product_turnaround, white_bg]
+    prompt_hint_template: "纯产品展示短视频，可旋转或推近；旁白要点突出材质与卖点；底部中文字幕短句，语气专业简洁…"
+
+  - key: video_scene
+    title: 场景氛围视频
+    target_type: video
+    source_section: 视觉资产/场景视频
+    chain: product
+    role: downstream
+    gen_mode: v_ref
+    auto_generate: true
+    depends_on: [scene, product_turnaround]
+    prompt_hint_template: "空间氛围运镜短视频，产品自然在场；旁白偏氛围与使用场景；底部中文字幕短句…"
+
+  - key: video_lifestyle
+    title: 人景生活方式视频
+    target_type: video
+    source_section: 视觉资产/人景视频
+    chain: model
+    role: downstream
+    gen_mode: v_ref
+    auto_generate: true
+    depends_on: [model_lifestyle, product_turnaround, scene]
+    prompt_hint_template: "产品+模特+场景生活方式短视频；旁白生活化卖点；底部中文字幕短句；人物与产品身份与参考图一致…"
