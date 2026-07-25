@@ -53,10 +53,10 @@ async def test_draft_copy_sets_gate_and_needs_user():
             "plan_summary": "卫生洁具方案",
         }
     )
-    assert out["phase"] == "await_copy_confirm"
+    assert out["phase"] == "await_topo"
     assert out["awaiting_user"] is True
     assert out["copy_node_id"] == "t1"
-    assert out["pending_orchestrate"] is True
+    assert out["pending_orchestrate"] is False
     assert "静音" in (out["copy_draft"] or "")
     assert any(
         c[0] == "emit_task_update" and c[1].get("status") == "needs_user"

@@ -10,7 +10,8 @@ _COPY_SYSTEM = (
 )
 
 _DRAFT_FOOTER = (
-    "\n\n请确认后回复「写入主文案」；如需修改请说明（例如「改成更强调节水」）。"
+    "\n\n请确认后回复「写入主文案」；如需修改请说明（例如「文案改成更强调节水」）。"
+    "拓扑确认无误后回复「确认出图」。"
 )
 
 
@@ -46,7 +47,6 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
         if hint:
             user_bits.append(f"节点提示：\n{hint}")
         if state.get("copy_revise_only") and state.get("messages"):
-            # Prefer latest human revise note
             for msg in reversed(state.get("messages") or []):
                 role = getattr(msg, "type", None) or (
                     msg.get("role") if isinstance(msg, dict) else None
@@ -83,15 +83,16 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
 
         was_revise = bool(state.get("copy_revise_only"))
         out: dict[str, Any] = {
-            "phase": "await_copy_confirm",
+            "phase": "await_topo",
             "awaiting_user": True,
             "copy_draft": draft,
             "copy_node_id": node_id,
             "copy_revise_only": False,
-            # First draft: arm background orchestrate. Revise-only: do not re-kick gens.
-            "pending_orchestrate": not was_revise,
+            "pending_orchestrate": False,
             "messages": [AIMessage(content=body)],
         }
+        if was_revise:
+            out["phase"] = "await_copy_confirm"
         return out
 
     return draft_copy

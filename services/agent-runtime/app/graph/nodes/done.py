@@ -11,12 +11,7 @@ def make_done_node() -> Callable:
     async def done(state: dict) -> dict:
         completed = state.get("gen_completed") or []
         failed = state.get("gen_failed") or []
-        if state.get("pending_orchestrate") and not completed and not failed:
-            msg = (
-                "主文案草稿已就绪；图片/视频正在后台生成。"
-                "可先确认「写入主文案」，无需等待出图结束。"
-            )
-        elif completed or failed:
+        if completed or failed:
             lines: list[str] = []
             fallback_n = 0
             for item in failed:
@@ -28,7 +23,7 @@ def make_done_node() -> Callable:
                     fallback_n += 1
                 lines.append(format_gen_progress_line(title=title, status=reason))
             for _ in completed:
-                pass  # per-node success already streamed in orchestrate_gen
+                pass
             msg = format_gen_summary(
                 lines=lines or ["（详见上方出图进度）"],
                 success_n=len(completed),
@@ -38,9 +33,8 @@ def make_done_node() -> Callable:
             msg = f"流程结束。\n{msg}"
         else:
             msg = "流程结束。本次无可汇总的出图结果；你也可手动在画布上生成。"
-        if state.get("phase") == "await_copy_confirm" or (
-            state.get("awaiting_user") and state.get("copy_draft")
-        ):
+
+        if state.get("phase") == "await_copy_confirm" and state.get("awaiting_user"):
             return {
                 "phase": "await_copy_confirm",
                 "awaiting_user": True,
