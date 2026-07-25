@@ -11,7 +11,12 @@ def make_done_node() -> Callable:
     async def done(state: dict) -> dict:
         completed = state.get("gen_completed") or []
         failed = state.get("gen_failed") or []
-        if completed or failed:
+        if state.get("pending_orchestrate") and not completed and not failed:
+            msg = (
+                "主文案草稿已就绪；图片/视频正在后台生成。"
+                "可先确认「写入主文案」，无需等待出图结束。"
+            )
+        elif completed or failed:
             lines: list[str] = []
             fallback_n = 0
             for item in failed:
@@ -39,11 +44,13 @@ def make_done_node() -> Callable:
             return {
                 "phase": "await_copy_confirm",
                 "awaiting_user": True,
+                "pending_orchestrate": False,
                 "messages": [AIMessage(content=msg)],
             }
         return {
             "phase": "done",
             "awaiting_user": False,
+            "pending_orchestrate": False,
             "messages": [AIMessage(content=msg)],
         }
 

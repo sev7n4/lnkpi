@@ -305,6 +305,7 @@ async function sendMessage(message: string) {
 
 const BUSY_TIP_SNIPPET = '上一轮仍在处理中'
 const EXEC_PROGRESS_SNIPPET = '出图成功'
+const COPY_WRITTEN_SNIPPET = '已将确认的主文案'
 
 /** 流结束后用 DB 历史补齐（避免只看到 busy / 截断 / 被旧确认文案覆盖） */
 async function reconcileLatestAssistant() {
@@ -339,7 +340,12 @@ async function reconcileLatestAssistant() {
         if (
           content
           && !content.includes(BUSY_TIP_SNIPPET)
-          && (content.includes(EXEC_PROGRESS_SNIPPET) || content.includes('自动出图') || content.length > 80)
+          && (
+            content.includes(COPY_WRITTEN_SNIPPET)
+            || content.includes(EXEC_PROGRESS_SNIPPET)
+            || content.includes('自动出图')
+            || content.length > 80
+          )
         ) {
           scrollToBottom()
           break

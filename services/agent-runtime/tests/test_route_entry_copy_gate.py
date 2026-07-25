@@ -42,3 +42,21 @@ async def test_done_preserves_copy_gate():
     )
     assert out["awaiting_user"] is True
     assert out["phase"] == "await_copy_confirm"
+
+
+@pytest.mark.asyncio
+async def test_done_pending_orchestrate_copy_ready_tip():
+    done = make_done_node()
+    out = await done(
+        {
+            "awaiting_user": True,
+            "phase": "await_copy_confirm",
+            "copy_draft": "主文案草稿",
+            "pending_orchestrate": True,
+            "gen_completed": [],
+            "gen_failed": [],
+        }
+    )
+    assert out["phase"] == "await_copy_confirm"
+    assert out["pending_orchestrate"] is False
+    assert "后台生成" in out["messages"][0].content

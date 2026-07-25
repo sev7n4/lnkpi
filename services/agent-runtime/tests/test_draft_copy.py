@@ -56,11 +56,36 @@ async def test_draft_copy_sets_gate_and_needs_user():
     assert out["phase"] == "await_copy_confirm"
     assert out["awaiting_user"] is True
     assert out["copy_node_id"] == "t1"
+    assert out["pending_orchestrate"] is True
     assert "静音" in (out["copy_draft"] or "")
     assert any(
         c[0] == "emit_task_update" and c[1].get("status") == "needs_user"
         for c in nest.calls
     )
+
+
+@pytest.mark.asyncio
+async def test_draft_copy_revise_skips_pending_orchestrate():
+    nest = FakeNest()
+    llm = FakeLLM(responses=["# 修订主文案\n节水优先\n"])
+    node = make_draft_copy_node(nest=nest, llm=llm)
+    out = await node(
+        {
+            "copy_revise_only": True,
+            "messages": [],
+            "split_manifest": [
+                {
+                    "key": "copy_main",
+                    "title": "主文案",
+                    "target_type": "text",
+                    "node_id": "t1",
+                },
+            ],
+            "plan_summary": "卫生洁具方案",
+        }
+    )
+    assert out["pending_orchestrate"] is False
+    assert out["phase"] == "await_copy_confirm"
 
 
 @pytest.mark.asyncio

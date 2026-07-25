@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   looksLikeConfirmTurn,
+  looksLikeCopyWriteTurn,
   shouldApplyReconciledAssistant,
 } from './assistantReconcile'
 
@@ -23,11 +24,34 @@ describe('shouldApplyReconciledAssistant', () => {
   it('accepts db when local empty', () => {
     expect(shouldApplyReconciledAssistant('', 'hello')).toBe(true)
   })
+
+  it('does not replace busy tip with stale copy draft', () => {
+    const local = '上一轮仍在处理中，请稍候；拆解出图通常需要一两分钟。'
+    const db = '【主文案草稿】\n# 文案\n请确认后回复「写入主文案」'
+    expect(shouldApplyReconciledAssistant(local, db)).toBe(false)
+  })
+
+  it('does not replace write success with longer draft', () => {
+    const local = '已将确认的主文案写入画布节点。'
+    const db = '【主文案草稿】\n很长的旧草稿……请确认后回复「写入主文案」'
+    expect(shouldApplyReconciledAssistant(local, db)).toBe(false)
+  })
+
+  it('prefers write success from DB over local draft bubble', () => {
+    const local = '【主文案草稿】\n旧草稿'
+    const db = '已将确认的主文案写入画布节点。'
+    expect(shouldApplyReconciledAssistant(local, db)).toBe(true)
+  })
 })
 
 describe('looksLikeConfirmTurn', () => {
   it('matches chip confirm', () => {
     expect(looksLikeConfirmTurn('确认')).toBe(true)
+  })
+
+  it('matches copy write chip', () => {
+    expect(looksLikeCopyWriteTurn('写入主文案')).toBe(true)
+    expect(looksLikeConfirmTurn('写入主文案')).toBe(true)
   })
 
   it('rejects long brief', () => {
