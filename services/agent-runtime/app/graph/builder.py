@@ -88,6 +88,10 @@ def route_after_topo(state: AgentRuntimeState) -> str:
         return "orchestrate_gen"
     if decision == "topo_revise":
         return "topo_revise"
+    # 修复 P0-1：节点内容修改（改为/调整/增加）→ 回退到 plan 走 modify 模式
+    # plan 会用 _MODIFY_INSTRUCTION 增量修改方案，保留未提及节点
+    if decision == "node_revise":
+        return "plan"
     return "end"
 
 
@@ -151,6 +155,7 @@ def build_agent_graph(
         {
             "orchestrate_gen": "orchestrate_gen",
             "topo_revise": "topo_revise",
+            "plan": "plan",
             "end": END,
         },
     )

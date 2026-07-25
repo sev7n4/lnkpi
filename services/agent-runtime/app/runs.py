@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.graph.builder import build_agent_graph
+from app.graph.nodes.intake import modify_intent
 from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.tools.nest_client import NestCanvasClient
 
@@ -23,6 +24,15 @@ _checkpointer = MemorySaver()
 # Same-thread concurrent turns (e.g. double「确认」while orchestrate_gen runs)
 # must not start a second graph — that clears await_confirm and re-plans.
 THREAD_BUSY_TIP = "上一轮仍在处理中，请稍候；拆解出图通常需要一两分钟。"
+
+# 修复 P0-2：出图过程中用户发送修改意见时，不返回生硬的 busy tip
+# 而是告诉用户修改意见已收到，等出图完成后再发一次
+# 区分依据：modify_intent（"改成""调整"等）vs 确认类消息（"确认""1"）
+_MODIFY_DURING_GEN_TIP = (
+    "出图仍在进行中，您的修改意见已收到。\n"
+    "请等待出图完成（通常一两分钟）后，再发送一次同样的修改意见，"
+    "我会基于最新方案进行调整。"
+)
 
 _thread_locks: dict[str, asyncio.Lock] = {}
 _thread_locks_meta = asyncio.Lock()
@@ -208,7 +218,10 @@ async def stream_run_events(
     """Yield AgentStreamEvent-shaped dicts for one user turn."""
     thread_id = req.thread_id or req.session_id
     if not await _try_acquire_thread(thread_id):
-        yield {"type": "text_delta", "data": {"text": THREAD_BUSY_TIP}}
+        # 修复 P0-2：出图过程中用户发送修改意见 → 友好提示（而非生硬 busy tip）
+        # plan 阶段并发（"确认""1"）→ 保持原 busy tip 防止冲突
+        tip = _MODIFY_DURING_GEN_TIP if modify_intent(req.message) else THREAD_BUSY_TIP
+        yield {"type": "text_delta", "data": {"text": tip}}
         yield {"type": "done", "data": {}}
         return
 
