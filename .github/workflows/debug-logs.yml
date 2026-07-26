@@ -6,16 +6,28 @@ concurrency:
 jobs:
   logs:
     runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
+      SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER || 'root' }}
     steps:
-      - name: SSH tail logs
-        env:
-          SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
-          SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER || 'root' }}
-          SSH_KEY: ${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+      - name: Prepare SSH
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
-          echo "$SSH_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
-          echo "=== agent-runtime last 120 log lines ==="
-          ssh -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" "docker logs lnkpi-agent-runtime --tail 120 2>&1 || true"
+          echo "${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          cat >> ~/.ssh/config <<EOF
+          Host deploy-cvm
+            HostName ${SSH_HOST}
+            User ${SSH_USER}
+            IdentityFile ~/.ssh/deploy_key
+            StrictHostKeyChecking no
+            BatchMode yes
+            LogLevel ERROR
+            ConnectTimeout 30
+          EOF
+          chmod 600 ~/.ssh/config
+      - name: Tail agent-runtime logs
+        run: |
+          echo "=== agent-runtime last 150 log lines ==="
+          ssh deploy-cvm "docker logs lnkpi-agent-runtime --tail 150 2>&1 || true"
