@@ -1,0 +1,21 @@
+name: Debug Logs (manual)
+on:
+  workflow_dispatch: {}
+concurrency:
+  group: deploy-tencent
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH tail logs
+        env:
+          SSH_HOST: ${{ secrets.TENCENT_CLOUD_IP || secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.TENCENT_CLOUD_USER || secrets.DEPLOY_USER || 'root' }}
+          SSH_KEY: ${{ secrets.TENCENT_CLOUD_SSH_KEY || secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "=== agent-runtime last 120 log lines ==="
+          ssh -o StrictHostKeyChecking=no "${SSH_USER}@${SSH_HOST}" "docker logs lnkpi-agent-runtime --tail 120 2>&1 || true"
