@@ -235,13 +235,12 @@ async def test_node_revise_full_flow_updates_canvas():
                 if getattr(m, "type", None) == "system":
                     sys_content = str(getattr(m, "content", "") or "")
                     break
-            # 节点清单修订调用 → 返回 JSON（改 model_portrait title + 新增 product_material_detail）
-            if "节点清单编辑器" in sys_content:
+            # 节点操作调用 → 返回操作列表 JSON（rename model_portrait + add product_material_detail）
+            if "节点编辑器" in sys_content:
                 return AIMessage(
                     content=(
-                        '[{"key":"hero_main","title":"主图","target_type":"image","prompt_hint":"主图","depends_on":[],"chain":"product","role":"downstream"},'
-                        '{"key":"model_portrait","title":"双人模特定妆","target_type":"image","prompt_hint":"双人模特半身肖像","depends_on":[],"chain":"model","role":"seed"},'
-                        '{"key":"product_material_detail","title":"产品材质特写图","target_type":"image","prompt_hint":"产品材质微距特写","depends_on":["hero_main"],"chain":"product","role":"downstream"}]'
+                        '[{"op":"rename","key":"model_portrait","title":"双人模特定妆","prompt_hint":"双人模特半身肖像"},'
+                        '{"op":"add","key":"product_material_detail","title":"产品材质特写图","target_type":"image","prompt_hint":"产品材质微距特写","depends_on":["hero_main"]}]'
                     )
                 )
             # 方案正文调用 → 返回修改后的方案 markdown

@@ -74,15 +74,6 @@ def _summarize(plan_md: str, limit: int = 280) -> str:
     return _positioning_line(plan_md)[:limit]
 
 
-def _current_manifest_items(skill: Any) -> list[dict]:
-    """Raw items list from skill.canvas_manifest for LLM revision context."""
-    cm = getattr(skill, "canvas_manifest", None)
-    if not isinstance(cm, dict):
-        return []
-    items = cm.get("items")
-    return items if isinstance(items, list) else []
-
-
 def _canvas_has_nodes(state: dict) -> bool:
     """画布是否已有拆解节点（区分 node_revise 拓扑门修改 vs revise 方案门改方向）。"""
     for it in state.get("split_manifest") or []:
@@ -103,52 +94,41 @@ _MODIFY_INSTRUCTION = (
     "只输出修改后的完整方案 Markdown 正文（包含保留部分），从一级标题开始，禁止寒暄。"
 )
 
-# P0 修复：modify 模式下让 LLM 对节点清单做增量修改（改 title/prompt_hint + 新增节点）
-_MANIFEST_REVISE_SYSTEM = (
-    "你是画布节点清单编辑器。根据用户修改意见，对【现有节点清单】做增量调整，输出修改后的完整清单。\n"
-    "严格规则：\n"
-    "- 保留未被提及的节点，原样输出（key 不变）\n"
-    "- 修改节点：更新对应节点的 title 和 prompt_hint\n"
-    "- 新增节点：key 用英文蛇形命名，指定 target_type/depends_on/chain/role\n"
-    "- depends_on 只能引用清单中已存在的 key\n"
-    "- 只输出 JSON 数组，禁止解释、禁止 markdown 代码块、禁止多余文本"
+# P0 修复：modify 模式下让 LLM 输出节点操作列表（rename/add/delete），而非完整清单
+# 操作列表更紧凑、LLM 更易正确输出 JSON，解析也更健壮
+_NODE_OPS_SYSTEM = (
+    "你是画布节点编辑器。根据用户修改意见，对现有节点输出操作列表。\n"
+    "只输出 JSON 数组，禁止解释、禁止 markdown 代码块。\n\n"
+    "操作类型：\n"
+    '- rename: 修改已有节点。字段: op,key,title,prompt_hint\n'
+    '- add: 新增节点。字段: op,key,title,target_type(image|text|video),prompt_hint,depends_on(可选)\n'
+    '- delete: 删除节点。字段: op,key\n\n'
+    "规则：rename/delete 的 key 必须是现有节点；add 的 key 用英文蛇形命名；depends_on 只能引用现有 key。"
 )
 
 
-def _manifest_to_llm_json(manifest: list[dict] | None) -> str:
-    """Simplify skill canvas_manifest items for LLM context."""
-    if not manifest:
-        return "[]"
-    out = []
-    for it in manifest:
+def _current_nodes_brief(split_manifest: list[dict] | None) -> str:
+    """Compact 'key: title' list of current canvas nodes for LLM context."""
+    if not split_manifest:
+        return "（无节点）"
+    lines = []
+    for it in split_manifest:
         if not isinstance(it, dict) or not it.get("key"):
             continue
-        out.append(
-            {
-                "key": str(it.get("key")),
-                "title": str(it.get("title") or it.get("key")),
-                "target_type": str(it.get("target_type") or "image"),
-                "prompt_hint": str(it.get("prompt_hint_template") or it.get("prompt_hint") or ""),
-                "depends_on": list(it.get("depends_on") or []),
-                "chain": it.get("chain"),
-                "role": it.get("role"),
-            }
-        )
-    return json.dumps(out, ensure_ascii=False)
+        lines.append(f"- {it.get('key')}: {it.get('title') or it.get('key')}")
+    return "\n".join(lines) if lines else "（无节点）"
 
 
-def _parse_revised_manifest(raw: str) -> list[dict] | None:
-    """Robustly parse LLM JSON array output; return None on any failure."""
+def _parse_node_operations(raw: str) -> list[dict] | None:
+    """Robustly parse LLM JSON array of node operations; return None on failure."""
     if not raw:
         return None
     text = raw.strip()
-    # strip ```json ... ``` fences if present
     if text.startswith("```"):
         text = text.split("\n", 1)[-1] if "\n" in text else text.strip("`")
         if text.endswith("```"):
             text = text[: -3].rstrip()
         text = text.strip()
-    # extract first [ ... last ]
     start = text.find("[")
     end = text.rfind("]")
     if start == -1 or end == -1 or end <= start:
@@ -161,49 +141,44 @@ def _parse_revised_manifest(raw: str) -> list[dict] | None:
         return None
     cleaned = []
     for item in parsed:
-        if not isinstance(item, dict) or not item.get("key"):
+        if not isinstance(item, dict) or not item.get("op"):
             continue
-        cleaned.append(
-            {
-                "key": str(item["key"]),
-                "title": str(item.get("title") or item["key"]),
-                "target_type": str(item.get("target_type") or "image"),
-                "prompt_hint": str(item.get("prompt_hint") or ""),
-                "depends_on": [str(d) for d in (item.get("depends_on") or [])],
-                "chain": item.get("chain") if item.get("chain") in ("product", "model") else None,
-                "role": item.get("role") if item.get("role") in ("seed", "turnaround", "downstream") else None,
-            }
-        )
+        op = str(item["op"]).lower()
+        if op not in ("rename", "add", "delete"):
+            continue
+        if not item.get("key"):
+            continue
+        cleaned.append(item)
     return cleaned if cleaned else None
 
 
-async def _revise_manifest_via_llm(
+async def _revise_operations_via_llm(
     *,
     llm: Any,
-    current_manifest: list[dict],
+    split_manifest: list[dict] | None,
     user_text: str,
 ) -> list[dict] | None:
-    """Ask LLM to incrementally revise the node manifest. None = parse failure / fallback."""
+    """Ask LLM for node operations (rename/add/delete). None = parse failure / fallback."""
     human = (
-        f"现有节点清单（JSON）：\n{_manifest_to_llm_json(current_manifest)}\n\n"
+        f"现有节点：\n{_current_nodes_brief(split_manifest)}\n\n"
         f"用户修改意见：{user_text}\n\n"
-        "输出修改后的完整节点清单 JSON 数组。"
+        "输出操作列表 JSON 数组。"
     )
     try:
         ai = await llm.ainvoke(
             [
-                SystemMessage(content=_MANIFEST_REVISE_SYSTEM),
+                SystemMessage(content=_NODE_OPS_SYSTEM),
                 HumanMessage(content=human),
             ]
         )
     except Exception as exc:  # noqa: BLE001 - LLM 失败必须回退，不能阻断流程
-        logger.warning("manifest revise LLM call failed: %s", exc)
+        logger.warning("node ops LLM call failed: %s", exc)
         return None
     raw = str(getattr(ai, "content", ai) or "")
-    revised = _parse_revised_manifest(raw)
-    if revised is None:
-        logger.warning("manifest revise parse failed; raw head=%r", raw[:200])
-    return revised
+    ops = _parse_node_operations(raw)
+    if ops is None:
+        logger.warning("node ops parse failed; raw head=%r", raw[:200])
+    return ops
 
 
 def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
@@ -261,23 +236,23 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
         #   → 回 await_confirm 让用户确认修订后的方案（不写画布）
         is_node_revise = mode == "modify" and user_brief and _canvas_has_nodes(state)
         if is_node_revise:
-            revised = await _revise_manifest_via_llm(
+            ops = await _revise_operations_via_llm(
                 llm=llm,
-                current_manifest=_current_manifest_items(skill),
+                split_manifest=list(state.get("split_manifest") or []),
                 user_text=user_text,
             )
-            n_changed = len(revised) if revised else 0
+            n_ops = len(ops) if ops else 0
             modify_ack = (
                 "已按您的修改意见更新方案与画布节点：\n"
                 f"- 方案摘要：{summary}\n"
-                + (f"- 节点清单：共 {n_changed} 个节点（含修改与新增）" if revised else "- 节点清单沿用原模板（修改未识别到结构变化）")
+                + (f"- 节点操作：{n_ops} 项（改名/新增/删除）" if ops else "- 节点结构沿用原拓扑（未识别到结构变化）")
                 + "\n\n已写入画布，请预览拓扑后回复「确认出图」；如需继续调整请说明。"
             )
             return {
                 "phase": "write_plan_node",
                 "plan_summary": summary,
                 "plan_draft": plan_md,
-                "revised_manifest": revised,
+                "node_operations": ops,
                 "awaiting_user": False,
                 "user_decision": "none",
                 "mode": mode,
@@ -293,7 +268,7 @@ def make_plan_node(*, nest: Any, llm: Any, skills_dir: Path) -> Callable:
             "phase": "await_confirm",
             "plan_summary": summary,
             "plan_draft": plan_md,
-            "revised_manifest": None,
+            "node_operations": None,
             # Do not upsert canvas until write_plan_node after confirm
             "awaiting_user": True,
             "user_decision": "none",

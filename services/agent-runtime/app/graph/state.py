@@ -49,10 +49,9 @@ class AgentRuntimeState(TypedDict, total=False):
     plan_node_id: str | None
     focus_node_ids: list[str]
     split_manifest: list[SplitManifestItem]
-    # P0 修复：node_revise 走 plan(modify) 后，LLM 增量修改产出的节点清单；
-    # split 在 modify 模式下优先读 revised_manifest 做 upsert（改 prompt/title + 加节点），
-    # 而非用 skill 静态 canvas_manifest 重建。None 表示首轮 create 或 LLM 解析失败回退。
-    revised_manifest: list[SplitManifestItem] | None
+    # P0 修复：node_revise 走 plan(modify) 后，LLM 产出的节点操作列表（rename/add/delete）；
+    # split 在 modify 模式下按操作列表 upsert 画布节点。None 表示首轮 create 或 LLM 解析失败回退。
+    node_operations: list[dict] | None
     topology_mode: Literal["full", "trimmed"] | None
     gen_queue: list[str]
     gen_completed: list[str]
