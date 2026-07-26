@@ -96,6 +96,11 @@ class SetNodePromptDto {
 
   @IsString()
   prompt!: string
+
+  // P0 修复：modify 模式 upsert 节点时同时更新标题（可选）
+  @IsOptional()
+  @IsString()
+  title?: string
 }
 
 class SetNodeContentDto {

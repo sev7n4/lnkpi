@@ -73,6 +73,26 @@ def route_after_intake(state: AgentRuntimeState) -> str:
     return "chat"
 
 
+def route_after_plan(state: AgentRuntimeState) -> str:
+    """P0 修复：node_revise（拓扑门改节点内容，画布已有节点）跳过方案确认门，直接进
+    write_plan_node → split 增量更新画布；revise（方案门改方向，画布未创建）与 create
+    保留 await_confirm 让用户确认方案。与 plan.py 的 is_node_revise 判断保持一致。"""
+    if state.get("mode") == "modify" and any(
+        isinstance(it, dict) and it.get("node_id")
+        for it in (state.get("split_manifest") or [])
+    ):
+        return "write_plan_node"
+    return "await_confirm"
+
+
+def route_after_split(state: AgentRuntimeState) -> str:
+    """P0 修复：modify 模式跳过 draft_copy（保留已确认的主文案），直接 END 回到拓扑确认门；
+    create 模式继续 draft_copy 生成首轮主文案草稿。"""
+    if state.get("mode") == "modify":
+        return "end"
+    return "draft_copy"
+
+
 def route_after_confirm(state: AgentRuntimeState) -> str:
     decision = state.get("user_decision") or "none"
     if decision == "confirm":
@@ -136,14 +156,24 @@ def build_agent_graph(
         {"plan": "plan", "chat": "chat"},
     )
     graph.add_edge("chat", END)
-    graph.add_edge("plan", "await_confirm")
+    # P0 修复：plan 后按 mode 分流（modify→write_plan_node 直接更新画布，create→await_confirm 确认）
+    graph.add_conditional_edges(
+        "plan",
+        route_after_plan,
+        {"write_plan_node": "write_plan_node", "await_confirm": "await_confirm"},
+    )
     graph.add_conditional_edges(
         "await_confirm",
         route_after_confirm,
         {"write_plan_node": "write_plan_node", "plan": "plan", "end": END},
     )
     graph.add_edge("write_plan_node", "split")
-    graph.add_edge("split", "draft_copy")
+    # P0 修复：split 后按 mode 分流（modify→END 回拓扑门，create→draft_copy 生成主文案）
+    graph.add_conditional_edges(
+        "split",
+        route_after_split,
+        {"draft_copy": "draft_copy", "end": END},
+    )
     graph.add_conditional_edges(
         "draft_copy",
         route_after_draft_copy,

@@ -87,6 +87,153 @@ def _select_trimmed_keys(plan_summary: str, items: list[SplitManifestItem]) -> l
     return must or keys[: max(3, min(5, len(keys)))]
 
 
+async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict:
+    """P0 修复：modify 模式下按 revised_manifest 增量更新画布节点。
+    - 已有 key（old split_manifest 有 node_id）：set_node_prompt 更新 prompt + title
+    - 新 key：add_nodes_batch 创建 + connect_nodes 接边
+    - LLM 解析失败（revised_manifest=None）：仅更新方案节点，节点清单不变，回拓扑门
+    """
+    old_manifest = list(state.get("split_manifest") or [])
+    old_by_key: dict[str, dict] = {
+        str(it.get("key")): it for it in old_manifest if it.get("key")
+    }
+    revised = state.get("revised_manifest")
+
+    # revised_manifest 为 None（LLM 解析失败）：不改动节点，直接回拓扑确认门
+    if not revised:
+        return {
+            "phase": "await_topo",
+            "awaiting_user": True,
+            "pending_orchestrate": False,
+            "mode": "modify",
+            "split_manifest": old_manifest,
+            "messages": [
+                AIMessage(
+                    content=(
+                        "方案已更新并写入画布。节点结构未识别到变化，沿用原拓扑。"
+                        "请预览后回复「确认出图」；如需继续调整请说明。"
+                    )
+                )
+            ],
+        }
+
+    # 1) 更新已有节点（改 prompt + title）
+    updated: list[dict] = []
+    for item in revised:
+        key = str(item.get("key") or "")
+        old = old_by_key.get(key)
+        node_id = str(old.get("node_id") or "") if old else ""
+        if node_id:
+            prompt_hint = str(item.get("prompt_hint") or "")
+            title = str(item.get("title") or key)
+            try:
+                await nest.set_node_prompt(node_id, prompt_hint, title=title)
+            except Exception:  # noqa: BLE001 - 单节点更新失败不阻断其余
+                pass
+            merged = dict(old)
+            merged["title"] = title
+            merged["prompt_hint"] = prompt_hint
+            updated.append(merged)
+        else:
+            # 新节点，待批量创建
+            updated.append({**item, "node_id": None})
+
+    # 2) 批量新增节点
+    new_items = [it for it in updated if not it.get("node_id")]
+    key_to_id: dict[str, str] = {
+        str(it.get("key")): str(it.get("node_id"))
+        for it in updated
+        if it.get("node_id")
+    }
+    if new_items:
+        batch_items = [
+            {
+                "key": str(it.get("key")),
+                "title": str(it.get("title") or it.get("key")),
+                "targetType": str(it.get("target_type") or "image"),
+                "prompt": str(it.get("prompt_hint") or ""),
+            }
+            for it in new_items
+        ]
+        try:
+            batch = await nest.add_nodes_batch(batch_items)
+            for n in batch.get("nodes") or []:
+                key_to_id[str(n.get("key"))] = str(n.get("nodeId"))
+        except Exception:  # noqa: BLE001
+            pass
+        # 回填 node_id
+        for it in updated:
+            if not it.get("node_id"):
+                it["node_id"] = key_to_id.get(str(it.get("key")))
+
+    # 3) 接边：新节点连 plan_node_id + 依赖
+    edges: list[dict[str, str]] = []
+    for it in updated:
+        nid = str(it.get("node_id") or "")
+        if not nid:
+            continue
+        # 仅给新节点接 plan 边，老节点已有边
+        if it.get("key") not in old_by_key:
+            edges.append({"source": plan_node_id, "target": nid})
+        for dep_key in it.get("depends_on") or []:
+            dep_id = key_to_id.get(str(dep_key))
+            if dep_id and dep_id != nid:
+                edges.append({"source": dep_id, "target": nid})
+    if edges:
+        try:
+            await nest.connect_nodes(edges)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # 4) 为新节点设置 prompt + attach refs（老节点已在上面更新）
+    for it in updated:
+        nid = str(it.get("node_id") or "")
+        if not nid or it.get("key") in old_by_key:
+            continue
+        hint = str(it.get("prompt_hint") or "")
+        if hint:
+            try:
+                await nest.set_node_prompt(nid, hint)
+            except Exception:  # noqa: BLE001
+                pass
+
+    titles = [str(it.get("title") or it.get("key") or "") for it in updated]
+    title_hint = "、".join(t for t in titles if t)[:80]
+    added_keys = [str(it.get("key")) for it in updated if it.get("key") not in old_by_key]
+    msg = (
+        f"已更新画布拓扑（共 {len(updated)} 个节点）：{title_hint or '（无）'}"
+        + (f"\n新增节点：{'、'.join(added_keys)}" if added_keys else "")
+        + "\n\n请预览拓扑后回复「确认出图」；如需继续调整请说明。"
+    )
+    emit_list = getattr(nest, "emit_task_list", None)
+    if emit_list is not None:
+        try:
+            await emit_list(
+                [
+                    {
+                        "id": str(it.get("key")),
+                        "title": str(it.get("title") or it.get("key")),
+                        "nodeId": str(it.get("node_id") or ""),
+                        "kind": str(it.get("target_type") or "image"),
+                    }
+                    for it in updated
+                    if it.get("key")
+                ]
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {
+        "phase": "await_topo",
+        "awaiting_user": True,
+        "pending_orchestrate": False,
+        "mode": "modify",
+        "split_manifest": updated,
+        "focus_node_ids": [str(it.get("node_id")) for it in updated if it.get("node_id")],
+        "messages": [AIMessage(content=msg)],
+    }
+
+
 def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
     async def split(state: dict) -> dict:
         plan_node_id = state.get("plan_node_id")
@@ -94,6 +241,10 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             raise RuntimeError("plan_node_id required before split")
 
         await nest.get_node(plan_node_id)
+
+        # P0 修复：modify 模式（node_revise）upsert 现有节点 + 新增节点，而非用 skill 模板重建
+        if state.get("mode") == "modify":
+            return await _apply_modify_split(nest, state, plan_node_id)
 
         skill_id = state.get("skill_id")
         if not skill_id:

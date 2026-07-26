@@ -585,7 +585,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                 :disabled="agent.isStreaming"
                 @click="sendPreset('1')"
               >
-                1 / A 确认方案
+                确认方案
               </button>
               <button
                 type="button"
@@ -593,7 +593,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                 :disabled="agent.isStreaming"
                 @click="sendPreset('2')"
               >
-                2 / B 换方向
+                换方向
               </button>
               <button
                 type="button"
@@ -601,7 +601,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                 :disabled="agent.isStreaming"
                 @click="sendPreset('3')"
               >
-                3 / C 自己说明
+                自己说明修改
               </button>
             </div>
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">

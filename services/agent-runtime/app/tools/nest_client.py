@@ -103,11 +103,18 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "edges": edges},
         )
 
-    async def set_node_prompt(self, node_id: str, prompt: str) -> dict[str, Any]:
-        return await self._post(
-            "/agent/internal/set-node-prompt",
-            {"sessionId": self._session_id, "nodeId": node_id, "prompt": prompt},
-        )
+    async def set_node_prompt(
+        self, node_id: str, prompt: str, *, title: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "nodeId": node_id,
+            "prompt": prompt,
+        }
+        # P0 修复：modify 模式 upsert 节点时同时更新标题（Nest 端可选字段）
+        if title:
+            body["title"] = title
+        return await self._post("/agent/internal/set-node-prompt", body)
 
     async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
         return await self._post(

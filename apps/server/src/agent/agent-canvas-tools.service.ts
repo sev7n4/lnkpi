@@ -339,15 +339,21 @@ export class AgentCanvasToolsService {
     sessionId: string
     nodeId: string
     prompt: string
+    title?: string
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadSession(input.sessionId)
     if (!canvas.nodes.some((n) => n.id === input.nodeId)) {
       throw new NotFoundException('节点不存在')
     }
+    // P0 修复：modify 模式可选同时更新标题（改节点名，如「模特定妆」→「双人模特定妆」）
+    const data: Record<string, unknown> = { prompt: input.prompt }
+    if (typeof input.title === 'string' && input.title.trim()) {
+      data.title = input.title.trim()
+    }
     const actions: CanvasAction[] = [
       {
         type: 'update_node',
-        payload: { id: input.nodeId, data: { prompt: input.prompt } },
+        payload: { id: input.nodeId, data },
       },
     ]
     await this.persist(input.sessionId, actions)
