@@ -59,7 +59,7 @@ def build_confirm_message(*, plan_md: str, canvas_manifest: dict | None) -> str:
     asset_lines = "\n".join(f"- {t}" for t in titles) if titles else "- （Skill 未声明资产清单）"
     return (
         f"定位：{positioning}\n"
-        f"拟定拆解约 {n} 个画布节点（确认方案后写入画布，确认出图后再生成）：\n"
+        f"拟定拆解约 {n} 个画布节点（确认方案后写入画布并进入骨架预览，预览无误再生成图片）：\n"
         f"{asset_lines}\n"
         "方案全文见上方摘要（确认前不会写入画布节点）。\n\n"
         "请选择：\n"
