@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o"
     image_gen_concurrency: int = 3
     image_gen_timeout_sec: int = 180
+    # Checkpoint persistence (G1 decision)
+    checkpoint_path: str = "data/checkpoints.db"
 
     class Config:
         env_prefix = "LNKPI_"

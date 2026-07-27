@@ -140,6 +140,24 @@ class RunImageGenerationDto {
   nodeId!: string
 }
 
+class SaveAgentMessageDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  role!: string
+
+  @IsString()
+  content!: string
+
+  @IsOptional()
+  @IsString()
+  toolCalls?: string
+}
+
 @Controller('agent/internal')
 @UseGuards(AgentInternalGuard)
 export class AgentCanvasToolsController {
@@ -210,6 +228,18 @@ export class AgentCanvasToolsController {
   @Post('get-generation-status')
   async getGenerationStatus(@Body() dto: SessionNodeDto) {
     const data = await this.tools.getGenerationStatus(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('get-agent-messages')
+  async getAgentMessages(@Body() dto: SessionOnlyDto) {
+    const data = await this.tools.getAgentMessages(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('save-agent-message')
+  async saveAgentMessage(@Body() dto: SaveAgentMessageDto) {
+    const data = await this.tools.saveAgentMessage(dto)
     return { code: 0, message: 'ok', data }
   }
 }
