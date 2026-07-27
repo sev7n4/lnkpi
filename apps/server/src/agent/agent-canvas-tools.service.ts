@@ -656,6 +656,43 @@ export class AgentCanvasToolsService {
     return url ? { status, url } : { status }
   }
 
+  async getAgentMessages(input: {
+    sessionId: string
+  }): Promise<Array<{ id: string; role: string; content: string; toolCalls?: string; createdAt: Date }>> {
+    const messages = await this.prisma.agentMessage.findMany({
+      where: { sessionId: input.sessionId },
+      orderBy: { createdAt: 'asc' },
+    })
+    return messages.map((msg) => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      toolCalls: msg.toolCalls ?? undefined,
+      createdAt: msg.createdAt,
+    }))
+  }
+
+  async saveAgentMessage(input: {
+    sessionId: string
+    userId: string
+    role: string
+    content: string
+    toolCalls?: string
+  }): Promise<{ id: string }> {
+    // Verify session ownership
+    await this.loadOwnedSession(input.sessionId, input.userId)
+
+    const message = await this.prisma.agentMessage.create({
+      data: {
+        sessionId: input.sessionId,
+        role: input.role,
+        content: input.content,
+        toolCalls: input.toolCalls,
+      },
+    })
+    return { id: message.id }
+  }
+
   private async pollGeneration(
     userId: string,
     recordId: string,

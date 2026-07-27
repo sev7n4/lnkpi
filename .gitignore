@@ -23,3 +23,6 @@ apps/server/prisma/*.db-journal
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Trae IDE
+.trae/

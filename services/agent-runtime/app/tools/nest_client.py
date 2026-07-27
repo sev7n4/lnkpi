@@ -155,3 +155,23 @@ class NestCanvasClient:
             "/agent/internal/get-generation-status",
             {"sessionId": self._session_id, "nodeId": node_id},
         )
+
+    async def get_agent_messages(self) -> list[dict[str, Any]]:
+        """Load conversation history from AgentMessage table (C1 decision)."""
+        return await self._post(
+            "/agent/internal/get-agent-messages",
+            {"sessionId": self._session_id},
+        )
+
+    async def save_agent_message(self, role: str, content: str, tool_calls: str | None = None) -> dict[str, Any]:
+        """Save a message to AgentMessage table (C1 decision)."""
+        return await self._post(
+            "/agent/internal/save-agent-message",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "role": role,
+                "content": content,
+                "toolCalls": tool_calls,
+            },
+        )

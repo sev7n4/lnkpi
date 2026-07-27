@@ -3,63 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from app.graph.intent import marketing_intent, modify_intent
 from app.skills.loader import discover_skills
-
-_MARKETING_HINTS = (
-    "营销",
-    "主图",
-    "详情页",
-    "banner",
-    "campaign",
-    "洁具",
-    "卫浴",
-    "电商",
-    "天猫",
-    "拆画布",
-    "出图",
-    "分镜",
-)
-
-# 修复 P0-1/P0-2：检测用户在已有方案上的修改意图
-# 注意：需与 apps/web/src/components/agent/agentChipSet.ts 的 _MODIFY_INTENT_KEYWORDS 保持同步
-_MODIFY_HINTS = (
-    "改成",
-    "改一下",
-    "修改",
-    "调整",
-    "换成",
-    "改为",
-    "更偏",
-    "强调",
-    "增加",
-    "加上",
-    "删掉",
-    "删除",
-    "去掉",
-    "移除",
-    "再改",
-    "改一版",
-    "自己说明",
-    "自己说",
-    "改拓扑",
-)
-
-
-def marketing_intent(text: str) -> bool:
-    """True when the user asks for marketing/campaign canvas orchestration."""
-    lowered = (text or "").strip().lower()
-    if not lowered:
-        return False
-    # Require at least one campaign-ish signal; bare product nouns are not enough.
-    return any(h in lowered for h in _MARKETING_HINTS)
-
-
-def modify_intent(text: str) -> bool:
-    """True when the user is modifying an existing plan/skeleton (not a brand-new brief)."""
-    lowered = (text or "").strip().lower()
-    if not lowered:
-        return False
-    return any(h in lowered for h in _MODIFY_HINTS)
 
 
 def _latest_user_text(messages: list[Any]) -> str:

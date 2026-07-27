@@ -1,53 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Literal
+from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-Decision = Literal["none", "confirm", "revise"]
+from app.graph.intent import classify_user_decision
 
 _NONE_DECISION_TIP = "请选择 1/A 确认方案，或 2/B、3/C / 说明修改后再确认。"
-
-_CONFIRM_HINTS = (
-    "确认方案",
-    "确认",
-    "同意",
-    "可以",
-    "没问题",
-    "按这个",
-    "开始拆",
-    "ok",
-    "okay",
-    "yes",
-    "confirm",
-)
-_REVISE_HINTS = (
-    "改成",
-    "修改",
-    "调整",
-    "换",
-    "不要",
-    "重新",
-    "revise",
-    "改一下",
-    "更偏",
-    "要修改",
-    "自己说",
-)
-_FRESH_BRIEF_HINTS = (
-    "请为",
-    "写一份",
-    "帮我设计",
-    "帮我做",
-    "帮我写",
-)
-_CONFIRM_NEGATIONS = (
-    "无修改",
-    "不修改",
-    "不用改",
-    "无需修改",
-    "没有修改",
-)
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -59,36 +18,7 @@ def _latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
-def classify_user_decision(text: str) -> Decision | None:
-    """Heuristic classifier. Returns None when ambiguous (caller may use LLM)."""
-    raw = text.strip()
-    lowered = raw.lower()
-    if not lowered:
-        return "none"
-
-    token = raw.split()[0].strip().rstrip(".).、）") if raw else ""
-    token_u = token.upper()
-    if token in ("1",) or token_u in ("A", "Ａ"):
-        return "confirm"
-    if token in ("2", "3") or token_u in ("B", "C", "Ｂ", "Ｃ"):
-        return "revise"
-
-    if any(n in lowered for n in _CONFIRM_NEGATIONS):
-        return "confirm"
-
-    if any(h in lowered for h in _REVISE_HINTS):
-        return "revise"
-    if any(h in lowered for h in _CONFIRM_HINTS):
-        if len(lowered) > 24 and any(h in lowered for h in _FRESH_BRIEF_HINTS):
-            return None
-        return "confirm"
-
-    if any(k in lowered for k in ("营销方案", "帮我设计", "帮我做")):
-        return "none"
-    return None
-
-
-async def _llm_classify(llm: Any, text: str) -> Decision:
+async def _llm_classify(llm: Any, text: str) -> str:
     ai = await llm.ainvoke(
         [
             SystemMessage(

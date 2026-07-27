@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Awaitable
 
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from pydantic import BaseModel
 
 from app.config import settings
@@ -19,7 +20,19 @@ from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
 
-_checkpointer = MemorySaver()
+
+def _init_checkpointer() -> SqliteSaver:
+    """Initialize SQLite checkpointer with proper path setup."""
+    checkpoint_path = Path(settings.checkpoint_path)
+    # Ensure parent directory exists
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+    # Create SQLite connection
+    conn = sqlite3.connect(str(checkpoint_path), check_same_thread=False)
+    # Create SqliteSaver instance
+    return SqliteSaver(conn)
+
+
+_checkpointer = _init_checkpointer()
 
 # Same-thread concurrent turns (e.g. double「确认」while orchestrate_gen runs)
 # must not start a second graph — that clears await_confirm and re-plans.
@@ -207,6 +220,43 @@ def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
     )
 
 
+async def _load_history(nest: NestCanvasClient) -> list[Any]:
+    """Load conversation history from AgentMessage table (C1 decision)."""
+    try:
+        messages = await nest.get_agent_messages()
+        result: list[Any] = []
+        for msg in messages:
+            role = str(msg.get("role") or "")
+            content = str(msg.get("content") or "")
+            if role == "user":
+                result.append(HumanMessage(content=content))
+            elif role == "assistant" or role == "ai":
+                result.append(AIMessage(content=content))
+        return result
+    except Exception:  # noqa: BLE001 — fallback to empty history on load failure
+        return []
+
+
+async def _save_history(nest: NestCanvasClient, messages: list[Any]) -> None:
+    """Save conversation history to AgentMessage table (C1 decision)."""
+    try:
+        # Only save the latest messages (avoid duplicates)
+        # We save each message individually to handle errors gracefully
+        for msg in messages:
+            role = getattr(msg, "type", None) or (
+                msg.get("role") if isinstance(msg, dict) else None
+            )
+            content = getattr(msg, "content", None) or (
+                msg.get("content") if isinstance(msg, dict) else ""
+            )
+            if role in ("human", "user"):
+                await nest.save_agent_message(role="user", content=str(content))
+            elif role in ("ai", "assistant"):
+                await nest.save_agent_message(role="assistant", content=str(content))
+    except Exception:  # noqa: BLE001 — history save failure should not crash the run
+        pass
+
+
 async def stream_run_events(
     req: RunRequest,
     *,
@@ -237,6 +287,10 @@ async def stream_run_events(
     )
     proxy = NestEventProxy(inner_nest, emit)
     graph_llm = llm if llm is not None else default_llm()
+
+    # Load conversation history (C1 decision)
+    history = await _load_history(inner_nest)
+
     graph = build_agent_graph(
         nest=proxy,
         llm=graph_llm,
@@ -244,8 +298,10 @@ async def stream_run_events(
         checkpointer=checkpointer if checkpointer is not None else _checkpointer,
     )
     config = {"configurable": {"thread_id": thread_id}}
+    # Prepend history to current message (C1 decision)
+    input_messages = history + [HumanMessage(content=req.message)]
     input_state = {
-        "messages": [HumanMessage(content=req.message)],
+        "messages": input_messages,
         "session_id": req.session_id,
         "user_id": req.user_id,
         "thread_id": thread_id,
@@ -300,6 +356,15 @@ async def stream_run_events(
         except Exception as exc:  # noqa: BLE001 — surface to Nest SSE
             await emit({"type": "error", "data": {"message": str(exc)}})
         finally:
+            # Save conversation history (C1 decision)
+            try:
+                snap = await graph.aget_state(config)
+                vals = getattr(snap, "values", None) or {}
+                final_messages = list(vals.get("messages") or [])
+                if final_messages:
+                    await _save_history(inner_nest, final_messages)
+            except Exception:  # noqa: BLE001 — history save failure should not crash
+                pass
             await queue.put(None)
             if owns_nest:
                 await proxy.close()
