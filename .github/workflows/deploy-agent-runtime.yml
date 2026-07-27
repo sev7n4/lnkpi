@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths:
       - "services/agent-runtime/**"
+      - "deploy/docker/**"  # 包含 Dockerfile.agent-runtime 等构建文件
       - "deploy/docker-compose.prod.yml"
       - "deploy/docker-compose.prod.images.yml"
       - "deploy/enable-agent-runtime.sh"

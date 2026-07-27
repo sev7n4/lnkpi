@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "apps/server/**"
+      - "services/agent-runtime/**"  # 确保 agent-runtime 代码变更能自动触发部署
       - "packages/**"
       - "deploy/**"
       - "package.json"
