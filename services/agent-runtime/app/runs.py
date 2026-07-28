@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import sqlite3
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Awaitable
 
+import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
 from app.config import settings
@@ -21,18 +21,26 @@ from app.tools.nest_client import NestCanvasClient
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
 
 
-def _init_checkpointer() -> SqliteSaver:
-    """Initialize SQLite checkpointer with proper path setup."""
+async def _init_checkpointer() -> AsyncSqliteSaver:
+    """Initialize async SQLite checkpointer with proper path setup."""
     checkpoint_path = Path(settings.checkpoint_path)
     # Ensure parent directory exists
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-    # Create SQLite connection
-    conn = sqlite3.connect(str(checkpoint_path), check_same_thread=False)
-    # Create SqliteSaver instance
-    return SqliteSaver(conn)
+    # Create async SQLite connection
+    conn = await aiosqlite.connect(str(checkpoint_path))
+    # Create AsyncSqliteSaver instance
+    return AsyncSqliteSaver(conn)
 
 
-_checkpointer = _init_checkpointer()
+_checkpointer: AsyncSqliteSaver | None = None
+
+
+async def _get_checkpointer() -> AsyncSqliteSaver:
+    """Lazy initialize the async checkpointer singleton."""
+    global _checkpointer
+    if _checkpointer is None:
+        _checkpointer = await _init_checkpointer()
+    return _checkpointer
 
 # Same-thread concurrent turns (e.g. double「确认」while orchestrate_gen runs)
 # must not start a second graph — that clears await_confirm and re-plans.
@@ -291,11 +299,12 @@ async def stream_run_events(
     # Load conversation history (C1 decision)
     history = await _load_history(inner_nest)
 
+    active_checkpointer = checkpointer if checkpointer is not None else await _get_checkpointer()
     graph = build_agent_graph(
         nest=proxy,
         llm=graph_llm,
         skills_dir=resolve_skills_dir(skills_dir),
-        checkpointer=checkpointer if checkpointer is not None else _checkpointer,
+        checkpointer=active_checkpointer,
     )
     config = {"configurable": {"thread_id": thread_id}}
     # Prepend history to current message (C1 decision)
