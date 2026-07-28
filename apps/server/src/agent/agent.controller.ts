@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
-import { IsOptional, IsString } from 'class-validator'
+import { IsIn, IsOptional, IsString } from 'class-validator'
 import type { Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { AgentService } from './agent.service'
@@ -15,6 +15,12 @@ class ConversationDto {
   @IsOptional()
   @IsString()
   threadId?: string
+
+  /** W5 修复：用户结构化决策（确认/修改/换方向），用于触发 Command(resume=...) 精确恢复 interrupt。
+   *  文本消息（"1"/"2"/"确认方案"等）也能走兼容分支，但显式传值更可靠。 */
+  @IsOptional()
+  @IsIn(['confirm', 'revise', 'replan', 'confirm_gen', 'topo_revise', 'node_revise'])
+  userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise'
 }
 
 class OptimizePromptDto {
@@ -65,6 +71,7 @@ export class AgentController {
         dto.message,
         req.user.sub,
         dto.threadId,
+        dto.userDecision,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }

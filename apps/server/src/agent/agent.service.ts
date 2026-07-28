@@ -50,6 +50,7 @@ export class AgentService {
     userMessage: string,
     userId?: string,
     threadId?: string,
+    userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
   ): AsyncGenerator<AgentStreamEvent> {
     await this.prisma.agentMessage.create({
       data: { sessionId, role: 'user', content: userMessage },
@@ -65,6 +66,7 @@ export class AgentService {
           userMessage,
           userId,
           threadId,
+          userDecision,
         )
         return
       }
@@ -87,6 +89,7 @@ export class AgentService {
     userMessage: string,
     userId: string,
     threadId?: string,
+    userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -97,6 +100,9 @@ export class AgentService {
       message: userMessage,
       // 新建对话应换 thread，避免 MemorySaver 把旧 await_confirm 状态续上
       threadId: threadId?.trim() || sessionId,
+      // W5 修复：把前端结构化决策（按钮点击）传给 agent-runtime
+      // 让它走 Command(resume=...) 精确恢复 interrupt，不再重跑 route_entry→intake
+      userDecision,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

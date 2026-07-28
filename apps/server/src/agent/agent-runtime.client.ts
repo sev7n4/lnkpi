@@ -5,6 +5,9 @@ export interface RuntimeRunInput {
   userId: string
   message: string
   threadId?: string
+  /** W5 修复：用户结构化决策（confirm/revise/...），用于触发 agent-runtime 的
+   *  Command(resume=user_decision) 精确恢复 interrupt，避免重跑 route_entry→intake 卡死 */
+  userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise'
 }
 
 /**
@@ -53,6 +56,9 @@ export class AgentRuntimeClient {
         user_id: input.userId,
         message: input.message,
         thread_id: input.threadId ?? input.sessionId,
+        // W5 修复：把结构化决策转发给 agent-runtime
+        // 与 RunRequest.user_decision 字段对应，触发 Command(resume=...) 恢复 interrupt
+        user_decision: input.userDecision,
       }),
     })
 

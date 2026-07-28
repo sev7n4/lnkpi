@@ -235,7 +235,8 @@ async function send() {
   const skillPrefix = activeSkillId.value === 'canvas' ? '' : `【技能：${activeSkill.value.label}】`
   const message = `${skillPrefix}${input.value.trim()}`
   input.value = ''
-  await sendMessage(message)
+  // W5 修复：手动输入若匹配确认/修改关键词，也带上 userDecision 触发 Command(resume=...)
+  await sendMessage(message, mapPresetToDecision(message))
 }
 
 async function sendPreset(text: string) {
@@ -245,10 +246,25 @@ async function sendPreset(text: string) {
     return
   }
   input.value = ''
-  await sendMessage(text.trim())
+  // W5 修复：按钮选择是结构化决策（confirm/revise），需显式传递 userDecision
+  // 否则后端 Command(resume=...) 不会触发，流程会卡在 await_confirm
+  const decision = mapPresetToDecision(text)
+  await sendMessage(text.trim(), decision)
 }
 
-async function sendMessage(message: string) {
+/** 把按钮文本映射为后端可识别的 userDecision 值。 */
+function mapPresetToDecision(text: string): 'confirm' | 'revise' | undefined {
+  const t = (text || '').trim()
+  if (t === '1' || t === 'A' || t === '确认方案' || t === '确认出图' || t === '写入主文案') {
+    return 'confirm'
+  }
+  if (t === '2' || t === 'B' || t === '3' || t === 'C' || t === '换方向' || t === '自己说明修改' || t === '要修改' || t === '要改拓扑：') {
+    return 'revise'
+  }
+  return undefined
+}
+
+async function sendMessage(message: string, userDecision?: 'confirm' | 'revise') {
   agent.addUserMessage(message)
   agent.isStreaming = true
   agent.startAssistantMessage()
@@ -267,6 +283,7 @@ async function sendMessage(message: string) {
         sessionId: props.sessionId,
         message,
         threadId: agentThreadId.value,
+        userDecision,
       }),
     })
 
