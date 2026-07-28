@@ -693,6 +693,121 @@ export class AgentCanvasToolsService {
     return { id: message.id }
   }
 
+  /**
+   * Acquire a distributed lock for a thread.
+   * Returns true if lock acquired, false if already locked by another holder.
+   * Automatically cleans up expired locks.
+   */
+  async acquireThreadLock(input: {
+    threadId: string
+    holderId: string
+    ttlSeconds: number
+  }): Promise<{ acquired: boolean }> {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + input.ttlSeconds * 1000)
+
+    // Clean up expired locks for this thread
+    await this.prisma.threadLock.deleteMany({
+      where: {
+        threadId: input.threadId,
+        leaseExpiresAt: { lt: now },
+      },
+    })
+
+    // Try to acquire the lock
+    try {
+      await this.prisma.threadLock.create({
+        data: {
+          threadId: input.threadId,
+          leaseHolder: input.holderId,
+          leaseExpiresAt: expiresAt,
+        },
+      })
+      return { acquired: true }
+    } catch {
+      // Lock already exists - check if we hold it
+      const existing = await this.prisma.threadLock.findUnique({
+        where: { threadId: input.threadId },
+      })
+      if (existing && existing.leaseHolder === input.holderId) {
+        // We already hold it - renew
+        await this.prisma.threadLock.update({
+          where: { threadId: input.threadId },
+          data: { leaseExpiresAt: expiresAt },
+        })
+        return { acquired: true }
+      }
+      return { acquired: false }
+    }
+  }
+
+  /**
+   * Renew an existing lock. Returns false if lock doesn't exist or held by another holder.
+   */
+  async renewThreadLock(input: {
+    threadId: string
+    holderId: string
+    ttlSeconds: number
+  }): Promise<{ renewed: boolean }> {
+    const now = new Date()
+    const expiresAt = new Date(now.getTime() + input.ttlSeconds * 1000)
+
+    const existing = await this.prisma.threadLock.findUnique({
+      where: { threadId: input.threadId },
+    })
+
+    if (!existing) {
+      return { renewed: false }
+    }
+
+    // Check if lock expired
+    if (existing.leaseExpiresAt < now) {
+      // Delete expired lock
+      await this.prisma.threadLock.delete({
+        where: { threadId: input.threadId },
+      })
+      return { renewed: false }
+    }
+
+    // Check if we hold the lock
+    if (existing.leaseHolder !== input.holderId) {
+      return { renewed: false }
+    }
+
+    // Renew the lock
+    await this.prisma.threadLock.update({
+      where: { threadId: input.threadId },
+      data: { leaseExpiresAt: expiresAt },
+    })
+    return { renewed: true }
+  }
+
+  /**
+   * Release a lock. Safe to call even if lock doesn't exist.
+   */
+  async releaseThreadLock(input: {
+    threadId: string
+    holderId: string
+  }): Promise<{ released: boolean }> {
+    const existing = await this.prisma.threadLock.findUnique({
+      where: { threadId: input.threadId },
+    })
+
+    if (!existing) {
+      return { released: false }
+    }
+
+    // Only release if we hold the lock
+    if (existing.leaseHolder !== input.holderId) {
+      return { released: false }
+    }
+
+    await this.prisma.threadLock.delete({
+      where: { threadId: input.threadId },
+    })
+    return { released: true }
+  }
+
   private async pollGeneration(
     userId: string,
     recordId: string,

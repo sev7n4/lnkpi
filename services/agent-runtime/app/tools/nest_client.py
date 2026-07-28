@@ -175,3 +175,35 @@ class NestCanvasClient:
                 "toolCalls": tool_calls,
             },
         )
+
+    async def acquire_thread_lock(self, thread_id: str, holder_id: str, ttl_seconds: float = 300) -> dict[str, Any]:
+        """Acquire a distributed lock for a thread."""
+        return await self._post(
+            "/agent/internal/acquire-thread-lock",
+            {
+                "threadId": thread_id,
+                "holderId": holder_id,
+                "ttlSeconds": ttl_seconds,
+            },
+        )
+
+    async def renew_thread_lock(self, thread_id: str, holder_id: str, ttl_seconds: float = 300) -> dict[str, Any]:
+        """Renew an existing thread lock."""
+        return await self._post(
+            "/agent/internal/renew-thread-lock",
+            {
+                "threadId": thread_id,
+                "holderId": holder_id,
+                "ttlSeconds": ttl_seconds,
+            },
+        )
+
+    async def release_thread_lock(self, thread_id: str, holder_id: str) -> dict[str, Any]:
+        """Release a thread lock."""
+        return await self._post(
+            "/agent/internal/release-thread-lock",
+            {
+                "threadId": thread_id,
+                "holderId": holder_id,
+            },
+        )

@@ -218,3 +218,13 @@ model VerificationCode {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
+model ThreadLock {
+  threadId       String   @id
+  leaseHolder    String
+  leaseExpiresAt DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([leaseExpiresAt])
+}

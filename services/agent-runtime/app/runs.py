@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Awaitable
 
@@ -42,7 +43,7 @@ async def _get_checkpointer() -> AsyncSqliteSaver:
         _checkpointer = await _init_checkpointer()
     return _checkpointer
 
-# Same-thread concurrent turns (e.g. double「确认」while orchestrate_gen runs)
+# Same-thread Concurrent turns (e.g. double「确认」while orchestrate_gen runs)
 # must not start a second graph — that clears await_confirm and re-plans.
 THREAD_BUSY_TIP = "上一轮仍在处理中，请稍候；拆解出图通常需要一两分钟。"
 
@@ -55,21 +56,90 @@ _MODIFY_DURING_GEN_TIP = (
     "我会基于最新方案进行调整。"
 )
 
+# Two-level locking: process-local asyncio.Lock (fast path) + DB-based distributed lock
+# 1. Process-local lock: fast check to avoid unnecessary DB calls
+# 2. DB-based lock: prevents concurrent runs across multiple instances
 _thread_locks: dict[str, asyncio.Lock] = {}
 _thread_locks_meta = asyncio.Lock()
 
+# Lock renewal configuration
+LOCK_TTL_SECONDS = 300  # 5 minutes default TTL
+LOCK_RENEWAL_INTERVAL = 60  # Renew every 60 seconds
 
-async def _try_acquire_thread(thread_id: str) -> bool:
-    """Acquire per-thread lock without waiting. False if another run holds it."""
+# Track active lock holders for renewal and release
+_active_lock_holders: dict[str, tuple[str, asyncio.Task[None]]] = {}
+
+
+async def _try_acquire_thread(
+    thread_id: str,
+    nest: NestCanvasClient,
+) -> tuple[bool, str | None]:
+    """Acquire per-thread lock without waiting.
+    
+    Returns (success, holder_id). holder_id is None if lock failed.
+    Uses two-level locking: process-local (fast path) + DB-based (distributed).
+    """
+    # Step 1: Try to acquire process-local lock (fast path)
     async with _thread_locks_meta:
         lock = _thread_locks.setdefault(thread_id, asyncio.Lock())
         if lock.locked():
-            return False
+            # Process-local lock already held
+            return False, None
         await lock.acquire()
-        return True
+    
+    # Step 2: Try to acquire DB-based distributed lock
+    holder_id = f"{uuid.uuid4().hex}-{thread_id}"
+    try:
+        result = await nest.acquire_thread_lock(thread_id, holder_id, LOCK_TTL_SECONDS)
+        if not result.get("acquired"):
+            # Failed to acquire DB lock - release process-local lock
+            lock.release()
+            return False, None
+    except Exception:
+        # DB lock failed - release process-local lock
+        lock.release()
+        raise
+    
+    # Step 3: Start background renewal task
+    async def _renewal_loop() -> None:
+        """Background task to renew the lock periodically."""
+        while True:
+            try:
+                await asyncio.sleep(LOCK_RENEWAL_INTERVAL)
+                await nest.renew_thread_lock(thread_id, holder_id, LOCK_TTL_SECONDS)
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                # Renewal failed - lock might be lost, but we'll still try to release on cleanup
+                break
+    
+    renewal_task = asyncio.create_task(_renewal_loop())
+    _active_lock_holders[thread_id] = (holder_id, renewal_task)
+    
+    return True, holder_id
 
 
-def _release_thread(thread_id: str) -> None:
+async def _release_thread(thread_id: str, holder_id: str | None, nest: NestCanvasClient) -> None:
+    """Release both process-local and DB-based locks."""
+    if holder_id is None:
+        return
+    
+    # Cancel renewal task
+    if thread_id in _active_lock_holders:
+        _, renewal_task = _active_lock_holders.pop(thread_id)
+        renewal_task.cancel()
+        try:
+            await renewal_task
+        except asyncio.CancelledError:
+            pass
+    
+    # Release DB lock
+    try:
+        await nest.release_thread_lock(thread_id, holder_id)
+    except Exception:
+        pass  # Best effort - lock will expire anyway
+    
+    # Release process-local lock
     lock = _thread_locks.get(thread_id)
     if lock is not None and lock.locked():
         lock.release()
@@ -275,12 +345,18 @@ async def stream_run_events(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield AgentStreamEvent-shaped dicts for one user turn."""
     thread_id = req.thread_id or req.session_id
-    if not await _try_acquire_thread(thread_id):
+    
+    # Create nest client for lock acquisition if needed
+    lock_nest = default_nest(session_id=req.session_id, user_id=req.user_id)
+    acquired, holder_id = await _try_acquire_thread(thread_id, lock_nest)
+    
+    if not acquired:
         # 修复 P0-2：出图过程中用户发送修改意见 → 友好提示（而非生硬 busy tip）
         # plan 阶段并发（"确认""1"）→ 保持原 busy tip 防止冲突
         tip = _MODIFY_DURING_GEN_TIP if modify_intent(req.message) else THREAD_BUSY_TIP
         yield {"type": "text_delta", "data": {"text": tip}}
         yield {"type": "done", "data": {}}
+        await lock_nest.close()
         return
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -403,7 +479,8 @@ async def stream_run_events(
                 break
             yield item
     finally:
-        _release_thread(thread_id)
+        await _release_thread(thread_id, holder_id, lock_nest)
+        await lock_nest.close()
         if bg_payload is not None:
             asyncio.create_task(_run_orchestrate_background(**bg_payload))
         if not task.done():

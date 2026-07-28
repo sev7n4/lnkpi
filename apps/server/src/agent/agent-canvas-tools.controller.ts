@@ -158,6 +158,36 @@ class SaveAgentMessageDto {
   toolCalls?: string
 }
 
+class AcquireThreadLockDto {
+  @IsString()
+  threadId!: string
+
+  @IsString()
+  holderId!: string
+
+  @IsOptional()
+  ttlSeconds?: number
+}
+
+class RenewThreadLockDto {
+  @IsString()
+  threadId!: string
+
+  @IsString()
+  holderId!: string
+
+  @IsOptional()
+  ttlSeconds?: number
+}
+
+class ReleaseThreadLockDto {
+  @IsString()
+  threadId!: string
+
+  @IsString()
+  holderId!: string
+}
+
 @Controller('agent/internal')
 @UseGuards(AgentInternalGuard)
 export class AgentCanvasToolsController {
@@ -240,6 +270,32 @@ export class AgentCanvasToolsController {
   @Post('save-agent-message')
   async saveAgentMessage(@Body() dto: SaveAgentMessageDto) {
     const data = await this.tools.saveAgentMessage(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('acquire-thread-lock')
+  async acquireThreadLock(@Body() dto: AcquireThreadLockDto) {
+    const data = await this.tools.acquireThreadLock({
+      threadId: dto.threadId,
+      holderId: dto.holderId,
+      ttlSeconds: dto.ttlSeconds ?? 300,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('renew-thread-lock')
+  async renewThreadLock(@Body() dto: RenewThreadLockDto) {
+    const data = await this.tools.renewThreadLock({
+      threadId: dto.threadId,
+      holderId: dto.holderId,
+      ttlSeconds: dto.ttlSeconds ?? 300,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('release-thread-lock')
+  async releaseThreadLock(@Body() dto: ReleaseThreadLockDto) {
+    const data = await this.tools.releaseThreadLock(dto)
     return { code: 0, message: 'ok', data }
   }
 }
