@@ -50,7 +50,10 @@ def route_entry(state: AgentRuntimeState) -> str:
 
 
 def route_after_draft_copy(state: AgentRuntimeState) -> str:
-    return "end"
+    # 修复：draft_copy 后进入主文案确认门（await_copy_confirm），而不是直接 END。
+    # 否则 await_copy_confirm / write_copy_node / await_topo / start_gen 全部不可达，
+    # 流程永远到不了生图/生视频阶段。
+    return "await_copy_confirm"
 
 
 def route_after_copy_confirm(state: AgentRuntimeState) -> str:
@@ -177,7 +180,7 @@ def build_agent_graph(
     graph.add_conditional_edges(
         "draft_copy",
         route_after_draft_copy,
-        {"end": END},
+        {"await_copy_confirm": "await_copy_confirm"},
     )
     graph.add_conditional_edges(
         "await_topo",
@@ -210,7 +213,9 @@ def build_agent_graph(
             "end": END,
         },
     )
-    graph.add_edge("write_copy_node", END)
+    # 修复：write_copy_node 后进入拓扑确认门（await_topo），而不是 END。
+    # 这样用户确认主文案后，流程继续到拓扑确认门，再「确认出图」进入生图/生视频。
+    graph.add_edge("write_copy_node", "await_topo")
 
     saver = checkpointer if checkpointer is not None else MemorySaver()
     # W5: 使用 LangGraph 原生 interrupt_before 机制替代 custom awaiting_user flags

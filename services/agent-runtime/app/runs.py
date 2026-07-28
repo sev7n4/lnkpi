@@ -11,7 +11,6 @@ import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.types import Command
 from pydantic import BaseModel
 
 from app.config import settings
@@ -408,20 +407,22 @@ async def stream_run_events(
     next_nodes = getattr(snap, "next", None) or []
 
     if next_nodes:
-        # W5修复：从interrupt恢复时，使用Command(resume=user_decision)
-        next_node = next_nodes[0] if next_nodes else None
-
-        # 如果有user_decision，使用Command(resume)恢复
+        # W5 修复（关键）：interrupt_before 的正确恢复方式是
+        #   aupdate_state({"messages": [HumanMessage(msg)], ...})  # 不传 as_node
+        #   然后 astream(None, config)
+        # 这样被中断的节点（如 await_confirm）会重新执行，并从 messages 读到用户新消息，
+        # 正确分类 confirm/revise/none。
+        #
+        # ❌ 不能用 Command(resume=...)：它只适用于节点内 interrupt() 动态中断；
+        #   对 interrupt_before，它不会把新消息注入 state，导致 await_confirm 读到旧 brief，
+        #   分类为 none，流程无法推进（重试后还会重跑 intake 误入 chat 分支）。
+        # ❌ 不能用 as_node=next_node：那会把 update 当作该节点的输出，从而跳过该节点
+        #   （await_confirm 的分类逻辑不执行），user_decision 不会被正确设置。
+        update_payload: dict[str, Any] = {"messages": [HumanMessage(content=req.message)]}
         if req.user_decision:
-            input_state = Command(resume=req.user_decision)  # type: ignore[assignment]
-        else:
-            # 兼容旧逻辑：仅添加用户消息（用于普通对话）
-            await graph.aupdate_state(
-                config,
-                {"messages": [HumanMessage(content=req.message)]},
-                as_node=next_node,
-            )
-            input_state = None  # type: ignore[assignment]
+            update_payload["user_decision"] = req.user_decision
+        await graph.aupdate_state(config, update_payload)
+        input_state = None  # type: ignore[assignment]
     else:
         # 新对话或已完成：加载历史并创建 input_state (C1 decision)
         history = await _load_history(inner_nest)
