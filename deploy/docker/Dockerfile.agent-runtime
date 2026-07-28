@@ -9,14 +9,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 依赖层先装：app/skills 变更不重装 pip（CVM 访问 PyPI 易超时）
 # 使用 pyproject.toml 管理依赖，避免硬编码
+# 修复：pyproject.toml 声明了 packages = ["app", "skills"]，pip install . 需要这些目录存在
+# 所以先 COPY 整个项目（包括空的 app/ 和 skills/ 目录）再 pip install
 COPY services/agent-runtime/pyproject.toml ./
+COPY services/agent-runtime/app ./app
+COPY services/agent-runtime/skills ./skills
 RUN pip install --no-cache-dir --default-timeout=120 \
     -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --trusted-host pypi.tuna.tsinghua.edu.cn \
     .
-
-COPY services/agent-runtime/app ./app
-COPY services/agent-runtime/skills ./skills
 
 ENV LNKPI_SKILLS_DIR=/app/skills
 ENV PYTHONPATH=/app
