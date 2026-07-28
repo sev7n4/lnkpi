@@ -808,6 +808,50 @@ export class AgentCanvasToolsService {
     return { released: true }
   }
 
+  /**
+   * W15: Get generation progress from GenProgress table
+   */
+  async getGenProgress(input: { threadId: string }): Promise<{
+    id: string
+    lines: string
+    summary: string | null
+  } | null> {
+    const record = await this.prisma.genProgress.findFirst({
+      where: { threadId: input.threadId },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!record) {
+      return null
+    }
+
+    return {
+      id: record.id,
+      lines: record.lines,
+      summary: record.summary,
+    }
+  }
+
+  /**
+   * W15: Save generation progress to GenProgress table
+   */
+  async saveGenProgress(input: {
+    threadId: string
+    sessionId: string
+    lines: string
+    summary?: string | null
+  }): Promise<{ id: string }> {
+    const record = await this.prisma.genProgress.create({
+      data: {
+        threadId: input.threadId,
+        sessionId: input.sessionId,
+        lines: input.lines,
+        summary: input.summary ?? null,
+      },
+    })
+    return { id: record.id }
+  }
+
   private async pollGeneration(
     userId: string,
     recordId: string,

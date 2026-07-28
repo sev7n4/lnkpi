@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
@@ -39,13 +40,15 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
         by_key = state.get("gen_by_key", {})
         ordered_keys = state.get("gen_ordered_keys", [])
 
-        gen_completed: list[str] = []
-        gen_failed: list[dict] = []
+        thread_id = state.get("thread_id", "")
+        session_id = state.get("session_id", "")
+
         progress_lines: list[str] = []
         summary_lines: list[dict[str, str]] = []
         fallback_n = 0
         needs_user_n = 0
         skipped_n = 0
+        success_n = 0
 
         # Process results
         for key in ordered_keys:
@@ -54,7 +57,7 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
             title = str(item.get("title") or key)
 
             if key in completed_keys:
-                gen_completed.append(node_id)
+                success_n += 1
                 line = format_gen_progress_line(title=title, status="completed")
                 progress_lines.append(line)
                 await _emit_text(nest, line)
@@ -64,9 +67,6 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
                 reason_lower = str(reason).lower()
                 if reason_lower == "fallback_pending":
                     fallback_n += 1
-                gen_failed.append(
-                    {"key": key, "node_id": node_id, "title": title, "reason": reason}
-                )
                 summary_lines.append(
                     {
                         "id": key,
@@ -82,9 +82,6 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
             elif key in failed_keys:
                 # Check if it was dependency_skipped or dependency_failed
                 reason = "dependency_failed"  # Default, could be refined
-                gen_failed.append(
-                    {"key": key, "node_id": node_id, "title": title, "reason": reason}
-                )
                 summary_lines.append(
                     {
                         "id": key,
@@ -98,24 +95,43 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
                 await _emit_text(nest, line)
 
         # Calculate fail_only (exclude needs_user and dependency_skipped)
-        fail_only = max(0, len(gen_failed) - needs_user_n - skipped_n)
+        fail_only = max(0, len(failed_keys) - needs_user_n - skipped_n)
 
         # Emit task summary
         await _emit_task_summary(
             nest,
-            success=len(gen_completed),
+            success=success_n,
             failed=fail_only,
             needsUser=needs_user_n,
             skipped=skipped_n,
             lines=summary_lines,
         )
 
+        # W15: Save progress to GenProgress table
+        gen_progress_id = None
+        if thread_id and session_id:
+            try:
+                lines_json = json.dumps(progress_lines)
+                summary_json = json.dumps(summary_lines) if summary_lines else None
+                result = await nest.save_gen_progress(
+                    thread_id=thread_id,
+                    session_id=session_id,
+                    lines=lines_json,
+                    summary=summary_json,
+                )
+                gen_progress_id = result.get("id")
+            except Exception as e:
+                # Log but don't fail the node
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to save gen progress: {e}")
+
         # Format final message
-        if gen_completed or gen_failed:
+        fail_n = len(failed_keys)
+        if success_n or fail_n:
             msg = format_gen_summary(
                 lines=progress_lines,
-                success_n=len(gen_completed),
-                fail_n=len(gen_failed),
+                success_n=success_n,
+                fail_n=fail_n,
                 fallback_n=fallback_n,
             )
         else:
@@ -123,8 +139,7 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
 
         return {
             "phase": "orchestrate_gen",
-            "gen_completed": gen_completed,
-            "gen_failed": gen_failed,
+            "gen_progress_id": gen_progress_id,
             "messages": [AIMessage(content=msg)],
             # Clean up transient state
             "gen_ordered_keys": None,

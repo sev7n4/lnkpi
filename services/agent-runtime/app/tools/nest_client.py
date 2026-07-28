@@ -207,3 +207,25 @@ class NestCanvasClient:
                 "holderId": holder_id,
             },
         )
+
+    async def get_gen_progress(self, thread_id: str) -> dict[str, Any] | None:
+        """Get generation progress from GenProgress table (W15)."""
+        result = await self._post(
+            "/agent/internal/get-gen-progress",
+            {"threadId": thread_id},
+        )
+        return result if result else None
+
+    async def save_gen_progress(
+        self, thread_id: str, session_id: str, lines: str, summary: str | None = None
+    ) -> dict[str, Any]:
+        """Save generation progress to GenProgress table (W15)."""
+        return await self._post(
+            "/agent/internal/save-gen-progress",
+            {
+                "threadId": thread_id,
+                "sessionId": session_id,
+                "lines": lines,
+                "summary": summary,
+            },
+        )

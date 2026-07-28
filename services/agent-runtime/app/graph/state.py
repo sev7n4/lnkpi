@@ -53,9 +53,11 @@ class AgentRuntimeState(TypedDict, total=False):
     # split 在 modify 模式下按操作列表 upsert 画布节点。None 表示首轮 create 或 LLM 解析失败回退。
     node_operations: list[dict] | None
     topology_mode: Literal["full", "trimmed"] | None
-    gen_queue: list[str]
-    gen_completed: list[str]
-    gen_failed: list[dict]
+    # W3/W15: gen_queue/gen_completed/gen_failed moved to DB (generation record queries)
+    # gen_queue: list[str]  # Removed by W3
+    # gen_completed: list[str]  # Removed by W3
+    # gen_failed: list[dict]  # Removed by W3
+    gen_progress_id: str | None  # W15: Pointer to GenProgress table
     last_error: str | None
     copy_draft: str | None
     copy_node_id: str | None

@@ -188,6 +188,27 @@ class ReleaseThreadLockDto {
   holderId!: string
 }
 
+// W15: Generation progress DTOs
+class GetGenProgressDto {
+  @IsString()
+  threadId!: string
+}
+
+class SaveGenProgressDto {
+  @IsString()
+  threadId!: string
+
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  lines!: string
+
+  @IsOptional()
+  @IsString()
+  summary?: string
+}
+
 @Controller('agent/internal')
 @UseGuards(AgentInternalGuard)
 export class AgentCanvasToolsController {
@@ -296,6 +317,19 @@ export class AgentCanvasToolsController {
   @Post('release-thread-lock')
   async releaseThreadLock(@Body() dto: ReleaseThreadLockDto) {
     const data = await this.tools.releaseThreadLock(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  // W15: Generation progress endpoints
+  @Post('get-gen-progress')
+  async getGenProgress(@Body() dto: GetGenProgressDto) {
+    const data = await this.tools.getGenProgress(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('save-gen-progress')
+  async saveGenProgress(@Body() dto: SaveGenProgressDto) {
+    const data = await this.tools.saveGenProgress(dto)
     return { code: 0, message: 'ok', data }
   }
 }

@@ -228,3 +228,16 @@ model ThreadLock {
 
   @@index([leaseExpiresAt])
 }
+
+// 生成进度记录：外置 transient 数据，减少 checkpoint 体积（W15）
+model GenProgress {
+  id        String   @id @default(cuid())
+  threadId  String
+  sessionId String
+  lines     String   // JSON 数组
+  summary   String?  // JSON
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([threadId, createdAt])
+}
