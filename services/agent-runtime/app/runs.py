@@ -298,6 +298,22 @@ def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
     )
 
 
+def _trim_history(messages: list[Any], window: int) -> list[Any]:
+    """W17: Trim history to recent N messages to prevent token overflow.
+
+    Args:
+        messages: Full conversation history
+        window: Maximum number of messages to retain
+
+    Returns:
+        Trimmed message list (most recent N messages)
+    """
+    if len(messages) <= window:
+        return messages
+    # Keep the most recent N messages
+    return messages[-window:]
+
+
 async def _load_history(nest: NestCanvasClient) -> list[Any]:
     """Load conversation history from AgentMessage table (C1 decision)."""
     try:
@@ -310,7 +326,8 @@ async def _load_history(nest: NestCanvasClient) -> list[Any]:
                 result.append(HumanMessage(content=content))
             elif role == "assistant" or role == "ai":
                 result.append(AIMessage(content=content))
-        return result
+        # W17: Trim history to configured window size
+        return _trim_history(result, settings.history_window)
     except Exception:  # noqa: BLE001 — fallback to empty history on load failure
         return []
 

@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     image_gen_timeout_sec: int = 180
     # Checkpoint persistence (G1 decision)
     checkpoint_path: str = "data/checkpoints.db"
+    # W17: History window for conversation context pruning
+    history_window: int = 20  # Keep last N messages; user_brief/plan_draft always preserved
 
     class Config:
         env_prefix = "LNKPI_"
