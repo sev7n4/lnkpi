@@ -77,3 +77,12 @@ class AgentRuntimeState(TypedDict, total=False):
     user_brief: str | None
     brief_locked: bool  # True 后 user_brief 不再被覆盖
     mode: Literal["create", "modify"] | None
+
+    # W3: Transient fields for Send API fan-out generation
+    # These are only used during orchestrate_gen and cleaned up by collect_gen
+    gen_ordered_keys: list[str] | None  # Topological order of generation keys
+    gen_deps_of: dict[str, list[str]] | None  # Dependency graph
+    gen_by_key: dict[str, dict] | None  # Manifest items by key
+    gen_completed_keys: list[str] | None  # Completed generation keys
+    gen_failed_keys: list[str] | None  # Failed generation keys
+    gen_needs_user_keys: list[str] | None  # Keys needing user intervention

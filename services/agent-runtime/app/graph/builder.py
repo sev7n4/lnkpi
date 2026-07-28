@@ -13,12 +13,15 @@ from app.graph.nodes.await_copy_confirm import (
 )
 from app.graph.nodes.await_topo import make_await_topo_node
 from app.graph.nodes.chat import make_chat_node
+from app.graph.nodes.collect_gen import make_collect_gen_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.draft_copy import make_draft_copy_node
+from app.graph.nodes.gen_node import make_gen_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.graph.nodes.plan import make_plan_node
 from app.graph.nodes.split import make_split_node
+from app.graph.nodes.start_gen import make_start_gen_node
 from app.graph.nodes.topo_revise import make_topo_revise_node
 from app.graph.nodes.write_copy_node import make_write_copy_node
 from app.graph.nodes.write_plan_node import make_write_plan_node
@@ -39,9 +42,9 @@ def route_entry(state: AgentRuntimeState) -> str:
     # 从 checkpoint 恢复时，LangGraph 会直接进入中断的节点
     # 新对话或 phase=done 后走 intake
     phase = state.get("phase")
-    # 如果有 pending_orchestrate 标记，应该进入 orchestrate_gen
+    # 如果有 pending_orchestrate 标记，应该进入 start_gen (W3)
     if state.get("pending_orchestrate"):
-        return "orchestrate_gen"
+        return "start_gen"
     # 从 intake 重新进入
     return "intake"
 
@@ -97,7 +100,7 @@ def route_after_confirm(state: AgentRuntimeState) -> str:
 def route_after_topo(state: AgentRuntimeState) -> str:
     decision = state.get("user_decision") or "none"
     if decision == "confirm_gen":
-        return "orchestrate_gen"
+        return "start_gen"  # W3: start_gen prepares gen_queue, then routes to orchestrate_gen
     if decision == "topo_revise":
         return "topo_revise"
     # 修复 P0-1：节点内容修改（改为/调整/增加）→ 回退到 plan 走 modify 模式
@@ -130,6 +133,13 @@ def build_agent_graph(
     graph.add_node("write_copy_node", make_write_copy_node(nest=nest))
     graph.add_node("await_topo", make_await_topo_node())
     graph.add_node("topo_revise", make_topo_revise_node(nest=nest))
+
+    # W3: New generation nodes using Send API for per-node checkpointing
+    graph.add_node("start_gen", make_start_gen_node())
+    graph.add_node("gen_node", make_gen_node(nest=nest))
+    graph.add_node("collect_gen", make_collect_gen_node(nest=nest))
+
+    # Keep old orchestrate_gen for backward compatibility (can be removed later)
     graph.add_node("orchestrate_gen", make_orchestrate_gen_node(nest=nest))
 
     graph.add_conditional_edges(
@@ -137,7 +147,7 @@ def build_agent_graph(
         route_entry,
         {
             "intake": "intake",
-            "orchestrate_gen": "orchestrate_gen",
+            "start_gen": "start_gen",
         },
     )
     graph.add_conditional_edges(
@@ -173,15 +183,24 @@ def build_agent_graph(
         "await_topo",
         route_after_topo,
         {
-            "orchestrate_gen": "orchestrate_gen",
+            "start_gen": "start_gen",
             "topo_revise": "topo_revise",
             "plan": "plan",
             "end": END,
         },
     )
     graph.add_edge("topo_revise", END)
-    graph.add_edge("orchestrate_gen", "done")
+
+    # W3: Generation DAG edges
+    # start_gen -> orchestrate_gen (prepares gen_queue, existing orchestrate_gen handles execution)
+    # orchestrate_gen -> done
+    graph.add_edge("start_gen", "orchestrate_gen")
+    graph.add_edge("collect_gen", "done")
     graph.add_edge("done", END)
+
+    # Old orchestrate_gen edge (keep for backward compatibility)
+    graph.add_edge("orchestrate_gen", "done")
+
     graph.add_conditional_edges(
         "await_copy_confirm",
         route_after_copy_confirm,

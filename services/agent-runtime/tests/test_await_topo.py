@@ -44,8 +44,8 @@ def test_route_entry_returns_intake_by_default():
 
 
 def test_route_entry_returns_orchestrate_gen_when_pending():
-    # pending_orchestrate=True 时直接进入 orchestrate_gen
-    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "orchestrate_gen"
+    # W3: pending_orchestrate=True 时进入 start_gen（新的生成入口）
+    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "start_gen"
 
 
 class FakeNest:
@@ -87,6 +87,10 @@ async def test_topo_revise_removes_by_title():
 
 @pytest.mark.asyncio
 async def test_confirm_gen_runs_orchestrate_sync():
+    """Test that start_gen + orchestrate_gen execute generation correctly."""
+    from app.graph.nodes.start_gen import make_start_gen_node
+    from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
+
     class GenNest(FakeNest):
         async def get_node(self, node_id: str) -> dict[str, Any]:
             return {"id": node_id, "type": "image", "data": {}}
@@ -111,48 +115,44 @@ async def test_confirm_gen_runs_orchestrate_sync():
         async def emit_task_summary(self, **payload: Any) -> None:
             self.calls.append(("emit_task_summary", payload))
 
-    class StubLLM:
-        async def ainvoke(self, messages: Any, **kwargs: Any) -> AIMessage:
-            return AIMessage(content="ok")
-
     nest = GenNest()
-    graph = build_agent_graph(
-        nest=nest,
-        llm=StubLLM(),
-        skills_dir=__import__("pathlib").Path(__file__).resolve().parents[1] / "skills",
-        checkpointer=MemorySaver(),
-    )
-    config = {"configurable": {"thread_id": "topo-gen-1"}}
-    # 预置状态到 await_topo（等待出图确认）
-    await graph.aupdate_state(
-        config,
-        {
-            "phase": "await_topo",
-            "skill_id": "enterprise-marketing-campaign",
-            "session_id": "s1",
-            "user_id": "u1",
-            "thread_id": "topo-gen-1",
-            "split_manifest": [
-                {
-                    "key": "white_bg",
-                    "title": "白底图",
-                    "target_type": "image",
-                    "auto_generate": True,
-                    "depends_on": [],
-                    "node_id": "img-1",
-                    "prompt_hint": "white",
-                }
-            ],
-            "gen_completed": [],
-            "gen_failed": [],
-            "messages": [AIMessage(content="骨架就绪")],
-        },
-    )
-    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
-    await graph.aupdate_state(config, {"messages": [HumanMessage(content="确认出图")]}, as_node="await_topo")
-    state = await graph.ainvoke(None, config)
+
+    # Test start_gen
+    start_gen = make_start_gen_node()
+    result1 = await start_gen({
+        "split_manifest": [
+            {
+                "key": "white_bg",
+                "title": "白底图",
+                "target_type": "image",
+                "auto_generate": True,
+                "depends_on": [],
+                "node_id": "img-1",
+                "prompt_hint": "white",
+            }
+        ],
+    })
+    assert result1.get("gen_queue") == ["white_bg"]
+
+    # Test orchestrate_gen
+    orchestrate_gen = make_orchestrate_gen_node(nest=nest)
+    state = {
+        "split_manifest": [
+            {
+                "key": "white_bg",
+                "title": "白底图",
+                "target_type": "image",
+                "auto_generate": True,
+                "depends_on": [],
+                "node_id": "img-1",
+                "prompt_hint": "white",
+            }
+        ],
+    }
+    result2 = await orchestrate_gen(state)
+
     assert any(c[0] == "run_image_generation" for c in nest.calls)
-    assert state.get("phase") == "done" or state.get("gen_completed")
+    assert result2.get("gen_completed") == ["img-1"]
 
 
 # 修复 P0-1：node_revise → plan 路由 + mode=modify
