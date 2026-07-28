@@ -30,9 +30,9 @@ permissions:
   contents: read
 
 concurrency:
-  # 与 deploy.yml 共用 group，避免同时改 apps/server + agent-runtime 时
-  # 两个 workflow 并行操作 CVM Docker 导致冲突
-  group: lnkpi-deploy-production
+  # 独立 concurrency group，避免与 deploy.yml 互相取消
+  # 由于两个 workflow 操作不同的容器（api vs agent-runtime），可以并行部署
+  group: lnkpi-deploy-agent-runtime
   cancel-in-progress: false
 
 env:
