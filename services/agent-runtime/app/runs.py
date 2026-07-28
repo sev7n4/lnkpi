@@ -11,6 +11,7 @@ import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from app.config import settings
@@ -180,6 +181,8 @@ class RunRequest(BaseModel):
     user_id: str
     message: str
     thread_id: str | None = None
+    # W5修复：添加user_decision字段，支持用户确认/修改/换方向
+    user_decision: str | None = None  # "confirm" | "revise" | "replan"
 
 
 class NestEventProxy:
@@ -405,16 +408,20 @@ async def stream_run_events(
     next_nodes = getattr(snap, "next", None) or []
 
     if next_nodes:
-        # 从中断恢复：更新 checkpoint 状态（添加用户消息）
-        # as_node 参数指定更新来自哪个节点（中断点）
+        # W5修复：从interrupt恢复时，使用Command(resume=user_decision)
         next_node = next_nodes[0] if next_nodes else None
-        await graph.aupdate_state(
-            config,
-            {"messages": [HumanMessage(content=req.message)]},
-            as_node=next_node,
-        )
-        # 使用 None 作为 input 继续执行
-        input_state = None  # type: ignore[assignment]
+
+        # 如果有user_decision，使用Command(resume)恢复
+        if req.user_decision:
+            input_state = Command(resume=req.user_decision)  # type: ignore[assignment]
+        else:
+            # 兼容旧逻辑：仅添加用户消息（用于普通对话）
+            await graph.aupdate_state(
+                config,
+                {"messages": [HumanMessage(content=req.message)]},
+                as_node=next_node,
+            )
+            input_state = None  # type: ignore[assignment]
     else:
         # 新对话或已完成：加载历史并创建 input_state (C1 decision)
         history = await _load_history(inner_nest)
