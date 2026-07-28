@@ -67,7 +67,10 @@ services:
       # Token / OpenAI keys come from env_file ../.env (LNKPI_* + AGENT_RUNTIME_*)
       LNKPI_NEST_BASE_URL: ${LNKPI_NEST_BASE_URL:-http://lnkpi-api:3001/api}
       LNKPI_SKILLS_DIR: /app/skills
+      LNKPI_CHECKPOINT_PATH: /app/data/checkpoints.db
     # 无 ports：只通过 lnkpi-net 被 api 访问
+    volumes:
+      - lnkpi-checkpoints:/app/data
     networks:
       - lnkpi
     depends_on:
@@ -86,3 +89,4 @@ networks:
 volumes:
   lnkpi-data:
   lnkpi-uploads:
+  lnkpi-checkpoints:
