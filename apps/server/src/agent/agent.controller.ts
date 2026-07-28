@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Inject, IsIn, IsOptional, IsString, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import { IsIn, IsOptional, IsString } from 'class-validator'
 import type { Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { AgentService } from './agent.service'
