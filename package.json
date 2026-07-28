@@ -9,7 +9,12 @@
     "dev:server": "pnpm --filter @lnkpi/server dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "verify-contract": "npx tsx scripts/verify-contract.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "zod-to-json-schema": "^3.23.0"
   },
   "engines": {
     "node": ">=20"

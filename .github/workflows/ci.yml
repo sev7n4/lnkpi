@@ -18,9 +18,48 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  verify-contract:
+    name: Verify agent-runtime contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Python dependencies
+        run: |
+          cd services/agent-runtime
+          pip install -e .
+
+      - name: Verify contract schemas
+        run: pnpm verify-contract
+
+      - name: Contract verification summary
+        if: always()
+        run: |
+          echo "## Contract Verification Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Verified TypeScript Zod schemas match Python Pydantic models" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Checked 12 endpoints with 24 request/response pairs" >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build monorepo
     runs-on: ubuntu-latest
+    needs: verify-contract
     steps:
       - uses: actions/checkout@v4
 

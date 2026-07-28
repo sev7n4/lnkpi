@@ -9,6 +9,7 @@ export * from './imageParams'
 export * from './studioModelCatalog'
 export * from './providerChannels'
 export * from './generationDiagnostics'
+export * from './agentContract'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
