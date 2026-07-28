@@ -37,24 +37,15 @@ def test_classify_topo_revise_still_works_for_deletions():
     assert classify_topo_decision("移除品牌图") == "topo_revise"
 
 
-def test_route_entry_await_topo():
-    assert (
-        route_entry({"awaiting_user": True, "phase": "await_topo", "messages": []})
-        == "await_topo"
-    )
+def test_route_entry_returns_intake_by_default():
+    # W5: route_entry 简化后默认返回 intake（除非 pending_orchestrate）
+    assert route_entry({"phase": "await_topo", "messages": []}) == "intake"
+    assert route_entry({"phase": "await_confirm", "messages": []}) == "intake"
 
 
-def test_route_entry_await_topo_prefers_copy_confirm():
-    assert (
-        route_entry(
-            {
-                "awaiting_user": True,
-                "phase": "await_topo",
-                "messages": [HumanMessage(content="写入主文案")],
-            }
-        )
-        == "await_copy_confirm"
-    )
+def test_route_entry_returns_orchestrate_gen_when_pending():
+    # pending_orchestrate=True 时直接进入 orchestrate_gen
+    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "orchestrate_gen"
 
 
 class FakeNest:
@@ -132,11 +123,11 @@ async def test_confirm_gen_runs_orchestrate_sync():
         checkpointer=MemorySaver(),
     )
     config = {"configurable": {"thread_id": "topo-gen-1"}}
+    # 预置状态到 await_topo（等待出图确认）
     await graph.aupdate_state(
         config,
         {
             "phase": "await_topo",
-            "awaiting_user": True,
             "skill_id": "enterprise-marketing-campaign",
             "session_id": "s1",
             "user_id": "u1",
@@ -156,12 +147,10 @@ async def test_confirm_gen_runs_orchestrate_sync():
             "gen_failed": [],
             "messages": [AIMessage(content="骨架就绪")],
         },
-        as_node="draft_copy",
     )
-    state = await graph.ainvoke(
-        {"messages": [HumanMessage(content="确认出图")]},
-        config,
-    )
+    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
+    await graph.aupdate_state(config, {"messages": [HumanMessage(content="确认出图")]}, as_node="await_topo")
+    state = await graph.ainvoke(None, config)
     assert any(c[0] == "run_image_generation" for c in nest.calls)
     assert state.get("phase") == "done" or state.get("gen_completed")
 
@@ -186,7 +175,6 @@ async def test_node_revise_sets_modify_mode_and_routes_to_plan():
     )
     assert out["user_decision"] == "node_revise"
     assert out["mode"] == "modify"
-    assert out["awaiting_user"] is False
     # 上下文衔接提示（修复 P1-2）
     assert "调整" in out["messages"][0].content or "基于当前方案" in out["messages"][0].content
 
@@ -259,7 +247,6 @@ async def test_node_revise_full_flow_updates_canvas():
         config,
         {
             "phase": "await_topo",
-            "awaiting_user": True,
             "skill_id": "enterprise-marketing-campaign",
             "session_id": "s1",
             "user_id": "u1",
@@ -275,12 +262,10 @@ async def test_node_revise_full_flow_updates_canvas():
             ],
             "messages": [AIMessage(content="骨架就绪，请确认出图")],
         },
-        as_node="draft_copy",
     )
-    state = await graph.ainvoke(
-        {"messages": [HumanMessage(content="把模特定妆改为双人模特，增加产品材质特写图")]},
-        config,
-    )
+    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
+    await graph.aupdate_state(config, {"messages": [HumanMessage(content="把模特定妆改为双人模特，增加产品材质特写图")]}, as_node="await_topo")
+    state = await graph.ainvoke(None, config)
     # P0 修复后：node_revise 直接更新画布，回到拓扑确认门（不再进 await_confirm）
     assert state.get("phase") == "await_topo"
     assert state.get("mode") == "modify"

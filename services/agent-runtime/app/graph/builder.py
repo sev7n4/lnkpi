@@ -35,22 +35,14 @@ def _latest_user_text(state: AgentRuntimeState) -> str:
 
 
 def route_entry(state: AgentRuntimeState) -> str:
-    # 修复 P0-1：phase=done 后用户再发消息，必须保留 brief + plan_draft 上下文
-    # 走 intake 重新进入，但 intake 会基于 state.user_brief/plan_draft 决定 modify vs create
-    if state.get("awaiting_user") and state.get("phase") == "await_copy_confirm":
-        return "await_copy_confirm"
-    if state.get("awaiting_user") and state.get("phase") == "await_topo":
-        text = _latest_user_text(state)
-        copy_dec = classify_copy_decision(text)
-        if copy_dec == "confirm" or (
-            copy_dec == "revise" and ("文案" in text or "主文案" in text)
-        ):
-            return "await_copy_confirm"
-        return "await_topo"
-    if state.get("awaiting_user") and state.get("phase") == "await_confirm":
-        return "await_confirm"
-    # 修复 P0-2：phase=done 但有 user_brief + plan_draft → 走 intake 重新进入
-    # intake 节点会基于 state.mode (modify/create) 决定下一步
+    # W5: 简化路由 - interrupt_before 替代 awaiting_user flag
+    # 从 checkpoint 恢复时，LangGraph 会直接进入中断的节点
+    # 新对话或 phase=done 后走 intake
+    phase = state.get("phase")
+    # 如果有 pending_orchestrate 标记，应该进入 orchestrate_gen
+    if state.get("pending_orchestrate"):
+        return "orchestrate_gen"
+    # 从 intake 重新进入
     return "intake"
 
 
@@ -145,9 +137,7 @@ def build_agent_graph(
         route_entry,
         {
             "intake": "intake",
-            "await_confirm": "await_confirm",
-            "await_copy_confirm": "await_copy_confirm",
-            "await_topo": "await_topo",
+            "orchestrate_gen": "orchestrate_gen",
         },
     )
     graph.add_conditional_edges(
@@ -204,4 +194,13 @@ def build_agent_graph(
     graph.add_edge("write_copy_node", END)
 
     saver = checkpointer if checkpointer is not None else MemorySaver()
-    return graph.compile(checkpointer=saver)
+    # W5: 使用 LangGraph 原生 interrupt_before 机制替代 custom awaiting_user flags
+    # 在用户确认节点前中断，等待用户输入后从 checkpoint 恢复继续执行
+    return graph.compile(
+        checkpointer=saver,
+        interrupt_before=[
+            "await_confirm",
+            "await_topo",
+            "await_copy_confirm",
+        ],
+    )

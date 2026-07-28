@@ -23,12 +23,10 @@ async def test_none_decision_adds_tip_message():
     out = await node(
         {
             "messages": [HumanMessage(content="你是谁？")],
-            "awaiting_user": True,
             "phase": "await_confirm",
         }
     )
     assert out["user_decision"] == "none"
-    assert out["awaiting_user"] is True
     assert out["messages"][0].content == _NONE_DECISION_TIP
 
 
@@ -38,19 +36,20 @@ async def test_confirm_decision_adds_progress_tip():
     out = await node(
         {
             "messages": [HumanMessage(content="确认")],
-            "awaiting_user": True,
             "phase": "await_confirm",
         }
     )
     assert out["user_decision"] == "confirm"
-    assert out["awaiting_user"] is False
     assert "拆解" in out["messages"][0].content
+
+
+@pytest.mark.asyncio
+async def test_same_turn_plan_no_re_prompt():
     """Same-turn plan → await_confirm must not re-prompt before user replies."""
     node = make_await_confirm_node(llm=_FakeLLM())
     out = await node(
         {
             "messages": [AIMessage(content="已生成方案摘要：…请确认…")],
-            "awaiting_user": True,
             "phase": "await_confirm",
         }
     )
@@ -96,7 +95,6 @@ async def test_revise_decision_sets_modify_mode_when_brief_and_plan_exist():
     out = await node(
         {
             "messages": [HumanMessage(content="改成双人模特")],
-            "awaiting_user": True,
             "phase": "await_confirm",
             "user_brief": "帮我做一套洁具详情页营销方案",
             "plan_draft": "# 洁具详情页方案\n## 定位...",
@@ -116,7 +114,6 @@ async def test_revise_decision_does_not_set_mode_without_brief():
     out = await node(
         {
             "messages": [HumanMessage(content="改成运动鞋")],
-            "awaiting_user": True,
             "phase": "await_confirm",
         }
     )

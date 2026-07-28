@@ -52,12 +52,13 @@ def classify_copy_decision(text: str) -> Decision:
 
 def make_await_copy_confirm_node() -> Callable:
     async def await_copy_confirm(state: dict) -> dict:
+        # W5: interrupt_before 替代 awaiting_user flag
+        # 从 checkpoint 恢复时，state 已包含用户新消息
         text = _latest_user_text(state.get("messages") or [])
         decision = classify_copy_decision(text)
         if decision == "none":
             return {
                 "user_decision": "none",
-                "awaiting_user": True,
                 "phase": "await_copy_confirm",
                 "copy_revise_only": False,
                 "messages": [AIMessage(content=_NONE_TIP)],
@@ -65,13 +66,11 @@ def make_await_copy_confirm_node() -> Callable:
         if decision == "revise":
             return {
                 "user_decision": "revise",
-                "awaiting_user": True,
                 "phase": "await_copy_confirm",
                 "copy_revise_only": True,
             }
         return {
             "user_decision": "confirm",
-            "awaiting_user": False,
             "phase": "await_copy_confirm",
             "copy_revise_only": False,
         }

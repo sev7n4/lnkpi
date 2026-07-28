@@ -156,7 +156,7 @@ async def test_confirm_then_split_creates_image_skeletons():
         },
         config,
     )
-    assert state1["awaiting_user"] is True
+    # W5: interrupt_before 在 await_confirm 前暂停，不会设置 awaiting_user
     assert state1["skill_id"] == "enterprise-marketing-campaign"
     assert not state1.get("plan_node_id")
     # 方案确认前不得写画布
@@ -168,10 +168,9 @@ async def test_confirm_then_split_creates_image_skeletons():
     ]
     assert any("1. 采纳推荐并确认方案" in t for t in texts1)
 
-    state2 = await graph.ainvoke(
-        {"messages": [HumanMessage(content="1")]},
-        config,
-    )
+    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
+    await graph.aupdate_state(config, {"messages": [HumanMessage(content="1")]}, as_node="await_confirm")
+    state2 = await graph.ainvoke(None, config)
     keys = _batch_keys(nest)
     assert "white_bg" in keys
     assert "hero_main" in keys
@@ -184,7 +183,6 @@ async def test_confirm_then_split_creates_image_skeletons():
     assert state2["plan_node_id"]
     # draft_copy ends turn on await_topo; no auto image gen
     assert state2["phase"] == "await_topo"
-    assert state2["awaiting_user"] is True
     assert state2.get("copy_draft")
     assert state2["user_decision"] == "confirm"
     assert state2["split_manifest"]
@@ -229,13 +227,11 @@ async def test_revise_returns_to_plan():
     )
     assert not any(c[0] == "upsert_prompt_node" for c in nest.calls)
 
-    state2 = await graph.ainvoke(
-        {"messages": [HumanMessage(content="改成更偏天猫详情页")]},
-        config,
-    )
+    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
+    await graph.aupdate_state(config, {"messages": [HumanMessage(content="改成更偏天猫详情页")]}, as_node="await_confirm")
+    state2 = await graph.ainvoke(None, config)
     # revise 仍不写画布，直到确认方案
     assert not any(c[0] == "upsert_prompt_node" for c in nest.calls)
-    assert state2["awaiting_user"] is True
     assert state2["user_decision"] == "none"
     assert state2["phase"] == "await_confirm"
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
@@ -266,12 +262,10 @@ async def test_await_confirm_none_emits_tip_message():
         config,
     )
 
-    state2 = await graph.ainvoke(
-        {"messages": [HumanMessage(content="请只回复：在线")]},
-        config,
-    )
+    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
+    await graph.aupdate_state(config, {"messages": [HumanMessage(content="请只回复：在线")]}, as_node="await_confirm")
+    state2 = await graph.ainvoke(None, config)
     assert state2["user_decision"] == "none"
-    assert state2["awaiting_user"] is True
     assert state2["phase"] == "await_confirm"
     texts = [
         str(getattr(m, "content", "") or "")

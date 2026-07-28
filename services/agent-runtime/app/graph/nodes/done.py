@@ -34,16 +34,16 @@ def make_done_node() -> Callable:
         else:
             msg = "流程结束。本次无可汇总的出图结果；你也可手动在画布上生成。"
 
-        if state.get("phase") == "await_copy_confirm" and state.get("awaiting_user"):
+        # W5: interrupt_before 后不再需要 awaiting_user 判断
+        # 如果当前 phase 是 await_copy_confirm，保持该 phase（等待用户确认主文案）
+        if state.get("phase") == "await_copy_confirm":
             return {
                 "phase": "await_copy_confirm",
-                "awaiting_user": True,
                 "pending_orchestrate": False,
                 "messages": [AIMessage(content=msg)],
             }
         return {
             "phase": "done",
-            "awaiting_user": False,
             "pending_orchestrate": False,
             "messages": [AIMessage(content=msg)],
         }

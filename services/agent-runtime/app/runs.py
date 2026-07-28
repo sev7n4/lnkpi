@@ -296,9 +296,6 @@ async def stream_run_events(
     proxy = NestEventProxy(inner_nest, emit)
     graph_llm = llm if llm is not None else default_llm()
 
-    # Load conversation history (C1 decision)
-    history = await _load_history(inner_nest)
-
     active_checkpointer = checkpointer if checkpointer is not None else await _get_checkpointer()
     graph = build_agent_graph(
         nest=proxy,
@@ -307,14 +304,34 @@ async def stream_run_events(
         checkpointer=active_checkpointer,
     )
     config = {"configurable": {"thread_id": thread_id}}
-    # Prepend history to current message (C1 decision)
-    input_messages = history + [HumanMessage(content=req.message)]
-    input_state = {
-        "messages": input_messages,
-        "session_id": req.session_id,
-        "user_id": req.user_id,
-        "thread_id": thread_id,
-    }
+
+    # W5: 检查是否从 interrupt_before 恢复
+    # 如果 checkpoint 存在且有 next 节点（中断点），则从 checkpoint 恢复
+    # 否则作为新对话处理
+    snap = await graph.aget_state(config)
+    next_nodes = getattr(snap, "next", None) or []
+
+    if next_nodes:
+        # 从中断恢复：更新 checkpoint 状态（添加用户消息）
+        # as_node 参数指定更新来自哪个节点（中断点）
+        next_node = next_nodes[0] if next_nodes else None
+        await graph.aupdate_state(
+            config,
+            {"messages": [HumanMessage(content=req.message)]},
+            as_node=next_node,
+        )
+        # 使用 None 作为 input 继续执行
+        input_state = None  # type: ignore[assignment]
+    else:
+        # 新对话或已完成：加载历史并创建 input_state (C1 decision)
+        history = await _load_history(inner_nest)
+        input_messages = history + [HumanMessage(content=req.message)]
+        input_state = {
+            "messages": input_messages,
+            "session_id": req.session_id,
+            "user_id": req.user_id,
+            "thread_id": thread_id,
+        }
 
     bg_payload: dict[str, Any] | None = None
 

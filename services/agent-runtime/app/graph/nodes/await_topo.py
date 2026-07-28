@@ -32,19 +32,19 @@ def _latest_user_text(messages: list[Any]) -> str:
 
 def make_await_topo_node() -> Callable:
     async def await_topo(state: dict) -> dict:
+        # W5: interrupt_before 替代 awaiting_user flag
+        # 从 checkpoint 恢复时，state 已包含用户新消息
         text = _latest_user_text(state.get("messages") or [])
         decision = classify_topo_decision(text)
         if decision == "none":
             return {
                 "user_decision": "none",
-                "awaiting_user": True,
                 "phase": "await_topo",
                 "messages": [AIMessage(content=_NONE_TIP)],
             }
         if decision == "topo_revise":
             return {
                 "user_decision": "topo_revise",
-                "awaiting_user": True,
                 "phase": "await_topo",
             }
         if decision == "node_revise":
@@ -53,7 +53,6 @@ def make_await_topo_node() -> Callable:
             # 同时清空 pending_orchestrate 避免误触发出图
             return {
                 "user_decision": "node_revise",
-                "awaiting_user": False,
                 "phase": "await_topo",
                 "mode": "modify",
                 "pending_orchestrate": False,
@@ -61,7 +60,6 @@ def make_await_topo_node() -> Callable:
             }
         return {
             "user_decision": "confirm_gen",
-            "awaiting_user": False,
             "phase": "await_topo",
             "pending_orchestrate": False,
             "messages": [AIMessage(content="开始按拓扑出图，请稍候…")],

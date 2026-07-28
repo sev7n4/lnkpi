@@ -47,10 +47,12 @@ def _last_role(messages: list[Any]) -> str | None:
 
 def make_await_confirm_node(*, llm: Any) -> Callable:
     async def await_confirm(state: dict) -> dict:
+        # W5: interrupt_before 替代 awaiting_user flag
+        # 从 checkpoint 恢复时，state 已包含用户新消息
+        # 如果最后一条消息不是用户消息，说明用户还没回复，不返回提示
         if _last_role(state.get("messages") or []) not in ("human", "user"):
             return {
                 "user_decision": "none",
-                "awaiting_user": True,
                 "phase": "await_confirm",
             }
 
@@ -59,11 +61,9 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
         if decision is None:
             decision = await _llm_classify(llm, text)
 
-        awaiting = decision == "none"
         out: dict[str, Any] = {
             "user_decision": decision,
-            "awaiting_user": awaiting,
-            "phase": "await_confirm" if awaiting else state.get("phase") or "await_confirm",
+            "phase": "await_confirm",
         }
         # 修复 P0-3 盲点：await_confirm → revise → plan 路径不经过 intake，
         # mode 不会被更新为 modify。这里在 revise 时同步设 mode=modify，
