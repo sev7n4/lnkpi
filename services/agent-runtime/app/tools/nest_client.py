@@ -103,6 +103,20 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "edges": edges},
         )
 
+    async def remove_nodes(self, node_ids: list[str]) -> dict[str, Any]:
+        """W31: Remove nodes and their associated edges."""
+        return await self._post(
+            "/agent/internal/remove-nodes",
+            {"sessionId": self._session_id, "nodeIds": node_ids},
+        )
+
+    async def remove_edges(self, edge_ids: list[str]) -> dict[str, Any]:
+        """W32: Remove edges from canvas."""
+        return await self._post(
+            "/agent/internal/remove-edges",
+            {"sessionId": self._session_id, "edgeIds": edge_ids},
+        )
+
     async def set_node_prompt(
         self, node_id: str, prompt: str, *, title: str | None = None
     ) -> dict[str, Any]:

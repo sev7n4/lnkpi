@@ -87,6 +87,26 @@ class ConnectNodesDto {
   edges!: EdgeDto[]
 }
 
+// W31: Remove nodes DTO
+class RemoveNodesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+}
+
+// W32: Remove edges DTO
+class RemoveEdgesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  edgeIds!: string[]
+}
+
 class SetNodePromptDto {
   @IsString()
   sessionId!: string
@@ -243,6 +263,20 @@ export class AgentCanvasToolsController {
   @Post('connect-nodes')
   async connectNodes(@Body() dto: ConnectNodesDto) {
     const data = await this.tools.connectNodes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  // W31: Remove nodes endpoint
+  @Post('remove-nodes')
+  async removeNodes(@Body() dto: RemoveNodesDto) {
+    const data = await this.tools.removeNodes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  // W32: Remove edges endpoint
+  @Post('remove-edges')
+  async removeEdges(@Body() dto: RemoveEdgesDto) {
+    const data = await this.tools.removeEdges(dto)
     return { code: 0, message: 'ok', data }
   }
 

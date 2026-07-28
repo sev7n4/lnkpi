@@ -335,6 +335,62 @@ export class AgentCanvasToolsService {
     return { actions }
   }
 
+  /**
+   * W31: Remove nodes and their associated edges from canvas.
+   */
+  async removeNodes(input: {
+    sessionId: string
+    nodeIds: string[]
+  }): Promise<{ actions: CanvasAction[] }> {
+    const { canvas } = await this.loadSession(input.sessionId)
+    const actions: CanvasAction[] = []
+
+    // Remove edges connected to deleted nodes
+    for (const nodeId of input.nodeIds) {
+      for (const edge of canvas.edges) {
+        if (edge.source === nodeId || edge.target === nodeId) {
+          actions.push({
+            type: 'remove_edge',
+            payload: { id: edge.id },
+          })
+        }
+      }
+      // Remove the node
+      actions.push({
+        type: 'remove_node',
+        payload: { id: nodeId },
+      })
+    }
+
+    await this.persist(input.sessionId, actions)
+    return { actions }
+  }
+
+  /**
+   * W32: Remove edges from canvas.
+   */
+  async removeEdges(input: {
+    sessionId: string
+    edgeIds: string[]
+  }): Promise<{ actions: CanvasAction[] }> {
+    const { canvas } = await this.loadSession(input.sessionId)
+    const actions: CanvasAction[] = []
+
+    for (const edgeId of input.edgeIds) {
+      // Verify edge exists
+      if (!canvas.edges.some((e) => e.id === edgeId)) {
+        continue // Skip non-existent edges
+      }
+      actions.push({
+        type: 'remove_edge',
+        payload: { id: edgeId },
+      })
+    }
+
+    await this.persist(input.sessionId, actions)
+    return { actions }
+  }
+
   async setNodePrompt(input: {
     sessionId: string
     nodeId: string
