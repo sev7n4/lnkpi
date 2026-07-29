@@ -11,9 +11,9 @@ def test_route_entry_returns_intake_by_default():
     assert route_entry({"phase": "await_topo", "messages": []}) == "intake"
 
 
-def test_route_entry_returns_orchestrate_gen_when_pending():
-    # pending_orchestrate=True 时直接进入 orchestrate_gen
-    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "orchestrate_gen"
+def test_route_entry_returns_start_gen_when_pending():
+    # W3: pending_orchestrate=True 时进入 start_gen（Send-API 生成入口，gen_scheduler 接力）
+    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "start_gen"
 
 
 @pytest.mark.asyncio

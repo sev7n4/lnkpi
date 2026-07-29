@@ -17,8 +17,8 @@ from app.graph.nodes.collect_gen import make_collect_gen_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.draft_copy import make_draft_copy_node
 from app.graph.nodes.gen_node import make_gen_node
+from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 from app.graph.nodes.intake import make_intake_node
-from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.graph.nodes.plan import make_plan_node
 from app.graph.nodes.split import make_split_node
 from app.graph.nodes.start_gen import make_start_gen_node
@@ -103,7 +103,7 @@ def route_after_confirm(state: AgentRuntimeState) -> str:
 def route_after_topo(state: AgentRuntimeState) -> str:
     decision = state.get("user_decision") or "none"
     if decision == "confirm_gen":
-        return "start_gen"  # W3: start_gen prepares gen_queue, then routes to orchestrate_gen
+        return "start_gen"  # W3: start_gen inits gen state, then gen_scheduler fans out gen_node via Send
     if decision == "topo_revise":
         return "topo_revise"
     # 修复 P0-1：节点内容修改（改为/调整/增加）→ 回退到 plan 走 modify 模式
@@ -137,13 +137,15 @@ def build_agent_graph(
     graph.add_node("await_topo", make_await_topo_node())
     graph.add_node("topo_revise", make_topo_revise_node(nest=nest))
 
-    # W3: New generation nodes using Send API for per-node checkpointing
+    # W3: New generation nodes using Send API for per-node checkpointing.
+    # gen_scheduler is the central arbiter: fans out gen_node via Send and
+    # re-runs after each superstep to dispatch the next wave (diamond-safe).
+    # orchestrate_gen.py is intentionally NOT registered (deprecated, kept on
+    # disk only because runs.py still imports it — cleanup in a follow-up PR).
     graph.add_node("start_gen", make_start_gen_node())
+    graph.add_node("gen_scheduler", make_gen_scheduler_node())
     graph.add_node("gen_node", make_gen_node(nest=nest))
     graph.add_node("collect_gen", make_collect_gen_node(nest=nest))
-
-    # Keep old orchestrate_gen for backward compatibility (can be removed later)
-    graph.add_node("orchestrate_gen", make_orchestrate_gen_node(nest=nest))
 
     graph.add_conditional_edges(
         START,
@@ -194,15 +196,16 @@ def build_agent_graph(
     )
     graph.add_edge("topo_revise", END)
 
-    # W3: Generation DAG edges
-    # start_gen -> orchestrate_gen (prepares gen_queue, existing orchestrate_gen handles execution)
-    # orchestrate_gen -> done
-    graph.add_edge("start_gen", "orchestrate_gen")
+    # W3: Generation DAG edges (Send API fan-out via gen_scheduler).
+    # start_gen -> gen_scheduler : kick off the first dispatch wave
+    # gen_node   -> gen_scheduler : re-run scheduler after each superstep to dispatch next wave
+    # gen_scheduler -> gen_node   : DYNAMIC via Command(goto=[Send("gen_node", ...)]), no static edge
+    # gen_scheduler -> collect_gen: DYNAMIC via Command(goto=["collect_gen"]) when nothing to dispatch
+    # collect_gen -> done
+    graph.add_edge("start_gen", "gen_scheduler")
+    graph.add_edge("gen_node", "gen_scheduler")
     graph.add_edge("collect_gen", "done")
     graph.add_edge("done", END)
-
-    # Old orchestrate_gen edge (keep for backward compatibility)
-    graph.add_edge("orchestrate_gen", "done")
 
     graph.add_conditional_edges(
         "await_copy_confirm",
