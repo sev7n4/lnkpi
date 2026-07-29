@@ -86,18 +86,22 @@ async def test_topo_revise_removes_by_title():
 
 
 @pytest.mark.asyncio
-async def test_confirm_gen_runs_orchestrate_sync():
-    """Test that start_gen + orchestrate_gen execute generation correctly."""
+async def test_confirm_gen_runs_send_api_subgraph():
+    """W3: start_gen → gen_scheduler ⇄ gen_node → collect_gen executes generation.
+
+    Replaces the old test that called orchestrate_gen directly. Now exercises the
+    full Send-API subgraph via ainvoke and asserts on the legacy bridge fields
+    that collect_gen produces for done.py.
+    """
+    from langgraph.graph import StateGraph, START, END
+
+    from app.graph.nodes.collect_gen import make_collect_gen_node
+    from app.graph.nodes.gen_node import make_gen_node
+    from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
     from app.graph.nodes.start_gen import make_start_gen_node
-    from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
+    from app.graph.state import AgentRuntimeState
 
     class GenNest(FakeNest):
-        async def get_node(self, node_id: str) -> dict[str, Any]:
-            return {"id": node_id, "type": "image", "data": {}}
-
-        async def set_node_prompt(self, node_id: str, prompt: str) -> dict[str, Any]:
-            return {"nodeId": node_id, "actions": []}
-
         async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
             return {"nodeId": node_id, "actions": []}
 
@@ -115,44 +119,47 @@ async def test_confirm_gen_runs_orchestrate_sync():
         async def emit_task_summary(self, **payload: Any) -> None:
             self.calls.append(("emit_task_summary", payload))
 
+        async def save_gen_progress(self, **kwargs: Any) -> dict[str, Any]:
+            return {"id": "gp-1"}
+
     nest = GenNest()
 
-    # Test start_gen
-    start_gen = make_start_gen_node()
-    result1 = await start_gen({
-        "split_manifest": [
-            {
-                "key": "white_bg",
-                "title": "白底图",
-                "target_type": "image",
-                "auto_generate": True,
-                "depends_on": [],
-                "node_id": "img-1",
-                "prompt_hint": "white",
-            }
-        ],
-    })
-    assert result1.get("gen_queue") == ["white_bg"]
+    # Build the W3 generation subgraph in isolation
+    g = StateGraph(AgentRuntimeState)
+    g.add_node("start_gen", make_start_gen_node())
+    g.add_node("gen_scheduler", make_gen_scheduler_node())
+    g.add_node("gen_node", make_gen_node(nest=nest))
+    g.add_node("collect_gen", make_collect_gen_node(nest=nest))
+    g.add_edge(START, "start_gen")
+    g.add_edge("start_gen", "gen_scheduler")
+    g.add_edge("gen_node", "gen_scheduler")
+    g.add_edge("collect_gen", END)
+    graph = g.compile(checkpointer=MemorySaver())
 
-    # Test orchestrate_gen
-    orchestrate_gen = make_orchestrate_gen_node(nest=nest)
-    state = {
-        "split_manifest": [
-            {
-                "key": "white_bg",
-                "title": "白底图",
-                "target_type": "image",
-                "auto_generate": True,
-                "depends_on": [],
-                "node_id": "img-1",
-                "prompt_hint": "white",
-            }
-        ],
-    }
-    result2 = await orchestrate_gen(state)
+    manifest = [
+        {
+            "key": "white_bg",
+            "title": "白底图",
+            "target_type": "image",
+            "auto_generate": True,
+            "depends_on": [],
+            "node_id": "img-1",
+            "prompt_hint": "white",
+        }
+    ]
+    result = await graph.ainvoke(
+        {"split_manifest": manifest},
+        {"configurable": {"thread_id": "send-api-smoke"}, "recursion_limit": 100},
+    )
 
+    # gen_node ran the image generation
     assert any(c[0] == "run_image_generation" for c in nest.calls)
-    assert result2.get("gen_completed") == ["img-1"]
+    # collect_gen bridged to the legacy fields done.py reads
+    assert result.get("gen_completed") == ["img-1"]
+    assert result.get("gen_failed") == []
+    # W3 transient fields are cleared after collect
+    assert result.get("gen_ordered_keys") is None
+    assert result.get("gen_completed_keys") is None
 
 
 # 修复 P0-1：node_revise → plan 路由 + mode=modify

@@ -1,4 +1,12 @@
-"""Orchestrate topological image/video generation with retry and task events."""
+"""Orchestrate topological image/video generation with retry and task events.
+
+DEPRECATED: This node is superseded by the Send-API generation subgraph
+(``start_gen → gen_scheduler ⇄ gen_node → collect_gen``) which provides
+per-node checkpointing and independent retries. This file is kept ONLY
+because ``app/runs.py`` still imports ``make_orchestrate_gen_node`` for
+its legacy background-task path; it is no longer registered in the graph
+(see ``app/graph/builder.py``). Removal is tracked as a follow-up cleanup PR.
+"""
 
 from __future__ import annotations
 

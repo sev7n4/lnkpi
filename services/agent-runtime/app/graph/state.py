@@ -5,6 +5,35 @@ from typing import Annotated, Literal, TypedDict
 from langgraph.graph.message import add_messages
 
 
+def reset_or_union(left: list[str] | None, right: list[str] | None) -> list[str] | None:
+    """Reducer for parallel Send fan-out: union-dedupe within a run, None resets.
+
+    LangGraph runs multiple gen_node instances in one superstep; without a
+    reducer they'd raise ``InvalidUpdateError: Can receive only one value per
+    step``. This reducer merges those parallel writes (union, dedupe, order-
+    preserving). Returning ``None`` (from start_gen at run start, or collect_gen
+    at run end) resets the channel so a re-generation on the same thread does
+    not leak the previous run's keys (which would make the scheduler wrongly
+    treat nodes as already-completed and skip them).
+    """
+    if right is None:
+        return None
+    out: list[str] = []
+    seen: set[str] = set()
+    for k in [*(left or []), *(right or [])]:
+        if k not in seen:
+            seen.add(k)
+            out.append(k)
+    return out
+
+
+def reset_or_merge(left: dict | None, right: dict | None) -> dict | None:
+    """Reducer for gen_fail_details: shallow-merge within a run, None resets."""
+    if right is None:
+        return None
+    return {**(left or {}), **(right or {})}
+
+
 class SplitManifestItem(TypedDict, total=False):
     key: str
     title: str
@@ -87,11 +116,18 @@ class AgentRuntimeState(TypedDict, total=False):
     brief_locked: bool  # True 后 user_brief 不再被覆盖
     mode: Literal["create", "modify"] | None
 
-    # W3: Transient fields for Send API fan-out generation
-    # These are only used during orchestrate_gen and cleaned up by collect_gen
+    # W3: Transient fields for Send API fan-out generation.
+    # gen_ordered_keys/gen_deps_of/gen_by_key are write-once (start_gen) /
+    # clear-once (collect_gen), so plain overwrite is fine.
+    # gen_*_keys/gen_fail_details are written by PARALLEL gen_node instances in
+    # the same superstep → must use reset_or_union/reset_or_merge reducers.
+    # Returning None (start_gen at run start, collect_gen at run end) resets
+    # them so a re-generation on the same thread doesn't leak the prior run.
     gen_ordered_keys: list[str] | None  # Topological order of generation keys
     gen_deps_of: dict[str, list[str]] | None  # Dependency graph
     gen_by_key: dict[str, dict] | None  # Manifest items by key
-    gen_completed_keys: list[str] | None  # Completed generation keys
-    gen_failed_keys: list[str] | None  # Failed generation keys
-    gen_needs_user_keys: list[str] | None  # Keys needing user intervention
+    gen_completed_keys: Annotated[list[str] | None, reset_or_union]  # Completed keys
+    gen_failed_keys: Annotated[list[str] | None, reset_or_union]  # Failed keys
+    gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]  # Keys needing user
+    gen_fail_details: Annotated[dict[str, dict] | None, reset_or_merge]  # key→{node_id,title,reason}
+    gen_max_concurrency: int | None  # Concurrency cap for gen_scheduler
