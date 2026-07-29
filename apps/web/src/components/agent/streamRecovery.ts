@@ -47,7 +47,9 @@ export async function checkRuntimeHealthViaNest(
       code?: number
       data?: { ok?: boolean; latencyMs?: number }
     }
-    return json?.data ?? null
+    const data = json?.data
+    if (!data || data.ok === undefined) return null
+    return { ok: data.ok, latencyMs: data.latencyMs }
   } catch {
     return null
   }
