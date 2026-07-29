@@ -21,6 +21,7 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
+import { buildIdempotencyKey, shouldPollRuntimeHealth, checkRuntimeHealthViaNest } from '@/components/agent/streamRecovery'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -271,6 +272,11 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   await nextTick()
   scrollToBottom()
 
+  // Generate idempotency key for this request
+  const idempotencyKey = buildIdempotencyKey(agentThreadId.value)
+  // Track whether SSE stream ended normally (received [DONE])
+  let streamEndedNormally = false
+
   try {
     const token = localStorage.getItem('token')
     const res = await fetch(apiUrl('/api/agent/chat/conversation'), {
@@ -278,6 +284,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
+        'Idempotency-Key': idempotencyKey,
       },
       body: JSON.stringify({
         sessionId: props.sessionId,
@@ -300,7 +307,11 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
       for (const line of lines) {
-        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue
+        if (!line.startsWith('data: ')) continue
+        if (line === 'data: [DONE]') {
+          streamEndedNormally = true
+          continue
+        }
         try {
           handleEvent(JSON.parse(line.slice(6)))
         } catch { /* skip */ }
@@ -309,6 +320,14 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   } catch (err) {
     agent.appendText(`\n\n⚠️ 请求失败: ${err}`)
   } finally {
+    // SSE abnormal-end detection: stream broke without [DONE]
+    if (!streamEndedNormally) {
+      const last = agent.messages[agent.messages.length - 1]
+      if (last?.role === 'assistant' && !last.content.trim()) {
+        agent.appendText('\n\n⚠️ 连接意外断开，请稍后重试。')
+      }
+    }
+
     const last = agent.messages[agent.messages.length - 1]
     if (last?.role === 'assistant' && !last.content.trim()) {
       agent.appendText('（本轮无文本回复。若在确认方案，可再发「确认」；或点「新建对话」后重试。）')
@@ -327,7 +346,8 @@ const BUSY_TIP_SNIPPET = '上一轮仍在处理中'
 const EXEC_PROGRESS_SNIPPET = '出图成功'
 const COPY_WRITTEN_SNIPPET = '已将确认的主文案'
 
-/** 流结束后用 DB 历史补齐（避免只看到 busy / 截断 / 被旧确认文案覆盖） */
+/** 流结束后用 DB 历史补齐（避免只看到 busy / 截断 / 被旧确认文案覆盖）。
+ *  当检测到仍在生成中时，附加 runtime 健康轮询。 */
 async function reconcileLatestAssistant() {
   const pull = async () => {
     const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
@@ -354,6 +374,7 @@ async function reconcileLatestAssistant() {
       content?.includes(BUSY_TIP_SNIPPET)
       || (confirmTurn && !content?.includes(EXEC_PROGRESS_SNIPPET) && !content?.includes('自动出图'))
     if (shouldPoll) {
+      let runtimeFailCount = 0
       for (let i = 0; i < 36; i++) {
         await new Promise((r) => setTimeout(r, 5_000))
         content = await pull()
@@ -369,6 +390,23 @@ async function reconcileLatestAssistant() {
         ) {
           scrollToBottom()
           break
+        }
+        // Runtime health check (every 3rd poll, i.e. every 15s)
+        if (i > 0 && i % 3 === 0 && content && shouldPollRuntimeHealth(content)) {
+          const health = await checkRuntimeHealthViaNest(apiUrl(''))
+          if (!health || !health.ok) {
+            runtimeFailCount++
+            if (runtimeFailCount >= 2) {
+              const last = agent.messages[agent.messages.length - 1]
+              if (last?.role === 'assistant') {
+                last.content += '\n\n⚠️ 生成服务暂时不可达，出图可能已中断。请稍后重试或新建对话。'
+              }
+              scrollToBottom()
+              break
+            }
+          } else {
+            runtimeFailCount = 0
+          }
         }
       }
     }

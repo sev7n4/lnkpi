@@ -51,28 +51,115 @@ export class AgentService {
     userId?: string,
     threadId?: string,
     userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
+    idempotencyKey?: string,
   ): AsyncGenerator<AgentStreamEvent> {
+    // Register idempotency key (if provided) before starting
+    if (idempotencyKey) {
+      await this.registerIdempotencyKey(idempotencyKey, sessionId, threadId || sessionId)
+    }
+
     await this.prisma.agentMessage.create({
       data: { sessionId, role: 'user', content: userMessage },
     })
+
+    let assistantText = ''
 
     const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
     if (runtimeUrl && userId) {
       const client = this.createRuntimeClient(runtimeUrl)
       if (await client.healthOk()) {
-        yield* this.streamFromRuntime(
+        for await (const event of this.streamFromRuntime(
           client,
           sessionId,
           userMessage,
           userId,
           threadId,
           userDecision,
-        )
+        )) {
+          if (event.type === 'text_delta') {
+            assistantText += (event.data as { text: string }).text
+          }
+          yield event
+        }
+        // Complete idempotency key after successful runtime stream
+        if (idempotencyKey) {
+          await this.completeIdempotencyKey(idempotencyKey, assistantText)
+        }
         return
       }
     }
 
-    yield* this.streamFromCanvasAgent(sessionId, userId)
+    for await (const event of this.streamFromCanvasAgent(sessionId, userId)) {
+      if (event.type === 'text_delta') {
+        assistantText += (event.data as { text: string }).text
+      }
+      yield event
+    }
+    // Complete idempotency key after canvas agent fallback
+    if (idempotencyKey) {
+      await this.completeIdempotencyKey(idempotencyKey, assistantText)
+    }
+  }
+
+  // ── Idempotency ──────────────────────────────────────────────
+
+  /** Check if an idempotency key already exists (lazy-clean expired records first). */
+  async checkIdempotencyKey(
+    key: string,
+  ): Promise<{ status: string; resultSummary?: string } | null> {
+    // Lazy-clean expired records
+    await this.prisma.idempotencyRecord.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+    const record = await this.prisma.idempotencyRecord.findUnique({
+      where: { idempotencyKey: key },
+    })
+    if (!record) return null
+    return { status: record.status, resultSummary: record.resultSummary ?? undefined }
+  }
+
+  /** Register a new idempotency key with 5-min TTL. */
+  async registerIdempotencyKey(
+    key: string,
+    sessionId: string,
+    threadId: string,
+  ): Promise<void> {
+    const now = new Date()
+    await this.prisma.idempotencyRecord
+      .create({
+        data: {
+          idempotencyKey: key,
+          sessionId,
+          threadId,
+          status: 'processing',
+          expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
+        },
+      })
+      .catch(() => {
+        // Unique constraint conflict = concurrent registration, ignore
+      })
+  }
+
+  /** Mark idempotency key as completed with optional result summary. */
+  async completeIdempotencyKey(key: string, resultSummary?: string): Promise<void> {
+    await this.prisma.idempotencyRecord
+      .updateMany({
+        where: { idempotencyKey: key, status: 'processing' },
+        data: { status: 'completed', resultSummary: resultSummary?.slice(0, 500) || null },
+      })
+      .catch(() => {})
+  }
+
+  // ── Runtime Health ───────────────────────────────────────────
+
+  /** Proxy agent-runtime health check for frontend heartbeat detection. */
+  async checkRuntimeHealth(): Promise<{ ok: boolean; latencyMs?: number }> {
+    const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
+    if (!runtimeUrl) return { ok: false }
+    const client = this.createRuntimeClient(runtimeUrl)
+    const start = Date.now()
+    const ok = await client.healthOk(5000)
+    return { ok, latencyMs: ok ? Date.now() - start : undefined }
   }
 
   /** Overridable in unit tests */

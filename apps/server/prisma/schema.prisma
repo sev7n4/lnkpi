@@ -194,6 +194,21 @@ model AgentMessage {
   createdAt DateTime @default(now())
 }
 
+/// Idempotency records for POST /agent/chat/conversation — prevent duplicate requests
+/// from network retries. 5 min TTL, lazy-cleaned on each lookup.
+model IdempotencyRecord {
+  id             String   @id @default(cuid())
+  idempotencyKey String   @unique
+  sessionId      String
+  threadId       String
+  status         String   @default("processing") // processing | completed | error
+  resultSummary  String?  // assistant text summary (≤500 chars) after completion
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime // createdAt + 5 min
+
+  @@index([expiresAt])
+}
+
 model Work {
   id           String   @id @default(cuid())
   title        String

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
 import { IsIn, IsOptional, IsString } from 'class-validator'
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { AgentService } from './agent.service'
 
@@ -48,6 +48,13 @@ export class AgentController {
     return { code: 0, message: 'ok', data }
   }
 
+  /** Proxy agent-runtime health check for frontend heartbeat detection. */
+  @Get('runtime-health')
+  async runtimeHealth() {
+    const data = await this.agentService.checkRuntimeHealth()
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('chat/optimize-prompt')
   async optimizePrompt(@Body() dto: OptimizePromptDto) {
     const data = await this.agentService.optimizePrompt(dto.prompt, dto.style)
@@ -58,12 +65,28 @@ export class AgentController {
   @UseGuards(AuthGuard)
   async conversation(
     @Body() dto: ConversationDto,
-    @Req() req: { user: { sub: string } },
+    @Req() req: Request & { user: { sub: string } },
     @Res() res: Response,
   ) {
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
+
+    // Idempotency key check — prevent duplicate requests from network retries
+    const idempotencyKey = req.headers['idempotency-key'] as string | undefined
+    if (idempotencyKey) {
+      const cached = await this.agentService.checkIdempotencyKey(idempotencyKey)
+      if (cached) {
+        const text =
+          cached.status === 'processing'
+            ? '上一轮仍在处理中，请稍候…'
+            : cached.resultSummary || '已完成'
+        res.write(`data: ${JSON.stringify({ type: 'text_delta', data: { text } })}\n\n`)
+        res.write('data: [DONE]\n\n')
+        res.end()
+        return
+      }
+    }
 
     try {
       for await (const event of this.agentService.streamConversation(
@@ -72,6 +95,7 @@ export class AgentController {
         req.user.sub,
         dto.threadId,
         dto.userDecision,
+        idempotencyKey,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }
