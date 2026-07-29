@@ -9,6 +9,10 @@ describe('AgentService streamConversation', () => {
   const agentMessageFindMany = vi.fn()
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
+  const idempotencyRecordCreate = vi.fn()
+  const idempotencyRecordFindUnique = vi.fn()
+  const idempotencyRecordUpdateMany = vi.fn()
+  const idempotencyRecordDeleteMany = vi.fn()
 
   let service: AgentService
 
@@ -22,6 +26,10 @@ describe('AgentService streamConversation', () => {
     ])
     sessionFindUnique.mockResolvedValue({ id: 's1', canvasData: null })
     sessionUpdate.mockResolvedValue({})
+    idempotencyRecordCreate.mockResolvedValue({})
+    idempotencyRecordFindUnique.mockResolvedValue(null)
+    idempotencyRecordUpdateMany.mockResolvedValue({ count: 1 })
+    idempotencyRecordDeleteMany.mockResolvedValue({ count: 0 })
 
     service = new AgentService(
       {
@@ -32,6 +40,12 @@ describe('AgentService streamConversation', () => {
         session: {
           findUnique: sessionFindUnique,
           update: sessionUpdate,
+        },
+        idempotencyRecord: {
+          create: idempotencyRecordCreate,
+          findUnique: idempotencyRecordFindUnique,
+          updateMany: idempotencyRecordUpdateMany,
+          deleteMany: idempotencyRecordDeleteMany,
         },
       } as never,
       { create: vi.fn() } as never,
@@ -135,5 +149,178 @@ describe('AgentService streamConversation', () => {
 
     expect(runSpy).toHaveBeenCalledOnce()
     expect(events.some((e) => e.type === 'text_delta')).toBe(true)
+  })
+})
+
+describe('AgentService idempotency', () => {
+  const idempotencyRecordCreate = vi.fn()
+  const idempotencyRecordFindUnique = vi.fn()
+  const idempotencyRecordUpdateMany = vi.fn()
+  const idempotencyRecordDeleteMany = vi.fn()
+  const agentMessageCreate = vi.fn()
+  const agentMessageFindMany = vi.fn()
+  const sessionFindUnique = vi.fn()
+  const sessionUpdate = vi.fn()
+
+  let service: AgentService
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.AGENT_RUNTIME_URL
+    agentMessageCreate.mockResolvedValue({})
+    agentMessageFindMany.mockResolvedValue([])
+    sessionFindUnique.mockResolvedValue(null)
+    sessionUpdate.mockResolvedValue({})
+    idempotencyRecordCreate.mockResolvedValue({})
+    idempotencyRecordFindUnique.mockResolvedValue(null)
+    idempotencyRecordUpdateMany.mockResolvedValue({ count: 1 })
+    idempotencyRecordDeleteMany.mockResolvedValue({ count: 0 })
+
+    service = new AgentService(
+      {
+        agentMessage: {
+          create: agentMessageCreate,
+          findMany: agentMessageFindMany,
+        },
+        session: { findUnique: sessionFindUnique, update: sessionUpdate },
+        idempotencyRecord: {
+          create: idempotencyRecordCreate,
+          findUnique: idempotencyRecordFindUnique,
+          updateMany: idempotencyRecordUpdateMany,
+          deleteMany: idempotencyRecordDeleteMany,
+        },
+      } as never,
+      { create: vi.fn() } as never,
+      { createFromAgent: vi.fn() } as never,
+    )
+  })
+
+  it('checkIdempotencyKey returns null for unknown key', async () => {
+    idempotencyRecordFindUnique.mockResolvedValue(null)
+    const result = await service.checkIdempotencyKey('unknown-key')
+    expect(result).toBeNull()
+  })
+
+  it('checkIdempotencyKey returns processing for active key', async () => {
+    idempotencyRecordFindUnique.mockResolvedValue({
+      idempotencyKey: 'ik-test',
+      status: 'processing',
+      resultSummary: null,
+    })
+    const result = await service.checkIdempotencyKey('ik-test')
+    expect(result).toEqual({ status: 'processing', resultSummary: undefined })
+  })
+
+  it('checkIdempotencyKey returns completed for finished key', async () => {
+    idempotencyRecordFindUnique.mockResolvedValue({
+      idempotencyKey: 'ik-test',
+      status: 'completed',
+      resultSummary: '方案已确认',
+    })
+    const result = await service.checkIdempotencyKey('ik-test')
+    expect(result).toEqual({ status: 'completed', resultSummary: '方案已确认' })
+  })
+
+  it('checkIdempotencyKey lazily cleans expired records', async () => {
+    await service.checkIdempotencyKey('any-key')
+    expect(idempotencyRecordDeleteMany).toHaveBeenCalledWith({
+      where: { expiresAt: { lt: expect.any(Date) } },
+    })
+  })
+
+  it('registerIdempotencyKey creates record with 5-min TTL', async () => {
+    await service.registerIdempotencyKey('ik-123', 's1', 't1')
+    expect(idempotencyRecordCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        idempotencyKey: 'ik-123',
+        sessionId: 's1',
+        threadId: 't1',
+        status: 'processing',
+      }),
+    })
+    const call = idempotencyRecordCreate.mock.calls[0][0] as { data: { expiresAt: Date } }
+    const ttl = call.data.expiresAt.getTime() - Date.now()
+    expect(ttl).toBeGreaterThan(4 * 60 * 1000) // > 4 min
+    expect(ttl).toBeLessThanOrEqual(6 * 60 * 1000) // <= 6 min (buffer)
+  })
+
+  it('registerIdempotencyKey ignores unique constraint conflict', async () => {
+    idempotencyRecordCreate.mockRejectedValue(new Error('Unique constraint failed'))
+    // Should not throw
+    await expect(service.registerIdempotencyKey('ik-dupe', 's1', 't1')).resolves.toBeUndefined()
+  })
+
+  it('completeIdempotencyKey updates status and resultSummary', async () => {
+    await service.completeIdempotencyKey('ik-123', '方案已确认，正在拆解画布')
+    expect(idempotencyRecordUpdateMany).toHaveBeenCalledWith({
+      where: { idempotencyKey: 'ik-123', status: 'processing' },
+      data: { status: 'completed', resultSummary: '方案已确认，正在拆解画布' },
+    })
+  })
+
+  it('completeIdempotencyKey truncates resultSummary to 500 chars', async () => {
+    const longText = 'x'.repeat(600)
+    await service.completeIdempotencyKey('ik-123', longText)
+    const call = idempotencyRecordUpdateMany.mock.calls[0][0] as { data: { resultSummary: string } }
+    expect(call.data.resultSummary.length).toBe(500)
+  })
+})
+
+describe('AgentService checkRuntimeHealth', () => {
+  const agentMessageCreate = vi.fn()
+  const agentMessageFindMany = vi.fn()
+  const sessionFindUnique = vi.fn()
+  const sessionUpdate = vi.fn()
+  const idempotencyRecordCreate = vi.fn()
+  const idempotencyRecordFindUnique = vi.fn()
+  const idempotencyRecordUpdateMany = vi.fn()
+  const idempotencyRecordDeleteMany = vi.fn()
+
+  let service: AgentService
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.AGENT_RUNTIME_URL
+
+    service = new AgentService(
+      {
+        agentMessage: { create: agentMessageCreate, findMany: agentMessageFindMany },
+        session: { findUnique: sessionFindUnique, update: sessionUpdate },
+        idempotencyRecord: {
+          create: idempotencyRecordCreate,
+          findUnique: idempotencyRecordFindUnique,
+          updateMany: idempotencyRecordUpdateMany,
+          deleteMany: idempotencyRecordDeleteMany,
+        },
+      } as never,
+      { create: vi.fn() } as never,
+      { createFromAgent: vi.fn() } as never,
+    )
+  })
+
+  it('returns ok:false when AGENT_RUNTIME_URL is unset', async () => {
+    const result = await service.checkRuntimeHealth()
+    expect(result).toEqual({ ok: false })
+  })
+
+  it('returns ok:true when runtime is healthy', async () => {
+    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
+    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
+      healthOk: vi.fn().mockResolvedValue(true),
+    } as unknown as AgentRuntimeClient)
+
+    const result = await service.checkRuntimeHealth()
+    expect(result.ok).toBe(true)
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('returns ok:false when runtime is unreachable', async () => {
+    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
+    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
+      healthOk: vi.fn().mockResolvedValue(false),
+    } as unknown as AgentRuntimeClient)
+
+    const result = await service.checkRuntimeHealth()
+    expect(result).toEqual({ ok: false })
   })
 })
