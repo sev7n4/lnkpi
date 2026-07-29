@@ -115,6 +115,8 @@ class AgentRuntimeState(TypedDict, total=False):
     user_brief: str | None
     brief_locked: bool  # True 后 user_brief 不再被覆盖
     mode: Literal["create", "modify"] | None
+    # W10: decide_plan_mode 计算，供 revise_manifest / compose_confirm / route_after_plan 使用
+    is_node_revise: bool | None
 
     # W3: Transient fields for Send API fan-out generation.
     # gen_ordered_keys/gen_deps_of/gen_by_key are write-once (start_gen) /

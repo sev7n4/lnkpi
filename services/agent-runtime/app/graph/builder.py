@@ -19,7 +19,7 @@ from app.graph.nodes.draft_copy import make_draft_copy_node
 from app.graph.nodes.gen_node import make_gen_node
 from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 from app.graph.nodes.intake import make_intake_node
-from app.graph.nodes.plan import make_plan_node
+from app.graph.nodes.plan import register_plan_nodes, route_after_plan
 from app.graph.nodes.split import make_split_node
 from app.graph.nodes.start_gen import make_start_gen_node
 from app.graph.nodes.topo_revise import make_topo_revise_node
@@ -67,20 +67,12 @@ def route_after_copy_confirm(state: AgentRuntimeState) -> str:
 
 def route_after_intake(state: AgentRuntimeState) -> str:
     if state.get("skill_id"):
-        return "plan"
+        return "decide_plan_mode"
     return "chat"
 
 
-def route_after_plan(state: AgentRuntimeState) -> str:
-    """P0 修复：node_revise（拓扑门改节点内容，画布已有节点）跳过方案确认门，直接进
-    write_plan_node → split 增量更新画布；revise（方案门改方向，画布未创建）与 create
-    保留 await_confirm 让用户确认方案。与 plan.py 的 is_node_revise 判断保持一致。"""
-    if state.get("mode") == "modify" and any(
-        isinstance(it, dict) and it.get("node_id")
-        for it in (state.get("split_manifest") or [])
-    ):
-        return "write_plan_node"
-    return "await_confirm"
+# route_after_plan is now imported from app.graph.nodes.plan (W10: single source of truth
+# from compose_confirm's phase field, eliminating duplicated is_node_revise logic)
 
 
 def route_after_split(state: AgentRuntimeState) -> str:
@@ -96,7 +88,7 @@ def route_after_confirm(state: AgentRuntimeState) -> str:
     if decision == "confirm":
         return "write_plan_node"
     if decision == "revise":
-        return "plan"
+        return "decide_plan_mode"
     return "end"
 
 
@@ -109,7 +101,7 @@ def route_after_topo(state: AgentRuntimeState) -> str:
     # 修复 P0-1：节点内容修改（改为/调整/增加）→ 回退到 plan 走 modify 模式
     # plan 会用 _MODIFY_INSTRUCTION 增量修改方案，保留未提及节点
     if decision == "node_revise":
-        return "plan"
+        return "decide_plan_mode"
     return "end"
 
 
@@ -126,7 +118,8 @@ def build_agent_graph(
 
     graph.add_node("intake", make_intake_node(skills_path))
     graph.add_node("chat", make_chat_node(llm=llm))
-    graph.add_node("plan", make_plan_node(nest=nest, llm=llm, skills_dir=skills_path))
+    # W10: plan pipeline — 4 single-responsibility nodes replacing monolithic plan.py
+    register_plan_nodes(graph, nest=nest, llm=llm, skills_dir=skills_path)
     graph.add_node("await_confirm", make_await_confirm_node(llm=llm))
     graph.add_node("write_plan_node", make_write_plan_node(nest=nest))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
@@ -158,19 +151,19 @@ def build_agent_graph(
     graph.add_conditional_edges(
         "intake",
         route_after_intake,
-        {"plan": "plan", "chat": "chat"},
+        {"decide_plan_mode": "decide_plan_mode", "chat": "chat"},
     )
     graph.add_edge("chat", END)
-    # P0 修复：plan 后按 mode 分流（modify→write_plan_node 直接更新画布，create→await_confirm 确认）
+    # W10: compose_confirm sets phase as SSOT → route_after_plan reads it
     graph.add_conditional_edges(
-        "plan",
+        "compose_confirm",
         route_after_plan,
         {"write_plan_node": "write_plan_node", "await_confirm": "await_confirm"},
     )
     graph.add_conditional_edges(
         "await_confirm",
         route_after_confirm,
-        {"write_plan_node": "write_plan_node", "plan": "plan", "end": END},
+        {"write_plan_node": "write_plan_node", "decide_plan_mode": "decide_plan_mode", "end": END},
     )
     graph.add_edge("write_plan_node", "split")
     # P0 修复：split 后按 mode 分流（modify→END 回拓扑门，create→draft_copy 生成主文案）
@@ -190,7 +183,7 @@ def build_agent_graph(
         {
             "start_gen": "start_gen",
             "topo_revise": "topo_revise",
-            "plan": "plan",
+            "decide_plan_mode": "decide_plan_mode",
             "end": END,
         },
     )

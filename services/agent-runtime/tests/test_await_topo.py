@@ -169,7 +169,8 @@ async def test_node_revise_sets_modify_mode_and_routes_to_plan():
     from app.graph.builder import route_after_topo
 
     # 验证 route_after_topo 在 node_revise 时路由到 plan
-    assert route_after_topo({"user_decision": "node_revise"}) == "plan"
+    # W10: plan 拆分后路由到 decide_plan_mode（原 plan 入口）
+    assert route_after_topo({"user_decision": "node_revise"}) == "decide_plan_mode"
 
     # 验证 await_topo 节点在 node_revise 时设置 mode=modify
     from app.graph.nodes.await_topo import make_await_topo_node
