@@ -48,8 +48,9 @@ docker images lnkpi-api --format '{{.Tag}}' 2>/dev/null | while read -r tag; do
   docker rmi "lnkpi-api:${tag}" 2>/dev/null || true
 done
 
-log "=== Building ${LNKPI_API_IMAGE} on CVM ==="
-if ! $COMPOSE build --progress=plain api >>"$LOG_FILE" 2>&1; then
+log "=== Building ${LNKPI_API_IMAGE} on CVM (no-cache to ensure code freshness) ==="
+# 修复：与 agent-runtime 一致，用 --no-cache 避免 Docker COPY 缓存导致容器内是旧代码
+if ! $COMPOSE build --no-cache --progress=plain api >>"$LOG_FILE" 2>&1; then
   on_fail
 fi
 docker tag "${LNKPI_API_IMAGE}" lnkpi-api:latest
