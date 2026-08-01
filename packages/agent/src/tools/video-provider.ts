@@ -170,7 +170,7 @@ function sleep(ms: number) {
 }
 
 function isAgnesBaseUrl(baseUrl?: string) {
-  return Boolean(baseUrl?.includes('agnes-ai.com'))
+  return Boolean(baseUrl?.includes('agnes-ai.com') || baseUrl?.includes('agnes-ai.cn'))
 }
 
 export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
