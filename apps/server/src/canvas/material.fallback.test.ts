@@ -263,7 +263,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(videoGenerate).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
-        model: 'seedance-2.0-min',
+        model: 'agnes-video-v2.0',
         image: 'https://cdn.example.com/frame.png',
       }),
     )

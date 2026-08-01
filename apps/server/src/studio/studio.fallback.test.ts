@@ -274,7 +274,7 @@ describe('StudioService BYOK fallback_pending', () => {
     const result = await svc.confirmPlatformFallback('u1', 'g1')
     expect(result.status).toBe('completed')
     expect(createTextProvider).toHaveBeenCalledWith(undefined)
-    expect(textGenerate).toHaveBeenCalledWith('hello', 'gemini-3.1-flash')
+    expect(textGenerate).toHaveBeenCalledWith('hello', 'agnes-2.0-flash')
     const [[, modelArg]] = textGenerate.mock.calls
     expect(modelArg).not.toBe('custom-model')
   })
