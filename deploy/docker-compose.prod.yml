@@ -20,6 +20,8 @@ services:
     build:
       context: ..
       dockerfile: deploy/docker/Dockerfile.api
+      args:
+        USE_TENCENT_APT_MIRROR: ${USE_TENCENT_APT_MIRROR:-0}
     container_name: lnkpi-api
     restart: unless-stopped
     env_file:

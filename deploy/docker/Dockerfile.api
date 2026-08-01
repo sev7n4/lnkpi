@@ -1,7 +1,21 @@
 # lnkpi API（NestJS + Prisma SQLite）
 FROM node:22-bookworm-slim AS build
+# CVM 跨境访问 deb.debian.org 极慢；仅在 deploy 脚本传 USE_TENCENT_APT_MIRROR=1 时换 http 腾讯源
+ARG USE_TENCENT_APT_MIRROR=0
+RUN if [ "$USE_TENCENT_APT_MIRROR" = "1" ]; then \
+      for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+        [ -f "$f" ] || continue; \
+        sed -i \
+          -e 's|https://deb.debian.org|http://mirrors.cloud.tencent.com|g' \
+          -e 's|http://deb.debian.org|http://mirrors.cloud.tencent.com|g' \
+          -e 's|https://security.debian.org|http://mirrors.cloud.tencent.com/debian-security|g' \
+          -e 's|http://security.debian.org|http://mirrors.cloud.tencent.com/debian-security|g' \
+          "$f"; \
+      done; \
+    fi
+# build 阶段仅需 openssl（Prisma），不必装 ffmpeg
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
@@ -32,11 +46,23 @@ RUN pnpm run build
 WORKDIR /app
 
 FROM node:22-bookworm-slim AS runner
+ARG USE_TENCENT_APT_MIRROR=0
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV DATABASE_URL=file:/app/apps/server/data/lnkpi.db
 
+RUN if [ "$USE_TENCENT_APT_MIRROR" = "1" ]; then \
+      for f in /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list; do \
+        [ -f "$f" ] || continue; \
+        sed -i \
+          -e 's|https://deb.debian.org|http://mirrors.cloud.tencent.com|g' \
+          -e 's|http://deb.debian.org|http://mirrors.cloud.tencent.com|g' \
+          -e 's|https://security.debian.org|http://mirrors.cloud.tencent.com/debian-security|g' \
+          -e 's|http://security.debian.org|http://mirrors.cloud.tencent.com/debian-security|g' \
+          "$f"; \
+      done; \
+    fi
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates ffmpeg \
   && rm -rf /var/lib/apt/lists/* \
