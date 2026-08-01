@@ -11,8 +11,11 @@ sudo cp "$REPO_ROOT/deploy/docker-compose.prod.images.yml" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/.env.production.example" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/deploy-remote.sh" "$DEPLOY_DIR/deploy/"
 sudo cp "$REPO_ROOT/deploy/deploy-remote-build.sh" "$DEPLOY_DIR/deploy/"
+sudo cp "$REPO_ROOT/deploy/deploy-web.sh" "$DEPLOY_DIR/deploy/"
+sudo cp "$REPO_ROOT/deploy/nginx.conf" "$DEPLOY_DIR/deploy/"
 sudo chmod +x "$DEPLOY_DIR/deploy/deploy-remote.sh"
 sudo chmod +x "$DEPLOY_DIR/deploy/deploy-remote-build.sh"
+sudo chmod +x "$DEPLOY_DIR/deploy/deploy-web.sh"
 
 if [[ ! -f "$DEPLOY_DIR/.env" ]]; then
   sudo cp "$DEPLOY_DIR/deploy/.env.production.example" "$DEPLOY_DIR/.env"
