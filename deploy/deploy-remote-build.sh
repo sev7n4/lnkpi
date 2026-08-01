@@ -40,8 +40,17 @@ df -h / /var/lib/docker 2>/dev/null || df -h /
 
 log "=== Prune unused Docker data ==="
 docker image prune -f >/dev/null 2>&1 || true
-# 保留一周内的构建缓存以复用 pnpm/编译层，磁盘充足时不要激进清理
-docker builder prune -f --filter 'until=168h' >/dev/null 2>&1 || true
+# 仅在 Docker 数据盘 >85% 时清理 builder cache，避免误删 apt/pnpm 层缓存导致冷构建 1h+
+docker_use_pct=$(df /var/lib/docker 2>/dev/null | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+if [[ -z "${docker_use_pct}" ]]; then
+  docker_use_pct=$(df / | awk 'NR==2 {gsub(/%/,"",$5); print $5}')
+fi
+if [[ "${docker_use_pct:-0}" -gt 85 ]]; then
+  log "Docker disk ${docker_use_pct}% — pruning builder cache older than 7d"
+  docker builder prune -f --filter 'until=168h' >/dev/null 2>&1 || true
+else
+  log "Docker disk ${docker_use_pct}% — keeping builder cache"
+fi
 docker images lnkpi-api --format '{{.Tag}}' 2>/dev/null | while read -r tag; do
   [[ -z "$tag" || "$tag" == "<none>" ]] && continue
   [[ "$tag" == "$IMAGE_TAG" || "$tag" == "latest" ]] && continue
