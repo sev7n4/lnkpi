@@ -1,5 +1,10 @@
-import { describe, it, expect, vi } from 'vitest'
+/** @vitest-environment node */
+import { describe, expect, it, vi, afterEach } from 'vitest'
 import { buildIdempotencyKey, shouldPollRuntimeHealth, checkRuntimeHealthViaNest } from './streamRecovery'
+
+vi.mock('@/services/api-base', () => ({
+  apiUrl: (path: string) => `http://localhost:5100${path.startsWith('/') ? path : `/${path}`}`,
+}))
 
 describe('buildIdempotencyKey', () => {
   it('generates key with thread ID, timestamp, and random suffix', () => {
@@ -37,6 +42,10 @@ describe('shouldPollRuntimeHealth', () => {
 })
 
 describe('checkRuntimeHealthViaNest', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('returns health data when API responds ok', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -44,31 +53,25 @@ describe('checkRuntimeHealthViaNest', () => {
     })
     vi.stubGlobal('fetch', mockFetch)
 
-    const result = await checkRuntimeHealthViaNest('http://localhost:5100')
+    const result = await checkRuntimeHealthViaNest()
     expect(result).toEqual({ ok: true, latencyMs: 42 })
     expect(mockFetch).toHaveBeenCalledWith(
-      'http://localhost:5100/api/agent/runtime-health',
+      'http://localhost:5100/agent/runtime-health',
       expect.objectContaining({ method: 'GET' }),
     )
-
-    vi.restoreAllMocks()
   })
 
   it('returns null when API is unreachable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')))
 
-    const result = await checkRuntimeHealthViaNest('http://localhost:5100')
+    const result = await checkRuntimeHealthViaNest()
     expect(result).toBeNull()
-
-    vi.restoreAllMocks()
   })
 
   it('returns null when API returns non-ok status', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }))
 
-    const result = await checkRuntimeHealthViaNest('http://localhost:5100')
+    const result = await checkRuntimeHealthViaNest()
     expect(result).toBeNull()
-
-    vi.restoreAllMocks()
   })
 })

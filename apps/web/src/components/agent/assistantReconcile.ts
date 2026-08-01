@@ -45,6 +45,26 @@ export function looksLikeCopyWriteTurn(userText: string): boolean {
   return /写入主文案|确认写入|可以写入/.test(t)
 }
 
+/** Assistant reply for the latest user turn only — avoids resurrecting stale busy tips. */
+export function pickAssistantForLatestUserTurn(
+  rows: Array<{ role: string; content: string }>,
+): { role: string; content: string } | null {
+  let lastUserIdx = -1
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].role === 'user') {
+      lastUserIdx = i
+      break
+    }
+  }
+  if (lastUserIdx < 0) {
+    return [...rows].reverse().find((m) => m.role === 'assistant') ?? null
+  }
+  for (let j = lastUserIdx + 1; j < rows.length; j++) {
+    if (rows[j].role === 'assistant') return rows[j]
+  }
+  return null
+}
+
 export function looksLikeConfirmTurn(userText: string): boolean {
   const t = userText.trim()
   if (!t) return false

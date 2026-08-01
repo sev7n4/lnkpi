@@ -1,3 +1,5 @@
+import { apiUrl } from '@/services/api-base'
+
 /**
  * Stream recovery utilities for frontend agent-side-rail.
  *
@@ -6,6 +8,8 @@
  * - Runtime health polling decision logic
  * - Idempotency key generation
  */
+
+export const RUNTIME_UNREACHABLE_SNIPPET = '生成服务暂时不可达'
 
 /** Generate an idempotency key for POST /api/agent/chat/conversation. */
 export function buildIdempotencyKey(threadId: string): string {
@@ -34,11 +38,9 @@ export function shouldPollRuntimeHealth(assistantContent: string): boolean {
  * Check agent-runtime health via Nest proxy endpoint.
  * Returns { ok: boolean, latencyMs?: number } or null on network failure.
  */
-export async function checkRuntimeHealthViaNest(
-  apiBase: string,
-): Promise<{ ok: boolean; latencyMs?: number } | null> {
+export async function checkRuntimeHealthViaNest(): Promise<{ ok: boolean; latencyMs?: number } | null> {
   try {
-    const res = await fetch(`${apiBase}/api/agent/runtime-health`, {
+    const res = await fetch(apiUrl('/agent/runtime-health'), {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
     })

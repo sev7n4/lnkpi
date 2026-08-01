@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, nextTick } from 'vue'
+import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
@@ -18,10 +18,16 @@ import {
 } from '@/components/agent/taskProgressReconcile'
 import {
   looksLikeConfirmTurn,
+  pickAssistantForLatestUserTurn,
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
-import { buildIdempotencyKey, shouldPollRuntimeHealth, checkRuntimeHealthViaNest } from '@/components/agent/streamRecovery'
+import {
+  buildIdempotencyKey,
+  shouldPollRuntimeHealth,
+  checkRuntimeHealthViaNest,
+  RUNTIME_UNREACHABLE_SNIPPET,
+} from '@/components/agent/streamRecovery'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -128,6 +134,16 @@ function applyHistoryPrompt(content: string) {
 onMounted(() => {
   void loadHistory()
 })
+
+watch(
+  () => props.sessionId,
+  (id) => {
+    agentThreadId.value = `${id}:main`
+    agent.clear()
+    taskProgress.value = emptyTaskProgress()
+    void loadHistory()
+  },
+)
 
 function openPanel() {
   open.value = true
@@ -349,11 +365,14 @@ const COPY_WRITTEN_SNIPPET = '已将确认的主文案'
 /** 流结束后用 DB 历史补齐（避免只看到 busy / 截断 / 被旧确认文案覆盖）。
  *  当检测到仍在生成中时，附加 runtime 健康轮询。 */
 async function reconcileLatestAssistant() {
+  const localAssistantContent = () =>
+    [...agent.messages].reverse().find((m) => m.role === 'assistant')?.content?.trim() ?? ''
+
   const pull = async () => {
     const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
     const json = await res.json()
     const rows = (json.data || []) as Array<{ role: string; content: string }>
-    const lastDb = [...rows].reverse().find((m) => m.role === 'assistant')
+    const lastDb = pickAssistantForLatestUserTurn(rows)
     if (!lastDb?.content?.trim()) return null
     const lastLocal = agent.messages[agent.messages.length - 1]
     if (
@@ -369,36 +388,38 @@ async function reconcileLatestAssistant() {
     let content = await pull()
     const lastUser = [...agent.messages].reverse().find((m) => m.role === 'user')
     const confirmTurn = lastUser ? looksLikeConfirmTurn(lastUser.content || '') : false
+    const effectiveContent = () => content ?? localAssistantContent()
     // busy tip：首轮仍在写 DB；确认拆图：Nest 可能在 Vercel 断流后继续跑完
     const shouldPoll =
-      content?.includes(BUSY_TIP_SNIPPET)
-      || (confirmTurn && !content?.includes(EXEC_PROGRESS_SNIPPET) && !content?.includes('自动出图'))
+      effectiveContent().includes(BUSY_TIP_SNIPPET)
+      || (confirmTurn && !effectiveContent().includes(EXEC_PROGRESS_SNIPPET) && !effectiveContent().includes('自动出图'))
     if (shouldPoll) {
       let runtimeFailCount = 0
       for (let i = 0; i < 36; i++) {
         await new Promise((r) => setTimeout(r, 5_000))
         content = await pull()
+        const active = effectiveContent()
         if (
-          content
-          && !content.includes(BUSY_TIP_SNIPPET)
+          active
+          && !active.includes(BUSY_TIP_SNIPPET)
           && (
-            content.includes(COPY_WRITTEN_SNIPPET)
-            || content.includes(EXEC_PROGRESS_SNIPPET)
-            || content.includes('自动出图')
-            || content.length > 80
+            active.includes(COPY_WRITTEN_SNIPPET)
+            || active.includes(EXEC_PROGRESS_SNIPPET)
+            || active.includes('自动出图')
+            || active.length > 80
           )
         ) {
           scrollToBottom()
           break
         }
         // Runtime health check (every 3rd poll, i.e. every 15s)
-        if (i > 0 && i % 3 === 0 && content && shouldPollRuntimeHealth(content)) {
-          const health = await checkRuntimeHealthViaNest(apiUrl(''))
+        if (i > 0 && i % 3 === 0 && active && shouldPollRuntimeHealth(active)) {
+          const health = await checkRuntimeHealthViaNest()
           if (!health || !health.ok) {
             runtimeFailCount++
             if (runtimeFailCount >= 2) {
               const last = agent.messages[agent.messages.length - 1]
-              if (last?.role === 'assistant') {
+              if (last?.role === 'assistant' && !last.content.includes(RUNTIME_UNREACHABLE_SNIPPET)) {
                 last.content += '\n\n⚠️ 生成服务暂时不可达，出图可能已中断。请稍后重试或新建对话。'
               }
               scrollToBottom()

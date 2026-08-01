@@ -3,8 +3,30 @@ import { describe, expect, it } from 'vitest'
 import {
   looksLikeConfirmTurn,
   looksLikeCopyWriteTurn,
+  pickAssistantForLatestUserTurn,
   shouldApplyReconciledAssistant,
 } from './assistantReconcile'
+
+describe('pickAssistantForLatestUserTurn', () => {
+  it('returns assistant after the latest user message only', () => {
+    const rows = [
+      { role: 'user', content: 'old brief' },
+      { role: 'assistant', content: '上一轮仍在处理中，请稍候；拆解出图通常需要一两分钟。' },
+      { role: 'user', content: '请帮我做蓝牙耳机营销方案' },
+    ]
+    expect(pickAssistantForLatestUserTurn(rows)).toBeNull()
+  })
+
+  it('returns current-turn assistant when present', () => {
+    const rows = [
+      { role: 'user', content: 'old brief' },
+      { role: 'assistant', content: '上一轮仍在处理中' },
+      { role: 'user', content: '新方案' },
+      { role: 'assistant', content: '定位：蓝牙耳机\n请确认是否按此方案拆解画布并出图' },
+    ]
+    expect(pickAssistantForLatestUserTurn(rows)?.content).toContain('请确认是否按此方案拆解')
+  })
+})
 
 describe('shouldApplyReconciledAssistant', () => {
   it('rejects stale confirm-gate overwrite of in-progress exec tip', () => {
