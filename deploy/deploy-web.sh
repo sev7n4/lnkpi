@@ -33,6 +33,11 @@ ensure_nginx() {
 }
 
 open_firewall() {
+  if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+    log "firewalld: allow TCP ${WEB_PORT}"
+    firewall-cmd --permanent --add-port="${WEB_PORT}/tcp" || true
+    firewall-cmd --reload || true
+  fi
   if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi active; then
     log "UFW: allow TCP ${WEB_PORT}"
     ufw allow "${WEB_PORT}/tcp" comment 'lnkpi-web' || true
