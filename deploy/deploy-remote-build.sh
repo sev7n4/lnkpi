@@ -13,6 +13,7 @@ IMAGE_TAG="${IMAGE_TAG:?set IMAGE_TAG to git commit sha}"
 STATUS_FILE="${STATUS_FILE:-/tmp/lnkpi-deploy-${IMAGE_TAG}.status}"
 LOG_FILE="${LOG_FILE:-/tmp/lnkpi-deploy-${IMAGE_TAG}.log}"
 export LNKPI_API_IMAGE="lnkpi-api:${IMAGE_TAG}"
+export USE_TENCENT_APT_MIRROR=1
 export DOCKER_BUILDKIT=1
 export COMPOSE_DOCKER_CLI_BUILD=1
 
