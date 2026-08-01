@@ -24,6 +24,7 @@ import {
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   buildIdempotencyKey,
+  createAgentThreadId,
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
   RUNTIME_UNREACHABLE_SNIPPET,
@@ -49,8 +50,9 @@ const agent = useAgentStore()
 const auth = useAuthStore()
 const input = ref('')
 const chatContainer = ref<HTMLElement>()
+
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
-const agentThreadId = ref(`${props.sessionId}:main`)
+const agentThreadId = ref(createAgentThreadId(props.sessionId))
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
 
@@ -138,7 +140,7 @@ onMounted(() => {
 watch(
   () => props.sessionId,
   (id) => {
-    agentThreadId.value = `${id}:main`
+    agentThreadId.value = createAgentThreadId(id)
     agent.clear()
     taskProgress.value = emptyTaskProgress()
     void loadHistory()
@@ -217,7 +219,7 @@ function newAgentSession() {
   agent.clear()
   input.value = ''
   taskProgress.value = emptyTaskProgress()
-  agentThreadId.value = `${props.sessionId}:${crypto.randomUUID()}`
+  agentThreadId.value = createAgentThreadId(props.sessionId)
 }
 
 async function loadHistory() {

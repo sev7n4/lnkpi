@@ -1,10 +1,45 @@
 /** @vitest-environment node */
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { buildIdempotencyKey, shouldPollRuntimeHealth, checkRuntimeHealthViaNest } from './streamRecovery'
+import {
+  buildIdempotencyKey,
+  createAgentThreadId,
+  randomThreadSuffix,
+  shouldPollRuntimeHealth,
+  checkRuntimeHealthViaNest,
+} from './streamRecovery'
 
 vi.mock('@/services/api-base', () => ({
   apiUrl: (path: string) => `http://localhost:5100${path.startsWith('/') ? path : `/${path}`}`,
 }))
+
+describe('randomThreadSuffix', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('uses crypto.randomUUID when available', () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid-1234' })
+    expect(randomThreadSuffix()).toBe('test-uuid-1234')
+  })
+
+  it('falls back when crypto.randomUUID is unavailable (HTTP)', () => {
+    vi.stubGlobal('crypto', {})
+    const suffix = randomThreadSuffix()
+    expect(suffix).toMatch(/^[a-z0-9]+-[a-z0-9]+$/)
+  })
+})
+
+describe('createAgentThreadId', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('never uses :main suffix', () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'abc-def' })
+    expect(createAgentThreadId('sess1')).toBe('sess1:abc-def')
+    expect(createAgentThreadId('sess1')).not.toContain(':main')
+  })
+})
 
 describe('buildIdempotencyKey', () => {
   it('generates key with thread ID, timestamp, and random suffix', () => {

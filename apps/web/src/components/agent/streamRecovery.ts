@@ -11,6 +11,22 @@ import { apiUrl } from '@/services/api-base'
 
 export const RUNTIME_UNREACHABLE_SNIPPET = '生成服务暂时不可达'
 
+/**
+ * Thread suffix for agent-runtime LangGraph threads.
+ * crypto.randomUUID requires a secure context (HTTPS/localhost); production CVM is HTTP.
+ */
+export function randomThreadSuffix(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`
+}
+
+/** Build a session-scoped agent thread id (never reuse `:main`). */
+export function createAgentThreadId(sessionId: string): string {
+  return `${sessionId}:${randomThreadSuffix()}`
+}
+
 /** Generate an idempotency key for POST /api/agent/chat/conversation. */
 export function buildIdempotencyKey(threadId: string): string {
   const ts = Date.now()
