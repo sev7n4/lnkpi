@@ -17,6 +17,8 @@ scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
   "$REPO_ROOT/deploy/docker-compose.prod.images.yml" \
   "$REPO_ROOT/deploy/deploy-remote.sh" \
   "$REPO_ROOT/deploy/deploy-remote-build.sh" \
+  "$REPO_ROOT/deploy/deploy-web.sh" \
+  "$REPO_ROOT/deploy/nginx.conf" \
   "$REPO_ROOT/deploy/bootstrap-server.sh" \
   "${SSH_USER}@${SSH_HOST}:/tmp/lnkpi-deploy/"
 
@@ -31,6 +33,7 @@ cp /tmp/lnkpi-deploy/* /opt/lnkpi/deploy/
 cp /tmp/lnkpi-deploy/.env.production.example /opt/lnkpi/deploy/
 chmod +x /opt/lnkpi/deploy/deploy-remote.sh
 chmod +x /opt/lnkpi/deploy/deploy-remote-build.sh
+chmod +x /opt/lnkpi/deploy/deploy-web.sh
 if [ ! -f /opt/lnkpi/.env ]; then
   cp /opt/lnkpi/deploy/.env.production.example /opt/lnkpi/.env
   SECRET=$(openssl rand -hex 24)
