@@ -111,10 +111,10 @@ describe('ProviderResolverService', () => {
   })
 
   it('resolves platform channel from env credentials', async () => {
-    const result = await resolver.resolveForGeneration('u1', 'platform::seedream-5.0-pro', 'image')
+    const result = await resolver.resolveForGeneration('u1', 'platform::agnes-image-2.1-flash', 'image')
     expect(result).toEqual({
       channelId: 'platform',
-      modelName: 'seedream-5.0-pro',
+      modelName: 'agnes-image-2.1-flash',
       apiFormat: 'openai',
       credentials: {
         apiKey: 'platform-env-key',
@@ -124,10 +124,19 @@ describe('ProviderResolverService', () => {
     })
   })
 
+  it('prefers OPENAI_BASE_URL over stale platform channel baseUrl', async () => {
+    const row = prisma._channels.get(PLATFORM_CHANNEL_ID)!
+    row.baseUrl = 'https://stale.example.com/v1'
+    process.env.OPENAI_BASE_URL = 'https://fresh.example.com/v1'
+
+    const result = await resolver.resolveForGeneration('u1', 'platform::agnes-2.0-flash', 'text')
+    expect(result.credentials.baseUrl).toBe('https://fresh.example.com/v1')
+  })
+
   it('treats legacy bare model keys as platform', async () => {
-    const result = await resolver.resolveForGeneration('u1', 'seedream-5.0-pro', 'image')
+    const result = await resolver.resolveForGeneration('u1', 'agnes-image-2.1-flash', 'image')
     expect(result.channelId).toBe('platform')
-    expect(result.modelName).toBe('seedream-5.0-pro')
+    expect(result.modelName).toBe('agnes-image-2.1-flash')
     expect(result.source).toBe('platform')
   })
 

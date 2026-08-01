@@ -269,7 +269,7 @@ describe('ProviderService', () => {
   it('bootstraps platform channel from catalog and default preferences', async () => {
     const result = await svc.bootstrap('u1')
     expect(result.platformChannel.id).toBe('platform')
-    expect(result.preferences.defaultImageModel).toBe('platform::seedream-5.0-pro')
+    expect(result.preferences.defaultImageModel).toBe('platform::agnes-image-2.1-flash')
     expect(result.platformChannel.hasApiKey).toBe(false)
   })
 

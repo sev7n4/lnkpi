@@ -9,12 +9,13 @@ import {
 describe('studioModelCatalog', () => {
   it('lists fixed product models per modality', () => {
     expect(listModels('text').map((m) => m.modelKey)).toEqual([
+      'agnes-2.0-flash',
       'gemini-3.1-flash',
       'deepseek-v4',
       'gpt-5.5',
     ])
-    expect(listModels('image')).toHaveLength(4)
-    expect(listModels('video')).toHaveLength(3)
+    expect(listModels('image')).toHaveLength(5)
+    expect(listModels('video')).toHaveLength(4)
     expect(listModels('audio').map((m) => m.modelKey)).toEqual([
       'seed-audio-1.0',
       'minimax-speech-2.8-hd',
