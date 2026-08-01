@@ -9,6 +9,10 @@ import { isOriginAllowed, parseCorsOrigins } from './cors.util'
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule)
 
+  // 分片上传 JSON body 含 base64（~3MB/片），默认 100kb 会 413
+  app.useBodyParser('json', { limit: '10mb' })
+  app.useBodyParser('urlencoded', { limit: '10mb', extended: true })
+
   app.setGlobalPrefix('api')
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/api/uploads/' })
 

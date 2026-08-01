@@ -1,6 +1,5 @@
 import type { AxiosError } from 'axios'
 import { api } from './api'
-import { getApiBaseUrl } from './api-base'
 
 export interface UploadResult {
   url: string
@@ -98,17 +97,19 @@ async function uploadChunked(
   return done.data
 }
 
-function preferChunked(file: File): boolean {
-  const base = getApiBaseUrl()
-  // 生产走 Vercel `/api` 代理：一律分片，避开 multipart 破坏与 4.5MB 硬限
-  if (base === '/api') return true
+/** Vercel Serverless 代理约 4.5MB/请求且 multipart 易损坏，需分片；CVM/nginx 直连可 multipart */
+export function shouldPreferChunkedUpload(file: File): boolean {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname
+    if (host.endsWith('.vercel.app') || host === 'vercel.app') return true
+  }
   return file.size > 40 * 1024 * 1024
 }
 
 export const uploadApi = {
   upload: async (file: File, opts?: { onProgress?: (pct: number) => void }) => {
     try {
-      if (preferChunked(file)) {
+      if (shouldPreferChunkedUpload(file)) {
         return await uploadChunked(file, opts)
       }
       try {
