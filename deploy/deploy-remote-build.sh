@@ -83,6 +83,17 @@ for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
   if curl -fsS "http://127.0.0.1:5100/api/health" >/dev/null 2>&1; then
     curl -fsS "http://127.0.0.1:5100/api/health" | head -c 200
     echo ""
+    log "=== Sync platform channel baseUrl from container env ==="
+    docker exec lnkpi-api node -e "
+const { PrismaClient } = require('@prisma/client');
+const url = (process.env.OPENAI_BASE_URL || '').trim();
+if (!url) { console.log('skip platform baseUrl sync: OPENAI_BASE_URL unset'); process.exit(0); }
+const p = new PrismaClient();
+p.providerChannel.update({ where: { id: 'platform' }, data: { baseUrl: url } })
+  .then((row) => { console.log('platform.baseUrl synced to', row.baseUrl); return p.\$disconnect(); })
+  .catch((err) => { console.error(err); process.exit(1); });
+" >>"$LOG_FILE" 2>&1 || log "WARN: platform baseUrl sync failed (non-fatal)"
+
     set_status success
     log "部署完成 (IMAGE=${LNKPI_API_IMAGE})"
     exit 0

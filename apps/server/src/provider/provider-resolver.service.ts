@@ -41,8 +41,9 @@ export class ProviderResolverService {
       const channel = await this.prisma.providerChannel.findUnique({
         where: { id: PLATFORM_CHANNEL_ID },
       })
+      // Runtime .env wins over DB snapshot so deploy can retarget .cn without manual SQL.
       const baseUrl =
-        channel?.baseUrl || process.env.OPENAI_BASE_URL || ''
+        process.env.OPENAI_BASE_URL?.trim() || channel?.baseUrl || ''
       const apiKey = process.env.OPENAI_API_KEY || undefined
       return {
         channelId: PLATFORM_CHANNEL_ID,

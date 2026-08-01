@@ -62,6 +62,14 @@ const MINIMAX_AUDIO_PARAMS: Record<string, ParamDisposition> = {
 export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   // Text (§3.1)
   {
+    modelKey: 'agnes-2.0-flash',
+    displayName: 'Agnes 2.0 Flash',
+    gatewayModelId: 'agnes-2.0-flash',
+    modality: 'text',
+    providerBinding: 'gateway-openai-compat',
+    params: TEXT_PARAMS,
+  },
+  {
     modelKey: 'gemini-3.1-flash',
     displayName: 'Gemini 3.1 Flash',
     gatewayModelId: 'gemini-3.1-flash',
@@ -87,6 +95,14 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   },
 
   // Image (§3.2)
+  {
+    modelKey: 'agnes-image-2.1-flash',
+    displayName: 'Agnes Image 2.1 Flash',
+    gatewayModelId: 'agnes-image-2.1-flash',
+    modality: 'image',
+    providerBinding: 'gateway-openai-compat',
+    params: IMAGE_PARAMS,
+  },
   {
     modelKey: 'image2',
     displayName: 'Image2',
@@ -121,6 +137,14 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   },
 
   // Video (§3.3)
+  {
+    modelKey: 'agnes-video-v2.0',
+    displayName: 'Agnes Video v2.0',
+    gatewayModelId: 'agnes-video-v2.0',
+    modality: 'video',
+    providerBinding: 'gateway-openai-compat',
+    params: VIDEO_PARAMS,
+  },
   {
     modelKey: 'seedance-2.0-min',
     displayName: 'Seedance 2.0 Min',
@@ -178,9 +202,9 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
 ]
 
 const DEFAULT_MODEL_KEYS: Record<StudioModality, string> = {
-  text: 'gemini-3.1-flash',
-  image: 'seedream-5.0-pro',
-  video: 'seedance-2.0-min',
+  text: 'agnes-2.0-flash',
+  image: 'agnes-image-2.1-flash',
+  video: 'agnes-video-v2.0',
   audio: 'minimax-speech-2.8-hd',
 }
 

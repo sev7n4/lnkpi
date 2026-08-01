@@ -593,10 +593,19 @@ export class ProviderService {
   }
 
   private async ensurePlatformChannel(): Promise<ChannelRow> {
+    const envBaseUrl = process.env.OPENAI_BASE_URL?.trim() || ''
     const existing = await this.prisma.providerChannel.findUnique({
       where: { id: PLATFORM_CHANNEL_ID },
     })
-    if (existing) return existing
+    if (existing) {
+      if (envBaseUrl && existing.baseUrl !== envBaseUrl) {
+        return this.prisma.providerChannel.update({
+          where: { id: PLATFORM_CHANNEL_ID },
+          data: { baseUrl: envBaseUrl },
+        })
+      }
+      return existing
+    }
 
     return this.prisma.providerChannel.create({
       data: {
@@ -604,7 +613,7 @@ export class ProviderService {
         userId: null,
         name: '平台服务',
         apiFormat: 'openai',
-        baseUrl: process.env.OPENAI_BASE_URL || '',
+        baseUrl: envBaseUrl,
         models: JSON.stringify(catalogModels()),
         encryptedApiKey: null,
         iv: null,
