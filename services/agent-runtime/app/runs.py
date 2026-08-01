@@ -70,6 +70,24 @@ LOCK_RENEWAL_INTERVAL = 60  # Renew every 60 seconds
 _active_lock_holders: dict[str, tuple[str, asyncio.Task[None]]] = {}
 
 
+async def _reset_orphan_local_lock(thread_id: str, nest: NestCanvasClient) -> bool:
+    """In-process lock held but DB lease free → prior task crashed without finally."""
+    lock = _thread_locks.get(thread_id)
+    if lock is None or not lock.locked():
+        return True
+    probe_holder = f"orphan-probe-{uuid.uuid4().hex}"
+    try:
+        result = await nest.acquire_thread_lock(thread_id, probe_holder, 5)
+        if not result.get("acquired"):
+            return False
+        await nest.release_thread_lock(thread_id, probe_holder)
+    except Exception:
+        return False
+    async with _thread_locks_meta:
+        _thread_locks[thread_id] = asyncio.Lock()
+    return True
+
+
 async def _try_acquire_thread(
     thread_id: str,
     nest: NestCanvasClient,
@@ -79,11 +97,18 @@ async def _try_acquire_thread(
     Returns (success, holder_id). holder_id is None if lock failed.
     Uses two-level locking: process-local (fast path) + DB-based (distributed).
     """
-    # Step 1: Try to acquire process-local lock (fast path)
+    # Step 1: Process-local lock — recover orphaned locks when DB lease expired
+    async with _thread_locks_meta:
+        lock = _thread_locks.setdefault(thread_id, asyncio.Lock())
+        local_locked = lock.locked()
+
+    if local_locked:
+        if not await _reset_orphan_local_lock(thread_id, nest):
+            return False, None
+
     async with _thread_locks_meta:
         lock = _thread_locks.setdefault(thread_id, asyncio.Lock())
         if lock.locked():
-            # Process-local lock already held
             return False, None
         await lock.acquire()
     
