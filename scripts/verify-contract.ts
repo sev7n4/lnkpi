@@ -43,6 +43,20 @@ import {
   GetAgentMessagesResponseSchema,
   SaveAgentMessageRequestSchema,
   SaveAgentMessageResponseSchema,
+  RemoveNodesRequestSchema,
+  RemoveNodesResponseSchema,
+  RemoveEdgesRequestSchema,
+  RemoveEdgesResponseSchema,
+  AcquireThreadLockRequestSchema,
+  AcquireThreadLockResponseSchema,
+  RenewThreadLockRequestSchema,
+  RenewThreadLockResponseSchema,
+  ReleaseThreadLockRequestSchema,
+  ReleaseThreadLockResponseSchema,
+  GetGenProgressRequestSchema,
+  GetGenProgressResponseSchema,
+  SaveGenProgressRequestSchema,
+  SaveGenProgressResponseSchema,
 } from '../packages/shared/src/agentContract'
 
 interface ContractMapping {
@@ -98,6 +112,34 @@ const CONTRACTS: Record<string, { request: ContractMapping; response: ContractMa
   save_agent_message: {
     request: { tsSchema: SaveAgentMessageRequestSchema, pyModel: 'SaveAgentMessageRequest' },
     response: { tsSchema: SaveAgentMessageResponseSchema, pyModel: 'SaveAgentMessageResponse' },
+  },
+  remove_nodes: {
+    request: { tsSchema: RemoveNodesRequestSchema, pyModel: 'RemoveNodesRequest' },
+    response: { tsSchema: RemoveNodesResponseSchema, pyModel: 'RemoveNodesResponse' },
+  },
+  remove_edges: {
+    request: { tsSchema: RemoveEdgesRequestSchema, pyModel: 'RemoveEdgesRequest' },
+    response: { tsSchema: RemoveEdgesResponseSchema, pyModel: 'RemoveEdgesResponse' },
+  },
+  acquire_thread_lock: {
+    request: { tsSchema: AcquireThreadLockRequestSchema, pyModel: 'AcquireThreadLockRequest' },
+    response: { tsSchema: AcquireThreadLockResponseSchema, pyModel: 'AcquireThreadLockResponse' },
+  },
+  renew_thread_lock: {
+    request: { tsSchema: RenewThreadLockRequestSchema, pyModel: 'RenewThreadLockRequest' },
+    response: { tsSchema: RenewThreadLockResponseSchema, pyModel: 'RenewThreadLockResponse' },
+  },
+  release_thread_lock: {
+    request: { tsSchema: ReleaseThreadLockRequestSchema, pyModel: 'ReleaseThreadLockRequest' },
+    response: { tsSchema: ReleaseThreadLockResponseSchema, pyModel: 'ReleaseThreadLockResponse' },
+  },
+  get_gen_progress: {
+    request: { tsSchema: GetGenProgressRequestSchema, pyModel: 'GetGenProgressRequest' },
+    response: { tsSchema: GetGenProgressResponseSchema, pyModel: 'GetGenProgressResponse' },
+  },
+  save_gen_progress: {
+    request: { tsSchema: SaveGenProgressRequestSchema, pyModel: 'SaveGenProgressRequest' },
+    response: { tsSchema: SaveGenProgressResponseSchema, pyModel: 'SaveGenProgressResponse' },
   },
 }
 

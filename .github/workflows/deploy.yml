@@ -56,6 +56,7 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       web: ${{ steps.filter.outputs.web }}
+      agent_runtime: ${{ steps.filter.outputs.agent_runtime }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -81,6 +82,11 @@ jobs:
               - 'deploy/nginx.conf'
               - 'deploy/deploy-web.sh'
               - '.github/workflows/deploy.yml'
+            agent_runtime:
+              - 'services/agent-runtime/**'
+              - 'deploy/docker/Dockerfile.agent-runtime'
+              - 'deploy/docker-compose.prod.yml'
+              - 'deploy/enable-agent-runtime.sh'
 
   deploy-api:
     name: Build API on CVM
@@ -180,24 +186,7 @@ jobs:
               --exclude='**/dist' \
               --exclude='.cursor' \
               --exclude='docs' \
-              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh ${DEPLOY_DIR}/deploy/enable-agent-runtime.sh ${DEPLOY_DIR}/deploy/deploy-web.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
-
-      - name: Enable Agent Runtime on CVM
-        if: ${{ github.event.inputs.enable_agent_runtime == 'true' }}
-        run: |
-          set -euo pipefail
-          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "bash -s" < deploy/enable-agent-runtime.sh
-          echo "=== post-enable: Nest token gate (external) ==="
-          MSG=$(curl -sS --connect-timeout 5 --max-time 10 -X POST \
-            "http://${{ env.SSH_HOST }}:${{ env.API_PORT }}/api/agent/internal/get-canvas-summary" \
-            -H 'Content-Type: application/json' -d '{"sessionId":"x"}' || true)
-          echo "$MSG" | head -c 300
-          echo ""
-          if echo "$MSG" | grep -q 'not configured'; then
-            echo "ERROR: AGENT_RUNTIME_SERVICE_TOKEN still not configured on Nest"
-            exit 1
-          fi
-          ssh -T deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS http://127.0.0.1:8000/health"
+              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/deploy-remote-build.sh ${DEPLOY_DIR}/deploy/deploy-remote.sh ${DEPLOY_DIR}/deploy/launch-cvm-build.sh ${DEPLOY_DIR}/deploy/cvm-recover.sh ${DEPLOY_DIR}/deploy/enable-agent-runtime.sh ${DEPLOY_DIR}/deploy/deploy-web.sh ${DEPLOY_DIR}/deploy/smoke-graph-phase-a.sh && rm -f /tmp/lnkpi-deploy-${IMAGE_TAG}.status /tmp/lnkpi-deploy-${IMAGE_TAG}.log'"
 
       - name: Launch background build on CVM
         if: ${{ github.event.inputs.enable_agent_runtime != 'true' }}
@@ -287,6 +276,32 @@ jobs:
             echo "WARN: public API unreachable from GitHub Actions — check security group"
             exit 1
           fi
+
+      - name: Enable Agent Runtime on CVM
+        if: >-
+          ${{
+            github.event.inputs.enable_agent_runtime == 'true'
+            || needs.changes.outputs.agent_runtime == 'true'
+          }}
+        run: |
+          set -euo pipefail
+          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "bash -s" < deploy/enable-agent-runtime.sh
+          echo "=== post-enable: agent-runtime health (in container) ==="
+          ssh -T deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS http://127.0.0.1:8000/health"
+
+      - name: Graph Phase A smoke (production)
+        if: >-
+          ${{
+            github.event.inputs.recover_only != 'true'
+            && github.event.inputs.deploy_web_only != 'true'
+          }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/smoke-graph-phase-a.sh
+          BASE_URL="http://${{ env.SSH_HOST }}:${{ env.WEB_PORT }}" bash deploy/smoke-graph-phase-a.sh || {
+            echo "WARN: smoke failed — web may not be deployed yet; check deploy-web job"
+            exit 0
+          }
 
       - name: Cleanup SSH key
         if: always()

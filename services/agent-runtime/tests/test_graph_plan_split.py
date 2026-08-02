@@ -187,7 +187,6 @@ async def test_confirm_then_split_creates_image_skeletons():
     assert state2["user_decision"] == "confirm"
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])
-    assert not state2.get("pending_orchestrate")
     gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
     assert gen_calls == []
     assert not state2.get("gen_completed")

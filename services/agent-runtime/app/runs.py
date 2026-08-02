@@ -16,7 +16,6 @@ from pydantic import BaseModel
 from app.config import settings
 from app.graph.builder import build_agent_graph
 from app.graph.nodes.intake import modify_intent
-from app.graph.nodes.orchestrate_gen import make_orchestrate_gen_node
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -170,36 +169,6 @@ async def _release_thread(thread_id: str, holder_id: str | None, nest: NestCanva
         lock.release()
 
 
-async def _run_orchestrate_background(
-    *,
-    session_id: str,
-    user_id: str,
-    split_manifest: list[Any],
-    gen_completed: list[Any] | None = None,
-    gen_failed: list[Any] | None = None,
-) -> None:
-    """Image/video topo gen after draft turn ends — must not hold the thread lock."""
-
-    async def _noop_emit(_event: dict[str, Any]) -> None:
-        return None
-
-    inner = default_nest(session_id=session_id, user_id=user_id)
-    proxy = NestEventProxy(inner, _noop_emit)
-    try:
-        node = make_orchestrate_gen_node(nest=proxy)
-        await node(
-            {
-                "split_manifest": split_manifest,
-                "gen_completed": list(gen_completed or []),
-                "gen_failed": list(gen_failed or []),
-            }
-        )
-    except Exception:  # noqa: BLE001 — background; canvas/records still reflect partial progress
-        pass
-    finally:
-        await proxy.close()
-
-
 class RunRequest(BaseModel):
     session_id: str
     user_id: str
@@ -341,6 +310,51 @@ def _trim_history(messages: list[Any], window: int) -> list[Any]:
     return messages[-window:]
 
 
+def _message_role(msg: Any) -> str | None:
+    role = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
+    if role in ("human", "user"):
+        return "user"
+    if role in ("ai", "assistant"):
+        return "assistant"
+    return None
+
+
+def _message_content(msg: Any) -> str:
+    content = getattr(msg, "content", None) or (
+        msg.get("content") if isinstance(msg, dict) else ""
+    )
+    return str(content or "")
+
+
+async def _save_user_message(nest: NestCanvasClient, content: str) -> None:
+    """W2: Persist user message before graph run (crash-safe)."""
+    text = content.strip()
+    if not text:
+        return
+    try:
+        await nest.save_agent_message(role="user", content=text)
+    except Exception:  # noqa: BLE001 — history save failure should not crash the run
+        pass
+
+
+async def _save_new_assistant_messages(
+    nest: NestCanvasClient,
+    messages: list[Any],
+    *,
+    after_index: int,
+) -> None:
+    """W2: Persist only assistant messages produced after ``after_index``."""
+    try:
+        for msg in messages[after_index:]:
+            if _message_role(msg) != "assistant":
+                continue
+            content = _message_content(msg).strip()
+            if content:
+                await nest.save_agent_message(role="assistant", content=content)
+    except Exception:  # noqa: BLE001 — history save failure should not crash the run
+        pass
+
+
 async def _load_history(nest: NestCanvasClient) -> list[Any]:
     """Load conversation history from AgentMessage table (C1 decision)."""
     try:
@@ -359,26 +373,6 @@ async def _load_history(nest: NestCanvasClient) -> list[Any]:
         return []
 
 
-async def _save_history(nest: NestCanvasClient, messages: list[Any]) -> None:
-    """Save conversation history to AgentMessage table (C1 decision)."""
-    try:
-        # Only save the latest messages (avoid duplicates)
-        # We save each message individually to handle errors gracefully
-        for msg in messages:
-            role = getattr(msg, "type", None) or (
-                msg.get("role") if isinstance(msg, dict) else None
-            )
-            content = getattr(msg, "content", None) or (
-                msg.get("content") if isinstance(msg, dict) else ""
-            )
-            if role in ("human", "user"):
-                await nest.save_agent_message(role="user", content=str(content))
-            elif role in ("ai", "assistant"):
-                await nest.save_agent_message(role="assistant", content=str(content))
-    except Exception:  # noqa: BLE001 — history save failure should not crash the run
-        pass
-
-
 async def stream_run_events(
     req: RunRequest,
     *,
@@ -389,9 +383,13 @@ async def stream_run_events(
 ) -> AsyncIterator[dict[str, Any]]:
     """Yield AgentStreamEvent-shaped dicts for one user turn."""
     thread_id = req.thread_id or req.session_id
-    
-    # Create nest client for lock acquisition if needed
-    lock_nest = default_nest(session_id=req.session_id, user_id=req.user_id)
+
+    owns_nest = nest is None
+    inner_nest = nest if nest is not None else default_nest(
+        session_id=req.session_id,
+        user_id=req.user_id,
+    )
+    lock_nest = inner_nest
     acquired, holder_id = await _try_acquire_thread(thread_id, lock_nest)
     
     if not acquired:
@@ -400,7 +398,8 @@ async def stream_run_events(
         tip = _MODIFY_DURING_GEN_TIP if modify_intent(req.message) else THREAD_BUSY_TIP
         yield {"type": "text_delta", "data": {"text": tip}}
         yield {"type": "done", "data": {}}
-        await lock_nest.close()
+        if owns_nest:
+            await lock_nest.close()
         return
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
@@ -408,11 +407,6 @@ async def stream_run_events(
     async def emit(event: dict[str, Any]) -> None:
         await queue.put(event)
 
-    owns_nest = nest is None
-    inner_nest = nest if nest is not None else default_nest(
-        session_id=req.session_id,
-        user_id=req.user_id,
-    )
     proxy = NestEventProxy(inner_nest, emit)
     graph_llm = llm if llm is not None else default_llm()
 
@@ -425,11 +419,13 @@ async def stream_run_events(
     )
     config = {"configurable": {"thread_id": thread_id}}
 
+    # W2: save user message before graph (both fresh turn and interrupt resume)
+    await _save_user_message(inner_nest, req.message)
+
     # W5: 检查是否从 interrupt_before 恢复
-    # 如果 checkpoint 存在且有 next 节点（中断点），则从 checkpoint 恢复
-    # 否则作为新对话处理
     snap = await graph.aget_state(config)
     next_nodes = getattr(snap, "next", None) or []
+    assistant_save_after = 0
 
     if next_nodes:
         # W5 修复（关键）：interrupt_before 的正确恢复方式是
@@ -446,11 +442,14 @@ async def stream_run_events(
         update_payload: dict[str, Any] = {"messages": [HumanMessage(content=req.message)]}
         if req.user_decision:
             update_payload["user_decision"] = req.user_decision
+        vals = getattr(snap, "values", None) or {}
+        assistant_save_after = len(vals.get("messages") or []) + 1
         await graph.aupdate_state(config, update_payload)
         input_state = None  # type: ignore[assignment]
     else:
         # 新对话或已完成：加载历史并创建 input_state (C1 decision)
         history = await _load_history(inner_nest)
+        assistant_save_after = len(history) + 1
         input_messages = history + [HumanMessage(content=req.message)]
         input_state = {
             "messages": input_messages,
@@ -459,11 +458,7 @@ async def stream_run_events(
             "thread_id": thread_id,
         }
 
-    bg_payload: dict[str, Any] | None = None
-
     async def run_graph() -> None:
-        nonlocal bg_payload
-        saw_pending_orchestrate = False
         try:
             async for update in graph.astream(input_state, config, stream_mode="updates"):
                 if not isinstance(update, dict):
@@ -471,8 +466,6 @@ async def stream_run_events(
                 for _node, delta in update.items():
                     if not isinstance(delta, dict):
                         continue
-                    if delta.get("pending_orchestrate"):
-                        saw_pending_orchestrate = True
                     messages = delta.get("messages")
                     if not messages:
                         continue
@@ -489,32 +482,21 @@ async def stream_run_events(
                         )
                         if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
                             await emit({"type": "text_delta", "data": {"text": str(content)}})
-            if saw_pending_orchestrate:
-                try:
-                    snap = await graph.aget_state(config)
-                    vals = getattr(snap, "values", None) or {}
-                    manifest = list(vals.get("split_manifest") or [])
-                    if manifest:
-                        bg_payload = {
-                            "session_id": req.session_id,
-                            "user_id": req.user_id,
-                            "split_manifest": manifest,
-                            "gen_completed": list(vals.get("gen_completed") or []),
-                            "gen_failed": list(vals.get("gen_failed") or []),
-                        }
-                except Exception:  # noqa: BLE001
-                    bg_payload = None
             await emit({"type": "done", "data": {}})
         except Exception as exc:  # noqa: BLE001 — surface to Nest SSE
             await emit({"type": "error", "data": {"message": str(exc)}})
         finally:
-            # Save conversation history (C1 decision)
+            # W2: save only new assistant messages from this turn (user saved at entry)
             try:
                 snap = await graph.aget_state(config)
                 vals = getattr(snap, "values", None) or {}
                 final_messages = list(vals.get("messages") or [])
                 if final_messages:
-                    await _save_history(inner_nest, final_messages)
+                    await _save_new_assistant_messages(
+                        inner_nest,
+                        final_messages,
+                        after_index=assistant_save_after,
+                    )
             except Exception:  # noqa: BLE001 — history save failure should not crash
                 pass
             await queue.put(None)
@@ -530,9 +512,8 @@ async def stream_run_events(
             yield item
     finally:
         await _release_thread(thread_id, holder_id, lock_nest)
-        await lock_nest.close()
-        if bg_payload is not None:
-            asyncio.create_task(_run_orchestrate_background(**bg_payload))
+        if owns_nest:
+            await lock_nest.close()
         if not task.done():
             task.cancel()
             try:

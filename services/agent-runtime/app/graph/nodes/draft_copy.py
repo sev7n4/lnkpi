@@ -124,13 +124,11 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
 
         return {
             "phase": "await_copy_confirm",
-            "awaiting_user": True,
             "copy_draft": draft,
             "copy_node_id": node_id,
             "copy_revise_only": False,
             "copy_write_blocked": False,
             "copy_alignment_ok": aligned,
-            "pending_orchestrate": False,
             "messages": [AIMessage(content=body)],
             **snapshot_copy_sot_fields(
                 {**state, "user_brief": user_brief, "plan_draft": plan_draft}

@@ -87,22 +87,14 @@ class AgentRuntimeState(TypedDict, total=False):
     # gen_completed: list[str]  # Removed by W3
     # gen_failed: list[dict]  # Removed by W3
     gen_progress_id: str | None  # W15: Pointer to GenProgress table
-    # 修复：W15 将 gen_queue/gen_completed/gen_failed 移到 DB，但 start_gen /
-    # orchestrate_gen / done 节点仍读写这些字段（DB 迁移未完成）。保留在 state
-    # 作为 transient 字段，避免节点 return 时 LangGraph 报 "Key not in schema"。
-    # 体积很小（节点 id 列表），不影响 checkpoint 性能；生成完成后由 done 清空。
-    gen_queue: list[str] | None
+    # Transient bridge: collect_gen → done within one run (not long-lived checkpoint state)
     gen_completed: list[str] | None
     gen_failed: list[dict] | None
     last_error: str | None
     copy_draft: str | None
     copy_node_id: str | None
     copy_revise_only: bool
-    # Only arm after「确认出图」(await_topo confirm_gen); not after draft_copy alone
-    pending_orchestrate: bool
 
-    # 一期轻量人机
-    awaiting_user: bool
     # node_revise: 拓扑确认门下检测到"节点内容修改"意图（改为/调整/增加等），
     # 回退到 plan 走 modify 模式增量修改方案，区别于 topo_revise（纯拓扑删除）
     user_decision: Literal[

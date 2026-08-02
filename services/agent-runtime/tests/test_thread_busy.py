@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 from langchain_core.messages import AIMessage
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.runs import RunRequest, stream_run_events
 
@@ -82,7 +83,13 @@ class _SlowLLM:
 
 async def _collect(req: RunRequest, nest: Any, llm: Any) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    async for ev in stream_run_events(req, nest=nest, llm=llm, skills_dir="skills"):
+    async for ev in stream_run_events(
+        req,
+        nest=nest,
+        llm=llm,
+        skills_dir="skills",
+        checkpointer=MemorySaver(),
+    ):
         events.append(ev)
     return events
 

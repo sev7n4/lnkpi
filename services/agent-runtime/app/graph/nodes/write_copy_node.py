@@ -15,7 +15,6 @@ def make_write_copy_node(*, nest: Any) -> Callable:
         if not node_id or not draft:
             return {
                 "phase": "done",
-                "awaiting_user": False,
                 "messages": [AIMessage(content="主文案草稿缺失，无法写入节点。")],
             }
 
@@ -24,11 +23,9 @@ def make_write_copy_node(*, nest: Any) -> Callable:
         if not ok:
             return {
                 "phase": "await_copy_confirm",
-                "awaiting_user": True,
                 "copy_revise_only": True,
                 "copy_write_blocked": True,
                 "copy_alignment_ok": False,
-                "pending_orchestrate": False,
                 "messages": [
                     AIMessage(
                         content=f"⚠️ {reason}\n正在重新生成主文案，请稍候…"
@@ -54,11 +51,9 @@ def make_write_copy_node(*, nest: Any) -> Callable:
         stay_topo = bool(state.get("split_manifest"))
         return {
             "phase": "await_topo" if stay_topo else "done",
-            "awaiting_user": stay_topo,
             "copy_revise_only": False,
             "copy_write_blocked": False,
             "copy_alignment_ok": True,
-            "pending_orchestrate": False,
             "messages": [
                 AIMessage(content="已将确认的主文案写入画布节点。可继续改拓扑或回复「确认出图」。")
             ],

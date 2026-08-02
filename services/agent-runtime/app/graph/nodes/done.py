@@ -39,12 +39,10 @@ def make_done_node() -> Callable:
         if state.get("phase") == "await_copy_confirm":
             return {
                 "phase": "await_copy_confirm",
-                "pending_orchestrate": False,
                 "messages": [AIMessage(content=msg)],
             }
         return {
             "phase": "done",
-            "pending_orchestrate": False,
             "messages": [AIMessage(content=msg)],
         }
 
