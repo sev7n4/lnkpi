@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.nodes.await_copy_confirm import classify_copy_decision
 from app.graph.intent import classify_topo_decision
 
 # 修复 P0-1（拓扑确认门节点内容修改）：
@@ -35,6 +36,11 @@ def make_await_topo_node() -> Callable:
         # W5: interrupt_before 替代 awaiting_user flag
         # 从 checkpoint 恢复时，state 已包含用户新消息
         text = _latest_user_text(state.get("messages") or [])
+        if classify_copy_decision(text) == "confirm" and state.get("copy_draft"):
+            return {
+                "user_decision": "copy_write",
+                "phase": "await_topo",
+            }
         decision = classify_topo_decision(text)
         if decision == "none":
             return {

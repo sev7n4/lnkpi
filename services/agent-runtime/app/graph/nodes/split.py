@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage
 
 from app.graph.state import SplitManifestItem
 from app.graph.chain_refs import build_chain_ref_order
+from app.graph.copy_sot import snapshot_copy_sot_fields
 from app.graph.mermaid_topo import manifest_to_mermaid
 from app.graph.topo_trim import trim_manifest_items
 from app.skills.loader import discover_skills, load_skill
@@ -375,6 +376,7 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             "awaiting_user": False,
             "pending_orchestrate": False,
             "messages": [AIMessage(content=split_msg)],
+            **snapshot_copy_sot_fields(state),
         }
 
     return split

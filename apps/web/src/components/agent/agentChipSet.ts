@@ -63,8 +63,8 @@ export function detectAgentChipSet(
   // 修复 P2-1：优先检查 assistant 是否已回复 confirm/copy/topo 选项
   // 如果已回复，显示对应按钮（即使用户之前输入了 modify intent）
   // 这允许 modify → agent 重新生成 → 新 confirm → 用户确认 的完整流程
+  if (t.includes('【主文案草稿】') && !t.includes('已将确认的主文案写入')) return 'copy'
   if (t.includes('【主文案草稿】') && TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
-  if (COPY_SNIPPETS.some((s) => t.includes(s)) && t.includes('【主文案草稿】')) return 'copy'
   if (TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (COPY_SNIPPETS.some((s) => t.includes(s))) return 'copy'
   if (PLAN_SNIPPETS.some((s) => t.includes(s))) return 'plan'

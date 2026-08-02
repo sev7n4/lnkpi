@@ -4,18 +4,28 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from app.graph.copy_alignment import build_copy_writer_context, validate_copy_alignment
+from app.graph.copy_alignment import (
+    _MAX_COPY_ATTEMPTS,
+    build_copy_writer_context,
+    validate_copy_alignment,
+)
+from app.graph.copy_sot import resolve_copy_sot, snapshot_copy_sot_fields
 
 _COPY_SYSTEM = (
     "你是电商主文案写手。只输出主文案 Markdown 正文，禁止寒暄、禁止解释过程。"
     "必须严格依据【用户需求锚定】与【已确认营销方案】中的产品品类与品牌撰写，"
-    "禁止替换为其他行业或产品（例如用户要耳机时不得写破壁机、乳胶枕、马桶等）。"
+    "禁止替换为其他行业或产品（例如用户要耳机时不得写破壁机、乳胶枕、空气净化器等）。"
     "正文必须包含【必须出现的关键词】中的品牌与产品词。"
 )
 
-_DRAFT_FOOTER = (
-    "\n\n请确认后回复「写入主文案」；如需修改请说明（例如「文案改成更强调节水」）。"
+_DRAFT_FOOTER_OK = (
+    "\n\n请确认后回复「写入主文案」；如需修改请说明（例如「文案改成更强调降噪」）。"
     "拓扑确认无误后回复「确认出图」。"
+)
+
+_DRAFT_FOOTER_BLOCKED = (
+    "\n\n⚠️ 主文案与方案/需求可能不一致，写入画布前会被系统拦截。"
+    "请说明修改意见后我会重新生成，或点「换方向」重开方案。"
 )
 
 
@@ -43,9 +53,11 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
         title = str(item.get("title") or "主文案")
         node_id = str(item.get("node_id") or "") or None
         plan_summary = str(state.get("plan_summary") or "").strip()
-        plan_draft = str(state.get("plan_draft") or "").strip()
-        user_brief = str(state.get("user_brief") or "").strip()
         hint = str(item.get("prompt_hint") or item.get("prompt") or "").strip()
+
+        sot = await resolve_copy_sot(state, nest)
+        user_brief = sot.user_brief
+        plan_draft = sot.plan_draft
 
         user_revision = ""
         if state.get("copy_revise_only") and state.get("messages"):
@@ -60,9 +72,14 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
                     user_revision = str(content)
                     break
 
+        if state.get("copy_write_blocked") and state.get("copy_revise_only") and not user_revision:
+            user_revision = "请严格按方案中的品牌与产品品类重写主文案，禁止换品类。"
+
         draft = ""
         alignment_feedback = ""
-        for attempt in range(3):
+        aligned = False
+        has_sot = bool(user_brief or plan_draft)
+        for attempt in range(_MAX_COPY_ATTEMPTS):
             content = build_copy_writer_context(
                 user_brief=user_brief,
                 plan_draft=plan_draft,
@@ -80,14 +97,19 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
             draft = str(getattr(result, "content", "") or "").strip()
             if not draft:
                 draft = hint or title
+            if not has_sot:
+                aligned = False
+                break
             ok, reason = validate_copy_alignment(user_brief, plan_draft, draft)
-            if ok or (not user_brief and not plan_draft):
+            if ok:
+                aligned = True
                 break
             alignment_feedback = reason or "与方案不一致"
-            if attempt >= 2:
+            if attempt >= _MAX_COPY_ATTEMPTS - 1:
                 break
 
-        body = f"【主文案草稿】\n{draft}{_DRAFT_FOOTER}"
+        footer = _DRAFT_FOOTER_OK if aligned else _DRAFT_FOOTER_BLOCKED
+        body = f"【主文案草稿】\n{draft}{footer}"
         emit = getattr(nest, "emit_text", None)
         if emit is not None:
             await emit(body)
@@ -97,21 +119,22 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
             await emit_upd(
                 id=key,
                 status="needs_user",
-                errorHint="请确认主文案后写入",
+                errorHint="请确认主文案后写入" if aligned else "主文案需修改后再写入",
             )
 
-        was_revise = bool(state.get("copy_revise_only"))
-        out: dict[str, Any] = {
-            "phase": "await_topo",
+        return {
+            "phase": "await_copy_confirm",
             "awaiting_user": True,
             "copy_draft": draft,
             "copy_node_id": node_id,
             "copy_revise_only": False,
+            "copy_write_blocked": False,
+            "copy_alignment_ok": aligned,
             "pending_orchestrate": False,
             "messages": [AIMessage(content=body)],
+            **snapshot_copy_sot_fields(
+                {**state, "user_brief": user_brief, "plan_draft": plan_draft}
+            ),
         }
-        if was_revise:
-            out["phase"] = "await_copy_confirm"
-        return out
 
     return draft_copy

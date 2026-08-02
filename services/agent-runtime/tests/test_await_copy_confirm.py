@@ -78,7 +78,8 @@ async def test_write_copy_blocks_misaligned_draft():
     )
     assert nest.calls == []
     assert out["phase"] == "await_copy_confirm"
-    assert "不一致" in out["messages"][0].content
+    assert out.get("copy_write_blocked") is True
+    assert "不一致" in out["messages"][0].content or "重新生成" in out["messages"][0].content
 
 
 @pytest.mark.asyncio
