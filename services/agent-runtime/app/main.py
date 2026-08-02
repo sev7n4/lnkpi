@@ -6,11 +6,22 @@ from typing import Any
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
+from contextlib import asynccontextmanager
+
 from app.config import settings
 from app.metrics import metrics_payload
 from app.runs import RunRequest, get_thread_state, stream_run_events
+from app.tracing import setup_tracing, shutdown_tracing
 
-app = FastAPI(title="lnkpi-agent-runtime")
+
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    setup_tracing()
+    yield
+    shutdown_tracing()
+
+
+app = FastAPI(title="lnkpi-agent-runtime", lifespan=_lifespan)
 
 # Test / DI hooks (cleared between tests)
 _run_overrides: dict[str, Any] = {}

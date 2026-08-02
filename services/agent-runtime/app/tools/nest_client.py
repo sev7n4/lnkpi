@@ -14,6 +14,7 @@ from app.errors import (
 )
 from app.metrics import record_tool_call
 from app.tools.circuit_breaker import CircuitBreaker
+from app.tracing import trace_tool
 
 DEFAULT_HTTP_TIMEOUT_SEC = 30.0
 IMAGE_GEN_TIMEOUT_BUFFER_SEC = 30.0
@@ -105,13 +106,14 @@ class NestCanvasClient:
         effective_timeout = timeout if timeout is not None else _default_timeout_sec(path)
         http = await self._get_http()
         try:
-            response = await http.post(
-                path,
-                json=body,
-                headers=self._headers,
-                timeout=effective_timeout,
-            )
-            response.raise_for_status()
+            with trace_tool(name, path=path):
+                response = await http.post(
+                    path,
+                    json=body,
+                    headers=self._headers,
+                    timeout=effective_timeout,
+                )
+                response.raise_for_status()
         except httpx.TimeoutException as exc:
             self._breaker.record_failure(name)
             record_tool_call(name, success=False)
