@@ -7,7 +7,7 @@ from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
-from app.runs import RunRequest, stream_run_events
+from app.runs import RunRequest, get_thread_state, stream_run_events
 
 app = FastAPI(title="lnkpi-agent-runtime")
 
@@ -39,6 +39,20 @@ def _require_runtime_auth(x_lnkpi_service_token: str | None) -> None:
 @app.get("/health")
 def health():
     return {"ok": True, "service": "agent-runtime"}
+
+
+@app.get("/v1/threads/{thread_id}/state")
+async def thread_state(
+    thread_id: str,
+    x_lnkpi_service_token: str | None = Header(default=None),
+):
+    _require_runtime_auth(x_lnkpi_service_token)
+    overrides = _run_overrides.get("checkpointer")
+    data = await get_thread_state(
+        thread_id,
+        checkpointer=overrides,
+    )
+    return data
 
 
 @app.post("/v1/runs")

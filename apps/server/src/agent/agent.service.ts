@@ -162,6 +162,20 @@ export class AgentService {
     return { ok, latencyMs: ok ? Date.now() - start : undefined }
   }
 
+  /** W12: Read LangGraph checkpoint phase for reconnect UI. */
+  async getThreadState(threadId: string): Promise<{
+    threadId: string
+    phase: string | null
+    nextNodes: string[]
+    interrupted: boolean
+    finished: boolean
+  } | null> {
+    const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
+    if (!runtimeUrl || !threadId.trim()) return null
+    const client = this.createRuntimeClient(runtimeUrl)
+    return client.getThreadState(threadId.trim())
+  }
+
   /** Overridable in unit tests */
   createRuntimeClient(baseUrl: string): AgentRuntimeClient {
     return new AgentRuntimeClient(

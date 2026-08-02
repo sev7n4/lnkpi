@@ -73,6 +73,16 @@ export class AgentController {
     return { code: 0, message: 'ok', data }
   }
 
+  /** W12: LangGraph checkpoint phase for agent reconnect. */
+  @Get('thread-state')
+  @UseGuards(AuthGuard)
+  async threadState(
+    @Query('threadId') threadId: string,
+  ) {
+    const data = await this.agentService.getThreadState(threadId)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('chat/optimize-prompt')
   async optimizePrompt(@Body() dto: OptimizePromptDto) {
     const data = await this.agentService.optimizePrompt(dto.prompt, dto.style)
