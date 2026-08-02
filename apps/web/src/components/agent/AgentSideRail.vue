@@ -34,6 +34,7 @@ import {
   checkRuntimeHealthViaNest,
   RUNTIME_UNREACHABLE_SNIPPET,
 } from '@/components/agent/streamRecovery'
+import ForceChoiceDialog, { type ForceChoiceKind } from '@/components/agent/ForceChoiceDialog.vue'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -63,6 +64,8 @@ const chatContainer = ref<HTMLElement>()
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
+const forceChoiceOpen = ref(false)
+const forceChoiceKind = ref<ForceChoiceKind | null>(null)
 
 const taskRecordPolling = useGenerationPolling((results) => {
   for (const { task, record } of results) {
@@ -298,6 +301,10 @@ async function send() {
   const message = `${skillPrefix}${input.value.trim()}`
   input.value = ''
   // W5 修复：手动输入若匹配确认/修改关键词，也带上 userDecision 触发 Command(resume=...)
+  await sendMessage(message, mapPresetToDecision(message))
+}
+
+async function onForceChoiceAction(message: string) {
   await sendMessage(message, mapPresetToDecision(message))
 }
 
@@ -607,6 +614,14 @@ function handleEvent(event: { type: string; data: unknown }) {
     }
     case 'ping':
       break
+    case 'force_choice': {
+      const kind = (event.data as { kind?: string }).kind
+      if (kind === 'plan_max_revise' || kind === 'copy_max_revise' || kind === 'gen_partial') {
+        forceChoiceKind.value = kind
+        forceChoiceOpen.value = true
+      }
+      break
+    }
     case 'error':
       agent.appendText(`\n\n⚠️ ${(event.data as { message: string }).message}`)
       break
@@ -997,6 +1012,11 @@ defineExpose({ openPanel, reconcileFromNodes })
           </div>
         </div>
       </Teleport>
+      <ForceChoiceDialog
+        v-model="forceChoiceOpen"
+        :kind="forceChoiceKind"
+        @action="onForceChoiceAction"
+      />
     </div>
   </aside>
 </template>

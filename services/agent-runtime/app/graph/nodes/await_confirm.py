@@ -5,8 +5,13 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.graph.intent import classify_user_decision
+from app.graph.limits import MAX_PLAN_REVISE
 
 _NONE_DECISION_TIP = "请选择 1/A 确认方案，或 2/B、3/C / 说明修改后再确认。"
+_MAX_PLAN_REVISE_TIP = (
+    f"已达最大修订次数（{MAX_PLAN_REVISE} 次），请确认当前方案（回复 1/确认），"
+    "或放弃本轮后重新描述需求。"
+)
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -68,11 +73,23 @@ def make_await_confirm_node(*, llm: Any) -> Callable:
         # 修复 P0-3 盲点：await_confirm → revise → plan 路径不经过 intake，
         # mode 不会被更新为 modify。这里在 revise 时同步设 mode=modify，
         # 让 plan 节点走增量修改分支（保留未提及的节点/文案）。
-        if decision == "revise" and state.get("user_brief") and state.get("plan_draft"):
-            out["mode"] = "modify"
+        if decision == "revise":
+            revise_count = int(state.get("plan_revise_count") or 0)
+            if revise_count >= MAX_PLAN_REVISE:
+                return {
+                    "user_decision": "none",
+                    "phase": "await_confirm",
+                    "force_choice": "plan_max_revise",
+                    "messages": [AIMessage(content=_MAX_PLAN_REVISE_TIP)],
+                }
+            out["plan_revise_count"] = revise_count + 1
+            if state.get("user_brief") and state.get("plan_draft"):
+                out["mode"] = "modify"
         elif decision == "none":
             out["messages"] = [AIMessage(content=_NONE_DECISION_TIP)]
         elif decision == "confirm":
+            out["plan_revise_count"] = 0
+            out["force_choice"] = None
             out["messages"] = [
                 AIMessage(content="正在写入确认方案并拆解画布骨架（先不出图），请稍候…")
             ]
