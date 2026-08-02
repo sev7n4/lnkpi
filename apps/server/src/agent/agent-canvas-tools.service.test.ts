@@ -545,6 +545,14 @@ describe('AgentCanvasToolsService', () => {
       .mockResolvedValueOnce({ id: 'rec-a', status: 'completed', url: 'https://cdn/a.png' })
       .mockResolvedValueOnce({ id: 'rec-b', status: 'completed', url: 'https://cdn/b.png' })
       .mockResolvedValueOnce({ id: 'rec-c', status: 'completed', url: 'https://cdn/c.png' })
+    getGeneration.mockImplementation(async (_uid: string, recordId: string) => {
+      const urls: Record<string, string> = {
+        'rec-a': 'https://cdn/a.png',
+        'rec-b': 'https://cdn/b.png',
+        'rec-c': 'https://cdn/c.png',
+      }
+      return { id: recordId, status: 'completed', url: urls[recordId] }
+    })
 
     const results = await Promise.all([
       svc.runImageGeneration({ sessionId: 's1', userId: 'u1', nodeId: 'img-a' }),

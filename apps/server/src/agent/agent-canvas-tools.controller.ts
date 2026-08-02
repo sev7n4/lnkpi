@@ -172,6 +172,20 @@ class RunImageGenerationDto {
   nodeId!: string
 }
 
+class WaitImageGenerationDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+
+  @IsString()
+  generationRecordId!: string
+}
+
 class SaveAgentMessageDto {
   @IsString()
   sessionId!: string
@@ -331,6 +345,18 @@ export class AgentCanvasToolsController {
   @Post('run-image-generation')
   async runImageGeneration(@Body() dto: RunImageGenerationDto) {
     const data = await this.tools.runImageGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('start-image-generation')
+  async startImageGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.startImageGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('wait-image-generation')
+  async waitImageGeneration(@Body() dto: WaitImageGenerationDto) {
+    const data = await this.tools.waitImageGeneration(dto)
     return { code: 0, message: 'ok', data }
   }
 

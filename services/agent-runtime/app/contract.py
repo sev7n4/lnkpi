@@ -232,6 +232,46 @@ class RunImageGenerationResponse(BaseModel):
 
     url: Optional[str] = None
     status: str
+    generationRecordId: Optional[str] = None
+    actions: list[CanvasAction]
+
+
+# ============================================================
+# start_image_generation / wait_image_generation (W11)
+# ============================================================
+
+
+class StartImageGenerationRequest(BaseModel):
+    """Request for start_image_generation endpoint."""
+
+    sessionId: str
+    userId: str
+    nodeId: str
+
+
+class StartImageGenerationResponse(BaseModel):
+    """Response for start_image_generation endpoint."""
+
+    status: str
+    generationRecordId: str
+    actions: list[CanvasAction]
+
+
+class WaitImageGenerationRequest(BaseModel):
+    """Request for wait_image_generation endpoint."""
+
+    sessionId: str
+    userId: str
+    nodeId: str
+    generationRecordId: str
+
+
+class WaitImageGenerationResponse(BaseModel):
+    """Response for wait_image_generation endpoint."""
+
+    url: Optional[str] = None
+    status: str
+    generationRecordId: Optional[str] = None
     actions: list[CanvasAction]
 
 

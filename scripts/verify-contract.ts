@@ -35,6 +35,10 @@ import {
   AttachRefsResponseSchema,
   RunImageGenerationRequestSchema,
   RunImageGenerationResponseSchema,
+  StartImageGenerationRequestSchema,
+  StartImageGenerationResponseSchema,
+  WaitImageGenerationRequestSchema,
+  WaitImageGenerationResponseSchema,
   RunVideoGenerationRequestSchema,
   RunVideoGenerationResponseSchema,
   GetGenerationStatusRequestSchema,
@@ -102,6 +106,14 @@ const CONTRACTS: Record<string, { request: ContractMapping; response: ContractMa
   run_image_generation: {
     request: { tsSchema: RunImageGenerationRequestSchema, pyModel: 'RunImageGenerationRequest' },
     response: { tsSchema: RunImageGenerationResponseSchema, pyModel: 'RunImageGenerationResponse' },
+  },
+  start_image_generation: {
+    request: { tsSchema: StartImageGenerationRequestSchema, pyModel: 'StartImageGenerationRequest' },
+    response: { tsSchema: StartImageGenerationResponseSchema, pyModel: 'StartImageGenerationResponse' },
+  },
+  wait_image_generation: {
+    request: { tsSchema: WaitImageGenerationRequestSchema, pyModel: 'WaitImageGenerationRequest' },
+    response: { tsSchema: WaitImageGenerationResponseSchema, pyModel: 'WaitImageGenerationResponse' },
   },
   run_video_generation: {
     request: { tsSchema: RunVideoGenerationRequestSchema, pyModel: 'RunVideoGenerationRequest' },
