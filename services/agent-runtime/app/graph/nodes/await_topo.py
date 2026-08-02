@@ -61,13 +61,11 @@ def make_await_topo_node() -> Callable:
                 "user_decision": "node_revise",
                 "phase": "await_topo",
                 "mode": "modify",
-                "pending_orchestrate": False,
                 "messages": [AIMessage(content=_NODE_REVISE_ACK)],
             }
         return {
             "user_decision": "confirm_gen",
             "phase": "await_topo",
-            "pending_orchestrate": False,
             "messages": [AIMessage(content="开始按拓扑出图，请稍候…")],
         }
 

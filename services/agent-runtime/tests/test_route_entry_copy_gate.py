@@ -1,19 +1,6 @@
 import pytest
 
-from app.graph.builder import route_entry
 from app.graph.nodes.done import make_done_node
-
-
-def test_route_entry_returns_intake_by_default():
-    # W5: route_entry 简化后默认返回 intake
-    assert route_entry({"phase": "await_copy_confirm"}) == "intake"
-    assert route_entry({"phase": "await_confirm"}) == "intake"
-    assert route_entry({"phase": "await_topo", "messages": []}) == "intake"
-
-
-def test_route_entry_returns_start_gen_when_pending():
-    # W3: pending_orchestrate=True 时进入 start_gen（Send-API 生成入口，gen_scheduler 接力）
-    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "start_gen"
 
 
 @pytest.mark.asyncio
@@ -37,10 +24,8 @@ async def test_done_after_gen_is_done():
         {
             "phase": "orchestrate_gen",
             "copy_draft": "主文案草稿",
-            "pending_orchestrate": False,
             "gen_completed": ["n1"],
             "gen_failed": [],
         }
     )
     assert out["phase"] == "done"
-    assert out["pending_orchestrate"] is False

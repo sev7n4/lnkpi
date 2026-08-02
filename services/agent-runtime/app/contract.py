@@ -315,3 +315,119 @@ class SaveAgentMessageResponse(BaseModel):
     """Response for save_agent_message endpoint."""
 
     id: str
+
+
+# ============================================================
+# remove_nodes (W31)
+# ============================================================
+
+
+class RemoveNodesRequest(BaseModel):
+    """Request for remove_nodes endpoint."""
+
+    sessionId: str
+    nodeIds: list[str]
+
+
+class RemoveNodesResponse(BaseModel):
+    """Response for remove_nodes endpoint."""
+
+    actions: list[CanvasAction]
+
+
+# ============================================================
+# remove_edges (W32)
+# ============================================================
+
+
+class RemoveEdgesRequest(BaseModel):
+    """Request for remove_edges endpoint."""
+
+    sessionId: str
+    edgeIds: list[str]
+
+
+class RemoveEdgesResponse(BaseModel):
+    """Response for remove_edges endpoint."""
+
+    actions: list[CanvasAction]
+
+
+# ============================================================
+# thread_lock (W7)
+# ============================================================
+
+
+class AcquireThreadLockRequest(BaseModel):
+    """Request for acquire_thread_lock endpoint."""
+
+    threadId: str
+    holderId: str
+    ttlSeconds: Optional[int] = None
+
+
+class AcquireThreadLockResponse(BaseModel):
+    """Response for acquire_thread_lock endpoint."""
+
+    acquired: bool
+
+
+class RenewThreadLockRequest(BaseModel):
+    """Request for renew_thread_lock endpoint."""
+
+    threadId: str
+    holderId: str
+    ttlSeconds: Optional[int] = None
+
+
+class RenewThreadLockResponse(BaseModel):
+    """Response for renew_thread_lock endpoint."""
+
+    renewed: bool
+
+
+class ReleaseThreadLockRequest(BaseModel):
+    """Request for release_thread_lock endpoint."""
+
+    threadId: str
+    holderId: str
+
+
+class ReleaseThreadLockResponse(BaseModel):
+    """Response for release_thread_lock endpoint."""
+
+    released: bool
+
+
+# ============================================================
+# gen_progress (W15)
+# ============================================================
+
+
+class GetGenProgressRequest(BaseModel):
+    """Request for get_gen_progress endpoint."""
+
+    threadId: str
+
+
+class GetGenProgressResponse(BaseModel):
+    """Response for get_gen_progress endpoint."""
+
+    id: str
+    lines: str
+    summary: Optional[str] = None
+
+
+class SaveGenProgressRequest(BaseModel):
+    """Request for save_gen_progress endpoint."""
+
+    threadId: str
+    sessionId: str
+    lines: str
+    summary: Optional[str] = None
+
+
+class SaveGenProgressResponse(BaseModel):
+    """Response for save_gen_progress endpoint."""
+
+    id: str

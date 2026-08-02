@@ -112,8 +112,6 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
     if not ops:
         return {
             "phase": "await_topo",
-            "awaiting_user": True,
-            "pending_orchestrate": False,
             "mode": "modify",
             "split_manifest": old_manifest,
             "messages": [
@@ -239,8 +237,6 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
 
     return {
         "phase": "await_topo",
-        "awaiting_user": True,
-        "pending_orchestrate": False,
         "mode": "modify",
         "split_manifest": updated,
         "focus_node_ids": [str(it.get("node_id")) for it in updated if it.get("node_id")],
@@ -296,7 +292,6 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
                 "phase": "split",
                 "split_manifest": [],
                 "topology_mode": mode,
-                "awaiting_user": False,
                 "messages": [AIMessage(content="当前 Skill 无 canvas-manifest，跳过批量拆解。")],
             }
 
@@ -373,8 +368,6 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             "split_manifest": manifest,
             "topology_mode": mode,
             "focus_node_ids": focus,
-            "awaiting_user": False,
-            "pending_orchestrate": False,
             "messages": [AIMessage(content=split_msg)],
             **snapshot_copy_sot_fields(state),
         }

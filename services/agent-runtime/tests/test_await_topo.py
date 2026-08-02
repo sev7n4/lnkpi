@@ -6,7 +6,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
-from app.graph.builder import build_agent_graph, route_entry
+from app.graph.builder import build_agent_graph
 from app.graph.nodes.await_topo import classify_topo_decision
 from app.graph.nodes.topo_revise import make_topo_revise_node
 
@@ -35,17 +35,6 @@ def test_classify_topo_revise_still_works_for_deletions():
     assert classify_topo_decision("删掉 Banner") == "topo_revise"
     assert classify_topo_decision("去掉主图") == "topo_revise"
     assert classify_topo_decision("移除品牌图") == "topo_revise"
-
-
-def test_route_entry_returns_intake_by_default():
-    # W5: route_entry 简化后默认返回 intake（除非 pending_orchestrate）
-    assert route_entry({"phase": "await_topo", "messages": []}) == "intake"
-    assert route_entry({"phase": "await_confirm", "messages": []}) == "intake"
-
-
-def test_route_entry_returns_orchestrate_gen_when_pending():
-    # W3: pending_orchestrate=True 时进入 start_gen（新的生成入口）
-    assert route_entry({"phase": "await_topo", "pending_orchestrate": True}) == "start_gen"
 
 
 class FakeNest:

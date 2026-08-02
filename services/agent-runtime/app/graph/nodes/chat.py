@@ -38,7 +38,6 @@ def make_chat_node(*, llm: Any) -> Callable:
         return {
             "phase": "done",
             "skill_id": None,
-            "awaiting_user": False,
             "user_decision": "none",
             "messages": [AIMessage(content=reply)],
         }

@@ -83,7 +83,6 @@ def make_topo_revise_node(*, nest: Any) -> Callable:
 
         return {
             "phase": "await_topo",
-            "awaiting_user": True,
             "split_manifest": new_manifest,
             "user_decision": "none",
             "messages": [AIMessage(content=body)],

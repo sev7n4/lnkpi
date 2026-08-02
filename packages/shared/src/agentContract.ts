@@ -293,3 +293,115 @@ export const SaveAgentMessageResponseSchema = z.object({
 })
 
 export type SaveAgentMessageResponse = z.infer<typeof SaveAgentMessageResponseSchema>
+
+// ============================================================
+// remove_nodes (W31)
+// ============================================================
+
+export const RemoveNodesRequestSchema = z.object({
+  sessionId: z.string(),
+  nodeIds: z.array(z.string()),
+})
+
+export type RemoveNodesRequest = z.infer<typeof RemoveNodesRequestSchema>
+
+export const RemoveNodesResponseSchema = z.object({
+  actions: z.array(CanvasActionSchema),
+})
+
+export type RemoveNodesResponse = z.infer<typeof RemoveNodesResponseSchema>
+
+// ============================================================
+// remove_edges (W32)
+// ============================================================
+
+export const RemoveEdgesRequestSchema = z.object({
+  sessionId: z.string(),
+  edgeIds: z.array(z.string()),
+})
+
+export type RemoveEdgesRequest = z.infer<typeof RemoveEdgesRequestSchema>
+
+export const RemoveEdgesResponseSchema = z.object({
+  actions: z.array(CanvasActionSchema),
+})
+
+export type RemoveEdgesResponse = z.infer<typeof RemoveEdgesResponseSchema>
+
+// ============================================================
+// thread_lock (W7)
+// ============================================================
+
+export const AcquireThreadLockRequestSchema = z.object({
+  threadId: z.string(),
+  holderId: z.string(),
+  ttlSeconds: z.number().optional(),
+})
+
+export type AcquireThreadLockRequest = z.infer<typeof AcquireThreadLockRequestSchema>
+
+export const AcquireThreadLockResponseSchema = z.object({
+  acquired: z.boolean(),
+})
+
+export type AcquireThreadLockResponse = z.infer<typeof AcquireThreadLockResponseSchema>
+
+export const RenewThreadLockRequestSchema = z.object({
+  threadId: z.string(),
+  holderId: z.string(),
+  ttlSeconds: z.number().optional(),
+})
+
+export type RenewThreadLockRequest = z.infer<typeof RenewThreadLockRequestSchema>
+
+export const RenewThreadLockResponseSchema = z.object({
+  renewed: z.boolean(),
+})
+
+export type RenewThreadLockResponse = z.infer<typeof RenewThreadLockResponseSchema>
+
+export const ReleaseThreadLockRequestSchema = z.object({
+  threadId: z.string(),
+  holderId: z.string(),
+})
+
+export type ReleaseThreadLockRequest = z.infer<typeof ReleaseThreadLockRequestSchema>
+
+export const ReleaseThreadLockResponseSchema = z.object({
+  released: z.boolean(),
+})
+
+export type ReleaseThreadLockResponse = z.infer<typeof ReleaseThreadLockResponseSchema>
+
+// ============================================================
+// gen_progress (W15)
+// ============================================================
+
+export const GetGenProgressRequestSchema = z.object({
+  threadId: z.string(),
+})
+
+export type GetGenProgressRequest = z.infer<typeof GetGenProgressRequestSchema>
+
+export const GetGenProgressResponseSchema = z.object({
+  id: z.string(),
+  lines: z.string(),
+  summary: z.string().nullable().optional(),
+})
+
+export type GetGenProgressResponse = z.infer<typeof GetGenProgressResponseSchema>
+
+export const SaveGenProgressRequestSchema = z.object({
+  threadId: z.string(),
+  sessionId: z.string(),
+  lines: z.string(),
+  summary: z.string().nullable().optional(),
+})
+
+export type SaveGenProgressRequest = z.infer<typeof SaveGenProgressRequestSchema>
+
+export const SaveGenProgressResponseSchema = z.object({
+  id: z.string(),
+})
+
+export type SaveGenProgressResponse = z.infer<typeof SaveGenProgressResponseSchema>

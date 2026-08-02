@@ -14,7 +14,6 @@ def make_write_plan_node(*, nest: Any) -> Callable:
         if not draft:
             return {
                 "phase": "await_confirm",
-                "awaiting_user": True,
                 "user_decision": "none",
                 "messages": [AIMessage(content="方案草稿缺失，请说明需求后重试。")],
             }
@@ -34,7 +33,6 @@ def make_write_plan_node(*, nest: Any) -> Callable:
             "phase": "write_plan_node",
             "plan_node_id": plan_node_id,
             "plan_draft": draft,
-            "awaiting_user": False,
             "messages": [AIMessage(content=confirmed)],
             **snapshot_copy_sot_fields({**state, "plan_draft": draft}),
         }

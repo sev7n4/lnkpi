@@ -40,9 +40,33 @@ class FakeLLM:
 class FakeNest:
     def __init__(self) -> None:
         self.calls: list[str] = []
+        self._db_locks: set[str] = set()
 
     async def close(self) -> None:
         return None
+
+    async def acquire_thread_lock(
+        self, thread_id: str, holder_id: str, ttl_seconds: float = 300
+    ) -> dict[str, bool]:
+        if thread_id in self._db_locks:
+            return {"acquired": False}
+        self._db_locks.add(thread_id)
+        return {"acquired": True}
+
+    async def release_thread_lock(self, thread_id: str, holder_id: str) -> dict[str, bool]:
+        self._db_locks.discard(thread_id)
+        return {"released": True}
+
+    async def renew_thread_lock(
+        self, thread_id: str, holder_id: str, ttl_seconds: float = 300
+    ) -> dict[str, bool]:
+        return {"renewed": True}
+
+    async def get_agent_messages(self) -> list[dict[str, Any]]:
+        return []
+
+    async def save_agent_message(self, **kwargs: Any) -> dict[str, Any]:
+        return {"id": "msg-1"}
 
     async def upsert_prompt_node(
         self,

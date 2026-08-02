@@ -37,18 +37,6 @@ def _latest_user_text(state: AgentRuntimeState) -> str:
     return ""
 
 
-def route_entry(state: AgentRuntimeState) -> str:
-    # W5: 简化路由 - interrupt_before 替代 awaiting_user flag
-    # 从 checkpoint 恢复时，LangGraph 会直接进入中断的节点
-    # 新对话或 phase=done 后走 intake
-    phase = state.get("phase")
-    # 如果有 pending_orchestrate 标记，应该进入 start_gen (W3)
-    if state.get("pending_orchestrate"):
-        return "start_gen"
-    # 从 intake 重新进入
-    return "intake"
-
-
 def route_after_draft_copy(state: AgentRuntimeState) -> str:
     # 修复：draft_copy 后进入主文案确认门（await_copy_confirm），而不是直接 END。
     # 否则 await_copy_confirm / write_copy_node / await_topo / start_gen 全部不可达，
@@ -141,21 +129,14 @@ def build_agent_graph(
     # W3: New generation nodes using Send API for per-node checkpointing.
     # gen_scheduler is the central arbiter: fans out gen_node via Send and
     # re-runs after each superstep to dispatch the next wave (diamond-safe).
-    # orchestrate_gen.py is intentionally NOT registered (deprecated, kept on
-    # disk only because runs.py still imports it — cleanup in a follow-up PR).
+    # orchestrate_gen.py is deprecated (W3 Send fan-out); not registered in the graph.
     graph.add_node("start_gen", make_start_gen_node())
     graph.add_node("gen_scheduler", make_gen_scheduler_node())
     graph.add_node("gen_node", make_gen_node(nest=nest))
     graph.add_node("collect_gen", make_collect_gen_node(nest=nest))
 
-    graph.add_conditional_edges(
-        START,
-        route_entry,
-        {
-            "intake": "intake",
-            "start_gen": "start_gen",
-        },
-    )
+    # W5: fresh runs always enter intake; interrupt resume bypasses START via checkpoint
+    graph.add_edge(START, "intake")
     graph.add_conditional_edges(
         "intake",
         route_after_intake,
