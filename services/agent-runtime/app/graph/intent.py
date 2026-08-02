@@ -204,3 +204,28 @@ def classify_user_decision(text: str) -> ConfirmDecision | None:
     if any(k in lowered for k in ("营销方案", "帮我设计", "帮我做")):
         return "none"
     return None
+
+
+# await_copy_confirm node: copy-specific confirm/revise keywords
+COPY_CONFIRM_HINTS = (
+    "写入主文案",
+    "确认写入",
+    "可以写入",
+    "用这个",
+    "就这个",
+    "写入",
+)
+
+CopyDecision = Literal["none", "confirm", "revise"]
+
+
+def classify_copy_decision(text: str) -> CopyDecision:
+    """Classify user decision in await_copy_confirm phase."""
+    lowered = text.strip().lower()
+    if not lowered:
+        return "none"
+    if any(h in lowered for h in REVISE_HINTS):
+        return "revise"
+    if any(h in lowered for h in COPY_CONFIRM_HINTS):
+        return "confirm"
+    return "none"

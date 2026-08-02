@@ -1,6 +1,7 @@
 """Graph routing tests for copy write loop."""
 
-from app.graph.builder import route_after_topo, route_after_write_copy
+from app.graph.subgraphs.copy_gate import route_after_write_copy
+from app.graph.subgraphs.topo_gate import route_after_topo
 
 
 def test_route_after_write_copy_regens_when_blocked():
