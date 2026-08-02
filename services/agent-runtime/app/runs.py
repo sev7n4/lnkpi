@@ -19,7 +19,7 @@ from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
-from app.tracing import is_tracing_enabled, trace_llm_handler, trace_node, get_tracer
+from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
 from app.graph.nodes.intake import modify_intent
 from app.tools.nest_client import NestCanvasClient
 
@@ -305,15 +305,11 @@ def resolve_skills_dir(skills_dir: str | Path | None = None) -> Path:
 
 
 def default_llm() -> Any:
-    callbacks: list[Any] = []
-    if is_tracing_enabled():
-        callbacks.append(trace_llm_handler(settings.openai_chat_model or "gpt-4o"))
     return ChatOpenAI(
         api_key=settings.openai_api_key or "sk-placeholder",
         base_url=settings.openai_base_url,
         model=settings.openai_chat_model or "gpt-4o",
         temperature=0.4,
-        callbacks=callbacks,
     )
 
 
@@ -462,16 +458,11 @@ async def stream_run_events(
             await lock_nest.close()
         return
 
-    run_span = None
-    if is_tracing_enabled():
-        run_span = get_tracer().start_span(
-            "agent.run",
-            attributes={
-                "agent.thread_id": thread_id,
-                "agent.session_id": req.session_id,
-                "agent.user_id": req.user_id,
-            },
-        )
+    run_span = start_run_span(
+        thread_id=thread_id,
+        session_id=req.session_id,
+        user_id=req.user_id,
+    )
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
 
@@ -607,8 +598,7 @@ async def stream_run_events(
                 break
             yield item
     finally:
-        if run_span is not None:
-            run_span.end()
+        end_run_span(run_span)
         thread_finished()
         hb_task.cancel()
         try:

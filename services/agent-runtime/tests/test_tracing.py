@@ -40,20 +40,25 @@ def test_trace_node_and_tool_spans(monkeypatch: pytest.MonkeyPatch):
     assert "tool.call" in names
 
 
+def test_trace_node_skipped_when_langsmith_otel(monkeypatch: pytest.MonkeyPatch):
+    exporter = InMemorySpanExporter()
+    monkeypatch.setattr(settings, "otel_exporter_otlp_endpoint", "http://127.0.0.1:4318")
+    tracing.configure_test_tracing(exporter)
+    tracing._langsmith_otel_active = True  # noqa: SLF001
+
+    with tracing.trace_node("plan"):
+        pass
+
+    assert len(exporter.get_finished_spans()) == 0
+
+
 def test_agent_run_span(monkeypatch: pytest.MonkeyPatch):
     exporter = InMemorySpanExporter()
     monkeypatch.setattr(settings, "otel_exporter_otlp_endpoint", "http://127.0.0.1:4318")
     tracing.configure_test_tracing(exporter)
 
-    span = tracing.get_tracer().start_span(
-        "agent.run",
-        attributes={
-            "agent.thread_id": "t1",
-            "agent.session_id": "s1",
-            "agent.user_id": "u1",
-        },
-    )
-    span.end()
+    span = tracing.start_run_span(thread_id="t1", session_id="s1", user_id="u1")
+    tracing.end_run_span(span)
 
     spans = exporter.get_finished_spans()
     assert any(s.name == "agent.run" for s in spans)
