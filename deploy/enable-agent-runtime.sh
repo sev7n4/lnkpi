@@ -81,31 +81,47 @@ upsert_env LNKPI_NEST_SERVICE_TOKEN "$NEST_TOKEN"
 upsert_env AGENT_RUNTIME_URL "http://lnkpi-agent-runtime:8000"
 upsert_env LNKPI_NEST_BASE_URL "http://lnkpi-api:3001/api"
 
-# Planning LLM: reuse Nest OPENAI_* when Runtime keys empty
+# Planning LLM: Nest OPENAI_* is platform source of truth; keep LNKPI_* in sync
 OPENAI_KEY="$(get_env OPENAI_API_KEY)"
 OPENAI_BASE="$(get_env OPENAI_BASE_URL)"
 RT_KEY="$(get_env LNKPI_OPENAI_API_KEY)"
 RT_BASE="$(get_env LNKPI_OPENAI_BASE_URL)"
-if [[ -z "$RT_KEY" && -n "$OPENAI_KEY" ]]; then
-  upsert_env LNKPI_OPENAI_API_KEY "$OPENAI_KEY"
-  log "copied OPENAI_API_KEY -> LNKPI_OPENAI_API_KEY"
+if [[ -n "$OPENAI_KEY" ]]; then
+  if [[ -z "$RT_KEY" || "$RT_KEY" != "$OPENAI_KEY" ]]; then
+    upsert_env LNKPI_OPENAI_API_KEY "$OPENAI_KEY"
+    if [[ -z "$RT_KEY" ]]; then
+      log "copied OPENAI_API_KEY -> LNKPI_OPENAI_API_KEY"
+    else
+      log "synced stale LNKPI_OPENAI_API_KEY from OPENAI_API_KEY"
+    fi
+  fi
 elif [[ -z "$RT_KEY" ]]; then
   log "WARN: LNKPI_OPENAI_API_KEY empty (and no OPENAI_API_KEY) — plan LLM may placeholder/fail"
 fi
-if [[ -z "$RT_BASE" || "$RT_BASE" == "https://api.openai.com/v1" ]]; then
-  if [[ -n "$OPENAI_BASE" ]]; then
+if [[ -n "$OPENAI_BASE" ]]; then
+  if [[ -z "$RT_BASE" || "$RT_BASE" == "https://api.openai.com/v1" || "$RT_BASE" != "$OPENAI_BASE" ]]; then
     upsert_env LNKPI_OPENAI_BASE_URL "$OPENAI_BASE"
-    log "copied OPENAI_BASE_URL -> LNKPI_OPENAI_BASE_URL"
-  elif [[ -z "$RT_BASE" ]]; then
-    upsert_env LNKPI_OPENAI_BASE_URL "https://api.openai.com/v1"
+    if [[ -z "$RT_BASE" || "$RT_BASE" == "https://api.openai.com/v1" ]]; then
+      log "copied OPENAI_BASE_URL -> LNKPI_OPENAI_BASE_URL"
+    else
+      log "synced stale LNKPI_OPENAI_BASE_URL from OPENAI_BASE_URL"
+    fi
   fi
+elif [[ -z "$RT_BASE" ]]; then
+  upsert_env LNKPI_OPENAI_BASE_URL "https://api.openai.com/v1"
 fi
 
 OPENAI_MODEL="$(get_env OPENAI_CHAT_MODEL)"
 RT_MODEL="$(get_env LNKPI_OPENAI_CHAT_MODEL)"
-if [[ -z "$RT_MODEL" && -n "$OPENAI_MODEL" ]]; then
-  upsert_env LNKPI_OPENAI_CHAT_MODEL "$OPENAI_MODEL"
-  log "copied OPENAI_CHAT_MODEL -> LNKPI_OPENAI_CHAT_MODEL"
+if [[ -n "$OPENAI_MODEL" ]]; then
+  if [[ -z "$RT_MODEL" || "$RT_MODEL" != "$OPENAI_MODEL" ]]; then
+    upsert_env LNKPI_OPENAI_CHAT_MODEL "$OPENAI_MODEL"
+    if [[ -z "$RT_MODEL" ]]; then
+      log "copied OPENAI_CHAT_MODEL -> LNKPI_OPENAI_CHAT_MODEL"
+    else
+      log "synced stale LNKPI_OPENAI_CHAT_MODEL from OPENAI_CHAT_MODEL (was ${RT_MODEL})"
+    fi
+  fi
 elif [[ -z "$RT_MODEL" ]]; then
   log "WARN: LNKPI_OPENAI_CHAT_MODEL empty — Runtime defaults to gpt-4o"
 fi
