@@ -11,8 +11,10 @@ from app.graph.nodes.draft_copy import make_draft_copy_node
 class FakeLLM:
     def __init__(self, responses: list[str]) -> None:
         self.responses = list(responses)
+        self.last_messages: list[Any] | None = None
 
     async def ainvoke(self, messages: Any, **kwargs: Any) -> AIMessage:
+        self.last_messages = messages
         if not self.responses:
             raise RuntimeError("FakeLLM: no responses left")
         return AIMessage(content=self.responses.pop(0))
@@ -62,6 +64,34 @@ async def test_draft_copy_sets_gate_and_needs_user():
         c[0] == "emit_task_update" and c[1].get("status") == "needs_user"
         for c in nest.calls
     )
+
+
+@pytest.mark.asyncio
+async def test_draft_copy_llm_context_includes_brief_and_plan():
+    nest = FakeNest()
+    llm = FakeLLM(responses=["# 主文案\nlnkpi 耳机\n"])
+    node = make_draft_copy_node(nest=nest, llm=llm)
+    plan = "# lnkpi 蓝牙耳机方案\n\nTWS 真无线耳机。"
+    await node(
+        {
+            "user_brief": "请帮我做一个蓝牙耳机营销方案，品牌lnkpi",
+            "plan_draft": plan,
+            "plan_summary": "2.1 市场背景",
+            "split_manifest": [
+                {
+                    "key": "copy_main",
+                    "title": "主文案",
+                    "target_type": "text",
+                    "node_id": "t1",
+                },
+            ],
+        }
+    )
+    assert llm.last_messages is not None
+    human = llm.last_messages[1].content
+    assert "用户需求锚定" in human
+    assert "lnkpi" in human
+    assert "TWS" in human or "蓝牙耳机" in human
 
 
 @pytest.mark.asyncio

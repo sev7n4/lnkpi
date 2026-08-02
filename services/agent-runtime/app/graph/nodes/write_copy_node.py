@@ -4,6 +4,8 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.copy_alignment import validate_copy_alignment
+
 
 def make_write_copy_node(*, nest: Any) -> Callable:
     async def write_copy_node(state: dict) -> dict:
@@ -14,6 +16,20 @@ def make_write_copy_node(*, nest: Any) -> Callable:
                 "phase": "done",
                 "awaiting_user": False,
                 "messages": [AIMessage(content="主文案草稿缺失，无法写入节点。")],
+            }
+
+        ok, reason = validate_copy_alignment(
+            str(state.get("user_brief") or ""),
+            str(state.get("plan_draft") or ""),
+            draft,
+        )
+        if not ok:
+            return {
+                "phase": "await_copy_confirm",
+                "awaiting_user": True,
+                "copy_revise_only": False,
+                "pending_orchestrate": False,
+                "messages": [AIMessage(content=f"⚠️ {reason}")],
             }
 
         await nest.set_node_content(node_id, draft)

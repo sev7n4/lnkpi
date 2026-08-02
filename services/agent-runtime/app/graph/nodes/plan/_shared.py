@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -54,18 +55,37 @@ def latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
+_SECTION_HEADING = re.compile(r"^[\d\.]+\s+[\u4e00-\u9fffA-Za-z0-9\s]{0,24}$")
+
+
+def _is_low_signal_line(text: str) -> bool:
+    """Skip section labels like '2.1 市场背景' when building one-line summaries."""
+    cleaned = text.lstrip("#>*- ").strip()
+    if len(cleaned) < 10:
+        return True
+    if cleaned in ("市场背景", "目标人群", "核心卖点", "竞争定位"):
+        return True
+    if _SECTION_HEADING.match(cleaned) and len(cleaned) < 28:
+        return True
+    return False
+
+
 def positioning_line(plan_md: str) -> str:
-    """Extract the first non-heading content line that follows a line containing '定位'."""
+    """Extract substantive positioning text — not bare section numbers."""
     lines = [ln.strip() for ln in (plan_md or "").splitlines() if ln.strip()]
     for i, ln in enumerate(lines):
         if "定位" in ln.lstrip("# ").strip():
-            for nxt in lines[i + 1 : i + 4]:
+            for nxt in lines[i + 1 : i + 8]:
                 cleaned = nxt.lstrip("#>*- ").strip()
-                if cleaned and "定位" not in cleaned:
-                    return cleaned[:120]
+                if not cleaned or "定位" in cleaned or _is_low_signal_line(cleaned):
+                    continue
+                return cleaned[:120]
     for ln in lines:
-        if not ln.startswith("#"):
-            return ln.lstrip("#>*- ").strip()[:120]
+        if ln.startswith("#"):
+            continue
+        cleaned = ln.lstrip("#>*- ").strip()
+        if cleaned and not _is_low_signal_line(cleaned):
+            return cleaned[:120]
     if lines:
         return lines[0].lstrip("# ").strip()[:120]
     return "（见画布方案节点）"
