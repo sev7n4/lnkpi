@@ -4,12 +4,13 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from app.graph.copy_alignment import build_copy_writer_context
+from app.graph.copy_alignment import build_copy_writer_context, validate_copy_alignment
 
 _COPY_SYSTEM = (
     "你是电商主文案写手。只输出主文案 Markdown 正文，禁止寒暄、禁止解释过程。"
     "必须严格依据【用户需求锚定】与【已确认营销方案】中的产品品类与品牌撰写，"
-    "禁止替换为其他行业或产品（例如用户要耳机时不得写破壁机、马桶等）。"
+    "禁止替换为其他行业或产品（例如用户要耳机时不得写破壁机、乳胶枕、马桶等）。"
+    "正文必须包含【必须出现的关键词】中的品牌与产品词。"
 )
 
 _DRAFT_FOOTER = (
@@ -59,23 +60,32 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
                     user_revision = str(content)
                     break
 
-        human_content = build_copy_writer_context(
-            user_brief=user_brief,
-            plan_draft=plan_draft,
-            plan_summary=plan_summary,
-            hint=hint,
-            user_revision=user_revision,
-        )
-
-        result = await llm.ainvoke(
-            [
-                SystemMessage(content=_COPY_SYSTEM),
-                HumanMessage(content=human_content),
-            ]
-        )
-        draft = str(getattr(result, "content", "") or "").strip()
-        if not draft:
-            draft = hint or title
+        draft = ""
+        alignment_feedback = ""
+        for attempt in range(3):
+            content = build_copy_writer_context(
+                user_brief=user_brief,
+                plan_draft=plan_draft,
+                plan_summary=plan_summary,
+                hint=hint,
+                user_revision=user_revision,
+                alignment_feedback=alignment_feedback,
+            )
+            result = await llm.ainvoke(
+                [
+                    SystemMessage(content=_COPY_SYSTEM),
+                    HumanMessage(content=content),
+                ]
+            )
+            draft = str(getattr(result, "content", "") or "").strip()
+            if not draft:
+                draft = hint or title
+            ok, reason = validate_copy_alignment(user_brief, plan_draft, draft)
+            if ok or (not user_brief and not plan_draft):
+                break
+            alignment_feedback = reason or "与方案不一致"
+            if attempt >= 2:
+                break
 
         body = f"【主文案草稿】\n{draft}{_DRAFT_FOOTER}"
         emit = getattr(nest, "emit_text", None)

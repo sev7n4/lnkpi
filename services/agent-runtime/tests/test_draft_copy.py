@@ -95,6 +95,36 @@ async def test_draft_copy_llm_context_includes_brief_and_plan():
 
 
 @pytest.mark.asyncio
+async def test_draft_copy_retries_when_first_draft_misaligned():
+    nest = FakeNest()
+    llm = FakeLLM(
+        responses=[
+            "# 天然乳胶枕\n天猫官方旗舰店销售。",
+            "# lnkpi Buds Pro\nTWS 蓝牙耳机，主动降噪。",
+        ]
+    )
+    node = make_draft_copy_node(nest=nest, llm=llm)
+    plan = "| 产品品类 | TWS 真无线蓝牙耳机 |\n| 品牌名称 | lnkpi |"
+    out = await node(
+        {
+            "user_brief": "请帮我做一个lnkpi蓝牙耳机营销方案",
+            "plan_draft": plan,
+            "plan_summary": "耳机方案",
+            "split_manifest": [
+                {
+                    "key": "copy_main",
+                    "title": "主文案",
+                    "target_type": "text",
+                    "node_id": "t1",
+                },
+            ],
+        }
+    )
+    assert len(llm.responses) == 0  # both responses consumed
+    assert "lnkpi" in (out["copy_draft"] or "").lower() or "耳机" in (out["copy_draft"] or "")
+
+
+@pytest.mark.asyncio
 async def test_draft_copy_revise_skips_pending_orchestrate():
     nest = FakeNest()
     llm = FakeLLM(responses=["# 修订主文案\n节水优先\n"])

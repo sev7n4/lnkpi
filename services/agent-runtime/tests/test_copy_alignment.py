@@ -79,3 +79,32 @@ def test_build_copy_writer_context_includes_brief_and_plan():
     assert "lnkpi" in ctx
     assert "TWS" in ctx or "蓝牙耳机" in ctx
     assert "2.1 市场背景" in ctx  # summary is supplementary
+
+
+LATEX_COPY = """# 天然乳胶枕，让每夜深睡如云
+
+## 产品类别：天然乳胶寝具
+本产品通过天猫官方旗舰店、京东自营等主流电商平台直接销售。
+"""
+
+
+def test_validate_rejects_latex_copy_for_earphone_brief():
+    brief = "请帮我做一个lnkpi蓝牙耳机营销方案"
+    ok, reason = validate_copy_alignment(brief, EARPHONE_PLAN, LATEX_COPY)
+    assert ok is False
+    assert reason is not None
+
+
+def test_validate_rejects_when_brief_and_plan_missing():
+    ok, reason = validate_copy_alignment("", "", "任意正文")
+    assert ok is False
+    assert reason is not None
+    assert "上下文" in reason or "方案" in reason
+
+
+def test_validate_rejects_misaligned_even_with_channel_keywords():
+    """Generic 天猫/京东 overlap must not pass without brand/product anchors."""
+    brief = "请帮我做一个lnkpi蓝牙耳机营销方案"
+    copy = "天猫旗舰店京东自营官方正品销售"
+    ok, _ = validate_copy_alignment(brief, EARPHONE_PLAN, copy)
+    assert ok is False

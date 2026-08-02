@@ -41,11 +41,13 @@ async def test_write_copy_persists_draft():
     out = await node(
         {
             "copy_node_id": "t1",
-            "copy_draft": "正文A",
+            "copy_draft": "# lnkpi 耳机\nTWS 蓝牙耳机正文。",
+            "user_brief": "请帮我做一个lnkpi蓝牙耳机营销方案",
+            "plan_draft": "| 产品品类 | TWS 真无线蓝牙耳机 |",
             "split_manifest": [{"key": "copy_main", "node_id": "t1", "title": "主文案"}],
         }
     )
-    assert any(c[0] == "set_node_content" and c[1] == ("t1", "正文A") for c in nest.calls)
+    assert any(c[0] == "set_node_content" and c[1] == ("t1", "# lnkpi 耳机\nTWS 蓝牙耳机正文。") for c in nest.calls)
     assert out["awaiting_user"] is True
     assert out["phase"] == "await_topo"
     assert any(
@@ -77,3 +79,22 @@ async def test_write_copy_blocks_misaligned_draft():
     assert nest.calls == []
     assert out["phase"] == "await_copy_confirm"
     assert "不一致" in out["messages"][0].content
+
+
+@pytest.mark.asyncio
+async def test_write_copy_blocks_when_context_missing():
+    class FakeNest:
+        async def set_node_content(self, node_id: str, content: str) -> dict:
+            raise AssertionError("should not write")
+
+    nest = FakeNest()
+    node = make_write_copy_node(nest=nest)
+    out = await node(
+        {
+            "copy_node_id": "t1",
+            "copy_draft": "# 任意文案",
+            "split_manifest": [{"key": "copy_main", "node_id": "t1", "title": "主文案"}],
+        }
+    )
+    assert out["phase"] == "await_copy_confirm"
+    assert "上下文" in out["messages"][0].content
