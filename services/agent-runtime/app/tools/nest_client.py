@@ -12,6 +12,7 @@ from app.errors import (
     from_nest_message,
     tool_timeout_error,
 )
+from app.metrics import record_tool_call
 from app.tools.circuit_breaker import CircuitBreaker
 
 DEFAULT_HTTP_TIMEOUT_SEC = 30.0
@@ -98,6 +99,7 @@ class NestCanvasClient:
     ) -> dict[str, Any]:
         name = tool_name or _tool_name_from_path(path)
         if self._breaker.is_open(name):
+            record_tool_call(name, success=False)
             raise AgentToolError(circuit_open_error(name))
 
         effective_timeout = timeout if timeout is not None else _default_timeout_sec(path)
@@ -112,11 +114,13 @@ class NestCanvasClient:
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             self._breaker.record_failure(name)
+            record_tool_call(name, success=False)
             raise AgentToolError(tool_timeout_error(name)) from exc
         except httpx.HTTPStatusError as exc:
             err = from_http_status(name, exc.response.status_code)
             if err["error_type"] == "downstream_unavailable":
                 self._breaker.record_failure(name)
+            record_tool_call(name, success=False)
             raise AgentToolError(err) from exc
 
         payload = response.json()
@@ -124,9 +128,11 @@ class NestCanvasClient:
             err = from_nest_message(name, str(payload.get("message", "Nest request failed")), code=payload.get("code"))
             if err["error_type"] in ("downstream_unavailable", "tool_timeout"):
                 self._breaker.record_failure(name)
+            record_tool_call(name, success=False)
             raise AgentToolError(err)
 
         self._breaker.record_success(name)
+        record_tool_call(name, success=True)
         return payload["data"]
 
     async def upsert_prompt_node(
