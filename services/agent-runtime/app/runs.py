@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from pathlib import Path
 from typing import Any, AsyncIterator, Callable, Awaitable
@@ -504,6 +505,16 @@ async def stream_run_events(
                 await proxy.close()
 
     task = asyncio.create_task(run_graph())
+
+    async def heartbeat() -> None:
+        """W12: SSE ping every 15s so frontend can detect stale connections."""
+        while not task.done():
+            await asyncio.sleep(15)
+            if task.done():
+                break
+            await emit({"type": "ping", "data": {"ts": int(time.time() * 1000)}})
+
+    hb_task = asyncio.create_task(heartbeat())
     try:
         while True:
             item = await queue.get()
@@ -511,6 +522,11 @@ async def stream_run_events(
                 break
             yield item
     finally:
+        hb_task.cancel()
+        try:
+            await hb_task
+        except asyncio.CancelledError:
+            pass
         await _release_thread(thread_id, holder_id, lock_nest)
         if owns_nest:
             await lock_nest.close()

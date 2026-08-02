@@ -9,8 +9,29 @@ from app.graph.state import SplitManifestItem
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.copy_sot import snapshot_copy_sot_fields
 from app.graph.mermaid_topo import manifest_to_mermaid
+from app.graph.topo import precompute_gen_order
 from app.graph.topo_trim import trim_manifest_items
 from app.skills.loader import discover_skills, load_skill
+
+
+def _gen_order_fields(manifest: list[dict[str, Any]]) -> dict[str, Any]:
+    """W13: pre-sort auto-generate keys at split; detect cycles before await_topo."""
+    ordered, err = precompute_gen_order(manifest)
+    if err:
+        return {
+            "gen_order_error": err,
+            "gen_ordered_keys": None,
+            "phase": "split",
+            "messages": [
+                AIMessage(
+                    content=(
+                        f"拓扑依赖有环，无法继续：{err}。"
+                        "请调整方案中的节点 depends_on 后重试。"
+                    )
+                )
+            ],
+        }
+    return {"gen_order_error": None, "gen_ordered_keys": ordered}
 
 
 def _manifest_items(canvas_manifest: dict | None, max_downstream: int) -> list[SplitManifestItem]:
@@ -110,7 +131,7 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
 
     # node_operations 为 None（LLM 解析失败）：不改动节点，直接回拓扑确认门
     if not ops:
-        return {
+        base = {
             "phase": "await_topo",
             "mode": "modify",
             "split_manifest": old_manifest,
@@ -123,6 +144,8 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
                 )
             ],
         }
+        base.update(_gen_order_fields(old_manifest))
+        return base
 
     renamed_keys: list[str] = []
     added_keys: list[str] = []
@@ -235,13 +258,15 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
         except Exception:  # noqa: BLE001
             pass
 
-    return {
+    out = {
         "phase": "await_topo",
         "mode": "modify",
         "split_manifest": updated,
         "focus_node_ids": [str(it.get("node_id")) for it in updated if it.get("node_id")],
         "messages": [AIMessage(content=msg)],
     }
+    out.update(_gen_order_fields(updated))
+    return out
 
 
 def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
@@ -363,7 +388,7 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
                     if item.get("key")
                 ]
             )
-        return {
+        out = {
             "phase": "split",
             "split_manifest": manifest,
             "topology_mode": mode,
@@ -371,5 +396,7 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             "messages": [AIMessage(content=split_msg)],
             **snapshot_copy_sot_fields(state),
         }
+        out.update(_gen_order_fields(list(manifest)))
+        return out
 
     return split
