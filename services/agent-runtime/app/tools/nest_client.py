@@ -5,9 +5,45 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.errors import (
+    AgentToolError,
+    circuit_open_error,
+    from_http_status,
+    from_nest_message,
+    tool_timeout_error,
+)
+from app.tools.circuit_breaker import CircuitBreaker
 
 DEFAULT_HTTP_TIMEOUT_SEC = 30.0
 IMAGE_GEN_TIMEOUT_BUFFER_SEC = 30.0
+
+_LOCK_PATHS = frozenset({
+    "/agent/internal/acquire-thread-lock",
+    "/agent/internal/renew-thread-lock",
+    "/agent/internal/release-thread-lock",
+})
+
+_LONG_GEN_PATHS = frozenset({
+    "/agent/internal/run-image-generation",
+    "/agent/internal/wait-image-generation",
+    "/agent/internal/run-video-generation",
+})
+
+
+def _tool_name_from_path(path: str) -> str:
+    segment = path.rstrip("/").rsplit("/", 1)[-1]
+    parts = segment.split("-")
+    if not parts:
+        return segment
+    return parts[0] + "".join(p.capitalize() for p in parts[1:])
+
+
+def _default_timeout_sec(path: str) -> float:
+    if path in _LOCK_PATHS:
+        return float(settings.thread_lock_timeout_sec)
+    if path in _LONG_GEN_PATHS:
+        return float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+    return float(settings.canvas_tool_timeout_sec)
 
 
 class NestCanvasClient:
@@ -21,6 +57,7 @@ class NestCanvasClient:
         user_id: str,
         *,
         http_client: httpx.AsyncClient | None = None,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._token = token
@@ -28,6 +65,10 @@ class NestCanvasClient:
         self._user_id = user_id
         self._http = http_client
         self._owns_http = http_client is None
+        self._breaker = circuit_breaker or CircuitBreaker(
+            failure_threshold=settings.circuit_breaker_failure_threshold,
+            cooldown_sec=settings.circuit_breaker_cooldown_sec,
+        )
 
     @property
     def _headers(self) -> dict[str, str]:
@@ -53,19 +94,39 @@ class NestCanvasClient:
         body: dict[str, Any],
         *,
         timeout: float | httpx.Timeout | None = None,
+        tool_name: str | None = None,
     ) -> dict[str, Any]:
+        name = tool_name or _tool_name_from_path(path)
+        if self._breaker.is_open(name):
+            raise AgentToolError(circuit_open_error(name))
+
+        effective_timeout = timeout if timeout is not None else _default_timeout_sec(path)
         http = await self._get_http()
-        response = await http.post(
-            path,
-            json=body,
-            headers=self._headers,
-            timeout=timeout,
-        )
-        response.raise_for_status()
+        try:
+            response = await http.post(
+                path,
+                json=body,
+                headers=self._headers,
+                timeout=effective_timeout,
+            )
+            response.raise_for_status()
+        except httpx.TimeoutException as exc:
+            self._breaker.record_failure(name)
+            raise AgentToolError(tool_timeout_error(name)) from exc
+        except httpx.HTTPStatusError as exc:
+            err = from_http_status(name, exc.response.status_code)
+            if err["error_type"] == "downstream_unavailable":
+                self._breaker.record_failure(name)
+            raise AgentToolError(err) from exc
+
         payload = response.json()
         if payload.get("code", 0) != 0:
-            message = payload.get("message", "Nest request failed")
-            raise RuntimeError(message)
+            err = from_nest_message(name, str(payload.get("message", "Nest request failed")), code=payload.get("code"))
+            if err["error_type"] in ("downstream_unavailable", "tool_timeout"):
+                self._breaker.record_failure(name)
+            raise AgentToolError(err)
+
+        self._breaker.record_success(name)
         return payload["data"]
 
     async def upsert_prompt_node(
