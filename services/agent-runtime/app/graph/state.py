@@ -106,8 +106,14 @@ class AgentRuntimeState(TypedDict, total=False):
     # node_revise: 拓扑确认门下检测到"节点内容修改"意图（改为/调整/增加等），
     # 回退到 plan 走 modify 模式增量修改方案，区别于 topo_revise（纯拓扑删除）
     user_decision: Literal[
-        "none", "confirm", "revise", "confirm_gen", "topo_revise", "node_revise"
+        "none", "confirm", "revise", "confirm_gen", "topo_revise", "node_revise", "copy_write"
     ] | None
+
+    # SoT snapshots — persisted at write_plan / split for copy harness fallbacks
+    copy_sot_brief: str | None
+    copy_sot_plan: str | None
+    copy_alignment_ok: bool | None
+    copy_write_blocked: bool | None
 
     # 修复 P0-1/P0-2/P0-3：brief 锚定 + 修改模式
     # user_brief: 首轮用户需求锚定，后续 plan 必须围绕这个 brief 展开（防止主题漂移）

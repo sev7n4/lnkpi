@@ -92,8 +92,16 @@ def route_after_confirm(state: AgentRuntimeState) -> str:
     return "end"
 
 
+def route_after_write_copy(state: AgentRuntimeState) -> str:
+    if state.get("copy_write_blocked"):
+        return "draft_copy"
+    return "await_topo"
+
+
 def route_after_topo(state: AgentRuntimeState) -> str:
     decision = state.get("user_decision") or "none"
+    if decision == "copy_write":
+        return "write_copy_node"
     if decision == "confirm_gen":
         return "start_gen"  # W3: start_gen inits gen state, then gen_scheduler fans out gen_node via Send
     if decision == "topo_revise":
@@ -184,6 +192,7 @@ def build_agent_graph(
             "start_gen": "start_gen",
             "topo_revise": "topo_revise",
             "decide_plan_mode": "decide_plan_mode",
+            "write_copy_node": "write_copy_node",
             "end": END,
         },
     )
@@ -211,7 +220,11 @@ def build_agent_graph(
     )
     # 修复：write_copy_node 后进入拓扑确认门（await_topo），而不是 END。
     # 这样用户确认主文案后，流程继续到拓扑确认门，再「确认出图」进入生图/生视频。
-    graph.add_edge("write_copy_node", "await_topo")
+    graph.add_conditional_edges(
+        "write_copy_node",
+        route_after_write_copy,
+        {"draft_copy": "draft_copy", "await_topo": "await_topo"},
+    )
 
     saver = checkpointer if checkpointer is not None else MemorySaver()
     # W5: 使用 LangGraph 原生 interrupt_before 机制替代 custom awaiting_user flags

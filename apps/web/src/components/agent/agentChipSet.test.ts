@@ -25,10 +25,18 @@ describe('detectAgentChipSet', () => {
     ).toBe('copy')
   })
 
-  it('prefers topo when draft also mentions 确认出图', () => {
+  it('prefers copy when draft not yet written even if footer mentions 确认出图', () => {
     expect(
       detectAgentChipSet(
         '【主文案草稿】\n静音\n\n请确认后回复「写入主文案」。拓扑确认无误后回复「确认出图」。',
+      ),
+    ).toBe('copy')
+  })
+
+  it('shows topo after copy written and footer mentions 确认出图', () => {
+    expect(
+      detectAgentChipSet(
+        '【主文案草稿】\n静音\n\n已将确认的主文案写入画布节点。拓扑确认无误后回复「确认出图」。',
       ),
     ).toBe('topo')
   })

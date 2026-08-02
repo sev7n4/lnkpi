@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.copy_sot import snapshot_copy_sot_fields
 from app.graph.plan_clean import strip_plan_preamble
 
 
@@ -35,6 +36,7 @@ def make_write_plan_node(*, nest: Any) -> Callable:
             "plan_draft": draft,
             "awaiting_user": False,
             "messages": [AIMessage(content=confirmed)],
+            **snapshot_copy_sot_fields({**state, "plan_draft": draft}),
         }
 
     return write_plan_node

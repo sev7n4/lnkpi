@@ -7,7 +7,7 @@ from app.graph.copy_alignment import (
     extract_anchor_terms,
     validate_copy_alignment,
 )
-from app.graph.nodes.plan._shared import positioning_line, summarize
+from app.graph.nodes.plan._shared import plan_product_line, positioning_line, summarize
 
 EARPHONE_PLAN = """# lnkpi 蓝牙耳机企业营销方案
 
@@ -44,7 +44,12 @@ def test_positioning_line_skips_section_number_heading():
 
 def test_summarize_uses_substantive_line_for_real_llm_plan():
     summary = summarize(EARPHONE_PLAN)
-    assert "2.1 市场背景" not in summary or "TWS" in summary
+    assert "2.1 市场背景" not in summary or "TWS" in summary or "耳机" in summary
+
+
+def test_plan_product_line_from_table():
+    line = plan_product_line(EARPHONE_PLAN)
+    assert "耳机" in line or "TWS" in line
 
 
 def test_extract_anchor_terms_from_brief_and_plan():

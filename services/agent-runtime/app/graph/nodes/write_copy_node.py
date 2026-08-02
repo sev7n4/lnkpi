@@ -5,6 +5,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.copy_alignment import validate_copy_alignment
+from app.graph.copy_sot import resolve_copy_sot, snapshot_copy_sot_fields
 
 
 def make_write_copy_node(*, nest: Any) -> Callable:
@@ -18,18 +19,24 @@ def make_write_copy_node(*, nest: Any) -> Callable:
                 "messages": [AIMessage(content="主文案草稿缺失，无法写入节点。")],
             }
 
-        ok, reason = validate_copy_alignment(
-            str(state.get("user_brief") or ""),
-            str(state.get("plan_draft") or ""),
-            draft,
-        )
+        sot = await resolve_copy_sot(state, nest)
+        ok, reason = validate_copy_alignment(sot.user_brief, sot.plan_draft, draft)
         if not ok:
             return {
                 "phase": "await_copy_confirm",
                 "awaiting_user": True,
-                "copy_revise_only": False,
+                "copy_revise_only": True,
+                "copy_write_blocked": True,
+                "copy_alignment_ok": False,
                 "pending_orchestrate": False,
-                "messages": [AIMessage(content=f"⚠️ {reason}")],
+                "messages": [
+                    AIMessage(
+                        content=f"⚠️ {reason}\n正在重新生成主文案，请稍候…"
+                    )
+                ],
+                **snapshot_copy_sot_fields(
+                    {**state, "user_brief": sot.user_brief, "plan_draft": sot.plan_draft}
+                ),
             }
 
         await nest.set_node_content(node_id, draft)
@@ -49,8 +56,15 @@ def make_write_copy_node(*, nest: Any) -> Callable:
             "phase": "await_topo" if stay_topo else "done",
             "awaiting_user": stay_topo,
             "copy_revise_only": False,
+            "copy_write_blocked": False,
+            "copy_alignment_ok": True,
             "pending_orchestrate": False,
-            "messages": [AIMessage(content="已将确认的主文案写入画布节点。可继续改拓扑或回复「确认出图」。")],
+            "messages": [
+                AIMessage(content="已将确认的主文案写入画布节点。可继续改拓扑或回复「确认出图」。")
+            ],
+            **snapshot_copy_sot_fields(
+                {**state, "user_brief": sot.user_brief, "plan_draft": sot.plan_draft}
+            ),
         }
 
     return write_copy_node

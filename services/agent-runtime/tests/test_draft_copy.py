@@ -30,6 +30,9 @@ class FakeNest:
     async def emit_task_update(self, **payload: Any) -> None:
         self.calls.append(("emit_task_update", payload))
 
+    async def get_node(self, node_id: str) -> dict:
+        return {"data": {"content": ""}}
+
 
 @pytest.mark.asyncio
 async def test_draft_copy_sets_gate_and_needs_user():
@@ -55,7 +58,7 @@ async def test_draft_copy_sets_gate_and_needs_user():
             "plan_summary": "卫生洁具方案",
         }
     )
-    assert out["phase"] == "await_topo"
+    assert out["phase"] == "await_copy_confirm"
     assert out["awaiting_user"] is True
     assert out["copy_node_id"] == "t1"
     assert out["pending_orchestrate"] is False

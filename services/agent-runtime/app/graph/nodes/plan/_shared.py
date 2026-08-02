@@ -104,8 +104,43 @@ def manifest_titles(canvas_manifest: dict | None) -> list[str]:
     return titles
 
 
+def plan_product_line(plan_md: str) -> str:
+    """Structured product/brand line from plan tables — preferred over section headings."""
+    text = plan_md or ""
+    for pat in (
+        r"\|\s*产品品类\s*\|\s*([^|\n]+)",
+        r"\|\s*产品类别\s*\|\s*([^|\n]+)",
+        r"\|\s*品牌名称\s*\|\s*([^|\n]+)",
+        r"产品类别\s*[:：]\s*([^\n|]+)",
+        r"产品品类\s*[:：]\s*([^\n|]+)",
+        r"\|\s*目标\s*SKU\s*\|\s*([^|\n]+)",
+    ):
+        m = re.search(pat, text)
+        if m:
+            val = m.group(1).strip()
+            if val and not _is_low_signal_line(val):
+                return val[:120]
+    return ""
+
+
 def summarize(plan_md: str, limit: int = 280) -> str:
-    return positioning_line(plan_md)[:limit]
+    product = plan_product_line(plan_md)
+    brand_m = re.search(
+        r"\|\s*品牌(?:名称)?\s*\|\s*([^|\n]+)|品牌\s*[:：]\s*([A-Za-z0-9\u4e00-\u9fff]+)",
+        plan_md or "",
+    )
+    brand = ""
+    if brand_m:
+        brand = (brand_m.group(1) or brand_m.group(2) or "").strip()
+    if product and brand:
+        line = f"{brand} · {product}"
+    elif product:
+        line = product
+    elif brand:
+        line = brand
+    else:
+        line = positioning_line(plan_md)
+    return line[:limit]
 
 
 def canvas_has_nodes(state: dict) -> bool:
