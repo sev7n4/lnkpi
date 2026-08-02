@@ -42,7 +42,9 @@ export class SessionsService {
   async findOne(id: string, userId?: string) {
     const session = await this.prisma.session.findUnique({ where: { id } })
     if (!session) throw new NotFoundException('会话不存在')
-    if (userId && session.userId !== userId) throw new ForbiddenException()
+    if (userId && session.userId !== userId) {
+      throw new ForbiddenException('此画布不属于当前账号')
+    }
     return this.formatSession(session)
   }
 
