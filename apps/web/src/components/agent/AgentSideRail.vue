@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
+import { sessionsApi } from '@/services/sessions-api'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
 import {
@@ -36,6 +38,8 @@ import { useClickOutside } from '@/composables/useClickOutside'
 
 const props = defineProps<{
   sessionId: string
+  /** 当前登录用户非画布所有者时为 true，禁止 Agent 写入画布 */
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -48,6 +52,7 @@ const emit = defineEmits<{
 
 const agent = useAgentStore()
 const auth = useAuthStore()
+const router = useRouter()
 const input = ref('')
 const chatContainer = ref<HTMLElement>()
 
@@ -283,7 +288,35 @@ function mapPresetToDecision(text: string): 'confirm' | 'revise' | undefined {
   return undefined
 }
 
+function goToWorkflowHome() {
+  void router.push('/workflow')
+}
+
+async function createOwnCanvas() {
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  try {
+    const { data } = await sessionsApi.create({ title: '我的画布' })
+    void router.push(`/workflow/${data.data.id}`)
+  } catch {
+    goToWorkflowHome()
+  }
+}
+
 async function sendMessage(message: string, userDecision?: 'confirm' | 'revise') {
+  if (props.readOnly) {
+    agent.addUserMessage(message)
+    agent.startAssistantMessage()
+    agent.appendText(
+      '⚠️ 此画布不属于当前账号，无法写入。请返回工作台新建画布，或使用画布所有者账号登录。',
+    )
+    agent.finishStreaming()
+    await nextTick()
+    scrollToBottom()
+    return
+  }
   agent.addUserMessage(message)
   agent.isStreaming = true
   agent.startAssistantMessage()
@@ -625,6 +658,22 @@ defineExpose({ openPanel, reconcileFromNodes })
             </div>
           </div>
 
+          <div
+            v-if="readOnly"
+            class="agent-readonly-banner mx-3 mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100"
+          >
+            <p>此画布属于其他账号，Agent 无法写入节点。</p>
+            <p class="mt-1 opacity-80">请新建自己的画布，或使用画布所有者账号登录。</p>
+            <div class="mt-2.5 flex flex-wrap gap-2">
+              <button type="button" class="agent-readonly-btn" @click="goToWorkflowHome">
+                返回工作台
+              </button>
+              <button type="button" class="agent-readonly-btn agent-readonly-btn-primary" @click="createOwnCanvas">
+                新建画布
+              </button>
+            </div>
+          </div>
+
           <!-- 消息列表 -->
           <div ref="chatContainer" class="min-h-0 flex-1 overflow-y-auto space-y-3 px-3 py-3">
             <div v-if="!agent.messages.length" class="agent-empty py-10 text-center">
@@ -923,6 +972,32 @@ defineExpose({ openPanel, reconcileFromNodes })
 .agent-head-btn.is-active {
   background: var(--neo-accent-soft);
   color: var(--neo-accent-text);
+}
+
+.agent-readonly-btn {
+  border-radius: 8px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(0, 0, 0, 0.15);
+  padding: 4px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgb(254, 243, 199);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.agent-readonly-btn:hover {
+  background: rgba(251, 191, 36, 0.12);
+  border-color: rgba(251, 191, 36, 0.55);
+}
+
+.agent-readonly-btn-primary {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: rgba(251, 191, 36, 0.18);
+  color: rgb(255, 251, 235);
+}
+
+.agent-readonly-btn-primary:hover {
+  background: rgba(251, 191, 36, 0.28);
 }
 
 /* ---- 消息气泡 ---- */

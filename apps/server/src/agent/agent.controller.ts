@@ -1,8 +1,23 @@
-import { Body, Controller, Get, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  ForbiddenException,
+  Get,
+  Inject,
+  Post,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common'
 import { IsIn, IsOptional, IsString } from 'class-validator'
 import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
+import { SessionsService } from '../sessions/sessions.service'
 import { AgentService } from './agent.service'
+
+const SESSION_FORBIDDEN_HINT =
+  '⚠️ 此画布不属于当前账号，无法写入。请返回工作台新建画布，或使用画布所有者账号登录。'
 
 class ConversationDto {
   @IsString()
@@ -34,7 +49,10 @@ class OptimizePromptDto {
 
 @Controller('agent')
 export class AgentController {
-  constructor(@Inject(AgentService) private readonly agentService: AgentService) {}
+  constructor(
+    @Inject(AgentService) private readonly agentService: AgentService,
+    @Inject(SessionsService) private readonly sessionsService: SessionsService,
+  ) {}
 
   @Get('capabilities/list')
   getCapabilities() {
@@ -86,6 +104,20 @@ export class AgentController {
         res.end()
         return
       }
+    }
+
+    try {
+      await this.sessionsService.findOne(dto.sessionId, req.user.sub)
+    } catch (err) {
+      if (err instanceof ForbiddenException) {
+        res.write(
+          `data: ${JSON.stringify({ type: 'text_delta', data: { text: SESSION_FORBIDDEN_HINT } })}\n\n`,
+        )
+        res.write('data: [DONE]\n\n')
+        res.end()
+        return
+      }
+      throw err
     }
 
     try {

@@ -196,6 +196,10 @@ const {
   selectedNodeId,
 } = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
+const sessionOwnerId = ref<string | null>(null)
+const agentReadOnly = computed(
+  () => !!auth.user?.id && !!sessionOwnerId.value && auth.user.id !== sessionOwnerId.value,
+)
 const saving = ref(false)
 const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
 const showStoryboard = ref(false)
@@ -2309,10 +2313,14 @@ function hydrateCanvasEdges(
 
 async function loadSession() {
   try {
-    const { data } = await api.get<{ data: { title: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
+    const { data } = await api.get<{ data: { title: string; userId?: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
       `/sessions/${sessionId.value}`,
     )
     sessionTitle.value = data.data.title
+    sessionOwnerId.value = data.data.userId ?? null
+    if (agentReadOnly.value) {
+      ElMessage.warning('此画布属于其他账号，Agent 无法写入画布')
+    }
     if (data.data.canvasData?.nodes?.length) {
       const serverNodes = data.data.canvasData.nodes as EditableFlowNode[]
       nodes.value = (
@@ -2718,6 +2726,7 @@ onMounted(() => {
       <AgentSideRail
         ref="agentRailRef"
         :session-id="sessionId"
+        :read-only="agentReadOnly"
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
