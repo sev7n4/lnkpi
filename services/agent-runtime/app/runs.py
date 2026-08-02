@@ -15,6 +15,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
 from app.config import settings
+from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.graph.nodes.intake import modify_intent
 from app.tools.nest_client import NestCanvasClient
@@ -540,8 +541,10 @@ async def stream_run_events(
                         if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
                             await emit({"type": "text_delta", "data": {"text": str(content)}})
             await emit({"type": "done", "data": {}})
+        except AgentToolError as exc:
+            await emit({"type": "error", "data": error_to_sse_payload(exc.error)})
         except Exception as exc:  # noqa: BLE001 — surface to Nest SSE
-            await emit({"type": "error", "data": {"message": str(exc)}})
+            await emit({"type": "error", "data": error_to_sse_payload(from_exception("stream_run", exc))})
         finally:
             # W2: save only new assistant messages from this turn (user saved at entry)
             try:

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from app.errors import AgentToolError, from_exception
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.gen_copy import format_gen_progress_line
 from app.graph.task_events import hint_for_error, is_recoverable, max_auto_retries
@@ -88,6 +89,7 @@ def make_gen_node(*, nest: Any) -> Callable:
         plan_node_id = state.get("plan_node_id")
         retries = max_auto_retries()
         last_status = "error"
+        last_reason = "error"
         last_record_id: str | None = None
 
         await _emit_task_update(nest, id=key, status="running", attempt=0, maxAttempts=retries)
@@ -162,8 +164,15 @@ def make_gen_node(*, nest: Any) -> Callable:
                     return {"gen_completed_keys": [key]}
 
                 last_status = _result_status(result)
+                last_reason = last_status
+            except AgentToolError as exc:
+                last_status = exc.error["error_type"]
+                last_reason = exc.error["message"]
+                result = None
             except Exception as exc:  # noqa: BLE001
-                last_status = str(exc)
+                err = from_exception(str(key), exc)
+                last_status = err["error_type"]
+                last_reason = err["message"]
                 result = None
 
             if not is_recoverable(last_status):
@@ -182,7 +191,7 @@ def make_gen_node(*, nest: Any) -> Callable:
                     await _emit_line(nest, format_gen_progress_line(title=title, status=last_status))
                 return {
                     "gen_needs_user_keys": [key],
-                    "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": last_status}},
+                    "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": last_reason}},
                 }
 
             # recoverable → retry loop continues
@@ -201,7 +210,7 @@ def make_gen_node(*, nest: Any) -> Callable:
         await _emit_line(nest, format_gen_progress_line(title=title, status=last_status))
         return {
             "gen_failed_keys": [key],
-            "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": last_status}},
+            "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": last_reason}},
         }
 
     return gen_node

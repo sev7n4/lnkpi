@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o"
     image_gen_concurrency: int = 3
     image_gen_timeout_sec: int = 180
+    # W21: per-tool HTTP timeouts (seconds)
+    canvas_tool_timeout_sec: float = 10.0
+    thread_lock_timeout_sec: float = 5.0
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_cooldown_sec: float = 60.0
     # Checkpoint persistence (G1 decision)
     checkpoint_path: str = "data/checkpoints.db"
     # W17: History window for conversation context pruning

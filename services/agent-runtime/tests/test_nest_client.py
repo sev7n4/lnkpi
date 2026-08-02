@@ -176,6 +176,63 @@ async def test_get_generation_status(nest_client, captured):
     assert req["json"] == {"sessionId": SESSION_ID, "nodeId": "n1"}
 
 
+@pytest.mark.asyncio
+async def test_default_timeout_mapping():
+    from app.tools.nest_client import _default_timeout_sec
+    from app.config import settings
+
+    assert _default_timeout_sec("/agent/internal/get-node") == float(settings.canvas_tool_timeout_sec)
+    assert _default_timeout_sec("/agent/internal/acquire-thread-lock") == float(
+        settings.thread_lock_timeout_sec
+    )
+    assert _default_timeout_sec("/agent/internal/run-image-generation") >= 210.0
+
+
+@pytest.mark.asyncio
+async def test_timeout_raises_agent_tool_error():
+    import httpx
+    from app.errors import AgentToolError
+    from app.tools.circuit_breaker import CircuitBreaker
+    from app.tools.nest_client import NestCanvasClient
+
+    async def handler(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out")
+
+    transport = httpx.MockTransport(handler)
+    http = httpx.AsyncClient(transport=transport, base_url=BASE_URL)
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        http_client=http,
+        circuit_breaker=CircuitBreaker(failure_threshold=10),
+    )
+    with pytest.raises(AgentToolError) as exc_info:
+        await client.get_node("n1")
+    assert exc_info.value.error["error_type"] == "tool_timeout"
+
+
+@pytest.mark.asyncio
+async def test_circuit_open_raises_without_http_call():
+    from app.errors import AgentToolError
+    from app.tools.circuit_breaker import CircuitBreaker
+    from app.tools.nest_client import NestCanvasClient
+
+    cb = CircuitBreaker(failure_threshold=1, cooldown_sec=60)
+    cb.record_failure("getNode")
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        circuit_breaker=cb,
+    )
+    with pytest.raises(AgentToolError) as exc_info:
+        await client.get_node("n1")
+    assert exc_info.value.error["error_type"] == "circuit_open"
+
+
 def test_build_canvas_tools_hides_session_and_user(nest_client):
     tools = build_canvas_tools(nest_client)
     names = {tool.name for tool in tools}
