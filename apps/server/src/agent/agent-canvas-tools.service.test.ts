@@ -573,4 +573,162 @@ describe('AgentCanvasToolsService', () => {
       expect(node!.data.generationStartedAt, `${nodeId} startedAt`).toBeTruthy()
     }
   })
+
+  describe('W8 stage/commit', () => {
+    const stagedAt = new Date()
+
+    beforeEach(() => {
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: null,
+        stagedAt: null,
+      }))
+      sessionUpdate.mockImplementation(
+        async ({
+          data,
+        }: {
+          data: {
+            canvasData?: string
+            stagedActions?: string | null
+            stagedAt?: Date | null
+          }
+        }) => {
+          if (data.canvasData) canvas = JSON.parse(data.canvasData) as CanvasData
+          return { id: 's1', ...data }
+        },
+      )
+    })
+
+    it('stageCanvasActions accumulates without changing canvasData', async () => {
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: null,
+        stagedAt: null,
+      }))
+      const action = {
+        type: 'add_node' as const,
+        payload: {
+          id: 'staged-1',
+          nodeType: 'image' as const,
+          position: { x: 0, y: 0 },
+          data: { title: 'staged' },
+        },
+      }
+      const result = await svc.stageCanvasActions({ sessionId: 's1', actions: [action] })
+      expect(result.stagedCount).toBe(1)
+      expect(canvas.nodes).toHaveLength(0)
+      expect(sessionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stagedActions: expect.stringContaining('staged-1'),
+            stagedAt: expect.any(Date),
+          }),
+        }),
+      )
+    })
+
+    it('commitStage applies staged actions to canvasData', async () => {
+      const action = {
+        type: 'add_node' as const,
+        payload: {
+          id: 'staged-1',
+          nodeType: 'image' as const,
+          position: { x: 0, y: 0 },
+          data: { title: 'staged' },
+        },
+      }
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: JSON.stringify([action]),
+        stagedAt,
+      }))
+      const result = await svc.commitStage({ sessionId: 's1' })
+      expect(result.actions).toHaveLength(1)
+      expect(canvas.nodes).toHaveLength(1)
+      expect(canvas.nodes[0].id).toBe('staged-1')
+    })
+
+    it('rollbackStage clears stagedActions without touching canvas', async () => {
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: '[]',
+        stagedAt,
+      }))
+      const result = await svc.rollbackStage({ sessionId: 's1' })
+      expect(result.cleared).toBe(true)
+      expect(canvas.nodes).toHaveLength(0)
+      expect(sessionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { stagedActions: null, stagedAt: null },
+        }),
+      )
+    })
+
+    it('expireStaleStage auto-clears stage older than TTL on commit', async () => {
+      const stale = new Date(Date.now() - 31 * 60 * 1000)
+      const action = {
+        type: 'add_node' as const,
+        payload: {
+          id: 'old-staged',
+          nodeType: 'image' as const,
+          position: { x: 0, y: 0 },
+          data: {},
+        },
+      }
+      let stagedActions: string | null = JSON.stringify([action])
+      let stagedAtVal: Date | null = stale
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions,
+        stagedAt: stagedAtVal,
+      }))
+      sessionUpdate.mockImplementation(
+        async ({
+          data,
+        }: {
+          data: {
+            canvasData?: string
+            stagedActions?: string | null
+            stagedAt?: Date | null
+          }
+        }) => {
+          if (data.canvasData) canvas = JSON.parse(data.canvasData) as CanvasData
+          if (data.stagedActions !== undefined) stagedActions = data.stagedActions
+          if (data.stagedAt !== undefined) stagedAtVal = data.stagedAt
+          return { id: 's1', ...data }
+        },
+      )
+      const result = await svc.commitStage({ sessionId: 's1' })
+      expect(result.actions).toHaveLength(0)
+      expect(canvas.nodes).toHaveLength(0)
+      expect(stagedActions).toBeNull()
+    })
+
+    it('persist rejects when stagedActions pending', async () => {
+      canvas = {
+        nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+        edges: [],
+      }
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: '[]',
+        stagedAt,
+      }))
+      await expect(
+        svc.setNodePrompt({ sessionId: 's1', nodeId: 'img-1', prompt: 'p' }),
+      ).rejects.toThrow(/staged actions pending/i)
+    })
+  })
 })

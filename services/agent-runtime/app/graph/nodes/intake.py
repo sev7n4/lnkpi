@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.graph.intent import marketing_intent, modify_intent
+from app.graph.intent import marketing_intent, modify_intent  # re-export for tests
+from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
 
@@ -27,40 +28,26 @@ def make_intake_node(skills_dir: Path) -> Callable:
             if preferred in by_id:
                 skill_id = preferred
             elif entries:
-                # Only when intent matched: pick first available skill package
                 skill_id = entries[0].skill_id
-        # No unique-skill fallback when intent is weak — skill_id stays None → chat
 
-        # 修复 P0-1/P0-2：检测修改模式
-        # 如果 state 中已有 user_brief（说明不是首轮）且用户输入带修改意图 → 进入 modify 模式
         existing_brief = state.get("user_brief")
         existing_plan = state.get("plan_draft")
         is_modify = bool(existing_brief and existing_plan and modify_intent(text))
 
-        # 锁定 brief：首轮写入后即锁定，避免后续轮次的主题漂移
-        # 但用户明确要全新方案（mode=create + marketing_intent）时解锁并重置 brief
-        if is_modify:
-            # modify 模式：保留旧 brief 作为锚定
-            new_brief = existing_brief
-            new_locked = state.get("brief_locked", False)
-        elif marketing_intent(text):
-            # 用户新需求（含明确营销意图）→ 写入/覆盖 brief 并锁定
-            new_brief = text
-            new_locked = True
-        else:
-            # 非营销意图（闲聊/确认词）→ 保留现有 brief 状态
-            new_brief = existing_brief
-            new_locked = state.get("brief_locked", False)
-
-        # 决定 mode：modify 模式必须有 brief + plan + 显式 modify 意图
-        # 注意：existing_brief+plan 存在但用户无 modify 意图时，走 create 模式
-        # （例如用户在 done 后说"帮我做运动鞋详情页"应生成全新方案，而非锚定到旧主题）
         if is_modify:
             mode = "modify"
+            proposed_brief = None  # reducer keeps existing brief
+        elif marketing_intent(text):
+            mode = "create"
+            if existing_brief and not modify_intent(text):
+                proposed_brief = BRIEF_RESET_PREFIX + text
+            else:
+                proposed_brief = text
         else:
             mode = "create"
+            proposed_brief = None
 
-        return {
+        out: dict[str, Any] = {
             "phase": "intake",
             "skill_id": skill_id,
             "user_decision": "none",
@@ -69,10 +56,10 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "gen_completed": state.get("gen_completed") or [],
             "gen_failed": state.get("gen_failed") or [],
             "last_error": state.get("last_error"),
-            # 修复 P0-1/P0-2/P0-3：传递 brief + mode 到后续节点
-            "user_brief": new_brief,
-            "brief_locked": new_locked,
             "mode": mode,
         }
+        if proposed_brief is not None:
+            out["user_brief"] = proposed_brief
+        return out
 
     return intake

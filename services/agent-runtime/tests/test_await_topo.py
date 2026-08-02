@@ -249,7 +249,6 @@ async def test_node_revise_full_flow_updates_canvas():
             "user_id": "u1",
             "thread_id": "topo-node-revise-1",
             "user_brief": "帮我设计无线蓝牙耳机品牌营销方案",
-            "brief_locked": True,
             "plan_node_id": "plan-1",
             "plan_draft": "# 蓝牙耳机营销方案\n\n## 定位\n高端无线耳机",
             "mode": "create",
@@ -286,3 +285,77 @@ async def test_node_revise_full_flow_updates_canvas():
     final_keys = {str(it.get("key")) for it in (state.get("split_manifest") or [])}
     assert "product_material_detail" in final_keys
     assert "model_portrait" in final_keys
+
+
+@pytest.mark.asyncio
+async def test_modify_split_pauses_at_await_topo_interrupt():
+    """modify split 后应 interrupt 在 await_topo（非 END），以便「确认出图」能路由 start_gen。"""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    from app.graph.builder import build_agent_graph
+
+    class MinimalNest:
+        async def upsert_prompt_node(self, **kwargs: Any) -> dict[str, Any]:
+            return {"nodeId": "plan-1", "actions": []}
+
+        async def get_node(self, node_id: str) -> dict[str, Any]:
+            return {"id": node_id, "data": {}}
+
+        async def set_node_prompt(self, node_id: str, prompt: str, **kwargs: Any) -> dict[str, Any]:
+            return {"nodeId": node_id, "actions": []}
+
+        async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
+            return {"nodes": [{"key": it["key"], "nodeId": f"n-{it['key']}"} for it in items]}
+
+        async def connect_nodes(self, edges: list[dict[str, str]], **kwargs: Any) -> dict[str, Any]:
+            return {"actions": []}
+
+        async def emit_task_list(self, items: list[dict[str, Any]]) -> None:
+            pass
+
+        async def emit_text(self, text: str) -> None:
+            pass
+
+        async def commit_stage(self) -> dict[str, Any]:
+            return {"actions": []}
+
+    class MinimalLLM:
+        async def ainvoke(self, messages: Any, **kwargs: Any) -> AIMessage:
+            return AIMessage(content='[{"op":"add","key":"extra_scene","title":"场景图","target_type":"image","prompt_hint":"运动场景"}]')
+
+    graph = build_agent_graph(
+        nest=MinimalNest(),
+        llm=MinimalLLM(),
+        skills_dir=__import__("pathlib").Path(__file__).resolve().parents[1] / "skills",
+        checkpointer=MemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "modify-confirm-gen-1"}}
+    await graph.aupdate_state(
+        config,
+        {
+            "phase": "await_topo",
+            "skill_id": "enterprise-marketing-campaign",
+            "session_id": "s1",
+            "user_id": "u1",
+            "thread_id": "modify-confirm-gen-1",
+            "user_brief": "蓝牙耳机方案",
+            "plan_node_id": "plan-1",
+            "plan_draft": "# plan",
+            "mode": "modify",
+            "split_manifest": [{"key": "hero_main", "title": "主图", "node_id": "img-1"}],
+            "messages": [
+                AIMessage(content="请确认拓扑"),
+                HumanMessage(content="增加运动场景图节点"),
+            ],
+            "user_decision": "node_revise",
+        },
+        as_node="await_topo",
+    )
+    await graph.ainvoke(None, config)
+    snap = graph.get_state(config)
+    assert snap.next == ("await_topo",), f"expected interrupt at await_topo, got {snap.next}"
+
+    await graph.ainvoke(None, config)
+    snap = graph.get_state(config)
+    assert snap.next == ("await_topo",), f"expected interrupt at await_topo, got {snap.next}"
