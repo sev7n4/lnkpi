@@ -51,3 +51,29 @@ async def test_write_copy_persists_draft():
     assert any(
         c[0] == "emit_task_update" and c[1].get("status") == "done" for c in nest.calls
     )
+
+
+@pytest.mark.asyncio
+async def test_write_copy_blocks_misaligned_draft():
+    class FakeNest:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, Any]] = []
+
+        async def set_node_content(self, node_id: str, content: str) -> dict:
+            self.calls.append(("set_node_content", (node_id, content)))
+            return {"actions": []}
+
+    nest = FakeNest()
+    node = make_write_copy_node(nest=nest)
+    out = await node(
+        {
+            "copy_node_id": "t1",
+            "copy_draft": "# 破壁机营销\n真正的好破壁机。",
+            "user_brief": "请帮我做一个蓝牙耳机营销方案，品牌lnkpi",
+            "plan_draft": "| 产品品类 | TWS 真无线蓝牙耳机 |",
+            "split_manifest": [{"key": "copy_main", "node_id": "t1", "title": "主文案"}],
+        }
+    )
+    assert nest.calls == []
+    assert out["phase"] == "await_copy_confirm"
+    assert "不一致" in out["messages"][0].content

@@ -4,9 +4,12 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from app.graph.copy_alignment import build_copy_writer_context
+
 _COPY_SYSTEM = (
     "你是电商主文案写手。只输出主文案 Markdown 正文，禁止寒暄、禁止解释过程。"
-    "根据营销方案摘要写出可直接用于详情页的主文案。"
+    "必须严格依据【用户需求锚定】与【已确认营销方案】中的产品品类与品牌撰写，"
+    "禁止替换为其他行业或产品（例如用户要耳机时不得写破壁机、马桶等）。"
 )
 
 _DRAFT_FOOTER = (
@@ -39,13 +42,11 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
         title = str(item.get("title") or "主文案")
         node_id = str(item.get("node_id") or "") or None
         plan_summary = str(state.get("plan_summary") or "").strip()
+        plan_draft = str(state.get("plan_draft") or "").strip()
+        user_brief = str(state.get("user_brief") or "").strip()
         hint = str(item.get("prompt_hint") or item.get("prompt") or "").strip()
 
-        user_bits = [
-            f"方案摘要：\n{plan_summary or '（无）'}",
-        ]
-        if hint:
-            user_bits.append(f"节点提示：\n{hint}")
+        user_revision = ""
         if state.get("copy_revise_only") and state.get("messages"):
             for msg in reversed(state.get("messages") or []):
                 role = getattr(msg, "type", None) or (
@@ -55,13 +56,21 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
                     msg.get("content") if isinstance(msg, dict) else ""
                 )
                 if role in ("human", "user") and content:
-                    user_bits.append(f"用户修改意见：\n{content}")
+                    user_revision = str(content)
                     break
+
+        human_content = build_copy_writer_context(
+            user_brief=user_brief,
+            plan_draft=plan_draft,
+            plan_summary=plan_summary,
+            hint=hint,
+            user_revision=user_revision,
+        )
 
         result = await llm.ainvoke(
             [
                 SystemMessage(content=_COPY_SYSTEM),
-                HumanMessage(content="\n\n".join(user_bits)),
+                HumanMessage(content=human_content),
             ]
         )
         draft = str(getattr(result, "content", "") or "").strip()
