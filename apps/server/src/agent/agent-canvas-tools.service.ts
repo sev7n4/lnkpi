@@ -632,6 +632,7 @@ export class AgentCanvasToolsService {
         actions: [...started.actions, ...finished.actions],
       }
     } catch (err) {
+      if (err instanceof ForbiddenException || err instanceof NotFoundException) throw err
       const errorMessage = err instanceof Error ? err.message : '图像生成失败'
       const errorActions: CanvasAction[] = [
         {
