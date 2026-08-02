@@ -75,7 +75,26 @@ LNKPI_OPENAI_API_KEY=
 LNKPI_OPENAI_BASE_URL=https://api.openai.com/v1
 LNKPI_IMAGE_GEN_CONCURRENCY=3
 LNKPI_IMAGE_GEN_TIMEOUT_SEC=180
+# W23 OTLP tracing (optional Jaeger overlay, see §2.4)
+# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
 ```
+
+---
+
+## 2.4 W23 OTLP Trace（可选）
+
+默认 **关闭**。启用步骤：
+
+```bash
+cd /opt/lnkpi
+docker compose -f deploy/docker-compose.prod.yml \
+  -f deploy/docker-compose.observability.yml up -d jaeger
+# .env 追加:
+# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+docker compose -f deploy/docker-compose.prod.yml up -d --no-build agent-runtime
+```
+
+Jaeger UI（仅本机）：`http://127.0.0.1:16686` — 搜索 `service=lnkpi-agent-runtime`，可见 `agent.run` → `graph.node` → `tool.call` → `llm.invoke` span 链。
 
 ---
 

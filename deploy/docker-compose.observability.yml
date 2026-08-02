@@ -1,0 +1,26 @@
+# Optional observability overlay — Jaeger all-in-one with OTLP HTTP receiver.
+# Usage on CVM:
+#   docker compose -f deploy/docker-compose.prod.yml \
+#     -f deploy/docker-compose.observability.yml up -d jaeger
+#   # then set in /opt/lnkpi/.env:
+#   # LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+#   # restart agent-runtime
+#
+# Jaeger UI: http://<cvm-host>:16686
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: lnkpi-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:16686:16686"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - lnkpi
+
+  agent-runtime:
+    environment:
+      LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT: ${LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}

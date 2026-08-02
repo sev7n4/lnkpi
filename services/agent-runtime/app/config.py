@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     # W17: History window for conversation context pruning
     history_window: int = 20  # Keep last N messages; anchors preserved separately
     history_token_budget: int = 8000  # Approx token cap for loaded history (0 = disabled)
+    # W23: OTLP tracing (Jaeger/Tempo). Empty = disabled.
+    otel_exporter_otlp_endpoint: str = ""
+    otel_service_name: str = "lnkpi-agent-runtime"
+    otel_simple_processor: bool = False  # True for tests / low-volume dev
 
     class Config:
         env_prefix = "LNKPI_"
