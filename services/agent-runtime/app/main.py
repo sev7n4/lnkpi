@@ -4,9 +4,10 @@ import json
 from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from app.config import settings
+from app.metrics import metrics_payload
 from app.runs import RunRequest, get_thread_state, stream_run_events
 
 app = FastAPI(title="lnkpi-agent-runtime")
@@ -39,6 +40,13 @@ def _require_runtime_auth(x_lnkpi_service_token: str | None) -> None:
 @app.get("/health")
 def health():
     return {"ok": True, "service": "agent-runtime"}
+
+
+@app.get("/metrics")
+def metrics():
+    """W24: Prometheus scrape endpoint."""
+    payload, content_type = metrics_payload()
+    return Response(content=payload, media_type=content_type)
 
 
 @app.get("/v1/threads/{thread_id}/state")

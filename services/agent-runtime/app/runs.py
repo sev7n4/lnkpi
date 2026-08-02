@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
+from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.graph.nodes.intake import modify_intent
 from app.tools.nest_client import NestCanvasClient
 
@@ -467,6 +468,7 @@ async def stream_run_events(
 
     proxy = NestEventProxy(inner_nest, emit)
     graph_llm = llm if llm is not None else default_llm()
+    thread_started()
 
     active_checkpointer = checkpointer if checkpointer is not None else await _get_checkpointer()
     graph = build_agent_graph(
@@ -521,38 +523,42 @@ async def stream_run_events(
             async for update in graph.astream(input_state, config, stream_mode="updates"):
                 if not isinstance(update, dict):
                     continue
-                for _node, delta in update.items():
-                    if not isinstance(delta, dict):
-                        continue
-                    force_choice = delta.get("force_choice")
-                    if force_choice:
-                        await emit(
-                            {
-                                "type": "force_choice",
-                                "data": {"kind": str(force_choice)},
-                            }
-                        )
-                    messages = delta.get("messages")
-                    if not messages:
-                        continue
-                    seq = messages if isinstance(messages, list) else [messages]
-                    for msg in seq:
-                        content = getattr(msg, "content", None)
-                        if content is None and isinstance(msg, dict):
-                            content = msg.get("content")
-                        if not content:
+                for node_name, delta in update.items():
+                    with track_node(str(node_name)):
+                        if not isinstance(delta, dict):
                             continue
-                        # Prefer AI replies for text_delta
-                        msg_type = getattr(msg, "type", None) or (
-                            msg.get("role") if isinstance(msg, dict) else None
-                        )
-                        if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
-                            await emit({"type": "text_delta", "data": {"text": str(content)}})
+                        force_choice = delta.get("force_choice")
+                        if force_choice:
+                            await emit(
+                                {
+                                    "type": "force_choice",
+                                    "data": {"kind": str(force_choice)},
+                                }
+                            )
+                        messages = delta.get("messages")
+                        if not messages:
+                            continue
+                        seq = messages if isinstance(messages, list) else [messages]
+                        for msg in seq:
+                            content = getattr(msg, "content", None)
+                            if content is None and isinstance(msg, dict):
+                                content = msg.get("content")
+                            if not content:
+                                continue
+                            # Prefer AI replies for text_delta
+                            msg_type = getattr(msg, "type", None) or (
+                                msg.get("role") if isinstance(msg, dict) else None
+                            )
+                            if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
+                                await emit({"type": "text_delta", "data": {"text": str(content)}})
             await emit({"type": "done", "data": {}})
         except AgentToolError as exc:
+            record_stream_error(exc.error["error_type"])
             await emit({"type": "error", "data": error_to_sse_payload(exc.error)})
         except Exception as exc:  # noqa: BLE001 — surface to Nest SSE
-            await emit({"type": "error", "data": error_to_sse_payload(from_exception("stream_run", exc))})
+            err = from_exception("stream_run", exc)
+            record_stream_error(err["error_type"])
+            await emit({"type": "error", "data": error_to_sse_payload(err)})
         finally:
             # W2: save only new assistant messages from this turn (user saved at entry)
             try:
@@ -589,6 +595,7 @@ async def stream_run_events(
                 break
             yield item
     finally:
+        thread_finished()
         hb_task.cancel()
         try:
             await hb_task
