@@ -75,26 +75,40 @@ LNKPI_OPENAI_API_KEY=
 LNKPI_OPENAI_BASE_URL=https://api.openai.com/v1
 LNKPI_IMAGE_GEN_CONCURRENCY=3
 LNKPI_IMAGE_GEN_TIMEOUT_SEC=180
-# W23 OTLP tracing (optional Jaeger overlay, see §2.4)
-# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+# W23 OTLP tracing (optional Collector overlay, see §2.4)
+# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+# LNKPI_LANGSMITH_OTEL_ENABLED=true
 ```
 
 ---
 
-## 2.4 W23 OTLP Trace（可选）
+## 2.4 W23 可观测性：OTel Collector → Tempo（可选）
 
-默认 **关闭**。启用步骤：
+默认 **关闭**。推荐栈：**LangSmith OTel 自动埋点（LangGraph/LLM）+ OTel Collector + Tempo + Grafana**。
+
+| 环境 | 配置 |
+|------|------|
+| **生产** | `LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` + `LANGSMITH_OTEL_ONLY=true`（无 API Key） |
+| **开发** | 同上 + `LANGSMITH_API_KEY=...` 可同时看 LangSmith Cloud |
+
+启用步骤：
 
 ```bash
 cd /opt/lnkpi
 docker compose -f deploy/docker-compose.prod.yml \
-  -f deploy/docker-compose.observability.yml up -d jaeger
+  -f deploy/docker-compose.observability.yml up -d
+
 # .env 追加:
-# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+# LNKPI_LANGSMITH_OTEL_ENABLED=true
+
 docker compose -f deploy/docker-compose.prod.yml up -d --no-build agent-runtime
 ```
 
-Jaeger UI（仅本机）：`http://127.0.0.1:16686` — 搜索 `service=lnkpi-agent-runtime`，可见 `agent.run` → `graph.node` → `tool.call` → `llm.invoke` span 链。
+- **Grafana Explore → Tempo**（本机）：`http://127.0.0.1:3000`
+- Span 链：`agent.run`（业务）+ LangSmith 自动 `chain/llm` + `tool.call`（Nest HTTP）
+
+后续 Nest 侧补 Node OTel 后，Collector 可统一接收全链路 trace。
 
 ---
 
