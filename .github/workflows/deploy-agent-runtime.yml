@@ -143,8 +143,18 @@ jobs:
           API_PORT="${{ env.API_PORT }}"
 
           echo "=== Agent Runtime health (via docker exec) ==="
-          if ! ssh deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:8000/health" 2>/dev/null | head -c 300; then
-            echo "ERROR: agent-runtime health check failed"
+          OK=0
+          for i in $(seq 1 12); do
+            if ssh deploy-cvm "docker exec lnkpi-agent-runtime curl -fsS --connect-timeout 5 --max-time 10 http://127.0.0.1:8000/health" 2>/dev/null | head -c 300; then
+              echo ""
+              OK=1
+              break
+            fi
+            echo "Attempt $i: agent-runtime health check failed, retrying..."
+            sleep $((i <= 6 ? 5 : 10))
+          done
+          if [ "$OK" != "1" ]; then
+            echo "ERROR: agent-runtime health check failed after retries"
             ssh deploy-cvm "docker logs lnkpi-agent-runtime --tail 50 2>&1 || true"
             exit 1
           fi
