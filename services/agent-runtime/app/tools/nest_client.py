@@ -91,17 +91,25 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id},
         )
 
-    async def add_nodes_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._post(
-            "/agent/internal/add-nodes-batch",
-            {"sessionId": self._session_id, "userId": self._user_id, "items": items},
-        )
+    async def add_nodes_batch(
+        self, items: list[dict[str, Any]], *, stage: bool = False
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "items": items,
+        }
+        if stage:
+            body["stage"] = True
+        return await self._post("/agent/internal/add-nodes-batch", body)
 
-    async def connect_nodes(self, edges: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._post(
-            "/agent/internal/connect-nodes",
-            {"sessionId": self._session_id, "edges": edges},
-        )
+    async def connect_nodes(
+        self, edges: list[dict[str, Any]], *, stage: bool = False
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"sessionId": self._session_id, "edges": edges}
+        if stage:
+            body["stage"] = True
+        return await self._post("/agent/internal/connect-nodes", body)
 
     async def remove_nodes(self, node_ids: list[str]) -> dict[str, Any]:
         """W31: Remove nodes and their associated edges."""
@@ -118,7 +126,7 @@ class NestCanvasClient:
         )
 
     async def set_node_prompt(
-        self, node_id: str, prompt: str, *, title: str | None = None
+        self, node_id: str, prompt: str, *, title: str | None = None, stage: bool = False
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -128,6 +136,8 @@ class NestCanvasClient:
         # P0 修复：modify 模式 upsert 节点时同时更新标题（Nest 端可选字段）
         if title:
             body["title"] = title
+        if stage:
+            body["stage"] = True
         return await self._post("/agent/internal/set-node-prompt", body)
 
     async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
@@ -242,4 +252,22 @@ class NestCanvasClient:
                 "lines": lines,
                 "summary": summary,
             },
+        )
+
+    async def stage_canvas_actions(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/stage-canvas-actions",
+            {"sessionId": self._session_id, "actions": actions},
+        )
+
+    async def commit_stage(self) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/commit-stage",
+            {"sessionId": self._session_id},
+        )
+
+    async def rollback_stage(self) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/rollback-stage",
+            {"sessionId": self._session_id},
         )

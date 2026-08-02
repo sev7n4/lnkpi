@@ -111,6 +111,7 @@ class AddNodesBatchRequest(BaseModel):
     sessionId: str
     userId: str
     items: list[AddNodesBatchItem]
+    stage: Optional[bool] = None
 
 
 class AddNodesBatchResponseNode(BaseModel):
@@ -144,6 +145,7 @@ class ConnectNodesRequest(BaseModel):
 
     sessionId: str
     edges: list[ConnectNodesEdge]
+    stage: Optional[bool] = None
 
 
 class ConnectNodesResponse(BaseModel):
@@ -164,6 +166,7 @@ class SetNodePromptRequest(BaseModel):
     nodeId: str
     prompt: str
     title: Optional[str] = None
+    stage: Optional[bool] = None
 
 
 class SetNodePromptResponse(BaseModel):
@@ -397,6 +400,48 @@ class ReleaseThreadLockResponse(BaseModel):
     """Response for release_thread_lock endpoint."""
 
     released: bool
+
+
+# ============================================================
+# canvas_stage (W8)
+# ============================================================
+
+
+class StageCanvasActionsRequest(BaseModel):
+    """Request for stage_canvas_actions endpoint."""
+
+    sessionId: str
+    actions: list[CanvasAction]
+
+
+class StageCanvasActionsResponse(BaseModel):
+    """Response for stage_canvas_actions endpoint."""
+
+    stagedCount: int
+
+
+class CommitStageRequest(BaseModel):
+    """Request for commit_stage endpoint."""
+
+    sessionId: str
+
+
+class CommitStageResponse(BaseModel):
+    """Response for commit_stage endpoint."""
+
+    actions: list[CanvasAction]
+
+
+class RollbackStageRequest(BaseModel):
+    """Request for rollback_stage endpoint."""
+
+    sessionId: str
+
+
+class RollbackStageResponse(BaseModel):
+    """Response for rollback_stage endpoint."""
+
+    cleared: bool
 
 
 # ============================================================

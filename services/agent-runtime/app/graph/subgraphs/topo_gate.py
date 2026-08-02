@@ -31,7 +31,7 @@ def route_after_topo(state: AgentRuntimeState) -> str:
 def register_topo_gate(graph: StateGraph, *, nest: Any) -> None:
     graph.add_node("await_topo", make_await_topo_node())
     graph.add_node("topo_revise", make_topo_revise_node(nest=nest))
-    graph.add_node("start_gen", make_start_gen_node())
+    graph.add_node("start_gen", make_start_gen_node(nest=nest))
     graph.add_node("gen_scheduler", make_gen_scheduler_node())
     graph.add_node("gen_node", make_gen_node(nest=nest))
     graph.add_node("collect_gen", make_collect_gen_node(nest=nest))

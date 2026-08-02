@@ -144,7 +144,7 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
             title = str(op.get("title") or key)
             prompt_hint = str(op.get("prompt_hint") or "")
             try:
-                await nest.set_node_prompt(node_id, prompt_hint, title=title)
+                await nest.set_node_prompt(node_id, prompt_hint, title=title, stage=True)
             except Exception:  # noqa: BLE001
                 pass
             # 同步更新 split_manifest 内存副本
@@ -169,7 +169,7 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
     # 批量新增节点
     if new_items_for_batch:
         try:
-            batch = await nest.add_nodes_batch(new_items_for_batch)
+            batch = await nest.add_nodes_batch(new_items_for_batch, stage=True)
             for n in batch.get("nodes") or []:
                 k = str(n.get("key") or "")
                 nid = str(n.get("nodeId") or "")
@@ -204,7 +204,7 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
                 edges.append({"source": dep_id, "target": nid})
     if edges:
         try:
-            await nest.connect_nodes(edges)
+            await nest.connect_nodes(edges, stage=True)
         except Exception:  # noqa: BLE001
             pass
 
