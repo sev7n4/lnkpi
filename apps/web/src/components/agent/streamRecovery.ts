@@ -10,6 +10,12 @@ import { apiUrl } from '@/services/api-base'
  */
 
 export const RUNTIME_UNREACHABLE_SNIPPET = '生成服务暂时不可达'
+export const STREAM_STALE_MS = 30_000
+
+/** W12: true when no SSE activity (incl. ping) for longer than STREAM_STALE_MS. */
+export function isStreamStale(lastActivityAt: number, now = Date.now()): boolean {
+  return now - lastActivityAt > STREAM_STALE_MS
+}
 
 /**
  * Thread suffix for agent-runtime LangGraph threads.

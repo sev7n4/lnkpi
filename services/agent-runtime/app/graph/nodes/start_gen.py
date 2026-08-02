@@ -35,16 +35,17 @@ def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callab
 
         by_key = {str(it["key"]): it for it in manifest if it.get("key")}
 
-        try:
-            ordered_keys = topo_sort_gen_keys(manifest)
-        except ValueError as exc:
-            return {
-                "phase": "done",
-                # legacy field for done.py / intake.py
-                "gen_failed": [{"key": None, "reason": str(exc)}],
-                "last_error": str(exc),
-                "messages": [AIMessage(content=f"出图编排失败：{exc}")],
-            }
+        ordered_keys = list(state.get("gen_ordered_keys") or [])
+        if not ordered_keys:
+            try:
+                ordered_keys = topo_sort_gen_keys(manifest)
+            except ValueError as exc:
+                return {
+                    "phase": "done",
+                    "gen_failed": [{"key": None, "reason": str(exc)}],
+                    "last_error": str(exc),
+                    "messages": [AIMessage(content=f"出图编排失败：{exc}")],
+                }
 
         if not ordered_keys:
             return {

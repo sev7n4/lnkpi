@@ -25,6 +25,8 @@ def route_after_intake(state: AgentRuntimeState) -> str:
 
 
 def route_after_split(state: AgentRuntimeState) -> str:
+    if state.get("gen_order_error"):
+        return "done"
     # modify split (node_revise) must return to topo gate — END caused intake replan on「确认出图」
     if state.get("mode") == "modify":
         return "await_topo"
@@ -62,7 +64,7 @@ def build_agent_graph(
     graph.add_conditional_edges(
         "split",
         route_after_split,
-        {"draft_copy": "draft_copy", "await_topo": "await_topo"},
+        {"draft_copy": "draft_copy", "await_topo": "await_topo", "done": "done"},
     )
     graph.add_edge("done", END)
 

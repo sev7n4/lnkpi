@@ -100,6 +100,8 @@ class AgentRuntimeState(TypedDict, total=False):
     plan_node_id: str | None
     focus_node_ids: list[str]
     split_manifest: list[SplitManifestItem]
+    # W13: cycle detection at split; blocks await_topo when set
+    gen_order_error: str | None
     # P0 修复：node_revise 走 plan(modify) 后，LLM 产出的节点操作列表（rename/add/delete）；
     # split 在 modify 模式下按操作列表 upsert 画布节点。None 表示首轮 create 或 LLM 解析失败回退。
     node_operations: list[dict] | None
@@ -135,13 +137,7 @@ class AgentRuntimeState(TypedDict, total=False):
     # W10: decide_plan_mode 计算，供 revise_manifest / compose_confirm / route_after_plan 使用
     is_node_revise: bool | None
 
-    # W3: Transient fields for Send API fan-out generation.
-    # gen_ordered_keys/gen_deps_of/gen_by_key are write-once (start_gen) /
-    # clear-once (collect_gen), so plain overwrite is fine.
-    # gen_*_keys/gen_fail_details are written by PARALLEL gen_node instances in
-    # the same superstep → must use reset_or_union/reset_or_merge reducers.
-    # Returning None (start_gen at run start, collect_gen at run end) resets
-    # them so a re-generation on the same thread doesn't leak the prior run.
+    # W3/W13: gen_ordered_keys precomputed at split (W13), deps/by_key filled at start_gen.
     gen_ordered_keys: list[str] | None  # Topological order of generation keys
     gen_deps_of: dict[str, list[str]] | None  # Dependency graph
     gen_by_key: dict[str, dict] | None  # Manifest items by key

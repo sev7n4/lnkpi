@@ -30,6 +30,7 @@ import {
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
   RUNTIME_UNREACHABLE_SNIPPET,
+  isStreamStale,
 } from '@/components/agent/streamRecovery'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
@@ -327,6 +328,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   const idempotencyKey = buildIdempotencyKey(agentThreadId.value)
   // Track whether SSE stream ended normally (received [DONE])
   let streamEndedNormally = false
+  let lastStreamActivityAt = Date.now()
 
   try {
     const token = localStorage.getItem('token')
@@ -364,7 +366,9 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
           continue
         }
         try {
-          handleEvent(JSON.parse(line.slice(6)))
+          const event = JSON.parse(line.slice(6)) as { type: string; data: unknown }
+          lastStreamActivityAt = Date.now()
+          handleEvent(event)
         } catch { /* skip */ }
       }
     }
@@ -376,6 +380,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
       const last = agent.messages[agent.messages.length - 1]
       if (last?.role === 'assistant' && !last.content.trim()) {
         agent.appendText('\n\n⚠️ 连接意外断开，请稍后重试。')
+      } else if (last?.role === 'assistant' && isStreamStale(lastStreamActivityAt)) {
+        last.content += `\n\n⚠️ ${RUNTIME_UNREACHABLE_SNIPPET}，已保存进度。请稍后重试。`
       }
     }
 
@@ -497,6 +503,8 @@ function handleEvent(event: { type: string; data: unknown }) {
         event as Parameters<typeof applyTaskEvent>[1],
       )
       scrollToBottom()
+      break
+    case 'ping':
       break
     case 'error':
       agent.appendText(`\n\n⚠️ ${(event.data as { message: string }).message}`)

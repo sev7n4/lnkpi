@@ -6,6 +6,8 @@ import {
   randomThreadSuffix,
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
+  isStreamStale,
+  STREAM_STALE_MS,
 } from './streamRecovery'
 
 vi.mock('@/services/api-base', () => ({
@@ -73,6 +75,18 @@ describe('shouldPollRuntimeHealth', () => {
 
   it('returns false when both busy and done indicators present', () => {
     expect(shouldPollRuntimeHealth('上一轮仍在处理中，但出图成功')).toBe(false)
+  })
+})
+
+describe('isStreamStale', () => {
+  it('returns true after STREAM_STALE_MS without activity', () => {
+    const now = 1_000_000
+    expect(isStreamStale(now - STREAM_STALE_MS - 1, now)).toBe(true)
+  })
+
+  it('returns false when activity is recent', () => {
+    const now = 1_000_000
+    expect(isStreamStale(now - 5_000, now)).toBe(false)
   })
 })
 

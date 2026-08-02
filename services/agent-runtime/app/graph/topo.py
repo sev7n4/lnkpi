@@ -54,3 +54,11 @@ def topo_sort_gen_keys(
 def topo_sort_image_keys(manifest: Iterable[dict[str, Any]]) -> list[str]:
     """Backward-compatible: image-only auto_generate keys."""
     return topo_sort_gen_keys(manifest, types=("image",))
+
+
+def precompute_gen_order(manifest: Iterable[dict[str, Any]]) -> tuple[list[str] | None, str | None]:
+    """W13: topo-sort at split time. Returns (ordered_keys, error_message)."""
+    try:
+        return topo_sort_gen_keys(manifest), None
+    except ValueError as exc:
+        return None, str(exc)

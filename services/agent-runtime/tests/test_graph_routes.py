@@ -11,3 +11,7 @@ def test_route_after_split_modify_returns_await_topo():
 
 def test_route_after_split_create_returns_draft_copy():
     assert route_after_split({"mode": "create"}) == "draft_copy"
+
+
+def test_route_after_split_cycle_goes_to_done():
+    assert route_after_split({"gen_order_error": "cycle detected"}) == "done"
