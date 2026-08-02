@@ -379,6 +379,39 @@ async def _save_new_assistant_messages(
         pass
 
 
+async def get_thread_state(
+    thread_id: str,
+    *,
+    checkpointer: Any | None = None,
+) -> dict[str, Any]:
+    """W12: Read LangGraph checkpoint phase for reconnect UI."""
+
+    class _NoOpNest:
+        async def close(self) -> None:
+            pass
+
+    cp = checkpointer if checkpointer is not None else await _get_checkpointer()
+    graph = build_agent_graph(
+        nest=_NoOpNest(),
+        llm=default_llm(),
+        skills_dir=resolve_skills_dir(),
+        checkpointer=cp,
+    )
+    config = {"configurable": {"thread_id": thread_id}}
+    snap = await graph.aget_state(config)
+    vals = getattr(snap, "values", None) or {}
+    next_nodes = [str(n) for n in (getattr(snap, "next", None) or [])]
+    phase = vals.get("phase")
+    phase_str = str(phase) if phase is not None else None
+    return {
+        "threadId": thread_id,
+        "phase": phase_str,
+        "nextNodes": next_nodes,
+        "interrupted": bool(next_nodes),
+        "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+    }
+
+
 async def _load_history(nest: NestCanvasClient) -> list[Any]:
     """Load conversation history from AgentMessage table (C1 decision)."""
     try:

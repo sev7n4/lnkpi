@@ -14,6 +14,7 @@ import {
   type AgentTaskProgressState,
 } from '@/components/agent/agentTaskProgress'
 import { useGenerationPolling, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { useAgentStream, formatPhaseLabel } from '@/composables/useAgentStream'
 import {
   reconcileTaskProgress,
   shouldFinishTaskCard,
@@ -32,7 +33,6 @@ import {
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
   RUNTIME_UNREACHABLE_SNIPPET,
-  isStreamStale,
 } from '@/components/agent/streamRecovery'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
@@ -88,6 +88,16 @@ function pollTasksFromProgress() {
   }
   startTaskRecordPoll(tasks)
 }
+
+let streamAbortController: AbortController | null = null
+const reconnecting = ref(false)
+const recoveredPhaseHint = ref<string | null>(null)
+
+const agentStream = useAgentStream({
+  onStale: () => {
+    streamAbortController?.abort()
+  },
+})
 
 /** 方案确认门 / 主文案确认门：侧栏快捷钮 */
 const chipSet = computed(() => {
@@ -355,12 +365,15 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   const idempotencyKey = buildIdempotencyKey(agentThreadId.value)
   // Track whether SSE stream ended normally (received [DONE])
   let streamEndedNormally = false
-  let lastStreamActivityAt = Date.now()
+  recoveredPhaseHint.value = null
+  streamAbortController = new AbortController()
+  agentStream.start()
 
   try {
     const token = localStorage.getItem('token')
     const res = await fetch(apiUrl('/api/agent/chat/conversation'), {
       method: 'POST',
+      signal: streamAbortController.signal,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
@@ -394,21 +407,27 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         }
         try {
           const event = JSON.parse(line.slice(6)) as { type: string; data: unknown }
-          lastStreamActivityAt = Date.now()
+          agentStream.touch()
           handleEvent(event)
         } catch { /* skip */ }
       }
     }
   } catch (err) {
-    agent.appendText(`\n\n⚠️ 请求失败: ${err}`)
+    if ((err as Error)?.name !== 'AbortError') {
+      agent.appendText(`\n\n⚠️ 请求失败: ${err}`)
+    }
   } finally {
+    agentStream.stop()
+    streamAbortController = null
     // SSE abnormal-end detection: stream broke without [DONE]
     if (!streamEndedNormally) {
       const last = agent.messages[agent.messages.length - 1]
       if (last?.role === 'assistant' && !last.content.trim()) {
         agent.appendText('\n\n⚠️ 连接意外断开，请稍后重试。')
-      } else if (last?.role === 'assistant' && isStreamStale(lastStreamActivityAt)) {
-        last.content += `\n\n⚠️ ${RUNTIME_UNREACHABLE_SNIPPET}，已保存进度。请稍后重试。`
+      } else if (last?.role === 'assistant' && agentStream.unreachable.value) {
+        if (!last.content.includes(RUNTIME_UNREACHABLE_SNIPPET)) {
+          last.content += `\n\n⚠️ ${RUNTIME_UNREACHABLE_SNIPPET}，已保存进度。请点击下方「重连」继续。`
+        }
       }
     }
 
@@ -422,6 +441,50 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     if (actions.length) emit('canvasActions', actions)
     // 始终回拉：Runtime 已写 Session.canvasData；本地 save 不得用旧节点覆盖
     emit('turnComplete')
+    scrollToBottom()
+  }
+}
+
+async function reconnectStream() {
+  if (reconnecting.value) return
+  reconnecting.value = true
+  try {
+    streamAbortController?.abort()
+    agentStream.stop()
+
+    const health = await checkRuntimeHealthViaNest()
+    if (!health?.ok) {
+      recoveredPhaseHint.value = '生成服务仍不可达，请稍后再试'
+      return
+    }
+
+    const token = localStorage.getItem('token')
+    const res = await fetch(
+      apiUrl(`/api/agent/thread-state?threadId=${encodeURIComponent(agentThreadId.value)}`),
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    const json = (await res.json()) as {
+      data?: { phase?: string | null; interrupted?: boolean; finished?: boolean } | null
+    }
+    const phase = json.data?.phase ?? null
+
+    if (agent.isStreaming) {
+      agent.finishStreaming()
+    }
+    agentStream.reset()
+    await reconcileLatestAssistant()
+    emit('turnComplete')
+
+    const label = formatPhaseLabel(phase)
+    recoveredPhaseHint.value =
+      json.data?.finished
+        ? '服务已恢复。上一轮已完成，可继续新的指令。'
+        : `服务已恢复。当前阶段：${label}。请继续操作。`
+    pollTasksFromProgress()
+  } catch {
+    recoveredPhaseHint.value = '重连失败，请稍后再试'
+  } finally {
+    reconnecting.value = false
     scrollToBottom()
   }
 }
@@ -729,6 +792,26 @@ defineExpose({ openPanel, reconcileFromNodes })
               </button>
               <button type="button" class="agent-readonly-btn agent-readonly-btn-primary" @click="createOwnCanvas">
                 新建画布
+              </button>
+            </div>
+          </div>
+
+          <div
+            v-if="agentStream.unreachable.value || recoveredPhaseHint"
+            class="agent-stream-banner mx-3 mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100"
+          >
+            <p v-if="agentStream.unreachable.value && agent.isStreaming">
+              {{ RUNTIME_UNREACHABLE_SNIPPET }}，已保存进度。出图状态仍可通过轮询更新。
+            </p>
+            <p v-else-if="recoveredPhaseHint">{{ recoveredPhaseHint }}</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="agent-readonly-btn agent-readonly-btn-primary"
+                :disabled="reconnecting"
+                @click="reconnectStream"
+              >
+                {{ reconnecting ? '重连中…' : '重连' }}
               </button>
             </div>
           </div>
