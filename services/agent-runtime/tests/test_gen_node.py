@@ -56,6 +56,17 @@ class FakeNest:
         self.image_calls.append(key)
         return self._gen(key, node_id)
 
+    async def start_image_generation(self, node_id: str) -> dict[str, Any]:
+        key = self._key_for(node_id)
+        self.image_calls.append(key)
+        result = self._gen(key, node_id)
+        return {**result, "generationRecordId": f"rec-{key}", "status": "generating"}
+
+    async def wait_image_generation(self, node_id: str, generation_record_id: str) -> dict[str, Any]:
+        key = self._key_for(node_id)
+        result = self._gen(key, node_id)
+        return {**result, "generationRecordId": generation_record_id}
+
     async def run_video_generation(self, node_id: str) -> dict[str, Any]:
         key = self._key_for(node_id)
         self.video_calls.append(key)
@@ -186,6 +197,16 @@ async def test_gen_node_video_calls_run_video_generation():
     assert nest.video_calls == ["k"]
     assert nest.image_calls == []
     assert out == {"gen_completed_keys": ["k"]}
+
+
+@pytest.mark.asyncio
+async def test_gen_node_emits_record_id_on_start():
+    nest = FakeNest()
+    node = make_gen_node(nest=nest)
+    by_key = {"k": _item("k", node_id="node-k")}
+    await node(_state("k", by_key))
+    assert any(u.get("recordId") == "rec-k" for u in nest.task_updates)
+    assert any(u.get("status") == "done" and u.get("recordId") == "rec-k" for u in nest.task_updates)
 
 
 @pytest.mark.asyncio

@@ -210,10 +210,40 @@ export type RunImageGenerationRequest = z.infer<typeof RunImageGenerationRequest
 export const RunImageGenerationResponseSchema = z.object({
   url: z.string().optional(),
   status: z.string(),
+  generationRecordId: z.string().optional(),
   actions: z.array(CanvasActionSchema),
 })
 
 export type RunImageGenerationResponse = z.infer<typeof RunImageGenerationResponseSchema>
+
+// ============================================================
+// start_image_generation / wait_image_generation (W11)
+// ============================================================
+
+export const StartImageGenerationRequestSchema = RunImageGenerationRequestSchema
+
+export type StartImageGenerationRequest = z.infer<typeof StartImageGenerationRequestSchema>
+
+export const StartImageGenerationResponseSchema = z.object({
+  status: z.string(),
+  generationRecordId: z.string(),
+  actions: z.array(CanvasActionSchema),
+})
+
+export type StartImageGenerationResponse = z.infer<typeof StartImageGenerationResponseSchema>
+
+export const WaitImageGenerationRequestSchema = z.object({
+  sessionId: z.string(),
+  userId: z.string(),
+  nodeId: z.string(),
+  generationRecordId: z.string(),
+})
+
+export type WaitImageGenerationRequest = z.infer<typeof WaitImageGenerationRequestSchema>
+
+export const WaitImageGenerationResponseSchema = RunImageGenerationResponseSchema
+
+export type WaitImageGenerationResponse = z.infer<typeof WaitImageGenerationResponseSchema>
 
 // ============================================================
 // run_video_generation

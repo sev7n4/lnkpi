@@ -9,9 +9,11 @@ import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
 import {
   applyTaskEvent,
+  applyPollRecordToTask,
   emptyTaskProgress,
   type AgentTaskProgressState,
 } from '@/components/agent/agentTaskProgress'
+import { useGenerationPolling, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import {
   reconcileTaskProgress,
   shouldFinishTaskCard,
@@ -61,6 +63,31 @@ const chatContainer = ref<HTMLElement>()
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
+
+const taskRecordPolling = useGenerationPolling((results) => {
+  for (const { task, record } of results) {
+    taskProgress.value = applyPollRecordToTask(
+      taskProgress.value,
+      task.nodeId,
+      record.status,
+    )
+  }
+})
+
+function startTaskRecordPoll(tasks: GenerationPollTask[]) {
+  if (!tasks.length) return
+  taskRecordPolling.start(tasks)
+}
+
+function pollTasksFromProgress() {
+  const tasks: GenerationPollTask[] = []
+  for (const it of taskProgress.value.items) {
+    if (it.recordId && it.nodeId) {
+      tasks.push({ recordId: it.recordId, nodeId: it.nodeId })
+    }
+  }
+  startTaskRecordPoll(tasks)
+}
 
 /** 方案确认门 / 主文案确认门：侧栏快捷钮 */
 const chipSet = computed(() => {
@@ -497,13 +524,24 @@ function handleEvent(event: { type: string; data: unknown }) {
       break
     case 'task_list':
     case 'task_update':
-    case 'task_summary':
+    case 'task_summary': {
+      const prev = taskProgress.value
       taskProgress.value = applyTaskEvent(
         taskProgress.value,
         event as Parameters<typeof applyTaskEvent>[1],
       )
+      if (event.type === 'task_update') {
+        const data = event.data as { recordId?: string; id?: string }
+        const item = taskProgress.value.items.find((it) => it.id === data.id)
+        if (item?.recordId && item.nodeId) {
+          startTaskRecordPoll([{ recordId: item.recordId, nodeId: item.nodeId }])
+        }
+      } else if (event.type === 'task_list' && taskProgress.value.items.length !== prev.items.length) {
+        pollTasksFromProgress()
+      }
       scrollToBottom()
       break
+    }
     case 'ping':
       break
     case 'error':
@@ -530,6 +568,19 @@ function onKeydown(e: KeyboardEvent) {
 function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
   if (!taskProgress.value.items.length) return
   let next = reconcileTaskProgress(taskProgress.value, rawNodes)
+  // W11: canvas generationRecordId → start poll for matching task items
+  for (const n of rawNodes) {
+    const recordId = n.data?.generationRecordId
+    if (typeof recordId !== 'string' || !recordId) continue
+    const item = next.items.find((it) => it.nodeId === n.id)
+    if (item && !item.recordId) {
+      next = applyTaskEvent(next, {
+        type: 'task_update',
+        data: { id: item.id, status: item.status, recordId },
+      })
+    }
+  }
+  pollTasksFromProgress()
   if (shouldFinishTaskCard(next, rawNodes) && !next.finished) {
     next = {
       ...next,

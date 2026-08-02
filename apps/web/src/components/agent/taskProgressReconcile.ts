@@ -65,6 +65,8 @@ export function reconcileTaskProgress(
   const items = state.items.map((item) => {
     const node = findNodeForItem(item, nodes)
     if (!node) return item
+    // W11: when polling a generation record, canvas/SSE must not override task status.
+    if (item.recordId) return item
     return { ...item, status: mapNodeStatus(node, item) }
   })
   return { ...state, items }

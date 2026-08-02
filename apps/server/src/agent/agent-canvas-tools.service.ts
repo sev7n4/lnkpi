@@ -488,11 +488,11 @@ export class AgentCanvasToolsService {
     return { actions }
   }
 
-  async runImageGeneration(input: {
+  async startImageGeneration(input: {
     sessionId: string
     userId: string
     nodeId: string
-  }): Promise<{ url?: string; status: string; actions: CanvasAction[] }> {
+  }): Promise<{ generationRecordId: string; status: string; actions: CanvasAction[] }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const node = canvas.nodes.find((n) => n.id === input.nodeId)
     if (!node) throw new NotFoundException('节点不存在')
@@ -515,44 +515,61 @@ export class AgentCanvasToolsService {
     let current = await this.persist(input.sessionId, started)
     const allActions = [...started]
 
-    try {
-      const prefs = await this.loadAccountGenPrefs(input.userId)
-      const refs = toStudioRefs(node, current)
-      const aspectRatio = pickString(node.data?.imageAspect, prefs.defaultImageAspect || '16:9')
-      const resolution = pickString(
-        node.data?.imageResolution,
-        prefs.defaultImageResolution || '1K',
-      )
-      const count = clampImageGenCount(
-        node.data?.imageCount ?? prefs.canvasImageCount ?? 1,
-      )
-      const model = pickString(node.data?.imageModel, prefs.defaultImageModel) || undefined
+    const prefs = await this.loadAccountGenPrefs(input.userId)
+    const refs = toStudioRefs(node, current)
+    const aspectRatio = pickString(node.data?.imageAspect, prefs.defaultImageAspect || '16:9')
+    const resolution = pickString(
+      node.data?.imageResolution,
+      prefs.defaultImageResolution || '1K',
+    )
+    const count = clampImageGenCount(
+      node.data?.imageCount ?? prefs.canvasImageCount ?? 1,
+    )
+    const model = pickString(node.data?.imageModel, prefs.defaultImageModel) || undefined
 
-      const record = await this.studio.generateImage(
-        input.userId,
-        prompt,
-        model,
-        aspectRatio,
-        refs,
-        undefined,
-        resolution,
-        count,
-        { sessionId: input.sessionId, nodeId: input.nodeId },
-      )
+    const record = await this.studio.generateImage(
+      input.userId,
+      prompt,
+      model,
+      aspectRatio,
+      refs,
+      undefined,
+      resolution,
+      count,
+      { sessionId: input.sessionId, nodeId: input.nodeId },
+    )
 
-      const recordId = record.id
-      allActions.push({
+    const recordId = record.id
+    allActions.push({
+      type: 'update_node',
+      payload: { id: input.nodeId, data: { generationRecordId: recordId } },
+    })
+    await this.persist(input.sessionId, [
+      {
         type: 'update_node',
         payload: { id: input.nodeId, data: { generationRecordId: recordId } },
-      })
-      await this.persist(input.sessionId, [
-        {
-          type: 'update_node',
-          payload: { id: input.nodeId, data: { generationRecordId: recordId } },
-        },
-      ])
+      },
+    ])
 
-      const terminal = await this.pollGeneration(input.userId, recordId, record)
+    return {
+      generationRecordId: recordId,
+      status: 'generating',
+      actions: allActions,
+    }
+  }
+
+  async waitImageGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+    generationRecordId: string
+  }): Promise<{ url?: string; status: string; generationRecordId: string; actions: CanvasAction[] }> {
+    const recordId = input.generationRecordId
+    const allActions: CanvasAction[] = []
+
+    try {
+      const initial = await this.studio.getGeneration(input.userId, recordId)
+      const terminal = await this.pollGeneration(input.userId, recordId, initial)
       const status = String(terminal.status)
       const url = typeof terminal.url === 'string' && terminal.url ? terminal.url : undefined
 
@@ -579,7 +596,40 @@ export class AgentCanvasToolsService {
       return {
         url,
         status: String(finishData.status),
+        generationRecordId: recordId,
         actions: allActions,
+      }
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '图像生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage, generationRecordId: recordId },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', generationRecordId: recordId, actions: allActions }
+    }
+  }
+
+  async runImageGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{ url?: string; status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+    try {
+      const started = await this.startImageGeneration(input)
+      const finished = await this.waitImageGeneration({
+        ...input,
+        generationRecordId: started.generationRecordId,
+      })
+      return {
+        ...finished,
+        actions: [...started.actions, ...finished.actions],
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '图像生成失败'
@@ -593,8 +643,7 @@ export class AgentCanvasToolsService {
         },
       ]
       await this.persist(input.sessionId, errorActions)
-      allActions.push(...errorActions)
-      return { status: 'error', actions: allActions }
+      return { status: 'error', actions: errorActions }
     }
   }
 

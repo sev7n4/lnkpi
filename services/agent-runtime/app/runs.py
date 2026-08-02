@@ -234,6 +234,29 @@ class NestEventProxy:
         payload: dict[str, Any] = {"nodeId": node_id, "status": status}
         if result.get("url"):
             payload["url"] = result["url"]
+        if result.get("generationRecordId"):
+            payload["generationRecordId"] = result["generationRecordId"]
+        await self._emit({"type": "node_status", "data": payload})
+        return result
+
+    async def start_image_generation(self, node_id: str) -> dict[str, Any]:
+        await self._emit(
+            {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
+        )
+        return await self._forward_actions(await self._inner.start_image_generation(node_id))
+
+    async def wait_image_generation(
+        self, node_id: str, generation_record_id: str
+    ) -> dict[str, Any]:
+        result = await self._forward_actions(
+            await self._inner.wait_image_generation(node_id, generation_record_id)
+        )
+        status = str(result.get("status") or "completed")
+        payload: dict[str, Any] = {"nodeId": node_id, "status": status}
+        if result.get("url"):
+            payload["url"] = result["url"]
+        if result.get("generationRecordId"):
+            payload["generationRecordId"] = result["generationRecordId"]
         await self._emit({"type": "node_status", "data": payload})
         return result
 

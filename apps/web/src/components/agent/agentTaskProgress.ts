@@ -13,6 +13,7 @@ export interface AgentTaskItem {
   nodeId?: string
   kind?: string
   status: TaskItemStatus
+  recordId?: string
   attempt?: number
   maxAttempts?: number
   errorHint?: string
@@ -35,6 +36,8 @@ export const emptyTaskProgress = (): AgentTaskProgressState => ({
   finished: false,
 })
 
+const TERMINAL_STATUSES: TaskItemStatus[] = ['done', 'failed', 'needs_user', 'skipped']
+
 type TaskEvent =
   | { type: 'task_list'; data: { items: Array<{ id: string; title: string; nodeId?: string; kind?: string }> } }
   | {
@@ -42,6 +45,7 @@ type TaskEvent =
       data: {
         id: string
         status: TaskItemStatus
+        recordId?: string
         attempt?: number
         maxAttempts?: number
         errorHint?: string
@@ -57,6 +61,16 @@ type TaskEvent =
         lines?: Array<{ id: string; status: string; title: string; hint?: string }>
       }
     }
+
+/** Map Studio generation record status → task card status (W11 authority channel). */
+export function mapRecordStatusToTaskStatus(recordStatus: string): TaskItemStatus {
+  const s = recordStatus.toLowerCase()
+  if (s === 'completed' || s === 'success') return 'done'
+  if (s === 'failed' || s === 'error' || s === 'timeout') return 'failed'
+  if (s === 'fallback_pending') return 'needs_user'
+  if (s === 'generating' || s === 'pending') return 'running'
+  return 'running'
+}
 
 export function applyTaskEvent(
   state: AgentTaskProgressState,
@@ -75,17 +89,22 @@ export function applyTaskEvent(
     }
   }
   if (event.type === 'task_update') {
-    const items = state.items.map((it) =>
-      it.id === event.data.id
-        ? {
-            ...it,
-            status: event.data.status,
-            attempt: event.data.attempt,
-            maxAttempts: event.data.maxAttempts,
-            errorHint: event.data.errorHint,
-          }
-        : it,
-    )
+    const { recordId, status, ...rest } = event.data
+    const items = state.items.map((it) => {
+      if (it.id !== event.data.id) return it
+      const next: AgentTaskItem = { ...it, ...rest }
+      if (recordId) next.recordId = recordId
+      // W11: SSE task_update is hint-only when recordId exists; terminal status from poll.
+      const deferTerminal = Boolean(recordId || it.recordId) && TERMINAL_STATUSES.includes(status)
+      if (!deferTerminal) {
+        next.status = status
+      } else if (status === 'running' || status === 'retrying' || status === 'pending') {
+        next.status = status
+      } else if (it.status === 'pending') {
+        next.status = 'running'
+      }
+      return next
+    })
     return { ...state, items }
   }
   if (event.type === 'task_summary') {
@@ -102,4 +121,17 @@ export function applyTaskEvent(
     }
   }
   return state
+}
+
+/** Apply polled generation record as authoritative task status (W11). */
+export function applyPollRecordToTask(
+  state: AgentTaskProgressState,
+  nodeId: string,
+  recordStatus: string,
+): AgentTaskProgressState {
+  const mapped = mapRecordStatusToTaskStatus(recordStatus)
+  const items = state.items.map((it) =>
+    it.nodeId === nodeId ? { ...it, status: mapped } : it,
+  )
+  return { ...state, items }
 }
