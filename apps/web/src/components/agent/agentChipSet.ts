@@ -1,5 +1,7 @@
 /** @vitest-environment node */
 
+import { hasModifyIntent } from '@lnkpi/shared'
+
 export type AgentChipSet = 'plan' | 'copy' | 'topo' | null
 
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"
@@ -21,35 +23,8 @@ export interface ChipSetContext {
   latestUserText?: string
 }
 
-const _MODIFY_INTENT_KEYWORDS = [
-  '改成',
-  '改一下',
-  '修改',
-  '调整',
-  '换成',
-  '改为',
-  '更偏',
-  '强调',
-  '增加',
-  '加上',
-  '删掉',
-  '删除',
-  '去掉',
-  '移除',
-  '再改',
-  '改一版',
-  '自己说明',
-  '自己说',
-  '改拓扑',
-]
-
 function userJustRequestedModify(latestUserText: string | undefined): boolean {
-  if (!latestUserText) return false
-  const t = latestUserText.trim()
-  if (!t) return false
-  // 显式 ABC 选项 + 自定义修改（3/C）→ 后续 assistant 是 modify 模式
-  if (t === '3' || t === 'C' || t === 'c') return true
-  return _MODIFY_INTENT_KEYWORDS.some((kw) => t.includes(kw))
+  return hasModifyIntent(latestUserText)
 }
 
 /** Which confirm chip row to show under the agent input. */

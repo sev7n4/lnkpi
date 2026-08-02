@@ -155,7 +155,7 @@ async def test_confirm_gen_runs_send_api_subgraph():
 @pytest.mark.asyncio
 async def test_node_revise_sets_modify_mode_and_routes_to_plan():
     """用户在拓扑确认门输入节点内容修改 → 设置 mode=modify → 路由到 plan 走增量修改。"""
-    from app.graph.builder import route_after_topo
+    from app.graph.subgraphs.topo_gate import route_after_topo
 
     # 验证 route_after_topo 在 node_revise 时路由到 plan
     # W10: plan 拆分后路由到 decide_plan_mode（原 plan 入口）
@@ -257,11 +257,15 @@ async def test_node_revise_full_flow_updates_canvas():
                 {"key": "hero_main", "title": "主图", "target_type": "image", "depends_on": [], "node_id": "img-1"},
                 {"key": "model_portrait", "title": "模特定妆", "target_type": "image", "depends_on": [], "node_id": "img-2"},
             ],
-            "messages": [AIMessage(content="骨架就绪，请确认出图")],
+            "messages": [
+                AIMessage(content="骨架就绪，请确认出图"),
+                HumanMessage(content="把模特定妆改为双人模特，增加产品材质特写图"),
+            ],
+            "user_decision": "node_revise",
+            "mode": "modify",
         },
+        as_node="await_topo",
     )
-    # W5: 从 interrupt 恢复需要 aupdate_state + ainvoke(None)
-    await graph.aupdate_state(config, {"messages": [HumanMessage(content="把模特定妆改为双人模特，增加产品材质特写图")]}, as_node="await_topo")
     state = await graph.ainvoke(None, config)
     # P0 修复后：node_revise 直接更新画布，回到拓扑确认门（不再进 await_confirm）
     assert state.get("phase") == "await_topo"

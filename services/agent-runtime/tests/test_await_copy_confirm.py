@@ -4,7 +4,8 @@ from typing import Any
 
 import pytest
 
-from app.graph.nodes.await_copy_confirm import classify_copy_decision, make_await_copy_confirm_node
+from app.graph.intent import classify_copy_decision
+from app.graph.nodes.await_copy_confirm import make_await_copy_confirm_node
 from app.graph.nodes.write_copy_node import make_write_copy_node
 from langchain_core.messages import HumanMessage
 

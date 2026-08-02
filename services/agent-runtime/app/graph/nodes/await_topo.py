@@ -4,8 +4,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
-from app.graph.nodes.await_copy_confirm import classify_copy_decision
-from app.graph.intent import classify_topo_decision
+from app.graph.intent import classify_copy_decision, classify_topo_decision
 
 # 修复 P0-1（拓扑确认门节点内容修改）：
 # 原来只有 topo_revise（只支持删节点），用户说"把模特定妆改为双人模特"会被误判为

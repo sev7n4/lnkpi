@@ -4,30 +4,11 @@ from typing import Any, Callable, Literal
 
 from langchain_core.messages import AIMessage
 
+from app.graph.intent import classify_copy_decision
+
 Decision = Literal["none", "confirm", "revise"]
 
 _NONE_TIP = "请确认主文案后回复「写入主文案」，或说明如何修改。"
-
-_CONFIRM_HINTS = (
-    "写入主文案",
-    "确认写入",
-    "可以写入",
-    "用这个",
-    "就这个",
-    "写入",
-)
-_REVISE_HINTS = (
-    "改成",
-    "修改",
-    "调整",
-    "换",
-    "不要",
-    "重新",
-    "revise",
-    "改一下",
-    "更偏",
-    "要修改",
-)
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -37,17 +18,6 @@ def _latest_user_text(messages: list[Any]) -> str:
         if role in ("human", "user") and content:
             return str(content)
     return ""
-
-
-def classify_copy_decision(text: str) -> Decision:
-    lowered = text.strip().lower()
-    if not lowered:
-        return "none"
-    if any(h in lowered for h in _REVISE_HINTS):
-        return "revise"
-    if any(h in lowered for h in _CONFIRM_HINTS):
-        return "confirm"
-    return "none"
 
 
 def make_await_copy_confirm_node() -> Callable:
