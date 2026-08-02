@@ -1,8 +1,30 @@
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Literal, TypedDict
 
 from langgraph.graph.message import add_messages
+
+logger = logging.getLogger(__name__)
+
+# W14: prefix signals brief_reducer to replace (fresh campaign) instead of rejecting overwrite
+BRIEF_RESET_PREFIX = "\0reset\0"
+
+
+def brief_reducer(left: str | None, right: str | None) -> str | None:
+    """W14: first non-empty write wins; fresh campaign uses BRIEF_RESET_PREFIX + text."""
+    if right is None:
+        return left
+    if str(right).startswith(BRIEF_RESET_PREFIX):
+        new = str(right)[len(BRIEF_RESET_PREFIX) :].strip()
+        return new or None
+    new = str(right).strip()
+    if not new:
+        return left
+    if left and str(left).strip():
+        logger.warning("brief_reducer: rejected overwrite of user_brief")
+        return left
+    return new
 
 
 def reset_or_union(left: list[str] | None, right: list[str] | None) -> list[str] | None:
@@ -107,11 +129,8 @@ class AgentRuntimeState(TypedDict, total=False):
     copy_alignment_ok: bool | None
     copy_write_blocked: bool | None
 
-    # 修复 P0-1/P0-2/P0-3：brief 锚定 + 修改模式
-    # user_brief: 首轮用户需求锚定，后续 plan 必须围绕这个 brief 展开（防止主题漂移）
-    # mode: "create"（首轮生成新方案）vs "modify"（在已有方案上修改）
-    user_brief: str | None
-    brief_locked: bool  # True 后 user_brief 不再被覆盖
+    # W14: user_brief uses brief_reducer — immutable after first write unless BRIEF_RESET_PREFIX
+    user_brief: Annotated[str | None, brief_reducer]
     mode: Literal["create", "modify"] | None
     # W10: decide_plan_mode 计算，供 revise_manifest / compose_confirm / route_after_plan 使用
     is_node_revise: bool | None

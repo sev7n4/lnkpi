@@ -53,7 +53,6 @@ async def test_intake_first_turn_create_mode_locks_brief():
         }
     )
     assert out["mode"] == "create"
-    assert out["brief_locked"] is True
     assert "洁具" in out["user_brief"]
 
 
@@ -65,14 +64,12 @@ async def test_intake_modify_intent_sets_modify_mode_and_keeps_brief():
         {
             "messages": [HumanMessage(content="把模特定妆改为双人模特")],
             "user_brief": "帮我做一套洁具详情页营销方案",
-            "brief_locked": True,
             "plan_draft": "# 洁具详情页方案\n## 定位...",
         }
     )
     assert out["mode"] == "modify"
-    # brief 保持首轮锚定，不被本轮修改意见覆盖
-    assert out["user_brief"] == "帮我做一套洁具详情页营销方案"
-    assert out["brief_locked"] is True
+    # W14: modify 模式不写入 user_brief，由 reducer 保留 checkpoint 中的锚定 brief
+    assert "user_brief" not in out
 
 
 @pytest.mark.asyncio
@@ -87,7 +84,6 @@ async def test_intake_new_product_request_resets_brief_to_create_mode():
                 HumanMessage(content="帮我做一套运动鞋详情页营销方案并出图")
             ],
             "user_brief": "帮我做一套洁具详情页营销方案",
-            "brief_locked": True,
             "plan_draft": "# 洁具详情页方案\n## 定位...",
         }
     )
