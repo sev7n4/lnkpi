@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     # Checkpoint persistence (G1 decision)
     checkpoint_path: str = "data/checkpoints.db"
     # W17: History window for conversation context pruning
-    history_window: int = 20  # Keep last N messages; user_brief/plan_draft always preserved
+    history_window: int = 20  # Keep last N messages; anchors preserved separately
+    history_token_budget: int = 8000  # Approx token cap for loaded history (0 = disabled)
 
     class Config:
         env_prefix = "LNKPI_"

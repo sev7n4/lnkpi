@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from app.config import settings
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
+from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.graph.nodes.intake import modify_intent
 from app.tools.nest_client import NestCanvasClient
@@ -321,19 +322,14 @@ def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
 
 
 def _trim_history(messages: list[Any], window: int) -> list[Any]:
-    """W17: Trim history to recent N messages to prevent token overflow.
-
-    Args:
-        messages: Full conversation history
-        window: Maximum number of messages to retain
-
-    Returns:
-        Trimmed message list (most recent N messages)
-    """
-    if len(messages) <= window:
-        return messages
-    # Keep the most recent N messages
-    return messages[-window:]
+    """W17: Trim history with window, token budget, and anchor preservation."""
+    budget = settings.history_token_budget or None
+    return trim_history(
+        messages,
+        window=window,
+        token_budget=budget,
+        preserve_anchors=True,
+    )
 
 
 def _message_role(msg: Any) -> str | None:
