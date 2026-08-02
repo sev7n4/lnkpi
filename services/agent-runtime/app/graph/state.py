@@ -119,6 +119,11 @@ class AgentRuntimeState(TypedDict, total=False):
     copy_node_id: str | None
     copy_revise_only: bool
 
+    # W16: revision counters for force-choice degradation
+    plan_revise_count: int
+    copy_revise_count: int
+    force_choice: Literal["plan_max_revise", "copy_max_revise", "gen_partial"] | None
+
     # node_revise: 拓扑确认门下检测到"节点内容修改"意图（改为/调整/增加等），
     # 回退到 plan 走 modify 模式增量修改方案，区别于 topo_revise（纯拓扑删除）
     user_decision: Literal[

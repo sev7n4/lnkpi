@@ -133,7 +133,8 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
         else:
             msg = "无可自动生成的图片/视频节点。"
 
-        return {
+        partial = success_n > 0 and (fail_n > 0 or needs_user_n > 0)
+        result: dict[str, Any] = {
             "phase": "orchestrate_gen",
             "gen_progress_id": gen_progress_id,
             # Legacy bridges for done.py
@@ -150,5 +151,8 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
             "gen_fail_details": None,
             "gen_max_concurrency": None,
         }
+        if partial:
+            result["force_choice"] = "gen_partial"
+        return result
 
     return collect_gen

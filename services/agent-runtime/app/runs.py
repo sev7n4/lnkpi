@@ -524,6 +524,14 @@ async def stream_run_events(
                 for _node, delta in update.items():
                     if not isinstance(delta, dict):
                         continue
+                    force_choice = delta.get("force_choice")
+                    if force_choice:
+                        await emit(
+                            {
+                                "type": "force_choice",
+                                "data": {"kind": str(force_choice)},
+                            }
+                        )
                     messages = delta.get("messages")
                     if not messages:
                         continue

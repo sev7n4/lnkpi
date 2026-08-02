@@ -87,6 +87,39 @@ def test_classify_pianhao_is_not_revise():
 
 
 @pytest.mark.asyncio
+async def test_revise_blocked_after_max_plan_revise():
+    node = make_await_confirm_node(llm=_FakeLLM())
+    base = {
+        "messages": [HumanMessage(content="改成运动鞋")],
+        "phase": "await_confirm",
+        "user_brief": "洁具详情页",
+        "plan_draft": "# plan",
+        "plan_revise_count": 3,
+    }
+    out = await node(base)
+    assert out["user_decision"] == "none"
+    assert out.get("force_choice") == "plan_max_revise"
+    assert "最大修订" in out["messages"][0].content
+
+
+@pytest.mark.asyncio
+async def test_revise_increments_plan_revise_count():
+    node = make_await_confirm_node(llm=_FakeLLM())
+    out = await node(
+        {
+            "messages": [HumanMessage(content="改成双人模特")],
+            "phase": "await_confirm",
+            "user_brief": "帮我做一套洁具详情页营销方案",
+            "plan_draft": "# 洁具详情页方案\n## 定位...",
+            "plan_revise_count": 1,
+        }
+    )
+    assert out["user_decision"] == "revise"
+    assert out["plan_revise_count"] == 2
+    assert out["mode"] == "modify"
+
+
+@pytest.mark.asyncio
 async def test_revise_decision_sets_modify_mode_when_brief_and_plan_exist():
     # 修复 P0-3 盲点：await_confirm → revise → plan 路径不经过 intake，
     # 必须在 await_confirm 节点同步设 mode=modify，否则 plan 会走 create 分支
@@ -105,6 +138,7 @@ async def test_revise_decision_sets_modify_mode_when_brief_and_plan_exist():
         "revise + 已有 brief/plan 时必须设 mode=modify，"
         "否则 plan 节点会走 create 分支重新生成全新方案"
     )
+    assert out.get("plan_revise_count") == 1
 
 
 @pytest.mark.asyncio
