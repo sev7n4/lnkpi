@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions } from '@lnkpi/agent'
 import {
   resolveNodeRefs,
@@ -15,6 +15,7 @@ const GRID_X = 280
 const GRID_Y = 220
 const DEFAULT_POLL_INTERVAL_MS = 1500
 const DEFAULT_POLL_TIMEOUT_MS = 180_000
+const STAGE_TTL_MS = 30 * 60 * 1000
 
 let nodeSeq = 0
 
@@ -37,6 +38,16 @@ function parseCanvas(raw: string | null | undefined): CanvasData {
     }
   } catch {
     return { nodes: [], edges: [] }
+  }
+}
+
+function parseStagedActions(raw: string | null | undefined): CanvasAction[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? (parsed as CanvasAction[]) : []
+  } catch {
+    return []
   }
 }
 
@@ -269,6 +280,7 @@ export class AgentCanvasToolsService {
       prompt?: string
       position?: { x: number; y: number }
     }>
+    stage?: boolean
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const prefs = await this.loadAccountGenPrefs(input.userId)
@@ -305,13 +317,14 @@ export class AgentCanvasToolsService {
       mapping.push({ key: item.key, nodeId })
     }
 
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { nodes: mapping, actions }
   }
 
   async connectNodes(input: {
     sessionId: string
     edges: Array<{ source: string; target: string }>
+    stage?: boolean
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadSession(input.sessionId)
     const actions: CanvasAction[] = []
@@ -331,7 +344,7 @@ export class AgentCanvasToolsService {
       })
     }
 
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { actions }
   }
 
@@ -396,6 +409,7 @@ export class AgentCanvasToolsService {
     nodeId: string
     prompt: string
     title?: string
+    stage?: boolean
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadSession(input.sessionId)
     if (!canvas.nodes.some((n) => n.id === input.nodeId)) {
@@ -412,7 +426,7 @@ export class AgentCanvasToolsService {
         payload: { id: input.nodeId, data },
       },
     ]
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { actions }
   }
 
@@ -950,6 +964,102 @@ export class AgentCanvasToolsService {
   }
 
   /**
+   * W8: Accumulate canvas actions in stagedActions without applying to canvasData.
+   */
+  async stageCanvasActions(input: {
+    sessionId: string
+    actions: CanvasAction[]
+  }): Promise<{ stagedCount: number }> {
+    if (input.actions.length === 0) {
+      const session = await this.prisma.session.findUnique({ where: { id: input.sessionId } })
+      if (!session) throw new NotFoundException('会话不存在')
+      const staged = parseStagedActions(session.stagedActions)
+      return { stagedCount: staged.length }
+    }
+    await this.expireStaleStage(input.sessionId)
+    const now = new Date()
+    await this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.findUnique({
+        where: { id: input.sessionId },
+        select: { stagedActions: true },
+      })
+      if (!session) throw new NotFoundException('会话不存在')
+      const merged = [...parseStagedActions(session.stagedActions), ...input.actions]
+      await tx.session.update({
+        where: { id: input.sessionId },
+        data: { stagedActions: JSON.stringify(merged), stagedAt: now },
+      })
+    })
+    return { stagedCount: input.actions.length }
+  }
+
+  /** W8: Apply staged actions atomically and clear the stage. */
+  async commitStage(input: { sessionId: string }): Promise<{ actions: CanvasAction[] }> {
+    await this.expireStaleStage(input.sessionId)
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.findUnique({
+        where: { id: input.sessionId },
+        select: { canvasData: true, stagedActions: true },
+      })
+      if (!session) throw new NotFoundException('会话不存在')
+      const staged = parseStagedActions(session.stagedActions)
+      if (staged.length === 0) return { actions: [] }
+      const current = parseCanvas(session.canvasData)
+      const updated = applyCanvasActions(current, staged)
+      await tx.session.update({
+        where: { id: input.sessionId },
+        data: {
+          canvasData: JSON.stringify(updated),
+          stagedActions: null,
+          stagedAt: null,
+        },
+      })
+      return { actions: staged }
+    })
+  }
+
+  /** W8: Discard staged actions without touching canvasData. */
+  async rollbackStage(input: { sessionId: string }): Promise<{ cleared: boolean }> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: input.sessionId },
+      select: { stagedActions: true },
+    })
+    if (!session) throw new NotFoundException('会话不存在')
+    if (!session.stagedActions) return { cleared: false }
+    await this.prisma.session.update({
+      where: { id: input.sessionId },
+      data: { stagedActions: null, stagedAt: null },
+    })
+    return { cleared: true }
+  }
+
+  private async expireStaleStage(sessionId: string): Promise<void> {
+    const session = await this.prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { stagedActions: true, stagedAt: true },
+    })
+    if (!session?.stagedActions || !session.stagedAt) return
+    if (Date.now() - session.stagedAt.getTime() <= STAGE_TTL_MS) return
+    await this.prisma.session.update({
+      where: { id: sessionId },
+      data: { stagedActions: null, stagedAt: null },
+    })
+  }
+
+  private async applyOrStage(
+    sessionId: string,
+    actions: CanvasAction[],
+    stage?: boolean,
+  ): Promise<void> {
+    if (actions.length === 0) return
+    if (stage) {
+      await this.stageCanvasActions({ sessionId, actions })
+      return
+    }
+    await this.persist(sessionId, actions)
+  }
+
+  /**
    * Atomic canvas patch — re-reads canvasData inside a Prisma transaction so
    * concurrent calls on the same session never lose each other's updates.
    *
@@ -966,6 +1076,7 @@ export class AgentCanvasToolsService {
     sessionId: string,
     actions: CanvasAction[],
   ): Promise<CanvasData> {
+    await this.expireStaleStage(sessionId)
     if (actions.length === 0) {
       // Dedup-to-empty fast path (e.g. connectNodes with all edges already
       // present). Skip the transaction and just return the current canvas.
@@ -974,13 +1085,16 @@ export class AgentCanvasToolsService {
       return parseCanvas(session.canvasData)
     }
     return this.prisma.$transaction(async (tx) => {
-      // Re-read inside the TX so concurrent persist() calls compose correctly
-      // rather than clobbering each other with stale in-memory snapshots.
       const session = await tx.session.findUnique({
         where: { id: sessionId },
-        select: { canvasData: true },
+        select: { canvasData: true, stagedActions: true },
       })
       if (!session) throw new NotFoundException('会话不存在')
+      if (session.stagedActions) {
+        throw new ConflictException(
+          'Canvas has staged actions pending commit; call commitStage or rollbackStage first',
+        )
+      }
       const current = parseCanvas(session.canvasData)
       const updated = applyCanvasActions(current, actions)
       await tx.session.update({

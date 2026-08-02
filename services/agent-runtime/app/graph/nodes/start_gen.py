@@ -15,10 +15,17 @@ from langchain_core.messages import AIMessage
 from app.graph.topo import topo_sort_gen_keys
 
 
-def make_start_gen_node(*, max_concurrency: int = 3) -> Callable:
+def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callable:
     """Create start_gen node. ``max_concurrency`` caps parallel gen_node per superstep."""
 
     async def start_gen(state: dict) -> dict:
+        commit_fn = getattr(nest, "commit_stage", None) if nest is not None else None
+        if commit_fn is not None:
+            try:
+                await commit_fn()
+            except Exception:  # noqa: BLE001
+                pass
+
         manifest = list(state.get("split_manifest") or [])
         if not manifest:
             return {

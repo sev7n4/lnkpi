@@ -1,5 +1,5 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
-import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
@@ -67,6 +67,10 @@ class AddNodesBatchDto {
   @ValidateNested({ each: true })
   @Type(() => BatchNodeItemDto)
   items!: BatchNodeItemDto[]
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 class EdgeDto {
@@ -85,6 +89,10 @@ class ConnectNodesDto {
   @ValidateNested({ each: true })
   @Type(() => EdgeDto)
   edges!: EdgeDto[]
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 // W31: Remove nodes DTO
@@ -121,6 +129,10 @@ class SetNodePromptDto {
   @IsOptional()
   @IsString()
   title?: string
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 class SetNodeContentDto {
@@ -206,6 +218,24 @@ class ReleaseThreadLockDto {
 
   @IsString()
   holderId!: string
+}
+
+class StageCanvasActionsDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  actions!: unknown[]
+}
+
+class CommitStageDto {
+  @IsString()
+  sessionId!: string
+}
+
+class RollbackStageDto {
+  @IsString()
+  sessionId!: string
 }
 
 // W15: Generation progress DTOs
@@ -351,6 +381,27 @@ export class AgentCanvasToolsController {
   @Post('release-thread-lock')
   async releaseThreadLock(@Body() dto: ReleaseThreadLockDto) {
     const data = await this.tools.releaseThreadLock(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('stage-canvas-actions')
+  async stageCanvasActions(@Body() dto: StageCanvasActionsDto) {
+    const data = await this.tools.stageCanvasActions({
+      sessionId: dto.sessionId,
+      actions: dto.actions as any,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('commit-stage')
+  async commitStage(@Body() dto: CommitStageDto) {
+    const data = await this.tools.commitStage(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('rollback-stage')
+  async rollbackStage(@Body() dto: RollbackStageDto) {
+    const data = await this.tools.rollbackStage(dto)
     return { code: 0, message: 'ok', data }
   }
 

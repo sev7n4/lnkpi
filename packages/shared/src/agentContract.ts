@@ -96,6 +96,7 @@ export const AddNodesBatchRequestSchema = z.object({
   sessionId: z.string(),
   userId: z.string(),
   items: z.array(AddNodesBatchItemSchema),
+  stage: z.boolean().optional(),
 })
 
 export type AddNodesBatchRequest = z.infer<typeof AddNodesBatchRequestSchema>
@@ -126,6 +127,7 @@ export type ConnectNodesEdge = z.infer<typeof ConnectNodesEdgeSchema>
 export const ConnectNodesRequestSchema = z.object({
   sessionId: z.string(),
   edges: z.array(ConnectNodesEdgeSchema),
+  stage: z.boolean().optional(),
 })
 
 export type ConnectNodesRequest = z.infer<typeof ConnectNodesRequestSchema>
@@ -145,6 +147,7 @@ export const SetNodePromptRequestSchema = z.object({
   nodeId: z.string(),
   prompt: z.string(),
   title: z.string().optional(),
+  stage: z.boolean().optional(),
 })
 
 export type SetNodePromptRequest = z.infer<typeof SetNodePromptRequestSchema>
@@ -372,6 +375,47 @@ export const ReleaseThreadLockResponseSchema = z.object({
 })
 
 export type ReleaseThreadLockResponse = z.infer<typeof ReleaseThreadLockResponseSchema>
+
+// ============================================================
+// canvas_stage (W8)
+// ============================================================
+
+export const StageCanvasActionsRequestSchema = z.object({
+  sessionId: z.string(),
+  actions: z.array(CanvasActionSchema),
+})
+
+export type StageCanvasActionsRequest = z.infer<typeof StageCanvasActionsRequestSchema>
+
+export const StageCanvasActionsResponseSchema = z.object({
+  stagedCount: z.number(),
+})
+
+export type StageCanvasActionsResponse = z.infer<typeof StageCanvasActionsResponseSchema>
+
+export const CommitStageRequestSchema = z.object({
+  sessionId: z.string(),
+})
+
+export type CommitStageRequest = z.infer<typeof CommitStageRequestSchema>
+
+export const CommitStageResponseSchema = z.object({
+  actions: z.array(CanvasActionSchema),
+})
+
+export type CommitStageResponse = z.infer<typeof CommitStageResponseSchema>
+
+export const RollbackStageRequestSchema = z.object({
+  sessionId: z.string(),
+})
+
+export type RollbackStageRequest = z.infer<typeof RollbackStageRequestSchema>
+
+export const RollbackStageResponseSchema = z.object({
+  cleared: z.boolean(),
+})
+
+export type RollbackStageResponse = z.infer<typeof RollbackStageResponseSchema>
 
 // ============================================================
 // gen_progress (W15)

@@ -198,7 +198,7 @@ async def test_node_revise_full_flow_updates_canvas():
             self.calls.append(("set_node_prompt", {"node_id": node_id, "prompt": prompt, **kwargs}))
             return {"nodeId": node_id, "actions": []}
 
-        async def add_nodes_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
             self.calls.append(("add_nodes_batch", items))
             # 模拟新节点创建返回 nodeId
             return {"nodes": [{"key": it["key"], "nodeId": f"new-{it['key']}"} for it in items]}

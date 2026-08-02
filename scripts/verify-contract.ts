@@ -57,6 +57,12 @@ import {
   GetGenProgressResponseSchema,
   SaveGenProgressRequestSchema,
   SaveGenProgressResponseSchema,
+  StageCanvasActionsRequestSchema,
+  StageCanvasActionsResponseSchema,
+  CommitStageRequestSchema,
+  CommitStageResponseSchema,
+  RollbackStageRequestSchema,
+  RollbackStageResponseSchema,
 } from '../packages/shared/src/agentContract'
 
 interface ContractMapping {
@@ -132,6 +138,18 @@ const CONTRACTS: Record<string, { request: ContractMapping; response: ContractMa
   release_thread_lock: {
     request: { tsSchema: ReleaseThreadLockRequestSchema, pyModel: 'ReleaseThreadLockRequest' },
     response: { tsSchema: ReleaseThreadLockResponseSchema, pyModel: 'ReleaseThreadLockResponse' },
+  },
+  stage_canvas_actions: {
+    request: { tsSchema: StageCanvasActionsRequestSchema, pyModel: 'StageCanvasActionsRequest' },
+    response: { tsSchema: StageCanvasActionsResponseSchema, pyModel: 'StageCanvasActionsResponse' },
+  },
+  commit_stage: {
+    request: { tsSchema: CommitStageRequestSchema, pyModel: 'CommitStageRequest' },
+    response: { tsSchema: CommitStageResponseSchema, pyModel: 'CommitStageResponse' },
+  },
+  rollback_stage: {
+    request: { tsSchema: RollbackStageRequestSchema, pyModel: 'RollbackStageRequest' },
+    response: { tsSchema: RollbackStageResponseSchema, pyModel: 'RollbackStageResponse' },
   },
   get_gen_progress: {
     request: { tsSchema: GetGenProgressRequestSchema, pyModel: 'GetGenProgressRequest' },
