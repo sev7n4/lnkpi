@@ -82,6 +82,7 @@ text_default_keywords:
   - 广告词
   - 文案
   - 分镜
+  - 口播稿
 
 prompt_explicit_keywords:
   - prompt扩写

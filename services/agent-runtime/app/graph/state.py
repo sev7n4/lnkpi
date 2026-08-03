@@ -86,6 +86,9 @@ class AgentRuntimeState(TypedDict, total=False):
         "write_copy_node",
         "await_topo",
         "orchestrate_gen",
+        "atomic_parse",
+        "atomic_create",
+        "await_atomic_confirm",
         "done",
         "error",
     ]
@@ -94,8 +97,11 @@ class AgentRuntimeState(TypedDict, total=False):
     session_id: str
     user_id: str
     prompt_version: str | None  # W19: active skill prompt template version
-    flow_mode: Literal["campaign", "single_node"] | None  # W28/W29
+    flow_mode: Literal["campaign", "single_node", "atomic_create"] | None  # W28/W29/P4
     focus_node_id: str | None  # W28: canvas node for single-node gen
+    atomic_spec: dict | None  # P4: parsed atomic create intent
+    atomic_node_id: str | None  # P4: created canvas node id
+    atomic_record_id: str | None  # P4: generation record id
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str

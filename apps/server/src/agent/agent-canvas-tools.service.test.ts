@@ -17,6 +17,9 @@ describe('AgentCanvasToolsService', () => {
   const prefsFindUnique = vi.fn()
   const generateImage = vi.fn()
   const generateVideo = vi.fn()
+  const generateText = vi.fn()
+  const generatePrompt = vi.fn()
+  const generateAudio = vi.fn()
   const getGeneration = vi.fn()
 
   const defaultPrefs = {
@@ -66,8 +69,23 @@ describe('AgentCanvasToolsService', () => {
       status: 'completed',
       url: 'https://cdn.example/img.png',
     })
+    generateText.mockResolvedValue({
+      id: 'gen-t1',
+      status: 'completed',
+      metadata: JSON.stringify({ text: '买它！限时优惠。' }),
+    })
+    generatePrompt.mockResolvedValue({
+      id: 'gen-p1',
+      status: 'completed',
+      metadata: JSON.stringify({ mode: 'image_prompt_multi_style', content: '扩写后的 prompt...' }),
+    })
+    generateAudio.mockResolvedValue({
+      id: 'gen-a1',
+      status: 'completed',
+      url: 'https://cdn.example/audio.mp3',
+    })
 
-    // Serialize concurrent $transaction callbacks. The real Postgres
+    // Serialize concurrent $transaction callbacks.
     // serializable / read-committed TX chain would queue concurrent
     // persist() calls so each one sees the post-commit state of the
     // previous. Without this queue, the mock would let N concurrent
@@ -98,7 +116,7 @@ describe('AgentCanvasToolsService', () => {
         },
         {
           provide: StudioService,
-          useValue: { generateImage, generateVideo, getGeneration },
+          useValue: { generateImage, generateVideo, generateText, generatePrompt, generateAudio, getGeneration },
         },
       ],
     }).compile()
@@ -362,6 +380,76 @@ describe('AgentCanvasToolsService', () => {
     expect(result.status).toBe('completed')
     expect(result.url).toBe('https://cdn.example/vid.mp4')
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/vid.mp4')
+  })
+
+  it('runTextGeneration calls Studio and writes content', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'txt-1',
+          type: 'text',
+          position: { x: 0, y: 0 },
+          data: { prompt: '写一段天猫开场文案', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    const result = await svc.runTextGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'txt-1',
+    })
+    expect(generateText).toHaveBeenCalled()
+    expect(result.status).toBe('completed')
+    expect(result.generationRecordId).toBe('gen-t1')
+    expect(canvas.nodes[0].data.content).toBe('买它！限时优惠。')
+    expect(canvas.nodes[0].data.status).toBe('completed')
+  })
+
+  it('runPromptGeneration writes content and promptMode', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'prm-1',
+          type: 'prompt',
+          position: { x: 0, y: 0 },
+          data: { prompt: '蓝牙耳机白底图', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    const result = await svc.runPromptGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'prm-1',
+    })
+    expect(generatePrompt).toHaveBeenCalled()
+    expect(result.status).toBe('completed')
+    expect(canvas.nodes[0].data.content).toBe('扩写后的 prompt...')
+    expect(canvas.nodes[0].data.promptMode).toBe('image_prompt_multi_style')
+  })
+
+  it('runAudioGeneration writes url and completed status', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'aud-1',
+          type: 'audio',
+          position: { x: 0, y: 0 },
+          data: { prompt: '给这段文案配旁白', status: 'draft' },
+        },
+      ],
+      edges: [],
+    }
+    const result = await svc.runAudioGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'aud-1',
+    })
+    expect(generateAudio).toHaveBeenCalled()
+    expect(result.status).toBe('completed')
+    expect(result.url).toBe('https://cdn.example/audio.mp3')
+    expect(canvas.nodes[0].data.url).toBe('https://cdn.example/audio.mp3')
   })
 
   it('runImageGeneration prefers node image fields over account defaults', async () => {

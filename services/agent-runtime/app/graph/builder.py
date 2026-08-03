@@ -13,6 +13,7 @@ from app.graph.nodes.done import make_done_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
+from app.graph.subgraphs.atomic_create_gate import register_atomic_create_gate
 from app.graph.subgraphs.confirm_gate import register_confirm_gate
 from app.graph.subgraphs.copy_gate import register_copy_gate
 from app.graph.subgraphs.single_node_gate import register_single_node_gate
@@ -22,6 +23,8 @@ from app.graph.subgraphs.topo_gate import register_topo_gate
 def route_after_intake(state: AgentRuntimeState) -> str:
     if state.get("flow_mode") == "single_node":
         return "prepare_single_gen"
+    if state.get("flow_mode") == "atomic_create":
+        return "parse_atomic_intent"
     if state.get("skill_id"):
         return "decide_plan_mode"
     return "chat"
@@ -56,6 +59,7 @@ def build_agent_graph(
     register_copy_gate(graph, nest=nest, llm=llm)
     register_topo_gate(graph, nest=nest)
     register_single_node_gate(graph, nest=nest)
+    register_atomic_create_gate(graph, nest=nest)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(
@@ -63,6 +67,7 @@ def build_agent_graph(
         route_after_intake,
         {
             "prepare_single_gen": "prepare_single_gen",
+            "parse_atomic_intent": "parse_atomic_intent",
             "decide_plan_mode": "decide_plan_mode",
             "chat": "chat",
         },
@@ -83,5 +88,6 @@ def build_agent_graph(
             "await_confirm",
             "await_topo",
             "await_copy_confirm",
+            "await_atomic_confirm",
         ],
     )

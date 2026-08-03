@@ -29,6 +29,9 @@ _LONG_GEN_PATHS = frozenset({
     "/agent/internal/run-image-generation",
     "/agent/internal/wait-image-generation",
     "/agent/internal/run-video-generation",
+    "/agent/internal/run-text-generation",
+    "/agent/internal/run-prompt-generation",
+    "/agent/internal/run-audio-generation",
 })
 
 
@@ -276,6 +279,30 @@ class NestCanvasClient:
         timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
         return await self._post(
             "/agent/internal/run-video-generation",
+            {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+            timeout=timeout_sec,
+        )
+
+    async def run_text_generation(self, node_id: str) -> dict[str, Any]:
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/run-text-generation",
+            {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+            timeout=timeout_sec,
+        )
+
+    async def run_prompt_generation(self, node_id: str) -> dict[str, Any]:
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/run-prompt-generation",
+            {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+            timeout=timeout_sec,
+        )
+
+    async def run_audio_generation(self, node_id: str) -> dict[str, Any]:
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/run-audio-generation",
             {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
             timeout=timeout_sec,
         )
