@@ -129,6 +129,32 @@ function pickString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
+function parseRecordText(metadata: string | null | undefined, prompt: string): string {
+  if (!metadata) return prompt
+  try {
+    const meta = JSON.parse(metadata) as { text?: string }
+    return meta.text ?? prompt
+  } catch {
+    return prompt
+  }
+}
+
+function parseRecordPromptContent(
+  metadata: string | null | undefined,
+  prompt: string,
+): { content: string; mode: string | null } {
+  if (!metadata) return { content: prompt, mode: null }
+  try {
+    const meta = JSON.parse(metadata) as { content?: string; mode?: string; text?: string }
+    return {
+      content: meta.content ?? meta.text ?? prompt,
+      mode: meta.mode ?? null,
+    }
+  } catch {
+    return { content: prompt, mode: null }
+  }
+}
+
 function modalityDefaults(nodeType: NodeType | string, prefs: AccountGenPrefs): Record<string, unknown> {
   switch (nodeType) {
     case 'image':
@@ -755,6 +781,241 @@ export class AgentCanvasToolsService {
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '视频生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', actions: allActions }
+    }
+  }
+
+  async runTextGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{ status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const prompt = String(node.data?.prompt ?? node.data?.content ?? '').trim()
+    if (!prompt) throw new NotFoundException('节点缺少 prompt')
+
+    const started: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: {
+            status: 'generating',
+            generationStartedAt: new Date().toISOString(),
+            prompt,
+          },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, started)
+    const allActions = [...started]
+
+    try {
+      const prefs = await this.loadAccountGenPrefs(input.userId)
+      const refs = toStudioRefs(node, canvas)
+      const model = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
+      const record = await this.studio.generateText(
+        input.userId,
+        prompt,
+        model,
+        refs,
+        undefined,
+        undefined,
+        node.data?.textThinking === true,
+        node.data?.textThinkingEffort === 'max' ? 'max' : 'high',
+        { sessionId: input.sessionId, nodeId: input.nodeId },
+      )
+      const recordId = record.id
+      const content = parseRecordText(record.metadata, prompt)
+      const finishActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: {
+              status: 'completed',
+              content,
+              generationRecordId: recordId,
+              errorMessage: null,
+            },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, finishActions)
+      allActions.push(...finishActions)
+      return { status: 'completed', generationRecordId: recordId, actions: allActions }
+    } catch (err) {
+      if (err instanceof ForbiddenException || err instanceof NotFoundException) throw err
+      const errorMessage = err instanceof Error ? err.message : '文本生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', actions: allActions }
+    }
+  }
+
+  async runPromptGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{ status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const prompt = String(node.data?.prompt ?? '').trim()
+    if (!prompt) throw new NotFoundException('节点缺少 prompt')
+
+    const started: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: {
+            status: 'generating',
+            generationStartedAt: new Date().toISOString(),
+          },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, started)
+    const allActions = [...started]
+
+    try {
+      const prefs = await this.loadAccountGenPrefs(input.userId)
+      const model = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
+      const record = await this.studio.generatePrompt(
+        input.userId,
+        prompt,
+        model,
+        undefined,
+        { sessionId: input.sessionId, nodeId: input.nodeId },
+      )
+      const recordId = record.id
+      const parsed = parseRecordPromptContent(record.metadata, prompt)
+      const finishData: Record<string, unknown> = {
+        status: 'completed',
+        content: parsed.content,
+        generationRecordId: recordId,
+        errorMessage: null,
+      }
+      if (parsed.mode) finishData.promptMode = parsed.mode
+      const finishActions: CanvasAction[] = [
+        { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
+      ]
+      await this.persist(input.sessionId, finishActions)
+      allActions.push(...finishActions)
+      return { status: 'completed', generationRecordId: recordId, actions: allActions }
+    } catch (err) {
+      if (err instanceof ForbiddenException || err instanceof NotFoundException) throw err
+      const errorMessage = err instanceof Error ? err.message : '提示词生成失败'
+      const errorActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: { status: 'error', errorMessage },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, errorActions)
+      allActions.push(...errorActions)
+      return { status: 'error', actions: allActions }
+    }
+  }
+
+  async runAudioGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{ url?: string; status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const text = String(node.data?.prompt ?? node.data?.content ?? '').trim()
+    if (!text) throw new NotFoundException('节点缺少文本')
+
+    const started: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: {
+            status: 'generating',
+            generationStartedAt: new Date().toISOString(),
+            prompt: text,
+          },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, started)
+    const allActions = [...started]
+
+    try {
+      const prefs = await this.loadAccountGenPrefs(input.userId)
+      const refs = toStudioRefs(node, canvas)
+      const record = await this.studio.generateAudio(
+        input.userId,
+        text,
+        {
+          model: pickString(node.data?.audioModel, prefs.defaultAudioModel) || undefined,
+          voice: pickString(node.data?.audioVoice, prefs.audioVoice || 'female-shaonv'),
+          emotion: pickString(node.data?.audioEmotion, 'neutral'),
+          language: pickString(node.data?.audioLanguage, 'zh'),
+          speed: typeof node.data?.audioSpeed === 'number' ? node.data.audioSpeed : prefs.audioSpeed ?? 1,
+          volume: typeof node.data?.audioVolume === 'number' ? node.data.audioVolume : 1,
+          pitch: typeof node.data?.audioPitch === 'number' ? node.data.audioPitch : 0,
+        },
+        refs,
+        undefined,
+        undefined,
+        { sessionId: input.sessionId, nodeId: input.nodeId },
+      )
+      const recordId = record.id
+      const url = typeof record.url === 'string' && record.url ? record.url : undefined
+      const finishActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: {
+              status: 'completed',
+              url,
+              generationRecordId: recordId,
+              errorMessage: null,
+            },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, finishActions)
+      allActions.push(...finishActions)
+      return { url, status: 'completed', generationRecordId: recordId, actions: allActions }
+    } catch (err) {
+      if (err instanceof ForbiddenException || err instanceof NotFoundException) throw err
+      const errorMessage = err instanceof Error ? err.message : '音频生成失败'
       const errorActions: CanvasAction[] = [
         {
           type: 'update_node',

@@ -1,0 +1,56 @@
+"""P4: atomic intent routing against eval-intent-set gold labels."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from app.graph.atomic_intent import (
+    atomic_create_intent,
+    build_atomic_spec,
+    parse_atomic_target_type,
+    resolve_intake_route,
+)
+
+EVAL_PATH = Path(__file__).resolve().parents[1] / "skills" / "atomic-create" / "eval-intent-set.yaml"
+
+
+@pytest.fixture(scope="module")
+def eval_cases() -> list[dict]:
+    doc = yaml.safe_load(EVAL_PATH.read_text(encoding="utf-8"))
+    return doc["cases"]
+
+
+def test_eval_routing_gold(eval_cases: list[dict]):
+    mismatches: list[str] = []
+    for case in eval_cases:
+        utterance = case["utterance"]
+        focus = case.get("focus_node_id")
+        gold = case["gold"]
+        route = resolve_intake_route(utterance, focus_node_id=focus)
+        if route != gold["route"]:
+            mismatches.append(f"{case['id']}: route {route} != {gold['route']}")
+            continue
+        if gold["route"] == "atomic_create":
+            spec = build_atomic_spec(utterance)
+            if spec["target_type"] != gold["target_type"]:
+                mismatches.append(
+                    f"{case['id']}: target {spec['target_type']} != {gold['target_type']}"
+                )
+            if spec["confirm_gate"] != gold["confirm_gate"]:
+                mismatches.append(
+                    f"{case['id']}: confirm_gate {spec['confirm_gate']} != {gold['confirm_gate']}"
+                )
+    assert not mismatches, "\n".join(mismatches)
+
+
+def test_d1_storyboard_is_text_not_prompt():
+    assert parse_atomic_target_type("帮我生成一个蓝牙耳机的分镜提示词") == "text"
+    assert parse_atomic_target_type("用提示词模式扩写白底图") == "prompt"
+
+
+def test_atomic_create_intent_negative_campaign():
+    assert not atomic_create_intent("帮我做一套天猫蓝牙耳机详情页营销方案")
+    assert atomic_create_intent("帮我生成一个模特人物图")

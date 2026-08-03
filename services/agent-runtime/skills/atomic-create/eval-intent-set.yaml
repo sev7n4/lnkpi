@@ -1,0 +1,169 @@
+# P4-01: 30-utterance gold set for atomic studio intent routing
+# Run: pytest tests/test_atomic_create_intent_eval.py
+version: 1
+meta:
+  spec: atomic-studio-intent-product-spec v1.1
+  adr: docs/adr/p4-atomic-create-adr.md
+  decisions:
+    D1: storyboard phrases → text node
+    D2: video/audio → confirm_gate true
+
+cases:
+  # --- image (6) ---
+  - id: img-01
+    utterance: 帮我生成一个模特人物图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-02
+    utterance: 生成一张白底产品图，蓝牙耳机
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-03
+    utterance: 来一张运动风海报
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-04
+    utterance: 帮我做一张场景图，客厅摆放耳机
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-05
+    utterance: 生成一个 Banner 图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-06
+    utterance: 做一个品牌视觉图，极简风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  # --- text / D1 分镜 (7) ---
+  - id: txt-01
+    utterance: 帮我生成一个蓝牙耳机的分镜提示词
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+    notes: D1 分镜 → text 非 prompt
+
+  - id: txt-02
+    utterance: 写一段天猫详情页开场文案
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: txt-03
+    utterance: 生成一个产品卖点脚本
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: txt-04
+    utterance: 来一段30秒短视频口播稿
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: txt-05
+    utterance: 帮我写广告词，强调降噪
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: txt-06
+    utterance: 生成蓝牙耳机的分镜脚本，5个镜头
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: txt-07
+    utterance: 写一段品牌故事文案
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  # --- prompt 显式 (3) ---
+  - id: prm-01
+    utterance: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: prm-02
+    utterance: 用提示词模式扩写：赛博朋克耳机主图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: prm-03
+    utterance: 多模式扩写这个主图 prompt
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  # --- audio + D2 confirm (5) ---
+  - id: aud-01
+    utterance: 给这段文案配一段旁白
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: aud-02
+    utterance: 生成一段女声配音，30字以内
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: aud-03
+    utterance: 帮我做一个产品介绍的音频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: aud-04
+    utterance: 来一段英文旁白，运动风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: aud-05
+    utterance: 配一段促销口播音频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  # --- video + D2 confirm (5) ---
+  - id: vid-01
+    utterance: 做一个15秒产品展示视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: vid-02
+    utterance: 帮我生成一个蓝牙耳机旋转展示视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: vid-03
+    utterance: 生成一段场景氛围视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: vid-04
+    utterance: 来一段15s 竖屏商品视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: vid-05
+    utterance: 做一个开箱短视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  # --- negative: campaign (2) ---
+  - id: neg-camp-01
+    utterance: 帮我做一套天猫蓝牙耳机详情页营销方案
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  - id: neg-camp-02
+    utterance: 天猫详情页，拆14个画布节点，品牌lnkpi
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  # --- negative: chat (1) ---
+  - id: neg-chat-01
+    utterance: 你好，今天天气怎么样
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  # --- negative: single_node P3 (1) ---
+  - id: neg-p3-01
+    utterance: 快速生成这张主图
+    focus_node_id: image-hero-001
+    gold: { route: single_node, target_type: image, confirm_gate: false }

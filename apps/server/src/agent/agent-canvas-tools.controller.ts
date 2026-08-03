@@ -418,6 +418,24 @@ export class AgentCanvasToolsController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Post('run-text-generation')
+  async runTextGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.runTextGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('run-prompt-generation')
+  async runPromptGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.runPromptGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('run-audio-generation')
+  async runAudioGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.runAudioGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('get-generation-status')
   async getGenerationStatus(@Body() dto: SessionNodeDto) {
     const data = await this.tools.getGenerationStatus(dto)
