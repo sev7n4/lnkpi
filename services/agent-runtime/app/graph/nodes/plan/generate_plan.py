@@ -17,6 +17,7 @@ from app.graph.nodes.plan._shared import (
     strip_plan_preamble,
     summarize,
 )
+from app.prompt_version import record_prompt_usage
 
 
 def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = None) -> Callable:
@@ -25,6 +26,11 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = No
     async def generate_plan(state: dict) -> dict:
         skill_id = state.get("skill_id")
         skill = load_skill_by_id(skill_id, skills_dir)
+        record_prompt_usage(
+            skill_id=str(skill.index.skill_id),
+            prompt_version=skill.prompt_version,
+            node_name="generate_plan",
+        )
 
         user_text = latest_user_text(state.get("messages") or [])
         from app.graph.context_snapshot import resolve_brief_for_llm
@@ -60,6 +66,7 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = No
         return {
             "plan_draft": plan_md,
             "plan_summary": summary,
+            "prompt_version": skill.prompt_version,
         }
 
     return generate_plan

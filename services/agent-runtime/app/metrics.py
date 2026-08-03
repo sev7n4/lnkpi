@@ -32,6 +32,11 @@ STREAM_ERRORS = Counter(
     "Agent stream terminal errors",
     ["error_type"],
 )
+PROMPT_INVOCATIONS = Counter(
+    "agent_prompt_invocations_total",
+    "LLM prompt template invocations",
+    ["skill_id", "prompt_version", "node_name"],
+)
 
 
 def metrics_payload() -> tuple[bytes, str]:
@@ -60,6 +65,14 @@ def record_tool_call(tool_name: str, *, success: bool) -> None:
 
 def record_stream_error(error_type: str) -> None:
     STREAM_ERRORS.labels(error_type=error_type or "internal_error").inc()
+
+
+def record_prompt_invocation(skill_id: str, prompt_version: str, node_name: str) -> None:
+    PROMPT_INVOCATIONS.labels(
+        skill_id=skill_id or "unknown",
+        prompt_version=prompt_version or "unknown",
+        node_name=node_name or "unknown",
+    ).inc()
 
 
 @contextmanager

@@ -17,3 +17,4 @@ class LoadedSkill:
     frontmatter: dict
     canvas_manifest: dict | None
     max_downstream: int
+    prompt_version: str
