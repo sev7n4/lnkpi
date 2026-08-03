@@ -287,5 +287,20 @@ cd /opt/lnkpi && docker compose -f deploy/docker-compose.prod.yml up -d --force-
 | `deploy/docker/Dockerfile.agent-runtime` | Runtime 镜像 |
 | `deploy/docker-compose.prod.yml` | `api` + `agent-runtime` |
 | `deploy/systemd/lnkpi-agent-runtime.service` | systemd 单元模板 |
+
+### 7.1 自动化生产验收脚本
+
+| 脚本 | 覆盖 | 用法 |
+|------|------|------|
+| `deploy/prod-w12-verify.py` | W12 ping + thread-state | `python3 deploy/prod-w12-verify.py` |
+| `deploy/prod-v4-hitl-refresh-verify.py` | **V4** HITL 刷新恢复（同 threadId interrupt 保持 + resume） | `python3 deploy/prod-v4-hitl-refresh-verify.py` |
+| `deploy/prod-v5-gen-crash-recovery-verify.py` | **V5** 出图 recovery（soft：recordId 稳定 + 重确认不重跑；manual：crash 演练） | `V5_MODE=soft python3 deploy/prod-v5-gen-crash-recovery-verify.py` |
+| `deploy/prod-phase-a-user-verify.py` | Phase A plan/confirm | 见脚本 header |
+| `deploy/prod-phase-b-user-verify.py` | Phase B await_topo + topo ops + 出图 | 见脚本 header |
+| `deploy/prod-phase-c-user-verify.py` | Phase C 手工改画布 + 执行生图 | 见脚本 header |
+
+环境变量（通用）：`BASE_URL`（默认 `http://119.29.173.89:8888`）、`PHONE`、`CODE`。
+
+**已知跟踪项**（Phase B 2026-08-03 复测）：`P1 topo add`（LLM 文案未命中）、`P2 canvas images/recordId`（topo add 失败后出图链未完整）— 见 graph-engineering backlog 生产跟踪节。
 | `deploy/.env.production.example` | 生产 env 示例（含 Runtime 段） |
 | `services/agent-runtime/README.md` | 本地双进程开发 |
