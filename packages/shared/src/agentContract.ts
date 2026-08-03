@@ -43,6 +43,7 @@ export const UpsertPromptNodeRequestSchema = z.object({
   prompt: z.string(),
   content: z.string(),
   nodeId: z.string().optional(),
+  stage: z.boolean().optional(),
 })
 
 export type UpsertPromptNodeRequest = z.infer<typeof UpsertPromptNodeRequestSchema>
@@ -192,6 +193,7 @@ export const SetNodeContentRequestSchema = z.object({
   userId: z.string(),
   nodeId: z.string(),
   content: z.string(),
+  stage: z.boolean().optional(),
 })
 
 export type SetNodeContentRequest = z.infer<typeof SetNodeContentRequestSchema>

@@ -6,6 +6,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.state import SplitManifestItem
+from app.graph.canvas_stage import rollback_stage_safe, stage_failure_message
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.copy_sot import snapshot_copy_sot_fields
 from app.graph.mermaid_topo import manifest_to_mermaid
@@ -19,9 +20,9 @@ def _gen_order_fields(manifest: list[dict[str, Any]]) -> dict[str, Any]:
     ordered, err = precompute_gen_order(manifest)
     if err:
         return {
-            "gen_order_error": err,
+            "last_error": err,
             "gen_ordered_keys": None,
-            "phase": "split",
+            "phase": "error",
             "messages": [
                 AIMessage(
                     content=(
@@ -31,7 +32,7 @@ def _gen_order_fields(manifest: list[dict[str, Any]]) -> dict[str, Any]:
                 )
             ],
         }
-    return {"gen_order_error": None, "gen_ordered_keys": ordered}
+    return {"gen_ordered_keys": ordered}
 
 
 def _manifest_items(canvas_manifest: dict | None, max_downstream: int) -> list[SplitManifestItem]:
@@ -70,10 +71,8 @@ def _manifest_items(canvas_manifest: dict | None, max_downstream: int) -> list[S
     return items
 
 
-def _resolve_topology_mode(state: dict, skill: Any, canvas_manifest: dict | None) -> str:
-    mode = state.get("topology_mode")
-    if mode in ("full", "trimmed"):
-        return mode
+def _resolve_topology_mode(skill: Any, canvas_manifest: dict | None) -> str:
+    """Resolve full vs trimmed from skill metadata / manifest defaults (not checkpoint)."""
     meta = getattr(skill, "metadata", None) or {}
     if isinstance(meta, dict):
         m = str(meta.get("lnkpi.topology_mode_default") or "").strip().lower()
@@ -152,53 +151,47 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
     new_items_for_batch: list[dict] = []
     new_items_meta: list[dict] = []
 
-    for op in ops:
-        if not isinstance(op, dict):
-            continue
-        kind = str(op.get("op") or "").lower()
-        key = str(op.get("key") or "")
-        if not key:
-            continue
-        if kind == "rename":
-            old = old_by_key.get(key)
-            node_id = str(old.get("node_id") or "") if old else ""
-            if not node_id:
+    try:
+        for op in ops:
+            if not isinstance(op, dict):
                 continue
-            title = str(op.get("title") or key)
-            prompt_hint = str(op.get("prompt_hint") or "")
-            try:
+            kind = str(op.get("op") or "").lower()
+            key = str(op.get("key") or "")
+            if not key:
+                continue
+            if kind == "rename":
+                old = old_by_key.get(key)
+                node_id = str(old.get("node_id") or "") if old else ""
+                if not node_id:
+                    continue
+                title = str(op.get("title") or key)
+                prompt_hint = str(op.get("prompt_hint") or "")
                 await nest.set_node_prompt(node_id, prompt_hint, title=title, stage=True)
-            except Exception:  # noqa: BLE001
-                pass
-            # 同步更新 split_manifest 内存副本
-            for it in updated:
-                if str(it.get("key")) == key:
-                    it["title"] = title
-                    it["prompt_hint"] = prompt_hint
-                    break
-            renamed_keys.append(key)
-        elif kind == "add":
-            new_items_for_batch.append(
-                {
-                    "key": key,
-                    "title": str(op.get("title") or key),
-                    "targetType": str(op.get("target_type") or "image"),
-                    "prompt": str(op.get("prompt_hint") or ""),
-                }
-            )
-            new_items_meta.append(op)
-            added_keys.append(key)
+                for it in updated:
+                    if str(it.get("key")) == key:
+                        it["title"] = title
+                        it["prompt_hint"] = prompt_hint
+                        break
+                renamed_keys.append(key)
+            elif kind == "add":
+                new_items_for_batch.append(
+                    {
+                        "key": key,
+                        "title": str(op.get("title") or key),
+                        "targetType": str(op.get("target_type") or "image"),
+                        "prompt": str(op.get("prompt_hint") or ""),
+                    }
+                )
+                new_items_meta.append(op)
+                added_keys.append(key)
 
-    # 批量新增节点
-    if new_items_for_batch:
-        try:
+        if new_items_for_batch:
             batch = await nest.add_nodes_batch(new_items_for_batch, stage=True)
             for n in batch.get("nodes") or []:
                 k = str(n.get("key") or "")
                 nid = str(n.get("nodeId") or "")
                 if k and nid:
                     key_to_id[k] = nid
-                    # 追加到 split_manifest
                     meta = next((m for m in new_items_meta if str(m.get("key")) == k), {})
                     updated.append(
                         {
@@ -210,26 +203,29 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
                             "node_id": nid,
                         }
                     )
-        except Exception:  # noqa: BLE001
-            pass
 
-    # 为新节点接边：plan_node_id → 新节点 + 依赖边
-    edges: list[dict[str, str]] = []
-    for meta in new_items_meta:
-        k = str(meta.get("key") or "")
-        nid = key_to_id.get(k)
-        if not nid:
-            continue
-        edges.append({"source": plan_node_id, "target": nid})
-        for dep_key in meta.get("depends_on") or []:
-            dep_id = key_to_id.get(str(dep_key))
-            if dep_id and dep_id != nid:
-                edges.append({"source": dep_id, "target": nid})
-    if edges:
-        try:
+        edges: list[dict[str, str]] = []
+        for meta in new_items_meta:
+            k = str(meta.get("key") or "")
+            nid = key_to_id.get(k)
+            if not nid:
+                continue
+            edges.append({"source": plan_node_id, "target": nid})
+            for dep_key in meta.get("depends_on") or []:
+                dep_id = key_to_id.get(str(dep_key))
+                if dep_id and dep_id != nid:
+                    edges.append({"source": dep_id, "target": nid})
+        if edges:
             await nest.connect_nodes(edges, stage=True)
-        except Exception:  # noqa: BLE001
-            pass
+    except Exception as exc:  # noqa: BLE001
+        await rollback_stage_safe(nest)
+        return {
+            "phase": "error",
+            "last_error": str(exc),
+            "mode": "modify",
+            "split_manifest": old_manifest,
+            "messages": [AIMessage(content=stage_failure_message("拓扑更新", exc))],
+        }
 
     parts = []
     if renamed_keys:
@@ -262,10 +258,18 @@ async def _apply_modify_split(nest: Any, state: dict, plan_node_id: str) -> dict
         "phase": "await_topo",
         "mode": "modify",
         "split_manifest": updated,
-        "focus_node_ids": [str(it.get("node_id")) for it in updated if it.get("node_id")],
+        "node_operations": None,
         "messages": [AIMessage(content=msg)],
     }
-    out.update(_gen_order_fields(updated))
+    order_fields = _gen_order_fields(updated)
+    if order_fields.get("phase") == "error":
+        await rollback_stage_safe(nest)
+        return {
+            **order_fields,
+            "mode": "modify",
+            "split_manifest": old_manifest,
+        }
+    out.update(order_fields)
     return out
 
 
@@ -286,7 +290,7 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             raise RuntimeError("skill_id missing for split")
         entries = {e.skill_id: e for e in discover_skills(skills_dir)}
         skill = load_skill(entries[skill_id])
-        mode = _resolve_topology_mode(state, skill, skill.canvas_manifest)
+        mode = _resolve_topology_mode(skill, skill.canvas_manifest)
         manifest = _manifest_items(skill.canvas_manifest, skill.max_downstream)
         if mode == "trimmed" and manifest:
             selected = _select_trimmed_keys(str(state.get("plan_summary") or ""), manifest)
@@ -316,7 +320,6 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             return {
                 "phase": "split",
                 "split_manifest": [],
-                "topology_mode": mode,
                 "messages": [AIMessage(content="当前 Skill 无 canvas-manifest，跳过批量拆解。")],
             }
 
@@ -362,7 +365,6 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             )
             await nest.attach_refs(nid, ref_order)
 
-        focus = [i["node_id"] for i in manifest if i.get("node_id")]
         titles = [str(i.get("title") or i.get("key") or "") for i in manifest]
         title_hint = "、".join(t for t in titles if t)[:80]
         mermaid = manifest_to_mermaid(list(manifest))
@@ -391,8 +393,6 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
         out = {
             "phase": "split",
             "split_manifest": manifest,
-            "topology_mode": mode,
-            "focus_node_ids": focus,
             "messages": [AIMessage(content=split_msg)],
             **snapshot_copy_sot_fields(state),
         }

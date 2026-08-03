@@ -57,6 +57,7 @@ class UpsertPromptNodeRequest(BaseModel):
     prompt: str
     content: str
     nodeId: Optional[str] = None
+    stage: Optional[bool] = None
 
 
 class UpsertPromptNodeResponse(BaseModel):
@@ -207,6 +208,7 @@ class SetNodeContentRequest(BaseModel):
     userId: str
     nodeId: str
     content: str
+    stage: Optional[bool] = None
 
 
 class SetNodeContentResponse(BaseModel):

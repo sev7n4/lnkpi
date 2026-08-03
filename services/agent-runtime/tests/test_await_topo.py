@@ -277,17 +277,20 @@ async def test_confirm_gen_runs_send_api_subgraph():
         }
     ]
     result = await graph.ainvoke(
-        {"split_manifest": manifest},
+        {
+            "split_manifest": manifest,
+            "thread_id": "send-api-smoke",
+            "session_id": "s-send-api-smoke",
+        },
         {"configurable": {"thread_id": "send-api-smoke"}, "recursion_limit": 100},
     )
 
     # gen_node ran the image generation
     assert any(c[0] == "run_image_generation" for c in nest.calls)
-    # collect_gen bridged to the legacy fields done.py reads
-    assert result.get("gen_completed") == ["img-1"]
-    assert result.get("gen_failed") == []
-    # W3 transient fields are cleared after collect
-    assert result.get("gen_ordered_keys") is None
+    # collect_gen persists GenProgress; legacy gen_completed bridge removed (P0-02)
+    assert result.get("gen_progress_id") == "gp-1"
+    # Tier B cleared; Tier A gen_ordered_keys preserved (P0-03)
+    assert result.get("gen_ordered_keys") == ["white_bg"]
     assert result.get("gen_completed_keys") is None
 
 
@@ -343,7 +346,7 @@ async def test_node_revise_full_flow_updates_canvas():
             # 模拟新节点创建返回 nodeId
             return {"nodes": [{"key": it["key"], "nodeId": f"new-{it['key']}"} for it in items]}
 
-        async def connect_nodes(self, edges: list[dict[str, str]]) -> dict[str, Any]:
+        async def connect_nodes(self, edges: list[dict[str, str]], **kwargs: Any) -> dict[str, Any]:
             self.calls.append(("connect_nodes", edges))
             return {"actions": []}
 

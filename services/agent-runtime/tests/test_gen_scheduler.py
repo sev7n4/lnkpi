@@ -16,8 +16,8 @@ from langgraph.types import Send
 from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 
 
-def _scheduler():
-    return make_gen_scheduler_node()
+def _scheduler(max_c: int = 3):
+    return make_gen_scheduler_node(max_concurrency=max_c)
 
 
 def _item(key: str, *, node_id: str = "n-" + "k", deps: list[str] | None = None, title: str = "t") -> dict[str, Any]:
@@ -32,7 +32,6 @@ def _state(
     completed: list[str] | None = None,
     failed: list[str] | None = None,
     needs_user: list[str] | None = None,
-    max_c: int = 3,
     fail_details: dict[str, dict] | None = None,
 ) -> dict[str, Any]:
     return {
@@ -43,7 +42,6 @@ def _state(
         "gen_failed_keys": failed,
         "gen_needs_user_keys": needs_user,
         "gen_fail_details": fail_details,
-        "gen_max_concurrency": max_c,
     }
 
 
@@ -74,9 +72,9 @@ async def test_dispatches_all_ready_when_no_deps():
 # 2. concurrency -------------------------------------------------------------------
 @pytest.mark.asyncio
 async def test_respects_max_concurrency_cap():
-    sched = _scheduler()
+    sched = _scheduler(max_c=2)
     by_key = {k: _item(k, deps=[]) for k in ["a", "b", "c", "d"]}
-    cmd = await sched(_state(["a", "b", "c", "d"], by_key, max_c=2))
+    cmd = await sched(_state(["a", "b", "c", "d"], by_key))
     dispatched = _dispatched_keys(cmd)
     assert len(dispatched) == 2
     # only the first 2 in topo order

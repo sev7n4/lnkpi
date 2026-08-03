@@ -293,7 +293,7 @@ async def check_plan_confirm_split(report: Report) -> None:
         Check(
             id="url_writeback",
             label="≥2 images write back url (白底 + 主图)",
-            ok=len(gen_calls) >= 2 and state2.get("gen_completed"),
+            ok=len(gen_calls) >= 2 and state2.get("gen_progress_id"),
             detail="dry-run uses mock urls; live: verify in canvas UI",
             manual=True,
         )

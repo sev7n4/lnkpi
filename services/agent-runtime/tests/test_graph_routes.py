@@ -14,4 +14,4 @@ def test_route_after_split_create_returns_draft_copy():
 
 
 def test_route_after_split_cycle_goes_to_done():
-    assert route_after_split({"gen_order_error": "cycle detected"}) == "done"
+    assert route_after_split({"phase": "error", "last_error": "cycle detected"}) == "done"

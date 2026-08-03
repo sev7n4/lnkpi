@@ -30,8 +30,8 @@ async def test_write_copy_persists_draft():
         def __init__(self) -> None:
             self.calls: list[tuple[str, Any]] = []
 
-        async def set_node_content(self, node_id: str, content: str) -> dict:
-            self.calls.append(("set_node_content", (node_id, content)))
+        async def set_node_content(self, node_id: str, content: str, **kwargs: Any) -> dict:
+            self.calls.append(("set_node_content", (node_id, content, kwargs)))
             return {"actions": []}
 
         async def emit_task_update(self, **payload: Any) -> None:
@@ -48,7 +48,12 @@ async def test_write_copy_persists_draft():
             "split_manifest": [{"key": "copy_main", "node_id": "t1", "title": "主文案"}],
         }
     )
-    assert any(c[0] == "set_node_content" and c[1] == ("t1", "# lnkpi 耳机\nTWS 蓝牙耳机正文。") for c in nest.calls)
+    assert any(
+        c[0] == "set_node_content"
+        and c[1][0] == "t1"
+        and c[1][2].get("stage") is True
+        for c in nest.calls
+    )
     assert out["phase"] == "await_topo"
     assert any(
         c[0] == "emit_task_update" and c[1].get("status") == "done" for c in nest.calls
@@ -61,8 +66,8 @@ async def test_write_copy_blocks_misaligned_draft():
         def __init__(self) -> None:
             self.calls: list[tuple[str, Any]] = []
 
-        async def set_node_content(self, node_id: str, content: str) -> dict:
-            self.calls.append(("set_node_content", (node_id, content)))
+        async def set_node_content(self, node_id: str, content: str, **kwargs: Any) -> dict:
+            self.calls.append(("set_node_content", (node_id, content, kwargs)))
             return {"actions": []}
 
     nest = FakeNest()

@@ -147,6 +147,12 @@ def test_runs_stream_ndjson_smoke():
     types = [e["type"] for e in events]
     # plan 确认前不写画布，首轮只有文本门
     assert "text_delta" in types
+    assert "interrupt" in types
+    interrupt_ev = next(e for e in events if e["type"] == "interrupt")
+    assert interrupt_ev["data"]["interrupted"] is True
+    assert interrupt_ev["data"]["node"] == "await_confirm"
+    assert interrupt_ev["data"]["phase"] == "await_confirm"
+    assert types.index("interrupt") < types.index("done")
     assert "done" in types
     assert "error" not in types
     assert "upsert_prompt_node" not in nest.calls
