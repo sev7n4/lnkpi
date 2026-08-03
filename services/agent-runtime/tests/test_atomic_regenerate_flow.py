@@ -42,3 +42,26 @@ async def test_prepare_then_regenerate_skips_create():
     assert done["phase"] == "done"
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
     assert ("run_image_generation", "node-abc") in nest.calls
+
+
+@pytest.mark.asyncio
+async def test_video_regenerate_skips_confirm_gate():
+    class VideoNest(FakeNest):
+        async def run_video_generation(self, node_id: str) -> dict[str, Any]:
+            self.calls.append(("run_video_generation", node_id))
+            return {"status": "completed", "url": "https://cdn/v2.mp4"}
+
+    nest = VideoNest()
+    spec = {
+        "target_type": "video",
+        "title": "产品视频",
+        "prompt": "15秒展示",
+        "confirm_gate": True,
+    }
+    prep = make_prepare_atomic_regenerate_node(nest=nest)
+    prepped = await prep({"atomic_node_id": "vid-1", "atomic_spec": spec})
+    run = make_run_atomic_gen_node(nest=nest)
+    done = await run({**prepped, "atomic_node_id": "vid-1", "atomic_spec": spec})
+    assert done["phase"] == "done"
+    assert ("run_video_generation", "vid-1") in nest.calls
+    assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
