@@ -39,6 +39,10 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useClickOutside } from '@/composables/useClickOutside'
+import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
+import { AGENT_SKILLS } from '@/constants/agentSkillMap'
+import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
   sessionId: string
@@ -137,21 +141,10 @@ function clamp(v: number, min: number, max: number) {
 
 const speech = useSpeechRecognition()
 
+const { preferences, load: loadProviderBootstrap } = useProviderBootstrap()
+const planningModel = ref(preferences.value?.defaultTextModel ?? '')
+
 /* ---- 技能选择 ---- */
-interface AgentSkill {
-  id: string
-  label: string
-  desc: string
-  icon: 'canvas' | 'storyboard' | 'polish' | 'organize'
-}
-
-const AGENT_SKILLS: AgentSkill[] = [
-  { id: 'canvas', label: '画布编排', desc: '创建节点与连线，驱动画布创作', icon: 'canvas' },
-  { id: 'storyboard', label: '分镜脚本', desc: '拆解剧情，生成分镜与镜头描述', icon: 'storyboard' },
-  { id: 'polish', label: '提示词优化', desc: '润色扩写提示词，提升生成质量', icon: 'polish' },
-  { id: 'organize', label: '素材整理', desc: '归纳画布素材，梳理创作结构', icon: 'organize' },
-]
-
 const activeSkillId = ref('canvas')
 const activeSkill = computed(() => AGENT_SKILLS.find((s) => s.id === activeSkillId.value) ?? AGENT_SKILLS[0])
 const skillMenuOpen = ref(false)
@@ -181,6 +174,11 @@ function applyHistoryPrompt(content: string) {
 
 onMounted(() => {
   void loadHistory()
+  void loadProviderBootstrap().then(() => {
+    if (!planningModel.value && preferences.value?.defaultTextModel) {
+      planningModel.value = preferences.value.defaultTextModel
+    }
+  })
 })
 
 watch(
@@ -297,8 +295,7 @@ async function send() {
     return
   }
 
-  const skillPrefix = activeSkillId.value === 'canvas' ? '' : `【技能：${activeSkill.value.label}】`
-  const message = `${skillPrefix}${input.value.trim()}`
+  const message = input.value.trim()
   input.value = ''
   // W5 修复：手动输入若匹配确认/修改关键词，也带上 userDecision 触发 Command(resume=...)
   await sendMessage(message, mapPresetToDecision(message))
@@ -351,6 +348,12 @@ async function createOwnCanvas() {
 }
 
 async function sendMessage(message: string, userDecision?: 'confirm' | 'revise') {
+  const selectableTextModels = preferences.value?.selectableTextModels ?? []
+  if (planningModel.value && !selectableTextModels.includes(planningModel.value)) {
+    ElMessage.warning('当前规划模型已停用，请重新选择')
+    return
+  }
+
   if (props.readOnly) {
     agent.addUserMessage(message)
     agent.startAssistantMessage()
@@ -391,6 +394,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         message,
         threadId: agentThreadId.value,
         userDecision,
+        skillId: activeSkillId.value,
+        model: planningModel.value || undefined,
       }),
     })
 
@@ -943,15 +948,14 @@ defineExpose({ openPanel, reconcileFromNodes })
               />
 
               <div class="agent-dock-actions">
-                <!-- 一期不打通规划模型选择：避免停用模型误导 -->
-                <span class="px-1 text-[10px] opacity-50">规划模型由服务端配置</span>
+                <UniversalModelSelector v-model="planningModel" type="text" />
 
-                <!-- 技能选择（一期仅文案前缀装饰，未打通 Runtime skillId） -->
+                <!-- 技能选择 -->
                 <div ref="skillMenuRef" class="relative">
                   <button
                     type="button"
                     class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
-                    title="技能（一期未打通 Runtime）"
+                    title="技能"
                     @click="skillMenuOpen = !skillMenuOpen"
                   >
                     <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-[var(--neo-accent-text)]" fill="none" stroke="currentColor" stroke-width="1.75">
@@ -988,7 +992,10 @@ defineExpose({ openPanel, reconcileFromNodes })
                         </svg>
                       </span>
                       <span class="min-w-0">
-                        <span class="block text-xs font-medium">{{ skill.label }}</span>
+                        <span class="flex items-center gap-1.5">
+                          <span class="text-xs font-medium">{{ skill.label }}</span>
+                          <span v-if="!skill.ready" class="rounded px-1 py-px text-[9px] opacity-50 ring-1 ring-current">开发中</span>
+                        </span>
                         <span class="block truncate text-[10px] opacity-60">{{ skill.desc }}</span>
                       </span>
                     </button>
