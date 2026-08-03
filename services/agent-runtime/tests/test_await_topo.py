@@ -73,6 +73,43 @@ class FakeNest:
 
 
 @pytest.mark.asyncio
+async def test_topo_revise_loops_back_to_await_topo_interrupt():
+    """topo_revise 后应回到 await_topo interrupt，而非 END（否则下一轮从 intake 重跑）。"""
+    from langgraph.checkpoint.memory import MemorySaver
+
+    from app.graph.builder import build_agent_graph
+
+    class MinimalNest(FakeNest):
+        pass
+
+    graph = build_agent_graph(
+        nest=MinimalNest(),
+        llm=object(),
+        skills_dir=__import__("pathlib").Path(__file__).resolve().parents[1] / "skills",
+        checkpointer=MemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "topo-loop-1"}}
+    await graph.aupdate_state(
+        config,
+        {
+            "phase": "await_topo",
+            "skill_id": "enterprise-marketing-campaign",
+            "session_id": "s1",
+            "user_id": "u1",
+            "thread_id": "topo-loop-1",
+            "plan_node_id": "plan-1",
+            "split_manifest": [{"key": "hero_main", "title": "主图", "node_id": "img-1"}],
+            "messages": [HumanMessage(content="查看主图")],
+            "user_decision": "topo_revise",
+        },
+        as_node="await_topo",
+    )
+    await graph.ainvoke(None, config)
+    snap = graph.get_state(config)
+    assert snap.next == ("await_topo",), f"expected interrupt at await_topo, got {snap.next}"
+
+
+@pytest.mark.asyncio
 async def test_topo_revise_removes_by_title():
     nest = FakeNest()
     node = make_topo_revise_node(nest=nest)
