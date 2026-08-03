@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from app.graph.few_shot import build_llm_messages, few_shots_for_skill
 from app.graph.nodes.plan._shared import (
     CREATE_INSTRUCTION,
     MODIFY_INSTRUCTION,
@@ -17,17 +18,25 @@ from app.graph.nodes.plan._shared import (
     strip_plan_preamble,
     summarize,
 )
+from app.prompt_version import record_prompt_usage
 
 
-def make_generate_plan_node(*, llm: Any, skills_dir: Path) -> Callable:
+def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = None) -> Callable:
     """Create the generate_plan node."""
 
     async def generate_plan(state: dict) -> dict:
         skill_id = state.get("skill_id")
         skill = load_skill_by_id(skill_id, skills_dir)
+        record_prompt_usage(
+            skill_id=str(skill.index.skill_id),
+            prompt_version=skill.prompt_version,
+            node_name="generate_plan",
+        )
 
         user_text = latest_user_text(state.get("messages") or [])
-        user_brief = str(state.get("user_brief") or "").strip()
+        from app.graph.context_snapshot import resolve_brief_for_llm
+
+        user_brief = await resolve_brief_for_llm(state, nest)
         mode = state.get("mode") or "create"
         existing_plan = str(state.get("plan_draft") or "").strip()
 
@@ -45,12 +54,12 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path) -> Callable:
             instruction = CREATE_INSTRUCTION
             human_content = f"{instruction}\n用户需求：{user_text}"
 
-        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_content),
-        ]
+        few_shots = few_shots_for_skill(skill_id, "generate_plan", skills_dir=skills_dir)
+        messages = build_llm_messages(
+            system=system_prompt,
+            user=human_content,
+            few_shots=few_shots,
+        )
         ai = await llm.ainvoke(messages)
         plan_md = strip_plan_preamble(str(getattr(ai, "content", ai) or ""))
         summary = summarize(plan_md)
@@ -58,6 +67,7 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path) -> Callable:
         return {
             "plan_draft": plan_md,
             "plan_summary": summary,
+            "prompt_version": skill.prompt_version,
         }
 
     return generate_plan

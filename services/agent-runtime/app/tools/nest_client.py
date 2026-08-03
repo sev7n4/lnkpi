@@ -354,6 +354,40 @@ class NestCanvasClient:
             },
         )
 
+    async def get_context_snapshot(
+        self, thread_id: str, stage: str | None = None
+    ) -> dict[str, Any] | None:
+        """Get latest context snapshot for thread (W18)."""
+        payload: dict[str, Any] = {"threadId": thread_id}
+        if stage:
+            payload["stage"] = stage
+        result = await self._post("/agent/internal/get-context-snapshot", payload)
+        return result if result else None
+
+    async def save_context_snapshot(
+        self,
+        thread_id: str,
+        session_id: str,
+        stage: str,
+        brief: str | None = None,
+        plan_summary: str | None = None,
+        manifest_json: str | None = None,
+        message_count: int | None = None,
+    ) -> dict[str, Any]:
+        """Save context snapshot (W18)."""
+        return await self._post(
+            "/agent/internal/save-context-snapshot",
+            {
+                "threadId": thread_id,
+                "sessionId": session_id,
+                "stage": stage,
+                "brief": brief,
+                "planSummary": plan_summary,
+                "manifestJson": manifest_json,
+                "messageCount": message_count,
+            },
+        )
+
     async def stage_canvas_actions(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/stage-canvas-actions",

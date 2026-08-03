@@ -6,6 +6,7 @@ from pathlib import Path
 
 import yaml
 
+from app.prompt_version import resolve_active_version, resolve_prompt_body
 from app.skills.models import LoadedSkill, SkillIndexEntry
 
 logger = logging.getLogger(__name__)
@@ -73,12 +74,21 @@ def load_skill(entry: SkillIndexEntry) -> LoadedSkill:
     max_downstream_raw = metadata.get("lnkpi.max_downstream", _DEFAULT_MAX_DOWNSTREAM)
     max_downstream = int(max_downstream_raw)
 
+    declared_version = str(metadata.get("lnkpi.prompt_version") or "1.0.0")
+    active_version = resolve_active_version(entry.skill_id, declared_version=declared_version)
+    body, active_version = resolve_prompt_body(
+        entry.path,
+        default_body=body,
+        active_version=active_version,
+    )
+
     return LoadedSkill(
         index=entry,
         body=body,
         frontmatter=frontmatter,
         canvas_manifest=canvas_manifest,
         max_downstream=max_downstream,
+        prompt_version=active_version,
     )
 
 

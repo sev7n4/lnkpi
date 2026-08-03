@@ -59,11 +59,30 @@ def plan_content_from_node(node: dict[str, Any]) -> str:
 
 
 async def resolve_copy_sot(state: dict, nest: Any | None = None) -> CopySoT:
-    """Resolve brief + plan from state, snapshot fields, messages, and canvas plan node."""
+    """Resolve brief + plan from state, snapshot fields, DB snapshot, messages, canvas."""
+    from app.graph.context_snapshot import (
+        brief_from_snapshot,
+        load_context_snapshot,
+        plan_summary_from_snapshot,
+    )
+
     brief = str(
         state.get("user_brief") or state.get("copy_sot_brief") or ""
     ).strip()
     plan = str(state.get("plan_draft") or state.get("copy_sot_plan") or "").strip()
+
+    thread_id = str(state.get("thread_id") or "").strip()
+    if nest is not None and thread_id and (not brief or not plan):
+        snap = await load_context_snapshot(nest, thread_id, stage="split")
+        if snap is None and not brief:
+            snap = await load_context_snapshot(nest, thread_id, stage="plan")
+        if snap:
+            if not brief:
+                brief = brief_from_snapshot(snap)
+            if not plan:
+                plan_summary = plan_summary_from_snapshot(snap)
+                if plan_summary:
+                    plan = plan_summary
 
     if not brief:
         brief = brief_from_messages(list(state.get("messages") or []))

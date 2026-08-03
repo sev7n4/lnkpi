@@ -9,6 +9,7 @@ def test_builtin_marketing_skill_loads():
     ids = {e.skill_id for e in entries}
     assert "enterprise-marketing-campaign" in ids
     loaded = load_skill(next(e for e in entries if e.skill_id == "enterprise-marketing-campaign"))
+    assert loaded.prompt_version == "1.1.0"
     keys = {i["key"] for i in loaded.canvas_manifest["items"]}
     assert "white_bg" in keys and "hero_main" in keys
     assert "product_turnaround" in keys

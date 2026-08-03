@@ -506,3 +506,43 @@ export const SaveGenProgressResponseSchema = z.object({
 })
 
 export type SaveGenProgressResponse = z.infer<typeof SaveGenProgressResponseSchema>
+
+// ============================================================
+// context_snapshot (W18)
+// ============================================================
+
+export const GetContextSnapshotRequestSchema = z.object({
+  threadId: z.string(),
+  stage: z.string().optional(),
+})
+
+export type GetContextSnapshotRequest = z.infer<typeof GetContextSnapshotRequestSchema>
+
+export const GetContextSnapshotResponseSchema = z.object({
+  id: z.string(),
+  stage: z.string(),
+  brief: z.string().nullable().optional(),
+  planSummary: z.string().nullable().optional(),
+  manifestJson: z.string().nullable().optional(),
+  messageCount: z.number().nullable().optional(),
+})
+
+export type GetContextSnapshotResponse = z.infer<typeof GetContextSnapshotResponseSchema>
+
+export const SaveContextSnapshotRequestSchema = z.object({
+  threadId: z.string(),
+  sessionId: z.string(),
+  stage: z.string(),
+  brief: z.string().nullable().optional(),
+  planSummary: z.string().nullable().optional(),
+  manifestJson: z.string().nullable().optional(),
+  messageCount: z.number().nullable().optional(),
+})
+
+export type SaveContextSnapshotRequest = z.infer<typeof SaveContextSnapshotRequestSchema>
+
+export const SaveContextSnapshotResponseSchema = z.object({
+  id: z.string(),
+})
+
+export type SaveContextSnapshotResponse = z.infer<typeof SaveContextSnapshotResponseSchema>

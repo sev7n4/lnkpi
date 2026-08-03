@@ -258,3 +258,19 @@ model GenProgress {
 
   @@index([threadId, createdAt])
 }
+
+// Context 快照：brief/plan/manifest 摘要外置，减少 LLM 上下文扫描（W18）
+model ContextSnapshot {
+  id            String   @id @default(cuid())
+  threadId      String
+  sessionId     String
+  stage         String   // plan | split
+  brief         String?
+  planSummary   String?
+  manifestJson  String?  // JSON 数组摘要
+  messageCount  Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([threadId, stage, createdAt])
+}

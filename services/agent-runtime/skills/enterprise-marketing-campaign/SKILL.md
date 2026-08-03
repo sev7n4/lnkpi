@@ -10,6 +10,7 @@ metadata:
   author: lnkpi
   lnkpi.canvas_manifest: assets/canvas-manifest.yaml
   lnkpi.max_downstream: "16"
+  lnkpi.prompt_version: "1.1.0"
   lnkpi.topology_mode_default: full
 allowed-tools: upsert_prompt_node add_nodes_batch connect_nodes set_node_prompt attach_refs run_image_generation get_generation_status
 ---

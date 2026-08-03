@@ -93,6 +93,7 @@ class AgentRuntimeState(TypedDict, total=False):
     thread_id: str
     session_id: str
     user_id: str
+    prompt_version: str | None  # W19: active skill prompt template version
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str
@@ -104,6 +105,7 @@ class AgentRuntimeState(TypedDict, total=False):
     node_operations: list[dict] | None
     # W3/W15: gen_queue removed; gen_completed/gen_failed removed from checkpoint (P0-02)
     gen_progress_id: str | None  # W15: Pointer to GenProgress table
+    context_snapshot_id: str | None  # W18: Pointer to latest ContextSnapshot
     last_error: str | None
     copy_draft: str | None
     copy_node_id: str | None

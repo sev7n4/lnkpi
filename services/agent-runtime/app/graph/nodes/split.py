@@ -9,6 +9,7 @@ from app.graph.state import SplitManifestItem
 from app.graph.canvas_stage import rollback_stage_safe, stage_failure_message
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.copy_sot import snapshot_copy_sot_fields
+from app.graph.context_snapshot import persist_snapshot_from_state
 from app.graph.mermaid_topo import manifest_to_mermaid
 from app.graph.topo import precompute_gen_order
 from app.graph.topo_trim import trim_manifest_items
@@ -397,6 +398,8 @@ def make_split_node(*, nest: Any, skills_dir: Path) -> Callable:
             **snapshot_copy_sot_fields(state),
         }
         out.update(_gen_order_fields(list(manifest)))
+        snap_patch = await persist_snapshot_from_state(nest, {**state, **out}, "split")
+        out.update(snap_patch)
         return out
 
     return split

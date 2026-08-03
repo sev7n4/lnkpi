@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     langsmith_otel_enabled: bool = True
     langsmith_api_key: str = ""  # Optional — dev/staging LangSmith Cloud
     langsmith_project: str = "lnkpi-agent"
+    # W19: JSON map skill_id -> pinned prompt version for rollback, e.g.
+    # {"enterprise-marketing-campaign":"1.0.0"}
+    prompt_version_overrides: str = "{}"
 
     class Config:
         env_prefix = "LNKPI_"

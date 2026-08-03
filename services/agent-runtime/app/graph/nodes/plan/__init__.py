@@ -36,8 +36,8 @@ def register_plan_nodes(
     ``route_after_plan``, and update inbound edges to point to ``"decide_plan_mode"``.
     """
     graph.add_node("decide_plan_mode", make_decide_plan_mode_node(skills_dir=skills_dir))
-    graph.add_node("generate_plan", make_generate_plan_node(llm=llm, skills_dir=skills_dir))
-    graph.add_node("revise_manifest", make_revise_manifest_node(llm=llm))
+    graph.add_node("generate_plan", make_generate_plan_node(llm=llm, skills_dir=skills_dir, nest=nest))
+    graph.add_node("revise_manifest", make_revise_manifest_node(llm=llm, skills_dir=skills_dir))
     graph.add_node("compose_confirm", make_compose_confirm_node(skills_dir=skills_dir))
 
     # Linear pipeline (revise_manifest is transparent when not node_revise)

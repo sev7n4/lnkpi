@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage
 
 from app.graph.copy_alignment import (
     _MAX_COPY_ATTEMPTS,
@@ -10,6 +10,7 @@ from app.graph.copy_alignment import (
     validate_copy_alignment,
 )
 from app.graph.copy_sot import resolve_copy_sot, snapshot_copy_sot_fields
+from app.graph.few_shot import build_llm_messages, few_shots_for_skill
 
 _COPY_SYSTEM = (
     "你是电商主文案写手。只输出主文案 Markdown 正文，禁止寒暄、禁止解释过程。"
@@ -88,11 +89,16 @@ def make_draft_copy_node(*, nest: Any, llm: Any) -> Callable:
                 user_revision=user_revision,
                 alignment_feedback=alignment_feedback,
             )
+            few_shots = few_shots_for_skill(
+                str(state.get("skill_id") or "") or None,
+                "draft_copy",
+            )
             result = await llm.ainvoke(
-                [
-                    SystemMessage(content=_COPY_SYSTEM),
-                    HumanMessage(content=content),
-                ]
+                build_llm_messages(
+                    system=_COPY_SYSTEM,
+                    user=content,
+                    few_shots=few_shots,
+                )
             )
             draft = str(getattr(result, "content", "") or "").strip()
             if not draft:
