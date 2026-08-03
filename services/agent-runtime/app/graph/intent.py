@@ -75,6 +75,15 @@ NODE_REVISE_HINTS = (
     "再加",
 )
 
+# await_topo node: topology query keywords (handled in topo_revise)
+TOPO_QUERY_HINTS = (
+    "查看",
+    "查询",
+    "看一下",
+    "prompt是什么",
+    "什么prompt",
+)
+
 # await_topo node: topology revision keywords
 TOPO_REVISE_HINTS = (
     "要改拓扑",
@@ -164,11 +173,17 @@ def classify_topo_decision(text: str) -> TopoDecision:
     lowered = t.lower()
     if any(h in t or h in lowered for h in CONFIRM_GEN_HINTS):
         return "confirm_gen"
-    # Check node revision before topo revision (higher priority)
-    if any(h in t for h in NODE_REVISE_HINTS):
-        return "node_revise"
+    if any(h in t for h in TOPO_QUERY_HINTS):
+        return "topo_revise"
     if any(h in t for h in TOPO_REVISE_HINTS):
         return "topo_revise"
+    if any(h in t for h in ("增加", "加上", "补一个", "补一张", "再加")):
+        return "topo_revise"
+    if any(h in t for h in ("改为", "改成", "调整", "换成", "修改")):
+        return "topo_revise"
+    # Plan-level revise (no concrete single-node op) → full modify flow
+    if any(h in t for h in NODE_REVISE_HINTS):
+        return "node_revise"
     if t in ("确认", "1", "A", "a") or t.lower() == "ok":
         return "confirm_gen"
     return "none"

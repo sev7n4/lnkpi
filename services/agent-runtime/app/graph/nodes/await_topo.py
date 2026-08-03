@@ -6,12 +6,9 @@ from langchain_core.messages import AIMessage
 
 from app.graph.intent import classify_copy_decision, classify_topo_decision
 
-# 修复 P0-1（拓扑确认门节点内容修改）：
-# 原来只有 topo_revise（只支持删节点），用户说"把模特定妆改为双人模特"会被误判为
-# topo_revise，进 topo_revise 节点后因只支持删除而返回"未识别具体改动"。
-# 现在拆分为：
-# - node_revise: 节点内容修改（改为/调整/增加/换）→ 回退到 plan 走 modify 模式
-# - topo_revise: 纯拓扑删除（删掉/去掉/移除）→ 进 topo_revise 节点
+# await_topo 拓扑门路由：
+# - topo_revise: 删/增/改/查节点（即时画布 + Mermaid）
+# - node_revise: 方案级修订（更偏/强调等）→ plan modify 模式
 
 _NONE_TIP = "请确认出图，或说明如何调整（例如「删掉 Banner」或「把模特定妆改为双人模特」）；主文案可用「写入主文案」。"
 
