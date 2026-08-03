@@ -15,10 +15,13 @@ from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
 from app.graph.subgraphs.confirm_gate import register_confirm_gate
 from app.graph.subgraphs.copy_gate import register_copy_gate
+from app.graph.subgraphs.single_node_gate import register_single_node_gate
 from app.graph.subgraphs.topo_gate import register_topo_gate
 
 
 def route_after_intake(state: AgentRuntimeState) -> str:
+    if state.get("flow_mode") == "single_node":
+        return "prepare_single_gen"
     if state.get("skill_id"):
         return "decide_plan_mode"
     return "chat"
@@ -52,12 +55,17 @@ def build_agent_graph(
     register_confirm_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
     register_copy_gate(graph, nest=nest, llm=llm)
     register_topo_gate(graph, nest=nest)
+    register_single_node_gate(graph, nest=nest)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(
         "intake",
         route_after_intake,
-        {"decide_plan_mode": "decide_plan_mode", "chat": "chat"},
+        {
+            "prepare_single_gen": "prepare_single_gen",
+            "decide_plan_mode": "decide_plan_mode",
+            "chat": "chat",
+        },
     )
     graph.add_edge("chat", END)
     graph.add_edge("write_plan_node", "split")

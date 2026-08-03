@@ -57,6 +57,7 @@ export class AgentService {
     idempotencyKey?: string,
     skillId?: string,
     model?: string,
+    focusNodeId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     // Register idempotency key (if provided) before starting
     if (idempotencyKey) {
@@ -82,6 +83,7 @@ export class AgentService {
           userDecision,
           skillId,
           model,
+          focusNodeId,
         )) {
           if (event.type === 'text_delta') {
             assistantText += (event.data as { text: string }).text
@@ -220,6 +222,7 @@ export class AgentService {
     userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
     skillId?: string,
     model?: string,
+    focusNodeId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -248,6 +251,7 @@ export class AgentService {
       llmModel,
       llmApiKey,
       llmBaseUrl,
+      focusNodeId,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

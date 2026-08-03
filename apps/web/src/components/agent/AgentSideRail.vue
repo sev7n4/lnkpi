@@ -53,6 +53,8 @@ const props = defineProps<{
   sessionId: string
   /** 当前登录用户非画布所有者时为 true，禁止 Agent 写入画布 */
   readOnly?: boolean
+  /** W30: 画布选中节点 id，配合「快速生成」走单节点路径 */
+  selectedNodeId?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -406,6 +408,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         userDecision,
         skillId: activeSkillId.value,
         model: planningModel.value || undefined,
+        focusNodeId: props.selectedNodeId || undefined,
       }),
     })
 
