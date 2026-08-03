@@ -392,6 +392,7 @@ class RemoveNodesRequest(BaseModel):
 
     sessionId: str
     nodeIds: list[str]
+    stage: Optional[bool] = None
 
 
 class RemoveNodesResponse(BaseModel):
@@ -410,6 +411,7 @@ class RemoveEdgesRequest(BaseModel):
 
     sessionId: str
     edgeIds: list[str]
+    stage: Optional[bool] = None
 
 
 class RemoveEdgesResponse(BaseModel):

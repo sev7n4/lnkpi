@@ -182,7 +182,7 @@ async def _apply_add(
         "targetType": "image",
         "prompt": title,
     }
-    batch = await add_fn([batch_item])
+    batch = await add_fn([batch_item], stage=True)
     node_id = ""
     for n in batch.get("nodes") or []:
         if str(n.get("key") or "") == key:
@@ -193,7 +193,7 @@ async def _apply_add(
 
     plan_node_id = str(state.get("plan_node_id") or "").strip()
     if connect_fn is not None and plan_node_id:
-        await connect_fn([{"source": plan_node_id, "target": node_id}])
+        await connect_fn([{"source": plan_node_id, "target": node_id}], stage=True)
 
     new_item = {
         "key": key,
@@ -220,7 +220,7 @@ async def _apply_update(
     if not node_id or set_fn is None:
         return manifest, f"「{target}」尚未绑定画布 node_id，无法更新。"
 
-    await set_fn(node_id, new_value, title=new_value)
+    await set_fn(node_id, new_value, title=new_value, stage=True)
     updated = [dict(it) for it in manifest]
     for it in updated:
         if str(it.get("key")) == str(item.get("key")):
@@ -272,7 +272,7 @@ def make_topo_revise_node(*, nest: Any) -> Callable:
                 remove_fn = getattr(nest, "remove_nodes", None)
                 node_ids = _removed_node_ids(manifest, new_manifest)
                 if node_ids and remove_fn is not None:
-                    await remove_fn(node_ids)
+                    await remove_fn(node_ids, stage=True)
         elif op == "add":
             new_manifest, note = await _apply_add(nest, state, manifest, _parse_add_title(text))
         elif op == "update":

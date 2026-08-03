@@ -51,8 +51,8 @@ class FakeNest:
     async def emit_text(self, text: str) -> None:
         self.calls.append(("emit_text", text))
 
-    async def remove_nodes(self, node_ids: list[str]) -> dict[str, Any]:
-        self.calls.append(("remove_nodes", node_ids))
+    async def remove_nodes(self, node_ids: list[str], **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("remove_nodes", node_ids, kwargs))
         return {"actions": []}
 
     async def get_node(self, node_id: str) -> dict[str, Any]:
@@ -64,11 +64,11 @@ class FakeNest:
         return {"nodeId": node_id, "actions": []}
 
     async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
-        self.calls.append(("add_nodes_batch", items))
+        self.calls.append(("add_nodes_batch", items, kwargs))
         return {"nodes": [{"key": it["key"], "nodeId": f"new-{it['key']}"} for it in items]}
 
     async def connect_nodes(self, edges: list[dict[str, str]], **kwargs: Any) -> dict[str, Any]:
-        self.calls.append(("connect_nodes", edges))
+        self.calls.append(("connect_nodes", edges, kwargs))
         return {"actions": []}
 
 
@@ -161,7 +161,7 @@ async def test_topo_revise_calls_remove_nodes_when_canvas_ids_present():
         }
     )
     assert "banner" not in {str(i["key"]) for i in out["split_manifest"]}
-    assert ("remove_nodes", ["img-banner"]) in nest.calls
+    assert ("remove_nodes", ["img-banner"], {"stage": True}) in nest.calls
 
 
 @pytest.mark.asyncio
@@ -180,6 +180,8 @@ async def test_topo_revise_add_node_on_canvas():
     keys = {str(i["key"]) for i in out["split_manifest"]}
     assert len(keys) == 2
     assert any(c[0] == "add_nodes_batch" for c in nest.calls)
+    batch_call = next(c for c in nest.calls if c[0] == "add_nodes_batch")
+    assert batch_call[2].get("stage") is True
 
 
 @pytest.mark.asyncio

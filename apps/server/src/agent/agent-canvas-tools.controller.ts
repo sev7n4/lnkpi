@@ -107,6 +107,10 @@ class RemoveNodesDto {
   @IsArray()
   @IsString({ each: true })
   nodeIds!: string[]
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 // W32: Remove edges DTO
@@ -117,6 +121,10 @@ class RemoveEdgesDto {
   @IsArray()
   @IsString({ each: true })
   edgeIds!: string[]
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 class SetNodePromptDto {
