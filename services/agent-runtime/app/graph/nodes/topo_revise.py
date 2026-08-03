@@ -9,6 +9,21 @@ from langchain_core.messages import AIMessage
 from app.graph.mermaid_topo import manifest_to_mermaid
 
 
+def _removed_node_ids(
+    before: list[dict[str, Any]], after: list[dict[str, Any]]
+) -> list[str]:
+    after_keys = {str(it.get("key")) for it in after if it.get("key")}
+    ids: list[str] = []
+    for it in before:
+        key = str(it.get("key") or "")
+        if not key or key in after_keys:
+            continue
+        node_id = str(it.get("node_id") or "").strip()
+        if node_id:
+            ids.append(node_id)
+    return ids
+
+
 def _apply_heuristic(manifest: list[dict[str, Any]], text: str) -> tuple[list[dict[str, Any]], str]:
     """Return (new_manifest, note). Supports 删掉/去掉 {title|key}."""
     t = text.strip()
@@ -59,6 +74,12 @@ def make_topo_revise_node(*, nest: Any) -> Callable:
 
         manifest = [dict(x) for x in (state.get("split_manifest") or []) if isinstance(x, dict)]
         new_manifest, note = _apply_heuristic(manifest, text)
+
+        if new_manifest != manifest:
+            remove_fn = getattr(nest, "remove_nodes", None)
+            node_ids = _removed_node_ids(manifest, new_manifest)
+            if node_ids and remove_fn is not None:
+                await remove_fn(node_ids)
 
         emit_list = getattr(nest, "emit_task_list", None)
         if emit_list is not None and new_manifest != manifest:

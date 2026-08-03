@@ -47,6 +47,10 @@ class FakeNest:
     async def emit_text(self, text: str) -> None:
         self.calls.append(("emit_text", text))
 
+    async def remove_nodes(self, node_ids: list[str]) -> dict[str, Any]:
+        self.calls.append(("remove_nodes", node_ids))
+        return {"actions": []}
+
 
 @pytest.mark.asyncio
 async def test_topo_revise_removes_by_title():
@@ -72,6 +76,35 @@ async def test_topo_revise_removes_by_title():
     assert "copy_main" in keys
     assert out["phase"] == "await_topo"
     assert "flowchart" in out["messages"][0].content or "资产拓扑" in out["messages"][0].content
+
+
+@pytest.mark.asyncio
+async def test_topo_revise_calls_remove_nodes_when_canvas_ids_present():
+    nest = FakeNest()
+    node = make_topo_revise_node(nest=nest)
+    out = await node(
+        {
+            "messages": [HumanMessage(content="删掉 Banner")],
+            "split_manifest": [
+                {
+                    "key": "copy_main",
+                    "title": "主文案",
+                    "target_type": "text",
+                    "node_id": "text-1",
+                    "depends_on": [],
+                },
+                {
+                    "key": "banner",
+                    "title": "Banner",
+                    "target_type": "image",
+                    "node_id": "img-banner",
+                    "depends_on": ["copy_main"],
+                },
+            ],
+        }
+    )
+    assert "banner" not in {str(i["key"]) for i in out["split_manifest"]}
+    assert ("remove_nodes", ["img-banner"]) in nest.calls
 
 
 @pytest.mark.asyncio
