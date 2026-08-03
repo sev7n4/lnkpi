@@ -50,6 +50,7 @@ describe('AgentService streamConversation', () => {
       } as never,
       { create: vi.fn() } as never,
       { createFromAgent: vi.fn() } as never,
+      { resolveForGeneration: vi.fn() } as never,
     )
   })
 
@@ -192,6 +193,7 @@ describe('AgentService idempotency', () => {
       } as never,
       { create: vi.fn() } as never,
       { createFromAgent: vi.fn() } as never,
+      { resolveForGeneration: vi.fn() } as never,
     )
   })
 
@@ -295,6 +297,7 @@ describe('AgentService checkRuntimeHealth', () => {
       } as never,
       { create: vi.fn() } as never,
       { createFromAgent: vi.fn() } as never,
+      { resolveForGeneration: vi.fn() } as never,
     )
   })
 

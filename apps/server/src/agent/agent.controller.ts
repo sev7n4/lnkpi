@@ -36,6 +36,16 @@ class ConversationDto {
   @IsOptional()
   @IsIn(['confirm', 'revise', 'replan', 'confirm_gen', 'topo_revise', 'node_revise'])
   userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise'
+
+  /** Dock 技能 id（UI 命名），Nest 映射后转发给 agent-runtime */
+  @IsOptional()
+  @IsString()
+  skillId?: string
+
+  /** 规划阶段 LLM 模型（含 channel 编码），Nest 解析凭证后转发 */
+  @IsOptional()
+  @IsString()
+  model?: string
 }
 
 class OptimizePromptDto {
@@ -138,6 +148,8 @@ export class AgentController {
         dto.threadId,
         dto.userDecision,
         idempotencyKey,
+        dto.skillId,
+        dto.model,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }

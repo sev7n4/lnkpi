@@ -8,6 +8,11 @@ export interface RuntimeRunInput {
   /** W5 修复：用户结构化决策（confirm/revise/...），用于触发 agent-runtime 的
    *  Command(resume=user_decision) 精确恢复 interrupt，避免重跑 route_entry→intake 卡死 */
   userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise'
+  /** Runtime skill id after UI→runtime mapping */
+  skillId?: string
+  llmModel?: string
+  llmApiKey?: string
+  llmBaseUrl?: string
 }
 
 export interface RuntimeThreadState {
@@ -88,6 +93,10 @@ export class AgentRuntimeClient {
         // W5 修复：把结构化决策转发给 agent-runtime
         // 与 RunRequest.user_decision 字段对应，触发 Command(resume=...) 恢复 interrupt
         user_decision: input.userDecision,
+        skill_id: input.skillId,
+        llm_model: input.llmModel,
+        llm_api_key: input.llmApiKey,
+        llm_base_url: input.llmBaseUrl,
       }),
     })
 
