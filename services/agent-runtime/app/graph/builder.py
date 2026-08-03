@@ -25,7 +25,7 @@ def route_after_intake(state: AgentRuntimeState) -> str:
 
 
 def route_after_split(state: AgentRuntimeState) -> str:
-    if state.get("gen_order_error"):
+    if state.get("phase") == "error":
         return "done"
     # modify split (node_revise) must return to topo gate — END caused intake replan on「确认出图」
     if state.get("mode") == "modify":
@@ -47,7 +47,7 @@ def build_agent_graph(
     graph.add_node("intake", make_intake_node(skills_path))
     graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
-    graph.add_node("done", make_done_node())
+    graph.add_node("done", make_done_node(nest=nest))
 
     register_confirm_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
     register_copy_gate(graph, nest=nest, llm=llm)

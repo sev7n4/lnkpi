@@ -23,6 +23,10 @@ class UpsertPromptNodeDto {
 
   @IsOptional()
   position?: { x: number; y: number }
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 class SessionNodeDto {
@@ -147,6 +151,10 @@ class SetNodeContentDto {
 
   @IsString()
   content!: string
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
 }
 
 class AttachRefsDto {

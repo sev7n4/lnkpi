@@ -185,12 +185,12 @@ async def test_confirm_then_split_creates_image_skeletons():
     # draft_copy ends turn at copy confirm gate; no auto image gen
     assert state2["phase"] == "await_copy_confirm"
     assert state2.get("copy_draft")
-    assert state2["user_decision"] == "confirm"
+    assert state2.get("user_decision") in (None, "none")
     assert state2["split_manifest"]
     assert all(item.get("node_id") for item in state2["split_manifest"])
     gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
     assert gen_calls == []
-    assert not state2.get("gen_completed")
+    assert not state2.get("gen_progress_id")
     texts2 = [
         str(getattr(m, "content", "") or "")
         for m in (state2.get("messages") or [])

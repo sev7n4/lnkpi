@@ -143,6 +143,7 @@ class NestCanvasClient:
         prompt: str,
         content: str,
         node_id: str | None = None,
+        stage: bool = False,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -152,6 +153,8 @@ class NestCanvasClient:
         }
         if node_id is not None:
             body["nodeId"] = node_id
+        if stage:
+            body["stage"] = True
         return await self._post("/agent/internal/upsert-prompt-node", body)
 
     async def get_node(self, node_id: str) -> dict[str, Any]:
@@ -216,16 +219,18 @@ class NestCanvasClient:
             body["stage"] = True
         return await self._post("/agent/internal/set-node-prompt", body)
 
-    async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
-        return await self._post(
-            "/agent/internal/set-node-content",
-            {
-                "sessionId": self._session_id,
-                "userId": self._user_id,
-                "nodeId": node_id,
-                "content": content,
-            },
-        )
+    async def set_node_content(
+        self, node_id: str, content: str, *, stage: bool = False
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "nodeId": node_id,
+            "content": content,
+        }
+        if stage:
+            body["stage"] = True
+        return await self._post("/agent/internal/set-node-content", body)
 
     async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
         return await self._post(

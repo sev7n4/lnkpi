@@ -5,7 +5,9 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.copy_alignment import validate_copy_alignment
+from app.graph.canvas_stage import rollback_stage_safe, stage_failure_message
 from app.graph.copy_sot import resolve_copy_sot, snapshot_copy_sot_fields
+from app.graph.hitl_resume import GATE_DECISION_CLEAR
 
 
 def make_write_copy_node(*, nest: Any) -> Callable:
@@ -36,7 +38,17 @@ def make_write_copy_node(*, nest: Any) -> Callable:
                 ),
             }
 
-        await nest.set_node_content(node_id, draft)
+        try:
+            await nest.set_node_content(
+                node_id, draft, stage=bool(state.get("split_manifest"))
+            )
+        except Exception as exc:  # noqa: BLE001
+            await rollback_stage_safe(nest)
+            return {
+                "phase": "error",
+                "last_error": str(exc),
+                "messages": [AIMessage(content=stage_failure_message("主文案写入", exc))],
+            }
 
         key = "copy_main"
         for raw in state.get("split_manifest") or []:
@@ -57,6 +69,7 @@ def make_write_copy_node(*, nest: Any) -> Callable:
             "messages": [
                 AIMessage(content="已将确认的主文案写入画布节点。可继续改拓扑或回复「确认出图」。")
             ],
+            **GATE_DECISION_CLEAR,
             **snapshot_copy_sot_fields(
                 {**state, "user_brief": sot.user_brief, "plan_draft": sot.plan_draft}
             ),

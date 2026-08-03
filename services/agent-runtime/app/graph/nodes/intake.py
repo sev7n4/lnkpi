@@ -54,10 +54,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "phase": "intake",
             "skill_id": skill_id,
             "user_decision": "none",
-            "focus_node_ids": state.get("focus_node_ids") or [],
             "split_manifest": state.get("split_manifest") or [],
-            "gen_completed": state.get("gen_completed") or [],
-            "gen_failed": state.get("gen_failed") or [],
             "last_error": state.get("last_error"),
             "mode": mode,
         }

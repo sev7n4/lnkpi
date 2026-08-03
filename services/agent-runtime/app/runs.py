@@ -17,6 +17,11 @@ from pydantic import BaseModel
 from app.config import settings
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
+from app.graph.hitl_resume import (
+    GATE_DECISION_CLEAR,
+    interrupt_event_payload,
+    prepare_interrupt_resume,
+)
 from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
@@ -213,21 +218,43 @@ class NestEventProxy:
     async def get_canvas_summary(self) -> dict[str, Any]:
         return await self._inner.get_canvas_summary()
 
-    async def add_nodes_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._forward_actions(await self._inner.add_nodes_batch(items))
-
-    async def connect_nodes(self, edges: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self._forward_actions(await self._inner.connect_nodes(edges))
-
-    async def set_node_prompt(self, node_id: str, prompt: str) -> dict[str, Any]:
+    async def add_nodes_batch(
+        self, items: list[dict[str, Any]], **kwargs: Any
+    ) -> dict[str, Any]:
         return await self._forward_actions(
-            await self._inner.set_node_prompt(node_id, prompt)
+            await self._inner.add_nodes_batch(items, **kwargs)
         )
 
-    async def set_node_content(self, node_id: str, content: str) -> dict[str, Any]:
+    async def connect_nodes(
+        self, edges: list[dict[str, Any]], **kwargs: Any
+    ) -> dict[str, Any]:
         return await self._forward_actions(
-            await self._inner.set_node_content(node_id, content)
+            await self._inner.connect_nodes(edges, **kwargs)
         )
+
+    async def set_node_prompt(self, node_id: str, prompt: str, **kwargs: Any) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.set_node_prompt(node_id, prompt, **kwargs)
+        )
+
+    async def set_node_content(
+        self, node_id: str, content: str, **kwargs: Any
+    ) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.set_node_content(node_id, content, **kwargs)
+        )
+
+    async def commit_stage(self) -> dict[str, Any]:
+        inner = getattr(self._inner, "commit_stage", None)
+        if inner is None:
+            return {"actions": []}
+        return await self._forward_actions(await inner())
+
+    async def rollback_stage(self) -> dict[str, Any]:
+        inner = getattr(self._inner, "rollback_stage", None)
+        if inner is None:
+            return {"cleared": False}
+        return await inner()
 
     async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
         return await self._forward_actions(
@@ -518,24 +545,14 @@ async def stream_run_events(
     assistant_save_after = 0
 
     if next_nodes:
-        # W5 修复（关键）：interrupt_before 的正确恢复方式是
-        #   aupdate_state({"messages": [HumanMessage(msg)], ...})  # 不传 as_node
-        #   然后 astream(None, config)
-        # 这样被中断的节点（如 await_confirm）会重新执行，并从 messages 读到用户新消息，
-        # 正确分类 confirm/revise/none。
-        #
-        # ❌ 不能用 Command(resume=...)：它只适用于节点内 interrupt() 动态中断；
-        #   对 interrupt_before，它不会把新消息注入 state，导致 await_confirm 读到旧 brief，
-        #   分类为 none，流程无法推进（重试后还会重跑 intake 误入 chat 分支）。
-        # ❌ 不能用 as_node=next_node：那会把 update 当作该节点的输出，从而跳过该节点
-        #   （await_confirm 的分类逻辑不执行），user_decision 不会被正确设置。
-        update_payload: dict[str, Any] = {"messages": [HumanMessage(content=req.message)]}
-        if req.user_decision:
-            update_payload["user_decision"] = req.user_decision
-        vals = getattr(snap, "values", None) or {}
-        assistant_save_after = len(vals.get("messages") or []) + 1
-        await graph.aupdate_state(config, update_payload)
-        input_state = None  # type: ignore[assignment]
+        # interrupt_before: inject user message, then continue with input=None.
+        # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
+        input_state, assistant_save_after = await prepare_interrupt_resume(
+            graph,
+            config,
+            req.message,
+            user_decision=req.user_decision,
+        )
     else:
         # 新对话或已完成：加载历史并创建 input_state (C1 decision)
         history = await _load_history(inner_nest)
@@ -582,6 +599,17 @@ async def stream_run_events(
                             )
                             if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
                                 await emit({"type": "text_delta", "data": {"text": str(content)}})
+            post = await graph.aget_state(config)
+            post_next = [str(n) for n in (getattr(post, "next", None) or [])]
+            post_vals = getattr(post, "values", None) or {}
+            if post_next:
+                phase = post_vals.get("phase")
+                await emit(
+                    interrupt_event_payload(
+                        next_nodes=post_next,
+                        phase=str(phase) if phase is not None else None,
+                    )
+                )
             await emit({"type": "done", "data": {}})
         except AgentToolError as exc:
             record_stream_error(exc.error["error_type"])

@@ -1,11 +1,9 @@
-"""Collect generation results: aggregate, emit summary, bridge to legacy state.
+"""Collect generation results: aggregate, emit summary, persist GenProgress (W15).
 
 Reads the W3 Send-API accumulators (``gen_completed_keys`` / ``gen_failed_keys``
 / ``gen_needs_user_keys`` / ``gen_fail_details``) and:
   - emits a task_summary + per-line progress to the chat/canvas stream,
   - persists progress to the GenProgress table (W15),
-  - bridges to the LEGACY ``gen_completed`` (node_id list) / ``gen_failed``
-    (list[dict]) fields that ``done.py`` still reads,
   - clears all W3 transient fields so the next generation run starts clean.
 """
 
@@ -18,6 +16,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
+from app.graph.gen_run_state import clear_tier_b_gen_run_state
 from app.graph.task_events import hint_for_error
 
 
@@ -52,10 +51,6 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
         skipped_n = 0  # dependency_skipped (upstream needs_user → downstream recoverable)
         success_n = 0
 
-        # Legacy fields consumed by done.py
-        gen_completed_legacy: list[str] = []
-        gen_failed_legacy: list[dict] = []
-
         for key in ordered_keys:
             item = by_key.get(key, {})
             node_id = str(item.get("node_id") or key)
@@ -65,14 +60,10 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
 
             if key in completed_keys:
                 success_n += 1
-                gen_completed_legacy.append(node_id)
                 line = format_gen_progress_line(title=title, status="completed")
                 progress_lines.append(line)
                 await _emit_text(nest, line)
             elif key in needs_user_keys:
-                gen_failed_legacy.append(
-                    {"key": key, "node_id": node_id, "title": title, "reason": reason or "needs_user"}
-                )
                 if reason == "dependency_skipped":
                     skipped_n += 1
                 else:
@@ -88,9 +79,6 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
                 if reason_lower != "fallback_pending":
                     await _emit_text(nest, line)
             elif key in failed_keys:
-                gen_failed_legacy.append(
-                    {"key": key, "node_id": node_id, "title": title, "reason": reason or "failed"}
-                )
                 summary_lines.append(
                     {"id": key, "status": "failed", "title": title, "hint": hint_for_error(reason)}
                 )
@@ -137,19 +125,8 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
         result: dict[str, Any] = {
             "phase": "orchestrate_gen",
             "gen_progress_id": gen_progress_id,
-            # Legacy bridges for done.py
-            "gen_completed": gen_completed_legacy,
-            "gen_failed": gen_failed_legacy,
             "messages": [AIMessage(content=msg)],
-            # Clean up all W3 transient fields (None resets the reducer-backed ones)
-            "gen_ordered_keys": None,
-            "gen_deps_of": None,
-            "gen_by_key": None,
-            "gen_completed_keys": None,
-            "gen_failed_keys": None,
-            "gen_needs_user_keys": None,
-            "gen_fail_details": None,
-            "gen_max_concurrency": None,
+            **clear_tier_b_gen_run_state(),
         }
         if partial:
             result["force_choice"] = "gen_partial"

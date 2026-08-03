@@ -27,20 +27,24 @@ from typing import Any, Callable
 
 from langgraph.types import Command, Send
 
+from app.config import settings
+
 
 def _detail(by_key: dict[str, dict], key: str, reason: str) -> dict[str, dict]:
     item = by_key.get(key, {})
     return {key: {"node_id": item.get("node_id"), "title": str(item.get("title") or key), "reason": reason}}
 
 
-def make_gen_scheduler_node() -> Callable:
+def make_gen_scheduler_node(*, max_concurrency: int | None = None) -> Callable:
     """Create the generation scheduler node (pure state computation, no nest)."""
+
+    cap = max(1, int(max_concurrency or settings.image_gen_concurrency))
 
     async def gen_scheduler(state: dict) -> Command:
         ordered_keys = list(state.get("gen_ordered_keys") or [])
         deps_of = state.get("gen_deps_of") or {}
         by_key = state.get("gen_by_key") or {}
-        max_c = max(1, int(state.get("gen_max_concurrency") or 3))
+        max_c = cap
 
         completed: set[str] = set(state.get("gen_completed_keys") or [])
         failed: set[str] = set(state.get("gen_failed_keys") or [])

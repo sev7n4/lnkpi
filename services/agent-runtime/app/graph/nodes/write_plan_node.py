@@ -5,6 +5,8 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.copy_sot import snapshot_copy_sot_fields
+from app.graph.canvas_stage import rollback_stage_safe, stage_failure_message
+from app.graph.hitl_resume import GATE_DECISION_CLEAR
 from app.graph.plan_clean import strip_plan_preamble
 
 
@@ -18,11 +20,20 @@ def make_write_plan_node(*, nest: Any) -> Callable:
                 "messages": [AIMessage(content="方案草稿缺失，请说明需求后重试。")],
             }
 
-        result = await nest.upsert_prompt_node(
-            prompt="营销方案",
-            content=draft,
-            node_id=state.get("plan_node_id"),
-        )
+        try:
+            result = await nest.upsert_prompt_node(
+                prompt="营销方案",
+                content=draft,
+                node_id=state.get("plan_node_id"),
+                stage=bool(state.get("plan_node_id")),
+            )
+        except Exception as exc:  # noqa: BLE001
+            await rollback_stage_safe(nest)
+            return {
+                "phase": "error",
+                "last_error": str(exc),
+                "messages": [AIMessage(content=stage_failure_message("方案写入", exc))],
+            }
         plan_node_id = result["nodeId"]
         confirmed = (
             "【已确认方案摘要】\n"
@@ -34,6 +45,7 @@ def make_write_plan_node(*, nest: Any) -> Callable:
             "plan_node_id": plan_node_id,
             "plan_draft": draft,
             "messages": [AIMessage(content=confirmed)],
+            **GATE_DECISION_CLEAR,
             **snapshot_copy_sot_fields({**state, "plan_draft": draft}),
         }
 

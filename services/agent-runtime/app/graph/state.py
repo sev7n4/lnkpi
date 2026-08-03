@@ -98,22 +98,12 @@ class AgentRuntimeState(TypedDict, total=False):
     plan_summary: str
     plan_draft: str | None
     plan_node_id: str | None
-    focus_node_ids: list[str]
     split_manifest: list[SplitManifestItem]
-    # W13: cycle detection at split; blocks await_topo when set
-    gen_order_error: str | None
     # P0 修复：node_revise 走 plan(modify) 后，LLM 产出的节点操作列表（rename/add/delete）；
     # split 在 modify 模式下按操作列表 upsert 画布节点。None 表示首轮 create 或 LLM 解析失败回退。
     node_operations: list[dict] | None
-    topology_mode: Literal["full", "trimmed"] | None
-    # W3/W15: gen_queue/gen_completed/gen_failed moved to DB (generation record queries)
-    # gen_queue: list[str]  # Removed by W3
-    # gen_completed: list[str]  # Removed by W3
-    # gen_failed: list[dict]  # Removed by W3
+    # W3/W15: gen_queue removed; gen_completed/gen_failed removed from checkpoint (P0-02)
     gen_progress_id: str | None  # W15: Pointer to GenProgress table
-    # Transient bridge: collect_gen → done within one run (not long-lived checkpoint state)
-    gen_completed: list[str] | None
-    gen_failed: list[dict] | None
     last_error: str | None
     copy_draft: str | None
     copy_node_id: str | None
@@ -142,12 +132,13 @@ class AgentRuntimeState(TypedDict, total=False):
     # W10: decide_plan_mode 计算，供 revise_manifest / compose_confirm / route_after_plan 使用
     is_node_revise: bool | None
 
-    # W3/W13: gen_ordered_keys precomputed at split (W13), deps/by_key filled at start_gen.
-    gen_ordered_keys: list[str] | None  # Topological order of generation keys
-    gen_deps_of: dict[str, list[str]] | None  # Dependency graph
-    gen_by_key: dict[str, dict] | None  # Manifest items by key
-    gen_completed_keys: Annotated[list[str] | None, reset_or_union]  # Completed keys
-    gen_failed_keys: Annotated[list[str] | None, reset_or_union]  # Failed keys
-    gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]  # Keys needing user
-    gen_fail_details: Annotated[dict[str, dict] | None, reset_or_merge]  # key→{node_id,title,reason}
-    gen_max_concurrency: int | None  # Concurrency cap for gen_scheduler
+    # --- Tier A: W13 presort (split → await_topo → start_gen) ---
+    gen_ordered_keys: list[str] | None
+
+    # --- Tier B: gen run transient (start_gen → collect_gen only; see gen_run_state.py) ---
+    gen_deps_of: dict[str, list[str]] | None
+    gen_by_key: dict[str, dict] | None
+    gen_completed_keys: Annotated[list[str] | None, reset_or_union]
+    gen_failed_keys: Annotated[list[str] | None, reset_or_union]
+    gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]
+    gen_fail_details: Annotated[dict[str, dict] | None, reset_or_merge]

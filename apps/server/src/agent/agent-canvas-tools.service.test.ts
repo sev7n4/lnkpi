@@ -726,6 +726,7 @@ describe('AgentCanvasToolsService', () => {
       canvas = {
         nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
         edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
       }
       sessionFindUnique.mockImplementation(async () => ({
         id: 's1',
@@ -737,6 +738,81 @@ describe('AgentCanvasToolsService', () => {
       await expect(
         svc.setNodePrompt({ sessionId: 's1', nodeId: 'img-1', prompt: 'p' }),
       ).rejects.toThrow(/staged actions pending/i)
+    })
+
+    it('upsertPromptNode with stage does not mutate canvasData', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'plan-1',
+            type: 'prompt',
+            position: { x: 0, y: 0 },
+            data: { prompt: 'old', content: 'old', title: 'old' },
+          },
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      }
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: null,
+        stagedAt: null,
+      }))
+      await svc.upsertPromptNode({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'plan-1',
+        prompt: '营销方案',
+        content: 'new draft',
+        stage: true,
+      })
+      expect(canvas.nodes[0].data.content).toBe('old')
+      expect(sessionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stagedActions: expect.stringContaining('plan-1'),
+          }),
+        }),
+      )
+    })
+
+    it('setNodeContent with stage does not mutate canvasData', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'copy-1',
+            type: 'text',
+            position: { x: 0, y: 0 },
+            data: { content: 'draft', title: '主文案' },
+          },
+        ],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      }
+      sessionFindUnique.mockImplementation(async () => ({
+        id: 's1',
+        userId: 'u1',
+        canvasData: JSON.stringify(canvas),
+        stagedActions: null,
+        stagedAt: null,
+      }))
+      await svc.setNodeContent({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'copy-1',
+        content: 'confirmed copy',
+        stage: true,
+      })
+      expect(canvas.nodes[0].data.content).toBe('draft')
+      expect(sessionUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stagedActions: expect.stringContaining('copy-1'),
+          }),
+        }),
+      )
     })
   })
 })

@@ -206,6 +206,7 @@ export class AgentCanvasToolsService {
     prompt: string
     content: string
     position?: { x: number; y: number }
+    stage?: boolean
   }): Promise<{ nodeId: string; actions: CanvasAction[] }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const existing = input.nodeId
@@ -222,7 +223,7 @@ export class AgentCanvasToolsService {
           },
         },
       ]
-      await this.persist(input.sessionId, actions)
+      await this.applyOrStage(input.sessionId, actions, input.stage)
       return { nodeId: existing.id, actions }
     }
 
@@ -245,7 +246,7 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
       return { nodeId, actions }
   }
 
@@ -435,6 +436,7 @@ export class AgentCanvasToolsService {
     userId: string
     nodeId: string
     content: string
+    stage?: boolean
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     if (!canvas.nodes.some((n) => n.id === input.nodeId)) {
@@ -449,7 +451,7 @@ export class AgentCanvasToolsService {
         },
       },
     ]
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { actions }
   }
 

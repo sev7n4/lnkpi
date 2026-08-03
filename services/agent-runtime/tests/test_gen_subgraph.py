@@ -16,6 +16,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.collect_gen import make_collect_gen_node
+from app.graph.nodes.done import make_done_node
 from app.graph.nodes.gen_node import make_gen_node
 from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 from app.graph.nodes.start_gen import make_start_gen_node
@@ -28,6 +29,7 @@ class _Nest:
     def __init__(self, *, fail_keys: set[str] | None = None) -> None:
         self.calls: list[str] = []
         self.fail_keys = fail_keys or set()
+        self.saved_lines: list[str] = []
 
     async def emit_task_update(self, **payload: Any) -> None:
         pass
@@ -48,19 +50,34 @@ class _Nest:
         return {"nodeId": node_id, "status": "completed"}
 
     async def save_gen_progress(self, **kwargs: Any) -> dict[str, Any]:
+        import json
+
+        raw = kwargs.get("lines") or "[]"
+        self.saved_lines = json.loads(raw) if isinstance(raw, str) else list(raw)
         return {"id": "gp-1"}
+
+    async def get_gen_progress(self, thread_id: str) -> dict[str, Any]:
+        import json
+
+        return {
+            "id": "gp-1",
+            "lines": json.dumps(self.saved_lines),
+            "summary": None,
+        }
 
 
 def _build_subgraph(nest: _Nest, *, max_concurrency: int = 3):
     g = StateGraph(AgentRuntimeState)
-    g.add_node("start_gen", make_start_gen_node(max_concurrency=max_concurrency))
-    g.add_node("gen_scheduler", make_gen_scheduler_node())
+    g.add_node("start_gen", make_start_gen_node())
+    g.add_node("gen_scheduler", make_gen_scheduler_node(max_concurrency=max_concurrency))
     g.add_node("gen_node", make_gen_node(nest=nest))
     g.add_node("collect_gen", make_collect_gen_node(nest=nest))
+    g.add_node("done", make_done_node(nest=nest))
     g.add_edge(START, "start_gen")
     g.add_edge("start_gen", "gen_scheduler")
     g.add_edge("gen_node", "gen_scheduler")
-    g.add_edge("collect_gen", END)
+    g.add_edge("collect_gen", "done")
+    g.add_edge("done", END)
     return g.compile(checkpointer=MemorySaver())
 
 
@@ -91,11 +108,12 @@ async def test_diamond_dependency_completes_without_deadlock():
         _img("c", ["a", "b"], "n-c"),
     ]
     result = await graph.ainvoke(
-        {"split_manifest": manifest},
+        {"split_manifest": manifest, "thread_id": "diamond", "session_id": "s-diamond"},
         {"configurable": {"thread_id": "diamond"}, "recursion_limit": 100},
     )
-    assert sorted(result["gen_completed"]) == ["n-a", "n-b", "n-c"]
-    assert result["gen_failed"] == []
+    assert result.get("gen_progress_id") == "gp-1"
+    assert len(nest.saved_lines) == 3
+    assert all("出图成功" in ln for ln in nest.saved_lines)
     # Each node called exactly once (no re-runs)
     assert sorted(nest.calls) == ["n-a", "n-b", "n-c"]
     assert len(nest.calls) == 3
@@ -111,10 +129,11 @@ async def test_concurrency_cap_runs_in_waves():
     graph = _build_subgraph(nest, max_concurrency=2)
     manifest = [_img(k, [], f"n-{k}") for k in ["a", "b", "c", "d"]]
     result = await graph.ainvoke(
-        {"split_manifest": manifest},
+        {"split_manifest": manifest, "thread_id": "conc", "session_id": "s-conc"},
         {"configurable": {"thread_id": "conc"}, "recursion_limit": 100},
     )
-    assert sorted(result["gen_completed"]) == ["n-a", "n-b", "n-c", "n-d"]
+    assert result.get("gen_progress_id") == "gp-1"
+    assert len(nest.saved_lines) == 4
     assert len(nest.calls) == 4
 
 
@@ -132,10 +151,12 @@ async def test_checkpoint_recovery_does_not_rerun_completed():
     g.add_node("gen_scheduler", make_gen_scheduler_node())
     g.add_node("gen_node", make_gen_node(nest=nest))
     g.add_node("collect_gen", make_collect_gen_node(nest=nest))
+    g.add_node("done", make_done_node(nest=nest))
     g.add_edge(START, "start_gen")
     g.add_edge("start_gen", "gen_scheduler")
     g.add_edge("gen_node", "gen_scheduler")
-    g.add_edge("collect_gen", END)
+    g.add_edge("collect_gen", "done")
+    g.add_edge("done", END)
     # interrupt BEFORE gen_node → halts right before dispatching white_bg
     graph = g.compile(
         checkpointer=MemorySaver(),
@@ -148,7 +169,10 @@ async def test_checkpoint_recovery_does_not_rerun_completed():
     ]
 
     # First ainvoke: start_gen → gen_scheduler → halts before gen_node(white_bg)
-    await graph.ainvoke({"split_manifest": manifest}, config)
+    await graph.ainvoke(
+        {"split_manifest": manifest, "thread_id": "ckpt", "session_id": "s-ckpt"},
+        config,
+    )
     assert nest.calls == []  # gen_node hasn't run yet (interrupted before it)
 
     # Resume: gen_node(white_bg) runs → gen_scheduler → halts before gen_node(hero_main)
@@ -157,6 +181,7 @@ async def test_checkpoint_recovery_does_not_rerun_completed():
 
     # Resume again: gen_node(hero_main) runs → gen_scheduler → collect_gen → END
     result = await graph.ainvoke(None, config)
-    assert sorted(result["gen_completed"]) == ["n-h", "n-w"]
+    assert result.get("gen_progress_id") == "gp-1"
+    assert len(nest.saved_lines) == 2
     # white_bg was NOT re-run during the resume (checkpoint recovery)
     assert nest.calls == ["n-w", "n-h"]

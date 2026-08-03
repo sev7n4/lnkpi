@@ -28,6 +28,11 @@ import {
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
+  chipSetFromInterrupt,
+  interruptPayloadFromThreadState,
+  type AgentInterruptPayload,
+} from '@/components/agent/agentInterruptGate'
+import {
   buildIdempotencyKey,
   createAgentThreadId,
   shouldPollRuntimeHealth,
@@ -99,6 +104,8 @@ function pollTasksFromProgress() {
 let streamAbortController: AbortController | null = null
 const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
+/** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
+const interruptGate = ref<AgentInterruptPayload | null>(null)
 
 const agentStream = useAgentStream({
   onStale: () => {
@@ -108,6 +115,8 @@ const agentStream = useAgentStream({
 
 /** 方案确认门 / 主文案确认门：侧栏快捷钮 */
 const chipSet = computed(() => {
+  const fromInterrupt = chipSetFromInterrupt(interruptGate.value)
+  if (fromInterrupt) return fromInterrupt
   if (agent.isStreaming) return null
   const last = [...agent.messages].reverse().find((m) => m.role === 'assistant')
   // 修复 P1-4：把"最近用户消息"传入 detectAgentChipSet，避免 modify 阶段误显示 plan 按钮
@@ -376,6 +385,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   // Track whether SSE stream ended normally (received [DONE])
   let streamEndedNormally = false
   recoveredPhaseHint.value = null
+  interruptGate.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -476,9 +486,15 @@ async function reconnectStream() {
       { headers: { Authorization: `Bearer ${token}` } },
     )
     const json = (await res.json()) as {
-      data?: { phase?: string | null; interrupted?: boolean; finished?: boolean } | null
+      data?: {
+        phase?: string | null
+        interrupted?: boolean
+        finished?: boolean
+        nextNodes?: string[]
+      } | null
     }
     const phase = json.data?.phase ?? null
+    interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     if (agent.isStreaming) {
       agent.finishStreaming()
@@ -619,6 +635,15 @@ function handleEvent(event: { type: string; data: unknown }) {
     }
     case 'ping':
       break
+    case 'interrupt': {
+      const data = event.data as AgentInterruptPayload
+      interruptGate.value = {
+        interrupted: data.interrupted ?? true,
+        phase: data.phase ?? null,
+        node: data.node ?? null,
+      }
+      break
+    }
     case 'force_choice': {
       const kind = (event.data as { kind?: string }).kind
       if (kind === 'plan_max_revise' || kind === 'copy_max_revise' || kind === 'gen_partial') {
