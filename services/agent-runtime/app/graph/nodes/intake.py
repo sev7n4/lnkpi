@@ -51,6 +51,11 @@ def make_intake_node(skills_dir: Path) -> Callable:
             flow_mode = "single_node"
             if not skill_id and "enterprise-marketing-campaign" in by_id:
                 skill_id = "enterprise-marketing-campaign"
+        elif is_atomic:
+            mode = "create"
+            proposed_brief = None
+            flow_mode = "atomic_create"
+            skill_id = None
         elif (
             atomic_regenerate_intent(text)
             and str(state.get("atomic_node_id") or "").strip()
@@ -59,11 +64,6 @@ def make_intake_node(skills_dir: Path) -> Callable:
             mode = "create"
             proposed_brief = None
             flow_mode = "atomic_regenerate"
-            skill_id = None
-        elif is_atomic:
-            mode = "create"
-            proposed_brief = None
-            flow_mode = "atomic_create"
             skill_id = None
         elif is_modify:
             mode = "modify"

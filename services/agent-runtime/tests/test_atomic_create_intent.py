@@ -74,6 +74,19 @@ async def test_intake_atomic_regenerate_when_prior_node(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_intake_atomic_create_wins_over_regenerate_with_prior_node(tmp_path: Path):
+    skills = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills)
+    out = await intake({
+        "messages": [HumanMessage(content="帮我生成一个模特人物图")],
+        "atomic_node_id": "node-abc",
+        "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特人物图"},
+    })
+    assert out["flow_mode"] == "atomic_create"
+    assert out["flow_mode"] != "atomic_regenerate"
+
+
+@pytest.mark.asyncio
 async def test_intake_regenerate_without_prior_node_falls_through(tmp_path: Path):
     skills = Path(__file__).resolve().parents[1] / "skills"
     intake = make_intake_node(skills)
