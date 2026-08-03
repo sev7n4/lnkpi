@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
-from app.graph.atomic_intent import build_atomic_spec
+from app.graph.atomic_parse_util import build_atomic_spec_enriched
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -27,7 +27,7 @@ def make_parse_atomic_intent_node() -> Callable:
                 "last_error": "empty utterance",
                 "messages": [AIMessage(content="请描述要生成的内容（如图、文案、视频等）。")],
             }
-        spec = build_atomic_spec(text)
+        spec = build_atomic_spec_enriched(text)
         target = spec["target_type"]
         gate = "需确认" if spec["confirm_gate"] else "直达"
         return {

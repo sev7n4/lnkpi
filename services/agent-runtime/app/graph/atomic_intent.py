@@ -7,7 +7,12 @@ from typing import Any, Literal
 
 import yaml
 
-from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent
+from app.graph.intent import (
+    CONFIRM_GEN_HINTS,
+    marketing_intent,
+    modify_intent,
+    single_node_gen_intent,
+)
 
 _TAXONOMY_PATH = (
     Path(__file__).resolve().parents[2] / "skills" / "atomic-create" / "intent-taxonomy.yaml"
@@ -59,7 +64,8 @@ PROMPT_EXPLICIT_KEYWORDS = tuple(_TAXONOMY.get("prompt_explicit_keywords") or (
 
 VIDEO_KEYWORDS = ("视频", "短片", "短视频", "15s", "15秒", "30s", "30秒")
 AUDIO_KEYWORDS = ("配音", "旁白", "音频", "语音")
-IMAGE_KEYWORDS = ("图", "海报", "banner", "视觉", "主图")
+# Avoid bare 「图」— it matches campaign phrases like 「确认出图」.
+IMAGE_KEYWORDS = ("海报", "banner", "视觉", "主图", "白底", "场景图", "产品图", "人物图", "风图")
 
 ATOMIC_CONFIRM_KEYWORDS = tuple(_TAXONOMY.get("atomic_confirm_keywords") or (
     "确认生成",
@@ -93,6 +99,8 @@ def atomic_create_intent(text: str) -> bool:
     """True when user wants a single-shot create-and-generate flow."""
     lowered = (text or "").strip().lower()
     if not lowered:
+        return False
+    if any(h in text for h in CONFIRM_GEN_HINTS):
         return False
     if _is_campaign_override(text):
         return False

@@ -128,6 +128,7 @@ const chipSet = computed(() => {
 const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
+const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -919,6 +920,24 @@ defineExpose({ openPanel, reconcileFromNodes })
                 @click="sendPreset('3')"
               >
                 自己说明修改
+              </button>
+            </div>
+            <div v-else-if="awaitingAtomicConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认生成')"
+              >
+                确认生成
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('取消')"
+              >
+                取消
               </button>
             </div>
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">

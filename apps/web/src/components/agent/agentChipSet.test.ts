@@ -41,6 +41,12 @@ describe('detectAgentChipSet', () => {
     ).toBe('topo')
   })
 
+  it('detects atomic confirm gate', () => {
+    expect(
+      detectAgentChipSet('视频/音频生成将消耗积分。回复「确认生成」开始，或「取消」放弃。'),
+    ).toBe('atomic')
+  })
+
   it('detects topo gate and prefers topo over bare plan words', () => {
     expect(
       detectAgentChipSet(

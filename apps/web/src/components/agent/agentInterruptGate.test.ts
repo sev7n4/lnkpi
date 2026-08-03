@@ -15,6 +15,10 @@ describe('chipSetFromInterrupt', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_copy_confirm' })).toBe('copy')
   })
 
+  it('maps await_atomic_confirm to atomic chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_atomic_confirm' })).toBe('atomic')
+  })
+
   it('maps await_topo node to topo chips', () => {
     expect(chipSetFromInterrupt({ interrupted: true, node: 'await_topo' })).toBe('topo')
   })

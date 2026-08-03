@@ -12,6 +12,7 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_confirm: 'plan',
   await_copy_confirm: 'copy',
   await_topo: 'topo',
+  await_atomic_confirm: 'atomic',
 }
 
 /** Map Runtime SSE ``interrupt`` / thread-state to confirm chip row. */
