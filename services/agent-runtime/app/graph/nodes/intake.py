@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.graph.intent import marketing_intent, modify_intent  # re-export for tests
+from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent  # re-export for tests
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
@@ -35,9 +35,19 @@ def make_intake_node(skills_dir: Path) -> Callable:
 
         existing_brief = state.get("user_brief")
         existing_plan = state.get("plan_draft")
-        is_modify = bool(existing_brief and existing_plan and modify_intent(text))
+        focus_node_id = str(state.get("focus_node_id") or "").strip() or None
+        is_single_node = bool(
+            focus_node_id and single_node_gen_intent(text) and not modify_intent(text)
+        )
+        is_modify = bool(existing_brief and existing_plan and modify_intent(text) and not is_single_node)
 
-        if is_modify:
+        if is_single_node:
+            mode = "create"
+            proposed_brief = None
+            flow_mode = "single_node"
+            if not skill_id and "enterprise-marketing-campaign" in by_id:
+                skill_id = "enterprise-marketing-campaign"
+        elif is_modify:
             mode = "modify"
             proposed_brief = None  # reducer keeps existing brief
         elif marketing_intent(text):
@@ -49,6 +59,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
         else:
             mode = "create"
             proposed_brief = None
+            flow_mode = "campaign"
 
         out: dict[str, Any] = {
             "phase": "intake",
@@ -57,7 +68,10 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "split_manifest": state.get("split_manifest") or [],
             "last_error": state.get("last_error"),
             "mode": mode,
+            "flow_mode": flow_mode if is_single_node else "campaign",
         }
+        if focus_node_id:
+            out["focus_node_id"] = focus_node_id
         if proposed_brief is not None:
             out["user_brief"] = proposed_brief
         return out

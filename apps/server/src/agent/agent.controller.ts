@@ -42,6 +42,11 @@ class ConversationDto {
   @IsString()
   skillId?: string
 
+  /** W28: 单节点快速生成目标画布 node id */
+  @IsOptional()
+  @IsString()
+  focusNodeId?: string
+
   /** 规划阶段 LLM 模型（含 channel 编码），Nest 解析凭证后转发 */
   @IsOptional()
   @IsString()
@@ -150,6 +155,7 @@ export class AgentController {
         idempotencyKey,
         dto.skillId,
         dto.model,
+        dto.focusNodeId,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }

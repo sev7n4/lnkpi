@@ -190,6 +190,7 @@ class RunRequest(BaseModel):
     llm_model: str | None = None
     llm_api_key: str | None = None
     llm_base_url: str | None = None
+    focus_node_id: str | None = None  # W28: single-node quick gen target
 
 
 class NestEventProxy:
@@ -564,6 +565,7 @@ async def stream_run_events(
             "user_id": req.user_id,
             "thread_id": thread_id,
             "requested_skill_id": req.skill_id,
+            "focus_node_id": req.focus_node_id,
         }
 
     async def run_graph() -> None:

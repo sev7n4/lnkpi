@@ -10,6 +10,7 @@ export interface RuntimeRunInput {
   userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise'
   /** Runtime skill id after UI→runtime mapping */
   skillId?: string
+  focusNodeId?: string
   llmModel?: string
   llmApiKey?: string
   llmBaseUrl?: string
@@ -97,6 +98,7 @@ export class AgentRuntimeClient {
         llm_model: input.llmModel,
         llm_api_key: input.llmApiKey,
         llm_base_url: input.llmBaseUrl,
+        focus_node_id: input.focusNodeId,
       }),
     })
 

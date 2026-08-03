@@ -94,6 +94,8 @@ class AgentRuntimeState(TypedDict, total=False):
     session_id: str
     user_id: str
     prompt_version: str | None  # W19: active skill prompt template version
+    flow_mode: Literal["campaign", "single_node"] | None  # W28/W29
+    focus_node_id: str | None  # W28: canvas node for single-node gen
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str

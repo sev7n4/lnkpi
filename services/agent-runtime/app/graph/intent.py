@@ -163,6 +163,17 @@ def modify_intent(text: str) -> bool:
     return any(h in lowered for h in MODIFY_HINTS)
 
 
+def single_node_gen_intent(text: str) -> bool:
+    """Quick-gen one canvas node — must pair with focus_node_id in intake."""
+    lowered = (text or "").strip().lower()
+    if not lowered:
+        return False
+    if any(h in lowered for h in SINGLE_NODE_GEN_HINTS):
+        return True
+    # Short regen commands when user selected a node
+    return lowered in ("快速生成", "重生成", "再生成", "生成")
+
+
 TopoDecision = Literal["none", "confirm_gen", "topo_revise", "node_revise"]
 
 
@@ -230,6 +241,21 @@ COPY_CONFIRM_HINTS = (
     "用这个",
     "就这个",
     "写入",
+)
+
+# W28: single-node quick generation (requires focus_node_id in state)
+SINGLE_NODE_GEN_HINTS = (
+    "只生成",
+    "仅生成",
+    "快速生成",
+    "只出图",
+    "只出这张",
+    "只生成这张",
+    "重新生成这张",
+    "单节点",
+    "这张主图",
+    "生成这张",
+    "重跑这张",
 )
 
 CopyDecision = Literal["none", "confirm", "revise"]

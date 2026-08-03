@@ -2727,6 +2727,7 @@ onMounted(() => {
         ref="agentRailRef"
         :session-id="sessionId"
         :read-only="agentReadOnly"
+        :selected-node-id="selectedNodeId"
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
