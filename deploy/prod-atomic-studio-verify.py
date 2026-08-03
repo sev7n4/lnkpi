@@ -19,6 +19,7 @@ import os
 import sys
 import time
 import uuid
+from http.client import IncompleteRead
 from typing import Any
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -77,33 +78,42 @@ def sse_collect(t: str, sid: str, msg: str, tid: str, *, timeout: float = 300) -
     exit_reason = "timeout"
     with urlopen(r, timeout=timeout) as resp:
         buf = ""
-        while time.time() < end:
-            chunk = resp.read(4096)
-            if not chunk:
-                exit_reason = "eof"
-                break
-            buf += chunk.decode(errors="replace")
-            while "\n\n" in buf:
-                block, buf = buf.split("\n\n", 1)
-                for line in block.splitlines():
-                    if not line.startswith("data:"):
-                        continue
-                    pl = line[5:].strip()
-                    if pl == "[DONE]":
-                        return events, "".join(parts), types, "done_marker"
-                    try:
-                        ev = json.loads(pl)
-                    except json.JSONDecodeError:
-                        continue
-                    events.append(ev)
-                    et = str(ev.get("type") or "")
-                    types.add(et)
-                    if et == "text_delta":
-                        parts.append(str((ev.get("data") or {}).get("text") or ""))
-                    if et == "done":
-                        return events, "".join(parts), types, "done"
-                    if et == "error":
-                        return events, "".join(parts), types, "error"
+        try:
+            while time.time() < end:
+                try:
+                    chunk = resp.read(4096)
+                except IncompleteRead as exc:
+                    if exc.partial:
+                        buf += exc.partial.decode(errors="replace")
+                    exit_reason = "eof"
+                    break
+                if not chunk:
+                    exit_reason = "eof"
+                    break
+                buf += chunk.decode(errors="replace")
+                while "\n\n" in buf:
+                    block, buf = buf.split("\n\n", 1)
+                    for line in block.splitlines():
+                        if not line.startswith("data:"):
+                            continue
+                        pl = line[5:].strip()
+                        if pl == "[DONE]":
+                            return events, "".join(parts), types, "done_marker"
+                        try:
+                            ev = json.loads(pl)
+                        except json.JSONDecodeError:
+                            continue
+                        events.append(ev)
+                        et = str(ev.get("type") or "")
+                        types.add(et)
+                        if et == "text_delta":
+                            parts.append(str((ev.get("data") or {}).get("text") or ""))
+                        if et == "done":
+                            return events, "".join(parts), types, "done"
+                        if et == "error":
+                            return events, "".join(parts), types, "error"
+        except IncompleteRead:
+            exit_reason = "eof"
     return events, "".join(parts), types, exit_reason
 
 
