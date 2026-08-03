@@ -7,12 +7,16 @@ from pathlib import Path
 import pytest
 import yaml
 
+from langchain_core.messages import HumanMessage
+
 from app.graph.atomic_intent import (
     atomic_create_intent,
+    atomic_regenerate_intent,
     build_atomic_spec,
     parse_atomic_target_type,
     resolve_intake_route,
 )
+from app.graph.nodes.intake import make_intake_node
 
 EVAL_PATH = Path(__file__).resolve().parents[1] / "skills" / "atomic-create" / "eval-intent-set.yaml"
 
@@ -54,3 +58,26 @@ def test_d1_storyboard_is_text_not_prompt():
 def test_atomic_create_intent_negative_campaign():
     assert not atomic_create_intent("帮我做一套天猫蓝牙耳机详情页营销方案")
     assert atomic_create_intent("帮我生成一个模特人物图")
+
+
+@pytest.mark.asyncio
+async def test_intake_atomic_regenerate_when_prior_node(tmp_path: Path):
+    skills = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills)
+    out = await intake({
+        "messages": [HumanMessage(content="再试一次")],
+        "atomic_node_id": "node-abc",
+        "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特人物图"},
+    })
+    assert out["flow_mode"] == "atomic_regenerate"
+    assert atomic_regenerate_intent("再试一次")
+
+
+@pytest.mark.asyncio
+async def test_intake_regenerate_without_prior_node_falls_through(tmp_path: Path):
+    skills = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills)
+    out = await intake({
+        "messages": [HumanMessage(content="再试一次")],
+    })
+    assert out.get("flow_mode") != "atomic_regenerate"
