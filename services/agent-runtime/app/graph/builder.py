@@ -21,6 +21,8 @@ from app.graph.subgraphs.topo_gate import register_topo_gate
 
 
 def route_after_intake(state: AgentRuntimeState) -> str:
+    if state.get("flow_mode") == "atomic_regenerate":
+        return "prepare_atomic_regenerate"
     if state.get("flow_mode") == "single_node":
         return "prepare_single_gen"
     if state.get("flow_mode") == "atomic_create":
@@ -66,6 +68,7 @@ def build_agent_graph(
         "intake",
         route_after_intake,
         {
+            "prepare_atomic_regenerate": "prepare_atomic_regenerate",
             "prepare_single_gen": "prepare_single_gen",
             "parse_atomic_intent": "parse_atomic_intent",
             "decide_plan_mode": "decide_plan_mode",
