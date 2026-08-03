@@ -183,6 +183,26 @@ export class AgentService {
     return client.getThreadState(threadId.trim())
   }
 
+  /** W27: Graph control-flow phase timeline (checkpoint history). */
+  async getThreadTimeline(threadId: string): Promise<{
+    threadId: string
+    entries: Array<{
+      step: number | null
+      source: string | null
+      phase: string | null
+      nextNodes: string[]
+      skillId: string | null
+      promptVersion: string | null
+      interrupted: boolean
+    }>
+    checkpointCount: number
+  } | null> {
+    const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
+    if (!runtimeUrl || !threadId.trim()) return null
+    const client = this.createRuntimeClient(runtimeUrl)
+    return client.getThreadTimeline(threadId.trim())
+  }
+
   /** Overridable in unit tests */
   createRuntimeClient(baseUrl: string): AgentRuntimeClient {
     return new AgentRuntimeClient(

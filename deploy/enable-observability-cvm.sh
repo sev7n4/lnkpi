@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Manual W23 observability enable (legacy). Production deploy uses enable-agent-runtime.sh.
 # Enable W23 observability on CVM: reuse pintuotuo Tempo + rebuild agent-runtime.
 set -euo pipefail
 

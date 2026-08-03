@@ -23,6 +23,22 @@ export interface RuntimeThreadState {
   finished: boolean
 }
 
+export interface RuntimeThreadTimelineEntry {
+  step: number | null
+  source: string | null
+  phase: string | null
+  nextNodes: string[]
+  skillId: string | null
+  promptVersion: string | null
+  interrupted: boolean
+}
+
+export interface RuntimeThreadTimeline {
+  threadId: string
+  entries: RuntimeThreadTimelineEntry[]
+  checkpointCount: number
+}
+
 /**
  * HTTP client for Python agent-runtime (`GET /health`, `POST /v1/runs` NDJSON).
  * Nest sends `x-lnkpi-service-token` (AGENT_RUNTIME_SERVICE_TOKEN) on /v1/runs;
@@ -65,6 +81,27 @@ export class AgentRuntimeClient {
       })
       if (!res.ok) return null
       return (await res.json()) as RuntimeThreadState
+    } catch {
+      return null
+    }
+  }
+
+  async getThreadTimeline(threadId: string): Promise<RuntimeThreadTimeline | null> {
+    const url = `${this.baseUrl.replace(/\/$/, '')}/v1/threads/${encodeURIComponent(threadId)}/timeline`
+    const headers: Record<string, string> = {}
+    const token =
+      this.serviceToken?.trim() || process.env.AGENT_RUNTIME_SERVICE_TOKEN?.trim()
+    if (token) {
+      headers['x-lnkpi-service-token'] = token
+    }
+    try {
+      const res = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!res.ok) return null
+      return (await res.json()) as RuntimeThreadTimeline
     } catch {
       return null
     }

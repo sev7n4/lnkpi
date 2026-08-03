@@ -1,0 +1,49 @@
+# Prometheus alerting rules for lnkpi agent-runtime (W25).
+# Validate: promtool check rules agent-runtime-alerts.yml
+
+groups:
+  - name: lnkpi_agent_runtime
+    rules:
+      - alert: AgentStreamErrorsElevated
+        expr: increase(agent_stream_errors_total[5m]) > 3
+        for: 2m
+        labels:
+          severity: warning
+          service: lnkpi-agent-runtime
+        annotations:
+          summary: Agent stream errors elevated
+          description: >-
+            agent_stream_errors_total increased by more than 3 in 5m
+            ({{ $labels.error_type }}).
+
+      - alert: AgentToolCallErrorsElevated
+        expr: increase(agent_tool_calls_total{outcome="error"}[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: lnkpi-agent-runtime
+        annotations:
+          summary: Nest tool call errors elevated
+          description: >-
+            agent_tool_calls_total{outcome="error"} increased by more than 10 in 5m
+            (tool={{ $labels.tool_name }}).
+
+      - alert: AgentThreadsActiveHigh
+        expr: agent_threads_active > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: lnkpi-agent-runtime
+        annotations:
+          summary: High concurrent agent threads
+          description: agent_threads_active={{ $value }} for 5m — check stuck runs or load.
+
+      - alert: AgentRuntimeMetricsMissing
+        expr: absent(agent_threads_total) or absent(up{job="lnkpi-agent-runtime"})
+        for: 10m
+        labels:
+          severity: critical
+          service: lnkpi-agent-runtime
+        annotations:
+          summary: Agent runtime metrics scrape missing
+          description: Prometheus cannot scrape lnkpi-agent-runtime /metrics for 10m.

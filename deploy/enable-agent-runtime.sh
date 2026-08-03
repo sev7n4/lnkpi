@@ -130,6 +130,22 @@ fi
 [[ -n "$(get_env LNKPI_IMAGE_GEN_CONCURRENCY)" ]] || upsert_env LNKPI_IMAGE_GEN_CONCURRENCY "3"
 [[ -n "$(get_env LNKPI_IMAGE_GEN_TIMEOUT_SEC)" ]] || upsert_env LNKPI_IMAGE_GEN_TIMEOUT_SEC "180"
 
+# W23: OTLP tracing — default on in production (reuse pintuotuo Tempo on lnkpi-net)
+ENABLE_OBSERVABILITY="${ENABLE_OBSERVABILITY:-true}"
+if [[ "$ENABLE_OBSERVABILITY" == "true" ]]; then
+  TEMPO_CONTAINER="${TEMPO_CONTAINER:-pintuotuo-tempo}"
+  TEMPO_NETWORK="${TEMPO_NETWORK:-lnkpi-net}"
+  OTEL_ENDPOINT="${OTEL_ENDPOINT:-http://pintuotuo-tempo:4318/v1/traces}"
+  log "=== Enable OTLP tracing (W23) ==="
+  docker network connect "$TEMPO_NETWORK" "$TEMPO_CONTAINER" 2>/dev/null || log "tempo already on ${TEMPO_NETWORK} (ok)"
+  upsert_env LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT "$OTEL_ENDPOINT"
+  upsert_env LNKPI_LANGSMITH_OTEL_ENABLED "false"
+  upsert_env LNKPI_OTEL_SERVICE_NAME "lnkpi-agent-runtime"
+  log "OTEL endpoint -> ${OTEL_ENDPOINT}"
+else
+  log "ENABLE_OBSERVABILITY=false — OTLP tracing skipped"
+fi
+
 # Keep current api image tag on recreate
 if docker inspect lnkpi-api --format '{{.Config.Image}}' >/dev/null 2>&1; then
   export LNKPI_API_IMAGE
@@ -202,6 +218,17 @@ if echo "$MSG" | grep -q 'not configured'; then
 fi
 if ! echo "$MSG" | grep -qi 'Invalid service token\|Unauthorized'; then
   log "WARN: unexpected internal response (continuing)"
+fi
+
+if [[ "$ENABLE_OBSERVABILITY" == "true" ]]; then
+  log "=== Verify tracing module (W23) ==="
+  docker exec lnkpi-agent-runtime python -c "
+from app.tracing import is_tracing_enabled, uses_langsmith_otel
+from app.config import settings
+print('endpoint=', settings.otel_exporter_otlp_endpoint)
+print('tracing=', is_tracing_enabled())
+print('langsmith_otel=', uses_langsmith_otel())
+" || log "WARN: tracing verify failed (Tempo may be unreachable)"
 fi
 
 # Confirm no public 8000 binding on host (best-effort)
