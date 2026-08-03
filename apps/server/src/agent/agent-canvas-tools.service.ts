@@ -355,6 +355,7 @@ export class AgentCanvasToolsService {
   async removeNodes(input: {
     sessionId: string
     nodeIds: string[]
+    stage?: boolean
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadSession(input.sessionId)
     const actions: CanvasAction[] = []
@@ -376,7 +377,7 @@ export class AgentCanvasToolsService {
       })
     }
 
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { actions }
   }
 
@@ -386,6 +387,7 @@ export class AgentCanvasToolsService {
   async removeEdges(input: {
     sessionId: string
     edgeIds: string[]
+    stage?: boolean
   }): Promise<{ actions: CanvasAction[] }> {
     const { canvas } = await this.loadSession(input.sessionId)
     const actions: CanvasAction[] = []
@@ -401,7 +403,7 @@ export class AgentCanvasToolsService {
       })
     }
 
-    await this.persist(input.sessionId, actions)
+    await this.applyOrStage(input.sessionId, actions, input.stage)
     return { actions }
   }
 

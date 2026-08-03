@@ -233,6 +233,20 @@ class NestEventProxy:
             await self._inner.connect_nodes(edges, **kwargs)
         )
 
+    async def remove_nodes(
+        self, node_ids: list[str], **kwargs: Any
+    ) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.remove_nodes(node_ids, **kwargs)
+        )
+
+    async def remove_edges(
+        self, edge_ids: list[str], **kwargs: Any
+    ) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.remove_edges(edge_ids, **kwargs)
+        )
+
     async def set_node_prompt(self, node_id: str, prompt: str, **kwargs: Any) -> dict[str, Any]:
         return await self._forward_actions(
             await self._inner.set_node_prompt(node_id, prompt, **kwargs)

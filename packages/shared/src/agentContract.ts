@@ -361,6 +361,7 @@ export type SaveAgentMessageResponse = z.infer<typeof SaveAgentMessageResponseSc
 export const RemoveNodesRequestSchema = z.object({
   sessionId: z.string(),
   nodeIds: z.array(z.string()),
+  stage: z.boolean().optional(),
 })
 
 export type RemoveNodesRequest = z.infer<typeof RemoveNodesRequestSchema>
@@ -378,6 +379,7 @@ export type RemoveNodesResponse = z.infer<typeof RemoveNodesResponseSchema>
 export const RemoveEdgesRequestSchema = z.object({
   sessionId: z.string(),
   edgeIds: z.array(z.string()),
+  stage: z.boolean().optional(),
 })
 
 export type RemoveEdgesRequest = z.infer<typeof RemoveEdgesRequestSchema>
