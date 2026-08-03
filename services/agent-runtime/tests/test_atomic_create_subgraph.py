@@ -30,6 +30,10 @@ class FakeNest:
         self.calls.append(("run_video_generation", node_id))
         return {"status": "completed", "url": "https://cdn/v.mp4"}
 
+    async def run_text_generation(self, node_id: str) -> dict[str, Any]:
+        self.calls.append(("run_text_generation", node_id))
+        return {"status": "completed", "generationRecordId": "rec-text-1"}
+
 
 @pytest.mark.asyncio
 async def test_parse_atomic_intent_image():
@@ -58,6 +62,24 @@ async def test_create_atomic_node_then_image_gen():
     done = await run({**created, "atomic_spec": spec})
     assert done["phase"] == "done"
     assert any(c[0] == "run_image_generation" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_text_atomic_gen_direct():
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+    spec = {
+        "target_type": "text",
+        "prompt": "广告词，强调降噪",
+        "title": "广告词",
+        "confirm_gate": False,
+    }
+    created = await create({"atomic_spec": spec})
+    assert route_after_atomic_create({**created, "atomic_spec": spec}) == "run_atomic_gen"
+    run = make_run_atomic_gen_node(nest=nest)
+    done = await run({**created, "atomic_spec": spec})
+    assert done["phase"] == "done"
+    assert any(c[0] == "run_text_generation" for c in nest.calls)
 
 
 @pytest.mark.asyncio

@@ -277,20 +277,7 @@ class NestEventProxy:
         )
 
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
-        await self._emit(
-            {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
-        )
-        result = await self._forward_actions(
-            await self._inner.run_image_generation(node_id)
-        )
-        status = str(result.get("status") or "completed")
-        payload: dict[str, Any] = {"nodeId": node_id, "status": status}
-        if result.get("url"):
-            payload["url"] = result["url"]
-        if result.get("generationRecordId"):
-            payload["generationRecordId"] = result["generationRecordId"]
-        await self._emit({"type": "node_status", "data": payload})
-        return result
+        return await self._run_studio_generation(node_id, "run_image_generation")
 
     async def start_image_generation(self, node_id: str) -> dict[str, Any]:
         await self._emit(
@@ -314,17 +301,31 @@ class NestEventProxy:
         return result
 
     async def run_video_generation(self, node_id: str) -> dict[str, Any]:
+        return await self._run_studio_generation(node_id, "run_video_generation")
+
+    async def run_text_generation(self, node_id: str) -> dict[str, Any]:
+        return await self._run_studio_generation(node_id, "run_text_generation")
+
+    async def run_prompt_generation(self, node_id: str) -> dict[str, Any]:
+        return await self._run_studio_generation(node_id, "run_prompt_generation")
+
+    async def run_audio_generation(self, node_id: str) -> dict[str, Any]:
+        return await self._run_studio_generation(node_id, "run_audio_generation")
+
+    async def _run_studio_generation(self, node_id: str, method: str) -> dict[str, Any]:
         await self._emit(
             {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
         )
-        inner = getattr(self._inner, "run_video_generation", None)
+        inner = getattr(self._inner, method, None)
         if inner is None:
-            raise RuntimeError("video_not_supported")
+            raise RuntimeError(f"{method}_not_supported")
         result = await self._forward_actions(await inner(node_id))
         status = str(result.get("status") or "completed")
         payload: dict[str, Any] = {"nodeId": node_id, "status": status}
         if result.get("url"):
             payload["url"] = result["url"]
+        if result.get("generationRecordId"):
+            payload["generationRecordId"] = result["generationRecordId"]
         await self._emit({"type": "node_status", "data": payload})
         return result
 
