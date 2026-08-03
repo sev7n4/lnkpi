@@ -52,6 +52,33 @@ def test_trace_node_skipped_when_langsmith_otel(monkeypatch: pytest.MonkeyPatch)
     assert len(exporter.get_finished_spans()) == 0
 
 
+def test_normalize_otlp_endpoint():
+    assert tracing._normalize_otlp_endpoint("http://tempo:4318") == "http://tempo:4318/v1/traces"
+    assert (
+        tracing._normalize_otlp_endpoint("http://tempo:4318/v1/traces")
+        == "http://tempo:4318/v1/traces"
+    )
+    assert tracing._normalize_otlp_endpoint("  ") == ""
+
+
+def test_langsmith_configure_false_falls_back_to_manual_otlp(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(settings, "otel_exporter_otlp_endpoint", "http://127.0.0.1:4318")
+    monkeypatch.setattr(settings, "langsmith_otel_enabled", True)
+
+    def _fake_configure(*_args, **_kwargs):
+        return False
+
+    monkeypatch.setattr(
+        "langsmith.integrations.otel.configure",
+        _fake_configure,
+        raising=False,
+    )
+
+    tracing.setup_tracing(force=True)
+    assert tracing.uses_langsmith_otel() is False
+    assert tracing.is_tracing_enabled() is True
+
+
 def test_agent_run_span(monkeypatch: pytest.MonkeyPatch):
     exporter = InMemorySpanExporter()
     monkeypatch.setattr(settings, "otel_exporter_otlp_endpoint", "http://127.0.0.1:4318")

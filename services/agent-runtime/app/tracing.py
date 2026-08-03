@@ -31,8 +31,17 @@ def uses_langsmith_otel() -> bool:
     return _langsmith_otel_active
 
 
+def _normalize_otlp_endpoint(endpoint: str) -> str:
+    ep = endpoint.strip().rstrip("/")
+    if not ep:
+        return ep
+    if ep.endswith("/v1/traces"):
+        return ep
+    return f"{ep}/v1/traces"
+
+
 def _apply_tracing_env() -> None:
-    endpoint = (settings.otel_exporter_otlp_endpoint or "").strip()
+    endpoint = _normalize_otlp_endpoint(settings.otel_exporter_otlp_endpoint or "")
     if endpoint:
         os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = endpoint
     os.environ["OTEL_SERVICE_NAME"] = settings.otel_service_name
@@ -68,17 +77,24 @@ def setup_tracing(*, force: bool = False) -> None:
         try:
             from langsmith.integrations.otel import configure as configure_langsmith_otel
 
-            configure_langsmith_otel(project_name=settings.langsmith_project or "lnkpi-agent")
-            _langsmith_otel_active = True
-            _tracer = trace.get_tracer(settings.otel_service_name)
-            _initialized = True
-            logger.info(
-                "W23 LangSmith OTel enabled endpoint=%s project=%s otel_only=%s",
-                settings.otel_exporter_otlp_endpoint or "(langsmith cloud)",
-                settings.langsmith_project,
-                os.environ.get("LANGSMITH_OTEL_ONLY", "false"),
+            configured = configure_langsmith_otel(
+                project_name=settings.langsmith_project or "lnkpi-agent"
             )
-            return
+            if configured:
+                _langsmith_otel_active = True
+                _tracer = trace.get_tracer(settings.otel_service_name)
+                _initialized = True
+                logger.info(
+                    "W23 LangSmith OTel enabled endpoint=%s project=%s otel_only=%s",
+                    os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT") or "(langsmith cloud)",
+                    settings.langsmith_project,
+                    os.environ.get("LANGSMITH_OTEL_ONLY", "false"),
+                )
+                return
+            logger.warning(
+                "LangSmith OTel configure returned false (missing API key?); "
+                "falling back to manual OTLP exporter"
+            )
         except ImportError:
             logger.warning("langsmith[otel] not installed; falling back to manual OTLP exporter")
         except Exception as exc:  # noqa: BLE001
@@ -90,7 +106,7 @@ def setup_tracing(*, force: bool = False) -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, SimpleSpanProcessor
 
-    endpoint = (settings.otel_exporter_otlp_endpoint or "").strip()
+    endpoint = _normalize_otlp_endpoint(settings.otel_exporter_otlp_endpoint or "")
     if not endpoint:
         _tracer = trace.get_tracer(settings.otel_service_name)
         _initialized = True
