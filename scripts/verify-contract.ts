@@ -23,6 +23,8 @@ import {
   UpsertPromptNodeResponseSchema,
   GetNodeRequestSchema,
   GetNodeResponseSchema,
+  GetCanvasSummaryRequestSchema,
+  GetCanvasSummaryResponseSchema,
   AddNodesBatchRequestSchema,
   AddNodesBatchResponseSchema,
   ConnectNodesRequestSchema,
@@ -82,6 +84,10 @@ const CONTRACTS: Record<string, { request: ContractMapping; response: ContractMa
   get_node: {
     request: { tsSchema: GetNodeRequestSchema, pyModel: 'GetNodeRequest' },
     response: { tsSchema: GetNodeResponseSchema, pyModel: 'GetNodeResponse' },
+  },
+  get_canvas_summary: {
+    request: { tsSchema: GetCanvasSummaryRequestSchema, pyModel: 'GetCanvasSummaryRequest' },
+    response: { tsSchema: GetCanvasSummaryResponseSchema, pyModel: 'GetCanvasSummaryResponse' },
   },
   add_nodes_batch: {
     request: { tsSchema: AddNodesBatchRequestSchema, pyModel: 'AddNodesBatchRequest' },

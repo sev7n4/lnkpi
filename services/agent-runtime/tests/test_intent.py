@@ -24,6 +24,7 @@ def test_classify_copy_decision():
 
 def test_classify_topo_decision():
     assert classify_topo_decision("确认出图") == "confirm_gen"
+    assert classify_topo_decision("执行生图") == "confirm_gen"
     assert classify_topo_decision("删掉 Banner") == "topo_revise"
     assert classify_topo_decision("改为双人模特") == "topo_revise"
     assert classify_topo_decision("更偏天猫") == "node_revise"

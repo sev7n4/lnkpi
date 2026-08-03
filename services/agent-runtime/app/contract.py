@@ -91,6 +91,26 @@ GetNodeResponse = CanvasNode
 
 
 # ============================================================
+# get_canvas_summary (Phase C)
+# ============================================================
+
+
+class CanvasSummaryNode(BaseModel):
+    id: str
+    type: str
+    title: str
+    status: str
+
+
+class GetCanvasSummaryRequest(BaseModel):
+    sessionId: str
+
+
+class GetCanvasSummaryResponse(BaseModel):
+    nodes: list[CanvasSummaryNode]
+
+
+# ============================================================
 # add_nodes_batch
 # ============================================================
 
