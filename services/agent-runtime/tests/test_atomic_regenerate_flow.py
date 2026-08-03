@@ -65,3 +65,26 @@ async def test_video_regenerate_skips_confirm_gate():
     assert done["phase"] == "done"
     assert ("run_video_generation", "vid-1") in nest.calls
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_audio_regenerate_skips_confirm_gate():
+    class AudioNest(FakeNest):
+        async def run_audio_generation(self, node_id: str) -> dict[str, Any]:
+            self.calls.append(("run_audio_generation", node_id))
+            return {"status": "completed", "url": "https://cdn/v2.mp3"}
+
+    nest = AudioNest()
+    spec = {
+        "target_type": "audio",
+        "title": "产品配音",
+        "prompt": "15秒旁白",
+        "confirm_gate": True,
+    }
+    prep = make_prepare_atomic_regenerate_node(nest=nest)
+    prepped = await prep({"atomic_node_id": "aud-1", "atomic_spec": spec})
+    run = make_run_atomic_gen_node(nest=nest)
+    done = await run({**prepped, "atomic_node_id": "aud-1", "atomic_spec": spec})
+    assert done["phase"] == "done"
+    assert ("run_audio_generation", "aud-1") in nest.calls
+    assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
