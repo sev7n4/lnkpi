@@ -1,0 +1,95 @@
+# P4 Atomic Studio Intent — routing & modality taxonomy
+# Consumed by parse_atomic_intent + intake routing (P4-03+)
+version: 1
+
+routes:
+  atomic_create:
+    description: 新建画布节点并提交 Studio 生产（单句原子闭环）
+    flow_mode: atomic_create
+  single_node:
+    description: 已有节点快速再生（P3，需 focus_node_id）
+    flow_mode: single_node
+  campaign:
+    description: 营销方案全链路
+    flow_mode: campaign
+  chat:
+    description: 无副作用闲聊
+    flow_mode: campaign  # phase=done via chat node
+
+target_types:
+  image:
+    node_type: image
+    studio_tool: run_image_generation
+    confirm_gate: false
+    write_field: prompt
+  text:
+    node_type: text
+    studio_tool: run_text_generation
+    confirm_gate: false
+    write_field: content
+    notes: |
+      D1 默认：分镜提示词、脚本、广告词、文案 → text（非 prompt 节点）
+  prompt:
+    node_type: prompt
+    studio_tool: run_prompt_generation
+    confirm_gate: false
+    write_field: prompt
+    trigger_phrases:
+      - prompt扩写
+      - 提示词模式
+      - 多模式扩写
+      - 扩写prompt
+  audio:
+    node_type: audio
+    studio_tool: run_audio_generation
+    confirm_gate: true
+    write_field: content
+  video:
+    node_type: video
+    studio_tool: run_video_generation
+    confirm_gate: true
+    write_field: prompt
+
+intake_priority:
+  - id: campaign_override
+    when: marketing_intent and not atomic_create_intent
+    route: campaign
+  - id: single_node
+    when: focus_node_id and single_node_gen_intent and not modify_intent
+    route: single_node
+  - id: atomic_create
+    when: atomic_create_intent and not marketing_intent
+    route: atomic_create
+  - id: fallback
+    when: default
+    route: chat
+
+atomic_create_hints:
+  - 帮我生成
+  - 帮我做一张
+  - 生成一个
+  - 生成一张
+  - 做一个
+  - 来一张
+  - 来一段
+  - 写一段
+  - 配一段
+
+text_default_keywords:
+  - 分镜提示词
+  - 分镜脚本
+  - 脚本
+  - 广告词
+  - 文案
+  - 分镜
+
+prompt_explicit_keywords:
+  - prompt扩写
+  - 提示词模式
+  - 多模式扩写
+  - 扩写prompt
+
+atomic_confirm_keywords:
+  - 确认生成
+  - 开始生成
+  - 确认
