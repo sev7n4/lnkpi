@@ -29,6 +29,26 @@ async def test_intake_hello_sets_no_skill():
 
 
 @pytest.mark.asyncio
+async def test_intake_explicit_skill_overrides_non_marketing_text():
+    node = make_intake_node(SKILLS_DIR)
+    out = await node({
+        "messages": [HumanMessage(content="你好")],
+        "requested_skill_id": "enterprise-marketing-campaign",
+    })
+    assert out.get("skill_id") == "enterprise-marketing-campaign"
+
+
+@pytest.mark.asyncio
+async def test_intake_invalid_requested_skill_falls_back_to_chat():
+    node = make_intake_node(SKILLS_DIR)
+    out = await node({
+        "messages": [HumanMessage(content="你好")],
+        "requested_skill_id": "nonexistent-skill",
+    })
+    assert out.get("skill_id") is None
+
+
+@pytest.mark.asyncio
 async def test_intake_marketing_sets_enterprise_skill():
     node = make_intake_node(SKILLS_DIR)
     out = await node(

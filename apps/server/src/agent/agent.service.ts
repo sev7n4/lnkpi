@@ -5,7 +5,9 @@ import { IMAGE_MODELS, TEXT_MODELS, VIDEO_MODELS } from '@lnkpi/shared'
 import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
+import { mapUiSkillId } from './agent-skill-map'
 
 @Injectable()
 export class AgentService {
@@ -15,6 +17,7 @@ export class AgentService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ShotService) private readonly shotService: ShotService,
     @Inject(MaterialService) private readonly materialService: MaterialService,
+    @Inject(ProviderResolverService) private readonly providerResolver: ProviderResolverService,
   ) {
     this.agent = new CanvasAgent(
       process.env.OPENAI_API_KEY,
@@ -52,6 +55,8 @@ export class AgentService {
     threadId?: string,
     userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
     idempotencyKey?: string,
+    skillId?: string,
+    model?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     // Register idempotency key (if provided) before starting
     if (idempotencyKey) {
@@ -75,6 +80,8 @@ export class AgentService {
           userId,
           threadId,
           userDecision,
+          skillId,
+          model,
         )) {
           if (event.type === 'text_delta') {
             assistantText += (event.data as { text: string }).text
@@ -191,9 +198,22 @@ export class AgentService {
     userId: string,
     threadId?: string,
     userDecision?: 'confirm' | 'revise' | 'replan' | 'confirm_gen' | 'topo_revise' | 'node_revise',
+    skillId?: string,
+    model?: string,
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
+
+    const runtimeSkillId = mapUiSkillId(skillId)
+    let llmModel: string | undefined
+    let llmApiKey: string | undefined
+    let llmBaseUrl: string | undefined
+    if (model && userId) {
+      const resolved = await this.providerResolver.resolveForGeneration(userId, model, 'text')
+      llmModel = resolved.modelName
+      llmApiKey = resolved.credentials.apiKey
+      llmBaseUrl = resolved.credentials.baseUrl
+    }
 
     for await (const event of client.streamRun({
       sessionId,
@@ -204,6 +224,10 @@ export class AgentService {
       // W5 修复：把前端结构化决策（按钮点击）传给 agent-runtime
       // 让它走 Command(resume=...) 精确恢复 interrupt，不再重跑 route_entry→intake
       userDecision,
+      skillId: runtimeSkillId,
+      llmModel,
+      llmApiKey,
+      llmBaseUrl,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

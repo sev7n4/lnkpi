@@ -181,6 +181,10 @@ class RunRequest(BaseModel):
     thread_id: str | None = None
     # W5修复：添加user_decision字段，支持用户确认/修改/换方向
     user_decision: str | None = None  # "confirm" | "revise" | "replan"
+    skill_id: str | None = None
+    llm_model: str | None = None
+    llm_api_key: str | None = None
+    llm_base_url: str | None = None
 
 
 class NestEventProxy:
@@ -314,6 +318,26 @@ def default_llm() -> Any:
         model=settings.openai_chat_model or "gpt-4o",
         temperature=0.4,
     )
+
+
+def resolve_llm(req: RunRequest) -> Any:
+    if req.llm_model and req.llm_api_key:
+        kwargs: dict[str, Any] = {
+            "api_key": req.llm_api_key,
+            "model": req.llm_model,
+            "temperature": 0.4,
+        }
+        if req.llm_base_url:
+            kwargs["base_url"] = req.llm_base_url
+        return ChatOpenAI(**kwargs)
+    if req.llm_model:
+        return ChatOpenAI(
+            api_key=settings.openai_api_key or "sk-placeholder",
+            base_url=settings.openai_base_url,
+            model=req.llm_model,
+            temperature=0.4,
+        )
+    return default_llm()
 
 
 def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
@@ -473,7 +497,7 @@ async def stream_run_events(
         await queue.put(event)
 
     proxy = NestEventProxy(inner_nest, emit)
-    graph_llm = llm if llm is not None else default_llm()
+    graph_llm = llm if llm is not None else resolve_llm(req)
     thread_started()
 
     active_checkpointer = checkpointer if checkpointer is not None else await _get_checkpointer()
@@ -522,6 +546,7 @@ async def stream_run_events(
             "session_id": req.session_id,
             "user_id": req.user_id,
             "thread_id": thread_id,
+            "requested_skill_id": req.skill_id,
         }
 
     async def run_graph() -> None:

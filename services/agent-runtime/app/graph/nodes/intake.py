@@ -21,10 +21,13 @@ def make_intake_node(skills_dir: Path) -> Callable:
     async def intake(state: dict) -> dict:
         text = _latest_user_text(state.get("messages") or [])
         entries = discover_skills(skills_dir)
+        requested = str(state.get("requested_skill_id") or "").strip()
+        by_id = {e.skill_id: e for e in entries}
         skill_id: str | None = None
-        if marketing_intent(text):
+        if requested and requested in by_id:
+            skill_id = requested
+        elif marketing_intent(text):
             preferred = "enterprise-marketing-campaign"
-            by_id = {e.skill_id: e for e in entries}
             if preferred in by_id:
                 skill_id = preferred
             elif entries:
