@@ -2,7 +2,7 @@
 
 import { hasModifyIntent } from '@lnkpi/shared'
 
-export type AgentChipSet = 'plan' | 'copy' | 'topo' | null
+export type AgentChipSet = 'plan' | 'copy' | 'topo' | 'atomic' | null
 
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"
 const PLAN_SNIPPETS = ['1. 采纳推荐', '1 / A', '确认方案', '请选择：'] as const
@@ -40,6 +40,8 @@ export function detectAgentChipSet(
   // 这允许 modify → agent 重新生成 → 新 confirm → 用户确认 的完整流程
   if (t.includes('【主文案草稿】') && !t.includes('已将确认的主文案写入')) return 'copy'
   if (t.includes('【主文案草稿】') && TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
+  if (t.includes('视频/音频生成将消耗积分')) return 'atomic'
+  if (t.includes('原子创作：') && t.includes('需确认')) return 'atomic'
   if (TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (COPY_SNIPPETS.some((s) => t.includes(s))) return 'copy'
   if (PLAN_SNIPPETS.some((s) => t.includes(s))) return 'plan'
