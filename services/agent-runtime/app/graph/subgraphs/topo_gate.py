@@ -47,7 +47,7 @@ def register_topo_gate(graph: StateGraph, *, nest: Any) -> None:
             "end": END,
         },
     )
-    graph.add_edge("topo_revise", END)
+    graph.add_edge("topo_revise", "await_topo")
     graph.add_edge("start_gen", "gen_scheduler")
     graph.add_edge("gen_node", "gen_scheduler")
     graph.add_edge("collect_gen", "done")
