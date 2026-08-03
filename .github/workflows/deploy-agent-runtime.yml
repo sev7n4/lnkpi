@@ -30,9 +30,8 @@ permissions:
   contents: read
 
 concurrency:
-  # 独立 concurrency group，避免与 deploy.yml 互相取消
-  # 由于两个 workflow 操作不同的容器（api vs agent-runtime），可以并行部署
-  group: lnkpi-deploy-agent-runtime
+  # 与 deploy.yml 共用 CVM 锁，避免并行 compose 导致容器名冲突
+  group: lnkpi-deploy-cvm
   cancel-in-progress: false
 
 env:
@@ -134,7 +133,7 @@ jobs:
       - name: Enable Agent Runtime on CVM
         run: |
           set -euo pipefail
-          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "bash -s" < deploy/enable-agent-runtime.sh
+          /tmp/lnkpi-ssh-retry.sh "enable-runtime-ssh" ssh -T deploy-cvm "RUNTIME_ONLY=1 bash -s" < deploy/enable-agent-runtime.sh
 
       - name: Verify deployment
         run: |

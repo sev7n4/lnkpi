@@ -6,7 +6,6 @@ on:
     paths:
       - "apps/server/**"
       - "apps/web/**"
-      - "services/agent-runtime/**"
       - "packages/**"
       - "deploy/**"
       - "package.json"
@@ -40,8 +39,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: lnkpi-deploy-production
-  cancel-in-progress: true
+  group: lnkpi-deploy-cvm
+  cancel-in-progress: false
 
 env:
   IMAGE_TAG: ${{ github.sha }}
@@ -68,7 +67,6 @@ jobs:
           filters: |
             api:
               - 'apps/server/**'
-              - 'services/agent-runtime/**'
               - 'packages/**'
               - 'deploy/**'
               - 'package.json'

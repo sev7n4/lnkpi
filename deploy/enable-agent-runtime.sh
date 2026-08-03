@@ -8,10 +8,39 @@ set -euo pipefail
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/lnkpi}"
 ENV_FILE="${ENV_FILE:-${DEPLOY_DIR}/.env}"
 COMPOSE_FILE="${DEPLOY_DIR}/deploy/docker-compose.prod.yml"
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-lnkpi}"
+export COMPOSE_PROJECT_NAME
 COMPOSE="docker compose -f ${COMPOSE_FILE}"
+RUNTIME_ONLY="${RUNTIME_ONLY:-0}"
+LOCK_FILE="${LOCK_FILE:-/tmp/lnkpi-compose.lock}"
 
 log() {
   echo "[$(date -u +%H:%M:%S)] $*"
+}
+
+acquire_compose_lock() {
+  exec 9>"${LOCK_FILE}"
+  if ! flock -n 9; then
+    log "compose lock busy — waiting on ${LOCK_FILE}"
+    flock 9
+  fi
+  log "compose lock acquired (project=${COMPOSE_PROJECT_NAME})"
+}
+
+prune_stale_compose_containers() {
+  local svc
+  for svc in api agent-runtime; do
+    local canonical="lnkpi-${svc}"
+    docker ps -aq --filter "name=${canonical}" | while read -r cid; do
+      [[ -z "${cid}" ]] && continue
+      local cname
+      cname="$(docker inspect --format '{{.Name}}' "${cid}" 2>/dev/null | sed 's|^/||' || true)"
+      if [[ -n "${cname}" && "${cname}" != "${canonical}" ]]; then
+        log "remove stale container ${cname} (${cid})"
+        docker rm -f "${cid}" 2>/dev/null || true
+      fi
+    done
+  done
 }
 
 get_env() {
@@ -167,8 +196,16 @@ if ! $COMPOSE build --no-cache --progress=plain agent-runtime; then
   $COMPOSE build --progress=plain agent-runtime
 fi
 
-log "=== Up api + agent-runtime (force-recreate) ==="
-$COMPOSE up -d --no-build --force-recreate --remove-orphans api agent-runtime
+acquire_compose_lock
+prune_stale_compose_containers
+
+if [[ "${RUNTIME_ONLY}" == "1" ]]; then
+  log "=== Up agent-runtime only (RUNTIME_ONLY=1, skip api recreate) ==="
+  $COMPOSE up -d --no-build --force-recreate --remove-orphans agent-runtime
+else
+  log "=== Up api + agent-runtime (force-recreate) ==="
+  $COMPOSE up -d --no-build --force-recreate --remove-orphans api agent-runtime
+fi
 
 log "=== Wait Runtime health (docker exec) ==="
 ok=0
@@ -189,35 +226,39 @@ if [[ "$ok" != "1" ]]; then
   exit 1
 fi
 
-log "=== Wait Nest health ==="
-ok=0
-for i in 1 2 3 4 5 6 7 8 9 10; do
-  if curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:5100/api/health >/tmp/lnkpi-api-health.json 2>/dev/null; then
-    head -c 200 /tmp/lnkpi-api-health.json
-    echo ""
-    ok=1
-    break
+if [[ "${RUNTIME_ONLY}" != "1" ]]; then
+  log "=== Wait Nest health ==="
+  ok=0
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if curl -fsS --connect-timeout 3 --max-time 5 http://127.0.0.1:5100/api/health >/tmp/lnkpi-api-health.json 2>/dev/null; then
+      head -c 200 /tmp/lnkpi-api-health.json
+      echo ""
+      ok=1
+      break
+    fi
+    log "api health attempt $i failed"
+    sleep 3
+  done
+  if [[ "$ok" != "1" ]]; then
+    log "ERROR: api unhealthy after recreate"
+    docker logs lnkpi-api --tail 80 2>&1 || true
+    exit 1
   fi
-  log "api health attempt $i failed"
-  sleep 3
-done
-if [[ "$ok" != "1" ]]; then
-  log "ERROR: api unhealthy after recreate"
-  docker logs lnkpi-api --tail 80 2>&1 || true
-  exit 1
-fi
 
-log "=== Token gate check (expect Invalid service token, not 'not configured') ==="
-MSG=$(curl -sS -X POST http://127.0.0.1:5100/api/agent/internal/get-canvas-summary \
-  -H 'Content-Type: application/json' -d '{"sessionId":"x"}' || true)
-echo "$MSG" | head -c 300
-echo ""
-if echo "$MSG" | grep -q 'not configured'; then
-  log "ERROR: Nest still missing AGENT_RUNTIME_SERVICE_TOKEN after recreate"
-  exit 1
-fi
-if ! echo "$MSG" | grep -qi 'Invalid service token\|Unauthorized'; then
-  log "WARN: unexpected internal response (continuing)"
+  log "=== Token gate check (expect Invalid service token, not 'not configured') ==="
+  MSG=$(curl -sS -X POST http://127.0.0.1:5100/api/agent/internal/get-canvas-summary \
+    -H 'Content-Type: application/json' -d '{"sessionId":"x"}' || true)
+  echo "$MSG" | head -c 300
+  echo ""
+  if echo "$MSG" | grep -q 'not configured'; then
+    log "ERROR: Nest still missing AGENT_RUNTIME_SERVICE_TOKEN after recreate"
+    exit 1
+  fi
+  if ! echo "$MSG" | grep -qi 'Invalid service token\|Unauthorized'; then
+    log "WARN: unexpected internal response (continuing)"
+  fi
+else
+  log "RUNTIME_ONLY=1 — skip api health/token gate (api container untouched)"
 fi
 
 if [[ "$ENABLE_OBSERVABILITY" == "true" ]]; then
