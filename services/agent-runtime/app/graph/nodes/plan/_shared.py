@@ -13,6 +13,7 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from app.graph.few_shot import build_llm_messages, few_shots_for_skill
 from app.graph.plan_clean import strip_plan_preamble
 from app.skills.loader import discover_skills, load_skill
 
@@ -224,6 +225,8 @@ async def revise_operations_via_llm(
     llm: Any,
     split_manifest: list[dict] | None,
     user_text: str,
+    skill_id: str | None = None,
+    skills_dir: Any = None,
 ) -> list[dict] | None:
     """Ask LLM for node operations (rename/add/delete). None = parse failure / fallback."""
     human = (
@@ -231,13 +234,10 @@ async def revise_operations_via_llm(
         f"用户修改意见：{user_text}\n\n"
         "输出操作列表 JSON 数组。"
     )
+    few_shots = few_shots_for_skill(skill_id, "revise_manifest", skills_dir=skills_dir)
+    messages = build_llm_messages(system=NODE_OPS_SYSTEM, user=human, few_shots=few_shots)
     try:
-        ai = await llm.ainvoke(
-            [
-                SystemMessage(content=NODE_OPS_SYSTEM),
-                HumanMessage(content=human),
-            ]
-        )
+        ai = await llm.ainvoke(messages)
     except Exception as exc:  # noqa: BLE001
         logger.warning("node ops LLM call failed: %s", exc)
         return None

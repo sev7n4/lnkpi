@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from app.graph.few_shot import build_llm_messages, few_shots_for_skill
 from app.graph.nodes.plan._shared import (
     CREATE_INSTRUCTION,
     MODIFY_INSTRUCTION,
@@ -53,12 +54,12 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = No
             instruction = CREATE_INSTRUCTION
             human_content = f"{instruction}\n用户需求：{user_text}"
 
-        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=human_content),
-        ]
+        few_shots = few_shots_for_skill(skill_id, "generate_plan", skills_dir=skills_dir)
+        messages = build_llm_messages(
+            system=system_prompt,
+            user=human_content,
+            few_shots=few_shots,
+        )
         ai = await llm.ainvoke(messages)
         plan_md = strip_plan_preamble(str(getattr(ai, "content", ai) or ""))
         summary = summarize(plan_md)

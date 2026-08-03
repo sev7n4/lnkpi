@@ -37,7 +37,7 @@ def register_plan_nodes(
     """
     graph.add_node("decide_plan_mode", make_decide_plan_mode_node(skills_dir=skills_dir))
     graph.add_node("generate_plan", make_generate_plan_node(llm=llm, skills_dir=skills_dir, nest=nest))
-    graph.add_node("revise_manifest", make_revise_manifest_node(llm=llm))
+    graph.add_node("revise_manifest", make_revise_manifest_node(llm=llm, skills_dir=skills_dir))
     graph.add_node("compose_confirm", make_compose_confirm_node(skills_dir=skills_dir))
 
     # Linear pipeline (revise_manifest is transparent when not node_revise)

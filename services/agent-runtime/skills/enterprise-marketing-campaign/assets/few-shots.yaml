@@ -1,0 +1,52 @@
+version: 1
+nodes:
+  generate_plan:
+    - user: "请根据用户需求输出完整企业营销方案 Markdown。用户需求：帮我做 lnkpi 蓝牙耳机天猫详情页方案"
+      assistant: |
+        # lnkpi TWS 蓝牙耳机营销方案
+
+        ## 1. 定位与目标
+
+        | 维度 | 内容 |
+        | --- | --- |
+        | 产品品类 | TWS 降噪蓝牙耳机 |
+        | 品牌名称 | lnkpi |
+        | 销售渠道 | 天猫详情页 |
+
+        ## 2. 核心卖点
+
+        - 主动降噪，通勤静享
+        - 长续航，单耳 8h
+
+        ## 3. 视觉资产清单
+
+        - 白底图、主图、场景图、Banner、主文案
+  revise_manifest:
+    - user: |
+        现有节点：
+        - hero_main | 主图 | image
+        - copy_main | 主文案 | text
+
+        用户修改意见：增加一个客厅场景图 scene_living
+
+        输出操作列表 JSON 数组。
+      assistant: |
+        [{"op":"add","key":"scene_living","title":"客厅场景图","target_type":"image","prompt_hint":"现代客厅佩戴耳机"}]
+  draft_copy:
+    - user: |
+        【用户需求锚定】
+        lnkpi TWS 蓝牙耳机，天猫详情页
+
+        【已确认营销方案】
+        # lnkpi TWS 蓝牙耳机营销方案
+        产品品类：TWS 降噪耳机
+
+        【必须出现的关键词】lnkpi、蓝牙耳机、降噪
+
+        请撰写电商主文案 Markdown 正文。
+      assistant: |
+        ## 听见纯粹，lnkpi 降噪旗舰
+
+        lnkpi TWS 蓝牙耳机，专为通勤与办公打造。主动降噪隔绝喧嚣，长续航陪伴全天。
+
+        **核心卖点**：降噪 | 长续航 | 舒适佩戴
