@@ -82,33 +82,73 @@ LNKPI_IMAGE_GEN_TIMEOUT_SEC=180
 
 ---
 
-## 2.4 W23 可观测性：OTel Collector → Tempo（可选）
+## 2.4 W23 可观测性：OTLP → Tempo（生产默认开启）
 
-默认 **关闭**。推荐栈：**LangSmith OTel 自动埋点（LangGraph/LLM）+ OTel Collector + Tempo + Grafana**。
+**默认行为（2026-08 起）**：`deploy/enable-agent-runtime.sh` 在 CVM 部署时自动：
+
+1. 将 `pintuotuo-tempo` 接入 `lnkpi-net`
+2. 写入 `.env`：`LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://pintuotuo-tempo:4318/v1/traces`
+3. 重建 `agent-runtime` 并验证 `is_tracing_enabled()`
+
+关闭 tracing（本地调试）：`ENABLE_OBSERVABILITY=false bash deploy/enable-agent-runtime.sh`
 
 | 环境 | 配置 |
 |------|------|
-| **生产** | `LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` + `LANGSMITH_OTEL_ONLY=true`（无 API Key） |
-| **开发** | 同上 + `LANGSMITH_API_KEY=...` 可同时看 LangSmith Cloud |
+| **生产（CVM 默认）** | 直连同机 Tempo（见上）；`LNKPI_LANGSMITH_OTEL_ENABLED=false` |
+| **独立 Collector 栈** | `docker compose -f deploy/docker-compose.observability.yml up -d` + `LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318` |
+| **开发 + LangSmith Cloud** | 同上 Collector + `LNKPI_LANGSMITH_OTEL_ENABLED=true` + `LNKPI_LANGSMITH_API_KEY=...` |
 
-启用步骤：
+手动补启用（已部署但未写 OTEL env）：
 
 ```bash
 cd /opt/lnkpi
-docker compose -f deploy/docker-compose.prod.yml \
-  -f deploy/docker-compose.observability.yml up -d
-
-# .env 追加:
-# LNKPI_OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
-# LNKPI_LANGSMITH_OTEL_ENABLED=true
-
-docker compose -f deploy/docker-compose.prod.yml up -d --no-build agent-runtime
+bash deploy/enable-observability-cvm.sh
 ```
 
 - **Grafana Explore → Tempo**（本机）：`http://127.0.0.1:3000`
+- 查询示例：`curl -s 'http://127.0.0.1:3200/api/search?limit=5&tags=resource.service.name%3Dlnkpi-agent-runtime'`
 - Span 链：`agent.run`（业务）+ LangSmith 自动 `chain/llm` + `tool.call`（Nest HTTP）
 
 后续 Nest 侧补 Node OTel 后，Collector 可统一接收全链路 trace。
+
+---
+
+## 2.5 W24/W25 Metrics：Prometheus + Grafana
+
+`agent-runtime` 暴露 `GET /metrics`（仅内网，容器 `:8000`）。
+
+| 文件 | 用途 |
+|------|------|
+| `deploy/observability/prometheus/agent-runtime-scrape.yml` | Prometheus scrape 片段 |
+| `deploy/observability/prometheus/agent-runtime-alerts.yml` | 告警规则（stream/tool/threads/scrape） |
+| `deploy/observability/grafana/dashboards/agent-runtime-dashboard.json` | Grafana 面板 JSON |
+
+**启用 scrape**（CVM，Prometheus 与 lnkpi 同 Docker 网络）：
+
+```yaml
+# prometheus.yml additional_scrape_configs 引入 agent-runtime-scrape.yml
+```
+
+**导入 Dashboard**：Grafana → Dashboards → Import → 上传 `agent-runtime-dashboard.json`，选择 Prometheus 数据源。
+
+**校验告警规则**：
+
+```bash
+promtool check rules deploy/observability/prometheus/agent-runtime-alerts.yml
+```
+
+---
+
+## 2.6 W27 Graph 控制流回放 API
+
+与画布 `/replay/:sessionId`（快照回放）区分：按 **threadId** 查询 LangGraph checkpoint **phase 时间线**。
+
+| 层 | 路径 |
+|----|------|
+| Runtime | `GET /v1/threads/{threadId}/timeline`（需 `x-lnkpi-service-token`） |
+| Nest 代理 | `GET /api/agent/thread-timeline?threadId=...`（需登录） |
+
+响应示例：`{ threadId, entries: [{ phase, nextNodes, step, promptVersion, ... }], checkpointCount }`
 
 ---
 

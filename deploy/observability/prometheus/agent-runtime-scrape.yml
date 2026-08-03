@@ -1,0 +1,15 @@
+# Prometheus scrape config snippet for lnkpi agent-runtime (W24).
+# Merge into pintuotuo/CVM prometheus.yml or use as file_sd / additional_scrape_configs.
+#
+# agent-runtime is NOT published on host :8000; scrape via docker network:
+#   targets: ['lnkpi-agent-runtime:8000']
+
+scrape_configs:
+  - job_name: lnkpi-agent-runtime
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['lnkpi-agent-runtime:8000']
+        labels:
+          service: lnkpi-agent-runtime
+          env: production

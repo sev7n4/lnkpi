@@ -74,6 +74,32 @@ async def thread_state(
     return data
 
 
+@app.get("/v1/threads/{thread_id}/timeline")
+async def thread_timeline(
+    thread_id: str,
+    x_lnkpi_service_token: str | None = Header(default=None),
+):
+    """W27: Graph control-flow phase timeline from checkpoint history."""
+    _require_runtime_auth(x_lnkpi_service_token)
+    from app.graph.builder import build_agent_graph
+    from app.runs import default_llm, resolve_skills_dir, _get_checkpointer
+
+    class _NoOpNest:
+        async def close(self) -> None:
+            pass
+
+    overrides = _run_overrides.get("checkpointer")
+    cp = overrides if overrides is not None else await _get_checkpointer()
+    graph = build_agent_graph(
+        nest=_NoOpNest(),
+        llm=default_llm(),
+        skills_dir=resolve_skills_dir(),
+        checkpointer=cp,
+    )
+    data = await get_thread_timeline(thread_id, graph=graph)
+    return data
+
+
 @app.post("/v1/runs")
 async def create_run(
     body: RunRequest,

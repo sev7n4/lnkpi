@@ -93,6 +93,16 @@ export class AgentController {
     return { code: 0, message: 'ok', data }
   }
 
+  /** W27: Graph phase timeline from checkpoint history (debug / ops). */
+  @Get('thread-timeline')
+  @UseGuards(AuthGuard)
+  async threadTimeline(
+    @Query('threadId') threadId: string,
+  ) {
+    const data = await this.agentService.getThreadTimeline(threadId)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('chat/optimize-prompt')
   async optimizePrompt(@Body() dto: OptimizePromptDto) {
     const data = await this.agentService.optimizePrompt(dto.prompt, dto.style)
