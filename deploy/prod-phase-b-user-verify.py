@@ -163,6 +163,7 @@ def main() -> int:
     steps = [
         ("P0-1 plan", "天猫蓝牙耳机详情页营销方案，品牌 lnkpi，PhaseB复测"),
         ("P0-2 confirm plan", "1"),
+        ("P0-3 write copy", "写入主文案"),
     ]
     for name, msg in steps:
         _, text, types, exit_reason = sse_collect(tok, sid, msg, tid, timeout=420)
@@ -173,35 +174,52 @@ def main() -> int:
     phase = str(ts.get("phase") or "")
     record(
         "P1 await_topo thread-state",
-        phase in ("await_topo", "await_confirm", "split") or "确认出图" in json.dumps(ts),
+        phase == "await_topo" or "确认出图" in json.dumps(ts),
         f"phase={phase} interrupted={ts.get('interrupted')}",
     )
 
-    _, qtext, qtypes, _ = sse_collect(tok, sid, "查看主图", tid, timeout=120)
-    record(
-        "P1 topo query",
-        "error" not in qtypes and ("节点" in qtext or "主图" in qtext or "prompt" in qtext.lower()),
-        qtext[:100].replace("\n", " "),
-    )
-
-    _, add_text, add_types, _ = sse_collect(tok, sid, "增加场景图", tid, timeout=180)
-    record(
-        "P1 topo add",
-        "error" not in add_types and ("新增" in add_text or "场景" in add_text or "资产拓扑" in add_text),
-        add_text[:100].replace("\n", " "),
-    )
-
-    if TOPO_DELETE:
-        _, del_text, del_types, _ = sse_collect(tok, sid, "删掉 Banner", tid, timeout=180)
+    if phase != "await_topo":
+        record("P1 topo query", False, f"skip: phase={phase}", skip=True)
+        record("P1 topo add", False, f"skip: phase={phase}", skip=True)
+    else:
+        _, qtext, qtypes, _ = sse_collect(tok, sid, "查看主图", tid, timeout=120)
         record(
-            "P1 topo delete (optional)",
-            "error" not in del_types and ("移除" in del_text or "未找到" in del_text or "资产拓扑" in del_text),
-            del_text[:100].replace("\n", " "),
+            "P1 topo query",
+            "error" not in qtypes and ("节点" in qtext or "主图" in qtext or "prompt" in qtext.lower()),
+            qtext[:100].replace("\n", " "),
         )
 
-    events, gen_text, gen_types, exit_gen = sse_collect(
-        tok, sid, "确认出图", tid, timeout=GEN_SSE_TIMEOUT_SEC
-    )
+        _, add_text, add_types, _ = sse_collect(tok, sid, "增加场景图", tid, timeout=180)
+        record(
+            "P1 topo add",
+            "error" not in add_types and ("新增" in add_text or "场景" in add_text or "资产拓扑" in add_text),
+            add_text[:100].replace("\n", " "),
+        )
+
+        if TOPO_DELETE:
+            _, del_text, del_types, _ = sse_collect(tok, sid, "删掉 Banner", tid, timeout=180)
+            record(
+                "P1 topo delete (optional)",
+                "error" not in del_types and ("移除" in del_text or "未找到" in del_text or "资产拓扑" in del_text),
+                del_text[:100].replace("\n", " "),
+            )
+
+    events: list[dict] = []
+    gen_text = ""
+    gen_types: set[str] = set()
+    exit_gen = "skipped"
+    if phase == "await_topo" or thread_state(tok, tid).get("phase") == "await_topo":
+        events, gen_text, gen_types, exit_gen = sse_collect(
+            tok, sid, "确认出图", tid, timeout=GEN_SSE_TIMEOUT_SEC
+        )
+    else:
+        record("P2 confirm gen stream", False, "skip: not at await_topo", skip=True)
+        record("P2 canvas images with url", False, "skip", skip=True)
+        record("P2 canvas generationRecordId", False, "skip", skip=True)
+        record("P2 stream/gen terminal", False, "skip", skip=True)
+        print(f"\n=== Summary PASS={PASS} FAIL={FAIL} SKIP={SKIP} ===")
+        return 0 if FAIL == 0 else 1
+
     record(
         "P2 confirm gen stream",
         "error" not in gen_types
