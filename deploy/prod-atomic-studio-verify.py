@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Production smoke verify for P4 atomic_create_gate (image path, no full gen wait).
+"""Production smoke verify for P4 atomic_create_gate — image/text/prompt (A1 partial).
 
-Checks:
-  1. Runtime health
-  2. SSE「帮我生成一个模特人物图」→ atomic_create path (not campaign plan gate)
-  3. thread-state phase await_atomic_confirm absent for image; canvas gets new node
+Checks per modality:
+  - SSE atomic_create path (not campaign plan gate)
+  - Canvas node created
+  - Generation completes (record/content) or clear error
+
+Video/audio confirm gates: deploy/prod-atomic-confirm-gate-verify.py
 
 Usage:
   python3 deploy/prod-atomic-studio-verify.py
@@ -25,9 +27,15 @@ BASE = os.environ.get("BASE_URL", "http://119.29.173.89:8888").rstrip("/")
 API = f"{BASE}/api"
 PHONE = os.environ.get("PHONE", "17279698608")
 CODE = os.environ.get("CODE", "123456")
-SSE_TIMEOUT_SEC = float(os.environ.get("SSE_TIMEOUT_SEC", "180"))
+SSE_TIMEOUT_SEC = float(os.environ.get("SSE_TIMEOUT_SEC", "300"))
 
 PASS = FAIL = 0
+
+CASES: list[tuple[str, str, str]] = [
+    ("image", "帮我生成一个模特人物图", "image"),
+    ("text", "帮我写广告词，强调降噪", "text"),
+    ("prompt", "帮我对「蓝牙耳机」做 prompt 扩写，出图用", "prompt"),
+]
 
 
 def record(case: str, ok: bool, detail: str = "") -> None:
@@ -53,7 +61,7 @@ def http(m: str, p: str, b: dict | None = None, t: str | None = None) -> Any:
         return json.loads(resp.read())
 
 
-def sse_collect(t: str, sid: str, msg: str, tid: str, *, timeout: float = 180) -> tuple[list[dict], str, set[str], str]:
+def sse_collect(t: str, sid: str, msg: str, tid: str, *, timeout: float = 300) -> tuple[list[dict], str, set[str], str]:
     body: dict[str, Any] = {"sessionId": sid, "message": msg, "threadId": tid}
     h = {
         "Content-Type": "application/json",
@@ -103,14 +111,50 @@ def thread_state(tok: str, tid: str) -> dict[str, Any]:
     return http("GET", f"/agent/thread-state?threadId={quote(tid, safe='')}", t=tok).get("data") or {}
 
 
-def canvas_node_count(tok: str, sid: str) -> int:
+def latest_node(tok: str, sid: str, node_type: str) -> dict[str, Any] | None:
     sess = http("GET", f"/sessions/{sid}", t=tok)["data"]
     canvas = sess.get("canvasData") or {}
-    return len(canvas.get("nodes") or [])
+    nodes = [n for n in (canvas.get("nodes") or []) if n.get("type") == node_type]
+    return nodes[-1] if nodes else None
+
+
+def verify_modality(tok: str, label: str, utterance: str, node_type: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"P4-{label}-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"{sid}:{uuid.uuid4()}"
+    _, text, types, exit_reason = sse_collect(tok, sid, utterance, tid, timeout=SSE_TIMEOUT_SEC)
+
+    atomic_ok = "原子创作" in text and f"{node_type} 节点" in text
+    not_campaign = "await_confirm" not in types and "拟定拆解约" not in text[:200]
+    record(f"{label} atomic path", atomic_ok and not_campaign, text[:120])
+
+    node = latest_node(tok, sid, node_type)
+    data = (node or {}).get("data") or {}
+    has_output = bool(
+        data.get("generationRecordId")
+        or data.get("url")
+        or (node_type == "text" and str(data.get("content") or "").strip())
+        or (node_type == "prompt" and str(data.get("prompt") or "").strip())
+    )
+    gen_ok = "生成完成" in text or has_output
+    not_unsupported = "暂不支持" not in text
+    record(
+        f"{label} gen completed",
+        gen_ok and not_unsupported and "error" not in types,
+        f"exit={exit_reason} rec={data.get('generationRecordId')} content={'yes' if data.get('content') else 'no'}",
+    )
+
+    ts = thread_state(tok, tid)
+    phase = ts.get("phase")
+    next_nodes = ts.get("nextNodes") or []
+    record(
+        f"{label} not stuck at plan gate",
+        "await_confirm" not in next_nodes and phase not in ("await_confirm",),
+        f"phase={phase}",
+    )
 
 
 def main() -> int:
-    print("=== P4 atomic_create production smoke verify ===")
+    print("=== P4 atomic_create production smoke verify (image/text/prompt) ===")
     print(f"BASE={BASE}\n")
 
     try:
@@ -127,37 +171,8 @@ def main() -> int:
     rt = http("GET", "/agent/runtime-health", t=tok)
     record("Runtime health", bool((rt.get("data") or {}).get("ok")))
 
-    sid = http("POST", "/sessions", {"title": f"P4-atomic-{int(time.time())}"}, t=tok)["data"]["id"]
-    tid = f"{sid}:{uuid.uuid4()}"
-    record("Create session", True, sid)
-
-    before_nodes = canvas_node_count(tok, sid)
-    events, text, types, exit_reason = sse_collect(
-        tok, sid, "帮我生成一个模特人物图", tid, timeout=SSE_TIMEOUT_SEC,
-    )
-    record("SSE stream", len(events) >= 1, f"events={len(events)} exit={exit_reason}")
-
-    atomic_path = "原子创作" in text or "atomic" in text.lower()
-    not_campaign = "await_confirm" not in types and "营销方案" not in text[:200]
-    record("Atomic path (not campaign plan)", atomic_path or not_campaign, text[:120])
-
-    after_nodes = canvas_node_count(tok, sid)
-    record("Canvas node created", after_nodes > before_nodes, f"{before_nodes} -> {after_nodes}")
-
-    ts = thread_state(tok, tid)
-    phase = ts.get("phase")
-    next_nodes = ts.get("nextNodes") or []
-    record(
-        "Not stuck at plan gate",
-        "await_confirm" not in next_nodes and phase not in ("await_confirm",),
-        f"phase={phase} next={next_nodes}",
-    )
-    record(
-        "Gen started or completed",
-        phase in ("done", "orchestrate_gen", "atomic_create", "await_atomic_confirm", None)
-        or any("gen" in str(n) for n in next_nodes),
-        f"phase={phase}",
-    )
+    for label, utterance, node_type in CASES:
+        verify_modality(tok, label, utterance, node_type)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1
