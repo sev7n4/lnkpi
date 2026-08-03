@@ -22,12 +22,16 @@ def test_classify_topo_revise():
 
 # 修复 P0-1：node_revise 决策检测（节点内容修改 vs 拓扑删除）
 def test_classify_node_revise():
-    """节点内容修改动词应识别为 node_revise，而非 topo_revise。"""
-    assert classify_topo_decision("把模特定妆改为双人模特") == "node_revise"
-    assert classify_topo_decision("改成更偏天猫详情页") == "node_revise"
-    assert classify_topo_decision("调整主图配色") == "node_revise"
-    assert classify_topo_decision("增加产品材质特写图") == "node_revise"
-    assert classify_topo_decision("加上一个场景图") == "node_revise"
+    """Plan-level revise (更偏/强调) still routes to node_revise."""
+    assert classify_topo_decision("更偏天猫详情页") == "node_revise"
+    assert classify_topo_decision("强调运动风") == "node_revise"
+
+
+def test_classify_topo_revise_add_update_query():
+    assert classify_topo_decision("删掉 Banner") == "topo_revise"
+    assert classify_topo_decision("增加场景图") == "topo_revise"
+    assert classify_topo_decision("把模特定妆改为双人模特") == "topo_revise"
+    assert classify_topo_decision("查看主图") == "topo_revise"
 
 
 def test_classify_topo_revise_still_works_for_deletions():
@@ -49,6 +53,22 @@ class FakeNest:
 
     async def remove_nodes(self, node_ids: list[str]) -> dict[str, Any]:
         self.calls.append(("remove_nodes", node_ids))
+        return {"actions": []}
+
+    async def get_node(self, node_id: str) -> dict[str, Any]:
+        self.calls.append(("get_node", node_id))
+        return {"id": node_id, "data": {"prompt": f"prompt-for-{node_id}"}}
+
+    async def set_node_prompt(self, node_id: str, prompt: str, **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("set_node_prompt", {"node_id": node_id, "prompt": prompt, **kwargs}))
+        return {"nodeId": node_id, "actions": []}
+
+    async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("add_nodes_batch", items))
+        return {"nodes": [{"key": it["key"], "nodeId": f"new-{it['key']}"} for it in items]}
+
+    async def connect_nodes(self, edges: list[dict[str, str]], **kwargs: Any) -> dict[str, Any]:
+        self.calls.append(("connect_nodes", edges))
         return {"actions": []}
 
 
@@ -105,6 +125,56 @@ async def test_topo_revise_calls_remove_nodes_when_canvas_ids_present():
     )
     assert "banner" not in {str(i["key"]) for i in out["split_manifest"]}
     assert ("remove_nodes", ["img-banner"]) in nest.calls
+
+
+@pytest.mark.asyncio
+async def test_topo_revise_add_node_on_canvas():
+    nest = FakeNest()
+    node = make_topo_revise_node(nest=nest)
+    out = await node(
+        {
+            "messages": [HumanMessage(content="增加场景图")],
+            "plan_node_id": "plan-1",
+            "split_manifest": [
+                {"key": "hero_main", "title": "主图", "node_id": "img-1", "depends_on": []},
+            ],
+        }
+    )
+    keys = {str(i["key"]) for i in out["split_manifest"]}
+    assert len(keys) == 2
+    assert any(c[0] == "add_nodes_batch" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_topo_revise_update_node_on_canvas():
+    nest = FakeNest()
+    node = make_topo_revise_node(nest=nest)
+    await node(
+        {
+            "messages": [HumanMessage(content="把主图改为运动风主图")],
+            "split_manifest": [
+                {"key": "hero_main", "title": "主图", "node_id": "img-1", "depends_on": []},
+            ],
+        }
+    )
+    set_calls = [c for c in nest.calls if c[0] == "set_node_prompt"]
+    assert set_calls and set_calls[0][1]["node_id"] == "img-1"
+
+
+@pytest.mark.asyncio
+async def test_topo_revise_query_node():
+    nest = FakeNest()
+    node = make_topo_revise_node(nest=nest)
+    out = await node(
+        {
+            "messages": [HumanMessage(content="查看主图")],
+            "split_manifest": [
+                {"key": "hero_main", "title": "主图", "node_id": "img-1", "depends_on": []},
+            ],
+        }
+    )
+    assert any(c[0] == "get_node" for c in nest.calls)
+    assert "prompt-for-img-1" in out["messages"][0].content
 
 
 @pytest.mark.asyncio
@@ -200,7 +270,7 @@ async def test_node_revise_sets_modify_mode_and_routes_to_plan():
     node = make_await_topo_node()
     out = await node(
         {
-            "messages": [HumanMessage(content="把模特定妆改为双人模特")],
+            "messages": [HumanMessage(content="更偏天猫详情页风格")],
         }
     )
     assert out["user_decision"] == "node_revise"
@@ -379,7 +449,7 @@ async def test_modify_split_pauses_at_await_topo_interrupt():
             "split_manifest": [{"key": "hero_main", "title": "主图", "node_id": "img-1"}],
             "messages": [
                 AIMessage(content="请确认拓扑"),
-                HumanMessage(content="增加运动场景图节点"),
+                HumanMessage(content="更偏运动风详情页"),
             ],
             "user_decision": "node_revise",
         },
