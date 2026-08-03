@@ -36,6 +36,22 @@ class FakeNest:
 
 
 @pytest.mark.asyncio
+async def test_parse_atomic_intent_with_canvas_summary():
+    class SummaryNest:
+        async def get_canvas_summary(self) -> dict:
+            return {
+                "nodes": [
+                    {"id": "img1", "type": "image", "title": "模特人物图", "status": "completed"},
+                ]
+            }
+
+    node = make_parse_atomic_intent_node(nest=SummaryNest())
+    out = await node({"messages": [HumanMessage(content="帮我生成一个模特人物图")]})
+    assert out["atomic_spec"]["title"] == "模特人物图 (2)"
+    assert "canvas_context" in out["atomic_spec"]
+
+
+@pytest.mark.asyncio
 async def test_parse_atomic_intent_image():
     node = make_parse_atomic_intent_node()
     out = await node({"messages": [HumanMessage(content="帮我生成一个模特人物图")]})

@@ -18,7 +18,7 @@ def _latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
-def make_parse_atomic_intent_node() -> Callable:
+def make_parse_atomic_intent_node(*, nest: Any | None = None) -> Callable:
     async def parse_atomic_intent(state: dict) -> dict:
         text = _latest_user_text(state.get("messages") or [])
         if not text.strip():
@@ -27,15 +27,31 @@ def make_parse_atomic_intent_node() -> Callable:
                 "last_error": "empty utterance",
                 "messages": [AIMessage(content="请描述要生成的内容（如图、文案、视频等）。")],
             }
-        spec = build_atomic_spec_enriched(text)
+
+        canvas_summary = None
+        if nest is not None:
+            summary_fn = getattr(nest, "get_canvas_summary", None)
+            if summary_fn is not None:
+                try:
+                    canvas_summary = await summary_fn()
+                except Exception:  # noqa: BLE001 — parse fallback without canvas
+                    canvas_summary = None
+
+        spec = build_atomic_spec_enriched(
+            text,
+            canvas_summary=canvas_summary,
+            focus_node_id=state.get("focus_node_id"),
+        )
         target = spec["target_type"]
         gate = "需确认" if spec["confirm_gate"] else "直达"
+        ctx = spec.get("canvas_context")
+        ctx_note = f" [{ctx}]" if ctx else ""
         return {
             "phase": "atomic_parse",
             "flow_mode": "atomic_create",
             "atomic_spec": spec,
             "messages": [
-                AIMessage(content=f"原子创作：{target} 节点（{gate}）— {spec['title']}"),
+                AIMessage(content=f"原子创作：{target} 节点（{gate}）— {spec['title']}{ctx_note}"),
             ],
         }
 

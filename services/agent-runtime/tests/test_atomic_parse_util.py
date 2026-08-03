@@ -9,7 +9,9 @@ import pytest
 from app.graph.atomic_intent import atomic_create_intent
 from app.graph.atomic_parse_util import (
     build_atomic_spec_enriched,
+    dedupe_atomic_title,
     extract_atomic_prompt,
+    format_canvas_context_line,
     load_atomic_parse_few_shots,
     parse_few_shot_json,
 )
@@ -31,6 +33,49 @@ def test_build_atomic_spec_enriched_uses_clean_prompt():
     spec = build_atomic_spec_enriched("帮我生成一个模特人物图")
     assert spec["target_type"] == "image"
     assert spec["prompt"] == "模特人物图"
+
+
+def test_build_atomic_spec_dedupes_title_from_canvas():
+    summary = {
+        "nodes": [
+            {"id": "n1", "type": "image", "title": "模特人物图", "status": "completed"},
+        ]
+    }
+    spec = build_atomic_spec_enriched("帮我生成一个模特人物图", canvas_summary=summary)
+    assert spec["title"] == "模特人物图 (2)"
+    assert "canvas_context" in spec
+
+
+def test_build_atomic_spec_focus_seed_for_prompt_expand():
+    summary = {
+        "nodes": [
+            {"id": "hero-1", "type": "image", "title": "主图", "status": "completed"},
+        ]
+    }
+    spec = build_atomic_spec_enriched(
+        "多模式扩写这个主图 prompt",
+        canvas_summary=summary,
+        focus_node_id="hero-1",
+    )
+    assert spec["target_type"] == "prompt"
+    assert "主图" in spec["prompt"]
+
+
+def test_format_canvas_context_line():
+    line = format_canvas_context_line(
+        [
+            {"type": "image", "title": "主图"},
+            {"type": "text", "title": "主文案"},
+        ]
+    )
+    assert "2 节点" in line
+    assert "image×1" in line
+    assert "主图" in line
+
+
+def test_dedupe_atomic_title():
+    nodes = [{"title": "Banner"}, {"title": "Banner (2)"}]
+    assert dedupe_atomic_title("Banner", nodes) == "Banner (3)"
 
 
 def test_parse_few_shot_json_roundtrip():

@@ -32,7 +32,7 @@ def route_after_atomic_confirm(state: AgentRuntimeState) -> str:
 
 
 def register_atomic_create_gate(graph: StateGraph, *, nest: Any) -> None:
-    graph.add_node("parse_atomic_intent", make_parse_atomic_intent_node())
+    graph.add_node("parse_atomic_intent", make_parse_atomic_intent_node(nest=nest))
     graph.add_node("create_atomic_node", make_create_atomic_node(nest=nest))
     graph.add_node("await_atomic_confirm", make_await_atomic_confirm_node())
     graph.add_node("run_atomic_gen", make_run_atomic_gen_node(nest=nest))
