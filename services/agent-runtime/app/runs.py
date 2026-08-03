@@ -546,6 +546,7 @@ async def stream_run_events(
             "session_id": req.session_id,
             "user_id": req.user_id,
             "thread_id": thread_id,
+            "requested_skill_id": req.skill_id,
         }
 
     async def run_graph() -> None:
