@@ -75,6 +75,16 @@ ATOMIC_CONFIRM_KEYWORDS = tuple(_TAXONOMY.get("atomic_confirm_keywords") or (
 
 ATOMIC_CANCEL_KEYWORDS = ("取消", "不要了", "算了", "放弃")
 
+ATOMIC_REGENERATE_HINTS = tuple(_TAXONOMY.get("atomic_regenerate_hints") or (
+    "再试一次",
+    "再试",
+    "重试",
+    "重新生成",
+    "再来一次",
+    "再生成一次",
+    "再跑一遍",
+))
+
 # Full-campaign phrases — atomic keyword substrings (e.g. 「图」in「出图」) must not hijack.
 CAMPAIGN_OVERRIDE_PHRASES = (
     "营销方案",
@@ -117,6 +127,21 @@ def atomic_create_intent(text: str) -> bool:
     if any(h in lowered for h in IMAGE_KEYWORDS):
         return True
     return False
+
+
+def atomic_regenerate_intent(text: str) -> bool:
+    """True when user wants to re-run gen on existing atomic_node_id."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    if _is_campaign_override(t):
+        return False
+    if atomic_create_intent(t):
+        return False
+    lowered = t.lower()
+    if any(h in lowered or h in t for h in ATOMIC_REGENERATE_HINTS):
+        return True
+    return lowered in ("retry", "again")
 
 
 def resolve_intake_route(
