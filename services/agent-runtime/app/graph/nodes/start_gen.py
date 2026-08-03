@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.canvas_sync import reconcile_manifest_from_canvas
 from app.graph.topo import topo_sort_gen_keys
 
 
@@ -27,6 +28,19 @@ def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callab
                 pass
 
         manifest = list(state.get("split_manifest") or [])
+        sync_note = ""
+        summary_fn = getattr(nest, "get_canvas_summary", None) if nest is not None else None
+        if summary_fn is not None and manifest:
+            try:
+                summary = await summary_fn()
+                manifest, sync_note = reconcile_manifest_from_canvas(
+                    manifest,
+                    summary.get("nodes") or [],
+                    plan_node_id=str(state.get("plan_node_id") or ""),
+                )
+            except Exception:  # noqa: BLE001
+                pass
+
         if not manifest:
             return {
                 "phase": "done",
@@ -36,6 +50,8 @@ def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callab
         by_key = {str(it["key"]): it for it in manifest if it.get("key")}
 
         ordered_keys = list(state.get("gen_ordered_keys") or [])
+        if sync_note:
+            ordered_keys = []
         if not ordered_keys:
             try:
                 ordered_keys = topo_sort_gen_keys(manifest)
@@ -59,7 +75,12 @@ def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callab
             for k in ordered_keys
         }
 
+        msg = f"开始按拓扑出图，共 {len(ordered_keys)} 个节点…"
+        if sync_note:
+            msg = f"{sync_note}\n{msg}"
+
         return {
+            "split_manifest": manifest,
             # write-once shared context (plain overwrite, no reducer)
             "gen_ordered_keys": ordered_keys,
             "gen_deps_of": deps_of,
@@ -70,7 +91,7 @@ def make_start_gen_node(*, nest: Any = None, max_concurrency: int = 3) -> Callab
             "gen_failed_keys": None,
             "gen_needs_user_keys": None,
             "gen_fail_details": None,
-            "messages": [AIMessage(content=f"开始按拓扑出图，共 {len(ordered_keys)} 个节点…")],
+            "messages": [AIMessage(content=msg)],
         }
 
     return start_gen

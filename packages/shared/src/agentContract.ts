@@ -79,6 +79,31 @@ export const GetNodeResponseSchema = CanvasNodeSchema
 export type GetNodeResponse = z.infer<typeof GetNodeResponseSchema>
 
 // ============================================================
+// get_canvas_summary (Phase C)
+// ============================================================
+
+export const CanvasSummaryNodeSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  title: z.string(),
+  status: z.string(),
+})
+
+export type CanvasSummaryNode = z.infer<typeof CanvasSummaryNodeSchema>
+
+export const GetCanvasSummaryRequestSchema = z.object({
+  sessionId: z.string(),
+})
+
+export type GetCanvasSummaryRequest = z.infer<typeof GetCanvasSummaryRequestSchema>
+
+export const GetCanvasSummaryResponseSchema = z.object({
+  nodes: z.array(CanvasSummaryNodeSchema),
+})
+
+export type GetCanvasSummaryResponse = z.infer<typeof GetCanvasSummaryResponseSchema>
+
+// ============================================================
 // add_nodes_batch
 // ============================================================
 

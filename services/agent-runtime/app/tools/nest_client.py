@@ -160,6 +160,13 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id},
         )
 
+    async def get_canvas_summary(self) -> dict[str, Any]:
+        """Phase C: lightweight canvas node list for manifest reconciliation."""
+        return await self._post(
+            "/agent/internal/get-canvas-summary",
+            {"sessionId": self._session_id},
+        )
+
     async def add_nodes_batch(
         self, items: list[dict[str, Any]], *, stage: bool = False
     ) -> dict[str, Any]:

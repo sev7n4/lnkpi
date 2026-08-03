@@ -206,6 +206,9 @@ class NestEventProxy:
     async def get_node(self, node_id: str) -> dict[str, Any]:
         return await self._inner.get_node(node_id)
 
+    async def get_canvas_summary(self) -> dict[str, Any]:
+        return await self._inner.get_canvas_summary()
+
     async def add_nodes_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._forward_actions(await self._inner.add_nodes_batch(items))
 
