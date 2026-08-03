@@ -19,7 +19,7 @@ from app.graph.nodes.plan._shared import (
 )
 
 
-def make_generate_plan_node(*, llm: Any, skills_dir: Path) -> Callable:
+def make_generate_plan_node(*, llm: Any, skills_dir: Path, nest: Any | None = None) -> Callable:
     """Create the generate_plan node."""
 
     async def generate_plan(state: dict) -> dict:
@@ -27,7 +27,9 @@ def make_generate_plan_node(*, llm: Any, skills_dir: Path) -> Callable:
         skill = load_skill_by_id(skill_id, skills_dir)
 
         user_text = latest_user_text(state.get("messages") or [])
-        user_brief = str(state.get("user_brief") or "").strip()
+        from app.graph.context_snapshot import resolve_brief_for_llm
+
+        user_brief = await resolve_brief_for_llm(state, nest)
         mode = state.get("mode") or "create"
         existing_plan = str(state.get("plan_draft") or "").strip()
 

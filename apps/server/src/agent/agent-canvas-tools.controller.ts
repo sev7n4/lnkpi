@@ -281,6 +281,42 @@ class SaveGenProgressDto {
   summary?: string
 }
 
+// W18: Context snapshot DTOs
+class GetContextSnapshotDto {
+  @IsString()
+  threadId!: string
+
+  @IsOptional()
+  @IsString()
+  stage?: string
+}
+
+class SaveContextSnapshotDto {
+  @IsString()
+  threadId!: string
+
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  stage!: string
+
+  @IsOptional()
+  @IsString()
+  brief?: string
+
+  @IsOptional()
+  @IsString()
+  planSummary?: string
+
+  @IsOptional()
+  @IsString()
+  manifestJson?: string
+
+  @IsOptional()
+  messageCount?: number
+}
+
 @Controller('agent/internal')
 @UseGuards(AgentInternalGuard)
 export class AgentCanvasToolsController {
@@ -449,6 +485,19 @@ export class AgentCanvasToolsController {
   @Post('save-gen-progress')
   async saveGenProgress(@Body() dto: SaveGenProgressDto) {
     const data = await this.tools.saveGenProgress(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  // W18: Context snapshot endpoints
+  @Post('get-context-snapshot')
+  async getContextSnapshot(@Body() dto: GetContextSnapshotDto) {
+    const data = await this.tools.getContextSnapshot(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('save-context-snapshot')
+  async saveContextSnapshot(@Body() dto: SaveContextSnapshotDto) {
+    const data = await this.tools.saveContextSnapshot(dto)
     return { code: 0, message: 'ok', data }
   }
 }

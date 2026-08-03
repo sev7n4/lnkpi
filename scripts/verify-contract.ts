@@ -63,6 +63,10 @@ import {
   GetGenProgressResponseSchema,
   SaveGenProgressRequestSchema,
   SaveGenProgressResponseSchema,
+  GetContextSnapshotRequestSchema,
+  GetContextSnapshotResponseSchema,
+  SaveContextSnapshotRequestSchema,
+  SaveContextSnapshotResponseSchema,
   StageCanvasActionsRequestSchema,
   StageCanvasActionsResponseSchema,
   CommitStageRequestSchema,
@@ -176,6 +180,14 @@ const CONTRACTS: Record<string, { request: ContractMapping; response: ContractMa
   save_gen_progress: {
     request: { tsSchema: SaveGenProgressRequestSchema, pyModel: 'SaveGenProgressRequest' },
     response: { tsSchema: SaveGenProgressResponseSchema, pyModel: 'SaveGenProgressResponse' },
+  },
+  get_context_snapshot: {
+    request: { tsSchema: GetContextSnapshotRequestSchema, pyModel: 'GetContextSnapshotRequest' },
+    response: { tsSchema: GetContextSnapshotResponseSchema, pyModel: 'GetContextSnapshotResponse' },
+  },
+  save_context_snapshot: {
+    request: { tsSchema: SaveContextSnapshotRequestSchema, pyModel: 'SaveContextSnapshotRequest' },
+    response: { tsSchema: SaveContextSnapshotResponseSchema, pyModel: 'SaveContextSnapshotResponse' },
   },
 }
 

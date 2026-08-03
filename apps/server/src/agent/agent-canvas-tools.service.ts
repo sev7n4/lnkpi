@@ -974,6 +974,70 @@ export class AgentCanvasToolsService {
     return { id: record.id }
   }
 
+  /**
+   * W18: Get latest context snapshot for a thread
+   */
+  async getContextSnapshot(input: {
+    threadId: string
+    stage?: string
+  }): Promise<{
+    id: string
+    stage: string
+    brief: string | null
+    planSummary: string | null
+    manifestJson: string | null
+    messageCount: number | null
+  } | null> {
+    const where: { threadId: string; stage?: string } = { threadId: input.threadId }
+    if (input.stage) {
+      where.stage = input.stage
+    }
+
+    const record = await this.prisma.contextSnapshot.findFirst({
+      where,
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!record) {
+      return null
+    }
+
+    return {
+      id: record.id,
+      stage: record.stage,
+      brief: record.brief,
+      planSummary: record.planSummary,
+      manifestJson: record.manifestJson,
+      messageCount: record.messageCount,
+    }
+  }
+
+  /**
+   * W18: Save context snapshot (brief/plan/manifest summaries)
+   */
+  async saveContextSnapshot(input: {
+    threadId: string
+    sessionId: string
+    stage: string
+    brief?: string | null
+    planSummary?: string | null
+    manifestJson?: string | null
+    messageCount?: number | null
+  }): Promise<{ id: string }> {
+    const record = await this.prisma.contextSnapshot.create({
+      data: {
+        threadId: input.threadId,
+        sessionId: input.sessionId,
+        stage: input.stage,
+        brief: input.brief ?? null,
+        planSummary: input.planSummary ?? null,
+        manifestJson: input.manifestJson ?? null,
+        messageCount: input.messageCount ?? null,
+      },
+    })
+    return { id: record.id }
+  }
+
   private async pollGeneration(
     userId: string,
     recordId: string,

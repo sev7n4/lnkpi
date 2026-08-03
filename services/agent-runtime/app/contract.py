@@ -538,3 +538,44 @@ class SaveGenProgressResponse(BaseModel):
     """Response for save_gen_progress endpoint."""
 
     id: str
+
+
+# ============================================================
+# context_snapshot (W18)
+# ============================================================
+
+
+class GetContextSnapshotRequest(BaseModel):
+    """Request for get_context_snapshot endpoint."""
+
+    threadId: str
+    stage: Optional[str] = None
+
+
+class GetContextSnapshotResponse(BaseModel):
+    """Response for get_context_snapshot endpoint."""
+
+    id: str
+    stage: str
+    brief: Optional[str] = None
+    planSummary: Optional[str] = None
+    manifestJson: Optional[str] = None
+    messageCount: Optional[int] = None
+
+
+class SaveContextSnapshotRequest(BaseModel):
+    """Request for save_context_snapshot endpoint."""
+
+    threadId: str
+    sessionId: str
+    stage: str
+    brief: Optional[str] = None
+    planSummary: Optional[str] = None
+    manifestJson: Optional[str] = None
+    messageCount: Optional[int] = None
+
+
+class SaveContextSnapshotResponse(BaseModel):
+    """Response for save_context_snapshot endpoint."""
+
+    id: str
