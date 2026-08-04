@@ -26,12 +26,14 @@ def _result_record_id(result: Any) -> str | None:
 
 def make_run_atomic_gen_node(*, nest: Any) -> Callable:
     async def run_atomic_gen(state: dict) -> dict:
-        node_id = str(state.get("atomic_node_id") or "").strip()
-        spec = state.get("atomic_spec") or {}
-        target_type = str(spec.get("target_type") or "image")
-        title = str(spec.get("title") or target_type)
+        items = [dict(i) for i in (state.get("atomic_items") or []) if isinstance(i, dict)]
+        if not items:
+            node_id = str(state.get("atomic_node_id") or "").strip()
+            spec = state.get("atomic_spec") or {}
+            if node_id:
+                items = [{**spec, "node_id": node_id}]
 
-        if not node_id:
+        if not items:
             return {
                 "phase": "error",
                 "last_error": "missing atomic_node_id",
@@ -45,38 +47,72 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
             "prompt": getattr(nest, "run_prompt_generation", None),
             "audio": getattr(nest, "run_audio_generation", None),
         }
-        run = runners.get(target_type)
-        if run is None:
-            return {
-                "phase": "error",
-                "last_error": f"unsupported target_type: {target_type}",
-                "messages": [AIMessage(content=f"暂不支持 {target_type} 模态生产。")],
-            }
 
-        try:
-            result = await run(node_id)
-        except Exception as exc:  # noqa: BLE001
-            return {
-                "phase": "error",
-                "last_error": str(exc),
-                "messages": [AIMessage(content=f"生成失败：{exc}")],
-            }
+        completed: list[str] = []
+        failed: list[str] = []
+        last_record_id: str | None = None
+        last_error: str | None = None
 
-        record_id = _result_record_id(result)
-        if _is_success(result):
-            msg = f"「{title}」生成完成。"
+        for item in items:
+            node_id = str(item.get("node_id") or state.get("atomic_node_id") or "").strip()
+            target_type = str(item.get("target_type") or "image")
+            title = str(item.get("title") or target_type)
+            if not node_id:
+                failed.append(title)
+                last_error = "missing atomic_node_id"
+                continue
+
+            run = runners.get(target_type)
+            if run is None:
+                failed.append(title)
+                last_error = f"unsupported target_type: {target_type}"
+                continue
+
+            try:
+                result = await run(node_id)
+            except Exception as exc:  # noqa: BLE001
+                failed.append(title)
+                last_error = str(exc)
+                continue
+
+            record_id = _result_record_id(result)
             if record_id:
-                msg += f"（record: {record_id}）"
+                last_record_id = record_id
+
+            if _is_success(result):
+                completed.append(title)
+            else:
+                status = str(result.get("status") or "error") if isinstance(result, dict) else "error"
+                failed.append(title)
+                last_error = status
+
+        if completed and not failed:
+            if len(completed) == 1:
+                msg = f"「{completed[0]}」生成完成。"
+            else:
+                msg = f"已完成 {len(completed)} 张：{'、'.join(completed)}。"
+            if last_record_id:
+                msg += f"（record: {last_record_id}）"
             return {
                 "phase": "done",
-                "atomic_record_id": record_id,
+                "atomic_record_id": last_record_id,
                 "messages": [AIMessage(content=msg)],
             }
 
-        status = str(result.get("status") or "error") if isinstance(result, dict) else "error"
+        if completed and failed:
+            msg = f"部分完成：{'、'.join(completed)}；未完成：{'、'.join(failed)}。"
+            return {
+                "phase": "error",
+                "atomic_record_id": last_record_id,
+                "last_error": last_error,
+                "messages": [AIMessage(content=msg)],
+            }
+
+        title = str(items[0].get("title") or items[0].get("target_type") or "节点")
+        status = last_error or "error"
         return {
             "phase": "error",
-            "atomic_record_id": record_id,
+            "atomic_record_id": last_record_id,
             "last_error": status,
             "messages": [AIMessage(content=f"「{title}」生成未完成（{status}）。")],
         }
