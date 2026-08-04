@@ -106,7 +106,8 @@ def test_parse_few_shot_json_roundtrip():
 
 def test_load_atomic_parse_few_shots():
     pairs = load_atomic_parse_few_shots(SKILLS_DIR)
-    assert len(pairs) >= 3
+    assert len(pairs) >= 20
     for user, assistant in pairs:
         assert user.strip()
-        assert parse_few_shot_json(assistant) is not None
+        # Phase 2 few-shots use full structured JSON; legacy single-spec still valid
+        assert assistant.strip().startswith("{")

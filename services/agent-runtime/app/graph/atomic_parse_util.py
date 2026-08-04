@@ -253,6 +253,81 @@ def build_atomic_spec_enriched(
     return base
 
 
+_VAGUE_UTTERANCES = frozenset({
+    "帮我生成",
+    "生成一下",
+    "做一个",
+    "来一张",
+    "来一段",
+    "帮我做一张",
+})
+
+_STRONG_SIGNAL_KEYWORDS = (
+    "人物图",
+    "白底",
+    "主图",
+    "三视图",
+    "海报",
+    "banner",
+    "分镜",
+    "旁白",
+    "配音",
+    "视频",
+    "prompt",
+    "文案",
+    "脚本",
+    "广告词",
+    "模特",
+)
+
+
+def rule_parse_confidence(
+    utterance: str,
+    spec: dict[str, Any],
+    multi_items: list[dict[str, Any]] | None,
+) -> float:
+    """Heuristic confidence for rule-only parse (Phase 2 fast path)."""
+    if multi_items and len(multi_items) >= 2:
+        return 0.98
+    t = (utterance or "").strip()
+    if not t or t in _VAGUE_UTTERANCES:
+        return 0.40
+    prompt = str(spec.get("prompt") or "").strip()
+    if len(prompt) < 4:
+        return 0.50
+    if any(k in t for k in _STRONG_SIGNAL_KEYWORDS):
+        return 0.96
+    if spec.get("target_type") in ("video", "audio"):
+        return 0.95
+    from app.graph.atomic_intent import atomic_create_intent
+
+    if atomic_create_intent(t):
+        return 0.88
+    return 0.55
+
+
+def rule_parse_atomic(
+    utterance: str,
+    *,
+    canvas_summary: dict[str, Any] | None = None,
+    focus_node_id: str | None = None,
+) -> tuple[list[dict[str, Any]], float]:
+    """Rule-based parse returning items + confidence."""
+    multi_items = build_atomic_items_enriched(
+        utterance,
+        canvas_summary=canvas_summary,
+        focus_node_id=focus_node_id,
+    )
+    if multi_items:
+        return multi_items, rule_parse_confidence(utterance, multi_items[0], multi_items)
+    spec = build_atomic_spec_enriched(
+        utterance,
+        canvas_summary=canvas_summary,
+        focus_node_id=focus_node_id,
+    )
+    return [spec], rule_parse_confidence(utterance, spec, None)
+
+
 def parse_few_shot_json(assistant: str) -> dict[str, Any] | None:
     """Parse assistant JSON from few-shot example (test / future LLM validation)."""
     text = (assistant or "").strip()
