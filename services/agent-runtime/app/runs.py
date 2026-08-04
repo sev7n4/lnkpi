@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -14,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
+from app.checkpoint_observability import checkpoint_diagnostics
 from app.config import settings
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
@@ -29,6 +31,8 @@ from app.graph.nodes.intake import modify_intent
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
+
+logger = logging.getLogger(__name__)
 
 
 async def _init_checkpointer() -> AsyncSqliteSaver:
@@ -472,12 +476,14 @@ async def get_thread_state(
     next_nodes = [str(n) for n in (getattr(snap, "next", None) or [])]
     phase = vals.get("phase")
     phase_str = str(phase) if phase is not None else None
+    diag = checkpoint_diagnostics(vals)
     return {
         "threadId": thread_id,
         "phase": phase_str,
         "nextNodes": next_nodes,
         "interrupted": bool(next_nodes),
         "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+        **diag,
     }
 
 
@@ -558,6 +564,14 @@ async def stream_run_events(
     # W5: 检查是否从 interrupt_before 恢复
     snap = await graph.aget_state(config)
     next_nodes = getattr(snap, "next", None) or []
+    pre_vals = getattr(snap, "values", None) or {}
+    logger.info(
+        "agent_turn_start thread_id=%s session_id=%s resume=%s checkpoint=%s",
+        thread_id,
+        req.session_id,
+        bool(next_nodes),
+        checkpoint_diagnostics(pre_vals),
+    )
     assistant_save_after = 0
 
     if next_nodes:
@@ -619,6 +633,13 @@ async def stream_run_events(
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]
             post_vals = getattr(post, "values", None) or {}
+            logger.info(
+                "agent_turn_end thread_id=%s session_id=%s checkpoint=%s next=%s",
+                thread_id,
+                req.session_id,
+                checkpoint_diagnostics(post_vals),
+                post_next,
+            )
             if post_next:
                 phase = post_vals.get("phase")
                 await emit(
