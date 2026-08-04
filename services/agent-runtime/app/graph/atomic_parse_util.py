@@ -12,7 +12,20 @@ import yaml
 from app.graph.few_shot import load_few_shots
 from app.graph.atomic_intent import build_atomic_spec, confirm_gate_for_type, parse_atomic_target_type
 
-_DEICTIC_HINTS = ("这个", "这张", "该", "主图", "当前", "刚才")
+_DEICTIC_HINTS = (
+    "这个",
+    "这张",
+    "那个",
+    "那张",
+    "该",
+    "主图",
+    "当前",
+    "刚才",
+    "同样风格",
+    "同样",
+    "上一张",
+)
+_STYLE_INHERIT_HINTS = ("同样风格", "刚才那个风格", "按刚才", "跟刚才一样", "一样风格")
 
 _STRIP_PREFIXES = (
     "帮我生成一个",
@@ -82,6 +95,21 @@ def dedupe_atomic_title(title: str, nodes: list[dict[str, Any]]) -> str:
         if candidate not in existing:
             return candidate
     return f"{base} ({len(nodes) + 1})"
+
+
+def style_seed_from_context(parse_context: str | None) -> str | None:
+    """Pull prior user topic from compact dialogue summary for style inheritance."""
+    ctx = (parse_context or "").strip()
+    if not ctx or "近期对话:" not in ctx:
+        return None
+    tail = ctx.split("近期对话:", 1)[1]
+    for chunk in tail.split("；"):
+        if "用户:" not in chunk:
+            continue
+        user_part = chunk.split("用户:", 1)[1].split("→助手:", 1)[0].strip()
+        if user_part and len(user_part) >= 4:
+            return user_part[:80]
+    return None
 
 
 def resolve_focus_seed(utterance: str, focus_node_id: str | None, nodes: list[dict[str, Any]]) -> str | None:
@@ -226,6 +254,7 @@ def build_atomic_spec_enriched(
     *,
     canvas_summary: dict[str, Any] | None = None,
     focus_node_id: str | None = None,
+    parse_context: str | None = None,
 ) -> dict[str, Any]:
     """Keyword routing + prompt/title cleanup + canvas context (P4-04/05)."""
     nodes = canvas_summary_nodes(canvas_summary)
@@ -241,6 +270,11 @@ def build_atomic_spec_enriched(
         elif len(prompt) <= 8:
             prompt = focus_seed
 
+    if any(h in utterance for h in _STYLE_INHERIT_HINTS):
+        style_seed = style_seed_from_context(parse_context)
+        if style_seed and style_seed not in (prompt or ""):
+            prompt = f"{style_seed}；{prompt}" if prompt else style_seed
+
     if prompt:
         base["prompt"] = prompt
         if len(prompt) <= 28:
@@ -248,7 +282,10 @@ def build_atomic_spec_enriched(
 
     if nodes:
         base["title"] = dedupe_atomic_title(str(base.get("title") or ""), nodes)
-        base["canvas_context"] = format_canvas_context_line(nodes)
+
+    ctx_line = parse_context or (format_canvas_context_line(nodes) if nodes else None)
+    if ctx_line:
+        base["canvas_context"] = ctx_line
 
     return base
 
@@ -311,6 +348,7 @@ def rule_parse_atomic(
     *,
     canvas_summary: dict[str, Any] | None = None,
     focus_node_id: str | None = None,
+    parse_context: str | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     """Rule-based parse returning items + confidence."""
     multi_items = build_atomic_items_enriched(
@@ -324,6 +362,7 @@ def rule_parse_atomic(
         utterance,
         canvas_summary=canvas_summary,
         focus_node_id=focus_node_id,
+        parse_context=parse_context,
     )
     return [spec], rule_parse_confidence(utterance, spec, None)
 

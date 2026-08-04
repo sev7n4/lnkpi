@@ -24,9 +24,9 @@ def taxonomy_doc() -> dict:
     return yaml.safe_load(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_eval_set_has_80_cases(eval_doc: dict):
+def test_eval_set_has_95_cases(eval_doc: dict):
     cases = eval_doc.get("cases") or []
-    assert len(cases) == 80
+    assert len(cases) == 95
     ids = [c["id"] for c in cases]
     assert len(ids) == len(set(ids)), "duplicate case ids"
 

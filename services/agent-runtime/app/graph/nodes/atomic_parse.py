@@ -7,6 +7,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.atomic_parse_llm import llm_parse_atomic_intent
+from app.graph.atomic_context import build_atomic_parse_context
 from app.graph.atomic_parse_schema import (
     CLARIFY_THRESHOLD,
     RULE_FAST_PATH_THRESHOLD,
@@ -46,12 +47,14 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_summary = None
 
         focus_node_id = state.get("focus_node_id")
+        parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
         rule_items, rule_conf = rule_parse_atomic(
             text,
             canvas_summary=canvas_summary,
             focus_node_id=focus_node_id,
+            parse_context=parse_ctx or None,
         )
-        canvas_ctx = rule_items[0].get("canvas_context") if rule_items else None
+        canvas_ctx = parse_ctx or (rule_items[0].get("canvas_context") if rule_items else None)
 
         outcome = None
         if rule_conf >= RULE_FAST_PATH_THRESHOLD:
