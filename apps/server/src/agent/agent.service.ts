@@ -178,6 +178,11 @@ export class AgentService {
     nextNodes: string[]
     interrupted: boolean
     finished: boolean
+    hasAtomicCheckpoint?: boolean
+    atomicNodeId?: string | null
+    atomicTargetType?: string | null
+    atomicTitle?: string | null
+    flowMode?: string | null
   } | null> {
     const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
     if (!runtimeUrl || !threadId.trim()) return null

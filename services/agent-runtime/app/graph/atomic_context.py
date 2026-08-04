@@ -55,6 +55,12 @@ def build_atomic_parse_context(
 ) -> str:
     """Canvas one-liner + last 2 dialogue turns for hybrid parse."""
     parts: list[str] = []
+    prior = state.get("atomic_spec")
+    if isinstance(prior, dict):
+        title = str(prior.get("title") or "").strip()
+        target = str(prior.get("target_type") or "").strip()
+        if title:
+            parts.append(f"上轮原子:{target or 'image'}:{title[:32]}")
     nodes = canvas_summary_nodes(canvas_summary)
     canvas_line = format_canvas_context_line(nodes)
     if canvas_line:

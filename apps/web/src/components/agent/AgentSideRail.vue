@@ -108,6 +108,8 @@ const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
 /** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
 const interruptGate = ref<AgentInterruptPayload | null>(null)
+/** LangGraph checkpoint: same thread can regenerate/variant on prior atomic node */
+const hasAtomicCheckpoint = ref(false)
 
 const agentStream = useAgentStream({
   onStale: () => {
@@ -275,7 +277,30 @@ function newAgentSession() {
   agent.clear()
   input.value = ''
   taskProgress.value = emptyTaskProgress()
+  interruptGate.value = null
+  hasAtomicCheckpoint.value = false
+  recoveredPhaseHint.value = null
   agentThreadId.value = createAgentThreadId(props.sessionId)
+  ElMessage.info('已新建对话：重新生成/变体需要在新对话里先完成首次创作。')
+}
+
+async function refreshThreadCheckpoint() {
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch(
+      apiUrl(`/api/agent/thread-state?threadId=${encodeURIComponent(agentThreadId.value)}`),
+      { headers: { Authorization: `Bearer ${token}` } },
+    )
+    const json = (await res.json()) as {
+      data?: { hasAtomicCheckpoint?: boolean; interrupted?: boolean; phase?: string | null }
+    }
+    hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.interrupted) {
+      interruptGate.value = interruptPayloadFromThreadState(json.data)
+    }
+  } catch {
+    // ignore — checkpoint hint is best-effort
+  }
 }
 
 async function loadHistory() {
@@ -463,6 +488,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     }
     agent.finishStreaming()
     await reconcileLatestAssistant()
+    await refreshThreadCheckpoint()
     const actions = agent.flushActions()
     if (actions.length) emit('canvasActions', actions)
     // 始终回拉：Runtime 已写 Session.canvasData；本地 save 不得用旧节点覆盖
@@ -495,9 +521,11 @@ async function reconnectStream() {
         interrupted?: boolean
         finished?: boolean
         nextNodes?: string[]
+        hasAtomicCheckpoint?: boolean
       } | null
     }
     const phase = json.data?.phase ?? null
+    hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     if (agent.isStreaming) {

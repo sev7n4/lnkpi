@@ -49,3 +49,14 @@ def test_build_atomic_parse_context_includes_canvas_and_history():
     assert "画布" in ctx
     assert "主图" in ctx
     assert "近期对话" in ctx
+
+
+def test_build_atomic_parse_context_includes_prior_atomic_spec():
+    ctx = build_atomic_parse_context(
+        {
+            "messages": [],
+            "atomic_spec": {"target_type": "image", "title": "模特人物图", "prompt": "模特"},
+        },
+        canvas_summary={"nodes": []},
+    )
+    assert "上轮原子:image:模特人物图" in ctx
