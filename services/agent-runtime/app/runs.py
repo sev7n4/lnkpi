@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
+from app.checkpoint_observability import checkpoint_diagnostics
 from app.config import settings
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
@@ -472,12 +473,14 @@ async def get_thread_state(
     next_nodes = [str(n) for n in (getattr(snap, "next", None) or [])]
     phase = vals.get("phase")
     phase_str = str(phase) if phase is not None else None
+    diag = checkpoint_diagnostics(vals)
     return {
         "threadId": thread_id,
         "phase": phase_str,
         "nextNodes": next_nodes,
         "interrupted": bool(next_nodes),
         "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+        **diag,
     }
 
 
