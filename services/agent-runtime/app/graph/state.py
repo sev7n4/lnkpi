@@ -100,6 +100,7 @@ class AgentRuntimeState(TypedDict, total=False):
     flow_mode: Literal["campaign", "single_node", "atomic_create", "atomic_regenerate"] | None  # W28/W29/P4
     focus_node_id: str | None  # W28: canvas node for single-node gen
     atomic_spec: dict | None  # P4: parsed atomic create intent
+    atomic_items: list[dict] | None  # P4: multi-item atomic create (spec + node_id)
     atomic_node_id: str | None  # P4: created canvas node id
     atomic_record_id: str | None  # P4: generation record id
 

@@ -98,6 +98,21 @@ def _is_campaign_override(text: str) -> bool:
     return any(p in text for p in CAMPAIGN_OVERRIDE_PHRASES)
 
 
+def _matches_regenerate_hints(text: str) -> bool:
+    """True when utterance is retry/regenerate, not a new create request."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    lowered = t.lower()
+    if any(h in lowered or h in t for h in ATOMIC_REGENERATE_HINTS):
+        return True
+    if "重新生成" in t:
+        return True
+    if any(p in t for p in ("再生成一次", "再生成一遍", "再跑一次")):
+        return True
+    return lowered in ("retry", "again")
+
+
 def _has_prompt_explicit(text: str) -> bool:
     n = _normalize(text)
     if any(_normalize(k) in n for k in PROMPT_EXPLICIT_KEYWORDS):
@@ -109,6 +124,8 @@ def atomic_create_intent(text: str) -> bool:
     """True when user wants a single-shot create-and-generate flow."""
     lowered = (text or "").strip().lower()
     if not lowered:
+        return False
+    if _matches_regenerate_hints(text):
         return False
     if any(h in text for h in CONFIRM_GEN_HINTS):
         return False
@@ -136,12 +153,7 @@ def atomic_regenerate_intent(text: str) -> bool:
         return False
     if _is_campaign_override(t):
         return False
-    if atomic_create_intent(t):
-        return False
-    lowered = t.lower()
-    if any(h in lowered or h in t for h in ATOMIC_REGENERATE_HINTS):
-        return True
-    return lowered in ("retry", "again")
+    return _matches_regenerate_hints(t)
 
 
 def resolve_intake_route(

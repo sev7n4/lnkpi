@@ -29,6 +29,24 @@ def test_extract_atomic_prompt_strips_prefix():
     assert extract_atomic_prompt("写一段天猫详情页开场文案") == "天猫详情页开场文案"
 
 
+def test_parse_atomic_multi_items_three_images():
+    from app.graph.atomic_parse_util import parse_atomic_multi_items
+
+    utterance = "帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。"
+    items = parse_atomic_multi_items(utterance)
+    assert items is not None
+    assert len(items) == 3
+    assert items[0]["prompt"] == "蓝牙耳机主图"
+    assert items[1]["prompt"] == "白底图"
+    assert items[2]["prompt"] == "三视图"
+
+
+def test_parse_atomic_multi_items_not_single_image():
+    from app.graph.atomic_parse_util import parse_atomic_multi_items
+
+    assert parse_atomic_multi_items("帮我生成一个模特人物图") is None
+
+
 def test_build_atomic_spec_enriched_uses_clean_prompt():
     spec = build_atomic_spec_enriched("帮我生成一个模特人物图")
     assert spec["target_type"] == "image"

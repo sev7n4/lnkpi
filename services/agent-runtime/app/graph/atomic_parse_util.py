@@ -10,7 +10,7 @@ from typing import Any
 import yaml
 
 from app.graph.few_shot import load_few_shots
-from app.graph.atomic_intent import build_atomic_spec, confirm_gate_for_type
+from app.graph.atomic_intent import build_atomic_spec, confirm_gate_for_type, parse_atomic_target_type
 
 _DEICTIC_HINTS = ("这个", "这张", "该", "主图", "当前", "刚才")
 
@@ -96,6 +96,116 @@ def resolve_focus_seed(utterance: str, focus_node_id: str | None, nodes: list[di
         title = str(node.get("title") or "").strip()
         return title or None
     return None
+
+
+_CN_COUNT = {
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+}
+
+_MULTI_ENUM_MARKERS = ("分别是", "分别为", "包括")
+
+
+def _parse_cn_count(token: str) -> int | None:
+    token = (token or "").strip()
+    if not token:
+        return None
+    if token.isdigit():
+        n = int(token)
+        return n if n >= 2 else None
+    if token in _CN_COUNT:
+        n = _CN_COUNT[token]
+        return n if n >= 2 else None
+    if len(token) == 2 and token[0] == "十" and token[1] in _CN_COUNT:
+        return 10 + _CN_COUNT[token[1]]
+    return None
+
+
+def _split_atomic_item_labels(text: str) -> list[str]:
+    parts = re.split(r"[、，,；;]+", text or "")
+    return [p.strip() for p in parts if p.strip()]
+
+
+def parse_atomic_multi_items(utterance: str) -> list[dict[str, Any]] | None:
+    """Split enumerated multi-image requests into per-node atomic specs."""
+    t = (utterance or "").strip()
+    if not t:
+        return None
+    if parse_atomic_target_type(t) != "image":
+        return None
+
+    count_m = re.search(r"([一二三四五六七八九十两\d]+)张(?:图|图片)", t)
+    expected = _parse_cn_count(count_m.group(1)) if count_m else None
+    if expected is not None and expected < 2:
+        return None
+
+    labels: list[str] | None = None
+    for marker in _MULTI_ENUM_MARKERS:
+        if marker not in t:
+            continue
+        tail = t.split(marker, 1)[1].lstrip("：: ").rstrip("。. ")
+        labels = _split_atomic_item_labels(tail)
+        break
+
+    if labels is None:
+        colon_m = re.search(r"张(?:图|图片)[：:，,]\s*(.+?)[。.]?$", t)
+        if colon_m and expected and expected >= 2:
+            labels = _split_atomic_item_labels(colon_m.group(1))
+
+    if not labels or len(labels) < 2:
+        return None
+    if expected is not None and expected != len(labels):
+        return None
+
+    return [
+        {
+            "target_type": "image",
+            "prompt": label,
+            "title": label,
+            "confirm_gate": False,
+        }
+        for label in labels
+    ]
+
+
+def build_atomic_items_enriched(
+    utterance: str,
+    *,
+    canvas_summary: dict[str, Any] | None = None,
+    focus_node_id: str | None = None,
+) -> list[dict[str, Any]] | None:
+    """Multi-image parse with canvas title dedupe applied per item."""
+    items = parse_atomic_multi_items(utterance)
+    if not items:
+        return None
+    nodes = canvas_summary_nodes(canvas_summary)
+    if not nodes:
+        return items
+    enriched: list[dict[str, Any]] = []
+    seen_titles = _existing_titles(nodes)
+    for item in items:
+        copy = dict(item)
+        title = str(copy.get("title") or "").strip()
+        if title and title in seen_titles:
+            for i in range(2, 20):
+                candidate = f"{title} ({i})"
+                if candidate not in seen_titles:
+                    copy["title"] = candidate
+                    seen_titles.add(candidate)
+                    break
+        elif title:
+            seen_titles.add(title)
+        enriched.append(copy)
+    return enriched
 
 
 def extract_atomic_prompt(utterance: str) -> str:

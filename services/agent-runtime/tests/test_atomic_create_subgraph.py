@@ -20,7 +20,12 @@ class FakeNest:
 
     async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
         self.calls.append(("add_nodes_batch", items))
-        return {"nodes": [{"key": items[0]["key"], "nodeId": "node-atomic-1"}]}
+        return {
+            "nodes": [
+                {"key": item["key"], "nodeId": f"node-atomic-{idx + 1}"}
+                for idx, item in enumerate(items)
+            ],
+        }
 
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         self.calls.append(("run_image_generation", node_id))
@@ -96,6 +101,29 @@ async def test_text_atomic_gen_direct():
     done = await run({**created, "atomic_spec": spec})
     assert done["phase"] == "done"
     assert any(c[0] == "run_text_generation" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_multi_image_atomic_create_and_gen():
+    nest = FakeNest()
+    utterance = "帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。"
+    parsed = await make_parse_atomic_intent_node()( {"messages": [HumanMessage(content=utterance)]})
+    items = parsed.get("atomic_items") or []
+    assert len(items) == 3
+    assert [i["prompt"] for i in items] == ["蓝牙耳机主图", "白底图", "三视图"]
+
+    created = await make_create_atomic_node(nest=nest)(parsed)
+    assert len(created["atomic_items"]) == 3
+    batch_call = next(c for c in nest.calls if c[0] == "add_nodes_batch")
+    assert len(batch_call[1]) == 3
+
+    run = make_run_atomic_gen_node(nest=nest)
+    done = await run(created)
+    assert done["phase"] == "done"
+    gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
+    assert len(gen_calls) == 3
+    assert gen_calls[0][1] == "node-atomic-1"
+    assert gen_calls[2][1] == "node-atomic-3"
 
 
 @pytest.mark.asyncio

@@ -57,6 +57,10 @@ intake_priority:
   - id: single_node
     when: focus_node_id and single_node_gen_intent and not modify_intent
     route: single_node
+  - id: atomic_regenerate
+    when: atomic_node_id and atomic_spec and atomic_regenerate_intent
+    route: atomic_regenerate
+    notes: Requires checkpoint in thread state; see eval-intent-regression.yaml
   - id: atomic_create
     when: atomic_create_intent and not marketing_intent
     route: atomic_create
@@ -100,6 +104,8 @@ atomic_regenerate_hints:
   - 再试
   - 重试
   - 重新生成
+  - 重新生成一张
+  - 重新生成一个
   - 再来一次
   - 再生成一次
   - 再跑一遍

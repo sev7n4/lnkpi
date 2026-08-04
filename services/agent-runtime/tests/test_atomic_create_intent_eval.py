@@ -24,9 +24,9 @@ def taxonomy_doc() -> dict:
     return yaml.safe_load(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_eval_set_has_30_cases(eval_doc: dict):
+def test_eval_set_has_50_cases(eval_doc: dict):
     cases = eval_doc.get("cases") or []
-    assert len(cases) == 30
+    assert len(cases) == 50
     ids = [c["id"] for c in cases]
     assert len(ids) == len(set(ids)), "duplicate case ids"
 
@@ -65,6 +65,13 @@ def test_taxonomy_confirm_flags_match_d2(taxonomy_doc: dict):
     assert types["audio"]["confirm_gate"] is True
     assert types["image"]["confirm_gate"] is False
     assert types["text"]["confirm_gate"] is False
+
+
+def test_taxonomy_has_regenerate_priority(taxonomy_doc: dict):
+    priority = taxonomy_doc.get("intake_priority") or []
+    ids = [p.get("id") for p in priority]
+    assert "atomic_regenerate" in ids
+    assert ids.index("atomic_regenerate") < ids.index("atomic_create")
 
 
 def test_modality_coverage(eval_doc: dict):
