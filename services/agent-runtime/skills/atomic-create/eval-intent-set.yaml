@@ -425,3 +425,78 @@ cases:
     utterance: 来一段场景氛围视频
     focus_node_id: null
     gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: p3-deix-01
+    utterance: 多模式扩写这个主图 prompt
+    focus_node_id: hero-001
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: p3-deix-02
+    utterance: 用提示词模式扩写这个白底图
+    focus_node_id: white-001
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: p3-deix-03
+    utterance: 帮我生成一张这个产品的场景图
+    focus_node_id: prod-001
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-04
+    utterance: 只生成这张白底版
+    focus_node_id: node-img-1
+    gold: { route: single_node, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-05
+    utterance: 同样风格帮我生成一张主图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-06
+    utterance: 按刚才那个风格生成一张海报
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-07
+    utterance: 跟刚才一样再来一张白底图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-08
+    utterance: 扩写该节点的 prompt
+    focus_node_id: node-prompt-1
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: p3-deix-09
+    utterance: 重新生成这张
+    focus_node_id: node-img-1
+    gold: { route: single_node, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-10
+    utterance: 帮我生成一张当前主图的变体
+    focus_node_id: hero-001
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-11
+    utterance: 主图、白底和三视图各来一张
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-12
+    utterance: 再来一张那个风格的场景图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-13
+    utterance: 生成一张上一张图的横版
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p3-deix-14
+    utterance: 用同样风格写一段开场文案
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p3-deix-15
+    utterance: 帮我做一张该产品的三视图
+    focus_node_id: prod-001
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }

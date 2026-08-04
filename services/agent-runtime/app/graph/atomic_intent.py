@@ -108,9 +108,63 @@ def _matches_regenerate_hints(text: str) -> bool:
         return True
     if "重新生成" in t:
         return True
-    if any(p in t for p in ("再生成一次", "再生成一遍", "再跑一次")):
+    if any(p in t for p in ("再生成一次", "再生成一遍", "再跑一次", "再生成一张")):
         return True
     return lowered in ("retry", "again")
+
+
+_REGENERATE_STRIP_PHRASES = (
+    "重新生成一张",
+    "重新生成",
+    "再生成一张",
+    "再生成一次",
+    "再生成一遍",
+    "再跑一次",
+    "再来一次",
+    "再试一次",
+    "再试",
+    "重试",
+)
+
+
+def detect_regenerate_adjust(text: str) -> str | None:
+    """Extract prompt-adjustment tail from regenerate utterance (L1-04)."""
+    t = (text or "").strip()
+    if not t or not _matches_regenerate_hints(t):
+        return None
+    remainder = t
+    for phrase in sorted(_REGENERATE_STRIP_PHRASES, key=len, reverse=True):
+        remainder = remainder.replace(phrase, "")
+    remainder = remainder.strip("，,、。；; \t")
+    if len(remainder) >= 2:
+        return remainder
+    return None
+
+
+def apply_regenerate_adjust(
+    spec: dict[str, Any],
+    adjust: str | None,
+    *,
+    parse_context: str | None = None,
+) -> dict[str, Any]:
+    """Merge adjust phrase (and optional style context) into atomic_spec.prompt."""
+    if not adjust:
+        return dict(spec)
+    out = dict(spec)
+    base = str(out.get("prompt") or "").strip()
+    adj = adjust.strip()
+    if any(h in adj for h in ("同样风格", "刚才那个风格", "按刚才", "跟刚才一样")):
+        from app.graph.atomic_parse_util import style_seed_from_context
+
+        style_seed = style_seed_from_context(parse_context)
+        if style_seed:
+            merged = f"{style_seed}；{base}" if base else style_seed
+            out["prompt"] = merged
+            return out
+    if adj in base:
+        return out
+    out["prompt"] = f"{base}；{adj}" if base else adj
+    return out
 
 
 def _has_prompt_explicit(text: str) -> bool:

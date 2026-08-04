@@ -9,7 +9,7 @@ from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
 
-def _latest_user_text(messages: list[Any]) -> str:
+def latest_user_text(messages: list[Any]) -> str:
     for msg in reversed(messages or []):
         role = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
         content = getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else "")
@@ -20,7 +20,7 @@ def _latest_user_text(messages: list[Any]) -> str:
 
 def make_intake_node(skills_dir: Path) -> Callable:
     async def intake(state: dict) -> dict:
-        text = _latest_user_text(state.get("messages") or [])
+        text = latest_user_text(state.get("messages") or [])
         entries = discover_skills(skills_dir)
         requested = str(state.get("requested_skill_id") or "").strip()
         by_id = {e.skill_id: e for e in entries}
@@ -93,6 +93,9 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "mode": mode,
             "flow_mode": resolved_flow,
         }
+        if resolved_flow in ("atomic_create", "atomic_regenerate"):
+            out["split_manifest"] = []
+            out["skill_id"] = None
         if focus_node_id:
             out["focus_node_id"] = focus_node_id
         if proposed_brief is not None:

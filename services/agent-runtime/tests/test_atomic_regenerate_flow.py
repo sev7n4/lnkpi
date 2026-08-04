@@ -23,7 +23,7 @@ class FakeNest:
 
 
 def test_route_after_intake_regenerate():
-    assert route_after_intake({"flow_mode": "atomic_regenerate"}) == "prepare_atomic_regenerate"
+    assert route_after_intake({"flow_mode": "atomic_regenerate", "messages": []}) == "prepare_atomic_regenerate"
 
 
 @pytest.mark.asyncio

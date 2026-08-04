@@ -79,6 +79,15 @@ def test_build_atomic_spec_focus_seed_for_prompt_expand():
     assert "主图" in spec["prompt"]
 
 
+def test_build_atomic_spec_style_inherit_from_context():
+    messages_ctx = "近期对话:用户:赛博朋克耳机主图→助手:已创建"
+    spec = build_atomic_spec_enriched(
+        "同样风格帮我生成一张主图",
+        parse_context=messages_ctx,
+    )
+    assert "赛博朋克耳机主图" in spec["prompt"]
+
+
 def test_format_canvas_context_line():
     line = format_canvas_context_line(
         [
