@@ -7,11 +7,18 @@ from app.graph.atomic_intent import (
     atomic_regenerate_intent,
     is_regenerate_new_variant,
     orchestration_complexity_intent,
+    regenerate_phrase_intent,
     resolve_intake_route,
 )
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent  # re-export for tests
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
+
+REGENERATE_NO_CHECKPOINT_CLARIFY = (
+    "当前对话还没有可重新生成的画布节点。"
+    "请先在同一会话里完成首次创作（例如「帮我生成一张蓝牙耳机主图」），"
+    "再说「重新生成一张」或「按刚才那个风格再生成一张」。"
+)
 
 
 def latest_user_text(messages: list[Any]) -> str:
@@ -54,6 +61,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
             and isinstance(state.get("atomic_spec"), dict)
         )
         is_variant_create = has_atomic_checkpoint and is_regenerate_new_variant(text)
+        needs_regen_clarify = not has_atomic_checkpoint and regenerate_phrase_intent(text)
         orch = orchestration_complexity_intent(text)
         if orch == "campaign" and (is_atomic or is_variant_create):
             is_atomic = False
@@ -70,6 +78,11 @@ def make_intake_node(skills_dir: Path) -> Callable:
             mode = "create"
             proposed_brief = None
             flow_mode = "atomic_regenerate"
+            skill_id = None
+        elif needs_regen_clarify:
+            mode = "create"
+            proposed_brief = None
+            flow_mode = "atomic_create"
             skill_id = None
         elif is_atomic or is_variant_create:
             mode = "create"
@@ -93,7 +106,11 @@ def make_intake_node(skills_dir: Path) -> Callable:
 
         resolved_flow = (
             flow_mode
-            if is_single_node or is_atomic or is_variant_create or flow_mode == "atomic_regenerate"
+            if is_single_node
+            or is_atomic
+            or is_variant_create
+            or flow_mode == "atomic_regenerate"
+            or needs_regen_clarify
             else "campaign"
         )
 
@@ -109,6 +126,9 @@ def make_intake_node(skills_dir: Path) -> Callable:
         if resolved_flow in ("atomic_create", "atomic_regenerate"):
             out["split_manifest"] = []
             out["skill_id"] = None
+        if needs_regen_clarify:
+            out["phase"] = "clarify"
+            out["clarify_question"] = REGENERATE_NO_CHECKPOINT_CLARIFY
         if focus_node_id:
             out["focus_node_id"] = focus_node_id
         if proposed_brief is not None:

@@ -106,4 +106,7 @@ async def test_intake_regenerate_without_prior_node_falls_through(tmp_path: Path
     out = await intake({
         "messages": [HumanMessage(content="再试一次")],
     })
+    assert out.get("flow_mode") == "atomic_create"
+    assert out.get("phase") == "clarify"
+    assert out.get("clarify_question")
     assert out.get("flow_mode") != "atomic_regenerate"

@@ -274,6 +274,11 @@ def atomic_create_intent(text: str) -> bool:
     return False
 
 
+def regenerate_phrase_intent(text: str) -> bool:
+    """True when utterance looks like regenerate/variant retry phrasing."""
+    return _matches_regenerate_hints(text)
+
+
 def atomic_regenerate_intent(text: str) -> bool:
     """True when user wants to re-run gen on existing atomic_node_id."""
     t = (text or "").strip()

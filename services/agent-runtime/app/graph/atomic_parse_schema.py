@@ -184,7 +184,6 @@ def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None 
             "flow_mode": "atomic_create",
             "parse_confidence": outcome["confidence"],
             "clarify_question": outcome["clarify_question"],
-            "messages": [AIMessage(content=outcome["clarify_question"])],
         }
 
     items = outcome["items"]

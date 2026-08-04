@@ -10,6 +10,10 @@ from app.graph.gen_progress_read import load_gen_progress, parse_gen_progress_re
 
 def make_done_node(*, nest: Any = None) -> Callable:
     async def done(state: dict) -> dict:
+        flow_mode = state.get("flow_mode")
+        if flow_mode in ("atomic_create", "atomic_regenerate"):
+            return {"phase": "done", "messages": []}
+
         thread_id = str(state.get("thread_id") or "")
         progress = await load_gen_progress(nest, thread_id) if state.get("gen_progress_id") else None
 
