@@ -5,6 +5,11 @@ import pytest
 
 from app.tools.definitions import build_canvas_tools
 from app.tools.nest_client import NestCanvasClient
+from app.tools.prompt_templates import (
+    CHARACTER_TURNAROUND_TEMPLATE,
+    CHARACTER_TURNAROUND_TRIGGERS,
+    upsert_prompt_node_tool_description,
+)
 
 BASE_URL = "http://127.0.0.1:3000/api"
 TOKEN = "test-service-token"
@@ -247,3 +252,44 @@ def test_build_canvas_tools_hides_session_and_user(nest_client):
         assert "user_id" not in props
         assert "sessionId" not in props
         assert "userId" not in props
+
+
+def test_character_turnaround_template_has_four_panels():
+    assert "四格布局" in CHARACTER_TURNAROUND_TEMPLATE
+    assert "第一格" in CHARACTER_TURNAROUND_TEMPLATE
+    assert "第四格" in CHARACTER_TURNAROUND_TEMPLATE
+
+
+def test_upsert_prompt_node_description_references_template():
+    desc = upsert_prompt_node_tool_description()
+    assert "character_turnaround" in desc
+    assert CHARACTER_TURNAROUND_TEMPLATE in desc
+    for trigger in ("三视图", "模特定妆图", "四视图"):
+        assert trigger in desc
+    assert "高定时尚大片" in desc
+    assert "赛博朋克角色" in desc
+
+
+def test_style_presets_count():
+    from app.tools.character_turnaround_presets import CHARACTER_TURNAROUND_STYLE_PRESETS
+
+    assert len(CHARACTER_TURNAROUND_STYLE_PRESETS) == 20
+    labels = {p["label"] for p in CHARACTER_TURNAROUND_STYLE_PRESETS}
+    assert "写实商业模拍" in labels
+    assert "美妆商业特写" in labels
+    assert "K-pop偶像定妆" in labels
+    assert "末世废土" in labels
+    assert "洛丽塔甜美系" in labels
+    assert "Q版萌系" in labels
+
+
+def test_build_canvas_tools_upsert_prompt_node_has_template_in_schema(nest_client):
+    tools = build_canvas_tools(nest_client)
+    upsert = next(t for t in tools if t.name == "upsert_prompt_node")
+    assert "四格布局" in upsert.description
+    assert "character_turnaround" in upsert.description
+
+    schema = upsert.args_schema.model_json_schema()
+    content_desc = schema["properties"]["content"]["description"]
+    assert "character_turnaround" in content_desc
+    assert any(t in content_desc for t in CHARACTER_TURNAROUND_TRIGGERS[:3])
