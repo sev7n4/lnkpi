@@ -61,7 +61,7 @@ def build_agent_graph(
     register_copy_gate(graph, nest=nest, llm=llm)
     register_topo_gate(graph, nest=nest)
     register_single_node_gate(graph, nest=nest)
-    register_atomic_create_gate(graph, nest=nest)
+    register_atomic_create_gate(graph, nest=nest, llm=llm)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(

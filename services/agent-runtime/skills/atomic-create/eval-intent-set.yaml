@@ -274,3 +274,154 @@ cases:
     utterance: 写一段促销文案，强调续航
     focus_node_id: null
     gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  # --- Phase 2: additional routing coverage (30) ---
+  - id: p2-img-01
+    utterance: 生成一张场景图，卧室摆放耳机
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-img-02
+    utterance: 来一张电商主图，极简风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-img-03
+    utterance: 做一个产品白底图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-img-04
+    utterance: 生成视觉 banner，运动风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-img-05
+    utterance: 帮我做一张人物图，时尚风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-txt-01
+    utterance: 生成一段广告词，突出降噪
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p2-txt-02
+    utterance: 写一段产品卖点脚本
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p2-txt-03
+    utterance: 来一段分镜脚本，4个镜头
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p2-txt-04
+    utterance: 帮我写口播稿，30秒
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p2-prm-01
+    utterance: prompt扩写：白底耳机产品图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: p2-prm-02
+    utterance: 提示词模式：赛博朋克耳机
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: p2-aud-01
+    utterance: 配一段英文旁白
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: p2-aud-02
+    utterance: 做一个产品介绍音频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: audio, confirm_gate: true }
+
+  - id: p2-vid-01
+    utterance: 生成一段15s竖屏商品视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: p2-vid-02
+    utterance: 做一个开箱短视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: p2-camp-01
+    utterance: 帮我策划天猫详情页全链路
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  - id: p2-camp-02
+    utterance: 做一套蓝牙耳机营销方案，要拆画布
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  - id: p2-chat-01
+    utterance: 你好
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: p2-chat-02
+    utterance: 能做什么
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: p2-chat-03
+    utterance: 生成一下
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: p2-reg-route-01
+    utterance: 重新生成
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: p2-multi-01
+    utterance: 生成三张图：主图、白底、场景
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-multi-02
+    utterance: 分别是主图、白底图、三视图，共3张图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-trap-01
+    utterance: 确认
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: p2-trap-02
+    utterance: 帮我生成一个新的白底图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-p3-01
+    utterance: 快速生成这张
+    focus_node_id: node-img-1
+    gold: { route: single_node, target_type: image, confirm_gate: false }
+
+  - id: p2-img-06
+    utterance: 来一张风图，户外跑步场景
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-txt-05
+    utterance: 写一段品牌故事文案，温暖风
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
+
+  - id: p2-img-07
+    utterance: 生成一个产品图，极简
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: p2-vid-03
+    utterance: 来一段场景氛围视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }

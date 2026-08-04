@@ -89,6 +89,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "atomic_parse",
         "atomic_create",
         "await_atomic_confirm",
+        "clarify",
         "done",
         "error",
     ]
@@ -103,6 +104,8 @@ class AgentRuntimeState(TypedDict, total=False):
     atomic_items: list[dict] | None  # P4: multi-item atomic create (spec + node_id)
     atomic_node_id: str | None  # P4: created canvas node id
     atomic_record_id: str | None  # P4: generation record id
+    parse_confidence: float | None  # Phase 2: hybrid parse confidence
+    clarify_question: str | None  # Phase 2: low-confidence clarify prompt
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str

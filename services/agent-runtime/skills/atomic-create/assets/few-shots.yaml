@@ -1,19 +1,67 @@
-# P4-04: few-shot examples for atomic utterance → atomic_spec JSON
-version: 1
+# P4-04 + Phase 2: few-shot examples for atomic utterance → structured JSON
+version: 2
 nodes:
   parse_atomic_intent:
     - user: 帮我生成一个模特人物图
       assistant: |
-        {"target_type":"image","prompt":"模特人物图","title":"模特人物图","confirm_gate":false}
+        {"structure":"single","items":[{"target_type":"image","prompt":"模特人物图","title":"模特人物图","confirm_gate":false}],"confidence":0.96,"reason":"明确 image 人物图","clarify_question":null}
     - user: 帮我生成一个蓝牙耳机的分镜提示词
       assistant: |
-        {"target_type":"text","prompt":"蓝牙耳机的分镜提示词","title":"蓝牙耳机分镜提示词","confirm_gate":false}
+        {"structure":"single","items":[{"target_type":"text","prompt":"蓝牙耳机的分镜提示词","title":"蓝牙耳机分镜提示词","confirm_gate":false}],"confidence":0.95,"reason":"D1 分镜 → text","clarify_question":null}
     - user: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
       assistant: |
-        {"target_type":"prompt","prompt":"蓝牙耳机","title":"蓝牙耳机 prompt 扩写","confirm_gate":false}
+        {"structure":"single","items":[{"target_type":"prompt","prompt":"蓝牙耳机","title":"蓝牙耳机 prompt 扩写","confirm_gate":false}],"confidence":0.94,"reason":"显式 prompt 扩写","clarify_question":null}
     - user: 做一个15秒产品展示视频
       assistant: |
-        {"target_type":"video","prompt":"15秒产品展示视频","title":"15秒产品展示视频","confirm_gate":true}
+        {"structure":"single","items":[{"target_type":"video","prompt":"15秒产品展示视频","title":"15秒产品展示视频","confirm_gate":true}],"confidence":0.95,"reason":"video D2 confirm","clarify_question":null}
     - user: 给这段文案配一段旁白
       assistant: |
-        {"target_type":"audio","prompt":"给这段文案配一段旁白","title":"文案旁白","confirm_gate":true}
+        {"structure":"single","items":[{"target_type":"audio","prompt":"给这段文案配一段旁白","title":"文案旁白","confirm_gate":true}],"confidence":0.93,"reason":"audio D2 confirm","clarify_question":null}
+    - user: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+      assistant: |
+        {"structure":"multi","items":[{"target_type":"image","prompt":"蓝牙耳机主图","title":"蓝牙耳机主图","confirm_gate":false},{"target_type":"image","prompt":"白底图","title":"白底图","confirm_gate":false},{"target_type":"image","prompt":"三视图","title":"三视图","confirm_gate":false}],"confidence":0.97,"reason":"枚举三张图","clarify_question":null}
+    - user: 主图、白底和三视图各来一张
+      assistant: |
+        {"structure":"multi","items":[{"target_type":"image","prompt":"蓝牙耳机主图","title":"主图","confirm_gate":false},{"target_type":"image","prompt":"白底图","title":"白底图","confirm_gate":false},{"target_type":"image","prompt":"三视图","title":"三视图","confirm_gate":false}],"confidence":0.90,"reason":"并列三项 image","clarify_question":null}
+    - user: 帮我生成
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.35,"reason":"缺少模态与主题","clarify_question":"你想生成什么？例如图片、文案或视频，以及具体主题。"}
+    - user: 生成一下
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.30,"reason":"过于模糊","clarify_question":"请说明要生成的类型和内容，例如：「帮我生成一张白底产品图」。"}
+    - user: 重新生成一张
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.20,"reason":"regenerate 非 create parse","clarify_question":"若要重新生成已有节点，请在同一会话中直接说「再试一次」。"}
+    - user: 帮我做一套天猫蓝牙耳机详情页营销方案
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.25,"reason":"Campaign 全链路","clarify_question":"这像完整营销方案，是否改用 Campaign 全链路？若只要单张图请说明。"}
+    - user: 写一段天猫详情页开场文案
+      assistant: |
+        {"structure":"single","items":[{"target_type":"text","prompt":"天猫详情页开场文案","title":"详情页开场文案","confirm_gate":false}],"confidence":0.94,"reason":"文案 → text","clarify_question":null}
+    - user: 来一张运动风海报
+      assistant: |
+        {"structure":"single","items":[{"target_type":"image","prompt":"运动风海报","title":"运动风海报","confirm_gate":false}],"confidence":0.93,"reason":"海报 image","clarify_question":null}
+    - user: 用提示词模式扩写：赛博朋克耳机主图
+      assistant: |
+        {"structure":"single","items":[{"target_type":"prompt","prompt":"赛博朋克耳机主图","title":"赛博朋克耳机主图","confirm_gate":false}],"confidence":0.95,"reason":"提示词模式","clarify_question":null}
+    - user: 生成一段女声配音，30字以内
+      assistant: |
+        {"structure":"single","items":[{"target_type":"audio","prompt":"女声配音，30字以内","title":"女声配音","confirm_gate":true}],"confidence":0.92,"reason":"配音 audio","clarify_question":null}
+    - user: 帮我生成一个新的模特图
+      assistant: |
+        {"structure":"single","items":[{"target_type":"image","prompt":"新的模特图","title":"模特图","confirm_gate":false}],"confidence":0.91,"reason":"新建 image","clarify_question":null}
+    - user: 生成2张图片，分别是白底图、场景图。
+      assistant: |
+        {"structure":"multi","items":[{"target_type":"image","prompt":"白底图","title":"白底图","confirm_gate":false},{"target_type":"image","prompt":"场景图","title":"场景图","confirm_gate":false}],"confidence":0.96,"reason":"2张枚举","clarify_question":null}
+    - user: 做一个品牌视觉图，极简风
+      assistant: |
+        {"structure":"single","items":[{"target_type":"image","prompt":"品牌视觉图，极简风","title":"品牌视觉图","confirm_gate":false}],"confidence":0.92,"reason":"视觉 image","clarify_question":null}
+    - user: 帮我生成一个蓝牙耳机旋转展示视频
+      assistant: |
+        {"structure":"single","items":[{"target_type":"video","prompt":"蓝牙耳机旋转展示视频","title":"旋转展示视频","confirm_gate":true}],"confidence":0.93,"reason":"视频","clarify_question":null}
+    - user: 多模式扩写这个主图 prompt
+      assistant: |
+        {"structure":"single","items":[{"target_type":"prompt","prompt":"主图 prompt 多模式扩写","title":"主图 prompt 扩写","confirm_gate":false}],"confidence":0.94,"reason":"多模式扩写","clarify_question":null}
+    - user: 来一段30秒短视频口播稿
+      assistant: |
+        {"structure":"single","items":[{"target_type":"text","prompt":"30秒短视频口播稿","title":"口播稿","confirm_gate":false}],"confidence":0.91,"reason":"口播稿 text","clarify_question":null}

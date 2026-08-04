@@ -1,0 +1,210 @@
+"""Phase 2: structured atomic parse result schema and validation."""
+
+from __future__ import annotations
+
+from typing import Any, Literal, TypedDict
+
+from langchain_core.messages import AIMessage
+
+from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override
+from app.graph.intent import marketing_intent
+
+CLARIFY_THRESHOLD = 0.70
+RULE_FAST_PATH_THRESHOLD = 0.95
+
+VALID_TARGET_TYPES = frozenset({"image", "text", "video", "audio", "prompt"})
+
+
+class AtomicParseItem(TypedDict):
+    target_type: str
+    title: str
+    prompt: str
+    confirm_gate: bool
+
+
+class AtomicParseSuccess(TypedDict):
+    kind: Literal["success"]
+    structure: Literal["single", "multi"]
+    items: list[AtomicParseItem]
+    confidence: float
+    reason: str
+
+
+class AtomicParseClarify(TypedDict):
+    kind: Literal["clarify"]
+    confidence: float
+    reason: str
+    clarify_question: str
+
+
+ParseOutcome = AtomicParseSuccess | AtomicParseClarify
+
+
+def _normalize_item(raw: dict[str, Any]) -> AtomicParseItem | None:
+    target = str(raw.get("target_type") or "").strip()
+    if target not in VALID_TARGET_TYPES:
+        return None
+    prompt = str(raw.get("prompt") or "").strip()
+    if not prompt:
+        return None
+    title = str(raw.get("title") or prompt[:24] or target).strip()
+    confirm = raw.get("confirm_gate")
+    if confirm is None:
+        confirm = confirm_gate_for_type(target)  # type: ignore[arg-type]
+    return {
+        "target_type": target,
+        "title": title,
+        "prompt": prompt,
+        "confirm_gate": bool(confirm),
+    }
+
+
+def _default_clarify_question(utterance: str) -> str:
+    return (
+        f"我还不太确定「{utterance[:24]}」具体要生成什么。"
+        "请补充模态（图片/文案/视频/音频）和主题，例如：「帮我生成一张蓝牙耳机主图」。"
+    )
+
+
+def validate_parse_result(
+    data: dict[str, Any] | None,
+    *,
+    utterance: str = "",
+) -> ParseOutcome:
+    """Validate LLM/rule JSON into success or clarify outcome."""
+    if not isinstance(data, dict):
+        return {
+            "kind": "clarify",
+            "confidence": 0.0,
+            "reason": "invalid_payload",
+            "clarify_question": _default_clarify_question(utterance),
+        }
+
+    if _is_campaign_override(utterance) or (
+        marketing_intent(utterance) and "营销方案" in utterance
+    ):
+        return {
+            "kind": "clarify",
+            "confidence": 0.0,
+            "reason": "campaign_override",
+            "clarify_question": "这听起来像完整营销方案需求。请确认是要「全链路 Campaign 方案」，还是单张/单条原子创作？",
+        }
+
+    confidence_raw = data.get("confidence")
+    try:
+        confidence = float(confidence_raw)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    clarify_q = str(data.get("clarify_question") or "").strip()
+    if confidence < CLARIFY_THRESHOLD or data.get("needs_clarify"):
+        return {
+            "kind": "clarify",
+            "confidence": confidence,
+            "reason": str(data.get("reason") or "low_confidence"),
+            "clarify_question": clarify_q or _default_clarify_question(utterance),
+        }
+
+    raw_items = data.get("items")
+    if not isinstance(raw_items, list) or not raw_items:
+        single = _normalize_item(data)
+        if single is not None:
+            raw_items = [single]
+        else:
+            return {
+                "kind": "clarify",
+                "confidence": confidence,
+                "reason": "empty_items",
+                "clarify_question": clarify_q or _default_clarify_question(utterance),
+            }
+
+    items: list[AtomicParseItem] = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        item = _normalize_item(raw)
+        if item is not None:
+            items.append(item)
+
+    if not items:
+        return {
+            "kind": "clarify",
+            "confidence": confidence,
+            "reason": "invalid_items",
+            "clarify_question": clarify_q or _default_clarify_question(utterance),
+        }
+
+    structure_raw = str(data.get("structure") or "").strip()
+    structure: Literal["single", "multi"] = "multi" if len(items) > 1 else "single"
+    if structure_raw in ("single", "multi"):
+        structure = structure_raw  # type: ignore[assignment]
+
+    return {
+        "kind": "success",
+        "structure": structure,
+        "items": items,
+        "confidence": confidence,
+        "reason": str(data.get("reason") or "validated"),
+    }
+
+
+def outcome_from_rule_items(
+    items: list[dict[str, Any]],
+    *,
+    confidence: float,
+    reason: str = "rule_parse",
+) -> ParseOutcome:
+    payload = {
+        "structure": "multi" if len(items) > 1 else "single",
+        "items": items,
+        "confidence": confidence,
+        "reason": reason,
+    }
+    return validate_parse_result(payload, utterance=items[0].get("prompt", "") if items else "")
+
+
+def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None = None) -> dict[str, Any]:
+    """Map validated parse outcome to graph state patch."""
+    if outcome["kind"] == "clarify":
+        return {
+            "phase": "clarify",
+            "flow_mode": "atomic_create",
+            "parse_confidence": outcome["confidence"],
+            "clarify_question": outcome["clarify_question"],
+            "messages": [AIMessage(content=outcome["clarify_question"])],
+        }
+
+    items = outcome["items"]
+    first = dict(items[0])
+    if canvas_context:
+        first["canvas_context"] = canvas_context
+        for item in items:
+            item.setdefault("canvas_context", canvas_context)
+
+    if len(items) == 1:
+        spec = first
+        target = spec["target_type"]
+        gate = "需确认" if spec["confirm_gate"] else "直达"
+        ctx_note = f" [{canvas_context}]" if canvas_context else ""
+        msg = f"原子创作：{target} 节点（{gate}）— {spec['title']}{ctx_note}"
+        return {
+            "phase": "atomic_parse",
+            "flow_mode": "atomic_create",
+            "atomic_spec": spec,
+            "atomic_items": None,
+            "parse_confidence": outcome["confidence"],
+            "messages": [AIMessage(content=msg)],
+        }
+
+    titles = "、".join(str(i.get("title") or "") for i in items)
+    ctx_note = f" [{canvas_context}]" if canvas_context else ""
+    msg = f"原子创作：{len(items)} 张 image 节点 — {titles}{ctx_note}"
+    return {
+        "phase": "atomic_parse",
+        "flow_mode": "atomic_create",
+        "atomic_spec": first,
+        "atomic_items": [dict(i) for i in items],
+        "parse_confidence": outcome["confidence"],
+        "messages": [AIMessage(content=msg)],
+    }
