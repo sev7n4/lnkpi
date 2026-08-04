@@ -48,12 +48,10 @@ ATOMIC_CREATE_HINTS = tuple(_TAXONOMY.get("atomic_create_hints") or (
 ))
 
 TEXT_DEFAULT_KEYWORDS = tuple(_TAXONOMY.get("text_default_keywords") or (
-    "分镜提示词",
     "分镜脚本",
     "脚本",
     "广告词",
     "文案",
-    "分镜",
     "口播稿",
 ))
 
@@ -247,10 +245,7 @@ def _has_prompt_explicit(text: str) -> bool:
         return True
     if "扩写" in text and ("prompt" in n or "提示词" in text):
         return True
-    # D1: 分镜提示词/脚本/广告词/文案 → text 节点（即使含「提示词」字样）
-    if any(k in text for k in TEXT_DEFAULT_KEYWORDS):
-        return False
-    # 用户要生成可生图的提示词文案 → prompt 节点（character_turnaround 等模式）
+    # 凡含「提示词」→ prompt 节点（分镜/三视图/扩写等均走 prompt + 对应 promptMode）
     if "提示词" in text:
         return True
     return False
@@ -342,7 +337,7 @@ def resolve_intake_route(
 
 
 def parse_atomic_target_type(text: str) -> AtomicTargetType:
-    """Classify modality from user utterance (D1: storyboard → text)."""
+    """Classify modality from user utterance."""
     t = (text or "").strip()
     lowered = t.lower()
     if _has_prompt_explicit(t):

@@ -7,7 +7,7 @@ nodes:
         {"structure":"single","items":[{"target_type":"image","prompt":"模特人物图","title":"模特人物图","confirm_gate":false}],"confidence":0.96,"reason":"明确 image 人物图","clarify_question":null}
     - user: 帮我生成一个蓝牙耳机的分镜提示词
       assistant: |
-        {"structure":"single","items":[{"target_type":"text","prompt":"蓝牙耳机的分镜提示词","title":"蓝牙耳机分镜提示词","confirm_gate":false}],"confidence":0.95,"reason":"D1 分镜 → text","clarify_question":null}
+        {"structure":"single","items":[{"target_type":"prompt","prompt":"蓝牙耳机的分镜提示词","title":"蓝牙耳机分镜提示词","confirm_gate":false}],"confidence":0.95,"reason":"分镜提示词 → prompt 节点","clarify_question":null}
     - user: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
       assistant: |
         {"structure":"single","items":[{"target_type":"prompt","prompt":"蓝牙耳机","title":"蓝牙耳机 prompt 扩写","confirm_gate":false}],"confidence":0.94,"reason":"显式 prompt 扩写","clarify_question":null}

@@ -28,7 +28,8 @@ target_types:
     confirm_gate: false
     write_field: content
     notes: |
-      D1 默认：分镜提示词、脚本、广告词、文案 → text（非 prompt 节点）
+      脚本/广告词/文案/口播稿 → text 节点。
+      凡含「提示词」→ prompt 节点（由 /studio/prompt/generate 按 promptMode 生成 content）。
   prompt:
     node_type: prompt
     studio_tool: run_prompt_generation
@@ -88,12 +89,10 @@ atomic_create_hints:
   - 配一段
 
 text_default_keywords:
-  - 分镜提示词
   - 分镜脚本
   - 脚本
   - 广告词
   - 文案
-  - 分镜
   - 口播稿
 
 prompt_explicit_keywords:
