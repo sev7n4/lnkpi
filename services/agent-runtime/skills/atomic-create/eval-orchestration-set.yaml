@@ -1,0 +1,86 @@
+# Phase 4: orchestration complexity routing gold set (20 cases)
+version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-04-atomic-intent-hybrid-design.md
+  phase: 4
+
+cases:
+  - id: orch-01
+    utterance: 帮我生成12个分镜镜头
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-02
+    utterance: 做一套天猫蓝牙耳机详情页营销方案
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-03
+    utterance: 帮我做全链路营销方案
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-04
+    utterance: 生成6个分镜脚本
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-05
+    utterance: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-06
+    utterance: 帮我生成一个模特人物图
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-07
+    utterance: 生成一张白底产品图
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-08
+    utterance: 写一段天猫详情页开场文案
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-09
+    utterance: 14节点详情页方案
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-10
+    utterance: 帮我生成
+    gold: { complexity: clarify, route: chat }
+
+  - id: orch-11
+    utterance: 生成4张分镜图
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-12
+    utterance: 来一张风图，户外跑步场景
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-13
+    utterance: 帮我做一套campaign全链路
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-14
+    utterance: 生成2张图片，分别是白底图、场景图。
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-15
+    utterance: 整套分镜脚本方案
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-16
+    utterance: 15秒产品展示视频
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-17
+    utterance: 详情页方案拆画布
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-18
+    utterance: 帮我生成一个蓝牙耳机的分镜提示词
+    gold: { complexity: atomic, route: atomic_create }
+
+  - id: orch-19
+    utterance: 生成十个镜头分镜
+    gold: { complexity: campaign, route: campaign }
+
+  - id: orch-20
+    utterance: 做一个Banner图
+    gold: { complexity: atomic, route: atomic_create }

@@ -11,6 +11,7 @@ from app.graph.intent import marketing_intent
 
 CLARIFY_THRESHOLD = 0.70
 RULE_FAST_PATH_THRESHOLD = 0.95
+MAX_ATOMIC_MULTI_ITEMS = 5
 
 VALID_TARGET_TYPES = frozenset({"image", "text", "video", "audio", "prompt"})
 
@@ -133,6 +134,17 @@ def validate_parse_result(
             "confidence": confidence,
             "reason": "invalid_items",
             "clarify_question": clarify_q or _default_clarify_question(utterance),
+        }
+
+    if len(items) > MAX_ATOMIC_MULTI_ITEMS:
+        return {
+            "kind": "clarify",
+            "confidence": min(confidence, 0.5),
+            "reason": "multi_item_limit",
+            "clarify_question": (
+                f"原子创作一次最多支持 {MAX_ATOMIC_MULTI_ITEMS} 个同模态节点。"
+                "如需更多资产或完整营销链路，请改用 Campaign 方案（例如：「帮我做一套详情页营销方案」）。"
+            ),
         }
 
     structure_raw = str(data.get("structure") or "").strip()

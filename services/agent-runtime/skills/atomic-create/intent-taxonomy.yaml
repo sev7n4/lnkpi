@@ -64,6 +64,10 @@ intake_priority:
   - id: atomic_create
     when: atomic_create_intent and not marketing_intent
     route: atomic_create
+  - id: orchestration_campaign
+    when: orchestration_complexity_intent == campaign
+    route: campaign
+    notes: Overrides atomic_create for high-complexity storyboard / full-funnel requests
   - id: fallback
     when: default
     route: chat
@@ -109,3 +113,11 @@ atomic_regenerate_hints:
   - 再来一次
   - 再生成一次
   - 再跑一遍
+
+orchestration:
+  max_atomic_multi_items: 5
+  campaign_complexity_phrases:
+    - 详情页方案
+    - 全链路
+    - 14节点
+    - 整套分镜

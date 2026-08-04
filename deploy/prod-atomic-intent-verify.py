@@ -213,6 +213,15 @@ def run_variant_new_node_smoke(tok: str) -> None:
     record("Variant Turn3 style new node", style_ok, f"nodes {count2}->{count3} text={text3[:120]} exit={exit3}")
 
 
+def run_clarify_smoke(tok: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"intent-clarify-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"iclari_{uuid.uuid4().hex[:8]}"
+    _, text, types, _ = sse_collect(tok, sid, "帮我生成", tid, timeout=SSE_TIMEOUT_SEC)
+    nodes = image_nodes(tok, sid)
+    ok = len(nodes) == 0 and ("不确定" in text or "有误" in text or "描述" in text or "clarify" in text.lower())
+    record("Clarify vague utterance", ok and "error" not in types, text[:120])
+
+
 def main() -> int:
     print("=== Prod smoke: atomic intent (regen + multi + variant new node) ===")
     print(f"BASE={BASE}\n")
@@ -234,6 +243,7 @@ def main() -> int:
     run_regenerate_phrase_smoke(tok)
     run_multi_image_smoke(tok)
     run_variant_new_node_smoke(tok)
+    run_clarify_smoke(tok)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1

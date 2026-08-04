@@ -29,7 +29,14 @@ def route_after_atomic_create(state: AgentRuntimeState) -> str:
     if state.get("phase") == "error":
         return "done"
     spec = state.get("atomic_spec") or {}
-    if spec.get("confirm_gate"):
+    items = state.get("atomic_items") or []
+    types = {str(i.get("target_type") or "") for i in items if isinstance(i, dict)}
+    if not types:
+        types = {str(spec.get("target_type") or "image")}
+    heavy = types & {"video", "audio"}
+    light = types & {"image", "text", "prompt"}
+    mixed_modal_confirm = bool(heavy) and bool(light)
+    if spec.get("confirm_gate") or mixed_modal_confirm:
         return "await_atomic_confirm"
     return "run_atomic_gen"
 
