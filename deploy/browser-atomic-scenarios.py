@@ -119,9 +119,10 @@ SCENARIOS: list[Scenario] = [
 ]
 
 
-def all_nodes(tok: str, sid: str) -> list[dict]:
-    data = v.http("GET", f"/sessions/{sid}/nodes", t=tok)
-    return [n for n in (data.get("data") or []) if isinstance(n, dict)]
+def canvas_nodes(tok: str, sid: str) -> list[dict]:
+    sess = v.http("GET", f"/sessions/{sid}", t=tok)["data"]
+    canvas = sess.get("canvasData") or {}
+    return [n for n in (canvas.get("nodes") or []) if isinstance(n, dict)]
 
 
 def run_group(tok: str, scenarios: list[Scenario], *, shared: bool = False) -> list[dict]:
@@ -134,7 +135,7 @@ def run_group(tok: str, scenarios: list[Scenario], *, shared: bool = False) -> l
         t0 = time.time()
         try:
             _, text, types, exit_r = v.sse_collect(tok, sid, msg, tid, timeout=240)
-            nodes = all_nodes(tok, sid) if "image" in name or "nodes" in name or True else v.image_nodes(tok, sid)
+            nodes = canvas_nodes(tok, sid)
             image_nodes = [n for n in nodes if str(n.get("type") or "") == "image"]
             ok, detail = pred(text, image_nodes, types, exit_r)
             ok = ok and "error" not in types
