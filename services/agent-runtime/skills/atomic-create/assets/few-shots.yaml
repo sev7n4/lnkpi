@@ -32,6 +32,12 @@ nodes:
     - user: 重新生成一张
       assistant: |
         {"structure":"single","items":[],"confidence":0.20,"reason":"regenerate 非 create parse","clarify_question":"若要重新生成已有节点，请在同一会话中直接说「再试一次」。"}
+    - user: 按刚才那个风格再生成一张
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.18,"reason":"variant/regenerate 需 checkpoint","clarify_question":"请在同一会话中先完成一张图，再说「按刚才那个风格再生成一张」以新建变体节点。"}
+    - user: 重新生成一张，背景改成白色
+      assistant: |
+        {"structure":"single","items":[],"confidence":0.18,"reason":"variant adjust 需 checkpoint","clarify_question":"请在同一会话中先有一张图，再说「重新生成一张，背景改成白色」。"}
     - user: 帮我做一套天猫蓝牙耳机详情页营销方案
       assistant: |
         {"structure":"single","items":[],"confidence":0.25,"reason":"Campaign 全链路","clarify_question":"这像完整营销方案，是否改用 Campaign 全链路？若只要单张图请说明。"}
