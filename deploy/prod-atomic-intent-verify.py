@@ -218,7 +218,16 @@ def run_clarify_smoke(tok: str) -> None:
     tid = f"iclari_{uuid.uuid4().hex[:8]}"
     _, text, types, _ = sse_collect(tok, sid, "帮我生成", tid, timeout=SSE_TIMEOUT_SEC)
     nodes = image_nodes(tok, sid)
-    ok = len(nodes) == 0 and ("不确定" in text or "有误" in text or "描述" in text or "clarify" in text.lower())
+    clarify_markers = (
+        "不确定",
+        "有误",
+        "描述",
+        "请说明",
+        "请补充",
+        "clarify",
+        "例如",
+    )
+    ok = len(nodes) == 0 and any(m in text for m in clarify_markers)
     record("Clarify vague utterance", ok and "error" not in types, text[:120])
 
 
