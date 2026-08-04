@@ -69,6 +69,7 @@ const agent = useAgentStore()
 const auth = useAuthStore()
 const router = useRouter()
 const input = ref('')
+const composerRef = ref<HTMLTextAreaElement | null>(null)
 const chatContainer = ref<HTMLElement>()
 
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
@@ -131,6 +132,18 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
+
+const canSubmitComposer = computed(() => {
+  const fromRef = composerRef.value?.value.trim() ?? ''
+  return Boolean(input.value.trim() || fromRef)
+})
+
+function syncComposerFromDom() {
+  const el = composerRef.value
+  if (el && el.value !== input.value) {
+    input.value = el.value
+  }
+}
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
 const open = ref(false)
@@ -326,7 +339,8 @@ function toggleVoice() {
 }
 
 async function send() {
-  if (!input.value.trim() || agent.isStreaming) return
+  syncComposerFromDom()
+  if (!canSubmitComposer.value || agent.isStreaming) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
@@ -1014,11 +1028,14 @@ defineExpose({ openPanel, reconcileFromNodes })
             </div>
             <div class="agent-input-dock">
               <textarea
+                ref="composerRef"
                 v-model="input"
                 class="agent-prompt-field"
                 rows="3"
                 :placeholder="`向${activeSkill.label}助手描述需求，Cmd/Ctrl + Enter 发送...`"
                 :disabled="agent.isStreaming"
+                @focus="syncComposerFromDom"
+                @input="syncComposerFromDom"
                 @keydown="onKeydown"
               />
 
@@ -1085,7 +1102,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                   />
                   <DockGenerateButton
                     :generating="agent.isStreaming"
-                    :disabled="!agent.isStreaming && !input.trim()"
+                    :disabled="!agent.isStreaming && !canSubmitComposer"
                     @generate="send"
                   />
                 </div>
