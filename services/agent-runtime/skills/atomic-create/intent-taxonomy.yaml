@@ -94,3 +94,12 @@ atomic_confirm_keywords:
   - 确认生成
   - 开始生成
   - 确认
+
+atomic_regenerate_hints:
+  - 再试一次
+  - 再试
+  - 重试
+  - 重新生成
+  - 再来一次
+  - 再生成一次
+  - 再跑一遍

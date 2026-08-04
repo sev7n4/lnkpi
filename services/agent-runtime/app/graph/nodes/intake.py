@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.graph.atomic_intent import resolve_intake_route
+from app.graph.atomic_intent import atomic_regenerate_intent, resolve_intake_route
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent  # re-export for tests
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
@@ -25,6 +25,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
         requested = str(state.get("requested_skill_id") or "").strip()
         by_id = {e.skill_id: e for e in entries}
         skill_id: str | None = None
+        flow_mode = "campaign"
         if requested and requested in by_id:
             skill_id = requested
         elif marketing_intent(text):
@@ -55,6 +56,15 @@ def make_intake_node(skills_dir: Path) -> Callable:
             proposed_brief = None
             flow_mode = "atomic_create"
             skill_id = None
+        elif (
+            atomic_regenerate_intent(text)
+            and str(state.get("atomic_node_id") or "").strip()
+            and isinstance(state.get("atomic_spec"), dict)
+        ):
+            mode = "create"
+            proposed_brief = None
+            flow_mode = "atomic_regenerate"
+            skill_id = None
         elif is_modify:
             mode = "modify"
             proposed_brief = None  # reducer keeps existing brief
@@ -67,11 +77,10 @@ def make_intake_node(skills_dir: Path) -> Callable:
         else:
             mode = "create"
             proposed_brief = None
-            flow_mode = "campaign"
 
         resolved_flow = (
             flow_mode
-            if is_single_node or is_atomic
+            if is_single_node or is_atomic or flow_mode == "atomic_regenerate"
             else "campaign"
         )
 

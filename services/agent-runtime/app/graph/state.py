@@ -97,7 +97,7 @@ class AgentRuntimeState(TypedDict, total=False):
     session_id: str
     user_id: str
     prompt_version: str | None  # W19: active skill prompt template version
-    flow_mode: Literal["campaign", "single_node", "atomic_create"] | None  # W28/W29/P4
+    flow_mode: Literal["campaign", "single_node", "atomic_create", "atomic_regenerate"] | None  # W28/W29/P4
     focus_node_id: str | None  # W28: canvas node for single-node gen
     atomic_spec: dict | None  # P4: parsed atomic create intent
     atomic_node_id: str | None  # P4: created canvas node id
