@@ -88,6 +88,33 @@ def test_build_atomic_spec_style_inherit_from_context():
     assert "赛博朋克耳机主图" in spec["prompt"]
 
 
+def test_build_variant_spec_dedupes_title_for_new_node():
+    from app.graph.atomic_parse_util import build_variant_spec_from_checkpoint
+
+    prior = {"target_type": "image", "title": "模特图", "prompt": "模特人物图", "confirm_gate": False}
+    summary = {"nodes": [{"id": "node-abc", "type": "image", "title": "模特图"}]}
+    spec = build_variant_spec_from_checkpoint(
+        "重新生成一张，背景改成白色",
+        prior,
+        canvas_summary=summary,
+    )
+    assert spec["title"] == "模特图 (2)"
+    assert "背景改成白色" in spec["prompt"]
+
+
+def test_build_variant_spec_style_from_context():
+    from app.graph.atomic_parse_util import build_variant_spec_from_checkpoint
+
+    prior = {"target_type": "image", "title": "模特图", "prompt": "模特人物图", "confirm_gate": False}
+    ctx = "近期对话:用户:赛博朋克耳机主图→助手:已创建"
+    spec = build_variant_spec_from_checkpoint(
+        "按刚才那个风格再生成一张",
+        prior,
+        parse_context=ctx,
+    )
+    assert "赛博朋克耳机主图" in spec["prompt"]
+
+
 def test_format_canvas_context_line():
     line = format_canvas_context_line(
         [

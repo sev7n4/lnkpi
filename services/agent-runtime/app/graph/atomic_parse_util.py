@@ -10,7 +10,13 @@ from typing import Any
 import yaml
 
 from app.graph.few_shot import load_few_shots
-from app.graph.atomic_intent import build_atomic_spec, confirm_gate_for_type, parse_atomic_target_type
+from app.graph.atomic_intent import (
+    apply_regenerate_adjust,
+    build_atomic_spec,
+    confirm_gate_for_type,
+    detect_regenerate_adjust,
+    parse_atomic_target_type,
+)
 
 _DEICTIC_HINTS = (
     "这个",
@@ -234,6 +240,27 @@ def build_atomic_items_enriched(
             seen_titles.add(title)
         enriched.append(copy)
     return enriched
+
+
+def build_variant_spec_from_checkpoint(
+    utterance: str,
+    prior_spec: dict[str, Any],
+    *,
+    canvas_summary: dict[str, Any] | None = None,
+    parse_context: str | None = None,
+) -> dict[str, Any]:
+    """Derive a new-node atomic spec from checkpoint + variant/adjust utterance."""
+    adjust = detect_regenerate_adjust(utterance)
+    spec = apply_regenerate_adjust(prior_spec, adjust, parse_context=parse_context)
+    nodes = canvas_summary_nodes(canvas_summary)
+    title = str(spec.get("title") or spec.get("prompt") or "节点").strip()
+    if nodes and title:
+        spec["title"] = dedupe_atomic_title(title, nodes)
+    if parse_context:
+        spec["canvas_context"] = parse_context
+    elif nodes:
+        spec["canvas_context"] = format_canvas_context_line(nodes)
+    return spec
 
 
 def extract_atomic_prompt(utterance: str) -> str:

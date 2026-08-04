@@ -4,6 +4,8 @@
 Cases:
   A) create →「重新生成一张」→ same node count, regen path
   B) multi-image enumerated → 3 nodes on canvas
+  C) create →「重新生成一张，背景改成白色」→ new node (count +1)
+  D) create →「按刚才那个风格再生成一张」→ new node (count +1)
 
 Reuse SSE helpers from prod-atomic-regenerate-verify.py.
 """
@@ -173,8 +175,46 @@ def run_multi_image_smoke(tok: str) -> None:
     record("Multi expected titles", title_hit >= 2, f"titles={list(titles)[:6]}")
 
 
+def run_variant_new_node_smoke(tok: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"intent-variant-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"ivariant_{uuid.uuid4().hex[:8]}"
+    record("Variant session", True, f"sid={sid}")
+
+    _, text1, types1, exit1 = sse_collect(
+        tok, sid, "帮我生成一个模特人物图", tid, timeout=SSE_TIMEOUT_SEC
+    )
+    record("Variant Turn1 atomic", "原子创作" in text1 and "error" not in types1, text1[:100])
+
+    count1 = len(image_nodes(tok, sid))
+    record("Variant Turn1 one node", count1 >= 1, f"nodes={count1} exit={exit1}")
+
+    _, text2, types2, exit2 = sse_collect(
+        tok, sid, "重新生成一张，背景改成白色", tid, timeout=SSE_TIMEOUT_SEC
+    )
+    count2 = len(image_nodes(tok, sid))
+    adjust_ok = (
+        count2 > count1
+        and ("已创建" in text2 or "image 节点" in text2 or "生成完成" in text2)
+        and "await_confirm" not in types2
+        and "error" not in types2
+    )
+    record("Variant Turn2 adjust new node", adjust_ok, f"nodes {count1}->{count2} text={text2[:120]} exit={exit2}")
+
+    _, text3, types3, exit3 = sse_collect(
+        tok, sid, "按刚才那个风格再生成一张", tid, timeout=SSE_TIMEOUT_SEC
+    )
+    count3 = len(image_nodes(tok, sid))
+    style_ok = (
+        count3 > count2
+        and ("已创建" in text3 or "image 节点" in text3 or "生成完成" in text3)
+        and "await_confirm" not in types3
+        and "error" not in types3
+    )
+    record("Variant Turn3 style new node", style_ok, f"nodes {count2}->{count3} text={text3[:120]} exit={exit3}")
+
+
 def main() -> int:
-    print("=== Prod smoke: Phase 1 atomic intent (regen phrase + multi-image) ===")
+    print("=== Prod smoke: atomic intent (regen + multi + variant new node) ===")
     print(f"BASE={BASE}\n")
 
     try:
@@ -193,6 +233,7 @@ def main() -> int:
 
     run_regenerate_phrase_smoke(tok)
     run_multi_image_smoke(tok)
+    run_variant_new_node_smoke(tok)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1
