@@ -50,6 +50,9 @@ nodes:
     - user: 用提示词模式扩写：赛博朋克耳机主图
       assistant: |
         {"structure":"single","items":[{"target_type":"prompt","prompt":"赛博朋克耳机主图","title":"赛博朋克耳机主图","confirm_gate":false}],"confidence":0.95,"reason":"提示词模式","clarify_question":null}
+    - user: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+      assistant: |
+        {"structure":"single","items":[{"target_type":"prompt","prompt":"年轻漂亮亚洲女性模特的三视图/四视图","title":"模特多视图提示词","confirm_gate":false}],"confidence":0.96,"reason":"人物多视图提示词 → prompt 节点","clarify_question":null}
     - user: 生成一段女声配音，30字以内
       assistant: |
         {"structure":"single","items":[{"target_type":"audio","prompt":"女声配音，30字以内","title":"女声配音","confirm_gate":true}],"confidence":0.92,"reason":"配音 audio","clarify_question":null}

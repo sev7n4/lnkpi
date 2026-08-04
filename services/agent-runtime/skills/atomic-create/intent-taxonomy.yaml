@@ -39,6 +39,10 @@ target_types:
       - 提示词模式
       - 多模式扩写
       - 扩写prompt
+      - 三视图提示词
+      - 四视图提示词
+      - 多视图提示词
+      - 的提示词
   audio:
     node_type: audio
     studio_tool: run_audio_generation
@@ -97,6 +101,11 @@ prompt_explicit_keywords:
   - 提示词模式
   - 多模式扩写
   - 扩写prompt
+  - 三视图提示词
+  - 四视图提示词
+  - 多视图提示词
+  - 角色设定图提示词
+  - 模特定妆图提示词
 
 atomic_confirm_keywords:
   - 确认生成

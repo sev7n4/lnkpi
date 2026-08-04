@@ -245,7 +245,15 @@ def _has_prompt_explicit(text: str) -> bool:
     n = _normalize(text)
     if any(_normalize(k) in n for k in PROMPT_EXPLICIT_KEYWORDS):
         return True
-    return "扩写" in text and ("prompt" in n or "提示词" in text)
+    if "扩写" in text and ("prompt" in n or "提示词" in text):
+        return True
+    # D1: 分镜提示词/脚本/广告词/文案 → text 节点（即使含「提示词」字样）
+    if any(k in text for k in TEXT_DEFAULT_KEYWORDS):
+        return False
+    # 用户要生成可生图的提示词文案 → prompt 节点（character_turnaround 等模式）
+    if "提示词" in text:
+        return True
+    return False
 
 
 def atomic_create_intent(text: str) -> bool:

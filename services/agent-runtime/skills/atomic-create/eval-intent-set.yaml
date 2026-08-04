@@ -93,6 +93,12 @@ cases:
     focus_node_id: null
     gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
 
+  - id: prm-04
+    utterance: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+    notes: 人物多视图提示词 → prompt 节点 + character_turnaround，非 image
+
   # --- audio + D2 confirm (5) ---
   - id: aud-01
     utterance: 给这段文案配一段旁白
