@@ -141,6 +141,8 @@ Terminate: success | hard_fail | cancel → phase=done
 
 **V2（L1-03 ✅）**：`atomic_regenerate` — 同 thread「再试一次」+ checkpoint 有 `atomic_node_id` → `prepare_atomic_regenerate` → `run_atomic_gen`
 
+**V3（Phase 4 LC-6 partial ✅）**：`atomic_multi_gen` — 顺序 gen；部分失败时 `phase=error` 且 AIMessage 列明「部分完成 / 未完成」项（不 silent 截断）。
+
 **验收**：`prod-atomic-studio-verify.py`、`prod-atomic-confirm-gate-verify.py`。
 
 ### 3.5 LC-6 高成本确认循环（P4 D2，已实现）

@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
+import re
+
 import yaml
 
 from app.graph.intent import (
@@ -93,6 +95,42 @@ CAMPAIGN_OVERRIDE_PHRASES = (
     "campaign",
 )
 
+CAMPAIGN_COMPLEXITY_PHRASES = (
+    "详情页方案",
+    "详情页营销",
+    "14节点",
+    "14个节点",
+    "整套分镜",
+    "全套分镜",
+    "分镜脚本方案",
+)
+
+OrchestrationComplexity = Literal["atomic", "campaign", "clarify"]
+
+_VAGUE_ORCHESTRATION = frozenset({
+    "帮我生成",
+    "生成一下",
+    "做一个",
+    "来一张",
+    "帮我做一张",
+})
+
+_CN_ORCH_COUNT = {
+    "一": 1,
+    "二": 2,
+    "两": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+    "十": 10,
+    "十一": 11,
+    "十二": 12,
+}
+
 
 def _is_campaign_override(text: str) -> bool:
     return any(p in text for p in CAMPAIGN_OVERRIDE_PHRASES)
@@ -177,6 +215,32 @@ def apply_regenerate_adjust(
     return out
 
 
+def _parse_orch_count(token: str) -> int | None:
+    token = (token or "").strip()
+    if not token:
+        return None
+    if token.isdigit():
+        return int(token)
+    if token in _CN_ORCH_COUNT:
+        return _CN_ORCH_COUNT[token]
+    if len(token) == 2 and token[0] == "十" and token[1] in _CN_ORCH_COUNT:
+        return 10 + _CN_ORCH_COUNT[token[1]]
+    return None
+
+
+def _storyboard_shot_count(text: str) -> int | None:
+    t = (text or "").strip()
+    for pat in (
+        r"([一二三四五六七八九十两\d]+)\s*个分镜",
+        r"([一二三四五六七八九十两\d]+)\s*个镜头",
+        r"([一二三四五六七八九十两\d]+)\s*张分镜",
+    ):
+        m = re.search(pat, t)
+        if m:
+            return _parse_orch_count(m.group(1))
+    return None
+
+
 def _has_prompt_explicit(text: str) -> bool:
     n = _normalize(text)
     if any(_normalize(k) in n for k in PROMPT_EXPLICIT_KEYWORDS):
@@ -218,6 +282,31 @@ def atomic_regenerate_intent(text: str) -> bool:
     if _is_campaign_override(t):
         return False
     return should_regenerate_same_node(t)
+
+
+def orchestration_complexity_intent(text: str) -> OrchestrationComplexity:
+    """Phase 4: route high-complexity requests toward Campaign vs atomic."""
+    t = (text or "").strip()
+    if not t:
+        return "clarify"
+    if any(p in t for p in CAMPAIGN_COMPLEXITY_PHRASES) or _is_campaign_override(t):
+        return "campaign"
+    shots = _storyboard_shot_count(t)
+    if shots is not None and shots >= 4:
+        return "campaign"
+    if "分镜" in t and any(x in t for x in ("12", "十二", "整套", "全套")):
+        return "campaign"
+    if t in _VAGUE_ORCHESTRATION:
+        return "clarify"
+    from app.graph.atomic_parse_util import parse_atomic_multi_items
+
+    if parse_atomic_multi_items(t):
+        return "atomic"
+    if atomic_create_intent(t):
+        return "atomic"
+    if marketing_intent(t):
+        return "campaign"
+    return "clarify"
 
 
 def resolve_intake_route(

@@ -175,3 +175,31 @@ async def test_await_atomic_confirm_then_gen():
     out = await run({"atomic_node_id": "node-atomic-1", "atomic_spec": spec})
     assert out["phase"] == "done"
     assert any(c[0] == "run_video_generation" for c in nest.calls)
+
+
+@pytest.mark.asyncio
+async def test_partial_multi_gen_compose_lc6():
+    class PartialNest(FakeNest):
+        def __init__(self) -> None:
+            super().__init__()
+            self._n = 0
+
+        async def run_image_generation(self, node_id: str) -> dict[str, Any]:
+            self._n += 1
+            self.calls.append(("run_image_generation", node_id))
+            if self._n == 2:
+                return {"status": "failed", "error": "timeout"}
+            return {"status": "completed", "generationRecordId": f"rec-{self._n}"}
+
+    nest = PartialNest()
+    items = [
+        {"node_id": "n1", "target_type": "image", "title": "主图"},
+        {"node_id": "n2", "target_type": "image", "title": "白底图"},
+        {"node_id": "n3", "target_type": "image", "title": "三视图"},
+    ]
+    run = make_run_atomic_gen_node(nest=nest)
+    out = await run({"atomic_items": items})
+    assert out["phase"] == "error"
+    assert "部分完成" in out["messages"][0].content
+    assert "主图" in out["messages"][0].content
+    assert "白底图" in out["messages"][0].content or "三视图" in out["messages"][0].content

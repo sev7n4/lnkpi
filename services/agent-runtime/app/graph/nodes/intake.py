@@ -3,7 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.graph.atomic_intent import atomic_regenerate_intent, is_regenerate_new_variant, resolve_intake_route
+from app.graph.atomic_intent import (
+    atomic_regenerate_intent,
+    is_regenerate_new_variant,
+    orchestration_complexity_intent,
+    resolve_intake_route,
+)
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent  # re-export for tests
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
@@ -49,6 +54,11 @@ def make_intake_node(skills_dir: Path) -> Callable:
             and isinstance(state.get("atomic_spec"), dict)
         )
         is_variant_create = has_atomic_checkpoint and is_regenerate_new_variant(text)
+        orch = orchestration_complexity_intent(text)
+        if orch == "campaign" and (is_atomic or is_variant_create):
+            is_atomic = False
+            is_variant_create = False
+            route = "campaign"
 
         if is_single_node:
             mode = "create"
@@ -69,8 +79,10 @@ def make_intake_node(skills_dir: Path) -> Callable:
         elif is_modify:
             mode = "modify"
             proposed_brief = None  # reducer keeps existing brief
-        elif marketing_intent(text):
+        elif marketing_intent(text) or (orch == "campaign" and route == "campaign"):
             mode = "create"
+            if not skill_id and "enterprise-marketing-campaign" in by_id:
+                skill_id = "enterprise-marketing-campaign"
             if existing_brief and not modify_intent(text):
                 proposed_brief = BRIEF_RESET_PREFIX + text
             else:
