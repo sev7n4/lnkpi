@@ -71,7 +71,7 @@ def register_atomic_create_gate(graph: StateGraph, *, nest: Any, llm: Any | None
             "done": "done",
         },
     )
-    graph.add_edge("clarify_atomic_intent", "done")
+    graph.add_edge("clarify_atomic_intent", END)
     graph.add_conditional_edges(
         "create_atomic_node",
         route_after_atomic_create,
@@ -92,4 +92,4 @@ def register_atomic_create_gate(graph: StateGraph, *, nest: Any, llm: Any | None
     )
     graph.add_edge("prepare_atomic_regenerate", "run_atomic_gen")
     graph.add_edge("adjust_atomic_regenerate", "run_atomic_gen")
-    graph.add_edge("run_atomic_gen", "done")
+    graph.add_edge("run_atomic_gen", END)

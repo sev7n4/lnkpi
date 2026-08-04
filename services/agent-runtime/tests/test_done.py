@@ -49,3 +49,11 @@ async def test_done_without_progress_uses_last_error():
     done = make_done_node()
     out = await done({"phase": "done", "last_error": "出图编排失败：cycle"})
     assert "出图编排失败" in out["messages"][0].content
+
+
+@pytest.mark.asyncio
+async def test_done_skips_campaign_fallback_for_atomic_flow():
+    done = make_done_node()
+    out = await done({"phase": "done", "flow_mode": "atomic_create"})
+    assert out["phase"] == "done"
+    assert out["messages"] == []

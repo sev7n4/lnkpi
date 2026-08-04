@@ -598,6 +598,7 @@ async def stream_run_events(
         }
 
     async def run_graph() -> None:
+        last_text_delta: str | None = None
         try:
             async for update in graph.astream(input_state, config, stream_mode="updates"):
                 if not isinstance(update, dict):
@@ -629,7 +630,11 @@ async def stream_run_events(
                                 msg.get("role") if isinstance(msg, dict) else None
                             )
                             if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
-                                await emit({"type": "text_delta", "data": {"text": str(content)}})
+                                text = str(content)
+                                if text == last_text_delta:
+                                    continue
+                                last_text_delta = text
+                                await emit({"type": "text_delta", "data": {"text": text}})
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]
             post_vals = getattr(post, "values", None) or {}
