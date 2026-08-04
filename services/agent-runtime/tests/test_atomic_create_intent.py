@@ -51,8 +51,22 @@ def test_eval_routing_gold(eval_cases: list[dict]):
 
 
 def test_d1_storyboard_is_text_not_prompt():
-    assert parse_atomic_target_type("帮我生成一个蓝牙耳机的分镜提示词") == "text"
+    assert parse_atomic_target_type("帮我生成一个蓝牙耳机的分镜提示词") == "prompt"
     assert parse_atomic_target_type("用提示词模式扩写白底图") == "prompt"
+    assert parse_atomic_target_type("生成蓝牙耳机的分镜脚本，5个镜头") == "text"
+
+
+def test_turnaround_prompt_phrase_routes_to_prompt_node():
+    utterance = "帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词"
+    assert parse_atomic_target_type(utterance) == "prompt"
+    spec = build_atomic_spec(utterance)
+    assert spec["target_type"] == "prompt"
+    assert atomic_create_intent(utterance)
+
+
+def test_turnaround_image_without_prompt_word_stays_image():
+    assert parse_atomic_target_type("帮我做一张该产品的三视图") == "image"
+    assert parse_atomic_target_type("生成一张三视图，蓝牙耳机") == "image"
 
 
 def test_atomic_create_intent_negative_campaign():

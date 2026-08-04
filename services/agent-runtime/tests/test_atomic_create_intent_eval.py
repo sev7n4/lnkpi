@@ -24,9 +24,9 @@ def taxonomy_doc() -> dict:
     return yaml.safe_load(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_eval_set_has_95_cases(eval_doc: dict):
+def test_eval_set_has_96_cases(eval_doc: dict):
     cases = eval_doc.get("cases") or []
-    assert len(cases) == 95
+    assert len(cases) == 96
     ids = [c["id"] for c in cases]
     assert len(ids) == len(set(ids)), "duplicate case ids"
 
@@ -45,8 +45,9 @@ def test_eval_gold_schema(eval_doc: dict):
             assert gold.get("target_type") is None or gold["route"] == "single_node"
 
 
-def test_d1_storyboard_cases_are_text(eval_doc: dict):
-    storyboard_ids = {"txt-01", "txt-06"}
+def test_d1_storyboard_script_cases_are_text(eval_doc: dict):
+    """分镜脚本（无「提示词」）仍走 text；分镜提示词已迁至 prompt。"""
+    storyboard_ids = {"txt-06"}
     for case in eval_doc["cases"]:
         if case["id"] in storyboard_ids:
             assert case["gold"]["target_type"] == "text", case["id"]

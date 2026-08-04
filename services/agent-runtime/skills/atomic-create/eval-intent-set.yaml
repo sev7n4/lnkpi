@@ -5,7 +5,7 @@ meta:
   spec: atomic-studio-intent-product-spec v1.1
   adr: docs/adr/p4-atomic-create-adr.md
   decisions:
-    D1: storyboard phrases → text node
+    D1: script/copy phrases without 提示词 → text node
     D2: video/audio → confirm_gate true
 
 cases:
@@ -40,12 +40,12 @@ cases:
     focus_node_id: null
     gold: { route: atomic_create, target_type: image, confirm_gate: false }
 
-  # --- text / D1 分镜 (7) ---
+  # --- text / D1 脚本文案 (6) ---
   - id: txt-01
     utterance: 帮我生成一个蓝牙耳机的分镜提示词
     focus_node_id: null
-    gold: { route: atomic_create, target_type: text, confirm_gate: false }
-    notes: D1 分镜 → text 非 prompt
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+    notes: 含「提示词」→ prompt 节点（storyboard promptMode）
 
   - id: txt-02
     utterance: 写一段天猫详情页开场文案
@@ -92,6 +92,12 @@ cases:
     utterance: 多模式扩写这个主图 prompt
     focus_node_id: null
     gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+
+  - id: prm-04
+    utterance: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: prompt, confirm_gate: false }
+    notes: 人物多视图提示词 → prompt 节点 + character_turnaround，非 image
 
   # --- audio + D2 confirm (5) ---
   - id: aud-01

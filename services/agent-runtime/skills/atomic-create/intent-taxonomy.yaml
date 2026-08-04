@@ -28,7 +28,8 @@ target_types:
     confirm_gate: false
     write_field: content
     notes: |
-      D1 默认：分镜提示词、脚本、广告词、文案 → text（非 prompt 节点）
+      脚本/广告词/文案/口播稿 → text 节点。
+      凡含「提示词」→ prompt 节点（由 /studio/prompt/generate 按 promptMode 生成 content）。
   prompt:
     node_type: prompt
     studio_tool: run_prompt_generation
@@ -39,6 +40,10 @@ target_types:
       - 提示词模式
       - 多模式扩写
       - 扩写prompt
+      - 三视图提示词
+      - 四视图提示词
+      - 多视图提示词
+      - 的提示词
   audio:
     node_type: audio
     studio_tool: run_audio_generation
@@ -84,12 +89,10 @@ atomic_create_hints:
   - 配一段
 
 text_default_keywords:
-  - 分镜提示词
   - 分镜脚本
   - 脚本
   - 广告词
   - 文案
-  - 分镜
   - 口播稿
 
 prompt_explicit_keywords:
@@ -97,6 +100,11 @@ prompt_explicit_keywords:
   - 提示词模式
   - 多模式扩写
   - 扩写prompt
+  - 三视图提示词
+  - 四视图提示词
+  - 多视图提示词
+  - 角色设定图提示词
+  - 模特定妆图提示词
 
 atomic_confirm_keywords:
   - 确认生成
