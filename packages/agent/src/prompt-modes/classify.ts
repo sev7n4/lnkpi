@@ -8,7 +8,7 @@ export function tryRuleShortcut(_prompt: string): PromptModeId | null {
 /** 仅无 Key / Placeholder 路径使用；不用于跳过有 Key 时的 Call-1 */
 export function heuristicMode(prompt: string): PromptModeId {
   const p = prompt.toLowerCase()
-  if (/三视图|正侧背|turnaround/.test(p)) return 'character_turnaround'
+  if (/三视图|多视图|正侧背|turnaround|模特图|角色设定|模特定妆|四视图|q版|q萌|chibi|二头身|洛丽塔|lolita|婚纱|战术|军事|牛仔|皮克斯|绘本|水彩/.test(p)) return 'character_turnaround'
   if (/分镜/.test(p)) return 'storyboard'
   if (/剧本|剧本大纲|人生观/.test(p)) return 'script'
   if (/旁白|口播|文案/.test(p)) return 'copywriting'

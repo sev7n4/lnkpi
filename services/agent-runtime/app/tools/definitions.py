@@ -6,11 +6,16 @@ from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.tools.nest_client import NestCanvasClient
+from app.tools.prompt_templates import (
+    UPSERT_PROMPT_NODE_CONTENT_FIELD,
+    UPSERT_PROMPT_NODE_PROMPT_FIELD,
+    upsert_prompt_node_tool_description,
+)
 
 
 class UpsertPromptNodeInput(BaseModel):
-    prompt: str = Field(description="Prompt title for the node")
-    content: str = Field(description="Markdown content for the prompt node")
+    prompt: str = Field(description=UPSERT_PROMPT_NODE_PROMPT_FIELD)
+    content: str = Field(description=UPSERT_PROMPT_NODE_CONTENT_FIELD)
     node_id: str | None = Field(default=None, description="Existing node id to update")
 
 
@@ -69,7 +74,7 @@ def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
         StructuredTool.from_function(
             coroutine=upsert_prompt_node,
             name="upsert_prompt_node",
-            description="Create or update a prompt node on the canvas",
+            description=upsert_prompt_node_tool_description(),
             args_schema=UpsertPromptNodeInput,
         ),
         StructuredTool.from_function(
