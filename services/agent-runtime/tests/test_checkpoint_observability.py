@@ -32,3 +32,9 @@ def test_checkpoint_diagnostics_shape():
     assert diag["atomicTitle"] == "模特人物图"
     assert diag["flowMode"] == "atomic_create"
     assert diag["phase"] == "done"
+
+
+def test_checkpoint_diagnostics_exposes_has_flag():
+    diag = checkpoint_diagnostics({"atomic_node_id": "n1", "atomic_spec": {"target_type": "text"}})
+    assert diag["hasAtomicCheckpoint"] is True
+    assert diag["atomicNodeId"] == "n1"

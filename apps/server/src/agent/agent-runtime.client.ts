@@ -22,6 +22,11 @@ export interface RuntimeThreadState {
   nextNodes: string[]
   interrupted: boolean
   finished: boolean
+  hasAtomicCheckpoint?: boolean
+  atomicNodeId?: string | null
+  atomicTargetType?: string | null
+  atomicTitle?: string | null
+  flowMode?: string | null
 }
 
 export interface RuntimeThreadTimelineEntry {
