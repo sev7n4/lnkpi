@@ -167,3 +167,110 @@ cases:
     utterance: 快速生成这张主图
     focus_node_id: image-hero-001
     gold: { route: single_node, target_type: image, confirm_gate: false }
+
+  # --- Phase 1: regenerate phrase must not route atomic_create (4) ---
+  - id: reg-route-01
+    utterance: 重新生成一张
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+    notes: no checkpoint → chat; with checkpoint → atomic_regenerate (regression yaml)
+
+  - id: reg-route-02
+    utterance: 再试一次
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: reg-route-03
+    utterance: 重试
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: reg-route-04
+    utterance: 再来一次
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  # --- Phase 1: substring traps — still atomic_create (3) ---
+  - id: trap-create-01
+    utterance: 帮我生成一个新的模特图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: trap-create-02
+    utterance: 重新帮我生成一个模特人物图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: trap-create-03
+    utterance: 再生成一个白底产品图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  # --- Phase 1: confirm gate replies not atomic create (3) ---
+  - id: trap-confirm-01
+    utterance: 确认生成
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: trap-confirm-02
+    utterance: 开始出图
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+    notes: campaign confirm reply, not atomic_create
+
+  - id: trap-confirm-03
+    utterance: 取消
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  # --- Phase 1: multi-image utterances still atomic_create route (3) ---
+  - id: multi-route-01
+    utterance: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: multi-route-02
+    utterance: 生成2张图片，分别是白底图、场景图。
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: multi-route-03
+    utterance: 帮我做三张图：主图、白底图、三视图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  # --- Phase 1: extra image + campaign + chat (7) ---
+  - id: img-07
+    utterance: 生成一张三视图，蓝牙耳机
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: img-08
+    utterance: 来一张产品主图，极简白底
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: neg-camp-03
+    utterance: 帮我策划一套全链路营销方案，要拆画布
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  - id: neg-camp-04
+    utterance: 做一套详情页 campaign，14个节点
+    focus_node_id: null
+    gold: { route: campaign, target_type: null, confirm_gate: false }
+
+  - id: neg-chat-02
+    utterance: 谢谢
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: neg-chat-03
+    utterance: 这是什么功能
+    focus_node_id: null
+    gold: { route: chat, target_type: null, confirm_gate: false }
+
+  - id: txt-08
+    utterance: 写一段促销文案，强调续航
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }

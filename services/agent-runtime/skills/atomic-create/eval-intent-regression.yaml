@@ -1,0 +1,100 @@
+# Phase 1: production bug regression — requires checkpoint or multi parse (not resolve_intake_route)
+# Run: pytest tests/test_atomic_intent_regression.py
+version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-04-atomic-intent-hybrid-design.md
+  phase: 1
+
+cases:
+  # --- regenerate with checkpoint (intake integration) ---
+  - id: reg-01
+    utterance: 再试一次
+    checkpoint:
+      atomic_node_id: node-abc
+      atomic_spec:
+        target_type: image
+        title: 模特图
+        prompt: 模特人物图
+        confirm_gate: false
+    gold:
+      flow_mode: atomic_regenerate
+
+  - id: reg-02
+    utterance: 重新生成一张
+    checkpoint:
+      atomic_node_id: node-abc
+      atomic_spec:
+        target_type: image
+        title: 模特图
+        prompt: 模特人物图
+        confirm_gate: false
+    gold:
+      flow_mode: atomic_regenerate
+
+  - id: reg-03
+    utterance: 帮我生成一个模特人物图
+    checkpoint:
+      atomic_node_id: node-abc
+      atomic_spec:
+        target_type: image
+        title: 模特图
+        prompt: 模特人物图
+        confirm_gate: false
+    gold:
+      flow_mode: atomic_create
+    notes: explicit new create wins over regenerate when user asks for new asset
+
+  # --- regenerate without checkpoint ---
+  - id: reg-neg-01
+    utterance: 再试一次
+    checkpoint: {}
+    gold:
+      flow_mode: not_atomic_regenerate
+
+  - id: reg-neg-02
+    utterance: 重新生成一张
+    checkpoint: {}
+    gold:
+      flow_mode: not_atomic_regenerate
+
+  # --- intent classifier (no checkpoint) ---
+  - id: trap-01
+    utterance: 重新生成一张
+    gold:
+      atomic_create_intent: false
+      atomic_regenerate_intent: true
+
+  - id: trap-02
+    utterance: 帮我生成一个新的模特图
+    gold:
+      atomic_create_intent: true
+      atomic_regenerate_intent: false
+
+  - id: trap-03
+    utterance: 确认生成
+    gold:
+      atomic_create_intent: false
+      atomic_regenerate_intent: false
+
+  # --- multi-image parse ---
+  - id: multi-01
+    utterance: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+    gold:
+      multi_item_count: 3
+      item_prompts:
+        - 蓝牙耳机主图
+        - 白底图
+        - 三视图
+
+  - id: multi-02
+    utterance: 生成2张图片，分别是白底图、场景图。
+    gold:
+      multi_item_count: 2
+      item_prompts:
+        - 白底图
+        - 场景图
+
+  - id: multi-neg-01
+    utterance: 帮我生成一个模特人物图
+    gold:
+      multi_item_count: null

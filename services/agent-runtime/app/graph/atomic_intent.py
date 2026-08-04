@@ -106,7 +106,9 @@ def _matches_regenerate_hints(text: str) -> bool:
     lowered = t.lower()
     if any(h in lowered or h in t for h in ATOMIC_REGENERATE_HINTS):
         return True
-    if "重新生成" in t or "再生成" in t:
+    if "重新生成" in t:
+        return True
+    if any(p in t for p in ("再生成一次", "再生成一遍", "再跑一次")):
         return True
     return lowered in ("retry", "again")
 
