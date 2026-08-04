@@ -44,6 +44,32 @@ cases:
       flow_mode: atomic_create
     notes: explicit new create wins over regenerate when user asks for new asset
 
+  - id: reg-04
+    utterance: 重新生成一张，背景改成白色
+    checkpoint:
+      atomic_node_id: node-abc
+      atomic_spec:
+        target_type: image
+        title: 模特图
+        prompt: 模特人物图
+        confirm_gate: false
+    gold:
+      flow_mode: atomic_create
+    notes: variant/adjust creates new node, not same-node regenerate
+
+  - id: reg-05
+    utterance: 按刚才那个风格再生成一张
+    checkpoint:
+      atomic_node_id: node-abc
+      atomic_spec:
+        target_type: image
+        title: 模特图
+        prompt: 模特人物图
+        confirm_gate: false
+    gold:
+      flow_mode: atomic_create
+    notes: style variant creates new node
+
   # --- regenerate without checkpoint ---
   - id: reg-neg-01
     utterance: 再试一次

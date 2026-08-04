@@ -1,20 +1,31 @@
-"""Phase 3: adjust regenerate and thread isolation tests."""
+"""Phase 3: variant regenerate → new node; same-node retry unchanged."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 
 from app.graph.atomic_intent import (
-    apply_regenerate_adjust,
+    atomic_regenerate_intent,
     detect_regenerate_adjust,
+    is_regenerate_new_variant,
 )
 from app.graph.builder import route_after_intake
-from app.graph.nodes.adjust_atomic_regenerate import make_adjust_atomic_regenerate_node
+from app.graph.nodes.atomic_create_node import make_create_atomic_node
+from app.graph.nodes.atomic_parse import make_parse_atomic_intent_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.run_atomic_gen import make_run_atomic_gen_node
+
+
+def test_variant_phrases_are_not_same_node_regenerate():
+    assert is_regenerate_new_variant("重新生成一张，背景改成白色")
+    assert is_regenerate_new_variant("按刚才那个风格再生成一张")
+    assert not is_regenerate_new_variant("重新生成一张")
+    assert not is_regenerate_new_variant("再试一次")
+    assert not atomic_regenerate_intent("重新生成一张，背景改成白色")
+    assert atomic_regenerate_intent("重新生成一张")
 
 
 def test_detect_regenerate_adjust_with_tail():
@@ -22,73 +33,82 @@ def test_detect_regenerate_adjust_with_tail():
     assert detect_regenerate_adjust("按刚才那个风格再生成一张") == "按刚才那个风格"
 
 
-def test_detect_regenerate_adjust_pure_regenerate_none():
-    assert detect_regenerate_adjust("重新生成一张") is None
-    assert detect_regenerate_adjust("再试一次") is None
-
-
-def test_apply_regenerate_adjust_merges_prompt():
-    spec = {"target_type": "image", "prompt": "模特人物图", "title": "模特图"}
-    out = apply_regenerate_adjust(spec, "背景改成白色")
-    assert "模特人物图" in out["prompt"]
-    assert "背景改成白色" in out["prompt"]
-
-
-def test_apply_regenerate_adjust_style_from_context():
-    spec = {"target_type": "image", "prompt": "模特人物图", "title": "模特图"}
-    ctx = "近期对话:用户:赛博朋克耳机主图→助手:已创建"
-    out = apply_regenerate_adjust(spec, "按刚才那个风格", parse_context=ctx)
-    assert "赛博朋克耳机主图" in out["prompt"]
-
-
-def test_route_after_intake_adjust_vs_prepare():
+def test_route_after_intake_pure_regenerate_only():
     assert route_after_intake({"flow_mode": "atomic_regenerate", "messages": []}) == "prepare_atomic_regenerate"
-    assert (
-        route_after_intake(
-            {
-                "flow_mode": "atomic_regenerate",
-                "messages": [HumanMessage(content="重新生成一张，背景改成白色")],
-            }
-        )
-        == "adjust_atomic_regenerate"
-    )
 
 
 class FakeNest:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str]] = []
-
-    async def get_node(self, node_id: str) -> dict:
-        self.calls.append(("get_node", node_id))
-        return {"id": node_id, "type": "image", "title": "模特图"}
+        self.calls: list[tuple[str, object]] = []
 
     async def get_canvas_summary(self) -> dict:
-        return {"nodes": []}
+        return {
+            "nodes": [
+                {"id": "node-abc", "type": "image", "title": "模特图"},
+            ]
+        }
+
+    async def add_nodes_batch(self, batch: list[dict]) -> dict:
+        self.calls.append(("add_nodes_batch", batch))
+        return {
+            "nodes": [
+                {"key": batch[0]["key"], "nodeId": "node-new-1"},
+            ]
+        }
 
     async def run_image_generation(self, node_id: str) -> dict:
         self.calls.append(("run_image_generation", node_id))
-        return {"status": "completed", "generationRecordId": "rec-adj-1"}
+        return {"status": "completed", "generationRecordId": "rec-new-1"}
 
 
 @pytest.mark.asyncio
-async def test_adjust_regenerate_updates_prompt_before_gen():
+async def test_intake_variant_routes_to_atomic_create(tmp_path: Path):
+    skills = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills)
+    checkpoint = {
+        "atomic_node_id": "node-abc",
+        "atomic_spec": {
+            "target_type": "image",
+            "title": "模特图",
+            "prompt": "模特人物图",
+            "confirm_gate": False,
+        },
+    }
+    for utterance in ("重新生成一张，背景改成白色", "按刚才那个风格再生成一张"):
+        out = await intake({**checkpoint, "messages": [HumanMessage(content=utterance)]})
+        assert out["flow_mode"] == "atomic_create", utterance
+
+
+@pytest.mark.asyncio
+async def test_variant_create_adds_new_node_not_regenerate_old():
     nest = FakeNest()
-    spec = {"target_type": "image", "title": "模特图", "prompt": "模特人物图", "confirm_gate": False}
-    adjust_node = make_adjust_atomic_regenerate_node(nest=nest)
-    out = await adjust_node(
+    prior = {
+        "target_type": "image",
+        "title": "模特图",
+        "prompt": "模特人物图",
+        "confirm_gate": False,
+    }
+    parse = make_parse_atomic_intent_node(nest=nest, llm=None)
+    parsed = await parse(
         {
-            "atomic_node_id": "node-abc",
-            "atomic_spec": spec,
             "messages": [HumanMessage(content="重新生成一张，背景改成白色")],
+            "atomic_node_id": "node-abc",
+            "atomic_spec": prior,
         }
     )
-    assert "背景改成白色" in out["atomic_spec"]["prompt"]
-    assert "按新要求" in out["messages"][0].content
+    assert "背景改成白色" in parsed["atomic_spec"]["prompt"]
+    assert parsed["atomic_spec"]["title"] == "模特图 (2)"
+
+    create = make_create_atomic_node(nest=nest)
+    created = await create(parsed)
+    assert created["atomic_node_id"] == "node-new-1"
+    assert any(c[0] == "add_nodes_batch" for c in nest.calls)
 
     run = make_run_atomic_gen_node(nest=nest)
-    done = await run({**out, "atomic_node_id": "node-abc"})
+    done = await run({**created, **parsed})
     assert done["phase"] == "done"
-    assert ("run_image_generation", "node-abc") in nest.calls
+    assert ("run_image_generation", "node-new-1") in nest.calls
+    assert not any(c == ("run_image_generation", "node-abc") for c in nest.calls)
 
 
 @pytest.mark.asyncio

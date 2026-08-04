@@ -141,6 +141,16 @@ def detect_regenerate_adjust(text: str) -> str | None:
     return None
 
 
+def is_regenerate_new_variant(text: str) -> bool:
+    """True when user wants another node (variant), not retry on the same node."""
+    return _matches_regenerate_hints(text) and detect_regenerate_adjust(text) is not None
+
+
+def should_regenerate_same_node(text: str) -> bool:
+    """Same-node retry only when regenerate phrasing has no variant/adjust tail."""
+    return _matches_regenerate_hints(text) and not is_regenerate_new_variant(text)
+
+
 def apply_regenerate_adjust(
     spec: dict[str, Any],
     adjust: str | None,
@@ -207,7 +217,7 @@ def atomic_regenerate_intent(text: str) -> bool:
         return False
     if _is_campaign_override(t):
         return False
-    return _matches_regenerate_hints(t)
+    return should_regenerate_same_node(t)
 
 
 def resolve_intake_route(

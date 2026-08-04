@@ -10,10 +10,9 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.done import make_done_node
-from app.graph.nodes.intake import make_intake_node, latest_user_text
+from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
-from app.graph.atomic_intent import detect_regenerate_adjust
 from app.graph.subgraphs.atomic_create_gate import register_atomic_create_gate
 from app.graph.subgraphs.confirm_gate import register_confirm_gate
 from app.graph.subgraphs.copy_gate import register_copy_gate
@@ -23,9 +22,6 @@ from app.graph.subgraphs.topo_gate import register_topo_gate
 
 def route_after_intake(state: AgentRuntimeState) -> str:
     if state.get("flow_mode") == "atomic_regenerate":
-        text = latest_user_text(state.get("messages") or [])
-        if detect_regenerate_adjust(text):
-            return "adjust_atomic_regenerate"
         return "prepare_atomic_regenerate"
     if state.get("flow_mode") == "single_node":
         return "prepare_single_gen"
@@ -72,7 +68,6 @@ def build_agent_graph(
         "intake",
         route_after_intake,
         {
-            "adjust_atomic_regenerate": "adjust_atomic_regenerate",
             "prepare_atomic_regenerate": "prepare_atomic_regenerate",
             "prepare_single_gen": "prepare_single_gen",
             "parse_atomic_intent": "parse_atomic_intent",

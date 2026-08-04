@@ -15,7 +15,12 @@ from app.graph.atomic_parse_schema import (
     parse_outcome_to_state,
     validate_parse_result,
 )
-from app.graph.atomic_parse_util import load_atomic_parse_few_shots, rule_parse_atomic
+from app.graph.atomic_parse_util import (
+    build_variant_spec_from_checkpoint,
+    load_atomic_parse_few_shots,
+    rule_parse_atomic,
+)
+from app.graph.atomic_intent import is_regenerate_new_variant
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -48,6 +53,26 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
 
         focus_node_id = state.get("focus_node_id")
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
+
+        prior_spec = state.get("atomic_spec")
+        if (
+            is_regenerate_new_variant(text)
+            and isinstance(prior_spec, dict)
+            and str(state.get("atomic_node_id") or "").strip()
+        ):
+            variant_spec = build_variant_spec_from_checkpoint(
+                text,
+                prior_spec,
+                canvas_summary=canvas_summary,
+                parse_context=parse_ctx or None,
+            )
+            outcome = outcome_from_rule_items(
+                [variant_spec],
+                confidence=0.96,
+                reason="variant_new_node_from_checkpoint",
+            )
+            return parse_outcome_to_state(outcome, canvas_context=parse_ctx)
+
         rule_items, rule_conf = rule_parse_atomic(
             text,
             canvas_summary=canvas_summary,
