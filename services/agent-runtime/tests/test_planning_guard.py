@@ -49,3 +49,47 @@ def test_detail_page_write_only_not_conflict():
     u = "写一份详情页模块构图策划文档，不出图"
     assert is_planning_intent(u)
     assert not has_planning_image_conflict(u)
+
+
+def test_validate_llm_parse_blocks_generate_on_planning_conflict():
+    from app.graph.planning_guard import validate_llm_parse
+
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    result = {
+        "action": "generate",
+        "route": "atomic_create",
+        "items": [{"target_type": "image", "prompt": u, "title": "主图"}],
+        "confidence": 0.95,
+    }
+    out = validate_llm_parse(result, u)  # type: ignore[arg-type]
+    assert out is not None
+    assert out["kind"] == "clarify"
+    assert out["reason"] == "planning_image_conflict"
+
+
+def test_validate_llm_parse_blocks_plan_with_image_items():
+    from app.graph.planning_guard import validate_llm_parse
+
+    u = "详情页构图方案"
+    result = {
+        "action": "plan",
+        "route": "atomic_create",
+        "items": [{"target_type": "image", "prompt": u, "title": "x"}],
+        "confidence": 0.9,
+    }
+    out = validate_llm_parse(result, u)  # type: ignore[arg-type]
+    assert out is not None
+    assert out["kind"] == "clarify"
+
+
+def test_validate_llm_parse_ok_for_explicit_generate():
+    from app.graph.planning_guard import validate_llm_parse
+
+    u = "生成一张蓝牙耳机主图"
+    result = {
+        "action": "generate",
+        "route": "atomic_create",
+        "items": [{"target_type": "image", "prompt": u, "title": "主图"}],
+        "confidence": 0.94,
+    }
+    assert validate_llm_parse(result, u) is None  # type: ignore[arg-type]

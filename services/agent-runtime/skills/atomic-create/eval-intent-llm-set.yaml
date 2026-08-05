@@ -1,0 +1,1566 @@
+version: 1
+meta:
+  spec: phase-c-intent-llm-structured-parse
+cases:
+- id: llm-001
+  category: llm-plan-campaign
+  utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-002
+  category: llm-plan-campaign
+  utterance: 帮我规划天猫蓝牙耳机详情页的视觉结构和模块顺序
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-003
+  category: llm-plan-campaign
+  utterance: 蓝牙耳机详情页构图方案
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-004
+  category: llm-plan-campaign
+  utterance: 设计一套详情页视觉方案，含主图和白底
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-005
+  category: llm-plan-campaign
+  utterance: 详情页营销视觉策划，运动耳机
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-006
+  category: llm-plan-campaign
+  utterance: 帮我做详情页方案，主图场景图布局
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-007
+  category: llm-plan-campaign
+  utterance: 电商详情页整体框架设计，蓝牙耳机
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-008
+  category: llm-plan-campaign
+  utterance: 主图加详情页模块的完整视觉方案
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-009
+  category: llm-plan-campaign
+  utterance: 详情页结构布局方案，3C数码耳机
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-010
+  category: llm-plan-campaign
+  utterance: 帮我设计详情页Banner和主图的整体思路
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-011
+  category: llm-plan-campaign
+  utterance: 整一个详情页的感觉
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-012
+  category: llm-plan-campaign
+  utterance: hero image + detail page layout for bluetooth earbuds
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-013
+  category: llm-plan-campaign
+  utterance: 帮我做一套天猫蓝牙耳机详情页营销方案
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-014
+  category: llm-plan-campaign
+  utterance: 14节点营销全链路方案，智能手表
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-015
+  category: llm-plan-campaign
+  utterance: 详情页视觉脚本和页面结构稿
+  gold:
+    route: campaign
+    outcome: clarify
+    action: plan
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    structure: single
+    items: []
+    confidence: 0.88
+    needs_clarify: false
+    reason: plan campaign
+- id: llm-g01
+  category: llm-generate-image
+  utterance: 生成一张蓝牙耳机主图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 生成一张蓝牙耳机主图
+      prompt: 生成一张蓝牙耳机主图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g02
+  category: llm-generate-image
+  utterance: 来一张运动风海报
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 来一张运动风海报
+      prompt: 来一张运动风海报
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g03
+  category: llm-generate-image
+  utterance: 帮我生成一个模特人物图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 帮我生成一个模特人物图
+      prompt: 帮我生成一个模特人物图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g04
+  category: llm-generate-image
+  utterance: 做一个品牌视觉图，极简风
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 做一个品牌视觉图，极简风
+      prompt: 做一个品牌视觉图，极简风
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g05
+  category: llm-generate-image
+  utterance: 设计一张赛博朋克海报
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 设计一张赛博朋克海报
+      prompt: 设计一张赛博朋克海报
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g06
+  category: llm-generate-image
+  utterance: 出一张白底产品图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 出一张白底产品图
+      prompt: 出一张白底产品图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g07
+  category: llm-generate-image
+  utterance: 帮我做一张场景图，客厅摆放耳机
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 帮我做一张场景图，客厅摆
+      prompt: 帮我做一张场景图，客厅摆放耳机
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g08
+  category: llm-generate-image
+  utterance: 生成一张电商主图，降噪耳机
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 生成一张电商主图，降噪耳
+      prompt: 生成一张电商主图，降噪耳机
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g09
+  category: llm-generate-image
+  utterance: 来一张3C数码产品图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 来一张3C数码产品图
+      prompt: 来一张3C数码产品图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g10
+  category: llm-generate-image
+  utterance: 直接生成主图，蓝牙耳机
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 直接生成主图，蓝牙耳机
+      prompt: 直接生成主图，蓝牙耳机
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g11
+  category: llm-generate-image
+  utterance: 帮我生成一张白底图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 帮我生成一张白底图
+      prompt: 帮我生成一张白底图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g12
+  category: llm-generate-image
+  utterance: 做一张Banner图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 做一张Banner图
+      prompt: 做一张Banner图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g13
+  category: llm-generate-image
+  utterance: 生成一个产品特写图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 生成一个产品特写图
+      prompt: 生成一个产品特写图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g14
+  category: llm-generate-image
+  utterance: 来一张极简风主图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 来一张极简风主图
+      prompt: 来一张极简风主图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-g15
+  category: llm-generate-image
+  utterance: 帮我生成一张详情页首屏主图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: image
+      title: 帮我生成一张详情页首屏主
+      prompt: 帮我生成一张详情页首屏主图
+      confirm_gate: false
+    confidence: 0.93
+    needs_clarify: false
+    reason: generate image
+- id: llm-w01
+  category: llm-write-text
+  utterance: 写一段天猫详情页开场文案
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 写一段天猫详情页开场文案
+      prompt: 写一段天猫详情页开场文案
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w02
+  category: llm-write-text
+  utterance: 写一份详情页模块构图策划文档，不出图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 写一份详情页模块构图策划
+      prompt: 写一份详情页模块构图策划文档，不出图
+      confirm_gate: false
+      prompt_mode: vision_text
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w03
+  category: llm-write-text
+  utterance: 帮我写广告词，强调降噪
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 帮我写广告词，强调降噪
+      prompt: 帮我写广告词，强调降噪
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w04
+  category: llm-write-text
+  utterance: 输出文案，蓝牙耳机卖点
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 输出文案，蓝牙耳机卖点
+      prompt: 输出文案，蓝牙耳机卖点
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w05
+  category: llm-write-text
+  utterance: 来一段30秒短视频口播稿
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 来一段30秒短视频口播稿
+      prompt: 来一段30秒短视频口播稿
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w06
+  category: llm-write-text
+  utterance: 起草产品详情页文案
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 起草产品详情页文案
+      prompt: 起草产品详情页文案
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w07
+  category: llm-write-text
+  utterance: 写脚本，15秒产品介绍
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 写脚本，15秒产品介绍
+      prompt: 写脚本，15秒产品介绍
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w08
+  category: llm-write-text
+  utterance: 输出详情页模块说明文字
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 输出详情页模块说明文字
+      prompt: 输出详情页模块说明文字
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w09
+  category: llm-write-text
+  utterance: 撰写品牌slogan文案
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 撰写品牌slogan文案
+      prompt: 撰写品牌slogan文案
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-w10
+  category: llm-write-text
+  utterance: 写一段品牌故事文案
+  gold:
+    route: atomic_create
+    outcome: success
+    action: write
+    target_type: text
+  llm_fixture:
+    action: write
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: text
+      title: 写一段品牌故事文案
+      prompt: 写一段品牌故事文案
+      confirm_gate: false
+    confidence: 0.91
+    needs_clarify: false
+    reason: write text
+- id: llm-e01
+  category: llm-expand-prompt
+  utterance: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 帮我对「蓝牙耳机」做 p
+      prompt: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
+      confirm_gate: false
+      prompt_mode: generic
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e02
+  category: llm-expand-prompt
+  utterance: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 帮我生成一个年轻漂亮亚洲
+      prompt: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+      confirm_gate: false
+      prompt_mode: character_turnaround
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e03
+  category: llm-expand-prompt
+  utterance: 帮我生成问界M9的15秒商业分镜提示词
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 帮我生成问界M9的15秒
+      prompt: 帮我生成问界M9的15秒商业分镜提示词
+      confirm_gate: false
+      prompt_mode: commercial_storyboard
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e04
+  category: llm-expand-prompt
+  utterance: 用提示词模式扩写：赛博朋克耳机主图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 用提示词模式扩写：赛博朋
+      prompt: 用提示词模式扩写：赛博朋克耳机主图
+      confirm_gate: false
+      prompt_mode: generic
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e05
+  category: llm-expand-prompt
+  utterance: 多模式扩写这个主图 prompt
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 多模式扩写这个主图 pr
+      prompt: 多模式扩写这个主图 prompt
+      confirm_gate: false
+      prompt_mode: generic
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e06
+  category: llm-expand-prompt
+  utterance: 帮我生成一个蓝牙耳机的分镜提示词
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 帮我生成一个蓝牙耳机的分
+      prompt: 帮我生成一个蓝牙耳机的分镜提示词
+      confirm_gate: false
+      prompt_mode: generic
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e07
+  category: llm-expand-prompt
+  utterance: 扩写三视图提示词，CG风格
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 扩写三视图提示词，CG风
+      prompt: 扩写三视图提示词，CG风格
+      confirm_gate: false
+      prompt_mode: character_turnaround
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e08
+  category: llm-expand-prompt
+  utterance: prompt扩写，商业分镜问界
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: prompt扩写，商业分
+      prompt: prompt扩写，商业分镜问界
+      confirm_gate: false
+      prompt_mode: commercial_storyboard
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e09
+  category: llm-expand-prompt
+  utterance: 生成商业分镜提示词，AITO
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 生成商业分镜提示词，AI
+      prompt: 生成商业分镜提示词，AITO
+      confirm_gate: false
+      prompt_mode: commercial_storyboard
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-e10
+  category: llm-expand-prompt
+  utterance: 扩写角色设定图提示词
+  gold:
+    route: atomic_create
+    outcome: success
+    action: expand
+    target_type: prompt
+  llm_fixture:
+    action: expand
+    scope: atomic
+    route: atomic_create
+    structure: single
+    items:
+    - target_type: prompt
+      title: 扩写角色设定图提示词
+      prompt: 扩写角色设定图提示词
+      confirm_gate: false
+      prompt_mode: character_turnaround
+    confidence: 0.92
+    needs_clarify: false
+    reason: expand prompt
+- id: llm-m01
+  category: llm-multi-image
+  utterance: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m02
+  category: llm-multi-image
+  utterance: 主图、白底和三视图各来一张
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 主图、白底和三视图各来一张
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 主图、白底和三视图各来一张
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m03
+  category: llm-multi-image
+  utterance: 生成2张图片，分别是白底图、场景图。
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 生成2张图片，分别是白底图、场景图。
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 生成2张图片，分别是白底图、场景图。
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m04
+  category: llm-multi-image
+  utterance: 来三张：主图、细节图、场景图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 来三张：主图、细节图、场景图
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 来三张：主图、细节图、场景图
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m05
+  category: llm-multi-image
+  utterance: 帮我生成主图、白底、Banner各一张
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 帮我生成主图、白底、Banner各一张
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 帮我生成主图、白底、Banner各一张
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m06
+  category: llm-multi-image
+  utterance: 白底图、场景图、细节图各一张
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 白底图、场景图、细节图各一张
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 白底图、场景图、细节图各一张
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m07
+  category: llm-multi-image
+  utterance: 生成三张产品图：正面、侧面、背面
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 生成三张产品图：正面、侧面、背面
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 生成三张产品图：正面、侧面、背面
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m08
+  category: llm-multi-image
+  utterance: 主图和白底各来一张
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 主图和白底各来一张
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 主图和白底各来一张
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m09
+  category: llm-multi-image
+  utterance: 帮我做三张电商图
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 帮我做三张电商图
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 帮我做三张电商图
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-m10
+  category: llm-multi-image
+  utterance: 生成多图：主图、场景、白底
+  gold:
+    route: atomic_create
+    outcome: success
+    action: generate
+    target_type: image
+    multi: true
+  llm_fixture:
+    action: generate
+    scope: atomic
+    route: atomic_create
+    structure: multi
+    items:
+    - target_type: image
+      title: 图1
+      prompt: 生成多图：主图、场景、白底
+      confirm_gate: false
+    - target_type: image
+      title: 图2
+      prompt: 生成多图：主图、场景、白底
+      confirm_gate: false
+    confidence: 0.9
+    needs_clarify: false
+    reason: multi image
+- id: llm-a01
+  category: llm-adversarial
+  utterance: 重新生成一张
+  gold:
+    route: atomic_regenerate
+    outcome: clarify
+  llm_fixture:
+    action: regenerate
+    route: atomic_regenerate
+    items: []
+    confidence: 0.2
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a02
+  category: llm-adversarial
+  utterance: 按刚才那个风格再生成一张
+  gold:
+    route: atomic_regenerate
+    outcome: clarify
+  llm_fixture:
+    action: regenerate
+    route: atomic_regenerate
+    items: []
+    confidence: 0.18
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a03
+  category: llm-adversarial
+  utterance: 重新生成一张，背景改成白色
+  gold:
+    route: atomic_regenerate
+    outcome: clarify
+  llm_fixture:
+    action: regenerate
+    route: atomic_regenerate
+    items: []
+    confidence: 0.18
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a04
+  category: llm-adversarial
+  utterance: 确认出图
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    route: chat
+    items: []
+    confidence: 0.3
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a05
+  category: llm-adversarial
+  utterance: 蓝牙耳机主图
+  gold:
+    route: atomic_create
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    route: chat
+    items: []
+    confidence: 0.45
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a06
+  category: llm-adversarial
+  utterance: 设计方案
+  gold:
+    route: campaign
+    outcome: clarify
+    forbid_image: true
+  llm_fixture:
+    action: plan
+    route: campaign
+    items: []
+    confidence: 0.7
+    needs_clarify: true
+    scope: campaign
+    structure: single
+    reason: adversarial
+- id: llm-a07
+  category: llm-adversarial
+  utterance: 写文案并生成主图
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    route: chat
+    items: []
+    confidence: 0.5
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a08
+  category: llm-adversarial
+  utterance: 帮我生成
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    route: chat
+    items: []
+    confidence: 0.35
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a09
+  category: llm-adversarial
+  utterance: 生成一下
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    route: chat
+    items: []
+    confidence: 0.3
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-a10
+  category: llm-adversarial
+  utterance: 再试一次
+  gold:
+    route: atomic_regenerate
+    outcome: clarify
+  llm_fixture:
+    action: regenerate
+    route: atomic_regenerate
+    items: []
+    confidence: 0.25
+    needs_clarify: true
+    scope: atomic
+    structure: single
+    reason: adversarial
+- id: llm-c01
+  category: llm-clarify-expected
+  utterance: 帮我生成
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c02
+  category: llm-clarify-expected
+  utterance: 生成一下
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c03
+  category: llm-clarify-expected
+  utterance: 帮我做营销
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c04
+  category: llm-clarify-expected
+  utterance: 设计
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c05
+  category: llm-clarify-expected
+  utterance: 详情页
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c06
+  category: llm-clarify-expected
+  utterance: 整一个方案
+  gold:
+    route: campaign
+    outcome: clarify
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    items: []
+    confidence: 0.65
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c07
+  category: llm-clarify-expected
+  utterance: 帮我搞一下
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c08
+  category: llm-clarify-expected
+  utterance: 做个东西
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c09
+  category: llm-clarify-expected
+  utterance: 帮我整一个
+  gold:
+    route: chat
+    outcome: clarify
+  llm_fixture:
+    action: unknown
+    scope: unknown
+    route: chat
+    items: []
+    confidence: 0.4
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
+- id: llm-c10
+  category: llm-clarify-expected
+  utterance: 来一个方案
+  gold:
+    route: campaign
+    outcome: clarify
+  llm_fixture:
+    action: plan
+    scope: campaign
+    route: campaign
+    items: []
+    confidence: 0.65
+    needs_clarify: true
+    structure: single
+    reason: clarify expected
