@@ -165,6 +165,18 @@ def verify_modality(tok: str, label: str, utterance: str, node_type: str) -> Non
     )
 
 
+def _is_valid_turnaround_expansion(text: str, utterance: str) -> bool:
+    """Expanded prompt should be materially longer than utterance and describe multi-view layout."""
+    t = (text or "").strip()
+    if len(t) < len(utterance) + 80:
+        return False
+    layout_markers = ("四格", "第一格", "第二格", "第三格", "第四格")
+    view_markers = ("正面全身", "侧面全身", "背面全身", "近景特写", "正侧背")
+    has_layout = any(m in t for m in layout_markers)
+    has_views = sum(1 for m in view_markers if m in t) >= 2
+    return has_layout or has_views
+
+
 def verify_turnaround_pipeline(tok: str) -> None:
     sid = http("POST", "/sessions", {"title": f"P4-turnaround-{int(time.time())}"}, t=tok)["data"]["id"]
     tid = f"{sid}:{uuid.uuid4()}"
@@ -188,7 +200,7 @@ def verify_turnaround_pipeline(tok: str) -> None:
     expanded = str(data.get("expandedPrompt") or data.get("content") or "")
     record(
         "turnaround expandedPrompt",
-        "四格" in expanded,
+        _is_valid_turnaround_expansion(expanded, TURNAROUND_UTTERANCE),
         expanded[:120],
     )
     record(
@@ -209,7 +221,7 @@ def verify_turnaround_pipeline(tok: str) -> None:
         prompt_used = str(rec.get("prompt") or "")
         record(
             "turnaround image prompt not raw utterance",
-            "四格" in prompt_used,
+            _is_valid_turnaround_expansion(prompt_used, TURNAROUND_UTTERANCE),
             prompt_used[:100],
         )
     record(
