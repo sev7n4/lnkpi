@@ -922,7 +922,13 @@ export class AgentCanvasToolsService {
     sessionId: string
     userId: string
     nodeId: string
-  }): Promise<{ status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+  }): Promise<{
+    status: string
+    generationRecordId?: string
+    actions: CanvasAction[]
+    promptMode?: string | null
+    completionSummary?: string
+  }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const node = canvas.nodes.find((n) => n.id === input.nodeId)
     if (!node) throw new NotFoundException('节点不存在')
