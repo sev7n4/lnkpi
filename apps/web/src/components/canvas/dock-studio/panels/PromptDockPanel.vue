@@ -16,15 +16,13 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { resolveGenerationModel } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
+import {
+  PROMPT_MODE_LABELS,
+  buildPromptNodeCardPreview,
+  countMarkdownTableDataRows,
+} from '@lnkpi/shared'
 
-const MODE_LABELS: Record<string, string> = {
-  image_prompt_multi_style: '多风格绘画提示词',
-  character_turnaround: '人物三视图',
-  storyboard: '分镜提示词',
-  script: '剧本',
-  copywriting: '文案/旁白',
-  generic: '通用创作',
-}
+const MODE_LABELS = PROMPT_MODE_LABELS
 
 const { getConfig } = useModelProviderSettings()
 
@@ -57,6 +55,20 @@ const promptModeLabel = computed(() => {
   const mode = promptMode.value
   return mode ? (MODE_LABELS[mode] ?? mode) : ''
 })
+
+const generatedContent = computed(() => String(props.node.data?.content ?? '').trim())
+const generatedPreview = computed(() =>
+  buildPromptNodeCardPreview({
+    content: generatedContent.value,
+    promptMode: promptMode.value,
+    maxChars: 360,
+  }),
+)
+const tableRowCount = computed(() =>
+  promptMode.value === 'commercial_storyboard'
+    ? countMarkdownTableDataRows(generatedContent.value)
+    : 0,
+)
 
 const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType === 'text'))
 
@@ -145,6 +157,22 @@ function onRefRemove(ref: NodeRef) {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
+
+    <section
+      v-if="generatedContent"
+      class="mx-3 mb-2 rounded-xl border border-white/10 bg-white/[0.03] p-3"
+    >
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <span class="text-[10px] font-medium text-fuchsia-300/90">
+          {{ promptModeLabel || '生成结果' }}
+        </span>
+        <span v-if="tableRowCount" class="text-[10px] text-white/45">
+          含 {{ tableRowCount }} 镜表格
+        </span>
+      </div>
+      <pre class="max-h-36 overflow-auto whitespace-pre-wrap text-left text-[11px] leading-relaxed text-white/75">{{ generatedPreview }}</pre>
+      <p class="mt-2 text-[10px] text-white/35">双击画布节点可打开表格编辑器查看完整分镜表</p>
+    </section>
 
     <div class="bottom-toolbar-actions flex-wrap">
       <UniversalModelSelector

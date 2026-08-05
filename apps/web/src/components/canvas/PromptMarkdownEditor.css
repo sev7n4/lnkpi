@@ -13,8 +13,8 @@
 .prompt-md-modal {
   display: flex;
   flex-direction: column;
-  width: min(920px, 100%);
-  max-height: min(85vh, 720px);
+  width: min(1100px, 100%);
+  max-height: min(88vh, 780px);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
   background: #1a1a1e;
@@ -155,6 +155,38 @@
 
 .prompt-md-editor .tiptap em {
   font-style: italic;
+}
+
+.prompt-md-editor .tiptap table {
+  width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 12px;
+}
+
+.prompt-md-editor .tiptap th,
+.prompt-md-editor .tiptap td {
+  min-width: 72px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  vertical-align: top;
+  text-align: left;
+}
+
+.prompt-md-editor .tiptap th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.prompt-md-editor .tiptap td {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.prompt-md-editor .tiptap .tableWrapper {
+  overflow-x: auto;
+  margin: 0.5em 0;
 }
 
 .prompt-md-btn-secondary {

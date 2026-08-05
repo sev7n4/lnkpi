@@ -4,6 +4,10 @@ import { EditorContent, Editor } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Typography from '@tiptap/extension-typography'
+import { Table } from '@tiptap/extension-table'
+import { TableRow } from '@tiptap/extension-table-row'
+import { TableCell } from '@tiptap/extension-table-cell'
+import { TableHeader } from '@tiptap/extension-table-header'
 import { Markdown } from 'tiptap-markdown'
 import type { MarkdownStorage } from 'tiptap-markdown'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -46,8 +50,12 @@ function ensureEditor() {
     extensions: [
       StarterKit,
       Typography,
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Placeholder.configure({ placeholder: '输入或生成提示词内容...' }),
-      Markdown.configure({ html: false }),
+      Markdown.configure({ html: false, transformPastedText: true, transformCopiedText: true }),
     ],
     content: props.modelValue || '',
     onUpdate: () => scheduleSave(),

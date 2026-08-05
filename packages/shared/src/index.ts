@@ -11,6 +11,7 @@ export * from './providerChannels'
 export * from './generationDiagnostics'
 export * from './agentContract'
 export * from './agentIntent'
+export * from './promptContent'
 
 export type GenerationType = 'text' | 'image' | 'video'
 

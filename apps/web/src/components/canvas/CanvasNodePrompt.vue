@@ -5,25 +5,33 @@ import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import PromptMarkdownEditor from '@/components/canvas/PromptMarkdownEditor.vue'
 import { CANVAS_NODE_PATCH_KEY } from '@/composables/canvasNodeActions'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import { buildPromptNodeCardPreview } from '@lnkpi/shared'
 
 const props = defineProps<{
   selected?: boolean
-  data: { prompt?: string; content?: string; label?: string; status?: string; errorMessage?: string }
+  data: {
+    prompt?: string
+    content?: string
+    label?: string
+    status?: string
+    errorMessage?: string
+    promptMode?: string
+  }
 }>()
 
 const nodeId = useNodeId()
 const { updateNodeData } = useVueFlow()
-// 同 CanvasNodeText:受控模式下必须走页面级 patch 才能持久化并让下游引用可见。
 const patchCanvasNode = inject(CANVAS_NODE_PATCH_KEY, null)
 
 const editorOpen = ref(false)
 const draft = ref('')
 
-const preview = computed(() => {
-  const c = String(props.data.content ?? '').trim()
-  if (c) return c.length > 180 ? `${c.slice(0, 180)}…` : c
-  return ''
-})
+const preview = computed(() =>
+  buildPromptNodeCardPreview({
+    content: String(props.data.content ?? ''),
+    promptMode: props.data.promptMode,
+  }),
+)
 
 const isError = computed(
   () => props.data.status === NODE_GENERATION_STATUS.error || props.data.status === 'error',
