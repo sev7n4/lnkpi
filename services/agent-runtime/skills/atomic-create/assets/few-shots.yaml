@@ -74,3 +74,52 @@ nodes:
     - user: 来一段30秒短视频口播稿
       assistant: |
         {"structure":"single","items":[{"target_type":"text","prompt":"30秒短视频口播稿","title":"口播稿","confirm_gate":false}],"confidence":0.91,"reason":"口播稿 text","clarify_question":null}
+  parse_intent_structured:
+    - user: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+      assistant: |
+        {"action":"plan","scope":"campaign","route":"campaign","structure":"single","items":[],"confidence":0.90,"needs_clarify":false,"clarify_question":null,"reason":"主图+详情页构图方案 → Campaign"}
+    - user: 写一份详情页模块构图策划文档，不出图
+      assistant: |
+        {"action":"write","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"text","prompt":"详情页模块构图策划文档","title":"构图策划","confirm_gate":false,"prompt_mode":"vision_text"}],"confidence":0.92,"needs_clarify":false,"reason":"write 文字策划"}
+    - user: 生成一张蓝牙耳机主图
+      assistant: |
+        {"action":"generate","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"image","prompt":"蓝牙耳机主图","title":"蓝牙耳机主图","confirm_gate":false}],"confidence":0.94,"needs_clarify":false,"reason":"明确 generate image"}
+    - user: 帮我对「蓝牙耳机」做 prompt 扩写，出图用
+      assistant: |
+        {"action":"expand","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"prompt","prompt":"蓝牙耳机","title":"蓝牙耳机 prompt 扩写","confirm_gate":false,"prompt_mode":"generic"}],"confidence":0.93,"needs_clarify":false,"reason":"expand prompt"}
+    - user: 帮我生成三张图，分别是蓝牙耳机主图、白底图、三视图。
+      assistant: |
+        {"action":"generate","scope":"atomic","route":"atomic_create","structure":"multi","items":[{"target_type":"image","prompt":"蓝牙耳机主图","title":"主图","confirm_gate":false},{"target_type":"image","prompt":"白底图","title":"白底图","confirm_gate":false},{"target_type":"image","prompt":"三视图","title":"三视图","confirm_gate":false}],"confidence":0.96,"needs_clarify":false,"reason":"multi image generate"}
+    - user: 帮我做一套天猫蓝牙耳机详情页营销方案
+      assistant: |
+        {"action":"plan","scope":"campaign","route":"campaign","structure":"single","items":[],"confidence":0.91,"needs_clarify":false,"reason":"全链路 Campaign"}
+    - user: 写一段天猫详情页开场文案
+      assistant: |
+        {"action":"write","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"text","prompt":"天猫详情页开场文案","title":"详情页开场文案","confirm_gate":false}],"confidence":0.93,"needs_clarify":false,"reason":"write text"}
+    - user: 做一个15秒产品展示视频
+      assistant: |
+        {"action":"generate","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"video","prompt":"15秒产品展示视频","title":"15秒产品展示视频","confirm_gate":true}],"confidence":0.92,"needs_clarify":false,"reason":"video confirm gate"}
+    - user: 给这段文案配一段旁白
+      assistant: |
+        {"action":"generate","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"audio","prompt":"给这段文案配一段旁白","title":"文案旁白","confirm_gate":true}],"confidence":0.90,"needs_clarify":false,"reason":"audio confirm gate"}
+    - user: 帮我生成一个年轻漂亮亚洲女性模特的三视图/四视图的提示词
+      assistant: |
+        {"action":"expand","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"prompt","prompt":"年轻漂亮亚洲女性模特的三视图/四视图","title":"模特多视图提示词","confirm_gate":false,"prompt_mode":"character_turnaround","pipeline":"turnaround_image"}],"confidence":0.95,"needs_clarify":false,"reason":"turnaround prompt expand"}
+    - user: 帮我生成问界M9的15秒商业分镜提示词
+      assistant: |
+        {"action":"expand","scope":"atomic","route":"atomic_create","structure":"single","items":[{"target_type":"prompt","prompt":"问界M9 15秒商业分镜","title":"商业分镜提示词","confirm_gate":false,"prompt_mode":"commercial_storyboard"}],"confidence":0.93,"needs_clarify":false,"reason":"commercial storyboard expand"}
+    - user: 帮我生成
+      assistant: |
+        {"action":"unknown","scope":"unknown","route":"chat","structure":"single","items":[],"confidence":0.35,"needs_clarify":true,"clarify_question":"你想生成什么？例如图片、文案或视频，以及具体主题。","reason":"缺少模态与主题"}
+    - user: 重新生成一张
+      assistant: |
+        {"action":"regenerate","scope":"atomic","route":"atomic_regenerate","structure":"single","items":[],"confidence":0.25,"needs_clarify":true,"clarify_question":"若要重新生成已有节点，请在同一会话中直接说「再试一次」。","reason":"regenerate 需 checkpoint"}
+    - user: 整一个详情页的感觉
+      assistant: |
+        {"action":"plan","scope":"campaign","route":"campaign","structure":"single","items":[],"confidence":0.72,"needs_clarify":true,"clarify_question":"您是要完整详情页 Campaign 方案，还是单张主图/文字策划？回复 2 走 Campaign，3 只要文字策划。","reason":"口语 planning 模糊"}
+    - user: hero image + detail page layout for bluetooth earbuds
+      assistant: |
+        {"action":"plan","scope":"campaign","route":"campaign","structure":"single","items":[],"confidence":0.85,"needs_clarify":false,"reason":"英文混排 planning → campaign"}
+    - user: 写文案并生成主图
+      assistant: |
+        {"action":"unknown","scope":"unknown","route":"chat","structure":"multi","items":[],"confidence":0.55,"needs_clarify":true,"clarify_question":"您同时提到文案和主图。请先选：1）单张主图；2）完整 Campaign；3）只要文字策划。","reason":"多意图需 clarify"}

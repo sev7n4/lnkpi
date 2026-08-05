@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
     # W19: JSON map skill_id -> pinned prompt version for rollback, e.g.
     # {"enterprise-marketing-campaign":"1.0.0"}
     prompt_version_overrides: str = "{}"
+    # Phase C: LLM structured intent parse (default off until C4)
+    intent_llm_parse: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE")
+    intent_llm_parse_shadow: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE_SHADOW")
 
     class Config:
         env_prefix = "LNKPI_"
