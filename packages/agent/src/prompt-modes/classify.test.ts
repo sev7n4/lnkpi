@@ -19,6 +19,18 @@ describe('classifyPromptMode without API key', () => {
     expect(res.confidence).toBeLessThan(1)
   })
 
+  it('routes commercial brand storyboard by keywords', async () => {
+    delete process.env.OPENAI_API_KEY
+    const res = await classifyPromptMode('问界M9 30秒商业分镜提示词，官网发布会')
+    expect(res.mode).toBe('commercial_storyboard')
+  })
+
+  it('routes plain storyboard without commercial keywords', async () => {
+    delete process.env.OPENAI_API_KEY
+    const res = await classifyPromptMode('蓝牙耳机追逐场景分镜提示词')
+    expect(res.mode).toBe('storyboard')
+  })
+
   it('falls back to generic for ambiguous text when no key', async () => {
     delete process.env.OPENAI_API_KEY
     const res = await classifyPromptMode('你好')

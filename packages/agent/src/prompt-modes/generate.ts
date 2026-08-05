@@ -15,18 +15,23 @@ export async function generatePromptContent(
   }
 
   const baseUrl = (opts?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '')
+  const fewShots = def.fewShots ?? [def.fewShot]
+  const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+    { role: 'system', content: def.system },
+  ]
+  for (const shot of fewShots) {
+    messages.push({ role: 'user', content: shot.user })
+    messages.push({ role: 'assistant', content: shot.assistant })
+  }
+  messages.push({ role: 'user', content: `请基于以下需求生成：\n\n${prompt}` })
+
   const res = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: opts?.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o',
       temperature: 0.8,
-      messages: [
-        { role: 'system', content: def.system },
-        { role: 'user', content: def.fewShot.user },
-        { role: 'assistant', content: def.fewShot.assistant },
-        { role: 'user', content: `请基于以下需求生成：\n\n${prompt}` },
-      ],
+      messages,
     }),
   })
   if (!res.ok) {
