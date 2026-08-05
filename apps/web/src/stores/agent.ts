@@ -42,6 +42,13 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function replaceAssistantText(text: string) {
+    const last = messages.value[messages.value.length - 1]
+    if (last?.role === 'assistant') {
+      last.content = text
+    }
+  }
+
   function addToolCall(name: string, result?: unknown) {
     const last = messages.value[messages.value.length - 1]
     if (last?.role === 'assistant') {
@@ -85,6 +92,7 @@ export const useAgentStore = defineStore('agent', () => {
     addUserMessage,
     startAssistantMessage,
     appendText,
+    replaceAssistantText,
     addToolCall,
     addCanvasAction,
     flushActions,

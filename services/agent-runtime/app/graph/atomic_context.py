@@ -1,10 +1,11 @@
-"""Phase 3: compact context for atomic parse (canvas + recent dialogue)."""
+"""Phase 3: compact context for atomic parse — delegates to ContextPacket."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from app.graph.atomic_parse_util import canvas_summary_nodes, format_canvas_context_line
+from app.graph.context_packet import build_parse_packet
+from app.graph.context_render import render_packet_for_llm
 
 _MAX_CONTEXT_CHARS = 500
 
@@ -26,7 +27,7 @@ def _message_content(msg: Any) -> str:
 
 
 def summarize_recent_turns(messages: list[Any] | None, *, max_turns: int = 2) -> str:
-    """Compact summary of the last N user→assistant turns."""
+    """Compact summary of the last N user→assistant turns (legacy helper / tests)."""
     turns: list[str] = []
     pending_user: str | None = None
     for msg in messages or []:
@@ -53,24 +54,9 @@ def build_atomic_parse_context(
     canvas_summary: dict[str, Any] | None = None,
     max_chars: int = _MAX_CONTEXT_CHARS,
 ) -> str:
-    """Canvas one-liner + last 2 dialogue turns for hybrid parse."""
-    parts: list[str] = []
-    prior = state.get("atomic_spec")
-    if isinstance(prior, dict):
-        title = str(prior.get("title") or "").strip()
-        target = str(prior.get("target_type") or "").strip()
-        if title:
-            parts.append(f"上轮原子:{target or 'image'}:{title[:32]}")
-    nodes = canvas_summary_nodes(canvas_summary)
-    canvas_line = format_canvas_context_line(nodes)
-    if canvas_line:
-        parts.append(canvas_line)
-    history = summarize_recent_turns(state.get("messages") or [])
-    if history:
-        parts.append(f"近期对话:{history}")
-    if not parts:
-        return ""
-    ctx = " | ".join(parts)
-    if len(ctx) <= max_chars:
-        return ctx
-    return ctx[: max_chars - 1] + "…"
+    """Structured markdown context for parse LLM (replaces pipe-delimited string)."""
+    packet = build_parse_packet(state, canvas_summary=canvas_summary)
+    rendered = render_packet_for_llm(packet)
+    if len(rendered) <= max_chars:
+        return rendered
+    return rendered[: max_chars - 1] + "…"

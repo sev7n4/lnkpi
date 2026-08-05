@@ -146,7 +146,7 @@ def test_runs_stream_ndjson_smoke():
 
     types = [e["type"] for e in events]
     # plan 确认前不写画布，首轮只有文本门
-    assert "text_delta" in types
+    assert "text_replace" in types or "text_delta" in types
     assert "interrupt" in types
     interrupt_ev = next(e for e in events if e["type"] == "interrupt")
     assert interrupt_ev["data"]["interrupted"] is True
@@ -158,7 +158,8 @@ def test_runs_stream_ndjson_smoke():
     assert "upsert_prompt_node" not in nest.calls
     assert "canvas_action" not in types
 
-    text = "".join(
-        e["data"]["text"] for e in events if e["type"] == "text_delta"
-    )
+    text_parts = [
+        e["data"]["text"] for e in events if e["type"] in ("text_delta", "text_replace")
+    ]
+    text = text_parts[-1] if text_parts else ""
     assert "1 / A" in text or "确认方案" in text or "方案" in text

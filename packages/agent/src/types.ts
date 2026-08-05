@@ -36,6 +36,7 @@ export interface AgentContext {
 export interface AgentStreamEvent {
   type:
     | 'text_delta'
+    | 'text_replace'
     | 'tool_call'
     | 'tool_result'
     | 'canvas_action'

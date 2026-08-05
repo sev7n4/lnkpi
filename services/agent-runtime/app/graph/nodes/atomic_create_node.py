@@ -6,6 +6,8 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.sidebar_copy import format_atomic_create_progress
+
 
 def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     batch: list[dict[str, Any]] = []
@@ -32,6 +34,28 @@ def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
         )
     return batch
+
+
+async def _emit_atomic_task_list(nest: Any, created_items: list[dict[str, Any]]) -> None:
+    emit_list = getattr(nest, "emit_task_list", None)
+    if emit_list is None:
+        return
+    tasks: list[dict[str, Any]] = []
+    for idx, item in enumerate(created_items):
+        node_id = str(item.get("node_id") or "").strip()
+        if not node_id:
+            continue
+        title = str(item.get("title") or item.get("target_type") or f"任务{idx + 1}")
+        tasks.append(
+            {
+                "id": f"atomic-{node_id}",
+                "title": title,
+                "status": "pending",
+                "nodeId": node_id,
+            }
+        )
+    if tasks:
+        await emit_list(tasks)
 
 
 def make_create_atomic_node(*, nest: Any) -> Callable:
@@ -81,17 +105,10 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
             created["node_id"] = node_id
             created_items.append(created)
 
-        first = created_items[0]
-        target_type = str(first.get("target_type") or "image")
-        count = len(created_items)
-        if count == 1:
-            msg = f"已创建 {target_type} 节点，准备生产。"
-        else:
-            msg = f"已创建 {count} 个 {target_type} 节点，准备生产。"
-        if str(first.get("pipeline") or "") == "turnaround_image":
-            from app.graph.atomic_intent import turnaround_pipeline_user_note
+        await _emit_atomic_task_list(nest, created_items)
 
-            msg += turnaround_pipeline_user_note()
+        first = created_items[0]
+        msg = format_atomic_create_progress(first, count=len(created_items))
 
         return {
             "phase": "atomic_create",

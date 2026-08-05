@@ -261,6 +261,9 @@ export class AgentService {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text
       }
+      if (event.type === 'text_replace') {
+        assistantText = (event.data as { text: string }).text
+      }
       if (event.type === 'canvas_action') {
         canvasActions.push(event.data as CanvasAction)
       }

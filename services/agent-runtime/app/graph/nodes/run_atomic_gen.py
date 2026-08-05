@@ -6,6 +6,12 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.sidebar_copy import (
+    format_atomic_gen_failed,
+    format_atomic_gen_partial,
+    format_atomic_gen_success,
+)
+
 
 def _is_success(result: Any) -> bool:
     if not isinstance(result, dict):
@@ -22,6 +28,12 @@ def _result_record_id(result: Any) -> str | None:
         return None
     rid = result.get("generationRecordId")
     return str(rid) if rid else None
+
+
+async def _emit_task_update(nest: Any, **payload: Any) -> None:
+    fn = getattr(nest, "emit_task_update", None)
+    if fn is not None:
+        await fn(**payload)
 
 
 def make_run_atomic_gen_node(*, nest: Any) -> Callable:
@@ -58,6 +70,7 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
             node_id = str(item.get("node_id") or state.get("atomic_node_id") or "").strip()
             target_type = str(item.get("target_type") or "image")
             title = str(item.get("title") or target_type)
+            task_id = f"atomic-{node_id}" if node_id else None
             if not node_id:
                 failed.append(title)
                 last_error = "missing atomic_node_id"
@@ -69,11 +82,28 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
                 last_error = f"unsupported target_type: {target_type}"
                 continue
 
+            if task_id:
+                await _emit_task_update(
+                    nest,
+                    id=task_id,
+                    status="running",
+                    nodeId=node_id,
+                    recordId=None,
+                )
+
             try:
                 result = await run(node_id)
             except Exception as exc:  # noqa: BLE001
                 failed.append(title)
                 last_error = str(exc)
+                if task_id:
+                    await _emit_task_update(
+                        nest,
+                        id=task_id,
+                        status="failed",
+                        nodeId=node_id,
+                        errorCode="exception",
+                    )
                 continue
 
             record_id = _result_record_id(result)
@@ -85,20 +115,34 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
 
             if _is_success(result):
                 completed.append(title)
+                if task_id:
+                    await _emit_task_update(
+                        nest,
+                        id=task_id,
+                        status="done",
+                        nodeId=node_id,
+                        recordId=record_id,
+                    )
             else:
                 status = str(result.get("status") or "error") if isinstance(result, dict) else "error"
                 failed.append(title)
                 last_error = status
+                if task_id:
+                    await _emit_task_update(
+                        nest,
+                        id=task_id,
+                        status="failed",
+                        nodeId=node_id,
+                        errorCode=status,
+                    )
 
         if completed and not failed:
             if len(completed) == 1:
-                msg = f"「{completed[0]}」生成完成。"
+                msg = format_atomic_gen_success(completed[0])
             else:
-                msg = f"已完成 {len(completed)} 张：{'、'.join(completed)}。"
+                msg = format_atomic_gen_success(completed[0], count=len(completed))
             if last_completion_summary:
                 msg += last_completion_summary
-            elif last_record_id:
-                msg += f"（record: {last_record_id}）"
             return {
                 "phase": "done",
                 "atomic_record_id": last_record_id,
@@ -106,7 +150,7 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
             }
 
         if completed and failed:
-            msg = f"部分完成：{'、'.join(completed)}；未完成：{'、'.join(failed)}。"
+            msg = format_atomic_gen_partial(completed, failed)
             return {
                 "phase": "error",
                 "atomic_record_id": last_record_id,
@@ -120,7 +164,7 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
             "phase": "error",
             "atomic_record_id": last_record_id,
             "last_error": status,
-            "messages": [AIMessage(content=f"「{title}」生成未完成（{status}）。")],
+            "messages": [AIMessage(content=format_atomic_gen_failed(title, status))],
         }
 
     return run_atomic_gen

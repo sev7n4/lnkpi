@@ -6,7 +6,8 @@ from typing import Any, Literal, TypedDict
 
 from langchain_core.messages import AIMessage
 
-from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override, turnaround_pipeline_user_note
+from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override
+from app.graph.sidebar_copy import format_atomic_multi_ack, format_atomic_parse_ack
 from app.graph.intent import marketing_intent
 from app.graph.planning_guard import has_planning_image_conflict, planning_clarify_question
 
@@ -200,7 +201,12 @@ def outcome_from_rule_items(
     return validate_parse_result(payload, utterance=items[0].get("prompt", "") if items else "")
 
 
-def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None = None) -> dict[str, Any]:
+def parse_outcome_to_state(
+    outcome: ParseOutcome,
+    *,
+    canvas_context: str | None = None,
+    prior_spec: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Map validated parse outcome to graph state patch."""
     if outcome["kind"] == "clarify":
         return {
@@ -223,12 +229,7 @@ def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None 
 
     if len(items) == 1:
         spec = first
-        target = spec["target_type"]
-        gate = "需确认" if spec["confirm_gate"] else "直达"
-        ctx_note = f" [{canvas_context}]" if canvas_context else ""
-        msg = f"原子创作：{target} 节点（{gate}）— {spec['title']}{ctx_note}"
-        if spec.get("pipeline") == "turnaround_image":
-            msg += turnaround_pipeline_user_note()
+        msg = format_atomic_parse_ack(spec, prior_spec=prior_spec)
         return {
             "phase": "atomic_parse",
             "flow_mode": "atomic_create",
@@ -238,9 +239,7 @@ def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None 
             "messages": [AIMessage(content=msg)],
         }
 
-    titles = "、".join(str(i.get("title") or "") for i in items)
-    ctx_note = f" [{canvas_context}]" if canvas_context else ""
-    msg = f"原子创作：{len(items)} 张 image 节点 — {titles}{ctx_note}"
+    msg = format_atomic_multi_ack(items, prior_spec=prior_spec)
     return {
         "phase": "atomic_parse",
         "flow_mode": "atomic_create",
