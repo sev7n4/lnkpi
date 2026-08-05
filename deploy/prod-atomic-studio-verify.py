@@ -38,6 +38,8 @@ CASES: list[tuple[str, str, str]] = [
     ("prompt", "帮我对「蓝牙耳机」做 prompt 扩写，出图用", "prompt"),
 ]
 
+TURNAROUND_UTTERANCE = "山海经吞金兽的三视图，CG风格"
+
 
 def record(case: str, ok: bool, detail: str = "") -> None:
     global PASS, FAIL
@@ -163,6 +165,60 @@ def verify_modality(tok: str, label: str, utterance: str, node_type: str) -> Non
     )
 
 
+def verify_turnaround_pipeline(tok: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"P4-turnaround-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"{sid}:{uuid.uuid4()}"
+    _, text, types, exit_reason = sse_collect(
+        tok, sid, TURNAROUND_UTTERANCE, tid, timeout=SSE_TIMEOUT_SEC
+    )
+
+    record(
+        "turnaround atomic path",
+        "image 节点" in text and "2:1" in text,
+        text[:160],
+    )
+    record(
+        "turnaround light hint",
+        "角色设定图" in text or "非账户默认" in text or "非默认" in text,
+        text[:160],
+    )
+
+    node = latest_node(tok, sid, "image")
+    data = (node or {}).get("data") or {}
+    expanded = str(data.get("expandedPrompt") or data.get("content") or "")
+    record(
+        "turnaround expandedPrompt",
+        "四格" in expanded,
+        expanded[:120],
+    )
+    record(
+        "turnaround promptMode",
+        data.get("promptMode") == "character_turnaround",
+        str(data.get("promptMode")),
+    )
+
+    rec_id = data.get("generationRecordId")
+    aspect_ok = False
+    if rec_id:
+        rec = http("GET", f"/studio/generations/{rec_id}", t=tok).get("data") or {}
+        try:
+            meta = json.loads(rec.get("metadata") or "{}")
+        except json.JSONDecodeError:
+            meta = {}
+        aspect_ok = meta.get("aspectRatio") == "2:1"
+        prompt_used = str(rec.get("prompt") or "")
+        record(
+            "turnaround image prompt not raw utterance",
+            "四格" in prompt_used,
+            prompt_used[:100],
+        )
+    record(
+        "turnaround aspect 2:1",
+        aspect_ok,
+        f"rec={rec_id} exit={exit_reason}",
+    )
+
+
 def main() -> int:
     print("=== P4 atomic_create production smoke verify (image/text/prompt) ===")
     print(f"BASE={BASE}\n")
@@ -183,6 +239,8 @@ def main() -> int:
 
     for label, utterance, node_type in CASES:
         verify_modality(tok, label, utterance, node_type)
+
+    verify_turnaround_pipeline(tok)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1

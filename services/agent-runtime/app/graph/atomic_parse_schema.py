@@ -6,7 +6,7 @@ from typing import Any, Literal, TypedDict
 
 from langchain_core.messages import AIMessage
 
-from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override
+from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override, turnaround_pipeline_user_note
 from app.graph.intent import marketing_intent
 
 CLARIFY_THRESHOLD = 0.70
@@ -199,6 +199,8 @@ def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None 
         gate = "需确认" if spec["confirm_gate"] else "直达"
         ctx_note = f" [{canvas_context}]" if canvas_context else ""
         msg = f"原子创作：{target} 节点（{gate}）— {spec['title']}{ctx_note}"
+        if spec.get("pipeline") == "turnaround_image":
+            msg += turnaround_pipeline_user_note()
         return {
             "phase": "atomic_parse",
             "flow_mode": "atomic_create",

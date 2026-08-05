@@ -58,6 +58,14 @@ class BatchNodeItemDto {
 
   @IsOptional()
   position?: { x: number; y: number }
+
+  @IsOptional()
+  @IsString()
+  pipeline?: string
+
+  @IsOptional()
+  @IsString()
+  imageAspect?: string
 }
 
 class AddNodesBatchDto {

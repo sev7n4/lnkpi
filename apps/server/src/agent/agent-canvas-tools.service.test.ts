@@ -20,6 +20,7 @@ describe('AgentCanvasToolsService', () => {
   const generateText = vi.fn()
   const generatePrompt = vi.fn()
   const generateAudio = vi.fn()
+  const expandPromptContent = vi.fn()
   const getGeneration = vi.fn()
 
   const defaultPrefs = {
@@ -79,6 +80,10 @@ describe('AgentCanvasToolsService', () => {
       status: 'completed',
       metadata: JSON.stringify({ mode: 'image_prompt_multi_style', content: '扩写后的 prompt...' }),
     })
+    expandPromptContent.mockResolvedValue({
+      mode: 'character_turnaround',
+      content: '画面分为四格布局…近景特写…正面全身…侧面全身…背面全身…纯白背景',
+    })
     generateAudio.mockResolvedValue({
       id: 'gen-a1',
       status: 'completed',
@@ -116,7 +121,7 @@ describe('AgentCanvasToolsService', () => {
         },
         {
           provide: StudioService,
-          useValue: { generateImage, generateVideo, generateText, generatePrompt, generateAudio, getGeneration },
+          useValue: { generateImage, generateVideo, generateText, generatePrompt, generateAudio, getGeneration, expandPromptContent },
         },
       ],
     }).compile()
@@ -487,6 +492,50 @@ describe('AgentCanvasToolsService', () => {
       1,
       { sessionId: 's1', nodeId: 'img-1' },
     )
+  })
+
+  it('runImageGeneration turnaround pipeline expands prompt and uses 2:1', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'img-turn',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '山海经吞金兽的三视图，CG风格',
+            status: 'draft',
+            pipeline: 'turnaround_image',
+            imageAspect: '2:1',
+            imageResolution: '1K',
+          },
+        },
+      ],
+      edges: [],
+    }
+    await svc.runImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-turn',
+    })
+    expect(expandPromptContent).toHaveBeenCalledWith(
+      'u1',
+      '山海经吞金兽的三视图，CG风格',
+      'platform::user-default-text',
+    )
+    expect(generateImage).toHaveBeenCalledWith(
+      'u1',
+      expect.stringContaining('四格布局'),
+      'platform::user-default-image',
+      '2:1',
+      [],
+      undefined,
+      '2K',
+      2,
+      { sessionId: 's1', nodeId: 'img-turn' },
+    )
+    expect(canvas.nodes[0].data.expandedPrompt).toContain('四格布局')
+    expect(canvas.nodes[0].data.promptMode).toBe('character_turnaround')
+    expect(canvas.nodes[0].data.imageResolution).toBe('2K')
   })
 
   it('addNodesBatch stamps account defaults onto image/video/text/audio skeletons', async () => {

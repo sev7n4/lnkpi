@@ -528,6 +528,30 @@ export class StudioService {
     }
   }
 
+  /** Expand user prompt via prompt-modes (no separate charge; used by turnaround image pipeline). */
+  async expandPromptContent(
+    userId: string,
+    prompt: string,
+    model?: string,
+  ): Promise<{ mode: string; content: string }> {
+    const trimmed = prompt?.trim()
+    if (!trimmed) throw new BadRequestException('prompt 不能为空')
+    const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
+    const { modelKey: resolvedKey, entry } = resolveModelKey('text', resolved.modelName)
+    const gatewayModelId =
+      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
+    const opts = userProviderOpts(resolved)
+    if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+      throw new Error('missing api key')
+    }
+    const { mode, content } = await generatePromptFromUserInput(trimmed, {
+      model: gatewayModelId,
+      apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+      baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+    })
+    return { mode, content }
+  }
+
   async getGeneration(userId: string, id: string) {
     const record = await this.prisma.generationRecord.findFirst({
       where: { id, userId },

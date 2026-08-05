@@ -37,6 +37,8 @@ export const characterTurnaroundMode: PromptModeDefinition = {
     '用户要人物三视图/模特图/角色设定图/多视图/模特定妆图/Q版/Q萌/chibi/洛丽塔/婚纱/战术/牛仔/皮克斯/绘本插画/turnaround/正侧背/四视图，强调同一角色一致性、四格拼图出图',
   system: `你是角色设定与 AI 绘画提示词专家。根据用户短需求，输出一份**可直接用于 AI 生图的单段中文提示词**（连贯段落，非 Markdown 分节、非中英对照）。
 
+主角可以是人物、神兽、机甲、生物、道具或拟人角色；勿将非人类需求强行改写为真人模特。
+
 严格按以下骨架填充，将 {占位符} 替换为具体内容：
 
 ${CHARACTER_TURNAROUND_TEMPLATE}

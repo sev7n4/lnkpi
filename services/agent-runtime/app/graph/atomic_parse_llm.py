@@ -34,7 +34,7 @@ _PARSE_SYSTEM = """你是 Atomic Studio 意图解析器。根据用户一句话�
 - D1：「脚本/广告词/文案/口播稿」→ target_type=text（不含「提示词」字样）
 - D2：video/audio → confirm_gate=true
 - 凡含「提示词」→ target_type=prompt（含分镜提示词、三视图提示词、提示词模式扩写等）
-- 「生成一张三视图/三视图各来一张」且无「提示词」→ target_type=image（直接出图）
+- 「生成一张三视图/三视图各来一张」且无「提示词」→ target_type=image，pipeline=turnaround_image（内部扩写后出图，非原句直出）
 - multi：用户要多张/多项时 structure=multi，items 逐条拆分 prompt/title
 - 营销方案/14节点/全链路 → confidence<0.7，clarify_question 建议走 Campaign
 - 意图不清（如仅「帮我生成」）→ confidence<0.7 并给出 clarify_question
