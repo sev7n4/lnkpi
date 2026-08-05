@@ -9,13 +9,34 @@ from typing import Any
 
 import yaml
 
-_TAXONOMY_REL = Path(__file__).resolve().parents[4] / "packages" / "agent" / "src" / "prompt-modes" / "taxonomy.yaml"
+from app.config import settings
+
+
+def _taxonomy_candidates() -> list[Path]:
+    skill = Path(settings.skills_dir) / "atomic-create"
+    candidates = [
+        skill / "assets" / "prompt-mode-taxonomy.yaml",
+    ]
+    here = Path(__file__).resolve()
+    # Monorepo dev fallback (packages/agent shared taxonomy)
+    if len(here.parents) >= 5:
+        candidates.append(
+            here.parents[4] / "packages" / "agent" / "src" / "prompt-modes" / "taxonomy.yaml"
+        )
+    return candidates
+
+
+def _resolve_taxonomy_path() -> Path | None:
+    for path in _taxonomy_candidates():
+        if path.is_file():
+            return path
+    return None
 
 
 @lru_cache(maxsize=1)
 def _load_taxonomy() -> list[dict[str, Any]]:
-    path = _TAXONOMY_REL
-    if not path.is_file():
+    path = _resolve_taxonomy_path()
+    if path is None:
         return []
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     modes = raw.get("modes") or []
