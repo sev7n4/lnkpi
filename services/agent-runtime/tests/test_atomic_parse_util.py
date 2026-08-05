@@ -29,6 +29,23 @@ def test_extract_atomic_prompt_strips_prefix():
     assert extract_atomic_prompt("写一段天猫详情页开场文案") == "天猫详情页开场文案"
 
 
+def test_extract_atomic_prompt_preserves_audio_vo_utterance():
+    utterance = "给这段文案配一段旁白"
+    assert extract_atomic_prompt(utterance) == utterance
+
+
+def test_rule_parse_audio_vo_reaches_confirm_gate_confidence():
+    from app.graph.atomic_parse_util import rule_parse_atomic
+    from app.graph.atomic_parse_schema import outcome_from_rule_items
+
+    items, conf = rule_parse_atomic("给这段文案配一段旁白")
+    assert items[0]["target_type"] == "audio"
+    assert items[0]["confirm_gate"] is True
+    assert conf >= 0.95
+    outcome = outcome_from_rule_items(items, confidence=conf)
+    assert outcome["kind"] == "success"
+
+
 def test_parse_atomic_multi_items_three_images():
     from app.graph.atomic_parse_util import parse_atomic_multi_items
 

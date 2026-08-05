@@ -265,15 +265,19 @@ def build_variant_spec_from_checkpoint(
 
 def extract_atomic_prompt(utterance: str) -> str:
     """Strip leading atomic hint prefixes; keep semantic payload for node prompt."""
-    t = (utterance or "").strip()
-    if not t:
+    original = (utterance or "").strip()
+    if not original:
         return ""
+    t = original
     for prefix in sorted(_STRIP_PREFIXES, key=len, reverse=True):
         if t.startswith(prefix):
             t = t[len(prefix) :].strip()
             break
     t = re.sub(r'^["「『](.+?)["」』]', r"\1", t).strip()
-    return t or utterance.strip()
+    # Avoid collapsing vo/audio requests to bare modality labels (e.g. 「旁白」)
+    if len(t) < 4 and len(original) >= 4:
+        return original
+    return t or original
 
 
 def build_atomic_spec_enriched(
@@ -358,12 +362,12 @@ def rule_parse_confidence(
         conf = 0.98
     elif not t or t in _VAGUE_UTTERANCES:
         conf = 0.40
+    elif spec.get("target_type") in ("video", "audio"):
+        conf = 0.95
     elif len(str(spec.get("prompt") or "").strip()) < 4:
         conf = 0.50
     elif any(k in t for k in _STRONG_SIGNAL_KEYWORDS):
         conf = 0.96
-    elif spec.get("target_type") in ("video", "audio"):
-        conf = 0.95
     else:
         from app.graph.atomic_intent import atomic_create_intent
 
