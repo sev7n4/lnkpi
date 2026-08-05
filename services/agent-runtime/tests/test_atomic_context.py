@@ -32,10 +32,9 @@ def test_build_atomic_parse_context_respects_max_length():
     ]
     ctx = build_atomic_parse_context({"messages": messages}, max_chars=500)
     assert len(ctx) <= 500
-    assert ctx.endswith("…") or len(ctx) <= 500
 
 
-def test_build_atomic_parse_context_includes_canvas_and_history():
+def test_build_atomic_parse_context_includes_canvas_stats():
     summary = {
         "nodes": [
             {"id": "n1", "type": "image", "title": "主图"},
@@ -46,17 +45,17 @@ def test_build_atomic_parse_context_includes_canvas_and_history():
         AIMessage(content="主图已创建"),
     ]
     ctx = build_atomic_parse_context({"messages": messages}, canvas_summary=summary)
-    assert "画布" in ctx
-    assert "主图" in ctx
-    assert "近期对话" in ctx
+    assert "画布" in ctx or "节点" in ctx
+    assert "近期对话" not in ctx
 
 
-def test_build_atomic_parse_context_includes_prior_atomic_spec():
+def test_build_atomic_parse_context_topic_switch_omits_prior():
     ctx = build_atomic_parse_context(
         {
-            "messages": [],
-            "atomic_spec": {"target_type": "image", "title": "模特人物图", "prompt": "模特"},
+            "messages": [HumanMessage(content="帮我生成山海经神兽三视图")],
+            "atomic_spec": {"target_type": "prompt", "title": "蓝牙耳机 prompt"},
         },
         canvas_summary={"nodes": []},
     )
-    assert "上轮原子:image:模特人物图" in ctx
+    assert "蓝牙耳机" not in ctx
+    assert "山海经" in ctx

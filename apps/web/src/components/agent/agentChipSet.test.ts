@@ -47,6 +47,12 @@ describe('detectAgentChipSet', () => {
     ).toBe('atomic')
   })
 
+  it('detects atomic confirm gate from sidebar copy snippet', () => {
+    expect(
+      detectAgentChipSet('收到，将为你创建视频「展示片」。提交前需你确认。'),
+    ).toBe('atomic')
+  })
+
   it('detects topo gate and prefers topo over bare plan words', () => {
     expect(
       detectAgentChipSet(
@@ -57,6 +63,10 @@ describe('detectAgentChipSet', () => {
 
   it('returns null for ordinary replies', () => {
     expect(detectAgentChipSet('出图成功')).toBe(null)
+  })
+
+  it('returns null for user-facing atomic ack without confirm gate', () => {
+    expect(detectAgentChipSet('好的，我来生成图片「主图」。')).toBe(null)
   })
 
   // 修复 P1-4 + P2-1：modify intent 检测的新优先级逻辑

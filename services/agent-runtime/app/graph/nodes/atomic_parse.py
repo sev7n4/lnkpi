@@ -102,8 +102,7 @@ async def _structured_llm_outcome(
     llm: Any,
     text: str,
     *,
-    canvas_summary: str | None,
-    dialogue: str | None,
+    context_markdown: str | None,
     checkpoint: dict[str, Any] | None,
 ) -> tuple[ParseOutcome | None, IntentParseResult | None, bool]:
     """Returns (outcome, llm_result, guard_triggered)."""
@@ -112,8 +111,7 @@ async def _structured_llm_outcome(
             llm_parse_intent(
                 llm,
                 text,
-                canvas_summary=canvas_summary,
-                dialogue=dialogue,
+                context_markdown=context_markdown,
                 checkpoint=checkpoint,
             ),
             timeout=LLM_PARSE_TIMEOUT_SEC,
@@ -137,8 +135,7 @@ async def _maybe_shadow_diff(
     text: str,
     rule_outcome: ParseOutcome,
     *,
-    canvas_summary: str | None,
-    dialogue: str | None,
+    context_markdown: str | None,
     checkpoint: dict[str, Any] | None,
 ) -> None:
     if not settings.intent_llm_parse_shadow or settings.intent_llm_parse:
@@ -146,8 +143,7 @@ async def _maybe_shadow_diff(
     llm_outcome, llm_result, _ = await _structured_llm_outcome(
         llm,
         text,
-        canvas_summary=canvas_summary,
-        dialogue=dialogue,
+        context_markdown=context_markdown,
         checkpoint=checkpoint,
     )
     if llm_outcome is None:
@@ -191,6 +187,8 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
 
         focus_node_id = state.get("focus_node_id")
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
+        prior_atomic = state.get("atomic_spec")
+        prior_spec = prior_atomic if isinstance(prior_atomic, dict) else None
         checkpoint = {
             "atomic_node_id": state.get("atomic_node_id"),
             "atomic_spec": state.get("atomic_spec"),
@@ -214,7 +212,9 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     llm_result=classified,
                     guard_triggered=guard is not None,
                 )
-                patch = parse_outcome_to_state(outcome, canvas_context=parse_ctx)
+                patch = parse_outcome_to_state(
+                    outcome, canvas_context=parse_ctx, prior_spec=prior_spec
+                )
                 patch.pop("clarify_context", None)
                 return patch
 
@@ -236,7 +236,9 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 reason="variant_new_node_from_checkpoint",
             )
             _log_intent_parse(source="rule_variant", utterance=text, outcome=outcome)
-            return parse_outcome_to_state(outcome, canvas_context=parse_ctx)
+            return parse_outcome_to_state(
+                outcome, canvas_context=parse_ctx, prior_spec=prior_spec
+            )
 
         canvas_ctx = parse_ctx
         dialogue = None
@@ -248,8 +250,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             outcome, llm_result, guard_triggered = await _structured_llm_outcome(
                 llm,
                 text,
-                canvas_summary=parse_ctx,
-                dialogue=dialogue,
+                context_markdown=parse_ctx or None,
                 checkpoint=checkpoint,
             )
             if outcome is None:
@@ -303,7 +304,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 llm_raw = await llm_parse_atomic_intent(
                     llm,
                     text,
-                    canvas_context=canvas_ctx,
+                    context_markdown=canvas_ctx,
                     few_shots=load_atomic_parse_few_shots(),
                 )
                 if llm_raw is not None:
@@ -334,12 +335,13 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     llm,
                     text,
                     outcome,
-                    canvas_summary=parse_ctx,
-                    dialogue=dialogue,
+                    context_markdown=parse_ctx or None,
                     checkpoint=checkpoint,
                 )
 
-        patch = parse_outcome_to_state(outcome, canvas_context=canvas_ctx)
+        patch = parse_outcome_to_state(
+            outcome, canvas_context=canvas_ctx, prior_spec=prior_spec
+        )
         if outcome["kind"] == "clarify":
             patch["clarify_context"] = {
                 "original_utterance": text,

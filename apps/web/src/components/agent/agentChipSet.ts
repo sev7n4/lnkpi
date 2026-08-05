@@ -41,7 +41,7 @@ export function detectAgentChipSet(
   if (t.includes('【主文案草稿】') && !t.includes('已将确认的主文案写入')) return 'copy'
   if (t.includes('【主文案草稿】') && TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (t.includes('视频/音频生成将消耗积分')) return 'atomic'
-  if (t.includes('原子创作：') && t.includes('需确认')) return 'atomic'
+  if (t.includes('提交前需你确认')) return 'atomic'
   if (TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (COPY_SNIPPETS.some((s) => t.includes(s))) return 'copy'
   if (PLAN_SNIPPETS.some((s) => t.includes(s))) return 'plan'

@@ -69,7 +69,7 @@ def canvas_summary_nodes(canvas_summary: dict[str, Any] | None) -> list[dict[str
     return [n for n in raw if isinstance(n, dict)]
 
 
-def format_canvas_context_line(nodes: list[dict[str, Any]]) -> str:
+def format_canvas_context_line(nodes: list[dict[str, Any]], *, include_titles: bool = True) -> str:
     """Compact canvas stats for parse context (P4-05)."""
     if not nodes:
         return "画布为空"
@@ -78,9 +78,11 @@ def format_canvas_context_line(nodes: list[dict[str, Any]]) -> str:
         kind = str(node.get("type") or "unknown")
         by_type[kind] = by_type.get(kind, 0) + 1
     counts = ", ".join(f"{k}×{v}" for k, v in sorted(by_type.items()))
-    titles = [str(n.get("title") or "").strip() for n in nodes if n.get("title")]
-    titles = [t for t in titles if t][:8]
-    title_bit = f"；已有：{'、'.join(titles)}" if titles else ""
+    title_bit = ""
+    if include_titles:
+        titles = [str(n.get("title") or "").strip() for n in nodes if n.get("title")]
+        titles = [t for t in titles if t][:8]
+        title_bit = f"；已有：{'、'.join(titles)}" if titles else ""
     return f"画布 {len(nodes)} 节点（{counts}）{title_bit}"
 
 
@@ -106,7 +108,17 @@ def dedupe_atomic_title(title: str, nodes: list[dict[str, Any]]) -> str:
 def style_seed_from_context(parse_context: str | None) -> str | None:
     """Pull prior user topic from compact dialogue summary for style inheritance."""
     ctx = (parse_context or "").strip()
-    if not ctx or "近期对话:" not in ctx:
+    if not ctx:
+        return None
+    if "## 近期" in ctx:
+        for line in ctx.splitlines():
+            line = line.strip()
+            if not line.startswith("用户:"):
+                continue
+            user_part = line.split("用户:", 1)[1].split("→", 1)[0].strip()
+            if user_part and len(user_part) >= 4:
+                return user_part[:80]
+    if "近期对话:" not in ctx:
         return None
     tail = ctx.split("近期对话:", 1)[1]
     for chunk in tail.split("；"):

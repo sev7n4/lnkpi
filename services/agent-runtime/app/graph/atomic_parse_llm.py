@@ -69,6 +69,7 @@ async def llm_parse_atomic_intent(
     utterance: str,
     *,
     canvas_context: str | None = None,
+    context_markdown: str | None = None,
     few_shots: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any] | None:
     """Call LLM for structured atomic parse JSON; None on failure."""
@@ -76,8 +77,9 @@ async def llm_parse_atomic_intent(
         return None
     shots = few_shots if few_shots is not None else load_atomic_parse_few_shots()
     user_block = utterance.strip()
-    if canvas_context:
-        user_block = f"{user_block}\n\n[画布上下文] {canvas_context}"
+    ctx = (context_markdown or canvas_context or "").strip()
+    if ctx:
+        user_block = f"{user_block}\n\n{ctx}"
     messages = build_llm_messages(system=_PARSE_SYSTEM, user=user_block, few_shots=shots)
     try:
         resp = await llm.ainvoke(messages)

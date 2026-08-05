@@ -634,7 +634,7 @@ async def stream_run_events(
                                 if text == last_text_delta:
                                     continue
                                 last_text_delta = text
-                                await emit({"type": "text_delta", "data": {"text": text}})
+                                await emit({"type": "text_replace", "data": {"text": text}})
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]
             post_vals = getattr(post, "values", None) or {}

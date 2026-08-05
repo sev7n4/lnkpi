@@ -643,6 +643,10 @@ async function reconcileLatestAssistant() {
 
 function handleEvent(event: { type: string; data: unknown }) {
   switch (event.type) {
+    case 'text_replace':
+      agent.replaceAssistantText((event.data as { text: string }).text)
+      scrollToBottom()
+      break
     case 'text_delta':
       agent.appendText((event.data as { text: string }).text)
       scrollToBottom()

@@ -82,6 +82,7 @@ async def llm_parse_intent(
     canvas_summary: str | None = None,
     dialogue: str | None = None,
     checkpoint: dict[str, Any] | None = None,
+    context_markdown: str | None = None,
     few_shots: list[tuple[str, str]] | None = None,
 ) -> IntentParseResult | None:
     """Call LLM for structured intent parse; None on failure."""
@@ -90,13 +91,16 @@ async def llm_parse_intent(
 
     shots = few_shots if few_shots is not None else load_structured_intent_few_shots()
     user_block = utterance.strip()
-    ctx = _format_context_block(
-        canvas_summary=canvas_summary,
-        dialogue=dialogue,
-        checkpoint=checkpoint,
-    )
-    if ctx:
-        user_block = f"{user_block}\n\n{ctx}"
+    if context_markdown:
+        user_block = f"{user_block}\n\n{context_markdown.strip()}"
+    else:
+        ctx = _format_context_block(
+            canvas_summary=canvas_summary,
+            dialogue=dialogue,
+            checkpoint=checkpoint,
+        )
+        if ctx:
+            user_block = f"{user_block}\n\n{ctx}"
 
     messages = build_llm_messages(
         system=_STRUCTURED_PARSE_SYSTEM,
