@@ -39,6 +39,7 @@ CASES: list[tuple[str, str, str]] = [
 ]
 
 TURNAROUND_UTTERANCE = "山海经吞金兽的三视图，CG风格"
+PHOTOREAL_TURNAROUND_UTTERANCE = "帮我生成写实商业模拍女性模特的三视图"
 
 
 def record(case: str, ok: bool, detail: str = "") -> None:
@@ -177,6 +178,20 @@ def _is_valid_turnaround_expansion(text: str, utterance: str) -> bool:
     return has_layout or has_views
 
 
+def _has_photoreal_deai_markers(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    has_negative = "Negative Prompt" in t or "negative prompt" in t.lower()
+    has_realism = any(m in t for m in ("85mm", "毛孔", "窗光", "去AI"))
+    return has_negative and has_realism
+
+
+def _lacks_photoreal_deai_markers(text: str) -> bool:
+    t = (text or "").strip()
+    return "Negative Prompt" not in t and "85mm" not in t
+
+
 def verify_turnaround_pipeline(tok: str) -> None:
     sid = http("POST", "/sessions", {"title": f"P4-turnaround-{int(time.time())}"}, t=tok)["data"]["id"]
     tid = f"{sid}:{uuid.uuid4()}"
@@ -209,6 +224,11 @@ def verify_turnaround_pipeline(tok: str) -> None:
         data.get("promptMode") == "character_turnaround",
         str(data.get("promptMode")),
     )
+    record(
+        "turnaround CG skips de-AI",
+        _lacks_photoreal_deai_markers(expanded),
+        expanded[:80],
+    )
 
     rec_id = data.get("generationRecordId")
     aspect_ok = False
@@ -229,6 +249,33 @@ def verify_turnaround_pipeline(tok: str) -> None:
         "turnaround aspect 2:1",
         aspect_ok,
         f"rec={rec_id} exit={exit_reason}",
+    )
+
+
+def verify_photoreal_turnaround_deai(tok: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"P4-photoreal-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"{sid}:{uuid.uuid4()}"
+    _, _text, _types, exit_reason = sse_collect(
+        tok, sid, PHOTOREAL_TURNAROUND_UTTERANCE, tid, timeout=SSE_TIMEOUT_SEC
+    )
+
+    node = latest_node(tok, sid, "image")
+    data = (node or {}).get("data") or {}
+    expanded = str(data.get("expandedPrompt") or data.get("content") or "")
+    record(
+        "photoreal turnaround de-AI markers",
+        _has_photoreal_deai_markers(expanded),
+        expanded[:120],
+    )
+    record(
+        "photoreal turnaround four-panel",
+        _is_valid_turnaround_expansion(expanded, PHOTOREAL_TURNAROUND_UTTERANCE),
+        expanded[:80],
+    )
+    record(
+        "photoreal turnaround promptMode",
+        data.get("promptMode") == "character_turnaround",
+        f"mode={data.get('promptMode')} exit={exit_reason}",
     )
 
 
@@ -254,6 +301,7 @@ def main() -> int:
         verify_modality(tok, label, utterance, node_type)
 
     verify_turnaround_pipeline(tok)
+    verify_photoreal_turnaround_deai(tok)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1
