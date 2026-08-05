@@ -16,6 +16,7 @@ from app.graph.atomic_intent import (
     is_turnaround_image_intent,
     parse_atomic_target_type,
     resolve_intake_route,
+    turnaround_pipeline_user_note,
 )
 from app.graph.nodes.intake import make_intake_node
 
@@ -144,3 +145,11 @@ async def test_intake_regenerate_without_prior_node_falls_through(tmp_path: Path
     assert out.get("phase") == "clarify"
     assert out.get("clarify_question")
     assert out.get("flow_mode") != "atomic_regenerate"
+
+
+def test_turnaround_pipeline_user_note_mentions_four_panel_closeup():
+    note = turnaround_pipeline_user_note()
+    assert "近景特写" in note
+    assert "四格" in note
+    assert "三视图" in note
+    assert "2:1" in note

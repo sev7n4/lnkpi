@@ -10,6 +10,13 @@ export const PROMPT_MODE_LABELS: Record<string, string> = {
   generic: '通用创作',
 }
 
+/** Keep in sync with services/agent-runtime/app/graph/atomic_intent.py turnaround_pipeline_user_note */
+export const TURNAROUND_PIPELINE_USER_NOTE =
+  '已按角色设定图模版扩写并出图；在原有三视图（正/侧/背）基础上增加近景特写，共四格横排；使用 2:1 画幅（非账户默认比例）。'
+
+export const TURNAROUND_PIPELINE_DOCK_HINT =
+  '三视图将自动补全为四格：近景特写 + 正/侧/背全身，2:1 横排出图'
+
 export function promptModeLabel(mode: string | null | undefined): string {
   if (!mode) return ''
   return PROMPT_MODE_LABELS[mode] ?? mode
@@ -83,4 +90,11 @@ export function buildPromptNodeCardPreview(input: {
   }
 
   return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+export const TURNAROUND_INTENT_PATTERN =
+  /三视图|四视图|多视图|turnaround|角色设定|模特定妆|正侧背|模特图|q版|q萌|chibi/i
+
+export function isTurnaroundLikePrompt(text: string): boolean {
+  return TURNAROUND_INTENT_PATTERN.test(text)
 }

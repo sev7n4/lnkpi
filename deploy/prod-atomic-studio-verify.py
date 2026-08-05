@@ -191,7 +191,8 @@ def verify_turnaround_pipeline(tok: str) -> None:
     )
     record(
         "turnaround light hint",
-        "角色设定图" in text or "非账户默认" in text or "非默认" in text,
+        ("角色设定图" in text or "非账户默认" in text or "非默认" in text)
+        and ("近景特写" in text or "四格" in text),
         text[:160],
     )
 

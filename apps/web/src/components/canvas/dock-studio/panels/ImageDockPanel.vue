@@ -23,6 +23,7 @@ import { resolveGenerationModel } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
+import { TURNAROUND_PIPELINE_DOCK_HINT, isTurnaroundLikePrompt } from '@lnkpi/shared'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -55,6 +56,12 @@ const refUploadError = ref('')
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateImageCredits(imageCount.value))
+
+const showTurnaroundHint = computed(() => {
+  const data = props.node.data ?? {}
+  if (data.pipeline === 'turnaround_image') return true
+  return isTurnaroundLikePrompt(prompt.value)
+})
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -231,6 +238,13 @@ function clearReferenceImage() {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
+
+    <p
+      v-if="showTurnaroundHint"
+      class="mx-3 mb-2 rounded-lg border border-indigo-400/20 bg-indigo-500/10 px-3 py-2 text-[11px] leading-relaxed text-indigo-200/90"
+    >
+      {{ TURNAROUND_PIPELINE_DOCK_HINT }}
+    </p>
 
     <div class="bottom-toolbar-actions flex-wrap items-center">
       <UniversalModelSelector
