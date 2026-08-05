@@ -7,6 +7,7 @@ import { apiUrl } from '@/services/api-base'
 import { sessionsApi } from '@/services/sessions-api'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
+import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import {
   applyTaskEvent,
   applyPollRecordToTask,
@@ -47,6 +48,7 @@ import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { AGENT_SKILLS } from '@/constants/agentSkillMap'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
+import { formatDuration as formatTraceDuration } from '@/components/agent/executionStepLabels'
 import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
@@ -663,6 +665,11 @@ function handleEvent(event: { type: string; data: unknown }) {
     case 'canvas_action':
       agent.addCanvasAction(event.data as Parameters<typeof agent.addCanvasAction>[0])
       break
+    case 'node_status': {
+      const data = event.data as { nodeId: string; status: string; url?: string }
+      agent.trackNodeStatus(data)
+      break
+    }
     case 'task_list':
     case 'task_update':
     case 'task_summary': {
@@ -672,8 +679,22 @@ function handleEvent(event: { type: string; data: unknown }) {
         event as Parameters<typeof applyTaskEvent>[1],
       )
       if (event.type === 'task_update') {
-        const data = event.data as { recordId?: string; id?: string }
+        const data = event.data as {
+          recordId?: string
+          id?: string
+          status?: string
+          errorHint?: string
+        }
         const item = taskProgress.value.items.find((it) => it.id === data.id)
+        if (item) {
+          agent.trackTaskUpdate({
+            id: item.id,
+            status: data.status ?? item.status,
+            title: item.title,
+            nodeId: item.nodeId,
+            errorHint: data.errorHint ?? item.errorHint,
+          })
+        }
         if (item?.recordId && item.nodeId) {
           startTaskRecordPoll([{ recordId: item.recordId, nodeId: item.nodeId }])
         }
@@ -927,7 +948,19 @@ defineExpose({ openPanel, reconcileFromNodes })
                 class="agent-bubble max-w-[94%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
                 :class="msg.role === 'user' ? 'agent-bubble-user' : 'agent-bubble-assistant'"
               >
-                <p class="whitespace-pre-wrap">{{ msg.content }}<span v-if="msg.streaming" class="animate-pulse">▊</span></p>
+                <p class="whitespace-pre-wrap">
+                  {{ msg.content }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
+                  <span
+                    v-if="msg.role === 'assistant' && msg.executionTrace?.totalMs != null && !msg.streaming"
+                    class="ml-1 text-[11px] opacity-60"
+                  >· {{ formatTraceDuration(msg.executionTrace.totalMs) }}</span>
+                </p>
+                <AgentExecutionTrace
+                  v-if="msg.role === 'assistant' && msg.executionTrace"
+                  :trace="msg.executionTrace"
+                  :streaming="Boolean(msg.streaming)"
+                  @focus-node="emit('focusNode', $event)"
+                />
                 <div v-if="msg.toolCalls?.length" class="agent-tools mt-1 space-y-0.5 pt-1">
                   <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-accent-text)]">⚙ {{ tc.name }}</div>
                 </div>
