@@ -1,6 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { AgentChatMessage, CanvasAction } from '@lnkpi/shared'
+import {
+  applyCanvasAction,
+  applyNodeStatus,
+  applyTaskUpdate,
+  applyTextReplaceStage,
+  applyToolCall,
+  createExecutionTrace,
+  finalizeExecutionTrace,
+  type ExecutionTraceState,
+} from '@/components/agent/executionTraceReducer'
 
 export interface AgentStreamMessage {
   id: string
@@ -8,12 +18,27 @@ export interface AgentStreamMessage {
   content: string
   toolCalls?: Array<{ name: string; result?: unknown }>
   streaming?: boolean
+  textReplaceHistory?: string[]
+  executionTrace?: ExecutionTraceState
 }
 
 export const useAgentStore = defineStore('agent', () => {
   const messages = ref<AgentStreamMessage[]>([])
   const isStreaming = ref(false)
   const pendingActions = ref<CanvasAction[]>([])
+
+  function lastAssistant(): AgentStreamMessage | undefined {
+    const last = messages.value[messages.value.length - 1]
+    return last?.role === 'assistant' ? last : undefined
+  }
+
+  function ensureExecutionTrace() {
+    const last = lastAssistant()
+    if (!last) return
+    if (!last.executionTrace) {
+      last.executionTrace = createExecutionTrace()
+    }
+  }
 
   function addUserMessage(content: string) {
     messages.value.push({
@@ -30,33 +55,74 @@ export const useAgentStore = defineStore('agent', () => {
       content: '',
       toolCalls: [],
       streaming: true,
+      textReplaceHistory: [],
+      executionTrace: createExecutionTrace(),
     }
     messages.value.push(msg)
     return msg
   }
 
   function appendText(text: string) {
-    const last = messages.value[messages.value.length - 1]
-    if (last?.role === 'assistant') {
+    const last = lastAssistant()
+    if (last) {
       last.content += text
     }
   }
 
   function replaceAssistantText(text: string) {
-    const last = messages.value[messages.value.length - 1]
-    if (last?.role === 'assistant') {
-      last.content = text
+    const last = lastAssistant()
+    if (!last) return
+    last.textReplaceHistory = [...(last.textReplaceHistory ?? []), text]
+    last.content = text
+    ensureExecutionTrace()
+    if (last.executionTrace) {
+      applyTextReplaceStage(last.executionTrace, text)
     }
   }
 
   function addToolCall(name: string, result?: unknown) {
-    const last = messages.value[messages.value.length - 1]
-    if (last?.role === 'assistant') {
+    const last = lastAssistant()
+    if (last) {
       last.toolCalls?.push({ name, result })
+      ensureExecutionTrace()
+      if (last.executionTrace) {
+        applyToolCall(last.executionTrace, name, result)
+      }
+    }
+  }
+
+  function trackCanvasAction(action: CanvasAction) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) {
+      applyCanvasAction(last.executionTrace, action)
+    }
+  }
+
+  function trackNodeStatus(data: { nodeId: string; status: string; url?: string }) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) {
+      applyNodeStatus(last.executionTrace, data)
+    }
+  }
+
+  function trackTaskUpdate(data: {
+    id: string
+    status: string
+    title?: string
+    nodeId?: string
+    errorHint?: string
+  }) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) {
+      applyTaskUpdate(last.executionTrace, data)
     }
   }
 
   function addCanvasAction(action: CanvasAction) {
+    trackCanvasAction(action)
     pendingActions.value.push(action)
   }
 
@@ -67,7 +133,10 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function finishStreaming() {
-    const last = messages.value[messages.value.length - 1]
+    const last = lastAssistant()
+    if (last?.executionTrace) {
+      finalizeExecutionTrace(last.executionTrace)
+    }
     if (last) last.streaming = false
     isStreaming.value = false
   }
@@ -94,6 +163,8 @@ export const useAgentStore = defineStore('agent', () => {
     appendText,
     replaceAssistantText,
     addToolCall,
+    trackNodeStatus,
+    trackTaskUpdate,
     addCanvasAction,
     flushActions,
     finishStreaming,
