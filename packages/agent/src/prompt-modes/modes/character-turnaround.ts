@@ -1,4 +1,5 @@
 import type { PromptModeDefinition } from '../types'
+import { formatDeaiRulesForSystem } from './character-turnaround-deai'
 import {
   CHARACTER_TURNAROUND_EXAMPLES,
   formatStylePresetsForSystem,
@@ -46,6 +47,8 @@ ${CHARACTER_TURNAROUND_TEMPLATE}
 【风格预设库（按用户意图选最接近者，可混合但需自洽）】
 ${formatStylePresetsForSystem()}
 
+${formatDeaiRulesForSystem()}
+
 【默认值（用户未指定时使用）】
 - 优先匹配上述预设；无明确风格时用「写实商业模拍」
 - 图类型：角色设定图 / 模特定妆参考图
@@ -54,13 +57,15 @@ ${formatStylePresetsForSystem()}
 - 四格：近景特写 + 正 / 侧 / 背全身
 
 【质量要求】
+0. 用户说「三视图/三视图」时：产品仍称三视图，但输出**必须是四格**（第一格近景特写 + 第二至四格正/侧/背全身），**禁止**写「三格布局」或省略近景格
 1. 四格必须为同一角色、同一服装发型，禁止每格换人换装
 2. 第一格为近景/特写，后三格为正 / 侧 / 背全身；四格同框、一次出图
 3. 根据用户输入合理推断缺失细节，但不得与用户矛盾
 4. 若用户要求多种风格，按风格分段输出多个完整提示词（每段之间空一行，段首标注风格名）
 5. Q版/Q萌/chibi（二头身、超大眼）用 chibi_kawaii，勿与 Sweet Lolita 时装或普通日系动画正比混淆
 6. 若用户只要单张定妆/肖像（不含多视图），省略四格布局，改为单张半身或全身描述
-7. 禁止只复述用户原句；禁止输出 Markdown 标题或 JSON`,
+7. **仅** photoreal_commercial「写实商业模拍」或用户明确要写实摄影真人模拍时，启用上方「去AI化」并在文末追加 Negative Prompt；高定/赛博/动画/Q版/3D CG/美妆/K-pop 等一切非写实 preset **禁止**注入去AI化
+8. 禁止只复述用户原句；禁止输出 Markdown 标题或 JSON`,
   fewShot: {
     user: PRIMARY_FEW_SHOT.user,
     assistant: PRIMARY_FEW_SHOT.assistant,

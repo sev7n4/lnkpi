@@ -257,10 +257,13 @@ def is_turnaround_image_intent(text: str) -> bool:
 
 
 def turnaround_pipeline_user_note() -> str:
-    """Light UX copy when auto-switching aspect for turnaround pipeline."""
+    """Light UX copy when auto-switching aspect for turnaround pipeline.
+    Keep in sync with packages/shared/src/promptContent.ts TURNAROUND_PIPELINE_USER_NOTE
+    """
     return (
         "已按角色设定图模版扩写并出图；"
-        f"四格横排使用 {TURNAROUND_ASPECT_RATIO} 画幅（非账户默认比例）。"
+        "在原有三视图（正/侧/背）基础上增加近景特写，共四格横排；"
+        f"使用 {TURNAROUND_ASPECT_RATIO} 画幅（非账户默认比例）。"
     )
 
 
