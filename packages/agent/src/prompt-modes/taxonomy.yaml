@@ -1,0 +1,72 @@
+# Shared prompt_mode taxonomy — mirrors classify.ts heuristicMode patterns
+version: 1
+modes:
+  - id: character_turnaround
+    patterns:
+      - 三视图
+      - 多视图
+      - 正侧背
+      - turnaround
+      - 模特图
+      - 角色设定
+      - 模特定妆
+      - 四视图
+      - q版
+      - q萌
+      - chibi
+      - 二头身
+      - 洛丽塔
+      - lolita
+      - 婚纱
+      - 战术
+      - 军事
+      - 牛仔
+      - 皮克斯
+      - 绘本
+      - 水彩
+  - id: commercial_storyboard
+    patterns:
+      - 商业分镜
+      - 品牌分镜
+      - 品牌广告
+      - 营销战役
+      - TVC
+      - 问界
+      - AITO
+      - 汽车广告
+      - 15秒
+      - 30秒
+      - 60秒
+      - 抖音前贴
+      - 发布会暖场
+      - 品牌形象片
+      - 闪电切割
+      - AIDA
+  - id: storyboard
+    patterns:
+      - 分镜
+  - id: script
+    patterns:
+      - 剧本
+      - 剧本大纲
+      - 人生观
+  - id: copywriting
+    patterns:
+      - 旁白
+      - 口播
+      - 文案
+  - id: image_prompt_multi_style
+    patterns:
+      - 提示词
+      - midjourney
+      - stable diffusion
+      - 绘画
+      - 车模
+  - id: vision_text
+    patterns:
+      - 视觉方案
+      - 构图策划
+      - 视觉脚本
+      - 页面结构稿
+  - id: generic
+    patterns: []

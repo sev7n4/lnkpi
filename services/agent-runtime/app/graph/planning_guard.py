@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from app.graph.intent_parse_schema import IntentParseResult
+    from app.graph.atomic_parse_schema import ParseOutcome
 
 ActionKind = Literal["plan", "write", "generate", "expand", "unknown"]
 
@@ -116,3 +120,48 @@ def planning_clarify_question(utterance: str) -> str:
         "3）只要文字版构图策划（不出图）。\n"
         "回复 1 / 2 / 3，或补充具体需求。"
     )
+
+
+def validate_llm_parse(result: "IntentParseResult", utterance: str) -> "ParseOutcome | None":
+    """Return clarify outcome if LLM parse conflicts with planning guard; None if OK."""
+    from app.graph.atomic_parse_schema import ParseOutcome
+
+    action = str(result.get("action") or "unknown")
+    items = result.get("items") or []
+
+    if action == "generate" and has_planning_image_conflict(utterance):
+        out: ParseOutcome = {
+            "kind": "clarify",
+            "confidence": min(float(result.get("confidence") or 0.0), PLANNING_CONFIDENCE_CAP),
+            "reason": "planning_image_conflict",
+            "clarify_question": planning_clarify_question(utterance),
+        }
+        return out
+
+    if action == "plan":
+        if any(str(i.get("target_type") or "") == "image" for i in items):
+            return {
+                "kind": "clarify",
+                "confidence": min(float(result.get("confidence") or 0.0), PLANNING_CONFIDENCE_CAP),
+                "reason": "planning_image_conflict",
+                "clarify_question": planning_clarify_question(utterance),
+            }
+        if has_planning_image_conflict(utterance) and str(result.get("route") or "") == "atomic_create":
+            for item in items:
+                if str(item.get("target_type") or "") == "image":
+                    return {
+                        "kind": "clarify",
+                        "confidence": min(float(result.get("confidence") or 0.0), PLANNING_CONFIDENCE_CAP),
+                        "reason": "planning_image_conflict",
+                        "clarify_question": planning_clarify_question(utterance),
+                    }
+
+    if bool(result.get("needs_clarify")) and has_planning_image_conflict(utterance):
+        return {
+            "kind": "clarify",
+            "confidence": float(result.get("confidence") or 0.0),
+            "reason": "planning_image_conflict",
+            "clarify_question": result.get("clarify_question") or planning_clarify_question(utterance),
+        }
+
+    return None

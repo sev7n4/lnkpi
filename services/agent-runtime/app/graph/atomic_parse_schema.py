@@ -25,6 +25,8 @@ class AtomicParseItem(TypedDict, total=False):
     pipeline: str
     imageAspect: str
     resolutionBump: bool
+    promptMode: str
+    prompt_mode: str
 
 
 class AtomicParseSuccess(TypedDict):
@@ -68,6 +70,9 @@ def _normalize_item(raw: dict[str, Any]) -> AtomicParseItem | None:
         item["imageAspect"] = str(raw["imageAspect"])
     if raw.get("resolutionBump") is not None:
         item["resolutionBump"] = bool(raw["resolutionBump"])
+    pm = raw.get("promptMode") or raw.get("prompt_mode")
+    if pm:
+        item["promptMode"] = str(pm)
     return item  # type: ignore[return-value]
 
 
@@ -211,6 +216,10 @@ def parse_outcome_to_state(outcome: ParseOutcome, *, canvas_context: str | None 
         first["canvas_context"] = canvas_context
         for item in items:
             item.setdefault("canvas_context", canvas_context)
+    for item in items:
+        pm = item.get("prompt_mode") or item.get("promptMode")
+        if pm and "promptMode" not in item:
+            item["promptMode"] = pm
 
     if len(items) == 1:
         spec = first
