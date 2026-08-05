@@ -506,3 +506,9 @@ cases:
     utterance: 帮我做一张该产品的三视图
     focus_node_id: prod-001
     gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: plan-01
+    utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+    focus_node_id: null
+    gold: { route: campaign, target_type: image, confirm_gate: false }
+    notes: planning guard — intake routes campaign; target_type ignored when not atomic_create

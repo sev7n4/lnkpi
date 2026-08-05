@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage
 
 from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override, turnaround_pipeline_user_note
 from app.graph.intent import marketing_intent
+from app.graph.planning_guard import has_planning_image_conflict, planning_clarify_question
 
 CLARIFY_THRESHOLD = 0.70
 RULE_FAST_PATH_THRESHOLD = 0.95
@@ -89,6 +90,14 @@ def validate_parse_result(
             "confidence": 0.0,
             "reason": "invalid_payload",
             "clarify_question": _default_clarify_question(utterance),
+        }
+
+    if has_planning_image_conflict(utterance):
+        return {
+            "kind": "clarify",
+            "confidence": 0.0,
+            "reason": "planning_image_conflict",
+            "clarify_question": planning_clarify_question(utterance),
         }
 
     if _is_campaign_override(utterance) or (

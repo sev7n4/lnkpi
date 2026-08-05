@@ -147,3 +147,19 @@ def test_load_atomic_parse_few_shots():
         assert user.strip()
         # Phase 2 few-shots use full structured JSON; legacy single-spec still valid
         assert assistant.strip().startswith("{")
+
+
+def test_rule_confidence_capped_for_planning_conflict():
+    from app.graph.atomic_parse_util import rule_parse_confidence
+
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    spec = {"target_type": "image", "prompt": u}
+    assert rule_parse_confidence(u, spec, None) <= 0.65
+
+
+def test_rule_confidence_unchanged_for_explicit_generate():
+    from app.graph.atomic_parse_util import rule_parse_confidence
+
+    u = "生成一张蓝牙耳机主图"
+    spec = {"target_type": "image", "prompt": u}
+    assert rule_parse_confidence(u, spec, None) == 0.96

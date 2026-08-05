@@ -95,3 +95,17 @@ def test_validate_campaign_override_clarify():
     )
     assert out["kind"] == "clarify"
     assert "Campaign" in out["clarify_question"] or "营销" in out["clarify_question"]
+
+
+def test_validate_parse_planning_conflict_clarifies():
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    out = validate_parse_result(
+        {
+            "items": [{"target_type": "image", "prompt": u, "title": "x"}],
+            "confidence": 0.96,
+        },
+        utterance=u,
+    )
+    assert out["kind"] == "clarify"
+    assert out["reason"] == "planning_image_conflict"
+    assert "1" in out["clarify_question"]

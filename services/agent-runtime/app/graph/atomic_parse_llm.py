@@ -37,6 +37,8 @@ _PARSE_SYSTEM = """你是 Atomic Studio 意图解析器。根据用户一句话�
 - 「生成一张三视图/三视图各来一张」且无「提示词」→ target_type=image，pipeline=turnaround_image（内部扩写后出图，非原句直出）
 - multi：用户要多张/多项时 structure=multi，items 逐条拆分 prompt/title
 - 营销方案/14节点/全链路 → confidence<0.7，clarify_question 建议走 Campaign
+- 「设计/构图方案/详情页策划/视觉方案」且无「生成一张/来一张」→ needs_clarify 或 target_type=text，confidence<0.7；「主图+详情页+方案」勿直接 image，建议 Campaign
+- 明确「生成一张主图/来一张白底图」→ target_type=image，confidence≥0.9
 - 意图不清（如仅「帮我生成」）→ confidence<0.7 并给出 clarify_question
 - 「再生成一张/按刚才风格/重新生成」→ 非首轮 create parse；confidence<0.5，clarify 引导同会话 regenerate/变体（勿判 Campaign）
 """

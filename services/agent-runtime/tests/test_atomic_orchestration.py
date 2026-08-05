@@ -30,6 +30,11 @@ def orch_cases() -> list[dict]:
     return doc["cases"]
 
 
+def test_orchestration_design_detail_page_is_campaign():
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    assert orchestration_complexity_intent(u) == "campaign"
+
+
 def test_eval_orchestration_complexity(orch_cases: list[dict]):
     mismatches: list[str] = []
     for case in orch_cases:
@@ -68,6 +73,16 @@ def test_mixed_modal_routes_to_confirm():
         )
         == "await_atomic_confirm"
     )
+
+
+@pytest.mark.asyncio
+async def test_intake_planning_detail_page_redirects_to_campaign(tmp_path: Path):
+    skills = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills)
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    out = await intake({"messages": [HumanMessage(content=u)]})
+    assert out["flow_mode"] == "campaign"
+    assert out.get("skill_id") is not None
 
 
 @pytest.mark.asyncio

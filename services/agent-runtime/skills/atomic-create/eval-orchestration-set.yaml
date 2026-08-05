@@ -81,6 +81,10 @@ cases:
     utterance: 生成十个镜头分镜
     gold: { complexity: campaign, route: campaign }
 
+  - id: orch-21
+    utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+    gold: { complexity: campaign, route: campaign }
+
   - id: orch-20
     utterance: 做一个Banner图
     gold: { complexity: atomic, route: atomic_create }

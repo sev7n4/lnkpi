@@ -105,6 +105,10 @@ CAMPAIGN_OVERRIDE_PHRASES = (
 CAMPAIGN_COMPLEXITY_PHRASES = (
     "详情页方案",
     "详情页营销",
+    "详情页构图",
+    "详情页的构图",
+    "构图方案",
+    "视觉方案",
     "14节点",
     "14个节点",
     "整套分镜",
@@ -324,9 +328,16 @@ def atomic_regenerate_intent(text: str) -> bool:
 
 def orchestration_complexity_intent(text: str) -> OrchestrationComplexity:
     """Phase 4: route high-complexity requests toward Campaign vs atomic."""
+    from app.graph.planning_guard import detect_action, has_planning_image_conflict, is_planning_intent
+
     t = (text or "").strip()
     if not t:
         return "clarify"
+    if has_planning_image_conflict(t):
+        return "campaign"
+    if "详情页" in t and is_planning_intent(t):
+        if detect_action(t) != "write":
+            return "campaign"
     if any(p in t for p in CAMPAIGN_COMPLEXITY_PHRASES) or _is_campaign_override(t):
         return "campaign"
     shots = _storyboard_shot_count(t)
@@ -339,6 +350,8 @@ def orchestration_complexity_intent(text: str) -> OrchestrationComplexity:
     from app.graph.atomic_parse_util import parse_atomic_multi_items
 
     if parse_atomic_multi_items(t):
+        return "atomic"
+    if detect_action(t) == "write":
         return "atomic"
     if atomic_create_intent(t):
         return "atomic"
@@ -359,6 +372,14 @@ def resolve_intake_route(
         and not modify_intent(text)
     ):
         return "single_node"
+    from app.graph.planning_guard import detect_action, has_planning_image_conflict, is_planning_intent
+
+    if has_planning_image_conflict(text):
+        return "campaign"
+    if "详情页" in text and is_planning_intent(text) and detect_action(text) != "write":
+        return "campaign"
+    if detect_action(text) == "write":
+        return "atomic_create"
     if atomic_create_intent(text):
         return "atomic_create"
     if marketing_intent(text):
@@ -368,6 +389,8 @@ def resolve_intake_route(
 
 def parse_atomic_target_type(text: str) -> AtomicTargetType:
     """Classify modality from user utterance."""
+    from app.graph.planning_guard import is_explicit_generation_intent, is_planning_intent
+
     t = (text or "").strip()
     lowered = t.lower()
     if _has_prompt_explicit(t):
@@ -378,6 +401,8 @@ def parse_atomic_target_type(text: str) -> AtomicTargetType:
         return "text"
     if any(k in lowered for k in VIDEO_KEYWORDS):
         return "video"
+    if is_planning_intent(t) and not is_explicit_generation_intent(t):
+        return "text"
     if any(k in lowered for k in IMAGE_KEYWORDS):
         return "image"
     return "image"

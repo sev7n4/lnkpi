@@ -351,23 +351,24 @@ def rule_parse_confidence(
     multi_items: list[dict[str, Any]] | None,
 ) -> float:
     """Heuristic confidence for rule-only parse (Phase 2 fast path)."""
-    if multi_items and len(multi_items) >= 2:
-        return 0.98
-    t = (utterance or "").strip()
-    if not t or t in _VAGUE_UTTERANCES:
-        return 0.40
-    prompt = str(spec.get("prompt") or "").strip()
-    if len(prompt) < 4:
-        return 0.50
-    if any(k in t for k in _STRONG_SIGNAL_KEYWORDS):
-        return 0.96
-    if spec.get("target_type") in ("video", "audio"):
-        return 0.95
-    from app.graph.atomic_intent import atomic_create_intent
+    from app.graph.planning_guard import planning_guard_confidence_cap
 
-    if atomic_create_intent(t):
-        return 0.88
-    return 0.55
+    t = (utterance or "").strip()
+    if multi_items and len(multi_items) >= 2:
+        conf = 0.98
+    elif not t or t in _VAGUE_UTTERANCES:
+        conf = 0.40
+    elif len(str(spec.get("prompt") or "").strip()) < 4:
+        conf = 0.50
+    elif any(k in t for k in _STRONG_SIGNAL_KEYWORDS):
+        conf = 0.96
+    elif spec.get("target_type") in ("video", "audio"):
+        conf = 0.95
+    else:
+        from app.graph.atomic_intent import atomic_create_intent
+
+        conf = 0.88 if atomic_create_intent(t) else 0.55
+    return planning_guard_confidence_cap(t, conf)
 
 
 def rule_parse_atomic(
