@@ -1,6 +1,7 @@
 import type { PromptModeDefinition, PromptModeId } from './types'
 import { imagePromptMultiStyleMode } from './modes/image-prompt-multi-style'
 import { characterTurnaroundMode } from './modes/character-turnaround'
+import { commercialStoryboardMode } from './modes/commercial-storyboard'
 import { storyboardMode } from './modes/storyboard'
 import { scriptMode } from './modes/script'
 import { copywritingMode } from './modes/copywriting'
@@ -10,6 +11,7 @@ export const PROMPT_MODES: Record<PromptModeId, PromptModeDefinition> = {
   image_prompt_multi_style: imagePromptMultiStyleMode,
   character_turnaround: characterTurnaroundMode,
   storyboard: storyboardMode,
+  commercial_storyboard: commercialStoryboardMode,
   script: scriptMode,
   copywriting: copywritingMode,
   generic: genericMode,

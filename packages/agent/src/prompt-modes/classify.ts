@@ -9,6 +9,8 @@ export function tryRuleShortcut(_prompt: string): PromptModeId | null {
 export function heuristicMode(prompt: string): PromptModeId {
   const p = prompt.toLowerCase()
   if (/三视图|多视图|正侧背|turnaround|模特图|角色设定|模特定妆|四视图|q版|q萌|chibi|二头身|洛丽塔|lolita|婚纱|战术|军事|牛仔|皮克斯|绘本|水彩/.test(p)) return 'character_turnaround'
+  if (/商业分镜|品牌分镜|品牌广告|营销战役|TVC|问界|AITO|汽车广告|15秒|30秒|60秒|抖音前贴|发布会暖场|品牌形象片|闪电切割|AIDA/.test(p))
+    return 'commercial_storyboard'
   if (/分镜/.test(p)) return 'storyboard'
   if (/剧本|剧本大纲|人生观/.test(p)) return 'script'
   if (/旁白|口播|文案/.test(p)) return 'copywriting'
