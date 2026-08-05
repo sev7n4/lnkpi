@@ -287,6 +287,8 @@ def atomic_create_intent(text: str) -> bool:
         return False
     if _is_campaign_override(text):
         return False
+    if is_turnaround_image_intent(text):
+        return True
     if _has_prompt_explicit(text):
         return True
     if any(h in lowered for h in ATOMIC_CREATE_HINTS):
