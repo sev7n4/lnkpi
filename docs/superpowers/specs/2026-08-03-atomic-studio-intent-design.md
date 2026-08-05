@@ -1,7 +1,7 @@
 # Atomic Studio Intent — 意图驱动画布原子创作（设计）
 
-> 状态：**P4 已交付**（2026-08-04）；**L1-03 atomic_regenerate ✅**（PR #122）  
-> 日期：2026-08-03（v1.1）；2026-08-04（L1-03 修订）  
+> 状态：**P4 已交付**（2026-08-04）；**L1-03 atomic_regenerate ✅**（PR #122）；**多视图二段式出图** → [2026-08-05-turnaround-image-pipeline-design.md](./2026-08-05-turnaround-image-pipeline-design.md)  
+> 日期：2026-08-03（v1.1）；2026-08-04（L1-03 修订）；2026-08-05（turnaround pipeline 规格）  
 > 前置：[2026-07-26-graph-engineering-design.md](./2026-07-26-graph-engineering-design.md)、P3 单节点快速生成（#113）、Phase B/C（#114）  
 > Loop 层：[2026-08-04-loop-engineering-design.md](./2026-08-04-loop-engineering-design.md)
 

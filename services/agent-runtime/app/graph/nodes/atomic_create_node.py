@@ -19,6 +19,16 @@ def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "title": title,
                 "targetType": target_type,
                 "prompt": prompt,
+                **(
+                    {"pipeline": item["pipeline"]}
+                    if item.get("pipeline")
+                    else {}
+                ),
+                **(
+                    {"imageAspect": item["imageAspect"]}
+                    if item.get("imageAspect")
+                    else {}
+                ),
             }
         )
     return batch
@@ -78,6 +88,10 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
             msg = f"已创建 {target_type} 节点，准备生产。"
         else:
             msg = f"已创建 {count} 个 {target_type} 节点，准备生产。"
+        if str(first.get("pipeline") or "") == "turnaround_image":
+            from app.graph.atomic_intent import turnaround_pipeline_user_note
+
+            msg += turnaround_pipeline_user_note()
 
         return {
             "phase": "atomic_create",

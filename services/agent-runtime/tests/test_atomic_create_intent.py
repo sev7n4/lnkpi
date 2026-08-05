@@ -13,6 +13,7 @@ from app.graph.atomic_intent import (
     atomic_create_intent,
     atomic_regenerate_intent,
     build_atomic_spec,
+    is_turnaround_image_intent,
     parse_atomic_target_type,
     resolve_intake_route,
 )
@@ -67,6 +68,24 @@ def test_turnaround_prompt_phrase_routes_to_prompt_node():
 def test_turnaround_image_without_prompt_word_stays_image():
     assert parse_atomic_target_type("帮我做一张该产品的三视图") == "image"
     assert parse_atomic_target_type("生成一张三视图，蓝牙耳机") == "image"
+
+
+def test_turnaround_pipeline_spec_for_direct_image_request():
+    utterance = "山海经吞金兽的三视图，CG风格"
+    assert is_turnaround_image_intent(utterance)
+    spec = build_atomic_spec(utterance)
+    assert spec["target_type"] == "image"
+    assert spec.get("pipeline") == "turnaround_image"
+    assert spec.get("imageAspect") == "2:1"
+    assert spec.get("resolutionBump") is True
+
+
+def test_turnaround_prompt_with_hint_word_not_pipeline():
+    utterance = "年轻女性模特三视图的提示词"
+    assert not is_turnaround_image_intent(utterance)
+    spec = build_atomic_spec(utterance)
+    assert spec["target_type"] == "prompt"
+    assert "pipeline" not in spec
 
 
 def test_atomic_create_intent_negative_campaign():

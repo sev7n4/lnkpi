@@ -129,3 +129,25 @@ orchestration:
     - 全链路
     - 14节点
     - 整套分镜
+
+pipelines:
+  turnaround_image:
+    description: 多视图 utterance 内部 character_turnaround 扩写后出图
+    target_type: image
+    prompt_mode: character_turnaround
+    aspect_ratio: "2:1"
+    resolution_bump_from_1k: true
+    trigger_pattern: 三视图|四视图|多视图|turnaround|角色设定|模特定妆|正侧背|模特图
+
+turnaround_image_keywords:
+  - 三视图
+  - 四视图
+  - 多视图
+  - turnaround
+  - 角色设定
+  - 模特定妆
+  - 正侧背
+  - 模特图
+  - q版
+  - chibi
+  - 模特定妆图

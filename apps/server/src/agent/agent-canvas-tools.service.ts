@@ -306,6 +306,8 @@ export class AgentCanvasToolsService {
       targetType: NodeType | string
       prompt?: string
       position?: { x: number; y: number }
+      pipeline?: string
+      imageAspect?: string
     }>
     stage?: boolean
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
@@ -326,19 +328,22 @@ export class AgentCanvasToolsService {
           y: 80 + Math.floor((baseIndex + i) / 4) * GRID_Y,
         }
       const defaults = modalityDefaults(nodeType, prefs)
+      const nodeData: Record<string, unknown> = {
+        title: item.title,
+        manifestKey: item.key,
+        prompt: item.prompt ?? '',
+        status: 'draft',
+        ...defaults,
+      }
+      if (item.pipeline) nodeData.pipeline = item.pipeline
+      if (item.imageAspect) nodeData.imageAspect = item.imageAspect
       actions.push({
         type: 'add_node',
         payload: {
           id: nodeId,
           nodeType,
           position,
-          data: {
-            title: item.title,
-            manifestKey: item.key,
-            prompt: item.prompt ?? '',
-            status: 'draft',
-            ...defaults,
-          },
+          data: nodeData,
         },
       })
       mapping.push({ key: item.key, nodeId })
@@ -547,8 +552,10 @@ export class AgentCanvasToolsService {
 
     const prefs = await this.loadAccountGenPrefs(input.userId)
     const refs = toStudioRefs(node, current)
-    const aspectRatio = pickString(node.data?.imageAspect, prefs.defaultImageAspect || '16:9')
-    const resolution = pickString(
+    const pipeline = String(node.data?.pipeline ?? '').trim()
+    let imagePrompt = prompt
+    let aspectRatio = pickString(node.data?.imageAspect, prefs.defaultImageAspect || '16:9')
+    let resolution = pickString(
       node.data?.imageResolution,
       prefs.defaultImageResolution || '1K',
     )
@@ -557,9 +564,43 @@ export class AgentCanvasToolsService {
     )
     const model = pickString(node.data?.imageModel, prefs.defaultImageModel) || undefined
 
+    if (pipeline === 'turnaround_image') {
+      const textModel = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
+      const expanded = await this.studio.expandPromptContent(input.userId, prompt, textModel)
+      imagePrompt = expanded.content
+      aspectRatio = '2:1'
+      const userResolution = pickString(
+        node.data?.imageResolution,
+        prefs.defaultImageResolution || '1K',
+      )
+      const bumpedResolution = userResolution === '1K' ? '2K' : userResolution
+      if (bumpedResolution !== userResolution) {
+        resolution = bumpedResolution
+      }
+      const expandActions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: {
+            id: input.nodeId,
+            data: {
+              expandedPrompt: expanded.content,
+              content: expanded.content,
+              promptMode: expanded.mode,
+              pipeline,
+              imageAspect: aspectRatio,
+              imageResolution: resolution,
+              ...(bumpedResolution !== userResolution ? { resolutionBump: true } : {}),
+            },
+          },
+        },
+      ]
+      await this.persist(input.sessionId, expandActions)
+      allActions.push(...expandActions)
+    }
+
     const record = await this.studio.generateImage(
       input.userId,
-      prompt,
+      imagePrompt,
       model,
       aspectRatio,
       refs,
