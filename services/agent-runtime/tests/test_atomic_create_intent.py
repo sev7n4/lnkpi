@@ -73,6 +73,7 @@ def test_turnaround_image_without_prompt_word_stays_image():
 def test_turnaround_pipeline_spec_for_direct_image_request():
     utterance = "山海经吞金兽的三视图，CG风格"
     assert is_turnaround_image_intent(utterance)
+    assert atomic_create_intent(utterance)
     spec = build_atomic_spec(utterance)
     assert spec["target_type"] == "image"
     assert spec.get("pipeline") == "turnaround_image"
