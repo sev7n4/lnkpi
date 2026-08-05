@@ -71,6 +71,16 @@ def test_turnaround_image_without_prompt_word_stays_image():
     assert parse_atomic_target_type("生成一张三视图，蓝牙耳机") == "image"
 
 
+def test_parse_atomic_target_type_planning_detail_page_is_text():
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    assert parse_atomic_target_type(u) == "text"
+
+
+def test_resolve_intake_route_planning_goes_campaign():
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    assert resolve_intake_route(u, focus_node_id=None) == "campaign"
+
+
 def test_turnaround_pipeline_spec_for_direct_image_request():
     utterance = "山海经吞金兽的三视图，CG风格"
     assert is_turnaround_image_intent(utterance)

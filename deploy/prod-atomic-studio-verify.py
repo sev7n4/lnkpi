@@ -252,6 +252,28 @@ def verify_turnaround_pipeline(tok: str) -> None:
     )
 
 
+PLANNING_UTTERANCE = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+
+
+def verify_planning_guard(tok: str) -> None:
+    sid = http("POST", "/sessions", {"title": f"P4-planning-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"{sid}:{uuid.uuid4()}"
+    _, text, _types, exit_reason = sse_collect(
+        tok, sid, PLANNING_UTTERANCE, tid, timeout=SSE_TIMEOUT_SEC
+    )
+    not_image_direct = "image 节点（直达）" not in text or "方案" in text or "确认" in text
+    record(
+        "planning guard not image direct",
+        not_image_direct,
+        text[:160],
+    )
+    record(
+        "planning guard campaign or clarify",
+        "方案" in text or "拟定拆解" in text or "请确认" in text or "1）" in text,
+        text[:120],
+    )
+
+
 def verify_photoreal_turnaround_deai(tok: str) -> None:
     sid = http("POST", "/sessions", {"title": f"P4-photoreal-{int(time.time())}"}, t=tok)["data"]["id"]
     tid = f"{sid}:{uuid.uuid4()}"
@@ -301,6 +323,7 @@ def main() -> int:
         verify_modality(tok, label, utterance, node_type)
 
     verify_turnaround_pipeline(tok)
+    verify_planning_guard(tok)
     verify_photoreal_turnaround_deai(tok)
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")

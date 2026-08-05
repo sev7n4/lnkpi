@@ -1,0 +1,110 @@
+# Phase B: Planning Guard eval gold set (25 cases)
+# Run: pytest tests/test_planning_guard_eval.py
+version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-05-intent-planning-guard-design.md
+
+cases:
+  # --- plan-campaign (10) ---
+  - id: pg-01
+    utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+    gold: { route: campaign, complexity: campaign, forbid_target: image, allow_clarify: true }
+
+  - id: pg-02
+    utterance: 帮我规划天猫蓝牙耳机详情页的视觉结构和模块顺序
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-03
+    utterance: 蓝牙耳机详情页构图方案
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-04
+    utterance: 设计一套详情页视觉方案，含主图和白底
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-05
+    utterance: 详情页营销视觉策划，运动耳机
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-06
+    utterance: 帮我做详情页方案，主图场景图布局
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-07
+    utterance: 电商详情页整体框架设计，蓝牙耳机
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-08
+    utterance: 主图加详情页模块的完整视觉方案
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-09
+    utterance: 详情页结构布局方案，3C数码耳机
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  - id: pg-10
+    utterance: 帮我设计详情页Banner和主图的整体思路
+    gold: { route: campaign, complexity: campaign, forbid_target: image }
+
+  # --- plan-clarify via validate (5) ---
+  - id: pg-cl-01
+    utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
+    gold: { validate_clarify: true, reason: planning_image_conflict }
+
+  - id: pg-cl-02
+    utterance: 主图和详情页构图方案一起给我
+    gold: { validate_clarify: true, reason: planning_image_conflict }
+
+  - id: pg-cl-03
+    utterance: 设计白底主图和详情页视觉方案
+    gold: { validate_clarify: true, reason: planning_image_conflict }
+
+  - id: pg-cl-04
+    utterance: 蓝牙耳机详情页主图构图策划
+    gold: { validate_clarify: true, reason: planning_image_conflict }
+
+  - id: pg-cl-05
+    utterance: 详情页主图布局方案，要专业
+    gold: { validate_clarify: true, reason: planning_image_conflict }
+
+  # --- plan-text (atomic planning copy, 5) ---
+  - id: pg-txt-01
+    utterance: 写一份详情页模块构图策划文档，不出图
+    gold: { route: atomic_create, target_type: text, complexity: atomic }
+
+  - id: pg-txt-02
+    utterance: 撰写电商详情页视觉思路说明
+    gold: { route: atomic_create, target_type: text, complexity: atomic }
+
+  - id: pg-txt-03
+    utterance: 起草主图拍摄构图的文字策划
+    gold: { route: atomic_create, target_type: text, complexity: atomic }
+
+  - id: pg-txt-04
+    utterance: 输出详情页结构规划文案
+    gold: { route: atomic_create, target_type: text, complexity: atomic }
+
+  - id: pg-txt-05
+    utterance: 写一段详情页视觉布局思路
+    gold: { route: atomic_create, target_type: text, complexity: atomic }
+
+  # --- control-generate (5) ---
+  - id: pg-ctrl-01
+    utterance: 生成一张蓝牙耳机主图
+    gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.90 }
+
+  - id: pg-ctrl-02
+    utterance: 来一张白底产品图，耳机
+    gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.90 }
+
+  - id: pg-ctrl-03
+    utterance: 帮我做一张场景图，客厅摆耳机
+    gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.88 }
+
+  - id: pg-ctrl-04
+    utterance: 设计一张赛博朋克海报
+    gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.90 }
+
+  - id: pg-ctrl-05
+    utterance: 生成一个模特人物图
+    gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.88 }
