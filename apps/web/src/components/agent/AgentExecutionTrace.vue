@@ -89,6 +89,8 @@ function onStepClick(step: ExecutionStep) {
           step.meta?.nodeId ? 'cursor-pointer hover:text-[var(--neo-accent-text)]' : '',
           step.status === 'failed' ? 'text-red-400/90' : 'text-[var(--neo-text-muted)]',
           step.status === 'running' ? 'animate-pulse' : '',
+          step.kind === 'thinking' ? 'italic opacity-80' : '',
+          step.kind === 'explore' ? 'opacity-90' : '',
         ]"
         @click="onStepClick(step)"
       >

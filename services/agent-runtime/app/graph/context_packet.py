@@ -246,3 +246,24 @@ def build_parse_packet(
         dropped.append("episodic")
 
     return packet
+
+
+def explore_summary_from_packet(packet: ContextPacket) -> dict[str, Any]:
+    """User-facing explore step payload (no raw context text)."""
+    canvas = packet.get("canvas") or {}
+    relevant = canvas.get("relevant_nodes") or []
+    if isinstance(relevant, list) and relevant:
+        titles = [str(n.get("title") or "").strip() for n in relevant if n.get("title")]
+        node_count = len(relevant)
+    else:
+        titles = []
+        node_count = int(canvas.get("node_count") or 0)
+    meta = packet.get("meta") or {}
+    episodic = packet.get("episodic") or {}
+    return {
+        "label": "参考画布上下文",
+        "nodeCount": node_count,
+        "nodeTitles": [t[:32] for t in titles if t][:3],
+        "episodicUsed": bool(episodic.get("turns")),
+        "topicSwitch": bool(meta.get("topic_switch")),
+    }

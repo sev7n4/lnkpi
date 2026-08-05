@@ -10,8 +10,9 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.config import settings
+from app.graph.context_packet import explore_summary_from_packet
 from app.graph.atomic_parse_llm import llm_parse_atomic_intent
-from app.graph.atomic_context import build_atomic_parse_context
+from app.graph.atomic_context import build_atomic_parse_context, build_atomic_parse_packet
 from app.graph.atomic_parse_schema import (
     CLARIFY_THRESHOLD,
     RULE_FAST_PATH_THRESHOLD,
@@ -186,6 +187,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_summary = None
 
         focus_node_id = state.get("focus_node_id")
+        context_packet = build_atomic_parse_packet(state, canvas_summary=canvas_summary)
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
         prior_atomic = state.get("atomic_spec")
         prior_spec = prior_atomic if isinstance(prior_atomic, dict) else None
@@ -342,6 +344,14 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
         patch = parse_outcome_to_state(
             outcome, canvas_context=canvas_ctx, prior_spec=prior_spec
         )
+        patch["explore_summary"] = explore_summary_from_packet(context_packet)
+        if settings.agent_thinking_ui and outcome.get("kind") == "items":
+            items = outcome.get("items") or []
+            if items:
+                first = items[0]
+                target = str(first.get("target_type") or "内容")
+                title = str(first.get("title") or first.get("prompt") or "")[:48]
+                patch["thinking_summary"] = f"识别为{target}创作：{title or '未命名'}"
         if outcome["kind"] == "clarify":
             patch["clarify_context"] = {
                 "original_utterance": text,

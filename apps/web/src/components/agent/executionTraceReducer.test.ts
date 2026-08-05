@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   applyCanvasAction,
   applyNodeStatus,
+  applyPhaseHint,
+  applyStep,
   applyTextReplaceStage,
   applyToolCall,
   createExecutionTrace,
@@ -51,5 +53,24 @@ describe('executionTraceReducer', () => {
     finalizeExecutionTrace(trace)
     expect(trace.totalMs).toBeGreaterThanOrEqual(0)
     expect(trace.steps[0]?.status).toBe('done')
+  })
+
+  it('applies step events and dedupes text_stage', () => {
+    const trace = createExecutionTrace()
+    applyTextReplaceStage(trace, '好的，我来生成图片「模特」')
+    applyStep(trace, {
+      id: 'node:parse_atomic_intent',
+      label: '理解需求',
+      status: 'done',
+      ms: 50,
+    })
+    expect(trace.steps.some((s) => s.kind === 'text_stage')).toBe(false)
+    expect(trace.steps.some((s) => s.id === 'node:parse_atomic_intent')).toBe(true)
+  })
+
+  it('applies phase hint as waiting_user', () => {
+    const trace = createExecutionTrace()
+    applyPhaseHint(trace, { phase: 'await_confirm', label: '等待你确认方案' })
+    expect(trace.steps[0]?.status).toBe('waiting_user')
   })
 })

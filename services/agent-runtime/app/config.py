@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # Phase C: LLM structured intent parse (default off until C4)
     intent_llm_parse: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE")
     intent_llm_parse_shadow: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE_SHADOW")
+    agent_thinking_ui: bool = Field(default=False, validation_alias="AGENT_THINKING_UI")
 
     class Config:
         env_prefix = "LNKPI_"

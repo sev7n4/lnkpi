@@ -15,8 +15,8 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from pydantic import BaseModel
 
-from app.checkpoint_observability import checkpoint_diagnostics
 from app.config import settings
+from app.checkpoint_observability import checkpoint_diagnostics
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
@@ -24,6 +24,7 @@ from app.graph.hitl_resume import (
     interrupt_event_payload,
     prepare_interrupt_resume,
 )
+from app.graph.step_copy import phase_hint_event, step_event
 from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
@@ -604,8 +605,18 @@ async def stream_run_events(
                 if not isinstance(update, dict):
                     continue
                 for node_name, delta in update.items():
-                    with track_node(str(node_name)), trace_node(str(node_name)):
+                    node_key = str(node_name)
+                    t0 = time.monotonic()
+                    await emit(step_event(node_key, status="running"))
+                    with track_node(node_key), trace_node(node_key):
                         if not isinstance(delta, dict):
+                            await emit(
+                                step_event(
+                                    node_key,
+                                    status="done",
+                                    ms=int((time.monotonic() - t0) * 1000),
+                                )
+                            )
                             continue
                         force_choice = delta.get("force_choice")
                         if force_choice:
@@ -616,25 +627,42 @@ async def stream_run_events(
                                 }
                             )
                         messages = delta.get("messages")
-                        if not messages:
-                            continue
-                        seq = messages if isinstance(messages, list) else [messages]
-                        for msg in seq:
-                            content = getattr(msg, "content", None)
-                            if content is None and isinstance(msg, dict):
-                                content = msg.get("content")
-                            if not content:
-                                continue
-                            # Prefer AI replies for text_delta
-                            msg_type = getattr(msg, "type", None) or (
-                                msg.get("role") if isinstance(msg, dict) else None
-                            )
-                            if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
-                                text = str(content)
-                                if text == last_text_delta:
+                        if messages:
+                            seq = messages if isinstance(messages, list) else [messages]
+                            for msg in seq:
+                                content = getattr(msg, "content", None)
+                                if content is None and isinstance(msg, dict):
+                                    content = msg.get("content")
+                                if not content:
                                     continue
-                                last_text_delta = text
-                                await emit({"type": "text_replace", "data": {"text": text}})
+                                # Prefer AI replies for text_delta
+                                msg_type = getattr(msg, "type", None) or (
+                                    msg.get("role") if isinstance(msg, dict) else None
+                                )
+                                if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
+                                    text = str(content)
+                                    if text == last_text_delta:
+                                        continue
+                                    last_text_delta = text
+                                    await emit({"type": "text_replace", "data": {"text": text}})
+                        explore = delta.get("explore_summary")
+                        if isinstance(explore, dict):
+                            await emit({"type": "explore", "data": explore})
+                        thinking = delta.get("thinking_summary")
+                        if thinking and settings.agent_thinking_ui:
+                            await emit(
+                                {
+                                    "type": "thinking",
+                                    "data": {"status": "done", "summary": str(thinking)},
+                                }
+                            )
+                    await emit(
+                        step_event(
+                            node_key,
+                            status="done",
+                            ms=int((time.monotonic() - t0) * 1000),
+                        )
+                    )
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]
             post_vals = getattr(post, "values", None) or {}
@@ -647,10 +675,15 @@ async def stream_run_events(
             )
             if post_next:
                 phase = post_vals.get("phase")
+                phase_str = str(phase) if phase is not None else None
+                gate = post_next[0] if post_next else None
+                hint = phase_hint_event(phase=phase_str, gate_node=gate)
+                if hint:
+                    await emit(hint)
                 await emit(
                     interrupt_event_payload(
                         next_nodes=post_next,
-                        phase=str(phase) if phase is not None else None,
+                        phase=phase_str,
                     )
                 )
             await emit({"type": "done", "data": {}})
