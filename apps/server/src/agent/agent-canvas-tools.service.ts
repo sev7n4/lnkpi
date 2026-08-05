@@ -2,6 +2,7 @@ import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundExce
 import { applyCanvasActions } from '@lnkpi/agent'
 import {
   resolveNodeRefs,
+  summarizePromptCompletion,
   type CanvasAction,
   type CanvasData,
   type CanvasNode,
@@ -921,7 +922,13 @@ export class AgentCanvasToolsService {
     sessionId: string
     userId: string
     nodeId: string
-  }): Promise<{ status: string; generationRecordId?: string; actions: CanvasAction[] }> {
+  }): Promise<{
+    status: string
+    generationRecordId?: string
+    actions: CanvasAction[]
+    promptMode?: string | null
+    completionSummary?: string
+  }> {
     const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
     const node = canvas.nodes.find((n) => n.id === input.nodeId)
     if (!node) throw new NotFoundException('节点不存在')
@@ -968,7 +975,14 @@ export class AgentCanvasToolsService {
       ]
       await this.persist(input.sessionId, finishActions)
       allActions.push(...finishActions)
-      return { status: 'completed', generationRecordId: recordId, actions: allActions }
+      const completionSummary = summarizePromptCompletion(parsed.mode, parsed.content)
+      return {
+        status: 'completed',
+        generationRecordId: recordId,
+        actions: allActions,
+        promptMode: parsed.mode,
+        completionSummary: completionSummary ?? undefined,
+      }
     } catch (err) {
       if (err instanceof ForbiddenException || err instanceof NotFoundException) throw err
       const errorMessage = err instanceof Error ? err.message : '提示词生成失败'

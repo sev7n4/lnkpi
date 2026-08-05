@@ -51,6 +51,7 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
         completed: list[str] = []
         failed: list[str] = []
         last_record_id: str | None = None
+        last_completion_summary: str | None = None
         last_error: str | None = None
 
         for item in items:
@@ -79,6 +80,9 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
             if record_id:
                 last_record_id = record_id
 
+            if isinstance(result, dict) and result.get("completionSummary"):
+                last_completion_summary = str(result["completionSummary"])
+
             if _is_success(result):
                 completed.append(title)
             else:
@@ -91,7 +95,9 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
                 msg = f"「{completed[0]}」生成完成。"
             else:
                 msg = f"已完成 {len(completed)} 张：{'、'.join(completed)}。"
-            if last_record_id:
+            if last_completion_summary:
+                msg += last_completion_summary
+            elif last_record_id:
                 msg += f"（record: {last_record_id}）"
             return {
                 "phase": "done",
