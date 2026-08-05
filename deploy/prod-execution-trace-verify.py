@@ -122,6 +122,7 @@ def main() -> int:
     record("canvas_action emitted", len(canvas_actions) >= 1 or "canvas_action" in types, f"n={len(canvas_actions)}")
     record("node_status emitted", len(node_statuses) >= 1 or "node_status" in types, f"n={len(node_statuses)}")
     record("no forbidden labels", not any(f in stream for f in FORBIDDEN))
+    record("step events emitted", "step" in types, f"types={sorted(types)[:12]}")
 
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1

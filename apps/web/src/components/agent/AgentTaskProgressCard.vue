@@ -39,6 +39,7 @@ const statusLabel: Record<string, string> = {
             {{ item.attempt }}/{{ item.maxAttempts || 2 }}
           </span>
           <div v-if="item.errorHint" class="mt-0.5 opacity-60">{{ item.errorHint }}</div>
+          <div v-if="item.errorCode && !item.errorHint" class="mt-0.5 opacity-50">{{ item.errorCode }}</div>
         </span>
       </li>
     </ul>

@@ -2,7 +2,8 @@
 
 > 日期：2026-08-06  
 > 前置：[2026-08-06-agent-execution-trace-design.md](../specs/2026-08-06-agent-execution-trace-design.md)  
-> P0 状态：实现中（本仓库 PR）
+> P0 状态：**已 merge**（PR #152）  
+> P1/P2 状态：**本 PR**
 
 ---
 

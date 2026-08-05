@@ -32,6 +32,8 @@ interface ReplayStep {
 const route = useRoute()
 const router = useRouter()
 const sessionId = computed(() => route.params.sessionId as string)
+const agentDebug = computed(() => route.query.agentDebug === '1')
+const graphTimeline = ref<Array<{ phase?: string | null; step?: number | null }>>([])
 
 const sessionTitle = ref('创作回放')
 const steps = ref<ReplayStep[]>([])
@@ -93,6 +95,18 @@ async function loadReplay() {
     api.get<{ data: AgentMessage[] }>(`/agent/chat/user/messages?sessionId=${sessionId.value}`),
   ])
   sessionTitle.value = sessionRes.data.data.title
+
+  if (agentDebug.value) {
+    try {
+      const threadId = `${sessionId.value}:latest`
+      const tl = await api.get<{ data: { entries?: Array<{ phase?: string | null; step?: number | null }> } }>(
+        `/agent/thread-timeline?threadId=${encodeURIComponent(threadId)}`,
+      )
+      graphTimeline.value = tl.data.data?.entries ?? []
+    } catch {
+      graphTimeline.value = []
+    }
+  }
 
   const built: ReplayStep[] = []
   for (const msg of msgRes.data.data) {
@@ -158,6 +172,14 @@ onUnmounted(() => { if (playTimer) clearInterval(playTimer) })
           暂无 Agent 对话记录
         </li>
       </ol>
+      <div v-if="agentDebug && graphTimeline.length" class="border-t border-white/5 p-3 text-[10px] text-white/40">
+        <p class="mb-1 font-medium text-white/60">Graph timeline (debug)</p>
+        <ul class="space-y-0.5">
+          <li v-for="(e, i) in graphTimeline" :key="i">
+            #{{ e.step ?? i }} · {{ e.phase ?? '—' }}
+          </li>
+        </ul>
+      </div>
     </aside>
 
     <div class="relative flex-1">
