@@ -78,3 +78,22 @@ export function formatDuration(ms: number): string {
   const rem = s % 60
   return rem ? `${m}m ${rem}s` : `${m}m`
 }
+
+const PHASE_HINT_LABELS: Record<string, string> = {
+  await_confirm: '等待你确认方案',
+  await_copy_confirm: '等待你确认主文案',
+  await_topo: '等待你确认节点结构',
+  await_atomic_confirm: '等待你确认生成参数',
+}
+
+export function phaseHintFromInterrupt(payload: {
+  phase?: string | null
+  node?: string | null
+} | null): string | null {
+  if (!payload) return null
+  const phase = payload.phase?.trim()
+  if (phase && PHASE_HINT_LABELS[phase]) return PHASE_HINT_LABELS[phase]
+  const node = payload.node?.trim()
+  if (node && PHASE_HINT_LABELS[node]) return PHASE_HINT_LABELS[node]
+  return null
+}

@@ -1,4 +1,5 @@
 import type { CanvasAction } from '@lnkpi/shared'
+import { formatStructuredError } from '@/components/agent/executionStepErrors'
 import {
   canvasActionLabel,
   labelFromTextReplace,
@@ -20,6 +21,8 @@ export type ExecutionStepKind =
   | 'tool'
   | 'node_gen'
   | 'task'
+  | 'thinking'
+  | 'explore'
 
 export interface ExecutionStep {
   id: string
@@ -91,9 +94,152 @@ function upsertTextStage(trace: ExecutionTraceState, label: string, detail?: str
   })
 }
 
+function removeDuplicateTextStage(trace: ExecutionTraceState, label: string) {
+  const idx = trace.steps.findIndex(
+    (s) => s.kind === 'text_stage' && s.label === label && s.status === 'done',
+  )
+  if (idx >= 0) trace.steps.splice(idx, 1)
+}
+
+export function applyStep(
+  trace: ExecutionTraceState,
+  data: {
+    id: string
+    kind?: string
+    label: string
+    status: string
+    detail?: string
+    ms?: number
+    nodeId?: string
+  },
+) {
+  const status = data.status as ExecutionStepStatus
+  let step = trace.steps.find((s) => s.id === data.id)
+  const now = Date.now()
+  if (!step) {
+    step = {
+      id: data.id,
+      kind: 'phase',
+      label: data.label,
+      status,
+      startedAt: now,
+      meta: data.nodeId ? { nodeId: data.nodeId } : undefined,
+      detail: data.detail,
+    }
+    trace.steps.push(step)
+    removeDuplicateTextStage(trace, data.label)
+  } else {
+    step.label = data.label
+    step.status = status
+    if (data.detail) step.detail = data.detail
+  }
+  if (status === 'done' || status === 'failed' || status === 'waiting_user') {
+    step.endedAt = now
+    step.ms = data.ms ?? (step.startedAt ? now - step.startedAt : 0)
+  }
+}
+
+export function applyPhaseHint(
+  trace: ExecutionTraceState,
+  data: { phase?: string; label: string },
+) {
+  const id = `phase-hint:${data.phase || 'gate'}`
+  let step = trace.steps.find((s) => s.id === id)
+  if (!step) {
+    step = {
+      id,
+      kind: 'phase',
+      label: data.label,
+      status: 'waiting_user',
+      startedAt: Date.now(),
+    }
+    trace.steps.push(step)
+  } else {
+    step.label = data.label
+    step.status = 'waiting_user'
+  }
+}
+
+export function applyStructuredError(
+  trace: ExecutionTraceState,
+  data: {
+    message?: string
+    error_type?: string
+    retry_hint?: string
+    tool_name?: string
+  },
+) {
+  const { label, detail } = formatStructuredError(data)
+  const now = Date.now()
+  trace.steps.push({
+    id: nextStepId('error'),
+    kind: 'phase',
+    label,
+    detail,
+    status: 'failed',
+    startedAt: now,
+    endedAt: now,
+    ms: 0,
+    meta: data.error_type ? { errorCode: data.error_type } : undefined,
+  })
+}
+
+export function applyThinking(
+  trace: ExecutionTraceState,
+  data: { status: string; summary?: string },
+) {
+  const id = 'thinking:parse'
+  let step = trace.steps.find((s) => s.id === id)
+  if (!step) {
+    step = {
+      id,
+      kind: 'thinking',
+      label: '思考中…',
+      status: data.status === 'done' ? 'done' : 'running',
+      startedAt: Date.now(),
+      detail: data.summary,
+    }
+    trace.steps.unshift(step)
+  } else {
+    step.status = data.status === 'done' ? 'done' : 'running'
+    if (data.summary) step.detail = data.summary
+    if (data.status === 'done') completeStep(step)
+  }
+}
+
+export function applyExplore(
+  trace: ExecutionTraceState,
+  data: {
+    label?: string
+    nodeCount?: number
+    nodeTitles?: string[]
+    episodicUsed?: boolean
+    topicSwitch?: boolean
+  },
+) {
+  const titles = (data.nodeTitles || []).slice(0, 3).join('、')
+  const suffix = (data.nodeCount || 0) > 3 ? '等' : ''
+  const detailParts: string[] = []
+  if (titles) detailParts.push(titles + suffix)
+  if (data.topicSwitch) detailParts.push('已切换话题，未引用历史任务')
+  else if (data.episodicUsed === false) detailParts.push('未引用历史对话')
+  const now = Date.now()
+  trace.steps.push({
+    id: nextStepId('explore'),
+    kind: 'explore',
+    label: data.label || '参考画布上下文',
+    detail: detailParts.join('；') || `已参考 ${data.nodeCount ?? 0} 个节点`,
+    status: 'done',
+    startedAt: now,
+    endedAt: now,
+    ms: 0,
+  })
+}
+
 export function applyTextReplaceStage(trace: ExecutionTraceState, text: string) {
   const label = labelFromTextReplace(text)
   if (!label) return
+  if (trace.steps.some((s) => s.kind === 'phase' && s.label === label)) return
   upsertTextStage(trace, label, text.slice(0, 120))
 }
 
@@ -188,6 +334,7 @@ export function applyTaskUpdate(
     title?: string
     nodeId?: string
     errorHint?: string
+    errorCode?: string
   },
 ) {
   const label = data.title ? `生成「${data.title}」` : '批量生成任务'
@@ -215,6 +362,9 @@ export function applyTaskUpdate(
   }
   if (data.status === 'failed' || data.status === 'needs_user') {
     step.detail = data.errorHint
+    if (data.errorCode) {
+      step.meta = { ...step.meta, errorCode: data.errorCode }
+    }
     completeStep(step, data.status === 'needs_user' ? 'waiting_user' : 'failed')
   }
 }

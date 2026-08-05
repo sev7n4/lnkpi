@@ -3,9 +3,14 @@ import { ref } from 'vue'
 import type { AgentChatMessage, CanvasAction } from '@lnkpi/shared'
 import {
   applyCanvasAction,
+  applyExplore,
   applyNodeStatus,
+  applyPhaseHint,
+  applyStep,
+  applyStructuredError,
   applyTaskUpdate,
   applyTextReplaceStage,
+  applyThinking,
   applyToolCall,
   createExecutionTrace,
   finalizeExecutionTrace,
@@ -28,8 +33,7 @@ export const useAgentStore = defineStore('agent', () => {
   const pendingActions = ref<CanvasAction[]>([])
 
   function lastAssistant(): AgentStreamMessage | undefined {
-    const last = messages.value[messages.value.length - 1]
-    return last?.role === 'assistant' ? last : undefined
+    return [...messages.value].reverse().find((m) => m.role === 'assistant')
   }
 
   function ensureExecutionTrace() {
@@ -113,12 +117,43 @@ export const useAgentStore = defineStore('agent', () => {
     title?: string
     nodeId?: string
     errorHint?: string
+    errorCode?: string
   }) {
     ensureExecutionTrace()
     const last = lastAssistant()
     if (last?.executionTrace) {
       applyTaskUpdate(last.executionTrace, data)
     }
+  }
+
+  function trackStep(data: Parameters<typeof applyStep>[1]) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) applyStep(last.executionTrace, data)
+  }
+
+  function trackPhaseHint(data: { phase?: string; label: string }) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) applyPhaseHint(last.executionTrace, data)
+  }
+
+  function trackStructuredError(data: Parameters<typeof applyStructuredError>[1]) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) applyStructuredError(last.executionTrace, data)
+  }
+
+  function trackThinking(data: { status: string; summary?: string }) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) applyThinking(last.executionTrace, data)
+  }
+
+  function trackExplore(data: Parameters<typeof applyExplore>[1]) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (last?.executionTrace) applyExplore(last.executionTrace, data)
   }
 
   function addCanvasAction(action: CanvasAction) {
@@ -165,6 +200,11 @@ export const useAgentStore = defineStore('agent', () => {
     addToolCall,
     trackNodeStatus,
     trackTaskUpdate,
+    trackStep,
+    trackPhaseHint,
+    trackStructuredError,
+    trackThinking,
+    trackExplore,
     addCanvasAction,
     flushActions,
     finishStreaming,

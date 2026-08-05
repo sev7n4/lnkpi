@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.graph.context_packet import build_parse_packet
+from app.config import settings
+from app.graph.context_packet import build_parse_packet, explore_summary_from_packet
 from app.graph.context_render import render_packet_for_llm
 
 _MAX_CONTEXT_CHARS = 500
@@ -60,3 +61,11 @@ def build_atomic_parse_context(
     if len(rendered) <= max_chars:
         return rendered
     return rendered[: max_chars - 1] + "…"
+
+
+def build_atomic_parse_packet(
+    state: dict[str, Any],
+    *,
+    canvas_summary: dict[str, Any] | None = None,
+) -> Any:
+    return build_parse_packet(state, canvas_summary=canvas_summary)

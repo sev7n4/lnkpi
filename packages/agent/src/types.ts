@@ -44,6 +44,13 @@ export interface AgentStreamEvent {
     | 'task_list'
     | 'task_update'
     | 'task_summary'
+    | 'step'
+    | 'phase_hint'
+    | 'thinking'
+    | 'explore'
+    | 'interrupt'
+    | 'force_choice'
+    | 'ping'
     | 'done'
     | 'error'
   data: unknown

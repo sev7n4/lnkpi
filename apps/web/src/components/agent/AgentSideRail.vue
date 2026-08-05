@@ -28,11 +28,8 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
-import {
-  chipSetFromInterrupt,
-  interruptPayloadFromThreadState,
-  type AgentInterruptPayload,
-} from '@/components/agent/agentInterruptGate'
+import { chipSetFromInterrupt, interruptPayloadFromThreadState, type AgentInterruptPayload } from '@/components/agent/agentInterruptGate'
+import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
   buildIdempotencyKey,
   createAgentThreadId,
@@ -544,6 +541,11 @@ async function reconnectStream() {
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     interruptGate.value = interruptPayloadFromThreadState(json.data)
 
+    const hint = phaseHintFromInterrupt(interruptGate.value)
+    if (hint) {
+      agent.trackPhaseHint({ phase: interruptGate.value?.phase ?? undefined, label: hint })
+    }
+
     if (agent.isStreaming) {
       agent.finishStreaming()
     }
@@ -670,6 +672,18 @@ function handleEvent(event: { type: string; data: unknown }) {
       agent.trackNodeStatus(data)
       break
     }
+    case 'step':
+      agent.trackStep(event.data as Parameters<typeof agent.trackStep>[0])
+      break
+    case 'phase_hint':
+      agent.trackPhaseHint(event.data as { phase?: string; label: string })
+      break
+    case 'thinking':
+      agent.trackThinking(event.data as { status: string; summary?: string })
+      break
+    case 'explore':
+      agent.trackExplore(event.data as Parameters<typeof agent.trackExplore>[0])
+      break
     case 'task_list':
     case 'task_update':
     case 'task_summary': {
@@ -684,6 +698,7 @@ function handleEvent(event: { type: string; data: unknown }) {
           id?: string
           status?: string
           errorHint?: string
+          errorCode?: string
         }
         const item = taskProgress.value.items.find((it) => it.id === data.id)
         if (item) {
@@ -693,6 +708,7 @@ function handleEvent(event: { type: string; data: unknown }) {
             title: item.title,
             nodeId: item.nodeId,
             errorHint: data.errorHint ?? item.errorHint,
+            errorCode: data.errorCode ?? item.errorCode,
           })
         }
         if (item?.recordId && item.nodeId) {
@@ -723,9 +739,17 @@ function handleEvent(event: { type: string; data: unknown }) {
       }
       break
     }
-    case 'error':
-      agent.appendText(`\n\n⚠️ ${(event.data as { message: string }).message}`)
+    case 'error': {
+      const data = event.data as {
+        message?: string
+        error_type?: string
+        retry_hint?: string
+        tool_name?: string
+      }
+      agent.trackStructuredError(data)
+      agent.appendText(`\n\n⚠️ ${data.message || '发生错误'}`)
       break
+    }
   }
 }
 

@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.graph.atomic_context import build_atomic_parse_context
 from app.graph.context_packet import (
     build_parse_packet,
+    explore_summary_from_packet,
     should_include_episodic,
     should_include_prior_task,
 )
@@ -96,3 +97,21 @@ def test_build_atomic_parse_context_uses_markdown_not_legacy_pipe():
     assert " | " not in ctx
     assert "上轮原子" not in ctx
     assert "##" in ctx
+
+
+def test_explore_summary_from_packet_no_raw_context():
+    packet = build_parse_packet(
+        {
+            "messages": [HumanMessage(content="生成一张主图")],
+        },
+        canvas_summary={
+            "nodes": [
+                {"id": "n1", "type": "image", "title": "主图参考"},
+                {"id": "n2", "type": "prompt", "title": "文案"},
+            ],
+        },
+    )
+    summary = explore_summary_from_packet(packet)
+    assert summary["label"] == "参考画布上下文"
+    assert summary["nodeCount"] >= 1
+    assert "[canvas_context]" not in str(summary)

@@ -17,6 +17,7 @@ export interface AgentTaskItem {
   attempt?: number
   maxAttempts?: number
   errorHint?: string
+  errorCode?: string
 }
 
 export interface AgentTaskProgressState {
@@ -49,6 +50,7 @@ type TaskEvent =
         attempt?: number
         maxAttempts?: number
         errorHint?: string
+        errorCode?: string
       }
     }
   | {
