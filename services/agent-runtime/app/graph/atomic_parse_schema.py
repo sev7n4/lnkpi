@@ -16,11 +16,14 @@ MAX_ATOMIC_MULTI_ITEMS = 5
 VALID_TARGET_TYPES = frozenset({"image", "text", "video", "audio", "prompt"})
 
 
-class AtomicParseItem(TypedDict):
+class AtomicParseItem(TypedDict, total=False):
     target_type: str
     title: str
     prompt: str
     confirm_gate: bool
+    pipeline: str
+    imageAspect: str
+    resolutionBump: bool
 
 
 class AtomicParseSuccess(TypedDict):
@@ -52,12 +55,19 @@ def _normalize_item(raw: dict[str, Any]) -> AtomicParseItem | None:
     confirm = raw.get("confirm_gate")
     if confirm is None:
         confirm = confirm_gate_for_type(target)  # type: ignore[arg-type]
-    return {
+    item: dict[str, Any] = {
         "target_type": target,
         "title": title,
         "prompt": prompt,
         "confirm_gate": bool(confirm),
     }
+    if raw.get("pipeline"):
+        item["pipeline"] = str(raw["pipeline"])
+    if raw.get("imageAspect"):
+        item["imageAspect"] = str(raw["imageAspect"])
+    if raw.get("resolutionBump") is not None:
+        item["resolutionBump"] = bool(raw["resolutionBump"])
+    return item  # type: ignore[return-value]
 
 
 def _default_clarify_question(utterance: str) -> str:
