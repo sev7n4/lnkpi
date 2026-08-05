@@ -9,11 +9,11 @@ from typing import Any
 
 import yaml
 
-from app.graph.atomic_parse_util import atomic_skill_path
+from app.config import settings
 
 
 def _taxonomy_candidates() -> list[Path]:
-    skill = atomic_skill_path()
+    skill = Path(settings.skills_dir) / "atomic-create"
     candidates = [
         skill / "assets" / "prompt-mode-taxonomy.yaml",
     ]
