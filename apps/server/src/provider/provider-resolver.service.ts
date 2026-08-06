@@ -1,6 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common'
 import {
   decodeChannelModel,
+  resolveApimartPlatformCredentials,
   type ApiCallFormat,
   type ModelCapability,
 } from '@lnkpi/shared'
@@ -31,7 +32,7 @@ export class ProviderResolverService {
   async resolveForGeneration(
     userId: string,
     modelValue: string | undefined,
-    _modality: ModelCapability,
+    modality: ModelCapability,
   ): Promise<ResolvedGenerationProvider> {
     const decoded = modelValue ? decodeChannelModel(modelValue) : null
     const channelId = decoded?.channelId ?? PLATFORM_CHANNEL_ID
@@ -42,9 +43,16 @@ export class ProviderResolverService {
         where: { id: PLATFORM_CHANNEL_ID },
       })
       // Runtime .env wins over DB snapshot so deploy can retarget .cn without manual SQL.
-      const baseUrl =
+      let baseUrl =
         process.env.OPENAI_BASE_URL?.trim() || channel?.baseUrl || ''
-      const apiKey = process.env.OPENAI_API_KEY || undefined
+      let apiKey = process.env.OPENAI_API_KEY || undefined
+      if (modality === 'image') {
+        const apimart = resolveApimartPlatformCredentials(modelName)
+        if (apimart) {
+          baseUrl = apimart.baseUrl
+          apiKey = apimart.apiKey
+        }
+      }
       return {
         channelId: PLATFORM_CHANNEL_ID,
         modelName,

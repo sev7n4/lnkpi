@@ -39,6 +39,8 @@ describe('ProviderResolverService', () => {
   const originalKey = process.env.BYOK_ENCRYPTION_KEY_V1
   const originalOpenAiKey = process.env.OPENAI_API_KEY
   const originalOpenAiBase = process.env.OPENAI_BASE_URL
+  const originalApimartKey = process.env.APIMART_API_KEY
+  const originalApimartBase = process.env.APIMART_BASE_URL
   let resolver: ProviderResolverService
   let crypto: CryptoService
   let prisma: ReturnType<typeof createMemoryPrisma>
@@ -47,6 +49,8 @@ describe('ProviderResolverService', () => {
     process.env.BYOK_ENCRYPTION_KEY_V1 = Buffer.alloc(32, 7).toString('base64')
     process.env.OPENAI_API_KEY = 'platform-env-key'
     process.env.OPENAI_BASE_URL = 'https://platform.example.com/v1'
+    process.env.APIMART_API_KEY = 'apimart-env-key'
+    process.env.APIMART_BASE_URL = 'https://api.apimart.ai/v1'
     prisma = createMemoryPrisma([
       {
         id: PLATFORM_CHANNEL_ID,
@@ -81,6 +85,10 @@ describe('ProviderResolverService', () => {
     else process.env.OPENAI_API_KEY = originalOpenAiKey
     if (originalOpenAiBase === undefined) delete process.env.OPENAI_BASE_URL
     else process.env.OPENAI_BASE_URL = originalOpenAiBase
+    if (originalApimartKey === undefined) delete process.env.APIMART_API_KEY
+    else process.env.APIMART_API_KEY = originalApimartKey
+    if (originalApimartBase === undefined) delete process.env.APIMART_BASE_URL
+    else process.env.APIMART_BASE_URL = originalApimartBase
   })
 
   it('decrypts user channel credentials', async () => {
@@ -121,6 +129,28 @@ describe('ProviderResolverService', () => {
         baseUrl: 'https://platform.example.com/v1',
       },
       source: 'platform',
+    })
+  })
+
+  it('routes platform seedream/image2 to APIMart credentials', async () => {
+    const seedream = await resolver.resolveForGeneration('u1', 'platform::seedream-5.0-pro', 'image')
+    expect(seedream.credentials).toEqual({
+      apiKey: 'apimart-env-key',
+      baseUrl: 'https://api.apimart.ai/v1',
+    })
+
+    const image2 = await resolver.resolveForGeneration('u1', 'image2', 'image')
+    expect(image2.credentials).toEqual({
+      apiKey: 'apimart-env-key',
+      baseUrl: 'https://api.apimart.ai/v1',
+    })
+  })
+
+  it('keeps Agnes credentials for platform text models', async () => {
+    const result = await resolver.resolveForGeneration('u1', 'platform::agnes-2.0-flash', 'text')
+    expect(result.credentials).toEqual({
+      apiKey: 'platform-env-key',
+      baseUrl: 'https://platform.example.com/v1',
     })
   })
 

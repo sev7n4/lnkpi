@@ -23,6 +23,7 @@ import {
   redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
+  resolvePlatformImageProviderOpts,
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
@@ -479,7 +480,9 @@ export class MaterialService {
         const fallbackPrompt = useNativeRefs
           ? stripRefImagePromptTags(String(meta.effectivePrompt ?? material.prompt ?? ''))
           : String(meta.effectivePrompt ?? material.prompt ?? '')
-        const { url } = await createImageProvider(undefined).generate(fallbackPrompt, {
+        const { url } = await createImageProvider(
+          resolvePlatformImageProviderOpts(modelKey),
+        ).generate(fallbackPrompt, {
           modelId,
           size,
           resolution,
