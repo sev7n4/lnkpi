@@ -4,6 +4,7 @@ import {
   resolveImageGatewayModelId,
   resolveImageModelProfile,
   usesNativeImageRefs,
+  isApimartBackedImageModel,
   SUPPORTED_ASPECT_RATIOS,
   type ImageRefWire,
   type ImageResolutionTier,
@@ -329,9 +330,17 @@ export function buildImageProviderOptions(input: {
     n,
     referenceImages,
   } = input
-  const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('image', modelKey)
-  const profile = resolveImageModelProfile(resolvedKey, entry.gatewayModelId)
-  const gatewayModelId = resolveImageGatewayModelId(resolvedKey, entry.gatewayModelId)
+  const catalog = resolveModelKey('image', modelKey)
+  let resolvedKey = catalog.modelKey
+  let catalogGateway = catalog.entry.gatewayModelId
+  let catalogFallback = catalog.fallback
+  if (modelKey && isApimartBackedImageModel(modelKey)) {
+    resolvedKey = modelKey
+    catalogGateway = resolveImageGatewayModelId(modelKey, modelKey)
+    catalogFallback = false
+  }
+  const profile = resolveImageModelProfile(resolvedKey, catalogGateway)
+  const gatewayModelId = resolveImageGatewayModelId(resolvedKey, catalogGateway)
   const clamped = clampImageGenerationInput(profile, {
     n,
     resolution,
@@ -405,7 +414,7 @@ export function buildImageProviderOptions(input: {
       referenceImageCount: refCount,
       responseMode: profile.responseMode,
       refWire: refCount > 0 ? profile.refWire : 'none',
-      ...(fallback ? { modelFallback: true } : {}),
+      ...(catalogFallback ? { modelFallback: true } : {}),
     },
   }
 }

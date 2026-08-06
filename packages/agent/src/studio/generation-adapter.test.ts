@@ -149,6 +149,20 @@ describe('buildImageProviderOptions', () => {
     expect(r.effectivePromptSuffix).toBe('[ref-image:https://cdn.example/b.png]')
   })
 
+  it('recognizes BYOK APIMart gateway model ids for async profile', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'doubao-seedream-5-0-pro',
+      aspectRatio: '1:1',
+      resolution: '1K',
+      n: 1,
+      referenceImages: [],
+    })
+    expect(r.meta.modelKey).toBe('doubao-seedream-5-0-pro')
+    expect(r.meta.gatewayModelId).toBe('doubao-seedream-5-0-pro')
+    expect(r.meta.responseMode).toBe('async_task')
+    expect(r.meta.modelFallback).toBeUndefined()
+  })
+
   it('buildImageProviderGenerateOptions forwards async profile fields', () => {
     const built = buildImageProviderOptions({
       modelKey: 'seedream-5.0-pro',
