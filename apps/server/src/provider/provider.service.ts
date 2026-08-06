@@ -173,6 +173,28 @@ function catalogModels(): ChannelModelEntry[] {
   }))
 }
 
+/** Turn undici/network fetch failures into actionable BYOK pull-models errors. */
+export function formatPullModelsFetchError(err: unknown, host: string): string {
+  const root = err instanceof Error && err.cause instanceof Error ? err.cause : err
+  const code =
+    root && typeof root === 'object' && 'code' in root ? String((root as { code?: string }).code) : ''
+  const message = root instanceof Error ? root.message : String(root ?? 'fetch failed')
+
+  if (code === 'UND_ERR_CONNECT_TIMEOUT' || /connect timeout/i.test(message)) {
+    return `无法连接渠道网关 ${host}（连接超时）。请检查服务器出网、DNS、防火墙，或配置 HTTPS 代理后重试。`
+  }
+  if (code === 'ENOTFOUND' || /getaddrinfo/i.test(message)) {
+    return `无法解析渠道网关域名 ${host}（DNS 失败）。请检查 Base URL 是否正确。`
+  }
+  if (code === 'ECONNREFUSED') {
+    return `渠道网关 ${host} 拒绝连接。请检查 Base URL 端口与服务是否可用。`
+  }
+  if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE') {
+    return `渠道网关 ${host} TLS 证书校验失败（${code}）。`
+  }
+  return `无法连接渠道网关 ${host}：${message}`
+}
+
 function defaultSelectableFor(modality: StudioModality): string[] {
   return STUDIO_MODEL_CATALOG.filter((entry) => entry.modality === modality).map((entry) =>
     encodeChannelModel(PLATFORM_CHANNEL_ID, entry.modelKey),
@@ -341,18 +363,26 @@ export class ProviderService {
     const modelsUrl = new URL(base.toString().replace(/\/?$/, '/') + 'models')
     this.safeOutboundUrl(modelsUrl.toString())
 
-    const response = await fetch(modelsUrl, {
-      redirect: 'manual',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-      },
-    })
+    let response: Response
+    try {
+      response = await fetch(modelsUrl, {
+        redirect: 'manual',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/json',
+        },
+      })
+    } catch (err) {
+      throw new BadRequestException(formatPullModelsFetchError(err, modelsUrl.hostname))
+    }
     if (response.status >= 300 && response.status < 400) {
       throw new BadRequestException('redirects are not allowed when pulling models')
     }
     if (!response.ok) {
-      throw new BadRequestException(`failed to pull models (${response.status})`)
+      const snippet = (await response.text()).replace(/\s+/g, ' ').slice(0, 240)
+      throw new BadRequestException(
+        `failed to pull models from ${modelsUrl.hostname} (HTTP ${response.status})${snippet ? `: ${snippet}` : ''}`,
+      )
     }
 
     const body = (await response.json()) as { data?: Array<{ id?: string }> }
@@ -388,7 +418,8 @@ export class ProviderService {
       try {
         results.push(await this.pullModels(userId, channel.id))
       } catch {
-        results.push(this.toPublicChannel(channel, { readOnly: false }))
+        const fresh = await this.prisma.providerChannel.findUnique({ where: { id: channel.id } })
+        results.push(this.toPublicChannel(fresh ?? channel, { readOnly: false }))
       }
     }
     return results
