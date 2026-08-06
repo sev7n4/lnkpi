@@ -35,6 +35,9 @@ export type { VisionTextOptions } from './refs/vision-text'
 export {
   buildAudioRequest,
   buildImageProviderOptions,
+  buildEffectiveImagePrompt,
+  providerReferenceImages,
+  stripRefImagePromptTags,
   buildVideoProviderOptions,
 } from './studio/generation-adapter'
 export type { AdapterMeta, BuiltAudioRequest } from './studio/generation-adapter'

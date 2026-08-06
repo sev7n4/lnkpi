@@ -66,4 +66,61 @@ describe('OpenAIImageProvider', () => {
       size: '512x512',
     })
   })
+
+  it('sends extra_body.image for agnes-image single-ref img2img', async () => {
+    const provider = new OpenAIImageProvider(
+      'test-key',
+      'https://apihub.agnes-ai.com/v1',
+      'agnes-image-2.0-flash',
+    )
+    await provider.generate('white background product photo', {
+      modelId: 'agnes-image-2.0-flash',
+      size: '1024x768',
+      n: 1,
+      referenceImages: ['https://cdn.example/ref.jpg'],
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toEqual({
+      model: 'agnes-image-2.0-flash',
+      prompt: 'white background product photo',
+      n: 1,
+      size: '1024x768',
+      extra_body: {
+        image: ['https://cdn.example/ref.jpg'],
+        response_format: 'url',
+      },
+    })
+  })
+
+  it('sends all reference images in extra_body.image for agnes multi-ref', async () => {
+    const provider = new OpenAIImageProvider(
+      'test-key',
+      'https://apihub.agnes-ai.com/v1',
+      'agnes-image-2.0-flash',
+    )
+    await provider.generate('combine these into one scene', {
+      modelId: 'agnes-image-2.0-flash',
+      size: '1024x768',
+      n: 1,
+      referenceImages: [
+        'https://cdn.example/a.png',
+        'https://cdn.example/b.png',
+        'https://cdn.example/c.png',
+      ],
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      extra_body: {
+        image: [
+          'https://cdn.example/a.png',
+          'https://cdn.example/b.png',
+          'https://cdn.example/c.png',
+        ],
+        response_format: 'url',
+      },
+    })
+  })
 })

@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import {
   buildAudioRequest,
+  buildEffectiveImagePrompt,
   buildImageProviderOptions,
   buildVideoProviderOptions,
   createAudioProvider,
@@ -10,6 +11,8 @@ import {
   generatePromptFromUserInput,
   generateTextWithImages,
   mergeRefsToPrompt,
+  providerReferenceImages,
+  stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
 import {
@@ -70,13 +73,6 @@ function extractReferenceImages(refs?: StudioRefInput[]): string[] {
   return (refs ?? [])
     .filter((r) => r.mediaType === 'image' && r.url?.trim())
     .map((r) => r.url!.trim())
-}
-
-function buildPromptWithRefImage(prompt: string, refImageUrl: string): string {
-  const trimmed = prompt.trim()
-  const ref = refImageUrl.trim()
-  if (!ref) return trimmed
-  return `${trimmed} [ref-image:${ref}]`
 }
 
 function userProviderOpts(resolved: ResolvedGenerationProvider) {
@@ -643,9 +639,8 @@ export class StudioService {
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
     const storeModel =
       resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
-    const primaryRef = built.referenceImages[0]
-    const basePrompt = primaryRef ? buildPromptWithRefImage(mergedText, primaryRef) : mergedText
-    const effectivePrompt = [basePrompt, built.effectivePromptSuffix].filter(Boolean).join('\n')
+    const effectivePrompt = buildEffectiveImagePrompt(mergedText, built)
+    const nativeReferenceImages = providerReferenceImages(built)
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
@@ -680,7 +675,7 @@ export class StudioService {
       cost,
       chargeReason,
       effectivePrompt,
-      { modelId, size: built.size, n: built.n },
+      { modelId, size: built.size, n: built.n, referenceImages: nativeReferenceImages },
       resolved,
     ).catch((err) => {
       console.error('Image generation failed:', err)
@@ -705,7 +700,7 @@ export class StudioService {
     cost: number,
     chargeReason: string,
     prompt: string,
-    options: { modelId?: string; size?: string; n?: number },
+    options: { modelId?: string; size?: string; n?: number; referenceImages?: string[] },
     resolved: ResolvedGenerationProvider,
   ) {
     try {
@@ -718,6 +713,7 @@ export class StudioService {
           size: options.size,
           n: options.n,
           modelId: options.modelId,
+          referenceImages: options.referenceImages,
         },
       )
       const imageUrls = urls?.length ? urls : [url]
@@ -1132,10 +1128,18 @@ export class StudioService {
         const size = String(meta.size ?? '1024x1024')
         const n = Number(meta.count ?? 1) || 1
         const modelId = this.platformGatewayModelId('image', meta)
-        const { url, urls } = await createImageProvider(undefined).generate(record.prompt, {
+        const refs = Array.isArray(meta.referenceImages)
+          ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
+          : []
+        const useNativeRefs =
+          refs.length > 0 &&
+          (meta.refImageMode === 'native' || /^agnes-image-/i.test(modelId))
+        const prompt = useNativeRefs ? stripRefImagePromptTags(record.prompt) : record.prompt
+        const { url, urls } = await createImageProvider(undefined).generate(prompt, {
           size,
           n,
           modelId,
+          referenceImages: useNativeRefs ? refs : undefined,
         })
         const imageUrls = urls?.length ? urls : [url]
         if (cancel?.isCancelled()) {

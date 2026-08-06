@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import * as shared from '@lnkpi/shared'
-import { buildAudioRequest, buildVideoProviderOptions, buildImageProviderOptions } from './generation-adapter'
+import { buildAudioRequest, buildVideoProviderOptions, buildImageProviderOptions, buildEffectiveImagePrompt } from './generation-adapter'
 
 describe('buildAudioRequest', () => {
   it('maps native speed/volume/pitch for minimax and prefixes language when needed', () => {
@@ -100,6 +100,46 @@ describe('buildImageProviderOptions', () => {
     expect(r.meta.refImageMode).toBe('none')
     expect(r.meta.referenceImageCount).toBe(0)
     expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('uses native ref mode for a single agnes-image reference', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'agnes-image-2.1-flash',
+      size: '1024x768',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png'],
+    })
+    expect(r.referenceImages).toEqual(['https://cdn.example/a.png'])
+    expect(r.meta.refImageMode).toBe('native')
+    expect(r.meta.nativeParams).toMatchObject({
+      image: ['https://cdn.example/a.png'],
+    })
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('uses native ref mode for agnes-image models with all reference URLs', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'agnes-image-2.0-flash',
+      size: '1024x768',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png', 'https://cdn.example/b.png'],
+    })
+    expect(r.referenceImages).toEqual([
+      'https://cdn.example/a.png',
+      'https://cdn.example/b.png',
+    ])
+    expect(r.meta.refImageMode).toBe('native')
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('buildEffectiveImagePrompt omits ref-image tags for native mode', () => {
+    const built = buildImageProviderOptions({
+      modelKey: 'agnes-image-2.1-flash',
+      size: '1024x768',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png'],
+    })
+    expect(buildEffectiveImagePrompt('draw a cat', built)).toBe('draw a cat')
   })
 
   it('uses primary_image for a single reference', () => {
