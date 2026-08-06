@@ -101,11 +101,12 @@ function extractReferenceImages(refs?: GenerationRefPayload[]): string[] {
     .map((r) => r.url!.trim())
 }
 
-function userProviderOpts(resolved: ResolvedGenerationProvider) {
-  if (resolved.source !== 'user') return undefined
+function providerOpts(resolved: ResolvedGenerationProvider) {
+  const { apiKey, baseUrl } = resolved.credentials
+  if (resolved.source === 'user' && !apiKey) return undefined
   return {
-    apiKey: resolved.credentials.apiKey,
-    baseUrl: resolved.credentials.baseUrl || undefined,
+    apiKey,
+    baseUrl: baseUrl || undefined,
   }
 }
 
@@ -819,7 +820,7 @@ export class MaterialService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const provider = createImageProvider(userProviderOpts(resolved))
+      const provider = createImageProvider(providerOpts(resolved))
       const { url } = await provider.generate(effectivePrompt, providerOptions)
       const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existing || existing.status !== 'generating') return
@@ -958,7 +959,7 @@ export class MaterialService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createVideoProvider(userProviderOpts(resolved)).generate(
+      const { url } = await createVideoProvider(providerOpts(resolved)).generate(
         effectivePrompt,
         {
           model: gatewayModel,
