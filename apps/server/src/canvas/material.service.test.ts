@@ -2,7 +2,6 @@ import 'reflect-metadata'
 import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import { resolveImageSize } from '@lnkpi/shared'
 import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@lnkpi/agent'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
@@ -93,9 +92,16 @@ describe('MaterialService image', () => {
     await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
     expect(consume).toHaveBeenCalledWith('u1', 10, '图像生成')
     expect(imageGenerate).toHaveBeenCalledWith('a cat', {
-      modelId: 'seedream-5.0-pro',
-      size: resolveImageSize('16:9', '1K'),
+      modelId: 'doubao-seedream-5-0-pro',
+      size: '16:9',
+      resolution: '1K',
       n: 1,
+      refWire: 'none',
+      responseMode: 'async_task',
+      pollIntervalMs: 8000,
+      maxPollMs: 300000,
+      referenceImages: undefined,
+      quality: undefined,
     })
   })
 
@@ -151,8 +157,16 @@ describe('MaterialService image', () => {
     await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
     expect(mergeRefsToPrompt).toHaveBeenCalled()
     const [prompt, opts] = imageGenerate.mock.calls[0]
-    expect(String(prompt)).toContain('[ref-image:https://example.com/a.png]')
-    expect(opts).toMatchObject({ n: 1, modelId: 'seedream-5.0-pro' })
+    expect(String(prompt)).toContain('local')
+    expect(String(prompt)).toContain('【参考图一致性】')
+    expect(String(prompt)).not.toContain('[ref-image:')
+    expect(opts).toMatchObject({
+      n: 1,
+      modelId: 'doubao-seedream-5-0-pro',
+      refWire: 'apimart_image_urls',
+      responseMode: 'async_task',
+      referenceImages: ['https://example.com/a.png'],
+    })
   })
 })
 

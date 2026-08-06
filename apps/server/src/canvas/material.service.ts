@@ -7,12 +7,13 @@ import {
 } from '@nestjs/common'
 import {
   buildEffectiveImagePrompt,
+  buildImageProviderGenerateOptions,
   buildImageProviderOptions,
   buildVideoProviderOptions,
   createImageProvider,
   createVideoProvider,
+  imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
-  providerReferenceImages,
   stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -25,6 +26,7 @@ import {
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
+  type ImageRefWire,
   type ImageResolutionTier,
 } from '@lnkpi/shared'
 import {
@@ -459,6 +461,12 @@ export class MaterialService {
 
       if (material.type === 'image') {
         const size = String(meta.size ?? resolveImageSize('16:9', '1K'))
+        const resolution =
+          typeof meta.nativeParams === 'object' &&
+          meta.nativeParams &&
+          typeof (meta.nativeParams as Record<string, unknown>).resolution === 'string'
+            ? ((meta.nativeParams as Record<string, unknown>).resolution as string)
+            : undefined
         const modelKey =
           typeof meta.modelKey === 'string' && meta.modelKey.trim()
             ? meta.modelKey
@@ -467,17 +475,33 @@ export class MaterialService {
         const refs = Array.isArray(meta.referenceImages)
           ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
           : []
-        const useNativeRefs =
-          refs.length > 0 &&
-          (meta.refImageMode === 'native' || /^agnes-image-/i.test(modelId))
+        const useNativeRefs = refs.length > 0 && meta.refImageMode === 'native'
         const fallbackPrompt = useNativeRefs
           ? stripRefImagePromptTags(String(meta.effectivePrompt ?? material.prompt ?? ''))
           : String(meta.effectivePrompt ?? material.prompt ?? '')
         const { url } = await createImageProvider(undefined).generate(fallbackPrompt, {
           modelId,
           size,
+          resolution,
           n: 1,
           referenceImages: useNativeRefs ? refs : undefined,
+          refWire:
+            meta.refWire === 'agnes_extra_body' ||
+            meta.refWire === 'apimart_image_urls' ||
+            meta.refWire === 'legacy_prompt_tags' ||
+            meta.refWire === 'none'
+              ? (meta.refWire as ImageRefWire)
+              : undefined,
+          responseMode:
+            meta.responseMode === 'async_task' || meta.responseMode === 'sync_url'
+              ? meta.responseMode
+              : undefined,
+          quality:
+            typeof meta.nativeParams === 'object' &&
+            meta.nativeParams &&
+            typeof (meta.nativeParams as Record<string, unknown>).quality === 'string'
+              ? ((meta.nativeParams as Record<string, unknown>).quality as string)
+              : undefined,
         })
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
@@ -725,6 +749,8 @@ export class MaterialService {
       localPrompt: localPrompt.trim() || undefined,
       downstreamType,
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
+      imageRefs:
+        downstreamType === 'image' ? imageRefDescriptorsFromRefs(refs) : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
       model: mergeChatModel(downstreamType, model),
@@ -766,31 +792,32 @@ export class MaterialService {
         referenceImages: referenceImages.length,
       }),
     )
-    const size = resolveImageSize(
+    const pixelSize = resolveImageSize(
       aspectRatio ?? '16:9',
       (resolution ?? '1K') as ImageResolutionTier,
     )
     const built = buildImageProviderOptions({
       modelKey: resolved.modelName,
-      size,
+      aspectRatio: aspectRatio ?? '16:9',
+      resolution: (resolution ?? '1K') as ImageResolutionTier,
+      pixelSize,
       n: 1,
       referenceImages,
     })
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
-    const effectivePrompt = buildEffectiveImagePrompt(mergedText, built)
-    const nativeReferenceImages = providerReferenceImages(built)
+    const effectivePrompt = buildEffectiveImagePrompt(
+      mergedText,
+      built,
+      imageRefDescriptorsFromRefs(refs),
+    )
+    const providerOptions = buildImageProviderGenerateOptions(built)
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
       const provider = createImageProvider(userProviderOpts(resolved))
-      const { url } = await provider.generate(effectivePrompt, {
-        modelId,
-        size: built.size,
-        n: built.n,
-        referenceImages: nativeReferenceImages,
-      })
+      const { url } = await provider.generate(effectivePrompt, providerOptions)
       const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existing || existing.status !== 'generating') return
       const prev = parseMeta(existing.metadata)
@@ -811,10 +838,13 @@ export class MaterialService {
                 aspectRatio,
                 resolution,
                 size: built.size,
+                pixelSize,
                 referenceImages,
                 skippedMerge,
                 channelId: resolved.channelId,
                 effectivePrompt,
+                responseMode: built.meta.responseMode,
+                refWire: built.meta.refWire,
               },
               skipCharge ? 0 : cost,
             ),

@@ -78,6 +78,7 @@ describe('OpenAIImageProvider', () => {
       size: '1024x768',
       n: 1,
       referenceImages: ['https://cdn.example/ref.jpg'],
+      refWire: 'agnes_extra_body',
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
@@ -94,6 +95,53 @@ describe('OpenAIImageProvider', () => {
     })
   })
 
+  it('sends image_urls for apimart seedream img2img', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          data: [{ status: 'submitted', task_id: 'task_abc' }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            status: 'completed',
+            result: { images: [{ url: ['https://cdn.example/out.png'] }] },
+          },
+        }),
+      })
+
+    const provider = new OpenAIImageProvider(
+      'test-key',
+      'https://api.apimart.ai/v1',
+      'doubao-seedream-5-0-pro',
+    )
+    const result = await provider.generate('product on white background', {
+      modelId: 'doubao-seedream-5-0-pro',
+      size: '16:9',
+      resolution: '2K',
+      n: 1,
+      referenceImages: ['https://cdn.example/ref.jpg'],
+      refWire: 'apimart_image_urls',
+      responseMode: 'async_task',
+      pollIntervalMs: 1,
+      maxPollMs: 1000,
+    })
+
+    expect(result.url).toBe('https://cdn.example/out.png')
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({
+      model: 'doubao-seedream-5-0-pro',
+      size: '16:9',
+      resolution: '2K',
+      image_urls: ['https://cdn.example/ref.jpg'],
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('sends all reference images in extra_body.image for agnes multi-ref', async () => {
     const provider = new OpenAIImageProvider(
       'test-key',
@@ -104,6 +152,7 @@ describe('OpenAIImageProvider', () => {
       modelId: 'agnes-image-2.0-flash',
       size: '1024x768',
       n: 1,
+      refWire: 'agnes_extra_body',
       referenceImages: [
         'https://cdn.example/a.png',
         'https://cdn.example/b.png',

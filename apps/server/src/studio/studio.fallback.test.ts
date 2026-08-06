@@ -365,8 +365,10 @@ describe('StudioService BYOK fallback_pending', () => {
     resolveForGeneration.mockResolvedValue(platformResolved)
     imageGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
     const record = await svc.generateImage('u1', 'a cat', undefined)
-    expect(record.status).toBe('failed')
-    const meta = JSON.parse(String(record.metadata))
+    expect(record.status).toBe('generating')
+
+    await vi.waitFor(() => expect(stored.status).toBe('failed'))
+    const meta = JSON.parse(String(stored.metadata))
     expect(meta.refundedPoints).toBe(10)
     expect(meta.refundReason).toBe('platform_failed')
     expect(meta.errorCode).toBeTruthy()
