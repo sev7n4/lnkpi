@@ -146,8 +146,14 @@ export function buildAudioRequest(input: {
   }
 }
 
-function usesNativeImageRefs(modelKey: string, entry: StudioModelEntry): boolean {
-  return [modelKey, entry.modelKey, entry.gatewayModelId].some((k) => /^agnes-image-/i.test(k))
+function usesNativeImageRefs(
+  requestedModelKey: string | undefined,
+  resolvedKey: string,
+  catalogFallback: boolean,
+): boolean {
+  if (requestedModelKey && /^agnes-image-/i.test(requestedModelKey)) return true
+  if (!catalogFallback && /^agnes-image-/i.test(resolvedKey)) return true
+  return false
 }
 
 function appendRefImageTag(prompt: string, refImageUrl: string): string {
@@ -219,7 +225,7 @@ export function buildImageProviderOptions(input: {
   let refImageMode: AdapterMeta['refImageMode'] = 'none'
   const nativeParams: Record<string, unknown> = { model: entry.gatewayModelId, size, n }
 
-  if (refCount > 0 && usesNativeImageRefs(modelKey ?? resolvedKey, entry)) {
+  if (refCount > 0 && usesNativeImageRefs(modelKey, resolvedKey, fallback)) {
     result.referenceImages = [...referenceImages]
     refImageMode = 'native'
     nativeParams.image = [...referenceImages]
