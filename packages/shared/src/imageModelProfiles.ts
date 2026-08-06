@@ -76,6 +76,15 @@ function isGptImage2Model(modelKey: string, gatewayModelId: string): boolean {
   )
 }
 
+/** Catalog keys and upstream gateway ids that must hit APIMart (not Agnes). */
+export function isApimartBackedImageModel(
+  modelKey: string,
+  gatewayModelId?: string,
+): boolean {
+  const gw = gatewayModelId ?? modelKey
+  return isSeedreamModel(modelKey, gw) || isGptImage2Model(modelKey, gw)
+}
+
 /** Resolve upstream gateway model id for APIMart-backed catalog entries. */
 export function resolveImageGatewayModelId(modelKey: string, gatewayModelId: string): string {
   if (isSeedreamModel(modelKey, gatewayModelId)) return SEEDREAM_GATEWAY

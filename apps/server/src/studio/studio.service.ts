@@ -22,6 +22,7 @@ import {
   redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
+  resolvePlatformImageProviderOpts,
   type ErrorCode,
   type GenerationDiagnostic,
   type ImageRefWire,
@@ -1148,7 +1149,13 @@ export class StudioService {
           : []
         const useNativeRefs = refs.length > 0 && meta.refImageMode === 'native'
         const prompt = useNativeRefs ? stripRefImagePromptTags(record.prompt) : record.prompt
-        const { url, urls } = await createImageProvider(undefined).generate(prompt, {
+        const modelKey =
+          typeof meta.modelKey === 'string' && meta.modelKey.trim()
+            ? meta.modelKey
+            : undefined
+        const { url, urls } = await createImageProvider(
+          resolvePlatformImageProviderOpts(modelKey ?? modelId),
+        ).generate(prompt, {
           size,
           resolution: typeof resolution === 'string' ? resolution : undefined,
           n,
