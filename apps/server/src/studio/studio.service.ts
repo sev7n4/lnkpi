@@ -2,6 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import {
   buildAudioRequest,
   buildEffectiveImagePrompt,
+  buildImageProviderGenerateOptions,
   buildImageProviderOptions,
   buildVideoProviderOptions,
   createAudioProvider,
@@ -10,8 +11,8 @@ import {
   createVideoProvider,
   generatePromptFromUserInput,
   generateTextWithImages,
+  imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
-  providerReferenceImages,
   stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -23,6 +24,7 @@ import {
   resolveModelKey,
   type ErrorCode,
   type GenerationDiagnostic,
+  type ImageRefWire,
   type ImageResolutionTier,
   type StudioModality,
 } from '@lnkpi/shared'
@@ -68,7 +70,7 @@ function extractTextSources(refs?: StudioRefInput[]): MergeTextSource[] {
     }))
 }
 
-// Provider image/video APIs currently use only referenceImages[0] (I1); full list is kept in metadata.
+// Full referenceImages[] is kept in metadata; agnes-image-* uses native extra_body.image for all refs.
 function extractReferenceImages(refs?: StudioRefInput[]): string[] {
   return (refs ?? [])
     .filter((r) => r.mediaType === 'image' && r.url?.trim())
@@ -232,6 +234,8 @@ export class StudioService {
       localPrompt: localPrompt.trim() || undefined,
       downstreamType,
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
+      imageRefs:
+        downstreamType === 'image' ? imageRefDescriptorsFromRefs(refs) : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
       model: mergeChatModel(downstreamType, model),
@@ -629,18 +633,24 @@ export class StudioService {
       resolved.source === 'user' ? resolved.credentials : undefined,
       resolved.modelName,
     )
-    const size = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
+    const pixelSize = resolveImageSize(aspectRatio, resolution as ImageResolutionTier)
     const built = buildImageProviderOptions({
       modelKey: resolved.modelName,
-      size,
+      aspectRatio,
+      resolution: resolution as ImageResolutionTier,
+      pixelSize,
       n,
       referenceImages,
     })
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
     const storeModel =
       resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
-    const effectivePrompt = buildEffectiveImagePrompt(mergedText, built)
-    const nativeReferenceImages = providerReferenceImages(built)
+    const effectivePrompt = buildEffectiveImagePrompt(
+      mergedText,
+      built,
+      imageRefDescriptorsFromRefs(refs),
+    )
+    const providerOptions = buildImageProviderGenerateOptions(built)
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
@@ -657,11 +667,14 @@ export class StudioService {
               resolution,
               count: n,
               size: built.size,
+              pixelSize,
               referenceImages,
               skippedMerge,
               channelId: resolved.channelId,
               originalModel: model,
               providerSource: resolved.source,
+              responseMode: built.meta.responseMode,
+              refWire: built.meta.refWire,
             },
             cost,
           ),
@@ -675,7 +688,7 @@ export class StudioService {
       cost,
       chargeReason,
       effectivePrompt,
-      { modelId, size: built.size, n: built.n, referenceImages: nativeReferenceImages },
+      providerOptions,
       resolved,
     ).catch((err) => {
       console.error('Image generation failed:', err)
@@ -683,6 +696,10 @@ export class StudioService {
     })
     // Fast path: quick providers finish within the grace window, so the client
     // gets the terminal record directly instead of one extra polling round-trip.
+    if (built.meta.responseMode === 'async_task') {
+      void completion
+      return record
+    }
     let graceTimer: ReturnType<typeof setTimeout> | undefined
     const fast = await Promise.race([
       completion,
@@ -700,7 +717,7 @@ export class StudioService {
     cost: number,
     chargeReason: string,
     prompt: string,
-    options: { modelId?: string; size?: string; n?: number; referenceImages?: string[] },
+    options: import('@lnkpi/agent').ImageProviderGenerateOptions,
     resolved: ResolvedGenerationProvider,
   ) {
     try {
@@ -709,12 +726,7 @@ export class StudioService {
       }
       const { url, urls } = await createImageProvider(userProviderOpts(resolved)).generate(
         prompt,
-        {
-          size: options.size,
-          n: options.n,
-          modelId: options.modelId,
-          referenceImages: options.referenceImages,
-        },
+        options,
       )
       const imageUrls = urls?.length ? urls : [url]
       const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
@@ -1126,20 +1138,39 @@ export class StudioService {
     try {
       if (record.type === 'image') {
         const size = String(meta.size ?? '1024x1024')
+        const resolution = typeof meta.nativeParams === 'object' && meta.nativeParams
+          ? (meta.nativeParams as Record<string, unknown>).resolution
+          : undefined
         const n = Number(meta.count ?? 1) || 1
         const modelId = this.platformGatewayModelId('image', meta)
         const refs = Array.isArray(meta.referenceImages)
           ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
           : []
-        const useNativeRefs =
-          refs.length > 0 &&
-          (meta.refImageMode === 'native' || /^agnes-image-/i.test(modelId))
+        const useNativeRefs = refs.length > 0 && meta.refImageMode === 'native'
         const prompt = useNativeRefs ? stripRefImagePromptTags(record.prompt) : record.prompt
         const { url, urls } = await createImageProvider(undefined).generate(prompt, {
           size,
+          resolution: typeof resolution === 'string' ? resolution : undefined,
           n,
           modelId,
           referenceImages: useNativeRefs ? refs : undefined,
+          refWire:
+            meta.refWire === 'agnes_extra_body' ||
+            meta.refWire === 'apimart_image_urls' ||
+            meta.refWire === 'legacy_prompt_tags' ||
+            meta.refWire === 'none'
+              ? (meta.refWire as ImageRefWire)
+              : undefined,
+          responseMode:
+            meta.responseMode === 'async_task' || meta.responseMode === 'sync_url'
+              ? meta.responseMode
+              : undefined,
+          quality:
+            typeof meta.nativeParams === 'object' &&
+            meta.nativeParams &&
+            typeof (meta.nativeParams as Record<string, unknown>).quality === 'string'
+              ? ((meta.nativeParams as Record<string, unknown>).quality as string)
+              : undefined,
         })
         const imageUrls = urls?.length ? urls : [url]
         if (cancel?.isCancelled()) {

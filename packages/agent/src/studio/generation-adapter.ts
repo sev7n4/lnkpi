@@ -1,4 +1,17 @@
-import { resolveModelKey, type StudioModelEntry } from '@lnkpi/shared'
+import {
+  clampImageGenerationInput,
+  formatImageResolutionForProvider,
+  resolveImageGatewayModelId,
+  resolveImageModelProfile,
+  usesNativeImageRefs,
+  SUPPORTED_ASPECT_RATIOS,
+  type ImageRefWire,
+  type ImageResolutionTier,
+  type ImageResponseMode,
+  resolveModelKey,
+  resolveImageSize,
+  type StudioModelEntry,
+} from '@lnkpi/shared'
 
 export interface AdapterMeta {
   modelKey: string
@@ -8,6 +21,8 @@ export interface AdapterMeta {
   droppedFields: Array<{ field: string; reason: string }>
   refImageMode?: 'native' | 'primary_image' | 'prompt_url_tags' | 'none'
   referenceImageCount?: number
+  responseMode?: ImageResponseMode
+  refWire?: ImageRefWire
   modelFallback?: boolean
 }
 
@@ -146,14 +161,9 @@ export function buildAudioRequest(input: {
   }
 }
 
-function usesNativeImageRefs(
-  requestedModelKey: string | undefined,
-  resolvedKey: string,
-  catalogFallback: boolean,
-): boolean {
-  if (requestedModelKey && /^agnes-image-/i.test(requestedModelKey)) return true
-  if (!catalogFallback && /^agnes-image-/i.test(resolvedKey)) return true
-  return false
+function normalizeAspectRatio(aspectRatio?: string): string {
+  const ratio = aspectRatio?.trim() || '16:9'
+  return SUPPORTED_ASPECT_RATIOS.has(ratio) ? ratio : '16:9'
 }
 
 function appendRefImageTag(prompt: string, refImageUrl: string): string {
@@ -168,19 +178,80 @@ export function stripRefImagePromptTags(prompt: string): string {
   return prompt.replace(/\s*\[ref-image:[^\]]+\]/g, '').trim()
 }
 
+export interface ImageRefDescriptor {
+  refKey: string
+  label: string
+}
+
+export function imageRefDescriptorsFromRefs(
+  refs: Array<{ refKey: string; label?: string; mediaType: string; url?: string }> | undefined,
+): ImageRefDescriptor[] {
+  return (refs ?? [])
+    .filter((r) => r.mediaType === 'image' && r.url?.trim())
+    .map((r) => ({ refKey: r.refKey, label: r.label?.trim() || r.refKey }))
+}
+
+const ORDINAL_ZH = ['第一张', '第二张', '第三张', '第四张', '第五张', '第六张']
+
+function formatImageRefName(ref: ImageRefDescriptor): string {
+  return ref.label !== ref.refKey ? `${ref.refKey}（${ref.label}）` : ref.refKey
+}
+
+/** Deterministic preserve/consistency instructions appended when image refs are present. */
+export function buildImageRefConsistencyBlock(imageRefs: ImageRefDescriptor[]): string {
+  if (imageRefs.length === 0) return ''
+
+  if (imageRefs.length === 1) {
+    const name = formatImageRefName(imageRefs[0])
+    return (
+      `【参考图一致性】以参考图 ${name} 为主参考，严格保留其主体形态、关键细节与构图布局；` +
+      '仅按上方提示词要求调整背景、风格或局部元素，不要改变主体品类、识别特征与核心结构。'
+    )
+  }
+
+  const roleLines = imageRefs
+    .map((ref, i) => {
+      const ord = ORDINAL_ZH[i] ?? `第${i + 1}张`
+      const name = formatImageRefName(ref)
+      if (i === 0) {
+        return `- ${ord}参考图 ${name}：主参考，严格保留主体形态、关键细节与构图`
+      }
+      return `- ${ord}参考图 ${name}：辅助参考，按提示词融合其风格/元素，但不覆盖主参考的主体识别`
+    })
+    .join('\n')
+
+  return (
+    `【参考图一致性】\n${roleLines}\n` +
+    '生成结果须与各参考图在主体身份、关键特征上保持一致；仅允许按提示词调整背景、风格或局部元素。'
+  )
+}
+
 export function buildEffectiveImagePrompt(
   mergedText: string,
   built: Pick<
     ReturnType<typeof buildImageProviderOptions>,
     'referenceImages' | 'effectivePromptSuffix' | 'meta'
   >,
+  imageRefs?: ImageRefDescriptor[],
 ): string {
+  let base: string
   if (built.meta.refImageMode === 'native' && built.referenceImages.length > 0) {
-    return mergedText.trim()
+    base = mergedText.trim()
+  } else {
+    const primaryRef = built.referenceImages[0]
+    base = primaryRef ? appendRefImageTag(mergedText, primaryRef) : mergedText.trim()
+    base = [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
   }
-  const primaryRef = built.referenceImages[0]
-  const base = primaryRef ? appendRefImageTag(mergedText, primaryRef) : mergedText.trim()
-  return [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
+
+  const refs =
+    imageRefs ??
+    built.referenceImages.map((_, i) => ({
+      refKey: `I${i + 1}`,
+      label: `I${i + 1}`,
+    }))
+  const consistency = buildImageRefConsistencyBlock(refs)
+  if (!consistency) return base
+  return `${base}\n\n${consistency}`
 }
 
 export function providerReferenceImages(
@@ -192,9 +263,54 @@ export function providerReferenceImages(
   return undefined
 }
 
+export interface ImageProviderGenerateOptions {
+  modelId?: string
+  size?: string
+  resolution?: string
+  n?: number
+  quality?: string
+  referenceImages?: string[]
+  refWire?: ImageRefWire
+  responseMode?: ImageResponseMode
+  pollIntervalMs?: number
+  maxPollMs?: number
+}
+
+export function buildImageProviderGenerateOptions(
+  built: ReturnType<typeof buildImageProviderOptions>,
+): ImageProviderGenerateOptions {
+  const profileResolution =
+    typeof built.meta.nativeParams.resolution === 'string'
+      ? built.meta.nativeParams.resolution
+      : undefined
+  return {
+    modelId: built.modelId,
+    size: built.size,
+    resolution: profileResolution,
+    n: built.n,
+    quality:
+      typeof built.meta.nativeParams.quality === 'string'
+        ? built.meta.nativeParams.quality
+        : undefined,
+    referenceImages: providerReferenceImages(built),
+    refWire: built.meta.refWire,
+    responseMode: built.meta.responseMode,
+    pollIntervalMs:
+      typeof built.meta.nativeParams.pollIntervalMs === 'number'
+        ? built.meta.nativeParams.pollIntervalMs
+        : undefined,
+    maxPollMs:
+      typeof built.meta.nativeParams.maxPollMs === 'number'
+        ? built.meta.nativeParams.maxPollMs
+        : undefined,
+  }
+}
+
 export function buildImageProviderOptions(input: {
   modelKey?: string
-  size: string
+  aspectRatio?: string
+  resolution?: ImageResolutionTier
+  pixelSize?: string
   n: number
   referenceImages: string[]
 }): {
@@ -205,10 +321,24 @@ export function buildImageProviderOptions(input: {
   effectivePromptSuffix?: string
   meta: AdapterMeta
 } {
-  const { modelKey, size, n, referenceImages } = input
+  const {
+    modelKey,
+    aspectRatio = '16:9',
+    resolution = '1K',
+    pixelSize,
+    n,
+    referenceImages,
+  } = input
   const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('image', modelKey)
+  const profile = resolveImageModelProfile(resolvedKey, entry.gatewayModelId)
+  const gatewayModelId = resolveImageGatewayModelId(resolvedKey, entry.gatewayModelId)
+  const clamped = clampImageGenerationInput(profile, {
+    n,
+    resolution,
+    referenceImages,
+  })
 
-  const refCount = referenceImages.length
+  const refCount = clamped.referenceImages.length
   const result: {
     modelId: string
     size: string
@@ -216,25 +346,48 @@ export function buildImageProviderOptions(input: {
     referenceImages: string[]
     effectivePromptSuffix?: string
   } = {
-    modelId: entry.gatewayModelId,
-    size,
-    n,
+    modelId: gatewayModelId,
+    size: pixelSize ?? resolveImageSize(aspectRatio, resolution),
+    n: clamped.n,
     referenceImages: [],
   }
 
   let refImageMode: AdapterMeta['refImageMode'] = 'none'
-  const nativeParams: Record<string, unknown> = { model: entry.gatewayModelId, size, n }
+  const nativeParams: Record<string, unknown> = {
+    model: gatewayModelId,
+    n: clamped.n,
+    pollIntervalMs: profile.pollIntervalMs,
+    maxPollMs: profile.maxPollMs,
+  }
+  const droppedFields: AdapterMeta['droppedFields'] = [...clamped.droppedFields]
 
-  if (refCount > 0 && usesNativeImageRefs(modelKey, resolvedKey, fallback)) {
-    result.referenceImages = [...referenceImages]
+  if (profile.sizeWire === 'ratio_resolution') {
+    result.size = normalizeAspectRatio(aspectRatio)
+    nativeParams.size = result.size
+    nativeParams.resolution = formatImageResolutionForProvider(profile, clamped.resolution)
+  } else {
+    result.size = pixelSize ?? resolveImageSize(aspectRatio, clamped.resolution)
+    nativeParams.size = result.size
+  }
+
+  if (profile.defaultQuality) {
+    nativeParams.quality = profile.defaultQuality
+  }
+
+  if (refCount > 0 && usesNativeImageRefs(profile)) {
+    result.referenceImages = [...clamped.referenceImages]
     refImageMode = 'native'
-    nativeParams.image = [...referenceImages]
+    if (profile.refWire === 'agnes_extra_body') {
+      nativeParams.image = [...clamped.referenceImages]
+    } else if (profile.refWire === 'apimart_image_urls') {
+      nativeParams.image_urls = [...clamped.referenceImages]
+    }
   } else if (refCount === 1) {
-    result.referenceImages = [referenceImages[0]]
+    result.referenceImages = [clamped.referenceImages[0]]
     refImageMode = 'primary_image'
   } else if (refCount > 1) {
-    result.referenceImages = [referenceImages[0]]
-    result.effectivePromptSuffix = referenceImages
+    result.referenceImages = [clamped.referenceImages[0]]
+    result.effectivePromptSuffix = clamped.referenceImages
       .slice(1)
       .map((url) => `[ref-image:${url}]`)
       .join(' ')
@@ -245,11 +398,13 @@ export function buildImageProviderOptions(input: {
     ...result,
     meta: {
       modelKey: resolvedKey,
-      gatewayModelId: entry.gatewayModelId,
+      gatewayModelId,
       nativeParams,
-      droppedFields: [],
+      droppedFields,
       refImageMode: refImageMode ?? 'none',
       referenceImageCount: refCount,
+      responseMode: profile.responseMode,
+      refWire: refCount > 0 ? profile.refWire : 'none',
       ...(fallback ? { modelFallback: true } : {}),
     },
   }

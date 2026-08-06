@@ -114,10 +114,11 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   {
     modelKey: 'image2',
     displayName: 'Image2',
-    gatewayModelId: 'image2',
+    gatewayModelId: 'gpt-image-2-official',
     modality: 'image',
     providerBinding: 'gateway-openai-compat',
-    params: IMAGE_PARAMS,
+    params: { ...IMAGE_PARAMS, resolution: 'native', quality: 'native', refImages: 'native' },
+    defaults: { resolution: '2K', quality: 'high' },
   },
   {
     modelKey: 'navo-pro',
@@ -130,10 +131,17 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   {
     modelKey: 'seedream-5.0-pro',
     displayName: 'Seedream 5.0 Pro',
-    gatewayModelId: 'seedream-5.0-pro',
+    gatewayModelId: 'doubao-seedream-5-0-pro',
     modality: 'image',
     providerBinding: 'gateway-openai-compat',
-    params: { ...IMAGE_PARAMS, refImages: 'native' },
+    params: {
+      ...IMAGE_PARAMS,
+      resolution: 'native',
+      refImages: 'native',
+      n: 'metadataOnly',
+      quality: 'metadataOnly',
+    },
+    defaults: { resolution: '2K' },
   },
   {
     modelKey: 'midjourney-8.1',

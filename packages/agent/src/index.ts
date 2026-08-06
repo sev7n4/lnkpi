@@ -12,7 +12,7 @@ export {
 
 export { createVideoProvider, PlaceholderVideoProvider, AgnesVideoProvider, resolveVideoParams } from './tools/video-provider'
 export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, FallbackAudioProvider } from './tools/audio-provider'
-export type { ImageProvider, ProviderCredentialOpts } from './tools/image-provider'
+export type { ImageProvider, ProviderCredentialOpts, ImageGenerateOptions } from './tools/image-provider'
 export type { TextProvider, TextGenerateOptions, TextThinkingEffort } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'
@@ -35,9 +35,17 @@ export type { VisionTextOptions } from './refs/vision-text'
 export {
   buildAudioRequest,
   buildImageProviderOptions,
+  buildImageProviderGenerateOptions,
   buildEffectiveImagePrompt,
+  buildImageRefConsistencyBlock,
+  imageRefDescriptorsFromRefs,
   providerReferenceImages,
   stripRefImagePromptTags,
   buildVideoProviderOptions,
 } from './studio/generation-adapter'
-export type { AdapterMeta, BuiltAudioRequest } from './studio/generation-adapter'
+export type {
+  AdapterMeta,
+  BuiltAudioRequest,
+  ImageRefDescriptor,
+  ImageProviderGenerateOptions,
+} from './studio/generation-adapter'

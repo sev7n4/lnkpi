@@ -1,6 +1,5 @@
 import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveImageSize } from '@lnkpi/shared'
 import {
   createAudioProvider,
   createImageProvider,
@@ -56,9 +55,16 @@ describe('StudioService integration (provider params)', () => {
 
     expect(createImageProvider).toHaveBeenCalled()
     expect(imageGenerate).toHaveBeenCalledWith('a prompt', {
-      size: resolveImageSize('16:9', '1K'),
-      n: 2,
-      modelId: 'seedream-5.0-pro',
+      modelId: 'doubao-seedream-5-0-pro',
+      size: '16:9',
+      resolution: '1K',
+      n: 1,
+      refWire: 'none',
+      responseMode: 'async_task',
+      pollIntervalMs: 8000,
+      maxPollMs: 300000,
+      referenceImages: undefined,
+      quality: undefined,
     })
   })
 

@@ -142,7 +142,7 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.failureClass).toBeTruthy()
     expect(meta.confirmMessage).toBe(BYOK_FALLBACK_CONFIRM_MESSAGE)
     expect(meta.effectivePrompt).toContain('merged cat prompt')
-    expect(meta.effectivePrompt).toContain('https://cdn.example.com/ref.png')
+    expect(meta.effectivePrompt).toContain('【参考图一致性】')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/ref.png'])
     expect(meta.chargedPoints).toBe(10)
     expect(meta.refundedPoints).toBe(10)
