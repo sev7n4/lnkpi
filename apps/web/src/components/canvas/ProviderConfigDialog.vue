@@ -252,14 +252,15 @@ function setModelCapability(draft: ChannelDraft, name: string, capability: Model
 }
 
 function onModelNamesChange(draft: ChannelDraft, names: string[]) {
-  draft.modelNames = names
-  for (const name of names) {
+  const cleaned = names.map((name) => String(name).trim()).filter(Boolean)
+  draft.modelNames = cleaned
+  for (const name of cleaned) {
     if (!draft.modelMeta[name]) {
       draft.modelMeta[name] = inferModelCapability(name)
     }
   }
   for (const key of Object.keys(draft.modelMeta)) {
-    if (!names.includes(key)) delete draft.modelMeta[key]
+    if (!cleaned.includes(key)) delete draft.modelMeta[key]
   }
 }
 
@@ -287,6 +288,18 @@ async function persistChannel(draft: ChannelDraft) {
 
   const updated = await providerApi.updateChannel(draft.id, input)
   applyServerChannel(updated)
+  return updated
+}
+
+async function saveChannel(draft: ChannelDraft) {
+  if (draft.readOnly) return
+  try {
+    const updated = await persistChannel(draft)
+    if (!updated) return
+    ElMessage.success(`「${updated.name}」已保存（${updated.models.length} 个模型）`)
+  } catch (err) {
+    ElMessage.error(apiErrorMessage(err, '保存渠道失败'))
+  }
 }
 
 async function refreshChannelDrafts() {
@@ -340,6 +353,9 @@ async function pullChannelModels(draft: ChannelDraft) {
     ElMessage.success(`${updated.name} 模型列表已更新`)
   } catch (err) {
     ElMessage.error(apiErrorMessage(err, '拉取模型失败'))
+    if (!draft.readOnly) {
+      ElMessage.info('手动填写的模型已保存，可稍后在「模型」Tab 勾选使用')
+    }
   } finally {
     pullingId.value = ''
   }
@@ -559,6 +575,15 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                 </div>
                 <div class="flex shrink-0 gap-2">
                   <el-button
+                    v-if="!draft.readOnly"
+                    size="small"
+                    type="primary"
+                    plain
+                    @click="saveChannel(draft)"
+                  >
+                    保存
+                  </el-button>
+                  <el-button
                     size="small"
                     :loading="pullingId === draft.id"
                     @click="pullChannelModels(draft)"
@@ -623,7 +648,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                     allow-create
                     default-first-option
                     :disabled="draft.readOnly"
-                    placeholder="输入模型名，或点击拉取模型"
+                    placeholder="输入模型名后按 Enter 确认，或点击「保存」"
                     @update:model-value="onModelNamesChange(draft, $event)"
                   />
                   <div
@@ -650,7 +675,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                     </div>
                   </div>
                   <p class="mt-1.5 text-[10px] leading-4 text-[var(--neo-text-muted)]">
-                    能力标签决定模型优先出现在哪一类可选项；自定义渠道模型也可在任意类型中勾选。
+                    能力标签决定模型优先出现在哪一类可选项；自定义渠道模型也可在任意类型中勾选。填写后请点击「保存」或底部「完成」，再到「模型」Tab 勾选可选项。
                   </p>
                 </label>
               </div>

@@ -379,6 +379,22 @@ describe('ProviderService', () => {
     expect(byName['kling-v2']).toBe('video')
   })
 
+  it('pullModels maps fetch failures to BadRequestException with host hint', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'pull-timeout',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.apimart.ai/v1',
+      apiKey: 'sk-test',
+    })
+    const timeout = new TypeError('fetch failed')
+    ;(timeout as TypeError & { cause: Error }).cause = Object.assign(new Error('Connect Timeout'), {
+      code: 'UND_ERR_CONNECT_TIMEOUT',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(timeout))
+
+    await expect(svc.pullModels('u1', ch.id)).rejects.toThrow(/api\.apimart\.ai/)
+  })
+
   it('rejects intranet WebDAV URL on update and test', async () => {
     await expect(
       svc.updateWebdav('u1', { url: 'https://10.0.0.5/webdav' }),
