@@ -78,11 +78,12 @@ function extractReferenceImages(refs?: StudioRefInput[]): string[] {
     .map((r) => r.url!.trim())
 }
 
-function userProviderOpts(resolved: ResolvedGenerationProvider) {
-  if (resolved.source !== 'user') return undefined
+function providerOpts(resolved: ResolvedGenerationProvider) {
+  const { apiKey, baseUrl } = resolved.credentials
+  if (resolved.source === 'user' && !apiKey) return undefined
   return {
-    apiKey: resolved.credentials.apiKey,
-    baseUrl: resolved.credentials.baseUrl || undefined,
+    apiKey,
+    baseUrl: baseUrl || undefined,
   }
 }
 
@@ -358,7 +359,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const opts = userProviderOpts(resolved)
+      const opts = providerOpts(resolved)
       const { text } =
         referenceImages.length > 0
           ? await generateTextWithImages(mergedText, referenceImages, {
@@ -448,7 +449,7 @@ export class StudioService {
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
-    const opts = userProviderOpts(resolved)
+    const opts = providerOpts(resolved)
     const baseMeta = {
       modelKey: resolvedKey,
       gatewayModelId,
@@ -541,7 +542,7 @@ export class StudioService {
     const { modelKey: resolvedKey, entry } = resolveModelKey('text', resolved.modelName)
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
-    const opts = userProviderOpts(resolved)
+    const opts = providerOpts(resolved)
     if (resolved.source === 'user' && !resolved.credentials.apiKey) {
       throw new Error('missing api key')
     }
@@ -725,7 +726,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url, urls } = await createImageProvider(userProviderOpts(resolved)).generate(
+      const { url, urls } = await createImageProvider(providerOpts(resolved)).generate(
         prompt,
         options,
       )
@@ -792,7 +793,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createImageProvider(userProviderOpts(resolved)).generate(combined, {
+      const { url } = await createImageProvider(providerOpts(resolved)).generate(combined, {
         modelId: resolved.modelName || undefined,
       })
       if (cancel?.isCancelled()) {
@@ -1014,7 +1015,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createAudioProvider(userProviderOpts(resolved)).generate(
+      const { url } = await createAudioProvider(providerOpts(resolved)).generate(
         built.text,
         audioOpts,
       )
@@ -1442,7 +1443,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createVideoProvider(userProviderOpts(resolved)).generate(
+      const { url } = await createVideoProvider(providerOpts(resolved)).generate(
         prompt,
         options,
       )
