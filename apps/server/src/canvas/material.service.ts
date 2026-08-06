@@ -6,11 +6,14 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  buildEffectiveImagePrompt,
   buildImageProviderOptions,
   buildVideoProviderOptions,
   createImageProvider,
   createVideoProvider,
   mergeRefsToPrompt,
+  providerReferenceImages,
+  stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
 import {
@@ -93,13 +96,6 @@ function extractReferenceImages(refs?: GenerationRefPayload[]): string[] {
   return (refs ?? [])
     .filter((r) => r.mediaType === 'image' && r.url?.trim())
     .map((r) => r.url!.trim())
-}
-
-function buildPromptWithRefImage(prompt: string, refImageUrl: string): string {
-  const trimmed = prompt.trim()
-  const ref = refImageUrl.trim()
-  if (!ref) return trimmed
-  return `${trimmed} [ref-image:${ref}]`
 }
 
 function userProviderOpts(resolved: ResolvedGenerationProvider) {
@@ -468,11 +464,20 @@ export class MaterialService {
             ? meta.modelKey
             : undefined
         const modelId = resolveModelKey('image', modelKey).entry.gatewayModelId
-        const prompt = String(meta.effectivePrompt ?? material.prompt ?? '')
-        const { url } = await createImageProvider(undefined).generate(prompt, {
+        const refs = Array.isArray(meta.referenceImages)
+          ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
+          : []
+        const useNativeRefs =
+          refs.length > 0 &&
+          (meta.refImageMode === 'native' || /^agnes-image-/i.test(modelId))
+        const fallbackPrompt = useNativeRefs
+          ? stripRefImagePromptTags(String(meta.effectivePrompt ?? material.prompt ?? ''))
+          : String(meta.effectivePrompt ?? material.prompt ?? '')
+        const { url } = await createImageProvider(undefined).generate(fallbackPrompt, {
           modelId,
           size,
           n: 1,
+          referenceImages: useNativeRefs ? refs : undefined,
         })
         if (cancel?.isCancelled()) {
           await this.points.refund(userId, platformCost, '平台回退-取消退款')
@@ -484,7 +489,7 @@ export class MaterialService {
             url,
             thumbnail: url,
             status: 'completed',
-            prompt,
+            prompt: fallbackPrompt,
             metadata: JSON.stringify({
               ...chargedMeta,
               gatewayModelId: modelId,
@@ -772,9 +777,8 @@ export class MaterialService {
       referenceImages,
     })
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
-    const primary = built.referenceImages[0]
-    const base = primary ? buildPromptWithRefImage(mergedText, primary) : mergedText
-    const effectivePrompt = [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
+    const effectivePrompt = buildEffectiveImagePrompt(mergedText, built)
+    const nativeReferenceImages = providerReferenceImages(built)
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
@@ -785,6 +789,7 @@ export class MaterialService {
         modelId,
         size: built.size,
         n: built.n,
+        referenceImages: nativeReferenceImages,
       })
       const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existing || existing.status !== 'generating') return

@@ -146,6 +146,46 @@ export function buildAudioRequest(input: {
   }
 }
 
+function usesNativeImageRefs(modelKey: string, entry: StudioModelEntry): boolean {
+  return [modelKey, entry.modelKey, entry.gatewayModelId].some((k) => /^agnes-image-/i.test(k))
+}
+
+function appendRefImageTag(prompt: string, refImageUrl: string): string {
+  const trimmed = prompt.trim()
+  const ref = refImageUrl.trim()
+  if (!ref) return trimmed
+  return `${trimmed} [ref-image:${ref}]`
+}
+
+/** Remove legacy prompt URL tags before native img2img provider calls (e.g. platform fallback). */
+export function stripRefImagePromptTags(prompt: string): string {
+  return prompt.replace(/\s*\[ref-image:[^\]]+\]/g, '').trim()
+}
+
+export function buildEffectiveImagePrompt(
+  mergedText: string,
+  built: Pick<
+    ReturnType<typeof buildImageProviderOptions>,
+    'referenceImages' | 'effectivePromptSuffix' | 'meta'
+  >,
+): string {
+  if (built.meta.refImageMode === 'native' && built.referenceImages.length > 0) {
+    return mergedText.trim()
+  }
+  const primaryRef = built.referenceImages[0]
+  const base = primaryRef ? appendRefImageTag(mergedText, primaryRef) : mergedText.trim()
+  return [base, built.effectivePromptSuffix].filter(Boolean).join('\n')
+}
+
+export function providerReferenceImages(
+  built: Pick<ReturnType<typeof buildImageProviderOptions>, 'referenceImages' | 'meta'>,
+): string[] | undefined {
+  if (built.meta.refImageMode === 'native' && built.referenceImages.length > 0) {
+    return built.referenceImages
+  }
+  return undefined
+}
+
 export function buildImageProviderOptions(input: {
   modelKey?: string
   size: string
@@ -176,26 +216,33 @@ export function buildImageProviderOptions(input: {
     referenceImages: [],
   }
 
-  if (refCount === 1) {
+  let refImageMode: AdapterMeta['refImageMode'] = 'none'
+  const nativeParams: Record<string, unknown> = { model: entry.gatewayModelId, size, n }
+
+  if (refCount > 0 && usesNativeImageRefs(modelKey ?? resolvedKey, entry)) {
+    result.referenceImages = [...referenceImages]
+    refImageMode = 'native'
+    nativeParams.image = [...referenceImages]
+  } else if (refCount === 1) {
     result.referenceImages = [referenceImages[0]]
+    refImageMode = 'primary_image'
   } else if (refCount > 1) {
     result.referenceImages = [referenceImages[0]]
     result.effectivePromptSuffix = referenceImages
       .slice(1)
       .map((url) => `[ref-image:${url}]`)
       .join(' ')
+    refImageMode = 'primary_image'
   }
-
-  const refImageMode = refCount > 0 ? 'primary_image' : 'none'
 
   return {
     ...result,
     meta: {
       modelKey: resolvedKey,
       gatewayModelId: entry.gatewayModelId,
-      nativeParams: { model: entry.gatewayModelId, size, n },
+      nativeParams,
       droppedFields: [],
-      refImageMode,
+      refImageMode: refImageMode ?? 'none',
       referenceImageCount: refCount,
       ...(fallback ? { modelFallback: true } : {}),
     },

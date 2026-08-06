@@ -96,6 +96,14 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
 
   // Image (§3.2)
   {
+    modelKey: 'agnes-image-2.0-flash',
+    displayName: 'Agnes Image 2.0 Flash',
+    gatewayModelId: 'agnes-image-2.0-flash',
+    modality: 'image',
+    providerBinding: 'gateway-openai-compat',
+    params: IMAGE_PARAMS,
+  },
+  {
     modelKey: 'agnes-image-2.1-flash',
     displayName: 'Agnes Image 2.1 Flash',
     gatewayModelId: 'agnes-image-2.1-flash',
