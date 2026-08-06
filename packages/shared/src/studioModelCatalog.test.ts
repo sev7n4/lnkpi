@@ -14,7 +14,14 @@ describe('studioModelCatalog', () => {
       'deepseek-v4',
       'gpt-5.5',
     ])
-    expect(listModels('image')).toHaveLength(5)
+    expect(listModels('image').map((m) => m.modelKey)).toEqual([
+      'agnes-image-2.0-flash',
+      'agnes-image-2.1-flash',
+      'image2',
+      'navo-pro',
+      'seedream-5.0-pro',
+      'midjourney-8.1',
+    ])
     expect(listModels('video')).toHaveLength(4)
     expect(listModels('audio').map((m) => m.modelKey)).toEqual([
       'seed-audio-1.0',
