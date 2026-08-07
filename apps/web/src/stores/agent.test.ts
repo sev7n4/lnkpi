@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import type { SidebarAttachment } from '@lnkpi/shared'
+import type { AgentChatMessage, SidebarAttachment } from '@lnkpi/shared'
 import { useAgentStore } from './agent'
+
+type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string }
 
 describe('useAgentStore', () => {
   beforeEach(() => {
@@ -68,5 +70,59 @@ describe('useAgentStore', () => {
         attachments,
       }),
     ])
+  })
+
+  it('restores persisted linkedOutputs from message history', () => {
+    const store = useAgentStore()
+    const linkedOutputs = [
+      {
+        nodeId: 'image-1',
+        title: '主图',
+        nodeType: 'image',
+        status: 'done' as const,
+      },
+    ]
+
+    store.loadHistory([
+      {
+        id: 'message-1',
+        sessionId: 'session-1',
+        role: 'assistant',
+        content: '已生成主图',
+        linkedOutputs: JSON.stringify(linkedOutputs),
+        createdAt: '2026-08-07T00:00:00.000Z',
+      } satisfies PersistedAgentMessage,
+    ])
+
+    expect(store.messages).toEqual([
+      expect.objectContaining({
+        id: 'message-1',
+        role: 'assistant',
+        linkedOutputs,
+      }),
+    ])
+  })
+
+  it('replaces existing messages when loading history', () => {
+    const store = useAgentStore()
+    store.addUserMessage('old message')
+
+    store.loadHistory([
+      {
+        id: 'message-2',
+        sessionId: 'session-1',
+        role: 'user',
+        content: 'new message',
+        createdAt: '2026-08-07T00:00:00.000Z',
+      },
+    ])
+
+    expect(store.messages).toHaveLength(1)
+    expect(store.messages[0]).toEqual(
+      expect.objectContaining({
+        id: 'message-2',
+        content: 'new message',
+      }),
+    )
   })
 })
