@@ -13,10 +13,11 @@ fi
 
 MIGRATION_NAME="20260808120000_agent_thread_isolation"
 MIGRATION_FILE="prisma/migrations/${MIGRATION_NAME}/migration.sql"
+PRISMA_SCHEMA="prisma/schema.prisma"
 
 apply_legacy_migration() {
   echo "Applying ${MIGRATION_NAME} for db-push legacy database"
-  if ! "$PRISMA" db execute --file "$MIGRATION_FILE" 2>/tmp/prisma-exec.log; then
+  if ! "$PRISMA" db execute --file "$MIGRATION_FILE" --schema "$PRISMA_SCHEMA" 2>/tmp/prisma-exec.log; then
     if grep -qiE 'duplicate|already exists|UNIQUE constraint' /tmp/prisma-exec.log; then
       echo "Migration SQL already applied, continuing"
     else
@@ -24,15 +25,15 @@ apply_legacy_migration() {
       return 1
     fi
   fi
-  "$PRISMA" migrate resolve --applied "$MIGRATION_NAME"
+  "$PRISMA" migrate resolve --applied "$MIGRATION_NAME" --schema "$PRISMA_SCHEMA"
 }
 
 if [ -n "$PRISMA" ]; then
-  if ! "$PRISMA" migrate deploy 2>/tmp/prisma-migrate.log; then
+  if ! "$PRISMA" migrate deploy --schema "$PRISMA_SCHEMA" 2>/tmp/prisma-migrate.log; then
     cat /tmp/prisma-migrate.log
     if grep -q P3005 /tmp/prisma-migrate.log; then
       apply_legacy_migration
-      "$PRISMA" migrate deploy
+      "$PRISMA" migrate deploy --schema "$PRISMA_SCHEMA"
     else
       exit 1
     fi
