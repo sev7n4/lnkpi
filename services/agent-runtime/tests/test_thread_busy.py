@@ -37,7 +37,7 @@ class _Nest:
     ) -> dict[str, bool]:
         return {"renewed": True}
 
-    async def get_agent_messages(self) -> list[dict[str, str]]:
+    async def get_agent_messages(self, *, thread_id: str) -> list[dict[str, str]]:
         return []
 
     async def save_agent_message(self, **kwargs: Any) -> dict[str, Any]:

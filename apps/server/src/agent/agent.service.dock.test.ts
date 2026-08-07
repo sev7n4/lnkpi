@@ -27,6 +27,11 @@ describe('AgentService dock forwarding', () => {
           create: agentMessageCreate,
           findMany: vi.fn(),
         },
+        agentThread: {
+          findUnique: vi.fn().mockResolvedValue(null),
+          upsert: vi.fn().mockResolvedValue({}),
+          update: vi.fn().mockResolvedValue({}),
+        },
         session: {
           findUnique: vi.fn(),
           update: vi.fn(),

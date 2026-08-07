@@ -1212,9 +1212,10 @@ export class AgentCanvasToolsService {
 
   async getAgentMessages(input: {
     sessionId: string
+    threadId: string
   }): Promise<Array<{ id: string; role: string; content: string; toolCalls?: string; createdAt: Date }>> {
     const messages = await this.prisma.agentMessage.findMany({
-      where: { sessionId: input.sessionId },
+      where: { sessionId: input.sessionId, threadId: input.threadId },
       orderBy: { createdAt: 'asc' },
     })
     return messages.map((msg) => ({

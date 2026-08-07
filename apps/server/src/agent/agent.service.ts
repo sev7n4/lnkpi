@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
-import type { CanvasAction, CanvasData, SidebarAttachment } from '@lnkpi/shared'
+import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment } from '@lnkpi/shared'
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -406,7 +406,7 @@ export class AgentService {
     userId: string | undefined,
     assistantText: string,
     canvasActions: CanvasAction[],
-    opts: { rewriteCanvasData: boolean },
+    opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[] },
   ) {
     if (assistantText) {
       await this.prisma.agentMessage.create({
@@ -416,7 +416,12 @@ export class AgentService {
           role: 'assistant',
           content: assistantText,
           toolCalls: canvasActions.length ? JSON.stringify(canvasActions) : null,
+          linkedOutputs: opts.linkedOutputs?.length ? JSON.stringify(opts.linkedOutputs) : null,
         },
+      })
+      await this.prisma.agentThread.update({
+        where: { id: threadId },
+        data: { updatedAt: new Date() },
       })
     }
 

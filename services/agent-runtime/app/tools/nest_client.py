@@ -342,11 +342,11 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id},
         )
 
-    async def get_agent_messages(self) -> list[dict[str, Any]]:
-        """Load conversation history from AgentMessage table (C1 decision)."""
+    async def get_agent_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
+        """Load conversation history for one thread (Nest single-writer)."""
         return await self._post(
             "/agent/internal/get-agent-messages",
-            {"sessionId": self._session_id},
+            {"sessionId": self._session_id, "threadId": thread_id},
         )
 
     async def save_agent_message(self, role: str, content: str, tool_calls: str | None = None) -> dict[str, Any]:

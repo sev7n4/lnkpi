@@ -343,6 +343,7 @@ export type GetAgentMessagesQuery = z.infer<typeof GetAgentMessagesQuerySchema>
 
 export const GetAgentMessagesRequestSchema = z.object({
   sessionId: z.string(),
+  threadId: z.string(),
 })
 
 export type GetAgentMessagesRequest = z.infer<typeof GetAgentMessagesRequestSchema>
