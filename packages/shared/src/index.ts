@@ -259,6 +259,8 @@ export interface AgentChatMessage {
   content: string
   toolCalls?: string
   attachments?: string
+  /** JSON: LinkedCanvasOutput[] — assistant turn canvas outputs for relocation */
+  linkedOutputs?: string
   createdAt: string
 }
 

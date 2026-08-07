@@ -323,6 +323,20 @@
   box-shadow: 0 0 0 1px var(--neo-node-selected-ring);
 }
 
+.neo-node-locate-flash {
+  animation: neo-node-locate-flash 1.2s ease-out 1;
+}
+
+@keyframes neo-node-locate-flash {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow: 0 0 0 3px var(--neo-accent-border);
+  }
+}
+
 .neo-node-content {
   width: 100%;
   height: 100%;

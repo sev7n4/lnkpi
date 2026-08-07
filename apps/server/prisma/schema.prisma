@@ -154,6 +154,7 @@ model Session {
   works         Work[]
   shots         Shot[]
   agentMessages AgentMessage[]
+  agentThreads  AgentThread[]
   stories       Story[]
 }
 
@@ -186,15 +187,34 @@ model Material {
   createdAt DateTime @default(now())
 }
 
-model AgentMessage {
-  id        String   @id @default(cuid())
+model AgentThread {
+  id        String   @id // threadId，格式 sessionId:suffix
   sessionId String
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role      String
-  content   String
-  toolCalls String?
-  attachments String?
+  title     String   @default("新对话")
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  AgentMessage[]
+
+  @@index([sessionId, updatedAt(sort: Desc)])
+}
+
+model AgentMessage {
+  id            String      @id @default(cuid())
+  sessionId     String
+  session       Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  threadId      String
+  thread        AgentThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role          String
+  content       String
+  toolCalls     String?
+  attachments   String?
+  /** JSON: LinkedCanvasOutput[] — 本轮 assistant 产出的可定位节点 */
+  linkedOutputs String?
+  createdAt     DateTime    @default(now())
+
+  @@index([threadId, createdAt])
+  @@index([sessionId, threadId, createdAt])
 }
 
 /// Idempotency records for POST /agent/chat/conversation — prevent duplicate requests

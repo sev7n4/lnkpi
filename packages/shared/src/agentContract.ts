@@ -315,8 +315,35 @@ export type GetGenerationStatusResponse = z.infer<typeof GetGenerationStatusResp
 // get_agent_messages
 // ============================================================
 
+export const LinkedCanvasOutputSchema = z.object({
+  nodeId: z.string(),
+  title: z.string(),
+  nodeType: z.string(),
+  status: z.enum(['running', 'done', 'failed']),
+})
+
+export type LinkedCanvasOutput = z.infer<typeof LinkedCanvasOutputSchema>
+
+export const AgentThreadSummarySchema = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  title: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+export type AgentThreadSummary = z.infer<typeof AgentThreadSummarySchema>
+
+export const GetAgentMessagesQuerySchema = z.object({
+  sessionId: z.string(),
+  threadId: z.string(),
+})
+
+export type GetAgentMessagesQuery = z.infer<typeof GetAgentMessagesQuerySchema>
+
 export const GetAgentMessagesRequestSchema = z.object({
   sessionId: z.string(),
+  threadId: z.string(),
 })
 
 export type GetAgentMessagesRequest = z.infer<typeof GetAgentMessagesRequestSchema>
@@ -326,6 +353,7 @@ export const AgentMessageSchema = z.object({
   role: z.string(),
   content: z.string(),
   toolCalls: z.string().optional(),
+  linkedOutputs: z.string().optional(),
   createdAt: z.union([z.string(), z.date()]),
 })
 
@@ -341,6 +369,7 @@ export type GetAgentMessagesResponse = z.infer<typeof GetAgentMessagesResponseSc
 
 export const SaveAgentMessageRequestSchema = z.object({
   sessionId: z.string(),
+  threadId: z.string(),
   userId: z.string(),
   role: z.string(),
   content: z.string(),

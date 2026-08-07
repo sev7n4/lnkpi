@@ -42,6 +42,14 @@ class SessionOnlyDto {
   sessionId!: string
 }
 
+class GetAgentMessagesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  threadId!: string
+}
+
 class BatchNodeItemDto {
   @IsString()
   key!: string
@@ -255,6 +263,9 @@ class WaitImageGenerationDto {
 class SaveAgentMessageDto {
   @IsString()
   sessionId!: string
+
+  @IsString()
+  threadId!: string
 
   @IsString()
   userId!: string
@@ -517,7 +528,7 @@ export class AgentCanvasToolsController {
   }
 
   @Post('get-agent-messages')
-  async getAgentMessages(@Body() dto: SessionOnlyDto) {
+  async getAgentMessages(@Body() dto: GetAgentMessagesDto) {
     const data = await this.tools.getAgentMessages(dto)
     return { code: 0, message: 'ok', data }
   }

@@ -346,6 +346,7 @@ class GetAgentMessagesRequest(BaseModel):
     """Request for get_agent_messages endpoint."""
 
     sessionId: str
+    threadId: str
 
 
 class AgentMessage(BaseModel):
@@ -370,6 +371,7 @@ class SaveAgentMessageRequest(BaseModel):
     """Request for save_agent_message endpoint."""
 
     sessionId: str
+    threadId: str
     userId: str
     role: str
     content: str

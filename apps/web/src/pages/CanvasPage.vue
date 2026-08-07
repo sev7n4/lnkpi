@@ -97,6 +97,7 @@ import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMe
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
   CANVAS_NODE_CANCEL_KEY,
+  CANVAS_NODE_LOCATE_FLASH_KEY,
   CANVAS_NODE_PATCH_KEY,
   CANVAS_NODE_RENAME_KEY,
   CANVAS_NODE_RETRY_KEY,
@@ -1059,9 +1060,33 @@ function resolveNewNodePosition(type: string) {
   )
 }
 
+const locateFlashNodeIds = ref<Set<string>>(new Set())
+
+function triggerLocateFlash(ids: string[]) {
+  locateFlashNodeIds.value = new Set(ids)
+  setTimeout(() => {
+    locateFlashNodeIds.value = new Set()
+  }, 1200)
+}
+
 async function focusNodeById(id: string) {
+  selectOnlyNode(id)
   await nextTick()
   await vueFlowRef.value?.fitView({ nodes: [id], padding: 0.45, duration: 320, maxZoom: 1.05 })
+  triggerLocateFlash([id])
+}
+
+async function focusNodesByIds(ids: string[]) {
+  const valid = ids.filter((id) => nodes.value.some((n) => n.id === id))
+  if (!valid.length) {
+    ElMessage.warning('当前画布中没有找到对应节点')
+    return
+  }
+  if (valid.length === 1) return focusNodeById(valid[0])
+  selectOnlyNode(valid[0])
+  await nextTick()
+  await vueFlowRef.value?.fitView({ nodes: valid, padding: 0.55, duration: 360, maxZoom: 1.0 })
+  triggerLocateFlash(valid)
 }
 
 /** 发布弹窗「定位」：选中节点并聚焦；可选关闭弹窗 */
@@ -1406,6 +1431,7 @@ function renameNodeById(nodeId: string, title: string) {
   persistUserEdit()
 }
 
+provide(CANVAS_NODE_LOCATE_FLASH_KEY, locateFlashNodeIds)
 provide(CANVAS_NODE_RENAME_KEY, renameNodeById)
 
 function patchNodeMediaById(nodeId: string, patch: Record<string, unknown>) {
@@ -2765,6 +2791,7 @@ onMounted(() => {
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
+        @focus-all="focusNodesByIds"
       />
     </div>
 

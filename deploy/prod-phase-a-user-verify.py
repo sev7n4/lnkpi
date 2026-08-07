@@ -184,7 +184,10 @@ def main() -> int:
         return 1
 
     time.sleep(1)
-    msgs_before = http_json("GET", f"/agent/chat/user/messages?sessionId={session_id}")
+    msgs_before = http_json(
+        "GET",
+        f"/agent/chat/user/messages?sessionId={session_id}&threadId={thread_id}",
+    )
     count_before = len(msgs_before.get("data") or [])
 
     # P0-2 confirm plan
@@ -201,7 +204,10 @@ def main() -> int:
 
     # P0-5 history dedup (W2)
     try:
-        msgs_after = http_json("GET", f"/agent/chat/user/messages?sessionId={session_id}")
+        msgs_after = http_json(
+            "GET",
+            f"/agent/chat/user/messages?sessionId={session_id}&threadId={thread_id}",
+        )
         data = msgs_after.get("data") or []
         user_msgs = [m for m in data if m.get("role") == "user" and prompt in str(m.get("content") or "")]
         record(

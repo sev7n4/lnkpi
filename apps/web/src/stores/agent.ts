@@ -3,9 +3,12 @@ import { ref } from 'vue'
 import {
   type AgentChatMessage,
   type CanvasAction,
+  LinkedCanvasOutputSchema,
+  type LinkedCanvasOutput,
   type SidebarAttachment,
   validateSidebarAttachments,
 } from '@lnkpi/shared'
+import { parsePersistedToolCalls } from '@/components/agent/agentCanvasOutputs'
 import {
   applyCanvasAction,
   applyExplore,
@@ -32,7 +35,11 @@ export interface AgentStreamMessage {
   executionTrace?: ExecutionTraceState
   attachments?: SidebarAttachment[]
   attachmentRefKeys?: string[]
+  linkedOutputs?: LinkedCanvasOutput[]
+  canvasActions?: CanvasAction[]
 }
+
+type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null }
 
 export const useAgentStore = defineStore('agent', () => {
   const messages = ref<AgentStreamMessage[]>([])
@@ -198,13 +205,34 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function parseLinkedOutputs(raw: string | undefined | null): LinkedCanvasOutput[] | undefined {
+    if (!raw) return undefined
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return undefined
+      const outputs: LinkedCanvasOutput[] = []
+      for (const item of parsed) {
+        const result = LinkedCanvasOutputSchema.safeParse(item)
+        if (result.success) outputs.push(result.data)
+      }
+      return outputs.length > 0 ? outputs : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   function loadHistory(history: AgentChatMessage[]) {
-    messages.value = history.map((m) => ({
-      id: m.id,
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-      attachments: parseAttachments(m.attachments),
-    }))
+    messages.value = history.map((m) => {
+      const persisted = m as PersistedAgentMessage
+      return {
+        id: persisted.id,
+        role: persisted.role as 'user' | 'assistant',
+        content: persisted.content,
+        attachments: parseAttachments(persisted.attachments),
+        linkedOutputs: parseLinkedOutputs(persisted.linkedOutputs),
+        canvasActions: parsePersistedToolCalls(persisted.toolCalls),
+      }
+    })
   }
 
   function clear() {

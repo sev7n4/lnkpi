@@ -11,7 +11,10 @@ import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentRefStrip from '@/components/agent/AgentRefStrip.vue'
 import AgentAssetPicker from '@/components/agent/AgentAssetPicker.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
+import AgentCanvasOutputs from '@/components/agent/AgentCanvasOutputs.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
+import { resolveMessageOutputs } from '@/components/agent/agentCanvasOutputs'
+import type { AgentStreamMessage } from '@/stores/agent'
 import {
   applyTaskEvent,
   applyPollRecordToTask,
@@ -57,7 +60,15 @@ import {
 } from '@/constants/agentSkillMap'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import { formatDuration as formatTraceDuration } from '@/components/agent/executionStepLabels'
+import { formatSessionTime, lastThreadStorageKey } from '@/utils/formatSessionTime'
 import { ElMessage } from 'element-plus'
+
+interface AgentThreadRow {
+  id: string
+  title: string
+  updatedAt: string
+  createdAt: string
+}
 
 const props = defineProps<{
   sessionId: string
@@ -74,6 +85,7 @@ const emit = defineEmits<{
   /** Agent 一轮结束后由画布从服务端回拉 SoT，避免本地旧图覆盖 Nest 拆图结果 */
   turnComplete: []
   focusNode: [nodeId: string]
+  focusAll: [nodeIds: string[]]
   expandedChange: [expanded: boolean]
 }>()
 
@@ -121,6 +133,36 @@ function insertRefMention(refKey: string) {
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
+
+const lastAssistantMessageId = computed(() =>
+  [...agent.messages].reverse().find((m) => m.role === 'assistant')?.id,
+)
+
+function isLiveTurnMessage(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'assistant') return false
+  if (msg.id !== lastAssistantMessageId.value) return false
+  return Boolean(msg.streaming) || showTaskCard.value || Boolean(msg.executionTrace)
+}
+
+function canvasOutputsForMessage(msg: AgentStreamMessage) {
+  return resolveMessageOutputs({
+    linkedOutputs: msg.linkedOutputs,
+    canvasActions: msg.canvasActions,
+    traceSteps: msg.executionTrace?.steps,
+    taskItems: isLiveTurnMessage(msg) ? taskProgress.value.items : undefined,
+    isLiveTurn: isLiveTurnMessage(msg),
+  })
+}
+
+const assistantOutputsById = computed(() => {
+  const map = new Map<string, ReturnType<typeof canvasOutputsForMessage>>()
+  for (const msg of agent.messages) {
+    if (msg.role === 'assistant') {
+      map.set(msg.id, canvasOutputsForMessage(msg))
+    }
+  }
+  return map
+})
 const forceChoiceOpen = ref(false)
 const forceChoiceKind = ref<ForceChoiceKind | null>(null)
 
@@ -265,27 +307,65 @@ useClickOutside(skillMenuRef, () => {
   skillMenuOpen.value = false
 })
 
-/* ---- 历史记录 ---- */
+/* ---- 对话 thread 列表 ---- */
 const historyOpen = ref(false)
 const historyRef = ref<HTMLElement | null>(null)
+const threads = ref<AgentThreadRow[]>([])
 useClickOutside(historyRef, () => {
   historyOpen.value = false
 })
 
-const historyPrompts = computed(() =>
-  agent.messages
-    .filter((m) => m.role === 'user')
-    .slice(-30)
-    .reverse(),
-)
+async function fetchThreads(): Promise<AgentThreadRow[]> {
+  try {
+    const res = await fetch(
+      apiUrl(`/api/agent/chat/threads?sessionId=${encodeURIComponent(props.sessionId)}`),
+    )
+    const json = await res.json()
+    const rows = (json.data ?? []) as AgentThreadRow[]
+    threads.value = rows
+    return rows
+  } catch {
+    return []
+  }
+}
 
-function applyHistoryPrompt(content: string) {
-  input.value = content
+async function toggleHistoryOpen() {
+  historyOpen.value = !historyOpen.value
+  if (historyOpen.value) {
+    await fetchThreads()
+  }
+}
+
+async function selectThread(threadId: string) {
+  if (threadId === agentThreadId.value) {
+    historyOpen.value = false
+    return
+  }
+  agentThreadId.value = threadId
+  localStorage.setItem(lastThreadStorageKey(props.sessionId), threadId)
   historyOpen.value = false
+  taskProgress.value = emptyTaskProgress()
+  interruptGate.value = null
+  hasAtomicCheckpoint.value = false
+  recoveredPhaseHint.value = null
+  await loadHistory()
+}
+
+async function bootstrapThread() {
+  agent.clear()
+  const cached = localStorage.getItem(lastThreadStorageKey(props.sessionId))
+  if (cached) {
+    agentThreadId.value = cached
+  } else {
+    const list = await fetchThreads()
+    agentThreadId.value = list[0]?.id ?? createAgentThreadId(props.sessionId)
+  }
+  await loadHistory()
+  scrollToBottom()
 }
 
 onMounted(() => {
-  void loadHistory()
+  void bootstrapThread()
   void loadProviderBootstrap().then(() => {
     if (!planningModel.value && preferences.value?.defaultTextModel) {
       planningModel.value = preferences.value.defaultTextModel
@@ -295,17 +375,19 @@ onMounted(() => {
 
 watch(
   () => props.sessionId,
-  (id) => {
-    agentThreadId.value = createAgentThreadId(id)
-    agent.clear()
+  () => {
     taskProgress.value = emptyTaskProgress()
-    void loadHistory()
+    interruptGate.value = null
+    hasAtomicCheckpoint.value = false
+    recoveredPhaseHint.value = null
+    void bootstrapThread()
   },
 )
 
 function openPanel() {
   open.value = true
   emit('expandedChange', true)
+  scrollToBottom()
 }
 
 function closePanel() {
@@ -379,7 +461,8 @@ function newAgentSession() {
   hasAtomicCheckpoint.value = false
   recoveredPhaseHint.value = null
   agentThreadId.value = createAgentThreadId(props.sessionId)
-  ElMessage.info('已新建对话：重新生成/变体需要在新对话里先完成首次创作。')
+  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
+  ElMessage.info('已新建对话')
 }
 
 async function refreshThreadCheckpoint() {
@@ -402,13 +485,19 @@ async function refreshThreadCheckpoint() {
 }
 
 async function loadHistory() {
+  agent.clear()
   try {
-    const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
+    const res = await fetch(
+      apiUrl(
+        `/api/agent/chat/user/messages?sessionId=${encodeURIComponent(props.sessionId)}&threadId=${encodeURIComponent(agentThreadId.value)}`,
+      ),
+    )
     const json = await res.json()
     if (json.data?.length) agent.loadHistory(json.data)
   } catch {
     // ignore
   }
+  scrollToBottom()
 }
 
 function toggleVoice() {
@@ -429,6 +518,7 @@ async function send() {
     auth.openLogin()
     return
   }
+  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
 
   const message = input.value.trim()
   input.value = ''
@@ -488,6 +578,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     ElMessage.warning('当前规划模型已停用，请重新选择')
     return
   }
+
+  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
 
   const { attachments: pendingAttachments } = sidebar.toPayload()
   const attachments = pendingAttachments
@@ -677,7 +769,11 @@ async function reconcileLatestAssistant() {
     [...agent.messages].reverse().find((m) => m.role === 'assistant')?.content?.trim() ?? ''
 
   const pull = async () => {
-    const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
+    const res = await fetch(
+      apiUrl(
+        `/api/agent/chat/user/messages?sessionId=${encodeURIComponent(props.sessionId)}&threadId=${encodeURIComponent(agentThreadId.value)}`,
+      ),
+    )
     const json = await res.json()
     const rows = (json.data || []) as Array<{ role: string; content: string }>
     const lastDb = pickAssistantForLatestUserTurn(rows)
@@ -959,8 +1055,8 @@ defineExpose({
                   type="button"
                   class="agent-head-btn"
                   :class="historyOpen ? 'is-active' : ''"
-                  title="历史记录"
-                  @click="historyOpen = !historyOpen"
+                  title="对话历史"
+                  @click="toggleHistoryOpen"
                 >
                   <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.75">
                     <circle cx="12" cy="12" r="9" />
@@ -972,19 +1068,21 @@ defineExpose({
                   class="neo-popover absolute right-0 top-full z-20 mt-1.5 max-h-[280px] w-[240px] overflow-y-auto rounded-xl py-1"
                   @click.stop
                 >
-                  <p class="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">最近指令</p>
+                  <p class="px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">对话历史</p>
                   <button
-                    v-for="msg in historyPrompts"
-                    :key="msg.id"
+                    v-for="thread in threads"
+                    :key="thread.id"
                     type="button"
-                    class="neo-popover-item block w-full truncate px-3 py-2 text-left text-xs"
-                    :title="msg.content"
-                    @click="applyHistoryPrompt(msg.content)"
+                    class="neo-popover-item block w-full px-3 py-2 text-left text-xs"
+                    :class="thread.id === agentThreadId ? '!text-[var(--neo-accent-text)]' : ''"
+                    :title="thread.title"
+                    @click="selectThread(thread.id)"
                   >
-                    {{ msg.content }}
+                    <span class="block truncate font-medium">{{ thread.title }}</span>
+                    <span class="block text-[10px] opacity-60">{{ formatSessionTime(thread.updatedAt) }}</span>
                   </button>
-                  <p v-if="!historyPrompts.length" class="px-3 py-4 text-center text-[11px] text-[var(--neo-text-muted)]">
-                    暂无历史指令
+                  <p v-if="!threads.length" class="px-3 py-4 text-center text-[11px] text-[var(--neo-text-muted)]">
+                    暂无对话记录
                   </p>
                 </div>
               </div>
@@ -1084,6 +1182,12 @@ defineExpose({
                   class="mt-2"
                   :items="makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)"
                   :removable="false"
+                />
+                <AgentCanvasOutputs
+                  v-if="msg.role === 'assistant' && (assistantOutputsById.get(msg.id)?.length ?? 0) > 0"
+                  :outputs="assistantOutputsById.get(msg.id) ?? []"
+                  @focus-node="emit('focusNode', $event)"
+                  @focus-all="emit('focusAll', $event)"
                 />
                 <AgentExecutionTrace
                   v-if="msg.role === 'assistant' && msg.executionTrace"

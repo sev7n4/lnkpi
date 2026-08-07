@@ -22,6 +22,13 @@ interface AgentMessage {
   createdAt: string
 }
 
+interface AgentThreadRow {
+  id: string
+  title: string
+  updatedAt: string
+  createdAt: string
+}
+
 interface ReplayStep {
   id: string
   label: string
@@ -90,15 +97,32 @@ function goToStep(index: number) {
 }
 
 async function loadReplay() {
-  const [sessionRes, msgRes] = await Promise.all([
+  const [sessionRes, threadsRes] = await Promise.all([
     api.get<{ data: { title: string } }>(`/sessions/${sessionId.value}`),
-    api.get<{ data: AgentMessage[] }>(`/agent/chat/user/messages?sessionId=${sessionId.value}`),
+    api.get<{ data: AgentThreadRow[] }>(
+      `/agent/chat/threads?sessionId=${encodeURIComponent(sessionId.value)}`,
+    ),
   ])
   sessionTitle.value = sessionRes.data.data.title
 
-  if (agentDebug.value) {
+  const threads = threadsRes.data.data ?? []
+  let allMessages: AgentMessage[] = []
+  if (threads.length) {
+    const msgResults = await Promise.all(
+      threads.map((t) =>
+        api.get<{ data: AgentMessage[] }>(
+          `/agent/chat/user/messages?sessionId=${encodeURIComponent(sessionId.value)}&threadId=${encodeURIComponent(t.id)}`,
+        ),
+      ),
+    )
+    allMessages = msgResults
+      .flatMap((r) => r.data.data ?? [])
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  }
+
+  if (agentDebug.value && threads.length) {
     try {
-      const threadId = `${sessionId.value}:latest`
+      const threadId = threads[0].id
       const tl = await api.get<{ data: { entries?: Array<{ phase?: string | null; step?: number | null }> } }>(
         `/agent/thread-timeline?threadId=${encodeURIComponent(threadId)}`,
       )
@@ -109,7 +133,7 @@ async function loadReplay() {
   }
 
   const built: ReplayStep[] = []
-  for (const msg of msgRes.data.data) {
+  for (const msg of allMessages) {
     if (msg.role === 'user') {
       built.push({ id: msg.id, label: msg.content, role: 'user', actions: [] })
     }

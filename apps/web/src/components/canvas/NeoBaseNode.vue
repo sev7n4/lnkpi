@@ -7,7 +7,7 @@ import {
   resolveNeoNodeTitle,
   type NeoNodeStatus,
 } from '@/components/canvas/neoNodeMeta'
-import { CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
+import { CANVAS_NODE_LOCATE_FLASH_KEY, CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
 
 const props = withDefaults(
   defineProps<{
@@ -50,6 +50,8 @@ const shellStyle = computed(() => {
 
 const { id: nodeId } = useNode()
 const renameNode = inject(CANVAS_NODE_RENAME_KEY, null)
+const locateFlashNodeIds = inject(CANVAS_NODE_LOCATE_FLASH_KEY, ref(new Set<string>()))
+const isLocateFlashing = computed(() => locateFlashNodeIds.value.has(nodeId))
 const isHovered = ref(false)
 
 const showHandles = computed(() => props.selected || isHovered.value)
@@ -130,7 +132,11 @@ function cancelRename() {
       <span class="neo-node-status" :class="nodeStatus" />
     </div>
 
-    <div class="neo-node" :class="[meta.variant, { selected }]" :style="shellStyle">
+    <div
+      class="neo-node"
+      :class="[meta.variant, { selected, 'neo-node-locate-flash': isLocateFlashing }]"
+      :style="shellStyle"
+    >
       <div class="neo-node-content">
         <slot />
       </div>

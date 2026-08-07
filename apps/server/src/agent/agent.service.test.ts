@@ -1,12 +1,74 @@
 import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { CanvasAgent } from '@lnkpi/agent'
-import { AgentService } from './agent.service'
+import type { CanvasAction } from '@lnkpi/shared'
+import { AgentService, deriveLinkedOutputs } from './agent.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
+
+describe('deriveLinkedOutputs', () => {
+  it('maps add_node actions to linked outputs', () => {
+    const actions: CanvasAction[] = [
+      {
+        type: 'add_node',
+        payload: {
+          id: 'image-1',
+          nodeType: 'image',
+          data: { title: '主视觉海报' },
+        },
+      },
+      {
+        type: 'add_node',
+        payload: {
+          id: 'prompt-1',
+          nodeType: 'prompt',
+          data: { prompt: '唐朝宰相三视图方案' },
+        },
+      },
+    ]
+
+    expect(deriveLinkedOutputs(actions)).toEqual([
+      { nodeId: 'image-1', title: '主视觉海报', nodeType: 'image', status: 'done' },
+      { nodeId: 'prompt-1', title: '唐朝宰相三视图方案', nodeType: 'prompt', status: 'done' },
+    ])
+  })
+
+  it('truncates title to 20 chars and defaults missing fields', () => {
+    const actions: CanvasAction[] = [
+      {
+        type: 'add_node',
+        payload: {
+          id: 'node-1',
+          data: { title: '这是一段非常非常非常非常非常非常非常非常长的标题' },
+        },
+      },
+      {
+        type: 'add_node',
+        payload: { id: 'node-2' },
+      },
+    ]
+
+    expect(deriveLinkedOutputs(actions)).toEqual([
+      { nodeId: 'node-1', title: '这是一段非常非常非常非常非常非常非常非常', nodeType: 'image', status: 'done' },
+      { nodeId: 'node-2', title: '未命名', nodeType: 'image', status: 'done' },
+    ])
+  })
+
+  it('ignores non-add_node actions and add_node without id', () => {
+    const actions: CanvasAction[] = [
+      { type: 'update_node', payload: { id: 'x-1', data: { title: 'skip' } } },
+      { type: 'add_node', payload: { nodeType: 'image' } },
+    ]
+
+    expect(deriveLinkedOutputs(actions)).toEqual([])
+  })
+})
 
 describe('AgentService streamConversation', () => {
   const agentMessageCreate = vi.fn()
   const agentMessageFindMany = vi.fn()
+  const agentThreadFindUnique = vi.fn()
+  const agentThreadUpsert = vi.fn()
+  const agentThreadUpdate = vi.fn()
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
   const idempotencyRecordCreate = vi.fn()
@@ -24,6 +86,9 @@ describe('AgentService streamConversation', () => {
     agentMessageFindMany.mockResolvedValue([
       { role: 'user', content: 'hello' },
     ])
+    agentThreadFindUnique.mockResolvedValue(null)
+    agentThreadUpsert.mockResolvedValue({})
+    agentThreadUpdate.mockResolvedValue({})
     sessionFindUnique.mockResolvedValue({ id: 's1', canvasData: null })
     sessionUpdate.mockResolvedValue({})
     idempotencyRecordCreate.mockResolvedValue({})
@@ -36,6 +101,11 @@ describe('AgentService streamConversation', () => {
         agentMessage: {
           create: agentMessageCreate,
           findMany: agentMessageFindMany,
+        },
+        agentThread: {
+          findUnique: agentThreadFindUnique,
+          upsert: agentThreadUpsert,
+          update: agentThreadUpdate,
         },
         session: {
           findUnique: sessionFindUnique,
@@ -127,6 +197,55 @@ describe('AgentService streamConversation', () => {
     ])
     // Runtime path skips canvasData rewrite (Nest tools already wrote)
     expect(sessionUpdate).not.toHaveBeenCalled()
+    expect(agentMessageCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: 'assistant',
+        linkedOutputs: JSON.stringify([
+          {
+            nodeId: 'prompt-1',
+            title: '方案',
+            nodeType: 'prompt',
+            status: 'done',
+          },
+        ]),
+      }),
+    })
+  })
+
+  it('persists linkedOutputs from CanvasAgent add_node actions', async () => {
+    vi.spyOn(CanvasAgent.prototype, 'run').mockImplementation(async (_messages, onEvent) => {
+      onEvent({ type: 'text_delta', data: { text: 'done' } })
+      onEvent({
+        type: 'canvas_action',
+        data: {
+          type: 'add_node',
+          payload: {
+            id: 'shot-1',
+            nodeType: 'shot',
+            data: { title: '镜头 A' },
+          },
+        },
+      })
+      onEvent({ type: 'done', data: {} })
+    })
+
+    for await (const _event of service.streamConversation('s1', 'hello', 'u1', 's1:thread-b')) {
+      // drain
+    }
+
+    expect(agentMessageCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        role: 'assistant',
+        linkedOutputs: JSON.stringify([
+          {
+            nodeId: 'shot-1',
+            title: '镜头 A',
+            nodeType: 'shot',
+            status: 'done',
+          },
+        ]),
+      }),
+    })
   })
 
   it('forwards validated sidebar attachments to runtime', async () => {
@@ -175,6 +294,7 @@ describe('AgentService streamConversation', () => {
     expect(agentMessageCreate).toHaveBeenCalledWith({
       data: {
         sessionId: 's1',
+        threadId: 's1:thread-a',
         role: 'user',
         content: '营销',
         attachments: JSON.stringify(attachments),
@@ -213,6 +333,9 @@ describe('AgentService idempotency', () => {
   const idempotencyRecordDeleteMany = vi.fn()
   const agentMessageCreate = vi.fn()
   const agentMessageFindMany = vi.fn()
+  const agentThreadFindUnique = vi.fn()
+  const agentThreadUpsert = vi.fn()
+  const agentThreadUpdate = vi.fn()
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
 
@@ -235,6 +358,11 @@ describe('AgentService idempotency', () => {
         agentMessage: {
           create: agentMessageCreate,
           findMany: agentMessageFindMany,
+        },
+        agentThread: {
+          findUnique: agentThreadFindUnique,
+          upsert: agentThreadUpsert,
+          update: agentThreadUpdate,
         },
         session: { findUnique: sessionFindUnique, update: sessionUpdate },
         idempotencyRecord: {

@@ -530,10 +530,10 @@ async def get_thread_state(
     }
 
 
-async def _load_history(nest: NestCanvasClient) -> list[Any]:
-    """Load conversation history from AgentMessage table (C1 decision)."""
+async def _load_history(nest: NestCanvasClient, thread_id: str) -> list[Any]:
+    """Load conversation history for the current thread only (Nest single-writer)."""
     try:
-        messages = await nest.get_agent_messages()
+        messages = await nest.get_agent_messages(thread_id=thread_id)
         result: list[Any] = []
         for msg in messages:
             role = str(msg.get("role") or "")
@@ -609,9 +609,6 @@ async def stream_run_events(
     )
     config = {"configurable": {"thread_id": thread_id}}
 
-    # W2: save user message before graph (both fresh turn and interrupt resume)
-    await _save_user_message(inner_nest, req.message)
-
     # W5: 检查是否从 interrupt_before 恢复
     snap = await graph.aget_state(config)
     next_nodes = getattr(snap, "next", None) or []
@@ -623,12 +620,10 @@ async def stream_run_events(
         bool(next_nodes),
         checkpoint_diagnostics(pre_vals),
     )
-    assistant_save_after = 0
-
     if next_nodes:
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
-        input_state, assistant_save_after = await prepare_interrupt_resume(
+        input_state, _ = await prepare_interrupt_resume(
             graph,
             config,
             req.message,
@@ -636,8 +631,7 @@ async def stream_run_events(
         )
     else:
         # 新对话或已完成：加载历史并创建 input_state (C1 decision)
-        history = await _load_history(inner_nest)
-        assistant_save_after = len(history) + 1
+        history = await _load_history(inner_nest, thread_id)
         input_messages = history + [HumanMessage(content=req.message)]
         input_state = {
             "messages": input_messages,
@@ -748,19 +742,6 @@ async def stream_run_events(
             record_stream_error(err["error_type"])
             await emit({"type": "error", "data": error_to_sse_payload(err)})
         finally:
-            # W2: save only new assistant messages from this turn (user saved at entry)
-            try:
-                snap = await graph.aget_state(config)
-                vals = getattr(snap, "values", None) or {}
-                final_messages = list(vals.get("messages") or [])
-                if final_messages:
-                    await _save_new_assistant_messages(
-                        inner_nest,
-                        final_messages,
-                        after_index=assistant_save_after,
-                    )
-            except Exception:  # noqa: BLE001 — history save failure should not crash
-                pass
             await queue.put(None)
             if owns_nest:
                 await proxy.close()

@@ -1,6 +1,6 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
-import type { CanvasAction, CanvasData, SidebarAttachment } from '@lnkpi/shared'
+import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment } from '@lnkpi/shared'
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -14,6 +14,17 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
+
+export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput[] {
+  return actions
+    .filter((a) => a.type === 'add_node' && a.payload?.id)
+    .map((a) => ({
+      nodeId: a.payload.id!,
+      title: String(a.payload.data?.title || a.payload.data?.prompt || '未命名').slice(0, 20),
+      nodeType: String(a.payload.nodeType || 'image'),
+      status: 'done' as const,
+    }))
+}
 
 @Injectable()
 export class AgentService {
@@ -39,11 +50,35 @@ export class AgentService {
     }
   }
 
-  async getMessages(sessionId: string) {
-    return this.prisma.agentMessage.findMany({
+  async getMessages(sessionId: string, threadId: string, limit = 100) {
+    if (!sessionId?.trim() || !threadId?.trim()) {
+      throw new BadRequestException('sessionId and threadId are required')
+    }
+    const rows = await this.prisma.agentMessage.findMany({
+      where: { sessionId, threadId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    })
+    return rows.reverse()
+  }
+
+  async listThreads(sessionId: string) {
+    if (!sessionId?.trim()) {
+      throw new BadRequestException('sessionId is required')
+    }
+    return this.prisma.agentThread.findMany({
       where: { sessionId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { updatedAt: 'desc' },
       take: 50,
+    })
+  }
+
+  async upsertAgentThread(input: { id: string; sessionId: string; title?: string }) {
+    const title = (input.title?.trim() || '新对话').slice(0, 40)
+    return this.prisma.agentThread.upsert({
+      where: { id: input.id },
+      create: { id: input.id, sessionId: input.sessionId, title },
+      update: { title, updatedAt: new Date() },
     })
   }
 
@@ -78,9 +113,28 @@ export class AgentService {
     const validatedMentionedKeys =
       mentionedKeys?.length ? normalizeMentionedKeys(mentionedKeys) : undefined
 
+    const effectiveThreadId = threadId?.trim() || sessionId
+    const threadExists = await this.prisma.agentThread.findUnique({
+      where: { id: effectiveThreadId },
+      select: { id: true },
+    })
+    if (!threadExists) {
+      await this.upsertAgentThread({
+        id: effectiveThreadId,
+        sessionId,
+        title: userMessage,
+      })
+    } else {
+      await this.prisma.agentThread.update({
+        where: { id: effectiveThreadId },
+        data: { updatedAt: new Date() },
+      })
+    }
+
     await this.prisma.agentMessage.create({
       data: {
         sessionId,
+        threadId: effectiveThreadId,
         role: 'user',
         content: userMessage,
         ...(validatedAttachments ? { attachments: JSON.stringify(validatedAttachments) } : {}),
@@ -120,7 +174,7 @@ export class AgentService {
       }
     }
 
-    for await (const event of this.streamFromCanvasAgent(sessionId, userId)) {
+    for await (const event of this.streamFromCanvasAgent(sessionId, effectiveThreadId, userId)) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text
       }
@@ -298,21 +352,20 @@ export class AgentService {
       yield event
     }
 
-    await this.finalizeTurn(sessionId, userId, assistantText, canvasActions, {
+    const effectiveThreadId = threadId?.trim() || sessionId
+    await this.finalizeTurn(sessionId, effectiveThreadId, userId, assistantText, canvasActions, {
       // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
       rewriteCanvasData: false,
+      linkedOutputs: deriveLinkedOutputs(canvasActions),
     })
   }
 
   private async *streamFromCanvasAgent(
     sessionId: string,
+    threadId: string,
     userId?: string,
   ): AsyncGenerator<AgentStreamEvent> {
-    const history = await this.prisma.agentMessage.findMany({
-      where: { sessionId },
-      orderBy: { createdAt: 'asc' },
-      take: 20,
-    })
+    const history = await this.getMessages(sessionId, threadId, 20)
 
     const messages = history.map((m) => ({
       role: m.role,
@@ -354,26 +407,34 @@ export class AgentService {
       yield event
     }
 
-    await this.finalizeTurn(sessionId, userId, assistantText, canvasActions, {
+    await this.finalizeTurn(sessionId, threadId, userId, assistantText, canvasActions, {
       rewriteCanvasData: true,
+      linkedOutputs: deriveLinkedOutputs(canvasActions),
     })
   }
 
   private async finalizeTurn(
     sessionId: string,
+    threadId: string,
     userId: string | undefined,
     assistantText: string,
     canvasActions: CanvasAction[],
-    opts: { rewriteCanvasData: boolean },
+    opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[] },
   ) {
     if (assistantText) {
       await this.prisma.agentMessage.create({
         data: {
           sessionId,
+          threadId,
           role: 'assistant',
           content: assistantText,
           toolCalls: canvasActions.length ? JSON.stringify(canvasActions) : null,
+          linkedOutputs: opts.linkedOutputs?.length ? JSON.stringify(opts.linkedOutputs) : null,
         },
+      })
+      await this.prisma.agentThread.update({
+        where: { id: threadId },
+        data: { updatedAt: new Date() },
       })
     }
 
