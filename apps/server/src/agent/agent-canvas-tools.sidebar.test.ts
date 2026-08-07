@@ -211,4 +211,33 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
     })
     expect(sessionUpdate).toHaveBeenCalled()
   })
+
+  it('localRefs mode writes mentionedKeys on target nodes', async () => {
+    canvas = {
+      nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+      edges: [],
+    }
+    const oneAttachment: SidebarAttachment[] = [
+      {
+        id: 'ref-upload',
+        mediaType: 'image',
+        sourceKind: 'upload',
+        label: 'product.jpg',
+        url: 'https://cdn.example.com/product.jpg',
+      },
+    ]
+
+    const result = await svc.applySidebarAttachments({
+      sessionId: 's1',
+      nodeIds: ['img-1'],
+      attachments: oneAttachment,
+      mode: 'localRefs',
+      mentionedKeys: ['I1', 'T2'],
+    })
+
+    expect(result.actions[0].payload.data).toMatchObject({
+      mentionedKeys: ['I1', 'T2'],
+    })
+    expect(sessionUpdate).toHaveBeenCalled()
+  })
 })

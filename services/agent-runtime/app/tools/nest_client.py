@@ -254,6 +254,7 @@ class NestCanvasClient:
         attachments: list[dict],
         ref_order: list[str] | None,
         mode: str,
+        mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
         body = {
             "sessionId": self._session_id,
@@ -262,6 +263,8 @@ class NestCanvasClient:
             "refOrder": ref_order or [],
             "mode": mode,
         }
+        if mentioned_keys:
+            body["mentionedKeys"] = mentioned_keys
         return await self._post("/agent/internal/apply-sidebar-attachments", body)
 
     async def update_nodes_batch(

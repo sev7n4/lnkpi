@@ -96,3 +96,10 @@ def test_normalize_mentioned_keys():
 
     assert normalize_mentioned_keys(["i1", "I1", "T2"]) == ["I1", "T2"]
     assert normalize_mentioned_keys(None) == []
+
+
+def test_parse_mentioned_keys_from_text():
+    from app.graph.sidebar_attachments import parse_mentioned_keys_from_text
+
+    assert parse_mentioned_keys_from_text("按 @I1 风格，@T2 文案") == ["I1", "T2"]
+    assert parse_mentioned_keys_from_text("无提及") == []

@@ -7,6 +7,7 @@ MAX_MENTIONED_KEYS = 5
 
 REF_PREFIX = {"text": "T", "image": "I", "video": "V", "audio": "A"}
 _MENTIONED_KEY_RE = re.compile(r"^[TIVA]\d+$", re.IGNORECASE)
+_MENTIONED_KEY_IN_TEXT_RE = re.compile(r"@([TIVA]\d+)", re.IGNORECASE)
 
 
 def normalize_sidebar_attachments(raw: list[dict] | None) -> list[dict]:
@@ -40,6 +41,31 @@ def assign_sidebar_ref_keys(attachments: list[dict] | None) -> list[str]:
         counters[media_type] += 1
         keys.append(f"{prefix}{counters[media_type]}")
     return keys
+
+
+def parse_mentioned_keys_from_text(text: str) -> list[str]:
+    """Extract @I1-style keys from user message (matches web parseRefMentions)."""
+    if not text:
+        return []
+    raw: list[str] = []
+    for match in _MENTIONED_KEY_IN_TEXT_RE.finditer(text):
+        raw.append(match.group(1))
+    return normalize_mentioned_keys(raw)
+
+
+def resolve_sidebar_mentioned_keys(state: dict) -> list[str]:
+    """State keys first; fallback parse latest HumanMessage for @T1/@I1."""
+    keys = normalize_mentioned_keys(state.get("sidebar_mentioned_keys"))
+    if keys:
+        return keys
+    messages = state.get("messages") or []
+    for msg in reversed(messages):
+        content = getattr(msg, "content", None)
+        if isinstance(content, str) and content.strip():
+            parsed = parse_mentioned_keys_from_text(content)
+            if parsed:
+                return parsed
+    return []
 
 
 def normalize_mentioned_keys(raw: list[str] | None) -> list[str]:

@@ -203,6 +203,11 @@ class ApplySidebarAttachmentsDto {
 
   @IsString()
   mode!: 'localRefs' | 'attach_edges'
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class UpdateNodesBatchItemDto {
@@ -449,6 +454,7 @@ export class AgentCanvasToolsController {
       >[0]['attachments'],
       refOrder: dto.refOrder,
       mode: dto.mode,
+      mentionedKeys: dto.mentionedKeys,
     })
     return { code: 0, message: 'ok', data }
   }

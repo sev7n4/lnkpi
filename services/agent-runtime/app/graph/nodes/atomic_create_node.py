@@ -7,6 +7,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.sidebar_copy import format_atomic_create_progress
+from app.graph.sidebar_attachments import resolve_sidebar_mentioned_keys
 
 
 def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -110,26 +111,16 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
         node_ids = [str(i.get("node_id") or "") for i in created_items if i.get("node_id")]
 
         attachments = state.get("sidebar_attachments") or []
-        if attachments:
-            apply_fn = getattr(nest, "apply_sidebar_attachments", None)
-            if apply_fn and node_ids:
-                await apply_fn(
-                    node_ids=node_ids,
-                    attachments=attachments,
-                    ref_order=state.get("sidebar_ref_order"),
-                    mode="localRefs",
-                )
-
-        keys = state.get("sidebar_mentioned_keys") or []
-        if keys and node_ids:
-            update_fn = getattr(nest, "update_nodes_batch", None)
-            if update_fn is not None:
-                await update_fn(
-                    [
-                        {"nodeId": nid, "patch": {"mentionedKeys": keys}}
-                        for nid in node_ids
-                    ]
-                )
+        mentioned_keys = resolve_sidebar_mentioned_keys(state)
+        apply_fn = getattr(nest, "apply_sidebar_attachments", None)
+        if apply_fn and node_ids and (attachments or mentioned_keys):
+            await apply_fn(
+                node_ids=node_ids,
+                attachments=attachments,
+                ref_order=state.get("sidebar_ref_order"),
+                mode="localRefs",
+                mentioned_keys=mentioned_keys or None,
+            )
 
         first = created_items[0]
         msg = format_atomic_create_progress(first, count=len(created_items))
