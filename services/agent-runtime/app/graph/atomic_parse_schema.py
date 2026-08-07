@@ -7,6 +7,7 @@ from typing import Any, Literal, TypedDict
 from langchain_core.messages import AIMessage
 
 from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override
+from app.graph.sidebar_attachments import assign_sidebar_ref_keys
 from app.graph.sidebar_copy import format_atomic_multi_ack, format_atomic_parse_ack
 from app.graph.intent import marketing_intent
 from app.graph.planning_guard import has_planning_image_conflict, planning_clarify_question
@@ -206,6 +207,7 @@ def parse_outcome_to_state(
     *,
     canvas_context: str | None = None,
     prior_spec: dict[str, Any] | None = None,
+    sidebar_attachments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Map validated parse outcome to graph state patch."""
     if outcome["kind"] == "clarify":
@@ -227,9 +229,11 @@ def parse_outcome_to_state(
         if pm and "promptMode" not in item:
             item["promptMode"] = pm
 
+    ref_keys = assign_sidebar_ref_keys(sidebar_attachments) or None
+
     if len(items) == 1:
         spec = first
-        msg = format_atomic_parse_ack(spec, prior_spec=prior_spec)
+        msg = format_atomic_parse_ack(spec, prior_spec=prior_spec, ref_keys=ref_keys)
         return {
             "phase": "atomic_parse",
             "flow_mode": "atomic_create",

@@ -187,6 +187,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_summary = None
 
         focus_node_id = state.get("focus_node_id")
+        sidebar_attachments = state.get("sidebar_attachments") or None
         context_packet = build_atomic_parse_packet(state, canvas_summary=canvas_summary)
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
         prior_atomic = state.get("atomic_spec")
@@ -215,7 +216,10 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     guard_triggered=guard is not None,
                 )
                 patch = parse_outcome_to_state(
-                    outcome, canvas_context=parse_ctx, prior_spec=prior_spec
+                    outcome,
+                    canvas_context=parse_ctx,
+                    prior_spec=prior_spec,
+                    sidebar_attachments=sidebar_attachments,
                 )
                 patch.pop("clarify_context", None)
                 return patch
@@ -239,7 +243,10 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             )
             _log_intent_parse(source="rule_variant", utterance=text, outcome=outcome)
             return parse_outcome_to_state(
-                outcome, canvas_context=parse_ctx, prior_spec=prior_spec
+                outcome,
+                canvas_context=parse_ctx,
+                prior_spec=prior_spec,
+                sidebar_attachments=sidebar_attachments,
             )
 
         canvas_ctx = parse_ctx
@@ -342,7 +349,10 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 )
 
         patch = parse_outcome_to_state(
-            outcome, canvas_context=canvas_ctx, prior_spec=prior_spec
+            outcome,
+            canvas_context=canvas_ctx,
+            prior_spec=prior_spec,
+            sidebar_attachments=sidebar_attachments,
         )
         patch["explore_summary"] = explore_summary_from_packet(context_packet)
         if settings.agent_thinking_ui and outcome.get("kind") == "items":
