@@ -23,7 +23,7 @@ describe('buildCanvasOutputs', () => {
     ]
     const out = buildCanvasOutputs({
       traceSteps,
-      taskItems: [{ id: 't1', nodeId: 'n1', title: '主图', status: 'running' }],
+      taskItems: [{ nodeId: 'n1', title: '主图', status: 'running' }],
     })
     expect(out).toHaveLength(1)
     expect(out[0].status).toBe('running')
@@ -40,7 +40,7 @@ describe('buildCanvasOutputs', () => {
           meta: { nodeId: 'n1' },
         },
       ],
-      taskItems: [{ id: 't2', nodeId: 'n2', title: '详情头图', status: 'running' }],
+      taskItems: [{ nodeId: 'n2', title: '详情头图', status: 'running' }],
     })
     expect(out).toHaveLength(2)
     expect(out.map((o) => o.nodeId).sort()).toEqual(['n1', 'n2'])
