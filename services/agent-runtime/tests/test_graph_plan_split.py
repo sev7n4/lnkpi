@@ -158,6 +158,7 @@ async def test_confirm_then_split_creates_image_skeletons():
             "session_id": "session-1",
             "thread_id": "thread-confirm-1",
             "user_id": "user-1",
+            "requested_skill_id": "enterprise-marketing-campaign",
         },
         config,
     )
@@ -226,6 +227,7 @@ async def test_revise_returns_to_plan():
             "session_id": "session-2",
             "thread_id": "thread-revise-1",
             "user_id": "user-1",
+            "requested_skill_id": "enterprise-marketing-campaign",
         },
         config,
     )
@@ -262,6 +264,7 @@ async def test_await_confirm_none_emits_tip_message():
             "session_id": "session-none-tip",
             "thread_id": "thread-none-tip-1",
             "user_id": "user-1",
+            "requested_skill_id": "enterprise-marketing-campaign",
         },
         config,
     )

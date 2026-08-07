@@ -87,8 +87,12 @@ def is_explicit_generation_intent(text: str) -> bool:
 
 def has_planning_image_conflict(text: str) -> bool:
     """True when planning + ecommerce hero/detail assets without explicit generation."""
+    from app.graph.l0_action import has_preserve_intent
+
     t = (text or "").strip()
-    if not t or is_explicit_generation_intent(t):
+    if not t or has_preserve_intent(t):
+        return False
+    if is_explicit_generation_intent(t):
         return False
     if detect_action(t) == "write":
         return False

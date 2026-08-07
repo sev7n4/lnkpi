@@ -15,6 +15,7 @@ from app.graph.atomic_intent import (
 )
 from app.graph.atomic_parse_schema import validate_parse_result
 from app.graph.atomic_parse_util import rule_parse_confidence
+from app.graph.planning_guard import has_planning_image_conflict
 
 EVAL_PATH = (
     Path(__file__).resolve().parents[1]
@@ -81,5 +82,9 @@ def test_eval_planning_guard_gold(planning_cases: list[dict]):
                 mismatches.append(f"{case_id}: expected clarify, got {out['kind']}")
             elif gold.get("reason") and out.get("reason") != gold["reason"]:
                 mismatches.append(f"{case_id}: reason {out.get('reason')} != {gold['reason']}")
+
+        if gold.get("planning_conflict") is False:
+            if has_planning_image_conflict(utterance):
+                mismatches.append(f"{case_id}: unexpected planning conflict")
 
     assert not mismatches, "\n".join(mismatches)
