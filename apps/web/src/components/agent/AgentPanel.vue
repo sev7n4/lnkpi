@@ -3,6 +3,8 @@ import { ref, nextTick, onMounted } from 'vue'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import { apiUrl } from '@/services/api-base'
+import { lastThreadStorageKey } from '@/utils/formatSessionTime'
+import { createAgentThreadId } from '@/components/agent/streamRecovery'
 
 const props = defineProps<{
   sessionId: string
@@ -18,8 +20,16 @@ const input = ref('')
 const chatContainer = ref<HTMLElement>()
 
 async function loadHistory() {
+  agent.clear()
   try {
-    const res = await fetch(apiUrl(`/api/agent/chat/user/messages?sessionId=${props.sessionId}`))
+    const threadId =
+      localStorage.getItem(lastThreadStorageKey(props.sessionId))
+      ?? createAgentThreadId(props.sessionId)
+    const res = await fetch(
+      apiUrl(
+        `/api/agent/chat/user/messages?sessionId=${encodeURIComponent(props.sessionId)}&threadId=${encodeURIComponent(threadId)}`,
+      ),
+    )
     const json = await res.json()
     if (json.data?.length) agent.loadHistory(json.data)
   } catch {
