@@ -50,7 +50,11 @@ import { parseRefMentions } from '@/composables/useRefMentions'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
-import { AGENT_SKILLS } from '@/constants/agentSkillMap'
+import {
+  AGENT_SKILLS,
+  agentInputPlaceholder,
+  getAgentSkill,
+} from '@/constants/agentSkillMap'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import { formatDuration as formatTraceDuration } from '@/components/agent/executionStepLabels'
 import { ElMessage } from 'element-plus'
@@ -250,9 +254,11 @@ const speech = useSpeechRecognition()
 const { preferences, load: loadProviderBootstrap } = useProviderBootstrap()
 const planningModel = ref(preferences.value?.defaultTextModel ?? '')
 
-/* ---- 技能选择 ---- */
-const activeSkillId = ref('canvas')
-const activeSkill = computed(() => AGENT_SKILLS.find((s) => s.id === activeSkillId.value) ?? AGENT_SKILLS[0])
+/* ---- 技能选择（显式 Skill；默认自动 / 平台路由） ---- */
+const activeSkillId = ref<string | null>(null)
+const activeSkill = computed(() => getAgentSkill(activeSkillId.value))
+const skillButtonLabel = computed(() => activeSkill.value?.label ?? '技能')
+const inputPlaceholder = computed(() => agentInputPlaceholder(activeSkill.value))
 const skillMenuOpen = ref(false)
 const skillMenuRef = ref<HTMLElement | null>(null)
 useClickOutside(skillMenuRef, () => {
@@ -535,7 +541,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         message,
         threadId: agentThreadId.value,
         userDecision,
-        skillId: activeSkillId.value,
+        skillId: activeSkillId.value ?? undefined,
         model: planningModel.value || undefined,
         focusNodeId: props.selectedNodeId || undefined,
         attachments: attachments.length ? attachments : undefined,
@@ -1213,7 +1219,7 @@ defineExpose({
                 ref="composerRef"
                 v-model="input"
                 :mentions="mentionOptions"
-                :placeholder="`向${activeSkill.label}助手描述需求，Cmd/Ctrl + Enter 发送...`"
+                :placeholder="inputPlaceholder"
                 :disabled="agent.isStreaming"
                 @submit="send"
               />
@@ -1252,13 +1258,30 @@ defineExpose({
                       <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8L12 3z" />
                       <path stroke-linecap="round" stroke-linejoin="round" d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
                     </svg>
-                    <span class="max-w-[72px] truncate font-medium">{{ activeSkill.label }}</span>
+                    <span class="max-w-[72px] truncate font-medium">{{ skillButtonLabel }}</span>
                   </button>
                   <div
                     v-if="skillMenuOpen"
-                    class="neo-popover absolute bottom-full left-0 z-30 mb-1 w-[220px] rounded-xl py-1"
+                    class="neo-popover absolute bottom-full left-0 z-30 mb-1 w-[240px] rounded-xl py-1"
                     @click.stop
                   >
+                    <button
+                      type="button"
+                      class="neo-popover-item flex w-full items-start gap-2 px-3 py-2 text-left"
+                      :class="activeSkillId === null ? '!text-[var(--neo-accent-text)]' : ''"
+                      @click="activeSkillId = null; skillMenuOpen = false"
+                    >
+                      <span class="agent-skill-icon mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
+                        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M5.6 18.4l2.1-2.1m8.6-8.6l2.1-2.1" />
+                        </svg>
+                      </span>
+                      <span class="min-w-0">
+                        <span class="text-xs font-medium">自动</span>
+                        <span class="block truncate text-[10px] opacity-60">平台路由，单张/图生图优先</span>
+                      </span>
+                    </button>
+                    <div class="mx-3 my-1 border-t border-[var(--neo-border)] opacity-40" />
                     <button
                       v-for="skill in AGENT_SKILLS"
                       :key="skill.id"
@@ -1268,27 +1291,16 @@ defineExpose({
                       @click="activeSkillId = skill.id; skillMenuOpen = false"
                     >
                       <span class="agent-skill-icon mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
-                        <svg v-if="skill.icon === 'canvas'" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                        <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
                           <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><path stroke-linecap="round" d="M10 6.5h5.5A1.5 1.5 0 0 1 17 8v6" />
-                        </svg>
-                        <svg v-else-if="skill.icon === 'storyboard'" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
-                          <rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M9 10v9" />
-                        </svg>
-                        <svg v-else-if="skill.icon === 'polish'" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M14 4l6 6L8 22H2v-6L14 4z" /><path stroke-linecap="round" d="M11 7l6 6" />
-                        </svg>
-                        <svg v-else viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
                         </svg>
                       </span>
                       <span class="min-w-0">
-                        <span class="flex items-center gap-1.5">
-                          <span class="text-xs font-medium">{{ skill.label }}</span>
-                          <span v-if="!skill.ready" class="rounded px-1 py-px text-[9px] opacity-50 ring-1 ring-current">开发中</span>
-                        </span>
+                        <span class="text-xs font-medium">{{ skill.label }}</span>
                         <span class="block truncate text-[10px] opacity-60">{{ skill.desc }}</span>
                       </span>
                     </button>
+                    <p v-if="!AGENT_SKILLS.length" class="px-3 py-2 text-[10px] opacity-50">暂无已安装技能</p>
                   </div>
                 </div>
 

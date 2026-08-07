@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from app.graph.atomic_clarify import is_affirmative_clarify_reply, is_img2img_utterance
 from app.graph.intent_parse_schema import IntentParseResult
 
 ClarifyReplyResult = IntentParseResult | Literal["none"]
@@ -94,6 +95,26 @@ def classify_clarify_reply(
             "confidence": 0.90,
             "needs_clarify": False,
             "reason": "clarify_reply_vision_text",
+        }
+
+    if is_affirmative_clarify_reply(raw) and is_img2img_utterance(original_utterance):
+        prompt = original_utterance.strip()
+        return {
+            "action": "generate",
+            "scope": "atomic",
+            "route": "atomic_create",
+            "structure": "single",
+            "items": [
+                {
+                    "target_type": "image",
+                    "title": prompt[:24],
+                    "prompt": prompt,
+                    "confirm_gate": False,
+                }
+            ],
+            "confidence": 0.94,
+            "needs_clarify": False,
+            "reason": "clarify_reply_img2img_confirm",
         }
 
     return "none"
