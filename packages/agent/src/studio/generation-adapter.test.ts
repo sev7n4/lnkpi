@@ -149,6 +149,42 @@ describe('buildImageProviderOptions', () => {
     expect(r.effectivePromptSuffix).toBe('[ref-image:https://cdn.example/b.png]')
   })
 
+  it('BYOK passthrough keeps unknown gateway id off platform catalog default', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'brand-new-upstream-image',
+      aspectRatio: '16:9',
+      resolution: '1K',
+      n: 1,
+      referenceImages: ['https://cdn.example/a.png'],
+      byok: true,
+      channelBaseUrl: 'https://api.apimart.ai/v1',
+    })
+    expect(r.modelId).toBe('brand-new-upstream-image')
+    expect(r.meta.gatewayModelId).toBe('brand-new-upstream-image')
+    expect(r.meta.modelFallback).toBeUndefined()
+    expect(r.meta.responseMode).toBe('async_task')
+    expect(r.meta.refWire).toBe('apimart_image_urls')
+  })
+
+  it('recognizes APIMart gemini-3.6-flash alias as image2 with multi-ref wire', () => {
+    const r = buildImageProviderOptions({
+      modelKey: 'gemini-3.6-flash',
+      aspectRatio: '16:9',
+      resolution: '1K',
+      n: 1,
+      referenceImages: [
+        'https://cdn.example/model.png',
+        'https://cdn.example/product.png',
+      ],
+    })
+    expect(r.modelId).toBe('gpt-image-2-official')
+    expect(r.meta.gatewayModelId).toBe('gpt-image-2-official')
+    expect(r.meta.responseMode).toBe('async_task')
+    expect(r.meta.refWire).toBe('apimart_image_urls')
+    expect(r.meta.modelFallback).toBeUndefined()
+    expect(r.meta.nativeParams.image_urls).toHaveLength(2)
+  })
+
   it('recognizes BYOK APIMart gateway model ids for async profile', () => {
     const r = buildImageProviderOptions({
       modelKey: 'doubao-seedream-5-0-pro',
