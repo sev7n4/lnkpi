@@ -44,6 +44,7 @@ const textThinkingEffort = ref<'high' | 'max'>('high')
 const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
+const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
@@ -140,6 +141,10 @@ function onRefReorder(refIds: string[]) {
 function onRefRemove(ref: NodeRef) {
   emit('removeRef', ref)
 }
+
+function onRefMention(refKey: string) {
+  promptSectionRef.value?.insertRefMention(refKey)
+}
 </script>
 
 <template>
@@ -148,9 +153,11 @@ function onRefRemove(ref: NodeRef) {
       :refs="refs ?? []"
       @reorder="onRefReorder"
       @remove="onRefRemove"
+      @mention="onRefMention"
     />
 
     <DockPromptSection
+      ref="promptSectionRef"
       :model-value="prompt"
       :mentions="mentions"
       placeholder="输入脚本、旁白或品牌文案..."

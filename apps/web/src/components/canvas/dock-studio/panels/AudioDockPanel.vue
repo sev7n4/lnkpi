@@ -63,6 +63,7 @@ const voiceSettings = ref<AudioVoiceSettings>({
 const modelVoices = computed(() => getModelEntry(catalogModelKeyFromValue(audioModel.value))?.voices)
 
 const speech = useSpeechRecognition()
+const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateAudioCredits())
 
@@ -153,6 +154,10 @@ function onRefReorder(refIds: string[]) {
 function onRefRemove(ref: NodeRef) {
   emit('removeRef', ref)
 }
+
+function onRefMention(refKey: string) {
+  promptSectionRef.value?.insertRefMention(refKey)
+}
 </script>
 
 <template>
@@ -161,9 +166,11 @@ function onRefRemove(ref: NodeRef) {
       :refs="refs ?? []"
       @reorder="onRefReorder"
       @remove="onRefRemove"
+      @mention="onRefMention"
     />
 
     <DockPromptSection
+      ref="promptSectionRef"
       :model-value="prompt"
       :mentions="mentions"
       placeholder="输入台词或旁白文本..."

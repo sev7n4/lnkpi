@@ -70,7 +70,9 @@ def _sidebar_img2img_signal(ctx: RouteContext) -> bool:
     keys = _image_mentioned_keys(ctx.get("mentioned_keys") or [])
     if not utterance:
         return False
-    has_transform = any(v in utterance for v in TRANSFORM_VERBS)
+    has_transform = any(v in utterance for v in TRANSFORM_VERBS) or (
+        len(keys) >= 2 and ("让" in utterance or "请" in utterance)
+    )
     if not has_transform and not has_preserve_intent(utterance):
         return False
     multi_ref = len(keys) >= 2 or utterance_has_multi_image_refs(utterance)

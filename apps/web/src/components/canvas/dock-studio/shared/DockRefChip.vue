@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import type { NodeRef, RefMediaType } from '@/composables/useNodeRefs'
 import DockTypeIcon from './DockTypeIcon.vue'
-import DockRefPreview from './DockRefPreview.vue'
+import AgentRefHoverPreview from '@/components/agent/AgentRefHoverPreview.vue'
 import { resolveMediaUrl } from '@/services/api-base'
 import type { DockNodeIconKind } from './dockIcons'
 
@@ -11,14 +11,24 @@ const props = defineProps<{
   draggable?: boolean
   dragging?: boolean
   dragOver?: boolean
+  /** When true, click inserts @refKey into prompt (agent-aligned). */
+  mentionable?: boolean
 }>()
 
 const emit = defineEmits<{
+  mention: [refKey: string]
   remove: []
+  dragstart: [event: DragEvent]
+  dragover: [event: DragEvent]
+  dragleave: []
+  drop: [event: DragEvent]
+  dragend: []
 }>()
 
 const previewOpen = ref(false)
 const previewPos = ref({ x: 0, y: 0 })
+const hoverTimer = ref<number | null>(null)
+const isHoveringPreview = ref(false)
 
 const MEDIA_ICON: Record<RefMediaType, DockNodeIconKind> = {
   text: 'text',
@@ -33,15 +43,48 @@ const thumbUrl = computed(() => {
   return raw ? resolveMediaUrl(raw) : ''
 })
 
+function clearHoverTimer() {
+  if (hoverTimer.value !== null) {
+    window.clearTimeout(hoverTimer.value)
+    hoverTimer.value = null
+  }
+}
+
+function onEnter(event: MouseEvent) {
+  clearHoverTimer()
+  previewPos.value = { x: event.clientX + 8, y: event.clientY + 8 }
+  hoverTimer.value = window.setTimeout(() => {
+    previewOpen.value = true
+  }, 200)
+}
+
+function onLeave() {
+  clearHoverTimer()
+  hoverTimer.value = window.setTimeout(() => {
+    if (!isHoveringPreview.value) previewOpen.value = false
+  }, 80)
+}
+
+function onPreviewEnter() {
+  clearHoverTimer()
+  isHoveringPreview.value = true
+}
+
+function onPreviewLeave() {
+  isHoveringPreview.value = false
+  previewOpen.value = false
+}
+
 function onRemoveClick(event: MouseEvent) {
   event.stopPropagation()
   emit('remove')
 }
 
-function onChipClick(event: MouseEvent) {
+function onClick() {
   if (props.refItem.stale) return
-  previewPos.value = { x: event.clientX + 8, y: event.clientY + 8 }
-  previewOpen.value = true
+  if (props.mentionable !== false) {
+    emit('mention', props.refItem.refKey)
+  }
 }
 </script>
 
@@ -58,8 +101,15 @@ function onChipClick(event: MouseEvent) {
     :title="`${refItem.refKey} · ${refItem.label}`"
     role="button"
     tabindex="0"
-    @click="onChipClick"
-    @keydown.enter.prevent="onChipClick($event as unknown as MouseEvent)"
+    @mouseenter="onEnter"
+    @mouseleave="onLeave"
+    @click="onClick"
+    @keydown.enter.prevent="onClick"
+    @dragstart="emit('dragstart', $event)"
+    @dragover="emit('dragover', $event)"
+    @dragleave="emit('dragleave')"
+    @drop="emit('drop', $event)"
+    @dragend="emit('dragend')"
   >
     <span class="dock-ref-chip__key">{{ refItem.refKey }}</span>
 
@@ -95,12 +145,13 @@ function onChipClick(event: MouseEvent) {
     </button>
   </div>
 
-  <DockRefPreview
+  <AgentRefHoverPreview
     v-if="previewOpen"
     :ref-item="refItem"
     :x="previewPos.x"
     :y="previewPos.y"
-    @close="previewOpen = false"
+    @mouseenter="onPreviewEnter"
+    @mouseleave="onPreviewLeave"
   />
 </template>
 
@@ -126,7 +177,7 @@ function onChipClick(event: MouseEvent) {
     opacity 0.15s ease;
 }
 
-.dock-ref-chip:active {
+.dock-ref-chip:active[draggable='true'] {
   cursor: grabbing;
 }
 
@@ -161,7 +212,6 @@ function onChipClick(event: MouseEvent) {
   pointer-events: none;
 }
 
-/* 缩略图上叠字时保持白字 + 阴影确保可读 */
 .dock-ref-chip.has-media .dock-ref-chip__key {
   color: rgba(255, 255, 255, 0.9);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);

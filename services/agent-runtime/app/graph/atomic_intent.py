@@ -92,6 +92,12 @@ ATOMIC_REGENERATE_HINTS = tuple(_TAXONOMY.get("atomic_regenerate_hints") or (
     "再来一次",
     "再生成一次",
     "再跑一遍",
+    "重复上一次操作",
+    "重复上次",
+    "重复上一步",
+    "再来一遍",
+    "再做一次",
+    "重复上一操作",
 ))
 
 # Full-campaign phrases — atomic keyword substrings (e.g. 「图」in「出图」) must not hijack.
@@ -163,6 +169,10 @@ def _matches_regenerate_hints(text: str) -> bool:
 
 
 _REGENERATE_STRIP_PHRASES = (
+    "重复上一次操作",
+    "重复上一操作",
+    "重复上次",
+    "重复上一步",
     "重新生成一张",
     "重新生成",
     "再生成一张",
@@ -170,6 +180,8 @@ _REGENERATE_STRIP_PHRASES = (
     "再生成一遍",
     "再跑一次",
     "再来一次",
+    "再来一遍",
+    "再做一次",
     "再试一次",
     "再试",
     "重试",

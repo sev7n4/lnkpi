@@ -45,6 +45,7 @@ const prompt = ref('')
 const textModel = ref(getConfig('text').model)
 
 const speech = useSpeechRecognition()
+const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const promptMode = computed(() => {
   const mode = props.node.data?.promptMode
@@ -140,6 +141,10 @@ function onRefReorder(refIds: string[]) {
 function onRefRemove(ref: NodeRef) {
   emit('removeRef', ref)
 }
+
+function onRefMention(refKey: string) {
+  promptSectionRef.value?.insertRefMention(refKey)
+}
 </script>
 
 <template>
@@ -148,9 +153,11 @@ function onRefRemove(ref: NodeRef) {
       :refs="textRefs"
       @reorder="onRefReorder"
       @remove="onRefRemove"
+      @mention="onRefMention"
     />
 
     <DockPromptSection
+      ref="promptSectionRef"
       :model-value="prompt"
       :mentions="mentions"
       placeholder="描述创作需求，生成结构化提示词..."

@@ -100,6 +100,13 @@ export function useSidebarAttachments() {
     pendingAttachments.value = pendingAttachments.value.filter((a) => a.id !== id)
   }
 
+  function reorder(ids: string[]) {
+    const byId = new Map(pendingAttachments.value.map((a) => [a.id, a]))
+    pendingAttachments.value = ids
+      .map((id) => byId.get(id))
+      .filter((a): a is SidebarAttachment => Boolean(a))
+  }
+
   function clear() {
     pendingAttachments.value = []
   }
@@ -129,5 +136,5 @@ export function useSidebarAttachments() {
     return { attachments: [...pendingAttachments.value], refOrder: refOrder.value }
   }
 
-  return { pendingAttachments, refOrder, addFromFile, addFromPayload, addFromCanvasNode, addFromCanvasNodes, remove, clear, toPayload, assignRefKeys }
+  return { pendingAttachments, refOrder, addFromFile, addFromPayload, addFromCanvasNode, addFromCanvasNodes, remove, reorder, clear, toPayload, assignRefKeys }
 }

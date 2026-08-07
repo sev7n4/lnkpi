@@ -52,6 +52,7 @@ const refInput = ref<HTMLInputElement | null>(null)
 const refUploading = ref(false)
 const refUploadProgress = ref(0)
 const refUploadError = ref('')
+const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
@@ -106,6 +107,10 @@ function onRefReorder(refIds: string[]) {
 
 function onRefRemove(ref: NodeRef) {
   emit('removeRef', ref)
+}
+
+function onRefMention(refKey: string) {
+  promptSectionRef.value?.insertRefMention(refKey)
 }
 
 function syncFromNode() {
@@ -229,9 +234,11 @@ function clearReferenceImage() {
       :refs="stripRefs"
       @reorder="onRefReorder"
       @remove="onRefRemove"
+      @mention="onRefMention"
     />
 
     <DockPromptSection
+      ref="promptSectionRef"
       :model-value="prompt"
       :mentions="mentions"
       placeholder="描述画面内容，@ 引用节点..."

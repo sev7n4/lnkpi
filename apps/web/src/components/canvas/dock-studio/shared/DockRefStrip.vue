@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   reorder: [refIds: string[]]
   remove: [ref: NodeRef]
+  mention: [refKey: string]
 }>()
 
 const dragRefId = ref<string | null>(null)
@@ -76,6 +77,7 @@ function onDragEnd() {
         @drop="onDrop(refItem.refId, $event)"
         @dragend="onDragEnd"
         @remove="emit('remove', refItem)"
+        @mention="emit('mention', $event)"
       />
     </div>
   </div>

@@ -61,6 +61,7 @@ import {
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import { formatDuration as formatTraceDuration } from '@/components/agent/executionStepLabels'
 import { formatSessionTime, lastThreadStorageKey } from '@/utils/formatSessionTime'
+import { randomId } from '@/utils/randomId'
 import { ElMessage } from 'element-plus'
 
 interface AgentThreadRow {
@@ -105,10 +106,29 @@ function makeAttachmentItems(
   attachments: SidebarAttachment[] | undefined,
   refKeys: string[] | undefined,
 ) {
-  return (attachments ?? []).map((attachment, index) => ({
+  const list = attachments ?? []
+  const keys = refKeys?.length === list.length ? refKeys : assignRefKeysFor(list)
+  return list.map((attachment, index) => ({
     attachment,
-    refKey: refKeys?.[index] ?? attachment.id,
+    refKey: keys[index] ?? attachment.id,
   }))
+}
+
+function clearComposer() {
+  input.value = ''
+  sidebar.clear()
+}
+
+function reattachFromHistory(attachment: SidebarAttachment) {
+  if (sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) {
+    ElMessage.warning(`最多 ${SIDEBAR_ATTACHMENT_MAX} 个引用`)
+    return
+  }
+  sidebar.addFromPayload({ ...attachment, id: randomId() })
+  const keys = sidebar.assignRefKeys()
+  const idx = sidebar.pendingAttachments.value.length - 1
+  if (keys[idx]) insertRefMention(keys[idx])
+  nextTick(() => composerRef.value?.focus())
 }
 
 const pendingAttachmentItems = computed(() =>
@@ -341,6 +361,7 @@ async function selectThread(threadId: string) {
     historyOpen.value = false
     return
   }
+  clearComposer()
   agentThreadId.value = threadId
   localStorage.setItem(lastThreadStorageKey(props.sessionId), threadId)
   historyOpen.value = false
@@ -349,9 +370,11 @@ async function selectThread(threadId: string) {
   hasAtomicCheckpoint.value = false
   recoveredPhaseHint.value = null
   await loadHistory()
+  void refreshThreadCheckpoint()
 }
 
 async function bootstrapThread() {
+  clearComposer()
   agent.clear()
   const cached = localStorage.getItem(lastThreadStorageKey(props.sessionId))
   if (cached) {
@@ -361,6 +384,7 @@ async function bootstrapThread() {
     agentThreadId.value = list[0]?.id ?? createAgentThreadId(props.sessionId)
   }
   await loadHistory()
+  void refreshThreadCheckpoint()
   scrollToBottom()
 }
 
@@ -454,8 +478,8 @@ function startResize(event: MouseEvent) {
 }
 
 function newAgentSession() {
+  clearComposer()
   agent.clear()
-  input.value = ''
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
   hasAtomicCheckpoint.value = false
@@ -1182,6 +1206,8 @@ defineExpose({
                   class="mt-2"
                   :items="makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)"
                   :removable="false"
+                  history-interactive
+                  @reattach="reattachFromHistory"
                 />
                 <AgentCanvasOutputs
                   v-if="msg.role === 'assistant' && (assistantOutputsById.get(msg.id)?.length ?? 0) > 0"
@@ -1310,6 +1336,7 @@ defineExpose({
                 :removable="true"
                 @remove="sidebar.remove"
                 @mention="insertRefMention"
+                @reorder="sidebar.reorder"
               />
               <input
                 ref="fileInputRef"

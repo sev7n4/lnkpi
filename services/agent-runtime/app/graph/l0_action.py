@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from app.graph.planning_guard import ActionKind
 
 PRESERVE_MARKERS = ("不变", "保持", "维持", "沿用")
-TRANSFORM_VERBS = ("穿上", "换装", "替换", "融合", "上身")
+TRANSFORM_VERBS = ("穿上", "换装", "替换", "融合", "上身", "换上", "换穿", "试穿", "佩戴", "搭配")
 _REF_KEY_PATTERN = re.compile(r"@([ITVA]\d+)", re.IGNORECASE)
 
 
