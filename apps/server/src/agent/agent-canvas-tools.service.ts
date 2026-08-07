@@ -532,6 +532,7 @@ export class AgentCanvasToolsService {
     attachments: SidebarAttachment[]
     refOrder?: string[]
     mode: 'localRefs' | 'attach_edges'
+    mentionedKeys?: string[]
   }): Promise<{ actions: CanvasAction[]; sourceNodeIds: string[] }> {
     validateSidebarAttachments(input.attachments)
     const order = input.refOrder?.length
@@ -550,7 +551,14 @@ export class AgentCanvasToolsService {
         }))
       const actions: CanvasAction[] = input.nodeIds.map((nodeId) => ({
         type: 'update_node',
-        payload: { id: nodeId, data: { localRefs, refOrder: order } },
+        payload: {
+          id: nodeId,
+          data: {
+            localRefs,
+            refOrder: order,
+            ...(input.mentionedKeys?.length ? { mentionedKeys: input.mentionedKeys } : {}),
+          },
+        },
       }))
       await this.persist(input.sessionId, actions)
       return { actions, sourceNodeIds: [] }

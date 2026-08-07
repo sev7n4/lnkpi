@@ -29,6 +29,7 @@ class FakeNest:
         attachments: list[dict],
         ref_order: list[str] | None,
         mode: str,
+        mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
         self.calls.append(
             (
@@ -38,6 +39,7 @@ class FakeNest:
                     "attachments": attachments,
                     "ref_order": ref_order,
                     "mode": mode,
+                    "mentioned_keys": mentioned_keys,
                 },
             )
         )
@@ -136,11 +138,10 @@ async def test_atomic_create_patches_mentioned_keys_after_sidebar_apply():
         }
     )
 
-    update_calls = [c for c in nest.calls if c[0] == "update_nodes_batch"]
-    assert len(update_calls) == 1
-    assert update_calls[0][1] == [
-        {"nodeId": "node-1", "patch": {"mentionedKeys": ["I1", "T1"]}}
-    ]
+    apply_calls = [c for c in nest.calls if c[0] == "apply_sidebar_attachments"]
+    assert len(apply_calls) == 1
+    assert apply_calls[0][1]["mentioned_keys"] == ["I1", "T1"]
+    assert not any(c[0] == "update_nodes_batch" for c in nest.calls)
 
 
 @pytest.mark.asyncio
@@ -159,12 +160,34 @@ async def test_atomic_create_patches_mentioned_keys_without_attachments():
         }
     )
 
-    assert not any(c[0] == "apply_sidebar_attachments" for c in nest.calls)
-    update_calls = [c for c in nest.calls if c[0] == "update_nodes_batch"]
-    assert len(update_calls) == 1
-    assert update_calls[0][1] == [
-        {"nodeId": "node-1", "patch": {"mentionedKeys": ["I1"]}}
-    ]
+    apply_calls = [c for c in nest.calls if c[0] == "apply_sidebar_attachments"]
+    assert len(apply_calls) == 1
+    assert apply_calls[0][1]["mentioned_keys"] == ["I1"]
+    assert apply_calls[0][1]["attachments"] == []
+
+
+@pytest.mark.asyncio
+async def test_atomic_create_parses_mentioned_keys_from_user_message():
+    from langchain_core.messages import HumanMessage
+
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+    attachments = [{"materialId": "mat-1"}]
+
+    await create(
+        {
+            "atomic_spec": {
+                "target_type": "image",
+                "prompt": "主图",
+                "title": "主图",
+            },
+            "sidebar_attachments": attachments,
+            "messages": [HumanMessage(content="按 @I1 风格生成主图")],
+        }
+    )
+
+    apply_calls = [c for c in nest.calls if c[0] == "apply_sidebar_attachments"]
+    assert apply_calls[0][1]["mentioned_keys"] == ["I1"]
 
 
 @pytest.mark.asyncio
@@ -183,4 +206,5 @@ async def test_atomic_create_skips_mentioned_keys_patch_when_empty():
         }
     )
 
+    assert not any(c[0] == "apply_sidebar_attachments" for c in nest.calls)
     assert not any(c[0] == "update_nodes_batch" for c in nest.calls)

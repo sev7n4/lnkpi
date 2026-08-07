@@ -306,6 +306,7 @@ class NestEventProxy:
         attachments: list[dict[str, Any]],
         ref_order: list[str] | None,
         mode: str,
+        mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
         return await self._forward_actions(
             await self._inner.apply_sidebar_attachments(
@@ -313,6 +314,7 @@ class NestEventProxy:
                 attachments=attachments,
                 ref_order=ref_order,
                 mode=mode,
+                mentioned_keys=mentioned_keys,
             )
         )
 
