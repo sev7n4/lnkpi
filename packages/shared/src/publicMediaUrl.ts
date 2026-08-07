@@ -1,10 +1,17 @@
 const UPLOAD_PATH_PREFIX = '/api/uploads/'
 
+function readEnv(name: string): string | undefined {
+  const env = (
+    globalThis as typeof globalThis & {
+      process?: { env?: Record<string, string | undefined> }
+    }
+  ).process?.env
+  const value = env?.[name]
+  return typeof value === 'string' ? value.trim() : undefined
+}
+
 function readPublicBase(explicit?: string): string {
-  const raw =
-    explicit ??
-    (typeof process !== 'undefined' ? process.env.API_PUBLIC_URL : undefined) ??
-    ''
+  const raw = explicit ?? readEnv('API_PUBLIC_URL') ?? ''
   return raw.replace(/\/$/, '')
 }
 
