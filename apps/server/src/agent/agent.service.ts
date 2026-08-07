@@ -15,6 +15,17 @@ import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
 
+export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput[] {
+  return actions
+    .filter((a) => a.type === 'add_node' && a.payload?.id)
+    .map((a) => ({
+      nodeId: a.payload.id!,
+      title: String(a.payload.data?.title || a.payload.data?.prompt || '未命名').slice(0, 20),
+      nodeType: String(a.payload.nodeType || 'image'),
+      status: 'done' as const,
+    }))
+}
+
 @Injectable()
 export class AgentService {
   private agent: CanvasAgent
@@ -345,6 +356,7 @@ export class AgentService {
     await this.finalizeTurn(sessionId, effectiveThreadId, userId, assistantText, canvasActions, {
       // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
       rewriteCanvasData: false,
+      linkedOutputs: deriveLinkedOutputs(canvasActions),
     })
   }
 
@@ -397,6 +409,7 @@ export class AgentService {
 
     await this.finalizeTurn(sessionId, threadId, userId, assistantText, canvasActions, {
       rewriteCanvasData: true,
+      linkedOutputs: deriveLinkedOutputs(canvasActions),
     })
   }
 

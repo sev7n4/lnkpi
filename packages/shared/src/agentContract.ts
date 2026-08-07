@@ -353,6 +353,7 @@ export const AgentMessageSchema = z.object({
   role: z.string(),
   content: z.string(),
   toolCalls: z.string().optional(),
+  linkedOutputs: z.string().optional(),
   createdAt: z.union([z.string(), z.date()]),
 })
 
