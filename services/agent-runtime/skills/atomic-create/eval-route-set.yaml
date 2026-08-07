@@ -1,0 +1,123 @@
+# Platform route_decide eval gold set (R1)
+# Run: pytest tests/test_eval_route_set.py
+version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-07-platform-route-skill-boundary-design.md
+
+cases:
+  - id: rt-img2img-01
+    state:
+      messages: [{ role: user, content: "@I1 模特 @I2 产品，让模特穿上，保持构图不变" }]
+      sidebar_mentioned_keys: [I1, I2]
+      sidebar_attachments:
+        - { mediaType: image, url: "https://a/1.jpg" }
+        - { mediaType: image, url: "https://a/2.jpg" }
+    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }
+
+  - id: rt-img2img-02
+    state:
+      messages: [{ role: user, content: "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。保持主图风格，背景，构图不变。" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-img2img-03
+    state:
+      messages: [{ role: user, content: "@I1 @I2 融合换装" }]
+      sidebar_mentioned_keys: [I1, I2]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-preserve-01
+    state:
+      messages: [{ role: user, content: "保持主图风格、背景、构图不变，生成换装图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-preserve-02
+    state:
+      messages: [{ role: user, content: "保持构图不变，按 @I1 出图" }]
+      sidebar_mentioned_keys: [I1]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-atomic-01
+    state:
+      messages: [{ role: user, content: "帮我生成一张蓝牙耳机主图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-atomic-02
+    state:
+      messages: [{ role: user, content: "帮我生成一个模特人物图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-atomic-03
+    state:
+      messages: [{ role: user, content: "生成一张白底产品图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-clarify-01
+    state:
+      messages: [{ role: user, content: "天猫蓝牙耳机详情页营销方案" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-clarify-02
+    state:
+      messages: [{ role: user, content: "请你帮我设计蓝牙耳机主图，详情页的构图方案" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-clarify-03
+    state:
+      messages: [{ role: user, content: "帮我生成12个分镜镜头" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-skill-campaign-01
+    state:
+      messages: [{ role: user, content: "天猫蓝牙耳机详情页营销方案" }]
+      requested_skill_id: enterprise-marketing-campaign
+    gold: { flow_mode: campaign }
+
+  - id: rt-skill-campaign-02
+    state:
+      messages: [{ role: user, content: "详情页构图方案" }]
+      requested_skill_id: enterprise-marketing-campaign
+    gold: { flow_mode: campaign }
+
+  - id: rt-chat-01
+    state:
+      messages: [{ role: user, content: "你好" }]
+    gold: { flow_mode: chat }
+
+  - id: rt-chat-02
+    state:
+      messages: [{ role: user, content: "这个音箱怎么样" }]
+    gold: { flow_mode: chat }
+
+  - id: rt-regen-01
+    state:
+      messages: [{ role: user, content: "重新生成一张" }]
+      atomic_node_id: node-1
+      atomic_spec: { target_type: image, prompt: x, title: x }
+    gold: { flow_mode: atomic_regenerate }
+
+  - id: rt-regen-clarify-01
+    state:
+      messages: [{ role: user, content: "重新生成一张" }]
+    gold: { flow_mode: clarify_route, reason: regen_no_checkpoint }
+
+  - id: rt-modify-01
+    state:
+      messages: [{ role: user, content: "把模特定妆改为双人模特" }]
+      user_brief: 洁具方案
+      plan_draft: "# plan"
+    gold: { flow_mode: campaign, is_modify: true }
+
+  - id: rt-single-01
+    state:
+      messages: [{ role: user, content: "快速生成" }]
+      focus_node_id: image-1
+    gold: { flow_mode: single_node }
+
+  - id: rt-img2img-04
+    state:
+      messages: [{ role: user, content: "@I1 风格 @I2 产品，替换穿上" }]
+      sidebar_mentioned_keys: [I1, I2]
+      sidebar_attachments:
+        - { mediaType: image, url: "https://a/1.jpg" }
+        - { mediaType: image, url: "https://a/2.jpg" }
+    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }

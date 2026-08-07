@@ -27,6 +27,7 @@ class FakeInner:
         attachments: list[dict],
         ref_order: list[str] | None,
         mode: str,
+        mentioned_keys: list[str] | None = None,
     ) -> dict:
         self.apply_calls.append(
             {
@@ -34,6 +35,7 @@ class FakeInner:
                 "attachments": attachments,
                 "ref_order": ref_order,
                 "mode": mode,
+                "mentioned_keys": mentioned_keys,
             }
         )
         return {

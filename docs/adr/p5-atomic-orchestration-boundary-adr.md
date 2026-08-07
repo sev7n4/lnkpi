@@ -17,10 +17,16 @@
 
 ## Rules
 
-1. **L1 intake** may override `atomic_create` → `campaign` when `orchestration_complexity_intent` returns `campaign`.
+1. **L1 intake** may override `atomic_create` → `campaign` when `orchestration_complexity_intent` returns `campaign` **and** user has explicitly selected a Skill (`requested_skill_id`) with high-confidence plan intent. **Without explicit skill, silent campaign override is forbidden** (R0/R1, 2026-08-07).
 2. **Parse** enforces `MAX_ATOMIC_MULTI_ITEMS = 5`; excess → clarify suggesting Campaign.
 3. **LLM parse** does not change L1 `flow_mode`; only structure/items.
 4. **Thread isolation:** atomic turns clear `split_manifest` (Phase 3).
+
+## Supersedes (partial, R0/R1)
+
+- Prior rule 1 allowed orchestration override from utterance keywords alone; replaced by `route_decide` + explicit skill contract per [platform-route-skill-boundary-design](../superpowers/specs/2026-08-07-platform-route-skill-boundary-design.md).
+- `marketing_intent → enterprise-marketing-campaign` implicit binding removed (R0).
+- `has_planning_image_conflict` exempts preserve phrases (主图风格/构图不变) for img2img (R0).
 
 ## Consequences
 

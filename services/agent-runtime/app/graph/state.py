@@ -95,6 +95,9 @@ class AgentRuntimeState(TypedDict, total=False):
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn
+    route_context: dict | None
+    route_decision: dict | None
+    route_clarify: bool | None
     thread_id: str
     session_id: str
     user_id: str

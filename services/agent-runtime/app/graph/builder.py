@@ -11,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 from app.graph.nodes.apply_sidebar_refs import make_apply_sidebar_refs_node
 from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.done import make_done_node
+from app.graph.nodes.clarify_route import make_clarify_route_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
@@ -22,6 +23,8 @@ from app.graph.subgraphs.topo_gate import register_topo_gate
 
 
 def route_after_intake(state: AgentRuntimeState) -> str:
+    if state.get("route_clarify") and state.get("phase") == "clarify":
+        return "clarify_route"
     if state.get("phase") == "clarify" and state.get("clarify_question"):
         return "clarify_atomic_intent"
     if state.get("flow_mode") == "atomic_regenerate":
@@ -56,6 +59,7 @@ def build_agent_graph(
     graph = StateGraph(AgentRuntimeState)
 
     graph.add_node("intake", make_intake_node(skills_path))
+    graph.add_node("clarify_route", make_clarify_route_node())
     graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
     graph.add_node("apply_sidebar_refs", make_apply_sidebar_refs_node(nest=nest))
@@ -76,11 +80,13 @@ def build_agent_graph(
             "prepare_single_gen": "prepare_single_gen",
             "parse_atomic_intent": "parse_atomic_intent",
             "clarify_atomic_intent": "clarify_atomic_intent",
+            "clarify_route": "clarify_route",
             "decide_plan_mode": "decide_plan_mode",
             "chat": "chat",
         },
     )
     graph.add_edge("chat", END)
+    graph.add_edge("clarify_route", END)
     graph.add_edge("write_plan_node", "split")
     graph.add_conditional_edges(
         "split",

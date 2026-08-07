@@ -1,6 +1,6 @@
 # 平台路由与 Skill 边界 — 设计规格
 
-> 状态：**Draft**（2026-08-07）  
+> 状态：**Implemented R0/R1**（2026-08-07）  
 > 动机：生产复测暴露 img2img 原子请求被误判为 Campaign 营销方案流；根因是 **平台 L1 路由** 与 **Skill 隐式绑定** 耦合，且样例 skill 被当作电商默认路径  
 > 前置：[2026-08-04-atomic-intent-hybrid-design.md](./2026-08-04-atomic-intent-hybrid-design.md)、[2026-08-05-intent-llm-structured-parse-design.md](./2026-08-05-intent-llm-structured-parse-design.md)、[2026-08-07-agent-sidebar-material-entry-design.md](./2026-08-07-agent-sidebar-material-entry-design.md)、[2026-08-03-agent-phase-c2-dock-model-skillid-design.md](./2026-08-03-agent-phase-c2-dock-model-skillid-design.md)  
 > 将 supersede：`docs/adr/p5-atomic-orchestration-boundary-adr.md` 规则 3（LLM 不改 L1）；Phase C2 §4.1 关键词启发式绑 skill  
@@ -404,19 +404,19 @@ flow_mode: str         # 来自 route_decision，不再默认 campaign
 
 ### R0 — 止血（1–2 天）
 
-- [ ] 删除 `marketing_intent → skill_id` 隐式绑定
-- [ ] `has_planning_image_conflict`：preserve 短语豁免
-- [ ] gold case pg-sidebar-01 + CI
-- [ ] 文档：样例 skill 非 production 默认（本 spec §7.1）
+- [x] 删除 `marketing_intent → skill_id` 隐式绑定
+- [x] `has_planning_image_conflict`：preserve 短语豁免
+- [x] gold case pg-sidebar-01 + CI
+- [x] 文档：样例 skill 非 production 默认（本 spec §7.1）
 
 **验收：** 生产复测 utterance（§1.1）在无 skill 时 **不得** 出现 14 节点 await_confirm；应 atomic 或 clarify。
 
 ### R1 — 平台路由（约 1 周）
 
-- [ ] `RouteContext` 组装；Nest → Runtime 已有 attachments/mentionedKeys 贯通
-- [ ] `route_decide` 节点 + P1 侧栏信号表
-- [ ] thin `intake`；默认 flow 非 campaign
-- [ ] `eval-route-set.yaml` v1
+- [x] `RouteContext` 组装；Nest → Runtime 已有 attachments/mentionedKeys 贯通
+- [x] `route_decide` 节点 + P1 侧栏信号表
+- [x] thin `intake`；默认 flow 非 campaign
+- [x] `eval-route-set.yaml` v1
 
 ### R2 — Orchestration 泛化（约 2 周）
 
