@@ -615,6 +615,18 @@ export class AgentCanvasToolsService {
     return { actions, sourceNodeIds }
   }
 
+  async updateNodesBatch(input: {
+    sessionId: string
+    items: Array<{ nodeId: string; patch: Record<string, unknown> }>
+  }): Promise<{ actions: CanvasAction[] }> {
+    const actions: CanvasAction[] = input.items.map((item) => ({
+      type: 'update_node',
+      payload: { id: item.nodeId, data: item.patch },
+    }))
+    await this.persist(input.sessionId, actions)
+    return { actions }
+  }
+
   async startImageGeneration(input: {
     sessionId: string
     userId: string
@@ -690,13 +702,16 @@ export class AgentCanvasToolsService {
       allActions.push(...expandActions)
     }
 
+    const mentionedKeys = Array.isArray(node.data?.mentionedKeys)
+      ? (node.data.mentionedKeys as string[])
+      : undefined
     const record = await this.studio.generateImage(
       input.userId,
       imagePrompt,
       model,
       aspectRatio,
       refs,
-      undefined,
+      mentionedKeys?.length ? mentionedKeys : undefined,
       resolution,
       count,
       { sessionId: input.sessionId, nodeId: input.nodeId },

@@ -316,6 +316,11 @@ class NestEventProxy:
             )
         )
 
+    async def update_nodes_batch(
+        self, items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        return await self._forward_actions(await self._inner.update_nodes_batch(items))
+
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_image_generation")
 

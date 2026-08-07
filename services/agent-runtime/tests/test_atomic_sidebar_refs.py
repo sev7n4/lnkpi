@@ -43,6 +43,10 @@ class FakeNest:
         )
         return {"applied": len(node_ids)}
 
+    async def update_nodes_batch(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+        self.calls.append(("update_nodes_batch", items))
+        return {"actions": []}
+
 
 @pytest.mark.asyncio
 async def test_atomic_create_applies_sidebar_local_refs():
@@ -112,3 +116,71 @@ async def test_atomic_create_applies_refs_to_all_created_nodes():
     assert len(apply_calls) == 1
     assert apply_calls[0][1]["node_ids"] == ["node-1", "node-2"]
     assert apply_calls[0][1]["mode"] == "localRefs"
+
+
+@pytest.mark.asyncio
+async def test_atomic_create_patches_mentioned_keys_after_sidebar_apply():
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+    attachments = [{"materialId": "mat-1", "role": "reference"}]
+
+    await create(
+        {
+            "atomic_spec": {
+                "target_type": "image",
+                "prompt": "主图",
+                "title": "主图",
+            },
+            "sidebar_attachments": attachments,
+            "sidebar_mentioned_keys": ["I1", "T1"],
+        }
+    )
+
+    update_calls = [c for c in nest.calls if c[0] == "update_nodes_batch"]
+    assert len(update_calls) == 1
+    assert update_calls[0][1] == [
+        {"nodeId": "node-1", "patch": {"mentionedKeys": ["I1", "T1"]}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_atomic_create_patches_mentioned_keys_without_attachments():
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+
+    await create(
+        {
+            "atomic_spec": {
+                "target_type": "image",
+                "prompt": "主图",
+                "title": "主图",
+            },
+            "sidebar_mentioned_keys": ["I1"],
+        }
+    )
+
+    assert not any(c[0] == "apply_sidebar_attachments" for c in nest.calls)
+    update_calls = [c for c in nest.calls if c[0] == "update_nodes_batch"]
+    assert len(update_calls) == 1
+    assert update_calls[0][1] == [
+        {"nodeId": "node-1", "patch": {"mentionedKeys": ["I1"]}}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_atomic_create_skips_mentioned_keys_patch_when_empty():
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+
+    await create(
+        {
+            "atomic_spec": {
+                "target_type": "image",
+                "prompt": "主图",
+                "title": "主图",
+            },
+            "sidebar_mentioned_keys": [],
+        }
+    )
+
+    assert not any(c[0] == "update_nodes_batch" for c in nest.calls)

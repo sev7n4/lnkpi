@@ -457,6 +457,40 @@ describe('AgentCanvasToolsService', () => {
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/audio.mp3')
   })
 
+  it('startImageGeneration passes node.data.mentionedKeys to studio', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'img-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '洁具白底图',
+            status: 'draft',
+            mentionedKeys: ['I1', 'T1'],
+          },
+        },
+      ],
+      edges: [],
+    }
+    await svc.startImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-1',
+    })
+    expect(generateImage).toHaveBeenCalledWith(
+      'u1',
+      '洁具白底图',
+      'platform::user-default-image',
+      '9:16',
+      expect.any(Array),
+      ['I1', 'T1'],
+      '2K',
+      2,
+      { sessionId: 's1', nodeId: 'img-1' },
+    )
+  })
+
   it('runImageGeneration prefers node image fields over account defaults', async () => {
     canvas = {
       nodes: [
