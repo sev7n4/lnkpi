@@ -807,6 +807,8 @@ export class MaterialService {
       pixelSize,
       n: 1,
       referenceImages,
+      byok: resolved.source === 'user',
+      channelBaseUrl: resolved.credentials.baseUrl,
     })
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
     const effectivePrompt = buildEffectiveImagePrompt(

@@ -68,9 +68,23 @@ function isSeedreamModel(modelKey: string, gatewayModelId: string): boolean {
   )
 }
 
+/** APIMart renames Image2 as gemini-3.x-flash in /models listings. */
+function isGptImage2Alias(value: string): boolean {
+  return (
+    value === 'image2' ||
+    /^gpt-image-2$/i.test(value) ||
+    /^gemini-3\.[0-9]+-flash$/i.test(value) ||
+    /gemini-.*-flash-image/i.test(value)
+  )
+}
+
+export function isApimartBaseUrl(baseUrl?: string): boolean {
+  return !!baseUrl?.trim() && /apimart\.ai/i.test(baseUrl)
+}
+
 function isGptImage2Model(modelKey: string, gatewayModelId: string): boolean {
   return (
-    modelKey === 'image2' ||
+    isGptImage2Alias(modelKey) ||
     /^gpt-image-2/i.test(modelKey) ||
     /^gpt-image-2/i.test(gatewayModelId)
   )
@@ -92,9 +106,29 @@ export function resolveImageGatewayModelId(modelKey: string, gatewayModelId: str
   return gatewayModelId
 }
 
+const APIMART_IMAGE2_PROFILE: Omit<ImageModelProfile, 'gatewayModelId'> = {
+  ...APIMART_PROFILE_BASE,
+  maxRefs: 16,
+  maxN: 4,
+  allowedResolutions: RATIO_RESOLUTIONS,
+  resolutionCase: 'lower',
+  defaultQuality: 'high',
+  maxPollMs: 360_000,
+}
+
+const APIMART_GENERIC_IMAGE_PROFILE: Omit<ImageModelProfile, 'gatewayModelId'> = {
+  ...APIMART_PROFILE_BASE,
+  maxRefs: 16,
+  maxN: 4,
+  allowedResolutions: RATIO_RESOLUTIONS,
+  resolutionCase: 'lower',
+  maxPollMs: 360_000,
+}
+
 export function resolveImageModelProfile(
   modelKey: string,
   gatewayModelId: string,
+  options?: { channelBaseUrl?: string },
 ): ImageModelProfile {
   const resolvedGateway = resolveImageGatewayModelId(modelKey, gatewayModelId)
 
@@ -115,16 +149,11 @@ export function resolveImageModelProfile(
   }
 
   if (isGptImage2Model(modelKey, gatewayModelId)) {
-    return {
-      ...APIMART_PROFILE_BASE,
-      gatewayModelId: resolvedGateway,
-      maxRefs: 16,
-      maxN: 4,
-      allowedResolutions: RATIO_RESOLUTIONS,
-      resolutionCase: 'lower',
-      defaultQuality: 'high',
-      maxPollMs: 360_000,
-    }
+    return { ...APIMART_IMAGE2_PROFILE, gatewayModelId: resolvedGateway }
+  }
+
+  if (isApimartBaseUrl(options?.channelBaseUrl)) {
+    return { ...APIMART_GENERIC_IMAGE_PROFILE, gatewayModelId: resolvedGateway }
   }
 
   return { ...LEGACY_PROFILE, gatewayModelId: resolvedGateway }

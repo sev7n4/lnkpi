@@ -314,6 +314,9 @@ export function buildImageProviderOptions(input: {
   pixelSize?: string
   n: number
   referenceImages: string[]
+  /** BYOK: keep upstream gateway id; never fall back to platform catalog default. */
+  byok?: boolean
+  channelBaseUrl?: string
 }): {
   modelId: string
   size: string
@@ -329,6 +332,8 @@ export function buildImageProviderOptions(input: {
     pixelSize,
     n,
     referenceImages,
+    byok = false,
+    channelBaseUrl,
   } = input
   const catalog = resolveModelKey('image', modelKey)
   let resolvedKey = catalog.modelKey
@@ -338,8 +343,12 @@ export function buildImageProviderOptions(input: {
     resolvedKey = modelKey
     catalogGateway = resolveImageGatewayModelId(modelKey, modelKey)
     catalogFallback = false
+  } else if (modelKey && byok && catalog.fallback) {
+    resolvedKey = modelKey
+    catalogGateway = modelKey
+    catalogFallback = false
   }
-  const profile = resolveImageModelProfile(resolvedKey, catalogGateway)
+  const profile = resolveImageModelProfile(resolvedKey, catalogGateway, { channelBaseUrl })
   const gatewayModelId = resolveImageGatewayModelId(resolvedKey, catalogGateway)
   const clamped = clampImageGenerationInput(profile, {
     n,

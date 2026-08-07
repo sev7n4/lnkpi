@@ -643,6 +643,8 @@ export class StudioService {
       pixelSize,
       n,
       referenceImages,
+      byok: resolved.source === 'user',
+      channelBaseUrl: resolved.credentials.baseUrl,
     })
     const modelId = resolved.source === 'user' ? resolved.modelName : built.modelId
     const storeModel =

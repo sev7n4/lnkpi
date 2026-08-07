@@ -24,6 +24,28 @@ describe('resolveImageModelProfile', () => {
     expect(p.maxRefs).toBe(16)
   })
 
+  it('maps APIMart gemini-3.x-flash aliases to gpt-image-2-official', () => {
+    for (const alias of ['gemini-3.5-flash', 'gemini-3.6-flash']) {
+      const p = resolveImageModelProfile(alias, alias)
+      expect(p.gatewayModelId).toBe('gpt-image-2-official')
+      expect(p.refWire).toBe('apimart_image_urls')
+      expect(p.responseMode).toBe('async_task')
+    }
+  })
+
+  it('uses APIMart generic async profile for unknown BYOK ids on apimart baseUrl', () => {
+    const p = resolveImageModelProfile('some-new-apimart-image', 'some-new-apimart-image', {
+      channelBaseUrl: 'https://api.apimart.ai/v1',
+    })
+    expect(p.gatewayModelId).toBe('some-new-apimart-image')
+    expect(p.refWire).toBe('apimart_image_urls')
+    expect(p.responseMode).toBe('async_task')
+  })
+
+  it('maps gpt-image-2 shorthand to gpt-image-2-official', () => {
+    expect(resolveImageGatewayModelId('gpt-image-2', 'gpt-image-2')).toBe('gpt-image-2-official')
+  })
+
   it('keeps agnes on extra_body sync wire', () => {
     const p = resolveImageModelProfile('agnes-image-2.1-flash', 'agnes-image-2.1-flash')
     expect(p.refWire).toBe('agnes_extra_body')
