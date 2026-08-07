@@ -108,3 +108,7 @@ cases:
   - id: pg-ctrl-05
     utterance: 生成一个模特人物图
     gold: { route: atomic_create, target_type: image, complexity: atomic, min_confidence: 0.88 }
+
+  - id: pg-sidebar-01
+    utterance: "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。保持主图风格，背景，构图不变。"
+    gold: { route: atomic_create, complexity: atomic, planning_conflict: false }
