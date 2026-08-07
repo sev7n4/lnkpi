@@ -11,7 +11,10 @@ import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentRefStrip from '@/components/agent/AgentRefStrip.vue'
 import AgentAssetPicker from '@/components/agent/AgentAssetPicker.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
+import AgentCanvasOutputs from '@/components/agent/AgentCanvasOutputs.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
+import { resolveMessageOutputs } from '@/components/agent/agentCanvasOutputs'
+import type { AgentStreamMessage } from '@/stores/agent'
 import {
   applyTaskEvent,
   applyPollRecordToTask,
@@ -82,6 +85,7 @@ const emit = defineEmits<{
   /** Agent 一轮结束后由画布从服务端回拉 SoT，避免本地旧图覆盖 Nest 拆图结果 */
   turnComplete: []
   focusNode: [nodeId: string]
+  focusAll: [nodeIds: string[]]
   expandedChange: [expanded: boolean]
 }>()
 
@@ -129,6 +133,36 @@ function insertRefMention(refKey: string) {
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
 const taskProgress = ref<AgentTaskProgressState>(emptyTaskProgress())
 const showTaskCard = computed(() => taskProgress.value.items.length > 0)
+
+const lastAssistantMessageId = computed(() =>
+  [...agent.messages].reverse().find((m) => m.role === 'assistant')?.id,
+)
+
+function isLiveTurnMessage(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'assistant') return false
+  if (msg.id !== lastAssistantMessageId.value) return false
+  return Boolean(msg.streaming) || showTaskCard.value || Boolean(msg.executionTrace)
+}
+
+function canvasOutputsForMessage(msg: AgentStreamMessage) {
+  return resolveMessageOutputs({
+    linkedOutputs: msg.linkedOutputs,
+    canvasActions: msg.canvasActions,
+    traceSteps: msg.executionTrace?.steps,
+    taskItems: isLiveTurnMessage(msg) ? taskProgress.value.items : undefined,
+    isLiveTurn: isLiveTurnMessage(msg),
+  })
+}
+
+const assistantOutputsById = computed(() => {
+  const map = new Map<string, ReturnType<typeof canvasOutputsForMessage>>()
+  for (const msg of agent.messages) {
+    if (msg.role === 'assistant') {
+      map.set(msg.id, canvasOutputsForMessage(msg))
+    }
+  }
+  return map
+})
 const forceChoiceOpen = ref(false)
 const forceChoiceKind = ref<ForceChoiceKind | null>(null)
 
@@ -1148,6 +1182,12 @@ defineExpose({
                   class="mt-2"
                   :items="makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)"
                   :removable="false"
+                />
+                <AgentCanvasOutputs
+                  v-if="msg.role === 'assistant' && (assistantOutputsById.get(msg.id)?.length ?? 0) > 0"
+                  :outputs="assistantOutputsById.get(msg.id) ?? []"
+                  @focus-node="emit('focusNode', $event)"
+                  @focus-all="emit('focusAll', $event)"
                 />
                 <AgentExecutionTrace
                   v-if="msg.role === 'assistant' && msg.executionTrace"

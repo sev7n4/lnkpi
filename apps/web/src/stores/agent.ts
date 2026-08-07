@@ -8,6 +8,7 @@ import {
   type SidebarAttachment,
   validateSidebarAttachments,
 } from '@lnkpi/shared'
+import { parsePersistedToolCalls } from '@/components/agent/agentCanvasOutputs'
 import {
   applyCanvasAction,
   applyExplore,
@@ -35,6 +36,7 @@ export interface AgentStreamMessage {
   attachments?: SidebarAttachment[]
   attachmentRefKeys?: string[]
   linkedOutputs?: LinkedCanvasOutput[]
+  canvasActions?: CanvasAction[]
 }
 
 type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null }
@@ -228,6 +230,7 @@ export const useAgentStore = defineStore('agent', () => {
         content: persisted.content,
         attachments: parseAttachments(persisted.attachments),
         linkedOutputs: parseLinkedOutputs(persisted.linkedOutputs),
+        canvasActions: parsePersistedToolCalls(persisted.toolCalls),
       }
     })
   }
