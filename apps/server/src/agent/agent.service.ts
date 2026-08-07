@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
-import type { CanvasAction, CanvasData } from '@lnkpi/shared'
-import { IMAGE_MODELS, TEXT_MODELS, VIDEO_MODELS } from '@lnkpi/shared'
+import type { CanvasAction, CanvasData, SidebarAttachment } from '@lnkpi/shared'
+import { IMAGE_MODELS, TEXT_MODELS, VIDEO_MODELS, validateSidebarAttachments } from '@lnkpi/shared'
 import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -58,14 +58,24 @@ export class AgentService {
     skillId?: string,
     model?: string,
     focusNodeId?: string,
+    attachments?: SidebarAttachment[],
+    refOrder?: string[],
   ): AsyncGenerator<AgentStreamEvent> {
     // Register idempotency key (if provided) before starting
     if (idempotencyKey) {
       await this.registerIdempotencyKey(idempotencyKey, sessionId, threadId || sessionId)
     }
 
+    const validatedAttachments =
+      attachments?.length ? validateSidebarAttachments(attachments) : undefined
+
     await this.prisma.agentMessage.create({
-      data: { sessionId, role: 'user', content: userMessage },
+      data: {
+        sessionId,
+        role: 'user',
+        content: userMessage,
+        ...(validatedAttachments ? { attachments: JSON.stringify(validatedAttachments) } : {}),
+      },
     })
 
     let assistantText = ''
@@ -84,6 +94,8 @@ export class AgentService {
           skillId,
           model,
           focusNodeId,
+          validatedAttachments,
+          refOrder,
         )) {
           if (event.type === 'text_delta') {
             assistantText += (event.data as { text: string }).text
@@ -228,6 +240,8 @@ export class AgentService {
     skillId?: string,
     model?: string,
     focusNodeId?: string,
+    attachments?: SidebarAttachment[],
+    refOrder?: string[],
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -257,6 +271,8 @@ export class AgentService {
       llmApiKey,
       llmBaseUrl,
       focusNodeId,
+      attachments,
+      refOrder,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

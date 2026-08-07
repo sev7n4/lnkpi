@@ -185,6 +185,26 @@ class AttachRefsDto {
   refOrder!: string[]
 }
 
+class ApplySidebarAttachmentsDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+
+  @IsArray()
+  attachments!: Record<string, unknown>[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  refOrder?: string[]
+
+  @IsString()
+  mode!: 'localRefs' | 'attach_edges'
+}
+
 class RunImageGenerationDto {
   @IsString()
   sessionId!: string
@@ -399,6 +419,20 @@ export class AgentCanvasToolsController {
   @Post('attach-refs')
   async attachRefs(@Body() dto: AttachRefsDto) {
     const data = await this.tools.attachRefs(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('apply-sidebar-attachments')
+  async applySidebarAttachments(@Body() dto: ApplySidebarAttachmentsDto) {
+    const data = await this.tools.applySidebarAttachments({
+      sessionId: dto.sessionId,
+      nodeIds: dto.nodeIds,
+      attachments: dto.attachments as Parameters<
+        AgentCanvasToolsService['applySidebarAttachments']
+      >[0]['attachments'],
+      refOrder: dto.refOrder,
+      mode: dto.mode,
+    })
     return { code: 0, message: 'ok', data }
   }
 

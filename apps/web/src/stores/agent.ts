@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { AgentChatMessage, CanvasAction } from '@lnkpi/shared'
+import {
+  type AgentChatMessage,
+  type CanvasAction,
+  type SidebarAttachment,
+  validateSidebarAttachments,
+} from '@lnkpi/shared'
 import {
   applyCanvasAction,
   applyExplore,
@@ -25,6 +30,8 @@ export interface AgentStreamMessage {
   streaming?: boolean
   textReplaceHistory?: string[]
   executionTrace?: ExecutionTraceState
+  attachments?: SidebarAttachment[]
+  attachmentRefKeys?: string[]
 }
 
 export const useAgentStore = defineStore('agent', () => {
@@ -44,11 +51,16 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function addUserMessage(content: string) {
+  function addUserMessage(
+    content: string,
+    extras?: { attachments?: SidebarAttachment[]; attachmentRefKeys?: string[] },
+  ) {
     messages.value.push({
       id: `msg-${Date.now()}`,
       role: 'user',
       content,
+      attachments: extras?.attachments?.map((attachment) => ({ ...attachment })),
+      attachmentRefKeys: extras?.attachmentRefKeys ? [...extras.attachmentRefKeys] : undefined,
     })
   }
 
@@ -176,11 +188,22 @@ export const useAgentStore = defineStore('agent', () => {
     isStreaming.value = false
   }
 
+  function parseAttachments(raw: string | undefined): SidebarAttachment[] | undefined {
+    if (!raw) return undefined
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? validateSidebarAttachments(parsed) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   function loadHistory(history: AgentChatMessage[]) {
     messages.value = history.map((m) => ({
       id: m.id,
       role: m.role as 'user' | 'assistant',
       content: m.content,
+      attachments: parseAttachments(m.attachments),
     }))
   }
 

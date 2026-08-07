@@ -140,6 +140,10 @@ class AgentRuntimeState(TypedDict, total=False):
     copy_alignment_ok: bool | None
     copy_write_blocked: bool | None
 
+    # Sidebar material entry (per user turn; overwritten each fresh turn)
+    sidebar_attachments: list[dict] | None
+    sidebar_ref_order: list[str] | None
+
     # W14: user_brief uses brief_reducer — immutable after first write unless BRIEF_RESET_PREFIX
     user_brief: Annotated[str | None, brief_reducer]
     mode: Literal["create", "modify"] | None

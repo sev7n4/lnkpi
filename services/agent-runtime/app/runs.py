@@ -13,7 +13,7 @@ import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
 from app.checkpoint_observability import checkpoint_diagnostics
@@ -29,6 +29,7 @@ from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
 from app.graph.nodes.intake import modify_intent
+from app.graph.sidebar_attachments import normalize_sidebar_attachments
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -185,6 +186,8 @@ async def _release_thread(thread_id: str, holder_id: str | None, nest: NestCanva
 
 
 class RunRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     session_id: str
     user_id: str
     message: str
@@ -196,6 +199,14 @@ class RunRequest(BaseModel):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     focus_node_id: str | None = None  # W28: single-node quick gen target
+    sidebar_attachments: list[dict[str, Any]] | None = Field(
+        default=None,
+        validation_alias="attachments",
+    )
+    sidebar_ref_order: list[str] | None = Field(
+        default=None,
+        validation_alias="ref_order",
+    )
 
 
 class NestEventProxy:
@@ -517,6 +528,13 @@ async def stream_run_events(
     """Yield AgentStreamEvent-shaped dicts for one user turn."""
     thread_id = req.thread_id or req.session_id
 
+    try:
+        normalized_attachments = normalize_sidebar_attachments(req.sidebar_attachments)
+    except ValueError as exc:
+        yield {"type": "error", "data": {"message": str(exc)}}
+        yield {"type": "done", "data": {}}
+        return
+
     owns_nest = nest is None
     inner_nest = nest if nest is not None else default_nest(
         session_id=req.session_id,
@@ -596,6 +614,8 @@ async def stream_run_events(
             "thread_id": thread_id,
             "requested_skill_id": req.skill_id,
             "focus_node_id": req.focus_node_id,
+            "sidebar_attachments": normalized_attachments,
+            "sidebar_ref_order": req.sidebar_ref_order,
         }
 
     async def run_graph() -> None:

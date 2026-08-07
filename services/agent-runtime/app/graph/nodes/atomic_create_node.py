@@ -107,6 +107,18 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
 
         await _emit_atomic_task_list(nest, created_items)
 
+        attachments = state.get("sidebar_attachments") or []
+        if attachments:
+            node_ids = [str(i.get("node_id") or "") for i in created_items if i.get("node_id")]
+            apply_fn = getattr(nest, "apply_sidebar_attachments", None)
+            if apply_fn and node_ids:
+                await apply_fn(
+                    node_ids=node_ids,
+                    attachments=attachments,
+                    ref_order=state.get("sidebar_ref_order"),
+                    mode="localRefs",
+                )
+
         first = created_items[0]
         msg = format_atomic_create_progress(first, count=len(created_items))
 

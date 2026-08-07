@@ -8,6 +8,8 @@ import {
   type CanvasNode,
   type LocalRefBinding,
   type NodeType,
+  type SidebarAttachment,
+  validateSidebarAttachments,
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
@@ -522,6 +524,95 @@ export class AgentCanvasToolsService {
 
     await this.persist(input.sessionId, actions)
     return { actions }
+  }
+
+  async applySidebarAttachments(input: {
+    sessionId: string
+    nodeIds: string[]
+    attachments: SidebarAttachment[]
+    refOrder?: string[]
+    mode: 'localRefs' | 'attach_edges'
+  }): Promise<{ actions: CanvasAction[]; sourceNodeIds: string[] }> {
+    validateSidebarAttachments(input.attachments)
+    const order = input.refOrder?.length
+      ? input.refOrder
+      : input.attachments.map((a) => a.id)
+
+    if (input.mode === 'localRefs') {
+      const localRefs: LocalRefBinding[] = input.attachments
+        .map((a) => ({
+          id: a.id,
+          mediaType: a.mediaType,
+          sourceKind: a.sourceKind === 'asset' ? 'asset' : 'upload',
+          label: a.label,
+          url: a.url,
+          text: a.text,
+        }))
+      const actions: CanvasAction[] = input.nodeIds.map((nodeId) => ({
+        type: 'update_node',
+        payload: { id: nodeId, data: { localRefs, refOrder: order } },
+      }))
+      await this.persist(input.sessionId, actions)
+      return { actions, sourceNodeIds: [] }
+    }
+
+    const { canvas } = await this.loadSession(input.sessionId)
+    const actions: CanvasAction[] = []
+    const sourceByAttachmentId = new Map<string, string>()
+    const baseIndex = canvas.nodes.length
+
+    for (const attachment of input.attachments) {
+      if (attachment.sourceKind === 'canvasNode' && attachment.sourceNodeId?.trim()) {
+        sourceByAttachmentId.set(attachment.id, attachment.sourceNodeId)
+        continue
+      }
+
+      const nodeType = attachment.mediaType === 'text' ? 'text' : 'mediaInput'
+      const nodeId = nextNodeId(nodeType)
+      const positionIndex = baseIndex + actions.length
+      const position = {
+        x: 80 + (positionIndex % 4) * GRID_X,
+        y: 80 + Math.floor(positionIndex / 4) * GRID_Y,
+      }
+      const data: Record<string, unknown> =
+        attachment.mediaType === 'text'
+          ? {
+              title: attachment.label,
+              content: attachment.text ?? '',
+              prompt: attachment.text ?? '',
+              status: 'completed',
+            }
+          : {
+              title: attachment.label,
+              url: attachment.url ?? '',
+              mediaKind: attachment.mediaType,
+              status: 'completed',
+            }
+
+      actions.push({
+        type: 'add_node',
+        payload: {
+          id: nodeId,
+          nodeType: nodeType as NodeType,
+          position,
+          data,
+        },
+      })
+      sourceByAttachmentId.set(attachment.id, nodeId)
+    }
+
+    const orderedAttachmentIds = [
+      ...order,
+      ...input.attachments.map((attachment) => attachment.id).filter((id) => !order.includes(id)),
+    ]
+    const sourceNodeIds = orderedAttachmentIds
+      .map((attachmentId) => sourceByAttachmentId.get(attachmentId))
+      .filter((nodeId): nodeId is string => Boolean(nodeId))
+
+    if (actions.length) {
+      await this.persist(input.sessionId, actions)
+    }
+    return { actions, sourceNodeIds }
   }
 
   async startImageGeneration(input: {

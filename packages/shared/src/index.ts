@@ -12,6 +12,7 @@ export * from './studioModelCatalog'
 export * from './providerChannels'
 export * from './generationDiagnostics'
 export * from './agentContract'
+export * from './sidebarAttachments'
 export * from './agentIntent'
 export * from './promptContent'
 
@@ -256,6 +257,7 @@ export interface AgentChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   toolCalls?: string
+  attachments?: string
   createdAt: string
 }
 

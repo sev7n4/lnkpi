@@ -37,10 +37,16 @@ def topic_switch_prefix(prior_title: str | None, new_title: str) -> str:
     return "已按你的新需求处理："
 
 
+def _ref_ack_clause(ref_keys: list[str]) -> str:
+    keys = "、".join(f"@{k}" for k in ref_keys)
+    return f"我会参考你提供的 {keys}，"
+
+
 def format_atomic_parse_ack(
     spec: dict,
     *,
     prior_spec: dict | None = None,
+    ref_keys: list[str] | None = None,
 ) -> str:
     """Brief acknowledgment after intent parse — no internal routing labels."""
     title = _display_title(spec)
@@ -49,13 +55,25 @@ def format_atomic_parse_ack(
         str(prior_spec.get("title") or "") if prior_spec else None,
         title,
     )
+    ref_clause = _ref_ack_clause(ref_keys) if ref_keys else ""
     if str(spec.get("pipeline") or "") == "turnaround_image":
-        body = f"好的，{prefix}我来生成「{title}」的角色设定图（四格）。"
+        if ref_clause:
+            body = f"好的，{prefix}{ref_clause}生成「{title}」的角色设定图（四格）。"
+        else:
+            body = f"好的，{prefix}我来生成「{title}」的角色设定图（四格）。"
     elif spec.get("confirm_gate"):
-        body = (
-            f"收到，{prefix}将为你创建{target}「{title}」。"
-            f"{ATOMIC_CONFIRM_SNIPPET}。"
-        )
+        if ref_clause:
+            body = (
+                f"收到，{prefix}{ref_clause}将为你创建{target}「{title}」。"
+                f"{ATOMIC_CONFIRM_SNIPPET}。"
+            )
+        else:
+            body = (
+                f"收到，{prefix}将为你创建{target}「{title}」。"
+                f"{ATOMIC_CONFIRM_SNIPPET}。"
+            )
+    elif ref_clause:
+        body = f"好的，{prefix}{ref_clause}生成{title}。"
     else:
         body = f"好的，{prefix}我来生成{target}「{title}」。"
     return body

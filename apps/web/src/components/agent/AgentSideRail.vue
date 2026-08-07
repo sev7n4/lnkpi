@@ -3,9 +3,12 @@ import { computed, ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
+import type { SidebarAttachment } from '@lnkpi/shared'
 import { apiUrl } from '@/services/api-base'
 import { sessionsApi } from '@/services/sessions-api'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
+import AgentRefStrip from '@/components/agent/AgentRefStrip.vue'
+import AgentAssetPicker from '@/components/agent/AgentAssetPicker.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import {
@@ -41,6 +44,7 @@ import ForceChoiceDialog, { type ForceChoiceKind } from '@/components/agent/Forc
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useSidebarAttachments, mergeFocusNodeRef, assignRefKeysFor } from '@/composables/useSidebarAttachments'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { AGENT_SKILLS } from '@/constants/agentSkillMap'
@@ -54,6 +58,8 @@ const props = defineProps<{
   readOnly?: boolean
   /** W30: 画布选中节点 id，配合「快速生成」走单节点路径 */
   selectedNodeId?: string | null
+  /** M2: 选中节点数据，发送时升格为 canvasNode attachment */
+  selectedNode?: { id: string; type?: string; data?: Record<string, unknown> } | null
 }>()
 
 const emit = defineEmits<{
@@ -69,7 +75,26 @@ const auth = useAuthStore()
 const router = useRouter()
 const input = ref('')
 const composerRef = ref<HTMLTextAreaElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 const chatContainer = ref<HTMLElement>()
+const sidebar = useSidebarAttachments()
+const isUploading = ref(false)
+const isDragOver = ref(false)
+const assetPickerOpen = ref(false)
+
+function makeAttachmentItems(
+  attachments: SidebarAttachment[] | undefined,
+  refKeys: string[] | undefined,
+) {
+  return (attachments ?? []).map((attachment, index) => ({
+    attachment,
+    refKey: refKeys?.[index] ?? attachment.id,
+  }))
+}
+
+const pendingAttachmentItems = computed(() =>
+  makeAttachmentItems(sidebar.pendingAttachments.value, sidebar.assignRefKeys()),
+)
 
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
@@ -134,8 +159,54 @@ const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 
 const canSubmitComposer = computed(() => {
   const fromRef = composerRef.value?.value.trim() ?? ''
-  return Boolean(input.value.trim() || fromRef)
+  return Boolean(input.value.trim() || fromRef || sidebar.pendingAttachments.value.length)
 })
+
+function openFilePicker() {
+  if (!props.readOnly && !isUploading.value) {
+    fileInputRef.value?.click()
+  }
+}
+
+function addAssetReference(attachment: SidebarAttachment) {
+  if (props.readOnly) return
+  sidebar.addFromPayload(attachment)
+}
+
+async function addFiles(files: FileList | File[]) {
+  if (props.readOnly || !files.length) return
+
+  isUploading.value = true
+  try {
+    for (const file of Array.from(files)) {
+      await sidebar.addFromFile(file)
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '上传参考素材失败')
+  } finally {
+    isUploading.value = false
+  }
+}
+
+function onFileChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  void addFiles(target.files ?? []).finally(() => {
+    target.value = ''
+  })
+}
+
+function onDragOver() {
+  if (!props.readOnly) isDragOver.value = true
+}
+
+function onDragLeave() {
+  isDragOver.value = false
+}
+
+function onDrop(event: DragEvent) {
+  isDragOver.value = false
+  void addFiles(event.dataTransfer?.files ?? [])
+}
 
 function syncComposerFromDom() {
   const el = composerRef.value
@@ -339,7 +410,7 @@ function toggleVoice() {
 
 async function send() {
   syncComposerFromDom()
-  if (!canSubmitComposer.value || agent.isStreaming) return
+  if (!canSubmitComposer.value || agent.isStreaming || isUploading.value) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
@@ -356,7 +427,7 @@ async function onForceChoiceAction(message: string) {
 }
 
 async function sendPreset(text: string) {
-  if (agent.isStreaming || !text.trim()) return
+  if (agent.isStreaming || isUploading.value || !text.trim()) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
@@ -404,8 +475,17 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     return
   }
 
+  const { attachments: pendingAttachments } = sidebar.toPayload()
+  const attachments = mergeFocusNodeRef(pendingAttachments, props.selectedNode ?? null)
+  const refOrder = attachments.map((a) => a.id)
+  const attachmentRefKeys = assignRefKeysFor(attachments)
+  const userMessageExtras = attachments.length
+    ? { attachments, attachmentRefKeys }
+    : undefined
+
   if (props.readOnly) {
-    agent.addUserMessage(message)
+    agent.addUserMessage(message, userMessageExtras)
+    sidebar.clear()
     agent.startAssistantMessage()
     agent.appendText(
       '⚠️ 此画布不属于当前账号，无法写入。请返回工作台新建画布，或使用画布所有者账号登录。',
@@ -415,7 +495,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     scrollToBottom()
     return
   }
-  agent.addUserMessage(message)
+  agent.addUserMessage(message, userMessageExtras)
+  sidebar.clear()
   agent.isStreaming = true
   agent.startAssistantMessage()
   await nextTick()
@@ -448,6 +529,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         skillId: activeSkillId.value,
         model: planningModel.value || undefined,
         focusNodeId: props.selectedNodeId || undefined,
+        attachments: attachments.length ? attachments : undefined,
+        refOrder: refOrder.length ? refOrder : undefined,
       }),
     })
 
@@ -979,6 +1062,12 @@ defineExpose({ openPanel, reconcileFromNodes })
                     class="ml-1 text-[11px] opacity-60"
                   >· {{ formatTraceDuration(msg.executionTrace.totalMs) }}</span>
                 </p>
+                <AgentRefStrip
+                  v-if="msg.role === 'user' && msg.attachments?.length"
+                  class="mt-2"
+                  :items="makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)"
+                  :removable="false"
+                />
                 <AgentExecutionTrace
                   v-if="msg.role === 'assistant' && msg.executionTrace"
                   :trace="msg.executionTrace"
@@ -1087,7 +1176,27 @@ defineExpose({ openPanel, reconcileFromNodes })
                 要修改
               </button>
             </div>
-            <div class="agent-input-dock">
+            <div
+              class="agent-input-dock"
+              :class="{ 'is-drop-target': isDragOver }"
+              @dragover.prevent="onDragOver"
+              @dragleave.prevent="onDragLeave"
+              @drop.prevent="onDrop"
+            >
+              <AgentRefStrip
+                v-if="pendingAttachmentItems.length"
+                :items="pendingAttachmentItems"
+                :removable="true"
+                @remove="sidebar.remove"
+              />
+              <input
+                ref="fileInputRef"
+                type="file"
+                class="sr-only"
+                multiple
+                :disabled="readOnly || isUploading"
+                @change="onFileChange"
+              >
               <textarea
                 ref="composerRef"
                 v-model="input"
@@ -1102,6 +1211,25 @@ defineExpose({ openPanel, reconcileFromNodes })
 
               <div class="agent-dock-actions">
                 <UniversalModelSelector v-model="planningModel" type="text" />
+
+                <button
+                  type="button"
+                  class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg text-base"
+                  :disabled="readOnly || isUploading"
+                  :title="readOnly ? '只读画布不能上传参考素材' : '添加参考素材'"
+                  @click="openFilePicker"
+                >
+                  <span aria-hidden="true">{{ isUploading ? '…' : '+' }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg text-sm"
+                  :disabled="readOnly || isUploading"
+                  :title="readOnly ? '只读画布不能添加参考素材' : '从资产库添加参考素材'"
+                  @click="assetPickerOpen = true"
+                >
+                  <span aria-hidden="true">📁</span>
+                </button>
 
                 <!-- 技能选择 -->
                 <div ref="skillMenuRef" class="relative">
@@ -1158,12 +1286,12 @@ defineExpose({ openPanel, reconcileFromNodes })
                 <div class="ml-auto flex items-center gap-2">
                   <DockMicButton
                     :listening="speech.listening.value"
-                    :disabled="agent.isStreaming"
+                    :disabled="agent.isStreaming || isUploading"
                     @toggle="toggleVoice"
                   />
                   <DockGenerateButton
                     :generating="agent.isStreaming"
-                    :disabled="!agent.isStreaming && !canSubmitComposer"
+                    :disabled="isUploading || (!agent.isStreaming && !canSubmitComposer)"
                     @generate="send"
                   />
                 </div>
@@ -1177,6 +1305,7 @@ defineExpose({ openPanel, reconcileFromNodes })
         :kind="forceChoiceKind"
         @action="onForceChoiceAction"
       />
+      <AgentAssetPicker v-model:open="assetPickerOpen" @pick="addAssetReference" />
     </div>
   </aside>
 </template>
@@ -1374,6 +1503,12 @@ defineExpose({ openPanel, reconcileFromNodes })
 
 .agent-input-dock:focus-within {
   border-color: var(--neo-accent-border);
+}
+
+.agent-input-dock.is-drop-target {
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-accent-border) 32%, transparent);
 }
 
 .agent-prompt-field {
