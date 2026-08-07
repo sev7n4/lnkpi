@@ -8,6 +8,7 @@ from typing import Any
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
+from app.graph.nodes.apply_sidebar_refs import make_apply_sidebar_refs_node
 from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.intake import make_intake_node
@@ -40,7 +41,7 @@ def route_after_split(state: AgentRuntimeState) -> str:
     # modify split (node_revise) must return to topo gate — END caused intake replan on「确认出图」
     if state.get("mode") == "modify":
         return "await_topo"
-    return "draft_copy"
+    return "apply_sidebar_refs"
 
 
 def build_agent_graph(
@@ -57,6 +58,7 @@ def build_agent_graph(
     graph.add_node("intake", make_intake_node(skills_path))
     graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
+    graph.add_node("apply_sidebar_refs", make_apply_sidebar_refs_node(nest=nest))
     graph.add_node("done", make_done_node(nest=nest))
 
     register_confirm_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
@@ -83,8 +85,13 @@ def build_agent_graph(
     graph.add_conditional_edges(
         "split",
         route_after_split,
-        {"draft_copy": "draft_copy", "await_topo": "await_topo", "done": "done"},
+        {
+            "apply_sidebar_refs": "apply_sidebar_refs",
+            "await_topo": "await_topo",
+            "done": "done",
+        },
     )
+    graph.add_edge("apply_sidebar_refs", "draft_copy")
     graph.add_edge("done", END)
 
     saver = checkpointer if checkpointer is not None else MemorySaver()

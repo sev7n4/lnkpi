@@ -165,16 +165,42 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
     expect(canvas.nodes[0].data.refOrder).toEqual(['ref-asset', 'ref-upload'])
   })
 
-  it('attach_edges mode stub returns empty actions', async () => {
+  it('attach_edges mode materializes uploads and returns ordered source nodes', async () => {
+    canvas = {
+      nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+      edges: [],
+    }
+
     const result = await svc.applySidebarAttachments({
       sessionId: 's1',
       nodeIds: ['img-1'],
       attachments,
+      refOrder: ['ref-canvas', 'ref-upload', 'ref-asset'],
       mode: 'attach_edges',
     })
 
-    expect(result.actions).toEqual([])
-    expect(result.sourceNodeIds).toEqual([])
-    expect(sessionUpdate).not.toHaveBeenCalled()
+    expect(result.sourceNodeIds).toHaveLength(3)
+    expect(result.actions).toHaveLength(2)
+    expect(result.actions.map((a) => a.type)).toEqual(['add_node', 'add_node'])
+    expect(result.sourceNodeIds[0]).toBe('src-1')
+
+    const mediaAction = result.actions[0]
+    expect(mediaAction.payload.nodeType).toBe('mediaInput')
+    expect(mediaAction.payload.data).toMatchObject({
+      title: 'product.jpg',
+      url: 'https://cdn.example.com/product.jpg',
+      mediaKind: 'image',
+      status: 'completed',
+    })
+
+    const textAction = result.actions[1]
+    expect(textAction.payload.nodeType).toBe('text')
+    expect(textAction.payload.data).toMatchObject({
+      title: 'brief',
+      content: '白底产品图',
+      prompt: '白底产品图',
+      status: 'completed',
+    })
+    expect(sessionUpdate).toHaveBeenCalled()
   })
 })

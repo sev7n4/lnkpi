@@ -557,8 +557,63 @@ export class AgentCanvasToolsService {
       return { actions, sourceNodeIds: [] }
     }
 
-    // attach_edges mode — stub for Task 11; return empty for now
-    return { actions: [], sourceNodeIds: [] }
+    const { canvas } = await this.loadSession(input.sessionId)
+    const actions: CanvasAction[] = []
+    const sourceByAttachmentId = new Map<string, string>()
+    const baseIndex = canvas.nodes.length
+
+    for (const attachment of input.attachments) {
+      if (attachment.sourceKind === 'canvasNode' && attachment.sourceNodeId?.trim()) {
+        sourceByAttachmentId.set(attachment.id, attachment.sourceNodeId)
+        continue
+      }
+
+      const nodeType = attachment.mediaType === 'text' ? 'text' : 'mediaInput'
+      const nodeId = nextNodeId(nodeType)
+      const positionIndex = baseIndex + actions.length
+      const position = {
+        x: 80 + (positionIndex % 4) * GRID_X,
+        y: 80 + Math.floor(positionIndex / 4) * GRID_Y,
+      }
+      const data: Record<string, unknown> =
+        attachment.mediaType === 'text'
+          ? {
+              title: attachment.label,
+              content: attachment.text ?? '',
+              prompt: attachment.text ?? '',
+              status: 'completed',
+            }
+          : {
+              title: attachment.label,
+              url: attachment.url ?? '',
+              mediaKind: attachment.mediaType,
+              status: 'completed',
+            }
+
+      actions.push({
+        type: 'add_node',
+        payload: {
+          id: nodeId,
+          nodeType: nodeType as NodeType,
+          position,
+          data,
+        },
+      })
+      sourceByAttachmentId.set(attachment.id, nodeId)
+    }
+
+    const orderedAttachmentIds = [
+      ...order,
+      ...input.attachments.map((attachment) => attachment.id).filter((id) => !order.includes(id)),
+    ]
+    const sourceNodeIds = orderedAttachmentIds
+      .map((attachmentId) => sourceByAttachmentId.get(attachmentId))
+      .filter((nodeId): nodeId is string => Boolean(nodeId))
+
+    if (actions.length) {
+      await this.persist(input.sessionId, actions)
+    }
+    return { actions, sourceNodeIds }
   }
 
   async startImageGeneration(input: {

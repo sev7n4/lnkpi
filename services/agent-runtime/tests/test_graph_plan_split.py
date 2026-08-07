@@ -59,10 +59,14 @@ class FakeNest:
         prompt: str,
         content: str,
         node_id: str | None = None,
+        stage: bool = False,
     ) -> dict[str, Any]:
         nid = node_id or "prompt-plan-1"
         self.calls.append(
-            ("upsert_prompt_node", {"prompt": prompt, "content": content, "node_id": node_id})
+            (
+                "upsert_prompt_node",
+                {"prompt": prompt, "content": content, "node_id": node_id, "stage": stage},
+            )
         )
         self.nodes[nid] = {
             "id": nid,
