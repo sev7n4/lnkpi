@@ -124,3 +124,9 @@ cases:
     utterance: 帮我生成一个模特人物图
     gold:
       multi_item_count: null
+
+  - id: reg-2026-08-07-img2img-sidebar
+    utterance: "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。保持主图风格，背景，构图不变。"
+    gold:
+      flow_mode: atomic_create
+      skill_id: null

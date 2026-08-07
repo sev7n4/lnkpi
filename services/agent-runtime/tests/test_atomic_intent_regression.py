@@ -77,3 +77,12 @@ def test_multi_parse_regression(regression_cases: list[dict], case_id: str):
 def test_multi_parse_negative(regression_cases: list[dict]):
     case = next(c for c in regression_cases if c["id"] == "multi-neg-01")
     assert parse_atomic_multi_items(case["utterance"]) is None
+
+
+@pytest.mark.asyncio
+async def test_intake_regression_img2img_no_implicit_skill(regression_cases: list[dict]):
+    case = next(c for c in regression_cases if c["id"] == "reg-2026-08-07-img2img-sidebar")
+    intake = make_intake_node(SKILLS_DIR)
+    out = await intake({"messages": [HumanMessage(content=case["utterance"])]})
+    assert out["flow_mode"] == case["gold"]["flow_mode"]
+    assert out.get("skill_id") is case["gold"]["skill_id"]
