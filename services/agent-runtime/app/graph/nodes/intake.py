@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent
+from app.graph.atomic_clarify import is_affirmative_clarify_reply, pending_atomic_clarify
 from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route
 from app.graph.state import BRIEF_RESET_PREFIX
@@ -49,6 +50,12 @@ def make_intake_node(skills_dir: Path) -> Callable:
 
         resolved_flow = flow_mode if flow_mode != "clarify_route" else "chat"
 
+        pending_clarify = pending_atomic_clarify(state)
+        if pending_clarify and is_affirmative_clarify_reply(text):
+            flow_mode = "atomic_create"
+            resolved_flow = "atomic_create"
+            skill_id = None
+
         out: dict[str, Any] = {
             "phase": "intake",
             "skill_id": skill_id,
@@ -64,6 +71,8 @@ def make_intake_node(skills_dir: Path) -> Callable:
         if resolved_flow in ("atomic_create", "atomic_regenerate"):
             out["split_manifest"] = []
             out["skill_id"] = None
+        if pending_clarify and is_affirmative_clarify_reply(text):
+            out["clarify_question"] = None
         if needs_regen_clarify:
             out["phase"] = "clarify"
             out["clarify_question"] = REGENERATE_NO_CHECKPOINT_CLARIFY

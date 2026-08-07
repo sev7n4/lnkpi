@@ -1,15 +1,35 @@
+/**
+ * Agent dock skills — only entries with Nest → Runtime mapping (see agent-skill-map.ts).
+ * Unconnected placeholders (分镜/润色/整理) are omitted until Skill packages exist.
+ */
+
 export interface AgentSkillDef {
   id: string
   label: string
   desc: string
-  icon: 'canvas' | 'storyboard' | 'polish' | 'organize'
-  runtimeSkillId: string | null
-  ready: boolean
+  /** Runtime skill directory name (validated by discover_skills). */
+  runtimeSkillId: string
 }
 
+/** Backend-connected skills shown in the Agent dock 「技能」 menu. */
 export const AGENT_SKILLS: AgentSkillDef[] = [
-  { id: 'canvas', label: '画布编排', desc: '创建节点与连线，驱动画布创作', icon: 'canvas', runtimeSkillId: 'enterprise-marketing-campaign', ready: true },
-  { id: 'storyboard', label: '分镜脚本', desc: '拆解剧情，生成分镜与镜头描述', icon: 'storyboard', runtimeSkillId: null, ready: false },
-  { id: 'polish', label: '提示词优化', desc: '润色扩写提示词，提升生成质量', icon: 'polish', runtimeSkillId: null, ready: false },
-  { id: 'organize', label: '素材整理', desc: '归纳画布素材，梳理创作结构', icon: 'organize', runtimeSkillId: null, ready: false },
+  {
+    id: 'canvas',
+    label: '营销方案编排',
+    desc: '多节点 Campaign 方案与画布拆分（enterprise-marketing-campaign）',
+    runtimeSkillId: 'enterprise-marketing-campaign',
+  },
 ]
+
+export function getAgentSkill(id: string | null | undefined): AgentSkillDef | undefined {
+  if (!id) return undefined
+  return AGENT_SKILLS.find((s) => s.id === id)
+}
+
+export const AGENT_INPUT_PLACEHOLDER_AUTO =
+  '描述需求，@ 引用素材，Cmd/Ctrl + Enter 发送…'
+
+export function agentInputPlaceholder(skill: AgentSkillDef | undefined): string {
+  if (!skill) return AGENT_INPUT_PLACEHOLDER_AUTO
+  return `已选技能「${skill.label}」— 描述编排需求，Cmd/Ctrl + Enter 发送…`
+}

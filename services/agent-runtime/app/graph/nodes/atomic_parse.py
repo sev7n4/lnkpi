@@ -27,6 +27,7 @@ from app.graph.atomic_parse_util import (
     rule_parse_atomic,
 )
 from app.graph.atomic_intent import is_regenerate_new_variant
+from app.graph.atomic_clarify import is_img2img_utterance, pending_atomic_clarify
 from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.intent_parse_llm import LLM_PARSE_TIMEOUT_SEC, llm_parse_intent
 from app.graph.intent_parse_schema import IntentParseResult, intent_result_to_parse_outcome
@@ -34,6 +35,18 @@ from app.graph.planning_guard import validate_llm_parse
 from app.tools.prompt_mode_taxonomy import resolve_prompt_mode
 
 logger = logging.getLogger(__name__)
+
+SIDEBAR_IMG2IMG_RULE_CONF = 0.95
+
+
+def _sidebar_img2img_fast_path(state: dict) -> bool:
+    decision = state.get("route_decision") if isinstance(state.get("route_decision"), dict) else {}
+    if decision.get("reason") == "sidebar_img2img_p1":
+        return True
+    ctx = state.get("route_context") if isinstance(state.get("route_context"), dict) else {}
+    utterance = str(ctx.get("utterance") or "")
+    keys = ctx.get("mentioned_keys") or []
+    return len(keys) >= 2 and is_img2img_utterance(utterance)
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -197,16 +210,23 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             "atomic_spec": state.get("atomic_spec"),
         }
 
-        clarify_ctx = state.get("clarify_context") if isinstance(state.get("clarify_context"), dict) else None
-        if state.get("phase") == "clarify" and clarify_ctx:
+        clarify_ctx = pending_atomic_clarify(state)
+        if clarify_ctx:
             original = str(clarify_ctx.get("original_utterance") or "")
             question = str(clarify_ctx.get("clarify_question") or state.get("clarify_question") or "")
             classified = classify_clarify_reply(original, question, text, checkpoint=checkpoint)
             if classified != "none":
                 classified = _apply_prompt_mode_to_result(classified, original or text)
                 reason = str(classified.get("reason") or "")
-                validation_u = classified["items"][0]["prompt"] if reason == "clarify_reply_generate_image" else (original or text)
-                guard = None if reason == "clarify_reply_generate_image" else validate_llm_parse(classified, original or text)
+                validation_u = (
+                    classified["items"][0]["prompt"]
+                    if reason in ("clarify_reply_generate_image", "clarify_reply_img2img_confirm")
+                    else (original or text)
+                )
+                guard = None if reason in (
+                    "clarify_reply_generate_image",
+                    "clarify_reply_img2img_confirm",
+                ) else validate_llm_parse(classified, original or text)
                 outcome = guard or intent_result_to_parse_outcome(classified, validation_u)
                 _log_intent_parse(
                     source="clarify_reply",
@@ -215,6 +235,33 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     llm_result=classified,
                     guard_triggered=guard is not None,
                 )
+                patch = parse_outcome_to_state(
+                    outcome,
+                    canvas_context=parse_ctx,
+                    prior_spec=prior_spec,
+                    sidebar_attachments=sidebar_attachments,
+                )
+                patch.pop("clarify_context", None)
+                return patch
+
+        if _sidebar_img2img_fast_path(state):
+            parse_utterance = text
+            pending = pending_atomic_clarify(state)
+            if pending:
+                parse_utterance = str(pending.get("original_utterance") or text)
+            rule_items, _rule_conf = rule_parse_atomic(
+                parse_utterance,
+                canvas_summary=canvas_summary,
+                focus_node_id=focus_node_id,
+                parse_context=parse_ctx or None,
+            )
+            if rule_items:
+                outcome = outcome_from_rule_items(
+                    rule_items,
+                    confidence=SIDEBAR_IMG2IMG_RULE_CONF,
+                    reason="sidebar_img2img_rule_fast_path",
+                )
+                _log_intent_parse(source="rule", utterance=parse_utterance, outcome=outcome)
                 patch = parse_outcome_to_state(
                     outcome,
                     canvas_context=parse_ctx,
