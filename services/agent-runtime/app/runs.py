@@ -29,7 +29,10 @@ from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
 from app.graph.nodes.intake import modify_intent
-from app.graph.sidebar_attachments import normalize_sidebar_attachments
+from app.graph.sidebar_attachments import (
+    normalize_mentioned_keys,
+    normalize_sidebar_attachments,
+)
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -206,6 +209,10 @@ class RunRequest(BaseModel):
     sidebar_ref_order: list[str] | None = Field(
         default=None,
         validation_alias="ref_order",
+    )
+    sidebar_mentioned_keys: list[str] | None = Field(
+        default=None,
+        validation_alias="mentioned_keys",
     )
 
 
@@ -547,6 +554,7 @@ async def stream_run_events(
 
     try:
         normalized_attachments = normalize_sidebar_attachments(req.sidebar_attachments)
+        normalized_mentioned_keys = normalize_mentioned_keys(req.sidebar_mentioned_keys)
     except ValueError as exc:
         yield {"type": "error", "data": {"message": str(exc)}}
         yield {"type": "done", "data": {}}
@@ -633,6 +641,7 @@ async def stream_run_events(
             "focus_node_id": req.focus_node_id,
             "sidebar_attachments": normalized_attachments,
             "sidebar_ref_order": req.sidebar_ref_order,
+            "sidebar_mentioned_keys": normalized_mentioned_keys,
         }
 
     async def run_graph() -> None:

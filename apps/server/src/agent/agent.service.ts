@@ -1,7 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common'
 import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
 import type { CanvasAction, CanvasData, SidebarAttachment } from '@lnkpi/shared'
-import { IMAGE_MODELS, TEXT_MODELS, VIDEO_MODELS, validateSidebarAttachments } from '@lnkpi/shared'
+import {
+  IMAGE_MODELS,
+  TEXT_MODELS,
+  VIDEO_MODELS,
+  normalizeMentionedKeys,
+  validateSidebarAttachments,
+} from '@lnkpi/shared'
 import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -60,6 +66,7 @@ export class AgentService {
     focusNodeId?: string,
     attachments?: SidebarAttachment[],
     refOrder?: string[],
+    mentionedKeys?: string[],
   ): AsyncGenerator<AgentStreamEvent> {
     // Register idempotency key (if provided) before starting
     if (idempotencyKey) {
@@ -68,6 +75,8 @@ export class AgentService {
 
     const validatedAttachments =
       attachments?.length ? validateSidebarAttachments(attachments) : undefined
+    const validatedMentionedKeys =
+      mentionedKeys?.length ? normalizeMentionedKeys(mentionedKeys) : undefined
 
     await this.prisma.agentMessage.create({
       data: {
@@ -96,6 +105,7 @@ export class AgentService {
           focusNodeId,
           validatedAttachments,
           refOrder,
+          validatedMentionedKeys,
         )) {
           if (event.type === 'text_delta') {
             assistantText += (event.data as { text: string }).text
@@ -242,6 +252,7 @@ export class AgentService {
     focusNodeId?: string,
     attachments?: SidebarAttachment[],
     refOrder?: string[],
+    mentionedKeys?: string[],
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -273,6 +284,7 @@ export class AgentService {
       focusNodeId,
       attachments,
       refOrder,
+      mentionedKeys,
     })) {
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text

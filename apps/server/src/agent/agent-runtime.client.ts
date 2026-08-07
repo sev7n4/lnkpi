@@ -17,6 +17,7 @@ export interface RuntimeRunInput {
   llmBaseUrl?: string
   attachments?: SidebarAttachment[]
   refOrder?: string[]
+  mentionedKeys?: string[]
 }
 
 export interface RuntimeThreadState {
@@ -146,6 +147,7 @@ export class AgentRuntimeClient {
         focus_node_id: input.focusNodeId,
         attachments: input.attachments,
         ref_order: input.refOrder,
+        mentioned_keys: input.mentionedKeys,
       }),
     })
 

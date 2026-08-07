@@ -89,3 +89,10 @@ def test_normalize_rejects_more_than_five():
 def test_normalize_empty_returns_empty():
     assert normalize_sidebar_attachments(None) == []
     assert normalize_sidebar_attachments([]) == []
+
+
+def test_normalize_mentioned_keys():
+    from app.graph.sidebar_attachments import normalize_mentioned_keys
+
+    assert normalize_mentioned_keys(["i1", "I1", "T2"]) == ["I1", "T2"]
+    assert normalize_mentioned_keys(None) == []
