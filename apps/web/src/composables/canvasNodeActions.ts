@@ -1,4 +1,4 @@
-import type { InjectionKey } from 'vue'
+import type { InjectionKey, Ref } from 'vue'
 
 export type CanvasNodeRenameFn = (nodeId: string, title: string) => void
 export type CanvasNodePatchFn = (nodeId: string, patch: Record<string, unknown>) => void
@@ -10,3 +10,5 @@ export type CanvasNodeCancelFn = (nodeId: string) => void
 export type CanvasNodeRetryFn = (nodeId: string) => void | Promise<void>
 export const CANVAS_NODE_CANCEL_KEY: InjectionKey<CanvasNodeCancelFn> = Symbol('canvasNodeCancel')
 export const CANVAS_NODE_RETRY_KEY: InjectionKey<CanvasNodeRetryFn> = Symbol('canvasNodeRetry')
+
+export const CANVAS_NODE_LOCATE_FLASH_KEY: InjectionKey<Ref<Set<string>>> = Symbol('canvasNodeLocateFlash')
