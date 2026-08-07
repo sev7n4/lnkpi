@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { BadRequestException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentService } from './agent.service'
 
@@ -72,6 +73,18 @@ describe('AgentService messages & threads', () => {
       { createFromAgent: vi.fn() } as never,
       { resolveForGeneration: vi.fn() } as never,
     )
+  })
+
+  it('getMessages rejects missing threadId before querying prisma', async () => {
+    await expect(service.getMessages('s1', '')).rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.getMessages('s1', '   ')).rejects.toBeInstanceOf(BadRequestException)
+    expect(agentMessageFindMany).not.toHaveBeenCalled()
+  })
+
+  it('listThreads rejects missing sessionId before querying prisma', async () => {
+    await expect(service.listThreads('')).rejects.toBeInstanceOf(BadRequestException)
+    await expect(service.listThreads('   ')).rejects.toBeInstanceOf(BadRequestException)
+    expect(agentThreadFindMany).not.toHaveBeenCalled()
   })
 
   it('returns latest messages for thread in asc order', async () => {

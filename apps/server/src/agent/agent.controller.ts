@@ -108,6 +108,19 @@ class OptimizePromptDto {
   style?: string
 }
 
+class ListAgentThreadsQueryDto {
+  @IsString()
+  sessionId!: string
+}
+
+class GetAgentMessagesQueryDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  threadId!: string
+}
+
 @Controller('agent')
 export class AgentController {
   constructor(
@@ -122,17 +135,14 @@ export class AgentController {
   }
 
   @Get('chat/threads')
-  async listThreads(@Query('sessionId') sessionId: string) {
-    const data = await this.agentService.listThreads(sessionId)
+  async listThreads(@Query() query: ListAgentThreadsQueryDto) {
+    const data = await this.agentService.listThreads(query.sessionId)
     return { code: 0, message: 'ok', data }
   }
 
   @Get('chat/user/messages')
-  async getMessages(
-    @Query('sessionId') sessionId: string,
-    @Query('threadId') threadId: string,
-  ) {
-    const data = await this.agentService.getMessages(sessionId, threadId)
+  async getMessages(@Query() query: GetAgentMessagesQueryDto) {
+    const data = await this.agentService.getMessages(query.sessionId, query.threadId)
     return { code: 0, message: 'ok', data }
   }
 

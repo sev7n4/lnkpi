@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
 import type { CanvasAction, CanvasData, SidebarAttachment } from '@lnkpi/shared'
 import {
@@ -40,6 +40,9 @@ export class AgentService {
   }
 
   async getMessages(sessionId: string, threadId: string, limit = 100) {
+    if (!sessionId?.trim() || !threadId?.trim()) {
+      throw new BadRequestException('sessionId and threadId are required')
+    }
     const rows = await this.prisma.agentMessage.findMany({
       where: { sessionId, threadId },
       orderBy: { createdAt: 'desc' },
@@ -49,6 +52,9 @@ export class AgentService {
   }
 
   async listThreads(sessionId: string) {
+    if (!sessionId?.trim()) {
+      throw new BadRequestException('sessionId is required')
+    }
     return this.prisma.agentThread.findMany({
       where: { sessionId },
       orderBy: { updatedAt: 'desc' },
