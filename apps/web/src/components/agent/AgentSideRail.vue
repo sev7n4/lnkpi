@@ -44,7 +44,7 @@ import ForceChoiceDialog, { type ForceChoiceKind } from '@/components/agent/Forc
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
-import { useSidebarAttachments } from '@/composables/useSidebarAttachments'
+import { useSidebarAttachments, mergeFocusNodeRef, assignRefKeysFor } from '@/composables/useSidebarAttachments'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { AGENT_SKILLS } from '@/constants/agentSkillMap'
@@ -58,6 +58,8 @@ const props = defineProps<{
   readOnly?: boolean
   /** W30: 画布选中节点 id，配合「快速生成」走单节点路径 */
   selectedNodeId?: string | null
+  /** M2: 选中节点数据，发送时升格为 canvasNode attachment */
+  selectedNode?: { id: string; type?: string; data?: Record<string, unknown> } | null
 }>()
 
 const emit = defineEmits<{
@@ -473,8 +475,10 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     return
   }
 
-  const { attachments, refOrder } = sidebar.toPayload()
-  const attachmentRefKeys = sidebar.assignRefKeys()
+  const { attachments: pendingAttachments } = sidebar.toPayload()
+  const attachments = mergeFocusNodeRef(pendingAttachments, props.selectedNode ?? null)
+  const refOrder = attachments.map((a) => a.id)
+  const attachmentRefKeys = assignRefKeysFor(attachments)
   const userMessageExtras = attachments.length
     ? { attachments, attachmentRefKeys }
     : undefined

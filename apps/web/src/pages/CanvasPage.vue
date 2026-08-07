@@ -194,6 +194,7 @@ const {
   clearSelection,
   patchNodeData: patchNodeDataBase,
   selectedNodeId,
+  selectedNode,
 } = useSelectedNodeEditor(nodes)
 const sessionTitle = ref('未命名画布')
 const sessionOwnerId = ref<string | null>(null)
@@ -2728,6 +2729,7 @@ onMounted(() => {
         :session-id="sessionId"
         :read-only="agentReadOnly"
         :selected-node-id="selectedNodeId"
+        :selected-node="selectedNode"
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
