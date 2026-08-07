@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { AgentChatMessage, CanvasAction } from '@lnkpi/shared'
+import type { AgentChatMessage, CanvasAction, SidebarAttachment } from '@lnkpi/shared'
 import {
   applyCanvasAction,
   applyExplore,
@@ -25,6 +25,8 @@ export interface AgentStreamMessage {
   streaming?: boolean
   textReplaceHistory?: string[]
   executionTrace?: ExecutionTraceState
+  attachments?: SidebarAttachment[]
+  attachmentRefKeys?: string[]
 }
 
 export const useAgentStore = defineStore('agent', () => {
@@ -44,11 +46,16 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  function addUserMessage(content: string) {
+  function addUserMessage(
+    content: string,
+    extras?: { attachments?: SidebarAttachment[]; attachmentRefKeys?: string[] },
+  ) {
     messages.value.push({
       id: `msg-${Date.now()}`,
       role: 'user',
       content,
+      attachments: extras?.attachments?.map((attachment) => ({ ...attachment })),
+      attachmentRefKeys: extras?.attachmentRefKeys ? [...extras.attachmentRefKeys] : undefined,
     })
   }
 

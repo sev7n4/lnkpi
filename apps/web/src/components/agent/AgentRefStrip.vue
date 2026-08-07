@@ -6,6 +6,7 @@ import type { NodeRef } from '@/composables/useNodeRefs'
 
 const props = defineProps<{
   items: Array<{ attachment: SidebarAttachment; refKey: string }>
+  removable?: boolean
 }>()
 const emit = defineEmits<{ remove: [id: string] }>()
 
@@ -29,6 +30,7 @@ const refs = computed<NodeRef[]>(() =>
         v-for="refItem in refs"
         :key="refItem.refId"
         :ref-item="refItem"
+      :class="{ 'agent-ref-strip__chip--readonly': !removable }"
         @remove="emit('remove', refItem.refId)"
       />
     </div>
@@ -61,5 +63,9 @@ const refs = computed<NodeRef[]>(() =>
 .agent-ref-strip__scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
+}
+
+.agent-ref-strip__chip--readonly :deep(.dock-ref-chip__remove) {
+  display: none;
 }
 </style>
