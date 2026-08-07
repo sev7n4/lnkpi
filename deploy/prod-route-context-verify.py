@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Production smoke: platform route R0 — atomic-first, no implicit skill.
+"""Production smoke: platform route R0/R1 — atomic-first, route_decide, no implicit skill.
 
 Cases:
   A) §1.1 img2img utterance without skillId → atomic_create (not 14-node campaign)
-  B) marketing utterance without skillId → clarify or chat (not campaign + implicit skill)
-  C) marketing with explicit skillId=canvas mapping → campaign allowed
+  B) Same utterance + mentionedKeys + image attachments → atomic_create
+  C) marketing utterance without skillId → clarify or chat (not campaign + implicit skill)
+  D) marketing with explicit skillId=canvas mapping → campaign allowed
 
 Usage:
   python3 deploy/prod-route-context-verify.py
@@ -67,11 +68,17 @@ def sse_collect(
     tid: str,
     *,
     skill_id: str | None = None,
+    attachments: list[dict] | None = None,
+    mentioned_keys: list[str] | None = None,
     timeout: float = 120,
 ) -> tuple[str, dict | None]:
     body: dict[str, Any] = {"sessionId": sid, "message": msg, "threadId": tid}
     if skill_id:
         body["skillId"] = skill_id
+    if attachments:
+        body["attachments"] = attachments
+    if mentioned_keys:
+        body["mentionedKeys"] = mentioned_keys
     h = {
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
@@ -119,8 +126,25 @@ def thread_state(tok: str, tid: str) -> dict[str, Any]:
 
 
 def main() -> int:
-    print("=== prod route context verify (R0) ===")
+    print("=== prod route context verify (R0/R1) ===")
     tok = http("POST", "/auth/login", {"phone": PHONE, "code": CODE})["data"]["token"]
+
+    mock_attachments = [
+        {
+            "id": "att_i1",
+            "mediaType": "image",
+            "sourceKind": "upload",
+            "label": "model.jpg",
+            "url": "https://example.com/model.jpg",
+        },
+        {
+            "id": "att_i2",
+            "mediaType": "image",
+            "sourceKind": "upload",
+            "label": "product.jpg",
+            "url": "https://example.com/product.jpg",
+        },
+    ]
 
     # Case A: img2img without skill
     sid_a = http("POST", "/sessions", {"title": f"route-r0-img2img-{int(time.time())}"}, t=tok)["data"]["id"]
@@ -140,41 +164,67 @@ def main() -> int:
         f"phase={ts_a.get('phase')}",
     )
 
-    # Case B: marketing without skill
-    sid_b = http("POST", "/sessions", {"title": f"route-r0-mkt-{int(time.time())}"}, t=tok)["data"]["id"]
-    tid_b = f"rr0mkt_{uuid.uuid4().hex[:8]}"
+    # Case B: img2img with sidebar attachments + mentionedKeys
+    sid_b = http("POST", "/sessions", {"title": f"route-r1-sidebar-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid_b = f"rr1sb_{uuid.uuid4().hex[:8]}"
     text_b, _ = sse_collect(
         tok,
         sid_b,
-        "天猫蓝牙耳机详情页营销方案，主图白底",
+        IMG2IMG_MSG,
         tid_b,
+        attachments=mock_attachments,
+        mentioned_keys=["I1", "I2"],
         timeout=SSE_TIMEOUT_SEC,
     )
     ts_b = thread_state(tok, tid_b)
     flow_b = ts_b.get("flowMode") or ts_b.get("flow_mode")
+    bad_campaign_b = "拟定拆解约" in text_b and "14" in text_b
     record(
-        "B marketing no skill → not silent campaign",
-        flow_b != "campaign" or "Skill" in text_b or "编排" in text_b,
+        "B img2img sidebar refs → not 14-node campaign",
+        flow_b != "campaign" and not bad_campaign_b,
         f"flow={flow_b} text={text_b[:120]}",
     )
+    record(
+        "B img2img sidebar refs → atomic_create",
+        flow_b == "atomic_create" or "原子" in text_b or ts_b.get("phase") in ("intake", "parse"),
+        f"phase={ts_b.get('phase')}",
+    )
 
-    # Case C: explicit skill (canvas → enterprise-marketing-campaign)
-    sid_c = http("POST", "/sessions", {"title": f"route-r0-skill-{int(time.time())}"}, t=tok)["data"]["id"]
-    tid_c = f"rr0sk_{uuid.uuid4().hex[:8]}"
+    # Case C: marketing without skill
+    sid_c = http("POST", "/sessions", {"title": f"route-r0-mkt-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid_c = f"rr0mkt_{uuid.uuid4().hex[:8]}"
     text_c, _ = sse_collect(
         tok,
         sid_c,
-        "天猫蓝牙耳机详情页营销方案",
+        "天猫蓝牙耳机详情页营销方案，主图白底",
         tid_c,
-        skill_id="canvas",
         timeout=SSE_TIMEOUT_SEC,
     )
     ts_c = thread_state(tok, tid_c)
     flow_c = ts_c.get("flowMode") or ts_c.get("flow_mode")
     record(
-        "C explicit skill → campaign path ok",
-        flow_c == "campaign" or "确认方案" in text_c or "采纳推荐" in text_c,
+        "C marketing no skill → not silent campaign",
+        flow_c != "campaign" or "Skill" in text_c or "编排" in text_c,
         f"flow={flow_c} text={text_c[:120]}",
+    )
+
+    # Case D: explicit skill (canvas → enterprise-marketing-campaign)
+    sid_d = http("POST", "/sessions", {"title": f"route-r0-skill-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid_d = f"rr0sk_{uuid.uuid4().hex[:8]}"
+    text_d, _ = sse_collect(
+        tok,
+        sid_d,
+        "天猫蓝牙耳机详情页营销方案",
+        tid_d,
+        skill_id="canvas",
+        timeout=SSE_TIMEOUT_SEC,
+    )
+    ts_d = thread_state(tok, tid_d)
+    flow_d = ts_d.get("flowMode") or ts_d.get("flow_mode")
+    record(
+        "D explicit skill → campaign path ok",
+        flow_d == "campaign" or "确认方案" in text_d or "采纳推荐" in text_d,
+        f"flow={flow_d} text={text_d[:120]}",
     )
 
     print(f"\n=== {PASS}/{PASS + FAIL} passed ===")
