@@ -172,6 +172,14 @@ describe('AgentService streamConversation', () => {
         refOrder: ['a1'],
       }),
     )
+    expect(agentMessageCreate).toHaveBeenCalledWith({
+      data: {
+        sessionId: 's1',
+        role: 'user',
+        content: '营销',
+        attachments: JSON.stringify(attachments),
+      },
+    })
   })
 
   it('falls back to CanvasAgent when Runtime health fails', async () => {

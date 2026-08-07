@@ -37,4 +37,36 @@ describe('useAgentStore', () => {
       }),
     ])
   })
+
+  it('restores persisted attachment snapshots from message history', () => {
+    const store = useAgentStore()
+    const attachments: SidebarAttachment[] = [
+      {
+        id: 'attachment-1',
+        mediaType: 'image',
+        sourceKind: 'canvasNode',
+        label: 'canvas output',
+        url: 'https://cdn.example.com/output.png',
+        sourceNodeId: 'image-1',
+      },
+    ]
+
+    store.loadHistory([
+      {
+        id: 'message-1',
+        sessionId: 'session-1',
+        role: 'user',
+        content: '用这张图继续生成',
+        attachments: JSON.stringify(attachments),
+        createdAt: '2026-08-07T00:00:00.000Z',
+      },
+    ])
+
+    expect(store.messages).toEqual([
+      expect.objectContaining({
+        id: 'message-1',
+        attachments,
+      }),
+    ])
+  })
 })

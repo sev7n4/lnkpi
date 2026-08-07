@@ -66,14 +66,19 @@ export class AgentService {
       await this.registerIdempotencyKey(idempotencyKey, sessionId, threadId || sessionId)
     }
 
+    const validatedAttachments =
+      attachments?.length ? validateSidebarAttachments(attachments) : undefined
+
     await this.prisma.agentMessage.create({
-      data: { sessionId, role: 'user', content: userMessage },
+      data: {
+        sessionId,
+        role: 'user',
+        content: userMessage,
+        ...(validatedAttachments ? { attachments: JSON.stringify(validatedAttachments) } : {}),
+      },
     })
 
     let assistantText = ''
-
-    const validatedAttachments =
-      attachments?.length ? validateSidebarAttachments(attachments) : undefined
 
     const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
     if (runtimeUrl && userId) {

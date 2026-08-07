@@ -1,6 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { AgentChatMessage, CanvasAction, SidebarAttachment } from '@lnkpi/shared'
+import {
+  type AgentChatMessage,
+  type CanvasAction,
+  type SidebarAttachment,
+  validateSidebarAttachments,
+} from '@lnkpi/shared'
 import {
   applyCanvasAction,
   applyExplore,
@@ -183,11 +188,22 @@ export const useAgentStore = defineStore('agent', () => {
     isStreaming.value = false
   }
 
+  function parseAttachments(raw: string | undefined): SidebarAttachment[] | undefined {
+    if (!raw) return undefined
+    try {
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? validateSidebarAttachments(parsed) : undefined
+    } catch {
+      return undefined
+    }
+  }
+
   function loadHistory(history: AgentChatMessage[]) {
     messages.value = history.map((m) => ({
       id: m.id,
       role: m.role as 'user' | 'assistant',
       content: m.content,
+      attachments: parseAttachments(m.attachments),
     }))
   }
 

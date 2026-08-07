@@ -193,6 +193,7 @@ model AgentMessage {
   role      String
   content   String
   toolCalls String?
+  attachments String?
   createdAt DateTime @default(now())
 }
 

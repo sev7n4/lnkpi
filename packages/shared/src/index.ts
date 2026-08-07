@@ -257,6 +257,7 @@ export interface AgentChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string
   toolCalls?: string
+  attachments?: string
   createdAt: string
 }
 

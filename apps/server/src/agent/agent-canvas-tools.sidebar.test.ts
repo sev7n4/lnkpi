@@ -91,7 +91,7 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
     },
   ]
 
-  it('localRefs mode writes localRefs and refOrder to target nodes', async () => {
+  it('localRefs mode preserves canvas-node snapshots as consumable local refs', async () => {
     canvas = {
       nodes: [
         { id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} },
@@ -127,6 +127,14 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
         label: 'brief',
         url: undefined,
         text: '白底产品图',
+      },
+      {
+        id: 'ref-canvas',
+        mediaType: 'image',
+        sourceKind: 'upload',
+        label: 'plan node',
+        url: 'https://cdn.example.com/plan.png',
+        text: undefined,
       },
     ]
     const expectedRefOrder = ['ref-upload', 'ref-asset', 'ref-canvas']

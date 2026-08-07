@@ -540,7 +540,6 @@ export class AgentCanvasToolsService {
 
     if (input.mode === 'localRefs') {
       const localRefs: LocalRefBinding[] = input.attachments
-        .filter((a) => a.sourceKind !== 'canvasNode')
         .map((a) => ({
           id: a.id,
           mediaType: a.mediaType,

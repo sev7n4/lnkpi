@@ -159,7 +159,7 @@ const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 
 const canSubmitComposer = computed(() => {
   const fromRef = composerRef.value?.value.trim() ?? ''
-  return Boolean(input.value.trim() || fromRef)
+  return Boolean(input.value.trim() || fromRef || sidebar.pendingAttachments.value.length)
 })
 
 function openFilePicker() {
