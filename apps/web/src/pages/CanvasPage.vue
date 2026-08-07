@@ -2083,10 +2083,41 @@ function closeContextMenu() {
   contextMenu.value = null
 }
 
+function handleAddToAgentRefs(sourceIds?: string[]) {
+  const ids = sourceIds?.length
+    ? sourceIds
+    : multiSelectedIds.value.length
+      ? multiSelectedIds.value
+      : selectedNodeId.value
+        ? [selectedNodeId.value]
+        : []
+  const focusNodes = ids
+    .map((id) => findNodeById(id))
+    .filter((node): node is EditableFlowNode => node != null)
+    .map((node) => ({
+      id: node.id,
+      type: node.type,
+      data: (node.data ?? {}) as Record<string, unknown>,
+    }))
+  agentRailRef.value?.addFromCanvasNodes(focusNodes)
+}
+
 function handleContextAction(action: string) {
   const menu = contextMenu.value
   contextMenu.value = null
   if (!menu) return
+
+  if (action === 'add-agent-ref') {
+    const ids = multiSelectedIds.value.length
+      ? [...multiSelectedIds.value]
+      : selectedNodeId.value
+        ? [selectedNodeId.value]
+        : menu.nodeId
+          ? [menu.nodeId]
+          : []
+    handleAddToAgentRefs(ids)
+    return
+  }
 
   if (action === 'edit-image' && menu.nodeId) {
     const node = findNodeById(menu.nodeId)
@@ -2599,6 +2630,7 @@ onMounted(() => {
             @layout="handleLayoutSelection"
             @generate-video="handleGenerateVideoFromSelection"
             @download="handlePackageDownload"
+            @add-agent-ref="handleAddToAgentRefs()"
           />
 
           <MultiSelectConnectOverlay

@@ -48,6 +48,14 @@ function run(action: string, payload?: string) {
     <button
       v-if="nodeId && nodeType !== 'group'"
       class="neo-popover-item block w-full px-4 py-2 text-left text-xs"
+      @click="run('add-agent-ref')"
+    >
+      加入 Agent 引用
+    </button>
+
+    <button
+      v-if="nodeId && nodeType !== 'group'"
+      class="neo-popover-item block w-full px-4 py-2 text-left text-xs"
       @click="run('duplicate')"
     >
       复制节点

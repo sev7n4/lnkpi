@@ -13,6 +13,7 @@ const emit = defineEmits<{
   layout: []
   generateVideo: []
   download: []
+  addAgentRef: []
 }>()
 </script>
 
@@ -54,6 +55,14 @@ const emit = defineEmits<{
         @click="emit('group')"
       >
         打组
+      </button>
+      <button
+        v-if="selectedIds.length >= 2"
+        type="button"
+        class="toolbar-action accent"
+        @click="emit('addAgentRef')"
+      >
+        加入 Agent 引用
       </button>
       <button
         v-if="selectedIds.length >= 2"
