@@ -4,15 +4,62 @@ import {
   buildIdempotencyKey,
   createAgentThreadId,
   randomThreadSuffix,
+  resolveBootstrapThreadId,
+  persistActiveThreadId,
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
   isStreamStale,
   STREAM_STALE_MS,
 } from './streamRecovery'
+import { lastThreadStorageKey } from '@/utils/formatSessionTime'
 
 vi.mock('@/services/api-base', () => ({
   apiUrl: (path: string) => `http://localhost:5100${path.startsWith('/') ? path : `/${path}`}`,
 }))
+
+describe('resolveBootstrapThreadId', () => {
+  it('prefers cached thread when it has messages', async () => {
+    const id = await resolveBootstrapThreadId('sess1', {
+      cachedThreadId: 'sess1:cached',
+      threads: [{ id: 'sess1:other' }],
+      messageCountFor: async (tid) => (tid === 'sess1:cached' ? 3 : 0),
+    })
+    expect(id).toBe('sess1:cached')
+  })
+
+  it('falls back to first non-empty thread when cached is empty', async () => {
+    const id = await resolveBootstrapThreadId('sess1', {
+      cachedThreadId: 'sess1:empty',
+      threads: [{ id: 'sess1:empty' }, { id: 'sess1:busy' }],
+      messageCountFor: async (tid) => (tid === 'sess1:busy' ? 5 : 0),
+    })
+    expect(id).toBe('sess1:busy')
+  })
+
+  it('creates new thread when nothing has messages', async () => {
+    vi.stubGlobal('crypto', { randomUUID: () => 'new-thread' })
+    const id = await resolveBootstrapThreadId('sess1', {
+      cachedThreadId: null,
+      threads: [],
+      messageCountFor: async () => 0,
+    })
+    expect(id).toBe('sess1:new-thread')
+  })
+})
+
+describe('persistActiveThreadId', () => {
+  it('writes localStorage key', () => {
+    const store: Record<string, string> = {}
+    vi.stubGlobal('localStorage', {
+      setItem: (k: string, v: string) => {
+        store[k] = v
+      },
+      getItem: (k: string) => store[k] ?? null,
+    })
+    persistActiveThreadId('sess-abc', 'sess-abc:tid1')
+    expect(store[lastThreadStorageKey('sess-abc')]).toBe('sess-abc:tid1')
+  })
+})
 
 describe('randomThreadSuffix', () => {
   afterEach(() => {

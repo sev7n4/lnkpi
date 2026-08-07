@@ -64,6 +64,42 @@ def test_parse_atomic_multi_items_not_single_image():
     assert parse_atomic_multi_items("帮我生成一个模特人物图") is None
 
 
+def test_parse_atomic_multi_items_color_variants_with_ref():
+    from app.graph.atomic_parse_util import parse_atomic_multi_items
+
+    utterance = "@I1 ，参考这个图，生成7中不同颜色的7张图"
+    items = parse_atomic_multi_items(utterance)
+    assert items is not None
+    assert len(items) == 7
+    assert all(i["target_type"] == "image" for i in items)
+    assert "变体 1/7" in items[0]["prompt"]
+
+
+def test_atomic_create_intent_batch_image_count():
+    from app.graph.atomic_intent import atomic_create_intent
+
+    assert atomic_create_intent("@I1 ，参考这个图，生成7中不同颜色的7张图")
+    assert atomic_create_intent("生成3张场景图")
+    assert not atomic_create_intent("今天天气不错")
+
+
+def test_intake_routes_batch_color_variants_to_atomic():
+    from app.graph.nodes.intake import make_intake_node
+    from langchain_core.messages import HumanMessage
+    from pathlib import Path
+
+    skills_dir = Path(__file__).resolve().parents[1] / "skills"
+    intake = make_intake_node(skills_dir)
+    utterance = "@I1 ，参考这个图，生成7中不同颜色的7张图"
+
+    import asyncio
+
+    out = asyncio.get_event_loop().run_until_complete(
+        intake({"messages": [HumanMessage(content=utterance)]})
+    )
+    assert out["flow_mode"] == "atomic_create"
+
+
 def test_build_atomic_spec_enriched_uses_clean_prompt():
     spec = build_atomic_spec_enriched("帮我生成一个模特人物图")
     assert spec["target_type"] == "image"

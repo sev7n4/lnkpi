@@ -40,6 +40,8 @@ import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
   buildIdempotencyKey,
   createAgentThreadId,
+  persistActiveThreadId,
+  resolveBootstrapThreadId,
   shouldPollRuntimeHealth,
   checkRuntimeHealthViaNest,
   RUNTIME_UNREACHABLE_SNIPPET,
@@ -161,7 +163,7 @@ const lastAssistantMessageId = computed(() =>
 function isLiveTurnMessage(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'assistant') return false
   if (msg.id !== lastAssistantMessageId.value) return false
-  return Boolean(msg.streaming) || showTaskCard.value || Boolean(msg.executionTrace)
+  return Boolean(msg.streaming) || Boolean(msg.executionTrace) || showTaskCard.value
 }
 
 function canvasOutputsForMessage(msg: AgentStreamMessage) {
@@ -363,7 +365,7 @@ async function selectThread(threadId: string) {
   }
   clearComposer()
   agentThreadId.value = threadId
-  localStorage.setItem(lastThreadStorageKey(props.sessionId), threadId)
+  persistActiveThreadId(props.sessionId, threadId)
   historyOpen.value = false
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
@@ -376,13 +378,27 @@ async function selectThread(threadId: string) {
 async function bootstrapThread() {
   clearComposer()
   agent.clear()
+  taskProgress.value = emptyTaskProgress()
   const cached = localStorage.getItem(lastThreadStorageKey(props.sessionId))
-  if (cached) {
-    agentThreadId.value = cached
-  } else {
-    const list = await fetchThreads()
-    agentThreadId.value = list[0]?.id ?? createAgentThreadId(props.sessionId)
-  }
+  const list = await fetchThreads()
+  agentThreadId.value = await resolveBootstrapThreadId(props.sessionId, {
+    cachedThreadId: cached,
+    threads: list,
+    messageCountFor: async (threadId) => {
+      try {
+        const res = await fetch(
+          apiUrl(
+            `/api/agent/chat/user/messages?sessionId=${encodeURIComponent(props.sessionId)}&threadId=${encodeURIComponent(threadId)}`,
+          ),
+        )
+        const json = await res.json()
+        return Array.isArray(json.data) ? json.data.length : 0
+      } catch {
+        return 0
+      }
+    },
+  })
+  persistActiveThreadId(props.sessionId, agentThreadId.value)
   await loadHistory()
   void refreshThreadCheckpoint()
   scrollToBottom()
@@ -485,7 +501,7 @@ function newAgentSession() {
   hasAtomicCheckpoint.value = false
   recoveredPhaseHint.value = null
   agentThreadId.value = createAgentThreadId(props.sessionId)
-  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
+  persistActiveThreadId(props.sessionId, agentThreadId.value)
   ElMessage.info('已新建对话')
 }
 
@@ -510,16 +526,21 @@ async function refreshThreadCheckpoint() {
 
 async function loadHistory() {
   agent.clear()
+  taskProgress.value = emptyTaskProgress()
   try {
     const res = await fetch(
       apiUrl(
         `/api/agent/chat/user/messages?sessionId=${encodeURIComponent(props.sessionId)}&threadId=${encodeURIComponent(agentThreadId.value)}`,
       ),
     )
+    if (!res.ok) {
+      ElMessage.warning('对话历史加载失败，请检查网络后刷新')
+      return
+    }
     const json = await res.json()
     if (json.data?.length) agent.loadHistory(json.data)
   } catch {
-    // ignore
+    ElMessage.warning('对话历史加载失败，请检查网络后刷新')
   }
   scrollToBottom()
 }
@@ -542,7 +563,7 @@ async function send() {
     auth.openLogin()
     return
   }
-  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
+  persistActiveThreadId(props.sessionId, agentThreadId.value)
 
   const message = input.value.trim()
   input.value = ''
@@ -603,7 +624,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     return
   }
 
-  localStorage.setItem(lastThreadStorageKey(props.sessionId), agentThreadId.value)
+  persistActiveThreadId(props.sessionId, agentThreadId.value)
+  taskProgress.value = emptyTaskProgress()
 
   const { attachments: pendingAttachments } = sidebar.toPayload()
   const attachments = pendingAttachments
