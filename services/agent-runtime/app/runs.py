@@ -292,6 +292,23 @@ class NestEventProxy:
             await self._inner.attach_refs(node_id, ref_order)
         )
 
+    async def apply_sidebar_attachments(
+        self,
+        *,
+        node_ids: list[str],
+        attachments: list[dict[str, Any]],
+        ref_order: list[str] | None,
+        mode: str,
+    ) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.apply_sidebar_attachments(
+                node_ids=node_ids,
+                attachments=attachments,
+                ref_order=ref_order,
+                mode=mode,
+            )
+        )
+
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_image_generation")
 
