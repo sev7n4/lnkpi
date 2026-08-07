@@ -121,9 +121,18 @@ export class AgentController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Get('chat/threads')
+  async listThreads(@Query('sessionId') sessionId: string) {
+    const data = await this.agentService.listThreads(sessionId)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Get('chat/user/messages')
-  async getMessages(@Query('sessionId') sessionId: string) {
-    const data = await this.agentService.getMessages(sessionId)
+  async getMessages(
+    @Query('sessionId') sessionId: string,
+    @Query('threadId') threadId: string,
+  ) {
+    const data = await this.agentService.getMessages(sessionId, threadId)
     return { code: 0, message: 'ok', data }
   }
 

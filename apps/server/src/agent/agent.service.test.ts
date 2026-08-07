@@ -7,6 +7,9 @@ import { AgentRuntimeClient } from './agent-runtime.client'
 describe('AgentService streamConversation', () => {
   const agentMessageCreate = vi.fn()
   const agentMessageFindMany = vi.fn()
+  const agentThreadFindUnique = vi.fn()
+  const agentThreadUpsert = vi.fn()
+  const agentThreadUpdate = vi.fn()
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
   const idempotencyRecordCreate = vi.fn()
@@ -24,6 +27,9 @@ describe('AgentService streamConversation', () => {
     agentMessageFindMany.mockResolvedValue([
       { role: 'user', content: 'hello' },
     ])
+    agentThreadFindUnique.mockResolvedValue(null)
+    agentThreadUpsert.mockResolvedValue({})
+    agentThreadUpdate.mockResolvedValue({})
     sessionFindUnique.mockResolvedValue({ id: 's1', canvasData: null })
     sessionUpdate.mockResolvedValue({})
     idempotencyRecordCreate.mockResolvedValue({})
@@ -36,6 +42,11 @@ describe('AgentService streamConversation', () => {
         agentMessage: {
           create: agentMessageCreate,
           findMany: agentMessageFindMany,
+        },
+        agentThread: {
+          findUnique: agentThreadFindUnique,
+          upsert: agentThreadUpsert,
+          update: agentThreadUpdate,
         },
         session: {
           findUnique: sessionFindUnique,
@@ -175,6 +186,7 @@ describe('AgentService streamConversation', () => {
     expect(agentMessageCreate).toHaveBeenCalledWith({
       data: {
         sessionId: 's1',
+        threadId: 's1:thread-a',
         role: 'user',
         content: '营销',
         attachments: JSON.stringify(attachments),
@@ -213,6 +225,9 @@ describe('AgentService idempotency', () => {
   const idempotencyRecordDeleteMany = vi.fn()
   const agentMessageCreate = vi.fn()
   const agentMessageFindMany = vi.fn()
+  const agentThreadFindUnique = vi.fn()
+  const agentThreadUpsert = vi.fn()
+  const agentThreadUpdate = vi.fn()
   const sessionFindUnique = vi.fn()
   const sessionUpdate = vi.fn()
 
@@ -235,6 +250,11 @@ describe('AgentService idempotency', () => {
         agentMessage: {
           create: agentMessageCreate,
           findMany: agentMessageFindMany,
+        },
+        agentThread: {
+          findUnique: agentThreadFindUnique,
+          upsert: agentThreadUpsert,
+          update: agentThreadUpdate,
         },
         session: { findUnique: sessionFindUnique, update: sessionUpdate },
         idempotencyRecord: {
