@@ -8,6 +8,7 @@ import { apiUrl } from '@/services/api-base'
 import { sessionsApi } from '@/services/sessions-api'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
 import AgentRefStrip from '@/components/agent/AgentRefStrip.vue'
+import AgentAssetPicker from '@/components/agent/AgentAssetPicker.vue'
 import AgentTaskProgressCard from '@/components/agent/AgentTaskProgressCard.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import {
@@ -77,6 +78,7 @@ const chatContainer = ref<HTMLElement>()
 const sidebar = useSidebarAttachments()
 const isUploading = ref(false)
 const isDragOver = ref(false)
+const assetPickerOpen = ref(false)
 
 function makeAttachmentItems(
   attachments: SidebarAttachment[] | undefined,
@@ -162,6 +164,11 @@ function openFilePicker() {
   if (!props.readOnly && !isUploading.value) {
     fileInputRef.value?.click()
   }
+}
+
+function addAssetReference(attachment: SidebarAttachment) {
+  if (props.readOnly) return
+  sidebar.addFromPayload(attachment)
 }
 
 async function addFiles(files: FileList | File[]) {
@@ -1210,6 +1217,15 @@ defineExpose({ openPanel, reconcileFromNodes })
                 >
                   <span aria-hidden="true">{{ isUploading ? '…' : '+' }}</span>
                 </button>
+                <button
+                  type="button"
+                  class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg text-sm"
+                  :disabled="readOnly || isUploading"
+                  :title="readOnly ? '只读画布不能添加参考素材' : '从资产库添加参考素材'"
+                  @click="assetPickerOpen = true"
+                >
+                  <span aria-hidden="true">📁</span>
+                </button>
 
                 <!-- 技能选择 -->
                 <div ref="skillMenuRef" class="relative">
@@ -1285,6 +1301,7 @@ defineExpose({ openPanel, reconcileFromNodes })
         :kind="forceChoiceKind"
         @action="onForceChoiceAction"
       />
+      <AgentAssetPicker v-model:open="assetPickerOpen" @pick="addAssetReference" />
     </div>
   </aside>
 </template>
