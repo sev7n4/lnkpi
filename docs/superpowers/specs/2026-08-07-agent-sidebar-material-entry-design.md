@@ -15,7 +15,7 @@
 | **D2** | **A（atomic）+ B（Campaign）并重** | 同一套侧栏 UI 与 API；落点按 `flow_mode` 分流 |
 | **D3** | **atomic 写 localRefs；Campaign 写 edge + refOrder** | atomic 单节点闭环优先 localRefs；split/topo 后 `attach_refs` 连边 |
 | **D4** | **交互：引用条 + [+] + 拖拽 + 资产库** | 与 Dock `DockRefStrip` 视觉/语义对齐 |
-| **D5** | **focusNodeId 可升格为 ref** | 选中节点若有 url/text，自动并入 attachments（可关闭） |
+| **D5** | ~~focusNodeId 可升格为 ref~~ → **M3 废止** | 见 [M3 显式引用 spec](./2026-08-07-agent-sidebar-m3-explicit-refs-design.md) D-A/D-B |
 | **D6** | **M1 仅消费 T\*/I\*** | 与 C2.1 对齐；V/A 芯片可展示，生成侧 P1 再消费 |
 
 ---
@@ -350,7 +350,7 @@ async def apply_sidebar_attachments(
 |------|------|------|
 | **M1** | 侧栏 UI + upload + API + atomic localRefs + img2img | 上传产品图 → atomic 三视图出图 |
 | **M2** | 资产库选取 + focusNodeId 升格 + Campaign attach_refs | 上传品牌图 → Campaign 主图连 ref |
-| **M3** | @ 提及、拖拽画布节点、粘贴板、V/A 消费 | 与 Dock 体验完全对齐 |
+| **M3** | 显式加入引用、@ 补全/mentionedKeys、芯片 hover/click、拖拽画布节点 | 见 [M3 spec](./2026-08-07-agent-sidebar-m3-explicit-refs-design.md) + [M3 plan](../plans/2026-08-07-agent-sidebar-m3-explicit-refs.md) |
 
 ---
 
