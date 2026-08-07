@@ -1229,6 +1229,7 @@ export class AgentCanvasToolsService {
 
   async saveAgentMessage(input: {
     sessionId: string
+    threadId: string
     userId: string
     role: string
     content: string
@@ -1240,6 +1241,7 @@ export class AgentCanvasToolsService {
     const message = await this.prisma.agentMessage.create({
       data: {
         sessionId: input.sessionId,
+        threadId: input.threadId,
         role: input.role,
         content: input.content,
         toolCalls: input.toolCalls,

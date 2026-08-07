@@ -265,6 +265,9 @@ class SaveAgentMessageDto {
   sessionId!: string
 
   @IsString()
+  threadId!: string
+
+  @IsString()
   userId!: string
 
   @IsString()

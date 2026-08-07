@@ -369,6 +369,7 @@ export type GetAgentMessagesResponse = z.infer<typeof GetAgentMessagesResponseSc
 
 export const SaveAgentMessageRequestSchema = z.object({
   sessionId: z.string(),
+  threadId: z.string(),
   userId: z.string(),
   role: z.string(),
   content: z.string(),
