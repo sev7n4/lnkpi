@@ -12,6 +12,7 @@ export * from './studioModelCatalog'
 export * from './providerChannels'
 export * from './generationDiagnostics'
 export * from './agentContract'
+export * from './sidebarAttachments'
 export * from './agentIntent'
 export * from './promptContent'
 

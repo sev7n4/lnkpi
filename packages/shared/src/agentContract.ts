@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SidebarAttachmentSchema } from './sidebarAttachments'
 
 // ============================================================
 // 基础类型定义
@@ -548,3 +549,23 @@ export const SaveContextSnapshotResponseSchema = z.object({
 })
 
 export type SaveContextSnapshotResponse = z.infer<typeof SaveContextSnapshotResponseSchema>
+
+// ============================================================
+// agent_conversation (sidebar attachments)
+// ============================================================
+
+export const AgentConversationRequestSchema = z.object({
+  sessionId: z.string(),
+  message: z.string(),
+  threadId: z.string().optional(),
+  userDecision: z
+    .enum(['confirm', 'revise', 'replan', 'confirm_gen', 'topo_revise', 'node_revise'])
+    .optional(),
+  skillId: z.string().optional(),
+  focusNodeId: z.string().optional(),
+  model: z.string().optional(),
+  attachments: z.array(SidebarAttachmentSchema).max(5).optional(),
+  refOrder: z.array(z.string()).optional(),
+})
+
+export type AgentConversationRequest = z.infer<typeof AgentConversationRequestSchema>
