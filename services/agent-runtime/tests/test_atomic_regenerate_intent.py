@@ -10,6 +10,8 @@ def test_atomic_regenerate_positive():
     assert atomic_regenerate_intent("重新生成")
     assert atomic_regenerate_intent("重新生成一张")
     assert atomic_regenerate_intent("再来一次")
+    assert atomic_regenerate_intent("重复上一次操作")
+    assert atomic_regenerate_intent("重复上次")
 
 
 def test_regenerate_phrase_not_atomic_create():

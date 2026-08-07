@@ -121,6 +121,12 @@ atomic_regenerate_hints:
   - 再来一次
   - 再生成一次
   - 再跑一遍
+  - 重复上一次操作
+  - 重复上次
+  - 重复上一步
+  - 再来一遍
+  - 再做一次
+  - 重复上一操作
 
 orchestration:
   max_atomic_multi_items: 5

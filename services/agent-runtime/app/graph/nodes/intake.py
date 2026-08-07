@@ -11,9 +11,9 @@ from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
 REGENERATE_NO_CHECKPOINT_CLARIFY = (
-    "当前对话还没有可重新生成的画布节点。"
-    "请先在同一会话里完成首次创作（例如「帮我生成一张蓝牙耳机主图」），"
-    "再说「重新生成一张」或「按刚才那个风格再生成一张」。"
+    "当前对话还没有可重新生成的画布节点（可能上一轮尚未成功完成）。"
+    "请先在同一会话里完成首次创作，或点击历史消息中的引用芯片重新加入 @I1 @I2 后再试；"
+    "也可以说「重新生成一张」或「按刚才那个风格再生成一张」。"
 )
 
 

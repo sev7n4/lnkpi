@@ -9,11 +9,19 @@ import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/do
 const props = defineProps<{
   refItem: NodeRef
   clickable?: boolean
+  draggable?: boolean
+  dragging?: boolean
+  dragOver?: boolean
 }>()
 
 const emit = defineEmits<{
   mention: [refKey: string]
   remove: []
+  dragstart: [event: DragEvent]
+  dragover: [event: DragEvent]
+  dragleave: []
+  drop: [event: DragEvent]
+  dragend: []
 }>()
 
 const previewOpen = ref(false)
@@ -84,7 +92,10 @@ function onClick() {
       'is-stale': refItem.stale,
       'has-media': !!thumbUrl,
       'is-readonly': !clickable,
+      'is-dragging': dragging,
+      'is-drag-over': dragOver,
     }"
+    :draggable="draggable"
     :title="`${refItem.refKey} · ${refItem.label}`"
     role="button"
     tabindex="0"
@@ -92,6 +103,11 @@ function onClick() {
     @mouseleave="onLeave"
     @click="onClick"
     @keydown.enter.prevent="onClick"
+    @dragstart="emit('dragstart', $event)"
+    @dragover="emit('dragover', $event)"
+    @dragleave="emit('dragleave')"
+    @drop="emit('drop', $event)"
+    @dragend="emit('dragend')"
   >
     <span class="dock-ref-chip__key">{{ refItem.refKey }}</span>
 
@@ -161,6 +177,19 @@ function onClick() {
 
 .dock-ref-chip.is-readonly {
   cursor: default;
+}
+
+.dock-ref-chip.is-dragging {
+  opacity: 0.45;
+}
+
+.dock-ref-chip.is-drag-over {
+  border-color: var(--neo-accent-border);
+  background: var(--neo-accent-soft);
+}
+
+.dock-ref-chip:active[draggable='true'] {
+  cursor: grabbing;
 }
 
 .dock-ref-chip.is-stale {
