@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mergeFocusNodeRef, useSidebarAttachments } from './useSidebarAttachments'
+import { mergeFocusNodeRef, nodeToSidebarAttachment, useSidebarAttachments } from './useSidebarAttachments'
 
 describe('useSidebarAttachments', () => {
   it('dedupes by url', () => {
@@ -69,5 +69,35 @@ describe('mergeFocusNodeRef', () => {
       text: 'hello',
     }]
     expect(mergeFocusNodeRef(existing, { id: 'empty', type: 'image', data: {} })).toBe(existing)
+  })
+})
+
+describe('nodeToSidebarAttachment', () => {
+  it('maps video node to V* mediaType', () => {
+    const item = nodeToSidebarAttachment({
+      id: 'v1',
+      type: 'video',
+      data: { url: 'https://cdn/x.mp4', title: 'demo' },
+    })
+    expect(item?.mediaType).toBe('video')
+    expect(item?.sourceKind).toBe('canvasNode')
+  })
+
+  it('returns null when no url or text', () => {
+    expect(nodeToSidebarAttachment({ id: 'e', type: 'image', data: {} })).toBeNull()
+  })
+})
+
+describe('addFromCanvasNodes', () => {
+  it('adds up to max and skips dup sourceNodeId', () => {
+    const { addFromCanvasNodes, pendingAttachments } = useSidebarAttachments()
+    const nodes = Array.from({ length: 6 }, (_, i) => ({
+      id: `n${i}`,
+      type: 'image' as const,
+      data: { url: `https://cdn/${i}.jpg` },
+    }))
+    const added = addFromCanvasNodes(nodes)
+    expect(added).toBe(5)
+    expect(pendingAttachments.value).toHaveLength(5)
   })
 })
