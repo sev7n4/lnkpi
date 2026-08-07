@@ -8,6 +8,7 @@ import { CANVAS_NODE_CANCEL_KEY, CANVAS_NODE_RETRY_KEY } from '@/composables/can
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi } from '@/services/studio-api'
+import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import {
   buildCopyForNode,
   sharedDiagnosticCache,
@@ -173,7 +174,7 @@ async function copyDiag() {
     sessionId: props.sessionId,
   })
   try {
-    await navigator.clipboard.writeText(text)
+    await copyTextToClipboard(text)
     copyLabel.value = '已复制'
     setTimeout(() => {
       copyLabel.value = '复制诊断'

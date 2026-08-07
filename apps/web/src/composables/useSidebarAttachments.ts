@@ -3,6 +3,8 @@ import type { SidebarAttachment } from '@lnkpi/shared'
 import { SIDEBAR_ATTACHMENT_MAX } from '@lnkpi/shared'
 import { fileToPersistedPayload } from '@/composables/useMediaUpload'
 
+import { randomId } from '@/utils/randomId'
+
 const REF_PREFIX = { text: 'T', image: 'I', video: 'V', audio: 'A' } as const
 
 export type FocusNodeLike = {
@@ -71,7 +73,7 @@ export function useSidebarAttachments() {
             ? 'audio'
             : 'image'
     addFromPayload({
-      id: crypto.randomUUID(),
+      id: randomId(),
       mediaType,
       sourceKind: 'upload',
       label: payload.fileName,

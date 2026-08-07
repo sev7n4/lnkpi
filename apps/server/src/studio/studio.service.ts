@@ -23,6 +23,7 @@ import {
   resolveImageSize,
   resolveModelKey,
   resolvePlatformImageProviderOpts,
+  resolvePublicMediaUrls,
   type ErrorCode,
   type GenerationDiagnostic,
   type ImageRefWire,
@@ -73,9 +74,11 @@ function extractTextSources(refs?: StudioRefInput[]): MergeTextSource[] {
 
 // Full referenceImages[] is kept in metadata; agnes-image-* uses native extra_body.image for all refs.
 function extractReferenceImages(refs?: StudioRefInput[]): string[] {
-  return (refs ?? [])
-    .filter((r) => r.mediaType === 'image' && r.url?.trim())
-    .map((r) => r.url!.trim())
+  return resolvePublicMediaUrls(
+    (refs ?? [])
+      .filter((r) => r.mediaType === 'image' && r.url?.trim())
+      .map((r) => r.url!.trim()),
+  )
 }
 
 function providerOpts(resolved: ResolvedGenerationProvider) {

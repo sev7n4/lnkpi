@@ -233,6 +233,8 @@
   font-weight: 600;
   color: var(--neo-text-primary);
   line-height: 1.35;
+  user-select: text;
+  cursor: text;
 }
 
 .neo-task-diag-hint {

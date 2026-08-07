@@ -1,4 +1,5 @@
 import { apiUrl } from '@/services/api-base'
+import { randomId } from '@/utils/randomId'
 
 /**
  * Stream recovery utilities for frontend agent-side-rail.
@@ -22,10 +23,7 @@ export function isStreamStale(lastActivityAt: number, now = Date.now()): boolean
  * crypto.randomUUID requires a secure context (HTTPS/localhost); production CVM is HTTP.
  */
 export function randomThreadSuffix(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`
+  return randomId()
 }
 
 /** Build a session-scoped agent thread id (never reuse `:main`). */
