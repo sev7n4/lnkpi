@@ -109,4 +109,41 @@ describe('AgentRuntimeClient', () => {
     expect(events[1]?.type).toBe('error')
     expect(events[2]).toEqual({ type: 'done', data: {} })
   })
+
+  it('streamRun forwards sidebar attachments in POST body', async () => {
+    const payload = JSON.stringify({ type: 'done', data: {} }) + '\n'
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(payload))
+        controller.close()
+      },
+    })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: stream })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const attachments = [
+      {
+        id: 'a1',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'p.jpg',
+        url: 'https://x/a.jpg',
+      },
+    ]
+    const client = new AgentRuntimeClient('http://runtime.test', 'dev-token')
+    for await (const _event of client.streamRun({
+      sessionId: 's1',
+      userId: 'u1',
+      message: 'hello',
+      attachments,
+      refOrder: ['a1'],
+    })) {
+      // drain
+    }
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1]?.body))
+    expect(body.attachments).toEqual(attachments)
+    expect(body.ref_order).toEqual(['a1'])
+  })
 })

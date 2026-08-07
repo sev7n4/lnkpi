@@ -129,6 +129,51 @@ describe('AgentService streamConversation', () => {
     expect(sessionUpdate).not.toHaveBeenCalled()
   })
 
+  it('forwards validated sidebar attachments to runtime', async () => {
+    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
+    const streamRun = vi.fn(async function* () {
+      yield { type: 'text_delta', data: { text: 'ok' } }
+      yield { type: 'done', data: {} }
+    })
+    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
+      healthOk: vi.fn().mockResolvedValue(true),
+      streamRun,
+    } as unknown as AgentRuntimeClient)
+
+    const attachments = [
+      {
+        id: 'a1',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'p.jpg',
+        url: 'https://x/a.jpg',
+      },
+    ]
+
+    for await (const _event of service.streamConversation(
+      's1',
+      '营销',
+      'u1',
+      's1:thread-a',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      attachments,
+      ['a1'],
+    )) {
+      // drain
+    }
+
+    expect(streamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments,
+        refOrder: ['a1'],
+      }),
+    )
+  })
+
   it('falls back to CanvasAgent when Runtime health fails', async () => {
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
     const runSpy = vi

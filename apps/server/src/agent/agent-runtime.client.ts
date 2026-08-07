@@ -1,4 +1,5 @@
 import type { AgentStreamEvent } from '@lnkpi/agent'
+import type { SidebarAttachment } from '@lnkpi/shared'
 
 export interface RuntimeRunInput {
   sessionId: string
@@ -14,6 +15,8 @@ export interface RuntimeRunInput {
   llmModel?: string
   llmApiKey?: string
   llmBaseUrl?: string
+  attachments?: SidebarAttachment[]
+  refOrder?: string[]
 }
 
 export interface RuntimeThreadState {
@@ -141,6 +144,8 @@ export class AgentRuntimeClient {
         llm_api_key: input.llmApiKey,
         llm_base_url: input.llmBaseUrl,
         focus_node_id: input.focusNodeId,
+        attachments: input.attachments,
+        ref_order: input.refOrder,
       }),
     })
 

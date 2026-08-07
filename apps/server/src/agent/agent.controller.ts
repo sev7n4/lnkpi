@@ -10,7 +10,8 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common'
-import { IsIn, IsOptional, IsString } from 'class-validator'
+import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { Type } from 'class-transformer'
 import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { SessionsService } from '../sessions/sessions.service'
@@ -18,6 +19,32 @@ import { AgentService } from './agent.service'
 
 const SESSION_FORBIDDEN_HINT =
   '⚠️ 此画布不属于当前账号，无法写入。请返回工作台新建画布，或使用画布所有者账号登录。'
+
+class SidebarAttachmentDto {
+  @IsString()
+  id!: string
+
+  @IsIn(['text', 'image', 'video', 'audio'])
+  mediaType!: 'text' | 'image' | 'video' | 'audio'
+
+  @IsIn(['upload', 'asset', 'canvasNode'])
+  sourceKind!: 'upload' | 'asset' | 'canvasNode'
+
+  @IsString()
+  label!: string
+
+  @IsOptional()
+  @IsString()
+  url?: string
+
+  @IsOptional()
+  @IsString()
+  text?: string
+
+  @IsOptional()
+  @IsString()
+  sourceNodeId?: string
+}
 
 class ConversationDto {
   @IsString()
@@ -51,6 +78,19 @@ class ConversationDto {
   @IsOptional()
   @IsString()
   model?: string
+
+  /** 侧边栏参考素材（本轮 user turn） */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SidebarAttachmentDto)
+  attachments?: SidebarAttachmentDto[]
+
+  /** 参考素材顺序（attachment id 列表） */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  refOrder?: string[]
 }
 
 class OptimizePromptDto {
@@ -166,6 +206,8 @@ export class AgentController {
         dto.skillId,
         dto.model,
         dto.focusNodeId,
+        dto.attachments,
+        dto.refOrder,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }
