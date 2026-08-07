@@ -49,7 +49,7 @@ async def test_intake_invalid_requested_skill_falls_back_to_chat():
 
 
 @pytest.mark.asyncio
-async def test_intake_marketing_sets_enterprise_skill():
+async def test_intake_marketing_without_explicit_skill_sets_no_skill():
     node = make_intake_node(SKILLS_DIR)
     out = await node(
         {
@@ -58,18 +58,34 @@ async def test_intake_marketing_sets_enterprise_skill():
             ]
         }
     )
+    assert out.get("skill_id") is None
+    assert out.get("phase") == "clarify"
+
+
+@pytest.mark.asyncio
+async def test_intake_marketing_with_explicit_skill():
+    node = make_intake_node(SKILLS_DIR)
+    out = await node(
+        {
+            "messages": [
+                HumanMessage(content="帮我设计一套卫生洁具的电商详情页营销方案")
+            ],
+            "requested_skill_id": "enterprise-marketing-campaign",
+        }
+    )
     assert out.get("skill_id") == "enterprise-marketing-campaign"
+    assert out["flow_mode"] == "campaign"
 
 
 @pytest.mark.asyncio
 async def test_intake_first_turn_create_mode_locks_brief():
-    # 修复 P0-1/P0-3：首轮营销需求 → mode=create + brief 锁定
     node = make_intake_node(SKILLS_DIR)
     out = await node(
         {
             "messages": [
                 HumanMessage(content="帮我做一套洁具详情页营销方案并出图")
-            ]
+            ],
+            "requested_skill_id": "enterprise-marketing-campaign",
         }
     )
     assert out["mode"] == "create"
@@ -103,6 +119,7 @@ async def test_intake_new_product_request_resets_brief_to_create_mode():
             "messages": [
                 HumanMessage(content="帮我做一套运动鞋详情页营销方案并出图")
             ],
+            "requested_skill_id": "enterprise-marketing-campaign",
             "user_brief": "帮我做一套洁具详情页营销方案",
             "plan_draft": "# 洁具详情页方案\n## 定位...",
         }
@@ -125,3 +142,15 @@ async def test_modify_intent_detects_changelog_keywords():
     assert modify_intent("改拓扑")
     assert not modify_intent("帮我做一套运动鞋详情页")
     assert not modify_intent("确认方案")
+
+
+@pytest.mark.asyncio
+async def test_intake_prod_img2img_case_atomic():
+    node = make_intake_node(SKILLS_DIR)
+    u = (
+        "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。"
+        "保持主图风格，背景，构图不变。"
+    )
+    out = await node({"messages": [HumanMessage(content=u)]})
+    assert out["flow_mode"] == "atomic_create"
+    assert out.get("skill_id") is None

@@ -16,6 +16,8 @@ from app.graph.atomic_parse_schema import MAX_ATOMIC_MULTI_ITEMS, validate_parse
 from app.graph.nodes.intake import make_intake_node
 from app.graph.subgraphs.atomic_create_gate import route_after_atomic_create
 
+SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
+
 EVAL_PATH = (
     Path(__file__).resolve().parents[1]
     / "skills"
@@ -76,19 +78,41 @@ def test_mixed_modal_routes_to_confirm():
 
 
 @pytest.mark.asyncio
-async def test_intake_planning_detail_page_redirects_to_campaign(tmp_path: Path):
-    skills = Path(__file__).resolve().parents[1] / "skills"
-    intake = make_intake_node(skills)
+async def test_intake_planning_without_skill_clarifies_or_chat():
+    intake = make_intake_node(SKILLS_DIR)
     u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
     out = await intake({"messages": [HumanMessage(content=u)]})
-    assert out["flow_mode"] == "campaign"
-    assert out.get("skill_id") is not None
+    assert out.get("skill_id") is None
+    assert out["flow_mode"] in ("atomic_create", "chat") or out.get("phase") == "clarify"
+    assert out["flow_mode"] != "campaign" or out.get("skill_id")
 
 
 @pytest.mark.asyncio
-async def test_intake_storyboard_redirects_to_campaign(tmp_path: Path):
-    skills = Path(__file__).resolve().parents[1] / "skills"
-    intake = make_intake_node(skills)
-    out = await intake({"messages": [HumanMessage(content="帮我生成12个分镜镜头")]})
+async def test_intake_planning_with_explicit_skill_enters_campaign():
+    intake = make_intake_node(SKILLS_DIR)
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    out = await intake({
+        "messages": [HumanMessage(content=u)],
+        "requested_skill_id": "enterprise-marketing-campaign",
+    })
     assert out["flow_mode"] == "campaign"
-    assert out.get("skill_id") is not None
+    assert out.get("skill_id") == "enterprise-marketing-campaign"
+
+
+@pytest.mark.asyncio
+async def test_intake_storyboard_without_skill_does_not_enter_campaign():
+    intake = make_intake_node(SKILLS_DIR)
+    out = await intake({"messages": [HumanMessage(content="帮我生成12个分镜镜头")]})
+    assert out.get("skill_id") is None
+    assert out["flow_mode"] != "campaign" or out.get("skill_id")
+
+
+@pytest.mark.asyncio
+async def test_intake_storyboard_with_explicit_skill_enters_campaign():
+    intake = make_intake_node(SKILLS_DIR)
+    out = await intake({
+        "messages": [HumanMessage(content="帮我生成12个分镜镜头")],
+        "requested_skill_id": "enterprise-marketing-campaign",
+    })
+    assert out["flow_mode"] == "campaign"
+    assert out.get("skill_id") == "enterprise-marketing-campaign"

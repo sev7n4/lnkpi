@@ -11,6 +11,11 @@ from app.graph.atomic_intent import (
     resolve_intake_route,
 )
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent  # re-export for tests
+from app.graph.l0_action import (
+    TRANSFORM_VERBS,
+    has_preserve_intent,
+    utterance_has_multi_image_refs,
+)
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
@@ -18,6 +23,14 @@ REGENERATE_NO_CHECKPOINT_CLARIFY = (
     "当前对话还没有可重新生成的画布节点。"
     "请先在同一会话里完成首次创作（例如「帮我生成一张蓝牙耳机主图」），"
     "再说「重新生成一张」或「按刚才那个风格再生成一张」。"
+)
+
+ROUTE_CLARIFY_ORCHESTRATION = (
+    "听起来像多节点编排或营销方案需求。请确认：\n"
+    "1）单张/图生图原子出图；\n"
+    "2）完整编排（请在侧栏选用已安装的 Skill）；\n"
+    "3）其他说明。\n"
+    "回复 1 / 2 / 3。"
 )
 
 
@@ -30,6 +43,14 @@ def latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
+def _should_skip_atomic_campaign_override(text: str) -> bool:
+    t = (text or "").strip()
+    if not t:
+        return False
+    img2img = utterance_has_multi_image_refs(t) and any(v in t for v in TRANSFORM_VERBS)
+    return has_preserve_intent(t) or img2img
+
+
 def make_intake_node(skills_dir: Path) -> Callable:
     async def intake(state: dict) -> dict:
         text = latest_user_text(state.get("messages") or [])
@@ -37,15 +58,8 @@ def make_intake_node(skills_dir: Path) -> Callable:
         requested = str(state.get("requested_skill_id") or "").strip()
         by_id = {e.skill_id: e for e in entries}
         skill_id: str | None = None
-        flow_mode = "campaign"
         if requested and requested in by_id:
             skill_id = requested
-        elif marketing_intent(text):
-            preferred = "enterprise-marketing-campaign"
-            if preferred in by_id:
-                skill_id = preferred
-            elif entries:
-                skill_id = entries[0].skill_id
 
         existing_brief = state.get("user_brief")
         existing_plan = state.get("plan_draft")
@@ -54,7 +68,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
         is_single_node = route == "single_node"
         is_atomic = route == "atomic_create"
         is_modify = bool(
-            existing_brief and existing_plan and modify_intent(text) and not is_single_node and not is_atomic
+            existing_brief and existing_plan and modify_intent(text) and not is_single_node
         )
         has_atomic_checkpoint = (
             bool(str(state.get("atomic_node_id") or "").strip())
@@ -62,56 +76,65 @@ def make_intake_node(skills_dir: Path) -> Callable:
         )
         is_variant_create = has_atomic_checkpoint and is_regenerate_new_variant(text)
         needs_regen_clarify = not has_atomic_checkpoint and regenerate_phrase_intent(text)
+        needs_route_clarify = False
         orch = orchestration_complexity_intent(text)
         if orch == "campaign" and (is_atomic or is_variant_create):
-            is_atomic = False
-            is_variant_create = False
-            route = "campaign"
+            if not _should_skip_atomic_campaign_override(text):
+                is_atomic = False
+                is_variant_create = False
+                route = "campaign"
+
+        flow_mode: str | None = None
+        mode = "create"
+        proposed_brief: str | None = None
 
         if is_single_node:
-            mode = "create"
             proposed_brief = None
             flow_mode = "single_node"
-            if not skill_id and "enterprise-marketing-campaign" in by_id:
-                skill_id = "enterprise-marketing-campaign"
         elif has_atomic_checkpoint and atomic_regenerate_intent(text):
-            mode = "create"
             proposed_brief = None
             flow_mode = "atomic_regenerate"
             skill_id = None
         elif needs_regen_clarify:
-            mode = "create"
-            proposed_brief = None
-            flow_mode = "atomic_create"
-            skill_id = None
-        elif is_atomic or is_variant_create:
-            mode = "create"
             proposed_brief = None
             flow_mode = "atomic_create"
             skill_id = None
         elif is_modify:
             mode = "modify"
             proposed_brief = None  # reducer keeps existing brief
-        elif marketing_intent(text) or (orch == "campaign" and route == "campaign"):
-            mode = "create"
-            if not skill_id and "enterprise-marketing-campaign" in by_id:
-                skill_id = "enterprise-marketing-campaign"
+            flow_mode = "campaign"
+        elif skill_id and (
+            marketing_intent(text) or route == "campaign" or orch == "campaign"
+        ):
             if existing_brief and not modify_intent(text):
                 proposed_brief = BRIEF_RESET_PREFIX + text
             else:
                 proposed_brief = text
-        else:
-            mode = "create"
+            flow_mode = "campaign"
+        elif is_atomic or is_variant_create:
             proposed_brief = None
+            flow_mode = "atomic_create"
+            skill_id = None
+        elif marketing_intent(text) or (orch == "campaign" and route == "campaign"):
+            if skill_id:
+                if existing_brief and not modify_intent(text):
+                    proposed_brief = BRIEF_RESET_PREFIX + text
+                else:
+                    proposed_brief = text
+                flow_mode = "campaign"
+            else:
+                needs_route_clarify = True
+                proposed_brief = None
+                flow_mode = "chat"
+        else:
+            proposed_brief = None
+            flow_mode = "chat"
 
         resolved_flow = (
             flow_mode
-            if is_single_node
-            or is_atomic
-            or is_variant_create
-            or flow_mode == "atomic_regenerate"
+            if flow_mode in ("single_node", "atomic_create", "atomic_regenerate", "campaign")
             or needs_regen_clarify
-            else "campaign"
+            else "chat"
         )
 
         out: dict[str, Any] = {
@@ -129,6 +152,9 @@ def make_intake_node(skills_dir: Path) -> Callable:
         if needs_regen_clarify:
             out["phase"] = "clarify"
             out["clarify_question"] = REGENERATE_NO_CHECKPOINT_CLARIFY
+        elif needs_route_clarify:
+            out["phase"] = "clarify"
+            out["clarify_question"] = ROUTE_CLARIFY_ORCHESTRATION
         if focus_node_id:
             out["focus_node_id"] = focus_node_id
         if proposed_brief is not None:
