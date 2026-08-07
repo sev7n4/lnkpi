@@ -247,6 +247,23 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id, "refOrder": ref_order},
         )
 
+    async def apply_sidebar_attachments(
+        self,
+        *,
+        node_ids: list[str],
+        attachments: list[dict],
+        ref_order: list[str] | None,
+        mode: str,
+    ) -> dict[str, Any]:
+        body = {
+            "sessionId": self._session_id,
+            "nodeIds": node_ids,
+            "attachments": attachments,
+            "refOrder": ref_order or [],
+            "mode": mode,
+        }
+        return await self._post("/agent/internal/apply-sidebar-attachments", body)
+
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         # Nest polls Studio up to image_gen_timeout_sec; httpx must outlive that.
         timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
