@@ -24,6 +24,7 @@ import {
   resolveImageSize,
   resolveModelKey,
   resolvePlatformImageProviderOpts,
+  resolvePublicMediaUrls,
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
@@ -96,9 +97,11 @@ function extractTextSources(refs?: GenerationRefPayload[]): MergeTextSource[] {
 }
 
 function extractReferenceImages(refs?: GenerationRefPayload[]): string[] {
-  return (refs ?? [])
-    .filter((r) => r.mediaType === 'image' && r.url?.trim())
-    .map((r) => r.url!.trim())
+  return resolvePublicMediaUrls(
+    (refs ?? [])
+      .filter((r) => r.mediaType === 'image' && r.url?.trim())
+      .map((r) => r.url!.trim()),
+  )
 }
 
 function providerOpts(resolved: ResolvedGenerationProvider) {

@@ -14,6 +14,7 @@ import {
   parseErrorCodeFromMetadata,
   sharedDiagnosticCache,
 } from '@/utils/generationDiagnostic'
+import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import {
   groupRecordsByNodeId,
   type TaskAttemptGroup,
@@ -430,7 +431,7 @@ async function copyFailureDiagnostic(record: GenerationRecord) {
     sessionId: sessionId.value,
   })
   try {
-    await navigator.clipboard.writeText(text)
+    await copyTextToClipboard(text)
     failureCopyLabel.value = '已复制'
     setTimeout(() => {
       failureCopyLabel.value = '复制诊断'
@@ -443,7 +444,7 @@ async function copyFailureDiagnostic(record: GenerationRecord) {
 async function copyTaskId(recordId: string, e?: Event) {
   e?.stopPropagation()
   try {
-    await navigator.clipboard.writeText(recordId)
+    await copyTextToClipboard(recordId)
     taskIdCopyLabel.value = { ...taskIdCopyLabel.value, [recordId]: '已复制' }
     setTimeout(() => {
       const next = { ...taskIdCopyLabel.value }
