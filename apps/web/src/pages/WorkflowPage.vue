@@ -15,6 +15,7 @@ import CategoryTabs from '@/components/workflow/CategoryTabs.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 import type { Session } from '@lnkpi/shared'
+import { formatSessionTime } from '@/utils/formatSessionTime'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -183,20 +184,6 @@ async function deleteSession(session: Session) {
 
 function openCanvas(sessionId: string) {
   router.push(`/workflow/${sessionId}`)
-}
-
-function formatSessionTime(iso: string) {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return ''
-  const diff = Date.now() - date.getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes} 分钟前`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} 小时前`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days} 天前`
-  return date.toLocaleDateString()
 }
 
 async function createCanvas() {
