@@ -91,6 +91,12 @@ class ConversationDto {
   @IsArray()
   @IsString({ each: true })
   refOrder?: string[]
+
+  /** 消息内 @ 提及的 refKey（优先参考） */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class OptimizePromptDto {
@@ -208,6 +214,7 @@ export class AgentController {
         dto.focusNodeId,
         dto.attachments,
         dto.refOrder,
+        dto.mentionedKeys,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }

@@ -12,6 +12,7 @@ const props = defineProps<{
   modelValue: string
   mentions: MentionOption[]
   placeholder?: string
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [v: string]; submit: [] }>()
@@ -84,8 +85,35 @@ function insertMention(option: MentionOption) {
   })
 }
 
+function insertText(text: string) {
+  const el = textareaRef.value
+  if (!el) {
+    updateValue(`${props.modelValue}${text}`)
+    return
+  }
+  const start = el.selectionStart ?? el.value.length
+  const end = el.selectionEnd ?? start
+  const before = el.value.slice(0, start)
+  const after = el.value.slice(end)
+  const next = `${before}${text}${after}`
+  updateValue(next)
+  requestAnimationFrame(() => {
+    const pos = before.length + text.length
+    el.focus()
+    el.setSelectionRange(pos, pos)
+    syncBackdropScroll()
+  })
+}
+
+function focus() {
+  textareaRef.value?.focus()
+}
+
+defineExpose({ focus, insertText })
+
 function onKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault()
     emit('submit')
     return
   }
@@ -126,6 +154,7 @@ function onKeydown(e: KeyboardEvent) {
         class="mention-input-field input-field min-h-[96px] w-full resize-none text-sm leading-[1.5] !text-transparent caret-[var(--neo-text-primary)]"
         rows="4"
         :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
+        :disabled="disabled"
         @input="onInput"
         @keydown="onKeydown"
         @scroll="syncBackdropScroll"

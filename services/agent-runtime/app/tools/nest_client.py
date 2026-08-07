@@ -264,6 +264,15 @@ class NestCanvasClient:
         }
         return await self._post("/agent/internal/apply-sidebar-attachments", body)
 
+    async def update_nodes_batch(
+        self, items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        body = {
+            "sessionId": self._session_id,
+            "items": items,
+        }
+        return await self._post("/agent/internal/update-nodes-batch", body)
+
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         # Nest polls Studio up to image_gen_timeout_sec; httpx must outlive that.
         timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC

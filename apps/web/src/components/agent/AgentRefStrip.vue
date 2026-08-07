@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { SidebarAttachment } from '@lnkpi/shared'
-import DockRefChip from '@/components/canvas/dock-studio/shared/DockRefChip.vue'
+import AgentSidebarRefChip from '@/components/agent/AgentSidebarRefChip.vue'
 import { computed } from 'vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
 
@@ -8,7 +8,10 @@ const props = defineProps<{
   items: Array<{ attachment: SidebarAttachment; refKey: string }>
   removable?: boolean
 }>()
-const emit = defineEmits<{ remove: [id: string] }>()
+const emit = defineEmits<{
+  remove: [id: string]
+  mention: [refKey: string]
+}>()
 
 const refs = computed<NodeRef[]>(() =>
   props.items.map(({ attachment, refKey }) => ({
@@ -26,12 +29,14 @@ const refs = computed<NodeRef[]>(() =>
 <template>
   <div v-if="refs.length" class="agent-ref-strip">
     <div class="agent-ref-strip__scroll">
-      <DockRefChip
+      <AgentSidebarRefChip
         v-for="refItem in refs"
         :key="refItem.refId"
         :ref-item="refItem"
-      :class="{ 'agent-ref-strip__chip--readonly': !removable }"
+        :clickable="removable !== false"
+        :class="{ 'agent-ref-strip__chip--readonly': !removable }"
         @remove="emit('remove', refItem.refId)"
+        @mention="emit('mention', $event)"
       />
     </div>
   </div>

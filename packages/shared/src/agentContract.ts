@@ -566,6 +566,23 @@ export const AgentConversationRequestSchema = z.object({
   model: z.string().optional(),
   attachments: z.array(SidebarAttachmentSchema).max(5).optional(),
   refOrder: z.array(z.string()).optional(),
+  mentionedKeys: z
+    .array(z.string().regex(/^[TIVA]\d+$/i))
+    .max(5)
+    .optional(),
 })
+
+export function normalizeMentionedKeys(keys?: string[]): string[] | undefined {
+  if (!keys?.length) return undefined
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const k of keys) {
+    const upper = k.toUpperCase()
+    if (seen.has(upper)) continue
+    seen.add(upper)
+    out.push(upper)
+  }
+  return out.length ? out : undefined
+}
 
 export type AgentConversationRequest = z.infer<typeof AgentConversationRequestSchema>

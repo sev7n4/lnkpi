@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
 import type { SidebarAttachment } from '@lnkpi/shared'
+import { normalizeMentionedKeys, SIDEBAR_ATTACHMENT_MAX } from '@lnkpi/shared'
 import { apiUrl } from '@/services/api-base'
 import { sessionsApi } from '@/services/sessions-api'
 import NeoAgentLogo from '@/components/agent/NeoAgentLogo.vue'
@@ -44,7 +45,9 @@ import ForceChoiceDialog, { type ForceChoiceKind } from '@/components/agent/Forc
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
-import { useSidebarAttachments, mergeFocusNodeRef, assignRefKeysFor } from '@/composables/useSidebarAttachments'
+import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike } from '@/composables/useSidebarAttachments'
+import { parseRefMentions } from '@/composables/useRefMentions'
+import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { AGENT_SKILLS } from '@/constants/agentSkillMap'
@@ -74,7 +77,7 @@ const agent = useAgentStore()
 const auth = useAuthStore()
 const router = useRouter()
 const input = ref('')
-const composerRef = ref<HTMLTextAreaElement | null>(null)
+const composerRef = ref<InstanceType<typeof MentionInput> | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const chatContainer = ref<HTMLElement>()
 const sidebar = useSidebarAttachments()
@@ -95,6 +98,20 @@ function makeAttachmentItems(
 const pendingAttachmentItems = computed(() =>
   makeAttachmentItems(sidebar.pendingAttachments.value, sidebar.assignRefKeys()),
 )
+
+const mentionOptions = computed((): MentionOption[] =>
+  pendingAttachmentItems.value.map(({ refKey, attachment }) => ({
+    id: attachment.id,
+    label: refKey,
+    type: attachment.mediaType,
+  })),
+)
+
+function insertRefMention(refKey: string) {
+  const token = `@${refKey} `
+  composerRef.value?.insertText(input.value ? ` ${token}` : token)
+  nextTick(() => composerRef.value?.focus())
+}
 
 /** Runtime LangGraph thread；与画布 sessionId 解耦，新建对话时重置 */
 const agentThreadId = ref(createAgentThreadId(props.sessionId))
@@ -157,10 +174,9 @@ const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 
-const canSubmitComposer = computed(() => {
-  const fromRef = composerRef.value?.value.trim() ?? ''
-  return Boolean(input.value.trim() || fromRef || sidebar.pendingAttachments.value.length)
-})
+const canSubmitComposer = computed(() =>
+  Boolean(input.value.trim() || sidebar.pendingAttachments.value.length),
+)
 
 function openFilePicker() {
   if (!props.readOnly && !isUploading.value) {
@@ -206,13 +222,6 @@ function onDragLeave() {
 function onDrop(event: DragEvent) {
   isDragOver.value = false
   void addFiles(event.dataTransfer?.files ?? [])
-}
-
-function syncComposerFromDom() {
-  const el = composerRef.value
-  if (el && el.value !== input.value) {
-    input.value = el.value
-  }
 }
 
 /** 面板是否展开（收缩态只保留右下角 logo FAB） */
@@ -409,7 +418,6 @@ function toggleVoice() {
 }
 
 async function send() {
-  syncComposerFromDom()
   if (!canSubmitComposer.value || agent.isStreaming || isUploading.value) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
@@ -476,7 +484,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   }
 
   const { attachments: pendingAttachments } = sidebar.toPayload()
-  const attachments = mergeFocusNodeRef(pendingAttachments, props.selectedNode ?? null)
+  const attachments = pendingAttachments
+  const mentionedKeys = normalizeMentionedKeys(parseRefMentions(message))
   const refOrder = attachments.map((a) => a.id)
   const attachmentRefKeys = assignRefKeysFor(attachments)
   const userMessageExtras = attachments.length
@@ -531,6 +540,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         focusNodeId: props.selectedNodeId || undefined,
         attachments: attachments.length ? attachments : undefined,
         refOrder: refOrder.length ? refOrder : undefined,
+        mentionedKeys,
       }),
     })
 
@@ -844,13 +854,6 @@ function scrollToBottom() {
   })
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-    e.preventDefault()
-    void send()
-  }
-}
-
 function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
   if (!taskProgress.value.items.length) return
   let next = reconcileTaskProgress(taskProgress.value, rawNodes)
@@ -877,7 +880,15 @@ function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
   taskProgress.value = next
 }
 
-defineExpose({ openPanel, reconcileFromNodes })
+defineExpose({
+  openPanel,
+  reconcileFromNodes,
+  addFromCanvasNodes: (nodes: FocusNodeLike[]) => {
+    const n = sidebar.addFromCanvasNodes(nodes)
+    if (n < nodes.length) ElMessage.warning(`最多添加 ${SIDEBAR_ATTACHMENT_MAX} 个参考素材`)
+    return n
+  },
+})
 </script>
 
 <template>
@@ -1188,6 +1199,7 @@ defineExpose({ openPanel, reconcileFromNodes })
                 :items="pendingAttachmentItems"
                 :removable="true"
                 @remove="sidebar.remove"
+                @mention="insertRefMention"
               />
               <input
                 ref="fileInputRef"
@@ -1197,16 +1209,13 @@ defineExpose({ openPanel, reconcileFromNodes })
                 :disabled="readOnly || isUploading"
                 @change="onFileChange"
               >
-              <textarea
+              <MentionInput
                 ref="composerRef"
                 v-model="input"
-                class="agent-prompt-field"
-                rows="3"
+                :mentions="mentionOptions"
                 :placeholder="`向${activeSkill.label}助手描述需求，Cmd/Ctrl + Enter 发送...`"
                 :disabled="agent.isStreaming"
-                @focus="syncComposerFromDom"
-                @input="syncComposerFromDom"
-                @keydown="onKeydown"
+                @submit="send"
               />
 
               <div class="agent-dock-actions">

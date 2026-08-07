@@ -205,6 +205,23 @@ class ApplySidebarAttachmentsDto {
   mode!: 'localRefs' | 'attach_edges'
 }
 
+class UpdateNodesBatchItemDto {
+  @IsString()
+  nodeId!: string
+
+  patch!: Record<string, unknown>
+}
+
+class UpdateNodesBatchDto {
+  @IsString()
+  sessionId!: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => UpdateNodesBatchItemDto)
+  items!: UpdateNodesBatchItemDto[]
+}
+
 class RunImageGenerationDto {
   @IsString()
   sessionId!: string
@@ -432,6 +449,15 @@ export class AgentCanvasToolsController {
       >[0]['attachments'],
       refOrder: dto.refOrder,
       mode: dto.mode,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('update-nodes-batch')
+  async updateNodesBatch(@Body() dto: UpdateNodesBatchDto) {
+    const data = await this.tools.updateNodesBatch({
+      sessionId: dto.sessionId,
+      items: dto.items,
     })
     return { code: 0, message: 'ok', data }
   }

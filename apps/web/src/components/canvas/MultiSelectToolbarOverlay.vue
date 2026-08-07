@@ -17,6 +17,7 @@ const emit = defineEmits<{
   layout: []
   generateVideo: []
   download: []
+  addAgentRef: []
 }>()
 
 const { viewport, nodes: flowNodes } = useVueFlow()
@@ -93,5 +94,6 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @layout="emit('layout')"
     @generate-video="emit('generateVideo')"
     @download="emit('download')"
+    @add-agent-ref="emit('addAgentRef')"
   />
 </template>

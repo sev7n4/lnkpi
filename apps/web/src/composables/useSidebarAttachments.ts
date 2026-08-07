@@ -26,26 +26,40 @@ export function mergeFocusNodeRef(
   node: FocusNodeLike | null,
 ): SidebarAttachment[] {
   if (!node) return attachments
-  const data = node.data ?? {}
-  const url = String(data.url ?? '').trim()
-  const text = String(data.content ?? data.prompt ?? '').trim()
-  if (!url && !text) return attachments
-  const mediaType = node.type === 'text' || node.type === 'prompt' ? 'text' : 'image'
-  const item: SidebarAttachment = {
-    id: `focus-${node.id}`,
-    mediaType,
-    sourceKind: 'canvasNode',
-    label: String(data.title ?? data.label ?? node.type ?? node.id),
-    url: url || undefined,
-    text: text || undefined,
-    sourceNodeId: node.id,
-  }
+  const item = nodeToSidebarAttachment(node)
+  if (!item) return attachments
   const dup = attachments.some(
     (a) => (item.url && a.url === item.url) || (item.sourceNodeId && a.sourceNodeId === item.sourceNodeId),
   )
   if (dup) return attachments
   if (attachments.length >= SIDEBAR_ATTACHMENT_MAX) return attachments
-  return [...attachments, item]
+  return [...attachments, { ...item, id: `focus-${node.id}` }]
+}
+
+export function nodeToSidebarAttachment(node: FocusNodeLike): SidebarAttachment | null {
+  const data = node.data ?? {}
+  const url = String(data.url ?? '').trim()
+  const text = String(data.content ?? data.prompt ?? '').trim()
+  if (!url && !text) return null
+
+  const t = String(node.type ?? '')
+  let mediaType: SidebarAttachment['mediaType'] = 'image'
+  if (t === 'text' || t === 'prompt') mediaType = 'text'
+  else if (t === 'video') mediaType = 'video'
+  else if (t === 'audio') mediaType = 'audio'
+  else if (t === 'image' || t === 'mediaInput') mediaType = 'image'
+  else if (text && !url) mediaType = 'text'
+  else if (!url) return null
+
+  return {
+    id: randomId(),
+    mediaType,
+    sourceKind: 'canvasNode',
+    label: String(data.title ?? data.label ?? (t || node.id)),
+    url: url || undefined,
+    text: text || undefined,
+    sourceNodeId: node.id,
+  }
 }
 
 export function useSidebarAttachments() {
@@ -94,9 +108,26 @@ export function useSidebarAttachments() {
     return assignRefKeysFor(pendingAttachments.value)
   }
 
+  function addFromCanvasNode(node: FocusNodeLike): boolean {
+    const item = nodeToSidebarAttachment(node)
+    if (!item) return false
+    if (pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) return false
+    addFromPayload(item)
+    return true
+  }
+
+  function addFromCanvasNodes(nodes: FocusNodeLike[]): number {
+    let count = 0
+    for (const n of nodes) {
+      if (pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) break
+      if (addFromCanvasNode(n)) count += 1
+    }
+    return count
+  }
+
   function toPayload() {
     return { attachments: [...pendingAttachments.value], refOrder: refOrder.value }
   }
 
-  return { pendingAttachments, refOrder, addFromFile, addFromPayload, remove, clear, toPayload, assignRefKeys }
+  return { pendingAttachments, refOrder, addFromFile, addFromPayload, addFromCanvasNode, addFromCanvasNodes, remove, clear, toPayload, assignRefKeys }
 }

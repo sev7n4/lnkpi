@@ -29,7 +29,10 @@ from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
 from app.graph.nodes.intake import modify_intent
-from app.graph.sidebar_attachments import normalize_sidebar_attachments
+from app.graph.sidebar_attachments import (
+    normalize_mentioned_keys,
+    normalize_sidebar_attachments,
+)
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -207,6 +210,10 @@ class RunRequest(BaseModel):
         default=None,
         validation_alias="ref_order",
     )
+    sidebar_mentioned_keys: list[str] | None = Field(
+        default=None,
+        validation_alias="mentioned_keys",
+    )
 
 
 class NestEventProxy:
@@ -308,6 +315,11 @@ class NestEventProxy:
                 mode=mode,
             )
         )
+
+    async def update_nodes_batch(
+        self, items: list[dict[str, Any]]
+    ) -> dict[str, Any]:
+        return await self._forward_actions(await self._inner.update_nodes_batch(items))
 
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_image_generation")
@@ -547,6 +559,7 @@ async def stream_run_events(
 
     try:
         normalized_attachments = normalize_sidebar_attachments(req.sidebar_attachments)
+        normalized_mentioned_keys = normalize_mentioned_keys(req.sidebar_mentioned_keys)
     except ValueError as exc:
         yield {"type": "error", "data": {"message": str(exc)}}
         yield {"type": "done", "data": {}}
@@ -633,6 +646,7 @@ async def stream_run_events(
             "focus_node_id": req.focus_node_id,
             "sidebar_attachments": normalized_attachments,
             "sidebar_ref_order": req.sidebar_ref_order,
+            "sidebar_mentioned_keys": normalized_mentioned_keys,
         }
 
     async def run_graph() -> None:

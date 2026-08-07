@@ -107,9 +107,10 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
 
         await _emit_atomic_task_list(nest, created_items)
 
+        node_ids = [str(i.get("node_id") or "") for i in created_items if i.get("node_id")]
+
         attachments = state.get("sidebar_attachments") or []
         if attachments:
-            node_ids = [str(i.get("node_id") or "") for i in created_items if i.get("node_id")]
             apply_fn = getattr(nest, "apply_sidebar_attachments", None)
             if apply_fn and node_ids:
                 await apply_fn(
@@ -117,6 +118,17 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
                     attachments=attachments,
                     ref_order=state.get("sidebar_ref_order"),
                     mode="localRefs",
+                )
+
+        keys = state.get("sidebar_mentioned_keys") or []
+        if keys and node_ids:
+            update_fn = getattr(nest, "update_nodes_batch", None)
+            if update_fn is not None:
+                await update_fn(
+                    [
+                        {"nodeId": nid, "patch": {"mentionedKeys": keys}}
+                        for nid in node_ids
+                    ]
                 )
 
         first = created_items[0]
