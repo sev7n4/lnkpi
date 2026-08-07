@@ -1,4 +1,5 @@
 import { apiUrl } from '@/services/api-base'
+import { lastThreadStorageKey } from '@/utils/formatSessionTime'
 import { randomId } from '@/utils/randomId'
 
 /**
@@ -29,6 +30,39 @@ export function randomThreadSuffix(): string {
 /** Build a session-scoped agent thread id (never reuse `:main`). */
 export function createAgentThreadId(sessionId: string): string {
   return `${sessionId}:${randomThreadSuffix()}`
+}
+
+/**
+ * Pick thread to restore after canvas refresh.
+ * Avoids blank UI when localStorage points at an empty thread (e.g. after「新建对话」).
+ */
+export async function resolveBootstrapThreadId(
+  sessionId: string,
+  opts: {
+    cachedThreadId: string | null
+    threads: Array<{ id: string }>
+    messageCountFor: (threadId: string) => Promise<number>
+  },
+): Promise<string> {
+  const { cachedThreadId, threads, messageCountFor } = opts
+
+  if (cachedThreadId) {
+    const cachedCount = await messageCountFor(cachedThreadId)
+    if (cachedCount > 0) return cachedThreadId
+  }
+
+  for (const th of threads) {
+    const count = await messageCountFor(th.id)
+    if (count > 0) return th.id
+  }
+
+  if (cachedThreadId) return cachedThreadId
+  if (threads[0]?.id) return threads[0].id
+  return createAgentThreadId(sessionId)
+}
+
+export function persistActiveThreadId(sessionId: string, threadId: string) {
+  localStorage.setItem(lastThreadStorageKey(sessionId), threadId)
 }
 
 /** Generate an idempotency key for POST /api/agent/chat/conversation. */

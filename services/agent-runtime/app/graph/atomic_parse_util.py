@@ -208,6 +208,20 @@ def parse_atomic_multi_items(utterance: str) -> list[dict[str, Any]] | None:
             labels = _split_atomic_item_labels(colon_m.group(1))
 
     if not labels or len(labels) < 2:
+        variant_markers = ("不同颜色", "多种颜色", "各色", "不同风格", "多种风格", "不同款式")
+        has_variant = any(m in t for m in variant_markers)
+        has_ref = bool(re.search(r"@I\d|参考|参照|这张图|这个图", t, re.IGNORECASE))
+        if expected is not None and expected >= 2 and (has_variant or has_ref):
+            base = re.sub(r"^@I\d+\s*[，,]?\s*", "", t).strip()
+            return [
+                {
+                    "target_type": "image",
+                    "prompt": f"{base}（变体 {i + 1}/{expected}）".strip(),
+                    "title": f"变体{i + 1}",
+                    "confirm_gate": False,
+                }
+                for i in range(expected)
+            ]
         return None
     if expected is not None and expected != len(labels):
         return None

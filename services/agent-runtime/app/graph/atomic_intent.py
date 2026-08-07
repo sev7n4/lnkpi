@@ -295,6 +295,12 @@ def _has_prompt_explicit(text: str) -> bool:
     return False
 
 
+_BATCH_IMAGE_COUNT = re.compile(
+    r"(?:生成|做|来)\s*([一二三四五六七八九十两\d]+)\s*张|"
+    r"([一二三四五六七八九十两\d]+)\s*张(?:图|图片)",
+)
+
+
 def atomic_create_intent(text: str) -> bool:
     """True when user wants a single-shot create-and-generate flow."""
     lowered = (text or "").strip().lower()
@@ -310,6 +316,12 @@ def atomic_create_intent(text: str) -> bool:
         return True
     if _has_prompt_explicit(text):
         return True
+    batch_m = _BATCH_IMAGE_COUNT.search(text or "")
+    if batch_m:
+        token = batch_m.group(1) or batch_m.group(2) or ""
+        count = _parse_orch_count(token)
+        if count is not None and count >= 2:
+            return True
     if any(h in lowered for h in ATOMIC_CREATE_HINTS):
         return True
     if any(h in text for h in TEXT_DEFAULT_KEYWORDS):
