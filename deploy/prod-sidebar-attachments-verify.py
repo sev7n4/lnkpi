@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Production smoke verify for sidebar attachments (Task 12).
+"""Production smoke verify for sidebar attachments (M3 explicit refs).
 
 Sections:
   A) Runtime unit smoke — normalize_sidebar_attachments, atomic localRefs,
-     campaign apply_sidebar_refs (pytest, no network)
-  B) Production integration — SSE with attachment payload:
-     1. atomic_create → image node localRefs
-     2. campaign plan → confirm split → seed image ref edges
+     campaign apply_sidebar_refs, mentionedKeys patch (pytest, no network)
+  B) Production integration — SSE with explicit attachment + mentionedKeys payload:
+     1. focusNodeId alone → no silent localRefs (M3 D-A/D-B)
+     2. atomic_create + attachments + mentionedKeys → localRefs + node.data.mentionedKeys
+     3. campaign plan → confirm split → seed image ref edges
 
 Usage:
   python3 deploy/prod-sidebar-attachments-verify.py
@@ -88,6 +89,8 @@ def sse_collect(
     *,
     attachments: list[dict[str, Any]] | None = None,
     ref_order: list[str] | None = None,
+    mentioned_keys: list[str] | None = None,
+    focus_node_id: str | None = None,
     timeout: float = 300,
 ) -> tuple[list[dict], str, set[str], str]:
     body: dict[str, Any] = {"sessionId": sid, "message": msg, "threadId": tid}
@@ -95,6 +98,10 @@ def sse_collect(
         body["attachments"] = attachments
     if ref_order:
         body["refOrder"] = ref_order
+    if mentioned_keys:
+        body["mentionedKeys"] = mentioned_keys
+    if focus_node_id:
+        body["focusNodeId"] = focus_node_id
     h = {
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
@@ -105,6 +112,7 @@ def sse_collect(
     events: list[dict] = []
     types: set[str] = set()
     parts: list[str] = []
+    replaces: list[str] = []
     end = time.time() + timeout
     exit_reason = "timeout"
     with urlopen(r, timeout=timeout) as resp:
@@ -129,7 +137,8 @@ def sse_collect(
                             continue
                         pl = line[5:].strip()
                         if pl == "[DONE]":
-                            return events, "".join(parts), types, "done_marker"
+                            text = replaces[-1] if replaces else "".join(parts)
+                            return events, text, types, "done_marker"
                         try:
                             ev = json.loads(pl)
                         except json.JSONDecodeError:
@@ -137,20 +146,60 @@ def sse_collect(
                         events.append(ev)
                         et = str(ev.get("type") or "")
                         types.add(et)
-                        if et == "text_delta":
-                            parts.append(str((ev.get("data") or {}).get("text") or ""))
+                        data = ev.get("data") or {}
+                        text_chunk = str(data.get("text") or "")
+                        if et == "text_delta" and text_chunk:
+                            parts.append(text_chunk)
+                        elif et == "text_replace" and text_chunk:
+                            replaces.append(text_chunk)
                         if et == "done":
-                            return events, "".join(parts), types, "done"
+                            text = replaces[-1] if replaces else "".join(parts)
+                            return events, text, types, "done"
                         if et == "error":
-                            return events, "".join(parts), types, "error"
+                            text = replaces[-1] if replaces else "".join(parts)
+                            return events, text, types, "error"
         except IncompleteRead:
             exit_reason = "eof"
-    return events, "".join(parts), types, exit_reason
+    text = replaces[-1] if replaces else "".join(parts)
+    return events, text, types, exit_reason
 
 
 def canvas_data(tok: str, sid: str) -> dict[str, Any]:
     sess = http("GET", f"/sessions/{sid}", t=tok)["data"]
     return sess.get("canvasData") or {}
+
+
+def put_canvas_data(tok: str, sid: str, canvas: dict[str, Any]) -> None:
+    http("PUT", f"/sessions/{sid}", {"canvasData": canvas}, t=tok)
+
+
+def seed_image_node(tok: str, sid: str, *, url: str, title: str = "focus-ref-seed") -> str:
+    canvas = canvas_data(tok, sid)
+    node_id = f"image-focus-{int(time.time())}"
+    nodes = list(canvas.get("nodes") or [])
+    nodes.append(
+        {
+            "id": node_id,
+            "type": "image",
+            "position": {"x": 640, "y": 320},
+            "data": {
+                "title": title,
+                "prompt": "侧栏 focus 解耦 smoke seed",
+                "url": url,
+                "status": "done",
+            },
+        }
+    )
+    put_canvas_data(
+        tok,
+        sid,
+        {
+            "nodes": nodes,
+            "edges": canvas.get("edges") or [],
+            "viewport": canvas.get("viewport"),
+        },
+    )
+    return node_id
 
 
 def latest_node(tok: str, sid: str, node_type: str) -> dict[str, Any] | None:
@@ -176,6 +225,33 @@ def run_unit_smoke() -> bool:
     return rc == 0
 
 
+def verify_focus_only_no_silent_ref(tok: str) -> None:
+    """M3: focusNodeId alone must not silently merge canvas node as sidebar ref."""
+    sid = http("POST", "/sessions", {"title": f"sidebar-focus-{int(time.time())}"}, t=tok)["data"]["id"]
+    focus_url = "https://picsum.photos/seed/lnkpi-sidebar-focus-only/512/512"
+    focus_id = seed_image_node(tok, sid, url=focus_url)
+    tid = f"{sid}:{uuid.uuid4()}"
+    _, text, types, exit_reason = sse_collect(
+        tok,
+        sid,
+        "按选中节点风格生成白底主图",
+        tid,
+        focus_node_id=focus_id,
+        timeout=SSE_TIMEOUT_SEC,
+    )
+    record("focus-only path started", "error" not in types, text[:140])
+
+    node = latest_node(tok, sid, "image")
+    data = (node or {}).get("data") or {}
+    local_refs = data.get("localRefs") or []
+    has_focus_url = any(str(r.get("url") or "") == focus_url for r in local_refs if isinstance(r, dict))
+    record(
+        "focus-only no silent localRefs",
+        not has_focus_url,
+        f"refs={len(local_refs)} focus={focus_id} exit={exit_reason}",
+    )
+
+
 def verify_atomic_local_refs(tok: str) -> None:
     sid = http("POST", "/sessions", {"title": f"sidebar-atomic-{int(time.time())}"}, t=tok)["data"]["id"]
     tid = f"{sid}:{uuid.uuid4()}"
@@ -188,6 +264,7 @@ def verify_atomic_local_refs(tok: str) -> None:
         tid,
         attachments=attachments,
         ref_order=ref_order,
+        mentioned_keys=["I1"],
         timeout=SSE_TIMEOUT_SEC,
     )
 
@@ -208,6 +285,12 @@ def verify_atomic_local_refs(tok: str) -> None:
         "atomic refOrder on image node",
         attachments[0]["id"] in ref_order_on_node,
         str(ref_order_on_node)[:120],
+    )
+    mentioned_keys = data.get("mentionedKeys") or []
+    record(
+        "atomic mentionedKeys on image node",
+        "I1" in mentioned_keys,
+        str(mentioned_keys)[:120],
     )
 
 
@@ -238,9 +321,16 @@ def verify_campaign_attach_edges(tok: str) -> None:
         tid,
         attachments=attachments,
         ref_order=ref_order,
+        mentioned_keys=["I1"],
         timeout=SSE_TIMEOUT_SEC,
     )
-    at_plan = "await_confirm" in types1 or "拟定" in text1 or "请确认" in text1 or "方案" in text1
+    at_plan = (
+        "await_confirm" in types1
+        or "interrupt" in types1
+        or "拟定拆解" in text1
+        or ("拟定" in text1 and "请确认" in text1)
+        or ("请确认" in text1 and ("拆解" in text1 or "模块" in text1))
+    )
     record("campaign plan with attachment", at_plan and "error" not in types1, text1[:140])
 
     _, text2, types2, exit2 = sse_collect(tok, sid, "1", tid, timeout=SSE_TIMEOUT_SEC)
@@ -282,12 +372,13 @@ def run_prod_smoke() -> None:
     rt = http("GET", "/agent/runtime-health", t=tok)
     record("Runtime health", bool((rt.get("data") or {}).get("ok")))
 
+    verify_focus_only_no_silent_ref(tok)
     verify_atomic_local_refs(tok)
     verify_campaign_attach_edges(tok)
 
 
 def main() -> int:
-    print("=== Sidebar attachments smoke verify (Task 12) ===")
+    print("=== Sidebar attachments smoke verify (M3 explicit refs) ===")
     if SKIP_UNIT:
         record("Unit smoke", True, "SKIP_UNIT=1", skip=True)
     else:
