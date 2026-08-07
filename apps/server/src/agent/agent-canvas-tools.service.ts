@@ -8,6 +8,8 @@ import {
   type CanvasNode,
   type LocalRefBinding,
   type NodeType,
+  type SidebarAttachment,
+  validateSidebarAttachments,
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
@@ -522,6 +524,41 @@ export class AgentCanvasToolsService {
 
     await this.persist(input.sessionId, actions)
     return { actions }
+  }
+
+  async applySidebarAttachments(input: {
+    sessionId: string
+    nodeIds: string[]
+    attachments: SidebarAttachment[]
+    refOrder?: string[]
+    mode: 'localRefs' | 'attach_edges'
+  }): Promise<{ actions: CanvasAction[]; sourceNodeIds: string[] }> {
+    validateSidebarAttachments(input.attachments)
+    const order = input.refOrder?.length
+      ? input.refOrder
+      : input.attachments.map((a) => a.id)
+
+    if (input.mode === 'localRefs') {
+      const localRefs: LocalRefBinding[] = input.attachments
+        .filter((a) => a.sourceKind !== 'canvasNode')
+        .map((a) => ({
+          id: a.id,
+          mediaType: a.mediaType,
+          sourceKind: a.sourceKind === 'asset' ? 'asset' : 'upload',
+          label: a.label,
+          url: a.url,
+          text: a.text,
+        }))
+      const actions: CanvasAction[] = input.nodeIds.map((nodeId) => ({
+        type: 'update_node',
+        payload: { id: nodeId, data: { localRefs, refOrder: order } },
+      }))
+      await this.persist(input.sessionId, actions)
+      return { actions, sourceNodeIds: [] }
+    }
+
+    // attach_edges mode — stub for Task 11; return empty for now
+    return { actions: [], sourceNodeIds: [] }
   }
 
   async startImageGeneration(input: {
