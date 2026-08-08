@@ -100,7 +100,7 @@ describe('buildVideoProviderOptions', () => {
       referenceBundle: bundle,
     })
     expect(ensureSeedanceRefTags('保持 @Image1', bundle)).toBe('保持 @Image1 @Video1')
-    expect(buildEffectiveVideoPrompt('保持角色', built, bundle)).toMatch(
+    expect(buildEffectiveVideoPrompt('保持角色', built)).toMatch(
       /保持角色 @Image1 @Video1[\s\S]*【参考图一致性】/,
     )
     expect(buildVideoProviderGenerateOptions(built)).toEqual(built.providerOptions)
@@ -110,6 +110,48 @@ describe('buildVideoProviderOptions', () => {
       refAudioMode: 'none',
       responseMode: 'async_task',
     })
+  })
+
+  it('clamps seedance prompt image tags to the 9 provider references', () => {
+    const bundle = buildVideoReferenceBundle(
+      Array.from({ length: 10 }, (_, index) => ({
+        refKey: `I${index + 1}`,
+        mediaType: 'image' as const,
+        url: `https://cdn/${index + 1}.png`,
+      })),
+    )
+    const built = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      referenceBundle: bundle,
+    })
+
+    const prompt = buildEffectiveVideoPrompt('保持角色', built)
+
+    expect(built.providerOptions.referenceImages).toHaveLength(9)
+    expect(prompt).toContain('@Image9')
+    expect(prompt).not.toContain('@Image10')
+  })
+
+  it('drops video and audio prompt tags before first-last scenario inference', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/last.png' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/style.mp4' },
+      { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/music.mp3' },
+    ])
+    const built = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      videoMode: 'first_last_frame',
+      referenceBundle: bundle,
+    })
+
+    const prompt = buildEffectiveVideoPrompt('首尾帧过渡', built)
+
+    expect(prompt).toContain('@Image1')
+    expect(prompt).toContain('@Image2')
+    expect(prompt).not.toContain('@Video1')
+    expect(prompt).not.toContain('@Audio1')
+    expect(built.meta.scenario).toBe('S5')
   })
 })
 

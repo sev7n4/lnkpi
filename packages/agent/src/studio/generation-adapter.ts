@@ -507,15 +507,19 @@ export interface BuiltVideoProviderOptions {
   crop?: string
   image?: string
   effectivePromptSuffix?: string
+  effectiveReferenceBundle: VideoReferenceBundle
   providerOptions: VideoProviderGenerateOptions
   meta: AdapterMeta
 }
 
 export function buildEffectiveVideoPrompt(
   mergedText: string,
-  built: Pick<BuiltVideoProviderOptions, 'effectivePromptSuffix' | 'meta'>,
-  bundle: VideoReferenceBundle,
+  built: Pick<
+    BuiltVideoProviderOptions,
+    'effectivePromptSuffix' | 'effectiveReferenceBundle' | 'meta'
+  >,
 ): string {
+  const bundle = built.effectiveReferenceBundle
   let prompt = [mergedText.trim(), built.effectivePromptSuffix].filter(Boolean).join('\n')
   if (
     built.meta.refWire === 'apimart_multimodal' ||
@@ -576,11 +580,18 @@ export function buildVideoProviderOptions(input: {
     referenceVideos: sourceBundle.videos.map((ref) => ref.url),
     referenceAudios: sourceBundle.audios.map((ref) => ref.url),
   })
-  const bundle: VideoReferenceBundle = {
+  const clampedBundle: VideoReferenceBundle = {
     images: sourceBundle.images.slice(0, clamped.referenceImages.length),
     videos: sourceBundle.videos.slice(0, clamped.referenceVideos.length),
     audios: sourceBundle.audios.slice(0, clamped.referenceAudios.length),
   }
+  const useFirstLast =
+    profile.refWire === 'apimart_multimodal' &&
+    videoMode === 'first_last_frame' &&
+    clampedBundle.images.length === 2
+  const bundle: VideoReferenceBundle = useFirstLast
+    ? { images: clampedBundle.images, videos: [], audios: [] }
+    : clampedBundle
   const scenario = input.scenario ?? inferVideoScenario(bundle, videoMode)
   const droppedFields: AdapterMeta['droppedFields'] = [...clamped.droppedFields]
   const nativeParams: Record<string, unknown> = {
@@ -653,42 +664,42 @@ export function buildVideoProviderOptions(input: {
       })
     }
   } else if (profile.refWire === 'apimart_multimodal') {
-    if (videoMode === 'first_last_frame' && imageCount === 2) {
+    if (useFirstLast) {
       refWire = 'apimart_first_last'
       providerOptions.imageWithRoles = [
-        { url: clamped.referenceImages[0], role: 'first_frame' },
-        { url: clamped.referenceImages[1], role: 'last_frame' },
+        { url: bundle.images[0].url, role: 'first_frame' },
+        { url: bundle.images[1].url, role: 'last_frame' },
       ]
       nativeParams.image_with_roles = providerOptions.imageWithRoles
       refImageMode = 'native'
-      if (videoCount) {
+      if (clampedBundle.videos.length) {
         droppedFields.push({
           field: 'referenceVideos',
           reason: 'referenceVideos omitted in first_last_frame mode',
         })
       }
-      if (audioCount) {
+      if (clampedBundle.audios.length) {
         droppedFields.push({
           field: 'referenceAudios',
           reason: 'referenceAudios omitted in first_last_frame mode',
         })
       }
-      refVideoMode = videoCount ? 'metadata_only' : 'none'
-      refAudioMode = audioCount ? 'metadata_only' : 'none'
+      refVideoMode = clampedBundle.videos.length ? 'metadata_only' : 'none'
+      refAudioMode = clampedBundle.audios.length ? 'metadata_only' : 'none'
     } else {
       if (imageCount) {
-        providerOptions.referenceImages = clamped.referenceImages
-        nativeParams.image_urls = clamped.referenceImages
+        providerOptions.referenceImages = bundle.images.map((ref) => ref.url)
+        nativeParams.image_urls = providerOptions.referenceImages
         refImageMode = 'native'
       }
       if (videoCount) {
-        providerOptions.referenceVideos = clamped.referenceVideos
-        nativeParams.video_urls = clamped.referenceVideos
+        providerOptions.referenceVideos = bundle.videos.map((ref) => ref.url)
+        nativeParams.video_urls = providerOptions.referenceVideos
         refVideoMode = 'native'
       }
       if (audioCount) {
-        providerOptions.referenceAudios = clamped.referenceAudios
-        nativeParams.audio_urls = clamped.referenceAudios
+        providerOptions.referenceAudios = bundle.audios.map((ref) => ref.url)
+        nativeParams.audio_urls = providerOptions.referenceAudios
         refAudioMode = 'native'
       }
     }
@@ -713,6 +724,7 @@ export function buildVideoProviderOptions(input: {
     ...(providerOptions.crop ? { crop: providerOptions.crop } : {}),
     image,
     effectivePromptSuffix,
+    effectiveReferenceBundle: bundle,
     providerOptions,
     meta: {
       modelKey: resolvedKey,
