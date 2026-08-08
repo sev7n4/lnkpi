@@ -180,4 +180,70 @@ describe('AgnesVideoProvider', () => {
     expect(body).not.toHaveProperty('crop')
     expect(body.model).toBe('agnes-video-v2.0')
   })
+
+  it('sends extra_body keyframes when referenceImages length >= 2', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-kf' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/kf.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    await provider.generate('transition', {
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png'],
+      refWire: 'agnes_keyframes',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.extra_body).toEqual({
+      image: ['https://cdn/a.png', 'https://cdn/b.png'],
+      mode: 'keyframes',
+    })
+    expect(body).not.toHaveProperty('image')
+  })
+
+  it('returns url from metadata when top-level url is absent', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-meta' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'completed',
+          metadata: { url: 'https://example.com/meta-video.mp4' },
+        }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    const { url } = await provider.generate('animate')
+    expect(url).toBe('https://example.com/meta-video.mp4')
+  })
+
+  it('passes seed and negative_prompt in create body', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-seed' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/seed.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    await provider.generate('animate', {
+      seed: 42,
+      negativePrompt: 'watermark, blur',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.seed).toBe(42)
+    expect(body.negative_prompt).toBe('watermark, blur')
+  })
 })

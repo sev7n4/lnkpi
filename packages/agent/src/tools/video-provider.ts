@@ -1,3 +1,5 @@
+import type { VideoRefWire } from '@lnkpi/shared'
+
 export interface VideoGenerateOptions {
   model?: string
   duration?: number
@@ -6,12 +8,14 @@ export interface VideoGenerateOptions {
   crop?: string
   image?: string
   seed?: number
+  negativePrompt?: string
   generateAudio?: boolean
   returnLastFrame?: boolean
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
   imageWithRoles?: Array<{ url: string; role: string }>
+  refWire?: VideoRefWire
   pollIntervalMs?: number
   maxPollMs?: number
 }
@@ -60,6 +64,7 @@ interface AgnesVideoPollResponse {
   status?: string
   url?: string
   error?: unknown
+  metadata?: { url?: string }
 }
 
 /** Agnes 异步视频：POST /v1/videos → 轮询 /agnesapi?video_id= */
@@ -89,7 +94,18 @@ export class AgnesVideoProvider implements VideoProvider {
       num_frames,
       frame_rate,
     }
-    if (options?.image) body.image = options.image
+
+    const refs = (options?.referenceImages ?? []).map((url) => url.trim()).filter(Boolean)
+    const useKeyframes = options?.refWire === 'agnes_keyframes' || refs.length >= 2
+    if (useKeyframes && refs.length >= 2) {
+      body.extra_body = { image: refs, mode: 'keyframes' }
+    } else if (options?.image) {
+      body.image = options.image
+    } else if (refs.length === 1) {
+      body.image = refs[0]
+    }
+    if (options?.seed != null) body.seed = options.seed
+    if (options?.negativePrompt) body.negative_prompt = options.negativePrompt
 
     const createRes = await fetch(`${this.baseUrl}/videos`, {
       method: 'POST',
@@ -119,8 +135,9 @@ export class AgnesVideoProvider implements VideoProvider {
       if (!pollRes.ok) continue
 
       const result = (await pollRes.json()) as AgnesVideoPollResponse
-      if (result.status === 'completed' && result.url) {
-        return { url: result.url }
+      const url = result.url ?? result.metadata?.url
+      if (result.status === 'completed' && url) {
+        return { url }
       }
       if (result.status === 'failed') {
         throw new Error(`Agnes video failed: ${JSON.stringify(result.error ?? result)}`)
