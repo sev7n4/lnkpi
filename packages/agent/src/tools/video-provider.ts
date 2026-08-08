@@ -131,8 +131,26 @@ export class AgnesVideoProvider implements VideoProvider {
   }
 }
 
+function isGatewayHost(hostname: string, allowedRoots: string[]): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, '')
+  return allowedRoots.some((root) => {
+    const r = root.toLowerCase()
+    return host === r || host.endsWith(`.${r}`)
+  })
+}
+
+function hostnameFromBaseUrl(baseUrl?: string): string | undefined {
+  if (!baseUrl?.trim()) return undefined
+  try {
+    return new URL(baseUrl).hostname
+  } catch {
+    return undefined
+  }
+}
+
 function isApimartBaseUrl(baseUrl?: string): boolean {
-  return Boolean(baseUrl?.includes('apimart.ai'))
+  const hostname = hostnameFromBaseUrl(baseUrl)
+  return Boolean(hostname && isGatewayHost(hostname, ['apimart.ai']))
 }
 
 function extractApimartTaskId(json: unknown): string | undefined {
@@ -264,8 +282,9 @@ function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-function isAgnesBaseUrl(baseUrl?: string) {
-  return Boolean(baseUrl?.includes('agnes-ai.com') || baseUrl?.includes('agnes-ai.cn'))
+function isAgnesBaseUrl(baseUrl?: string): boolean {
+  const hostname = hostnameFromBaseUrl(baseUrl)
+  return Boolean(hostname && isGatewayHost(hostname, ['agnes-ai.com', 'agnes-ai.cn']))
 }
 
 export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }

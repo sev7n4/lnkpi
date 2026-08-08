@@ -69,6 +69,15 @@ describe('createVideoProvider apimart', () => {
     expect(p).toBeInstanceOf(ApimartVideoProvider)
   })
 
+  it('rejects apimart.ai suffix attacker domains', async () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://apimart.ai.attacker.example/v1',
+    })
+    expect(p).not.toBeInstanceOf(ApimartVideoProvider)
+    await expect(p.generate('test')).rejects.toThrow(/unsupported video gateway/i)
+  })
+
   it('throws readable error for unknown BYOK instead of placeholder', async () => {
     const p = createVideoProvider({
       apiKey: 'sk-test',
