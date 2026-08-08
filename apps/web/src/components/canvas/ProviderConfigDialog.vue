@@ -69,7 +69,7 @@ const prefsDraft = reactive({
   defaultVideoModel: '',
   defaultTextModel: '',
   defaultAudioModel: '',
-  canvasImageCount: 3,
+  canvasImageCount: 1,
   defaultImageAspect: '16:9',
   defaultImageResolution: '1K',
   defaultVideoAspect: '16:9',
@@ -181,7 +181,7 @@ function hydrateFromBootstrap() {
     prefsDraft.defaultVideoModel = prefs.defaultVideoModel
     prefsDraft.defaultTextModel = prefs.defaultTextModel
     prefsDraft.defaultAudioModel = prefs.defaultAudioModel
-    prefsDraft.canvasImageCount = prefs.canvasImageCount
+    prefsDraft.canvasImageCount = 1
     prefsDraft.defaultImageAspect = prefs.defaultImageAspect || '16:9'
     prefsDraft.defaultImageResolution = prefs.defaultImageResolution || '1K'
     prefsDraft.defaultVideoAspect = prefs.defaultVideoAspect || DEFAULT_VIDEO_SETTINGS.aspectRatio
@@ -411,7 +411,7 @@ function buildPreferencesPayload(): ProviderPreferencesPublic {
     defaultVideoModel: prefsDraft.defaultVideoModel,
     defaultTextModel: prefsDraft.defaultTextModel,
     defaultAudioModel: prefsDraft.defaultAudioModel,
-    canvasImageCount: Math.max(1, Math.min(15, Math.floor(Number(prefsDraft.canvasImageCount) || 3))),
+    canvasImageCount: 1,
     defaultImageAspect: prefsDraft.defaultImageAspect || '16:9',
     defaultImageResolution: prefsDraft.defaultImageResolution || '1K',
     defaultVideoAspect: prefsDraft.defaultVideoAspect || DEFAULT_VIDEO_SETTINGS.aspectRatio,
@@ -734,17 +734,18 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
         <!-- 生成偏好 -->
         <el-tab-pane label="生成偏好" name="preferences">
           <div class="grid gap-4 md:grid-cols-4">
-            <label class="block">
+            <label class="block opacity-80">
               <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">画布默认生图张数</span>
               <el-input-number
-                v-model="prefsDraft.canvasImageCount"
+                :model-value="1"
                 :min="1"
-                :max="15"
+                :max="1"
+                disabled
                 class="!w-full"
                 controls-position="right"
               />
               <span class="mt-1 block text-[10px] leading-4 text-[var(--neo-text-muted)]">
-                新建画布生图和配置节点默认使用，单个节点仍可单独覆盖。Agent 自动出图会 clamp 到 1–4。
+                系统设定：单次原子生图固定 1 张。批量多图请通过 Agent 对话自动创建多个节点。
               </span>
             </label>
             <label class="block">

@@ -120,7 +120,10 @@ function syncFromNode() {
   imageAspect.value = (data.imageAspect as ImageAspectRatio | undefined) ?? '16:9'
   imageResolution.value = (data.imageResolution as ImageResolution | undefined) ?? '1K'
   const count = Number(data.imageCount ?? 1)
-  imageCount.value = (count === 2 || count === 4 ? count : 1) as ImageCount
+  imageCount.value = 1
+  if (count !== 1) {
+    syncField('imageCount', 1)
+  }
   referenceImageUrl.value = String(data.referenceImageUrl ?? '')
 }
 

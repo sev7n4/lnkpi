@@ -842,7 +842,7 @@ function createNodeAt(type: DockNodeType, position: { x: number; y: number }) {
   const imageModel = getProviderConfig('image').model
   const videoModel = getProviderConfig('video').model
   const audioModel = getProviderConfig('audio').model
-  const imageCount = Math.max(1, Math.min(4, Math.round(Number(prefs?.canvasImageCount) || 1)))
+  const imageCount = 1
   const imageAspect = prefs?.defaultImageAspect || '16:9'
   const imageResolution = prefs?.defaultImageResolution || '1K'
   const videoSettings = {
@@ -1579,7 +1579,7 @@ async function createFileNodeAt(payload: MediaFilePayload, clientPos: { x: numbe
         imageModel: getProviderConfig('image').model,
         imageAspect: preferences.value?.defaultImageAspect || '16:9',
         imageResolution: preferences.value?.defaultImageResolution || '1K',
-        imageCount: Math.max(1, Math.min(4, Math.round(Number(preferences.value?.canvasImageCount) || 1))),
+        imageCount: 1,
       }, { position: resolveDropPosition(clientPos, 'image') })
       break
     case 'video':
@@ -1639,7 +1639,7 @@ function createUploadingMediaNodeAt(
         imageModel: getProviderConfig('image').model,
         imageAspect: preferences.value?.defaultImageAspect || '16:9',
         imageResolution: preferences.value?.defaultImageResolution || '1K',
-        imageCount: Math.max(1, Math.min(4, Math.round(Number(preferences.value?.canvasImageCount) || 1))),
+        imageCount: 1,
       }, { position: resolveDropPosition(clientPos, kind) })
     case 'video':
       return addNode('video', {
