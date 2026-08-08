@@ -6,6 +6,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import {
   collectUrlsFromCanvasData,
+  contentDispositionAttachment,
   MediaService,
   sanitizeFilename,
 } from './media.service'
@@ -118,5 +119,22 @@ describe('MediaService.resolveDownloadSource', () => {
 describe('sanitizeFilename', () => {
   it('strips unsafe characters from basename', () => {
     expect(sanitizeFilename('a/b?c*.png')).toBe('b_c_.png')
+  })
+})
+
+describe('contentDispositionAttachment', () => {
+  it('keeps filename= ASCII-only for CJK names', () => {
+    const header = contentDispositionAttachment('让模特换上产品图.png')
+    expect(header).toMatch(/^attachment; filename="[^"]+"; filename\*=UTF-8''/)
+    expect(header).toContain(encodeURIComponent('让模特换上产品图.png'))
+    const quoted = header.match(/filename="([^"]*)"/)?.[1] ?? ''
+    expect(quoted).toMatch(/^[\x20-\x7E]+$/)
+    expect(quoted).not.toBe('')
+  })
+
+  it('preserves ASCII filename in filename=', () => {
+    expect(contentDispositionAttachment('product-shot.png')).toBe(
+      'attachment; filename="product-shot.png"; filename*=UTF-8\'\'product-shot.png',
+    )
   })
 })
