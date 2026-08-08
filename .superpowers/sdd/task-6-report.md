@@ -92,3 +92,34 @@ Tests       4 passed (4)
 - `pnpm --filter @lnkpi/web test -- useNodeGeneration.test.ts`：39 项测试通过。
 - `pnpm build`：shared、agent、web、server 全仓构建通过。
 - 编辑文件 IDE lint：无诊断。
+
+## Agent Canvas 视频 referenceImageUrl 透传
+
+**Commit:** `fix(server): pass referenceImageUrl from agent canvas video tools`
+
+### 问题
+
+`AgentCanvasToolsService.runVideoGeneration` 调用 `studio.generateVideo` 时第 10 个参数固定传 `undefined`，节点 `data.referenceImageUrl` 未进入 Studio 视频生成链路。
+
+### 修复
+
+| File | Action |
+|------|--------|
+| `apps/server/src/agent/agent-canvas-tools.service.ts` | **Modified** — 从 `node.data.referenceImageUrl` 提取并传给 `generateVideo` |
+| `apps/server/src/agent/agent-canvas-tools.service.test.ts` | **Modified** — 新增 `runVideoGeneration passes node referenceImageUrl to Studio` 测试 |
+
+`StudioService.generateVideo` 已支持 `referenceImageUrl` 参数（第 10 个 positional arg），并通过 `buildVideoReferenceBundle` 在 refs 无图片时作为 I1 后备。
+
+### 验证
+
+```bash
+pnpm --filter @lnkpi/server test -- agent-canvas-tools.service.test.ts studio.integration.test.ts video-reference.controller.test.ts
+```
+
+```
+✓ agent-canvas-tools.service.test.ts (32 tests)
+✓ studio.integration.test.ts (7 tests)
+✓ video-reference.controller.test.ts (2 tests)
+Test Files  3 passed (3)
+Tests       41 passed (41)
+```

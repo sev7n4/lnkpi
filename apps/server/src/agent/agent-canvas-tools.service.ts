@@ -880,6 +880,8 @@ export class AgentCanvasToolsService {
       const durationRaw = settings.duration ?? prefs.defaultVideoDuration ?? 5
       const duration = typeof durationRaw === 'number' ? durationRaw : Number(durationRaw) || 5
       const model = pickString(node.data?.videoModel, prefs.defaultVideoModel) || undefined
+      const referenceImageUrl =
+        String(node.data?.referenceImageUrl ?? '').trim() || undefined
 
       const record = await this.studio.generateVideo(
         input.userId,
@@ -891,7 +893,7 @@ export class AgentCanvasToolsService {
         undefined,
         resolution,
         crop,
-        undefined,
+        referenceImageUrl,
         { sessionId: input.sessionId, nodeId: input.nodeId },
       )
 
