@@ -109,6 +109,12 @@ describe('resolveSeedance20Gateway', () => {
   it('returns null for non-seedance models', () => {
     expect(resolveSeedance20Gateway('agnes-video-v2.0', 'agnes-video-v2.0')).toBeNull()
   })
+
+  it('maps BytePlus base id doubao-seedance-2-0-260128 to mini gateway', () => {
+    expect(
+      resolveSeedance20Gateway('doubao-seedance-2-0-260128', 'doubao-seedance-2-0-260128'),
+    ).toBe('doubao-seedance-2.0-mini')
+  })
 })
 
 describe('isSeedance1x', () => {
@@ -142,5 +148,16 @@ describe('resolveVideoModelProfile BYOK fast hint', () => {
     expect(p.refWire).toBe('apimart_multimodal')
     expect(p.gatewayModelId).toBe('doubao-seedance-2.0-fast')
     expect(p.variantTag).toBe('fast')
+  })
+
+  it('uses apimart_multimodal for BytePlus mini id while preserving upstream gatewayModelId', () => {
+    const p = resolveVideoModelProfile(
+      'doubao-seedance-2-0-260128',
+      'doubao-seedance-2-0-260128',
+      { channelBaseUrl: 'https://api.apimart.ai/v1' },
+    )
+    expect(p.refWire).toBe('apimart_multimodal')
+    expect(p.gatewayModelId).toBe('doubao-seedance-2-0-260128')
+    expect(p.variantTag).toBe('mini')
   })
 })

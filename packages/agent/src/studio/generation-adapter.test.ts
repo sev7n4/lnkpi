@@ -204,6 +204,24 @@ describe('buildVideoProviderOptions', () => {
     expect(prompt).not.toContain('@Image10')
   })
 
+  it('resolves BYOK BytePlus base gateway hint to apimart_multimodal with mini variant', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/v.mp4' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'doubao-seedance-2-0-260128',
+      gatewayModelHint: 'doubao-seedance-2-0-260128',
+      referenceBundle: bundle,
+      channelBaseUrl: 'https://api.apimart.ai/v1',
+    })
+    expect(r.meta.refWire).toBe('apimart_multimodal')
+    expect(r.model).toBe('doubao-seedance-2-0-260128')
+    expect(r.meta.gatewayModelId).toBe('doubao-seedance-2-0-260128')
+    expect(r.meta.variantTag).toBe('mini')
+    expect(r.providerOptions.referenceImages).toEqual(['https://cdn/a.png'])
+  })
+
   it('resolves BYOK fast gateway hint to apimart_multimodal with fast variant clamp', () => {
     const bundle = buildVideoReferenceBundle([
       { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
