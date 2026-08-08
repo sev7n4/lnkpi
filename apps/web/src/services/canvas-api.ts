@@ -48,6 +48,7 @@ export const canvasApi = {
     prompt: string,
     settings?: Partial<VideoSettings> & {
       model?: string
+      videoMode?: string
       refs?: GenerationRefPayload[]
       mentionedKeys?: string[]
       referenceImageUrl?: string
@@ -61,6 +62,8 @@ export const canvasApi = {
       aspectRatio: settings?.aspectRatio,
       crop: settings?.crop,
       resolution: settings?.resolution,
+      generateAudio: settings?.generateAudio,
+      videoMode: settings?.videoMode,
       refs: settings?.refs,
       mentionedKeys: settings?.mentionedKeys,
       referenceImageUrl: settings?.referenceImageUrl,

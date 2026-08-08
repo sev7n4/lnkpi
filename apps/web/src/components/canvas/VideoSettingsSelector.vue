@@ -110,7 +110,7 @@ watch(open, (isOpen) => {
         </p>
         <input
           type="range"
-          min="5"
+          min="4"
           max="15"
           step="1"
           class="w-full accent-[var(--neo-accent)]"
@@ -129,6 +129,18 @@ watch(open, (isOpen) => {
             {{ mark }}
           </button>
         </div>
+      </div>
+
+      <div class="mb-3">
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">生成音频</p>
+        <button
+          type="button"
+          class="neo-chip rounded-md px-2 py-1 text-[10px]"
+          :class="(modelValue.generateAudio ?? true) ? 'is-on' : ''"
+          @click="patch({ generateAudio: !(modelValue.generateAudio ?? true) })"
+        >
+          {{ (modelValue.generateAudio ?? true) ? '开启' : '关闭' }}
+        </button>
       </div>
 
       <div>

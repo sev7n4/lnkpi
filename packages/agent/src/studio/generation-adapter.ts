@@ -544,6 +544,7 @@ export interface VideoProviderGenerateOptions {
   resolution?: string
   crop?: string
   image?: string
+  generateAudio?: boolean
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
@@ -605,6 +606,7 @@ export function buildVideoProviderOptions(input: {
   videoMode?: VideoMode
   scenario?: VideoScenario
   channelBaseUrl?: string
+  generateAudio?: boolean
 }): BuiltVideoProviderOptions {
   const {
     modelKey,
@@ -614,6 +616,7 @@ export function buildVideoProviderOptions(input: {
     crop,
     videoMode,
     channelBaseUrl,
+    generateAudio,
   } = input
   const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('video', modelKey)
   const profile = resolveVideoModelProfile(resolvedKey, entry.gatewayModelId, {
@@ -678,6 +681,17 @@ export function buildVideoProviderOptions(input: {
       droppedFields.push({
         field: 'crop',
         reason: `crop not supported natively by ${entry.modelKey}`,
+      })
+    }
+  }
+  if (generateAudio !== undefined) {
+    if (entry.params.generateAudio === 'native') {
+      providerOptions.generateAudio = generateAudio
+      nativeParams.generate_audio = generateAudio
+    } else {
+      droppedFields.push({
+        field: 'generateAudio',
+        reason: `generateAudio not supported natively by ${entry.modelKey}`,
       })
     }
   }

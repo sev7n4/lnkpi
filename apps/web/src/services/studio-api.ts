@@ -120,6 +120,8 @@ export const studioApi = {
     referenceImageUrl?: string,
     signal?: AbortSignal,
     scope?: CanvasGenerationScope,
+    videoMode?: string,
+    generateAudio?: boolean,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/video/generate',
@@ -133,6 +135,8 @@ export const studioApi = {
         resolution,
         crop,
         referenceImageUrl,
+        videoMode,
+        generateAudio,
         ...scopeBody(scope),
       },
       { timeout: 60_000, signal },
