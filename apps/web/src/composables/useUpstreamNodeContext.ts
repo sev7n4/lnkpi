@@ -17,6 +17,10 @@ export interface UpstreamNodeContext {
   referenceImageNodeId: string | null
   /** 所有上游 text/prompt 节点 id */
   textNodeIds: string[]
+  /** 上游已完成视频节点的末帧 URL（S8 延续上一镜） */
+  lastFrameUrl: string
+  /** 提供末帧的上游视频节点 id（若有） */
+  lastFrameVideoNodeId: string | null
 }
 
 function normalizeEdges(
@@ -27,6 +31,25 @@ function normalizeEdges(
     source: edge.source,
     target: edge.target,
   }))
+}
+
+function resolveUpstreamLastFrame(
+  targetNodeId: string,
+  nodes: EditableFlowNode[],
+  edges: CanvasEdgeLike[],
+): { lastFrameUrl: string; lastFrameVideoNodeId: string | null } {
+  for (const edge of normalizeEdges(edges)) {
+    if (edge.target !== targetNodeId) continue
+    const source = nodes.find((n) => n.id === edge.source)
+    if (!source || String(source.type) !== 'video') continue
+    const data = source.data ?? {}
+    if (data.status !== 'completed') continue
+    const lastFrameUrl = String(data.lastFrameUrl ?? '').trim()
+    if (lastFrameUrl) {
+      return { lastFrameUrl, lastFrameVideoNodeId: source.id }
+    }
+  }
+  return { lastFrameUrl: '', lastFrameVideoNodeId: null }
 }
 
 export function resolveUpstreamContext(
@@ -46,6 +69,7 @@ export function resolveUpstreamContext(
 
   const textRefs = refs.filter((r) => r.mediaType === 'text' && !r.stale)
   const imageRefs = refs.filter((r) => r.mediaType === 'image' && !r.stale)
+  const { lastFrameUrl, lastFrameVideoNodeId } = resolveUpstreamLastFrame(targetNodeId, nodes, edges)
 
   return {
     textPrompt: textRefs
@@ -55,6 +79,8 @@ export function resolveUpstreamContext(
     referenceImageUrl: imageRefs[0]?.payload.url ?? '',
     referenceImageNodeId: imageRefs[0]?.sourceNodeId ?? null,
     textNodeIds: textRefs.map((r) => r.sourceNodeId!).filter(Boolean),
+    lastFrameUrl,
+    lastFrameVideoNodeId,
   }
 }
 
@@ -66,7 +92,14 @@ export function useUpstreamNodeContext(
   const upstream = computed((): UpstreamNodeContext => {
     const id = targetNodeId.value
     if (!id) {
-      return { textPrompt: '', referenceImageUrl: '', referenceImageNodeId: null, textNodeIds: [] }
+      return {
+        textPrompt: '',
+        referenceImageUrl: '',
+        referenceImageNodeId: null,
+        textNodeIds: [],
+        lastFrameUrl: '',
+        lastFrameVideoNodeId: null,
+      }
     }
     return resolveUpstreamContext(id, nodes.value, edges.value)
   })
@@ -93,14 +126,20 @@ export function mergeReferenceImageUrl(
   return upstream.referenceImageUrl.trim()
 }
 
-export type VideoGenerationMode = 'text_to_video' | 'image_to_video'
+export type VideoGenerationMode = 'text_to_video' | 'image_to_video' | 'first_last_frame'
 
 export function resolveVideoMode(
   nodeData: Record<string, unknown>,
   upstream: UpstreamNodeContext,
 ): VideoGenerationMode {
   const explicit = nodeData.videoMode as VideoGenerationMode | undefined
-  if (explicit === 'text_to_video' || explicit === 'image_to_video') return explicit
+  if (
+    explicit === 'text_to_video'
+    || explicit === 'image_to_video'
+    || explicit === 'first_last_frame'
+  ) {
+    return explicit
+  }
   const ref = mergeReferenceImageUrl(nodeData, upstream)
   return ref ? 'image_to_video' : 'text_to_video'
 }

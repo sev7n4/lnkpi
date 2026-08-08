@@ -123,3 +123,13 @@ export function parseRecordUrls(record: { url?: string | null; metadata?: string
     return record.url ? [record.url] : []
   }
 }
+
+export function parseRecordLastFrameUrl(record: { metadata?: string | null }): string {
+  if (!record.metadata) return ''
+  try {
+    const meta = JSON.parse(record.metadata) as { lastFrameUrl?: string }
+    return String(meta.lastFrameUrl ?? '').trim()
+  } catch {
+    return ''
+  }
+}

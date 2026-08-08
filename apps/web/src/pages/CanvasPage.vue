@@ -29,7 +29,7 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
-import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
@@ -521,7 +521,15 @@ const shotPolling = useShotPolling((shots) => {
       }
       if (linked) {
         if (!acceptsPollWrite(n.data?.status)) continue
-        patchNodeData(n.id, { url: material.url, status: NODE_GENERATION_STATUS.completed })
+        const nodePatch: Record<string, unknown> = {
+          url: material.url,
+          status: NODE_GENERATION_STATUS.completed,
+        }
+        if (n.type === 'video') {
+          const lastFrameUrl = parseRecordLastFrameUrl(material as { metadata?: string | null })
+          if (lastFrameUrl) nodePatch.lastFrameUrl = lastFrameUrl
+        }
+        patchNodeData(n.id, nodePatch)
       }
     }
   }
@@ -570,6 +578,10 @@ const generationPolling = useGenerationPolling((results) => {
         patch.promptMode = parsed.mode
       } else if (urls.length) {
         patch.images = urls
+      }
+      if (record.type === 'video') {
+        const lastFrameUrl = parseRecordLastFrameUrl(record)
+        if (lastFrameUrl) patch.lastFrameUrl = lastFrameUrl
       }
       patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
@@ -659,7 +671,7 @@ const editorNode = computed((): EditableFlowNode | null => {
 const editorUpstream = computed(() => {
   const node = editorNode.value
   if (!node) {
-    return { textPrompt: '', referenceImageUrl: '', referenceImageNodeId: null, textNodeIds: [] }
+    return { textPrompt: '', referenceImageUrl: '', referenceImageNodeId: null, textNodeIds: [], lastFrameUrl: '', lastFrameVideoNodeId: null }
   }
   return resolveUpstreamContext(node.id, nodes.value, edges.value)
 })

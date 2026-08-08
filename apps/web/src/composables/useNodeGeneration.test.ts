@@ -725,6 +725,7 @@ describe('useNodeGeneration', () => {
       aspectRatio: '9:16',
       resolution: '1080p',
       crop: 'center',
+      generateAudio: true,
       refs: [],
       mentionedKeys: [],
       referenceImageUrl: 'https://example.com/node-ref.png',

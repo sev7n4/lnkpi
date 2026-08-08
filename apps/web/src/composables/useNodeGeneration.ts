@@ -15,6 +15,7 @@ import {
   parseRecordText,
   parseRecordUrl,
   parseRecordUrls,
+  parseRecordLastFrameUrl,
   type GenerationPollTask,
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
@@ -449,6 +450,10 @@ async function cancelRemoteGeneration(nodeId: string) {
       } else {
         patch.url = urls[0] ?? parseRecordUrl(record)
         if (urls.length) patch.images = urls
+        if (record.type === 'video') {
+          const lastFrameUrl = parseRecordLastFrameUrl(record)
+          if (lastFrameUrl) patch.lastFrameUrl = lastFrameUrl
+        }
       }
       deps.patchNodeData(nodeId, patch)
       if (
@@ -733,6 +738,7 @@ async function cancelRemoteGeneration(nodeId: string) {
     }
 
     const settings = data.videoSettings as VideoSettings | undefined
+    const videoMode = data.videoMode as string | undefined
     const { data: res } = await studioApi.generateVideo(
       prompt,
       resolveGenerationModel('video', data.videoModel as string | undefined),
@@ -745,6 +751,8 @@ async function cancelRemoteGeneration(nodeId: string) {
       refImage || undefined,
       signal,
       canvasScope(node.id),
+      videoMode,
+      settings?.generateAudio,
     )
     if (signal?.aborted) return
     deps.patchNodeData(node.id, {

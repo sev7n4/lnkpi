@@ -545,6 +545,7 @@ export interface VideoProviderGenerateOptions {
   resolution?: string
   crop?: string
   image?: string
+  generateAudio?: boolean
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
@@ -615,6 +616,7 @@ export function buildVideoProviderOptions(input: {
   /** BYOK: upstream gateway id for profile resolution when catalog misses. */
   gatewayModelHint?: string
   channelBaseUrl?: string
+  generateAudio?: boolean
 }): BuiltVideoProviderOptions {
   const {
     modelKey,
@@ -625,6 +627,7 @@ export function buildVideoProviderOptions(input: {
     videoMode,
     gatewayModelHint,
     channelBaseUrl,
+    generateAudio,
   } = input
   if (gatewayModelHint && isSeedance1x(gatewayModelHint)) {
     throw new Seedance1xUnsupportedError(gatewayModelHint)
@@ -700,6 +703,17 @@ export function buildVideoProviderOptions(input: {
       droppedFields.push({
         field: 'crop',
         reason: `crop not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
+  }
+  if (generateAudio !== undefined) {
+    if (entry.params.generateAudio === 'native') {
+      providerOptions.generateAudio = generateAudio
+      nativeParams.generate_audio = generateAudio
+    } else {
+      droppedFields.push({
+        field: 'generateAudio',
+        reason: `generateAudio not supported natively by ${entry.modelKey}`,
       })
     }
   }

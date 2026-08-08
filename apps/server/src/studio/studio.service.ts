@@ -87,6 +87,20 @@ function extractReferenceImages(refs?: StudioRefInput[]): string[] {
   )
 }
 
+function resolveStudioVideoMode(
+  explicit: string | undefined,
+  referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
+): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+  if (
+    explicit === 'first_last_frame'
+    || explicit === 'image_to_video'
+    || explicit === 'text_to_video'
+  ) {
+    return explicit
+  }
+  return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
+}
+
 function providerOpts(resolved: ResolvedGenerationProvider) {
   const { apiKey, baseUrl } = resolved.credentials
   if (resolved.source === 'user' && !apiKey) return undefined
@@ -916,6 +930,8 @@ export class StudioService {
     crop = 'none',
     referenceImageUrl?: string,
     scope?: CanvasGenerationScope,
+    videoMode?: string,
+    generateAudio?: boolean,
   ) {
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
@@ -960,9 +976,10 @@ export class StudioService {
           resolution,
           crop,
           referenceBundle,
-          videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
+          videoMode: resolveStudioVideoMode(videoMode, referenceBundle),
           gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
           channelBaseUrl: resolved.credentials.baseUrl,
+          generateAudio,
         })
       } catch (err) {
         if (err instanceof Seedance1xUnsupportedError) {
