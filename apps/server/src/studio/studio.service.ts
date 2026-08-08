@@ -16,6 +16,7 @@ import {
   generateTextWithImages,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
+  Seedance1xUnsupportedError,
   stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -950,16 +951,26 @@ export class StudioService {
       resolved.modelName,
       referenceBundle.images.map(({ refKey, label }) => ({ refKey, label })),
     )
-    const built = buildVideoProviderOptions({
-      modelKey: resolved.modelName,
-      duration,
-      aspectRatio,
-      resolution,
-      crop,
-      referenceBundle,
-      videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
-      channelBaseUrl: resolved.credentials.baseUrl,
-    })
+    const built = (() => {
+      try {
+        return buildVideoProviderOptions({
+          modelKey: resolved.modelName,
+          duration,
+          aspectRatio,
+          resolution,
+          crop,
+          referenceBundle,
+          videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
+          gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
+          channelBaseUrl: resolved.credentials.baseUrl,
+        })
+      } catch (err) {
+        if (err instanceof Seedance1xUnsupportedError) {
+          throw new BadRequestException(err.message)
+        }
+        throw err
+      }
+    })()
     const storeModel =
       resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
     const effectivePrompt = buildEffectiveVideoPrompt(mergedText, built)

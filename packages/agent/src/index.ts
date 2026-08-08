@@ -46,6 +46,7 @@ export {
   buildEffectiveVideoPrompt,
   buildVideoProviderOptions,
   buildVideoProviderGenerateOptions,
+  Seedance1xUnsupportedError,
 } from './studio/generation-adapter'
 export {
   buildVideoReferenceBundle,

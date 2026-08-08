@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { BadRequestException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAudioProvider,
@@ -8,6 +9,7 @@ import {
   generateTextWithImages,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
+import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { createStudioService } from './studio.test-utils'
 import type { StudioService } from './studio.service'
 
@@ -175,6 +177,28 @@ describe('StudioService integration (provider params)', () => {
     expect(JSON.parse(String(stored.metadata))).toMatchObject({
       lastFrameUrl: 'https://example.com/v-last.png',
     })
+  })
+
+  it('rejects 1.x BYOK seedance with BadRequestException', async () => {
+    const resolver = (svc as unknown as { resolver: ProviderResolverService }).resolver
+    vi.spyOn(resolver, 'resolveForGeneration').mockResolvedValueOnce({
+      channelId: 'ch_user',
+      modelName: 'doubao-seedance-1-0-lite-i2v-250428',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'user-key', baseUrl: 'https://api.apimart.ai/v1' },
+      source: 'user',
+    })
+
+    const promise = svc.generateVideo(
+      'u1',
+      'a prompt',
+      'ch_user::doubao-seedance-1-0-lite-i2v-250428',
+      5,
+      '16:9',
+    )
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException)
+    await expect(promise).rejects.toThrow(/不支持.*Seedance 1\.x/)
+    expect(videoGenerate).not.toHaveBeenCalled()
   })
 
   it('rejects audio-only video references', async () => {
