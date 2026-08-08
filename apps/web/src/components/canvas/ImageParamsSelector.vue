@@ -120,12 +120,20 @@ function aspectRect(value: ImageAspectRatio) {
             :key="opt"
             type="button"
             class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
-            :class="count === opt ? 'is-on' : ''"
-            @click="emit('update:count', opt)"
+            :class="[
+              count === opt ? 'is-on' : '',
+              opt !== 1 ? 'cursor-not-allowed opacity-40' : '',
+            ]"
+            :disabled="opt !== 1"
+            :title="opt !== 1 ? '系统固定为单张；批量出图请使用 Agent 对话' : undefined"
+            @click="opt === 1 && emit('update:count', opt)"
           >
             ×{{ opt }}
           </button>
         </div>
+        <p class="mt-1.5 text-[10px] leading-4 text-[var(--neo-text-muted)]">
+          系统设定：单次原子生图固定 1 张；需多张请通过 Agent 批量创建节点。
+        </p>
       </div>
     </div>
   </div>
