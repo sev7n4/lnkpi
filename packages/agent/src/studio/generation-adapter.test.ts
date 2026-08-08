@@ -218,6 +218,27 @@ describe('buildVideoProviderOptions', () => {
     expect(r.meta.refWire).toBe('apimart_multimodal')
     expect(r.model).toBe('doubao-seedance-2.0-fast')
     expect(r.meta.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+    expect(r.meta.variantTag).toBe('fast')
+    expect(r.resolution).toBe('720p')
+    expect(r.meta.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('includes variantTag in meta for catalog seedance standard', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0',
+      resolution: '1080p',
+    })
+    expect(r.meta.variantTag).toBe('standard')
+    expect(r.resolution).toBe('1080p')
+    expect(r.model).toBe('doubao-seedance-2.0')
+  })
+
+  it('includes variantTag in meta for catalog seedance fast with resolution clamp', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-fast',
+      resolution: '1080p',
+    })
+    expect(r.meta.variantTag).toBe('fast')
     expect(r.resolution).toBe('720p')
     expect(r.meta.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
   })

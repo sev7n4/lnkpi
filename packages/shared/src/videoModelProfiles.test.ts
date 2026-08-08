@@ -39,6 +39,50 @@ describe('clampVideoGenerationInput', () => {
     expect(r.resolution).toBe('720p')
     expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
   })
+
+  it('keeps seedance standard 1080p without downgrade', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0', 'doubao-seedance-2.0')
+    expect(profile.variantTag).toBe('standard')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('1080p')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(false)
+  })
+
+  it('downgrades seedance fast 1080p to 720p with droppedFields', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0-fast', 'doubao-seedance-2.0-fast')
+    expect(profile.variantTag).toBe('fast')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('720p')
+    expect(r.droppedFields).toEqual([
+      { field: 'resolution', reason: '1080p not on fast; use 720p' },
+    ])
+  })
+
+  it('keeps seedance face 1080p without downgrade', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0-face', 'doubao-seedance-2.0-face')
+    expect(profile.variantTag).toBe('face')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('1080p')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(false)
+  })
 })
 
 describe('resolveVideoGatewayModelId', () => {

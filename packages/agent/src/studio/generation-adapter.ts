@@ -13,6 +13,7 @@ import {
   type ImageResponseMode,
   type VideoRefWire,
   type VideoResponseMode,
+  type SeedanceVariantTag,
   resolveModelKey,
   resolveImageSize,
   type StudioModelEntry,
@@ -42,6 +43,7 @@ export interface AdapterMeta {
   referenceVideoCount?: number
   referenceAudioCount?: number
   modelFallback?: boolean
+  variantTag?: SeedanceVariantTag
 }
 
 export interface BuiltAudioRequest {
@@ -707,13 +709,13 @@ export function buildVideoProviderOptions(input: {
     }
   }
   if (generateAudio !== undefined) {
-    if (entry.params.generateAudio === 'native') {
+    if (catalog.entry.params.generateAudio === 'native') {
       providerOptions.generateAudio = generateAudio
       nativeParams.generate_audio = generateAudio
     } else {
       droppedFields.push({
         field: 'generateAudio',
-        reason: `generateAudio not supported natively by ${entry.modelKey}`,
+        reason: `generateAudio not supported natively by ${catalog.entry.modelKey}`,
       })
     }
   }
@@ -839,6 +841,7 @@ export function buildVideoProviderOptions(input: {
       refWire,
       responseMode: profile.responseMode,
       scenario,
+      ...(profile.variantTag ? { variantTag: profile.variantTag } : {}),
       ...(catalogFallback ? { modelFallback: true } : {}),
     },
   }
