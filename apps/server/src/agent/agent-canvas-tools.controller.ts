@@ -74,6 +74,23 @@ class BatchNodeItemDto {
   @IsOptional()
   @IsString()
   imageAspect?: string
+
+  @IsOptional()
+  videoSettings?: {
+    aspectRatio?: string
+    duration?: number
+    resolution?: string
+    crop?: string
+    generateAudio?: boolean
+  }
+
+  @IsOptional()
+  @IsString()
+  videoMode?: string
+
+  @IsOptional()
+  @IsString()
+  referenceImageUrl?: string
 }
 
 class AddNodesBatchDto {

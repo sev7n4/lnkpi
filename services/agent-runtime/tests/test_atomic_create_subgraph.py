@@ -90,6 +90,31 @@ async def test_create_atomic_node_then_image_gen():
 
 
 @pytest.mark.asyncio
+async def test_create_atomic_node_passes_video_p6_fields():
+    nest = FakeNest()
+    create = make_create_atomic_node(nest=nest)
+    spec = {
+        "target_type": "video",
+        "prompt": "产品展示",
+        "title": "产品展示",
+        "confirm_gate": True,
+        "videoSettings": {"duration": 4, "aspectRatio": "9:16", "generateAudio": False},
+        "videoMode": "image_to_video",
+        "referenceImageUrl": "https://cdn.example/ref.png",
+    }
+    await create({"atomic_spec": spec})
+    batch_call = next(c for c in nest.calls if c[0] == "add_nodes_batch")
+    item = batch_call[1][0]
+    assert item["videoSettings"] == {
+        "duration": 4,
+        "aspectRatio": "9:16",
+        "generateAudio": False,
+    }
+    assert item["videoMode"] == "image_to_video"
+    assert item["referenceImageUrl"] == "https://cdn.example/ref.png"
+
+
+@pytest.mark.asyncio
 async def test_text_atomic_gen_direct():
     nest = FakeNest()
     create = make_create_atomic_node(nest=nest)

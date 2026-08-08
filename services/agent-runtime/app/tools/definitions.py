@@ -78,6 +78,16 @@ class SaveNodeAssetInput(BaseModel):
     label: str | None = Field(default=None, description="Optional asset label override")
 
 
+class ApplySidebarAttachmentsInput(BaseModel):
+    node_ids: list[str] = Field(description="Target canvas node ids")
+    attachments: list[dict[str, Any]] = Field(description="Sidebar attachment payloads")
+    ref_order: list[str] | None = Field(default=None, description="Attachment id order")
+    mode: str = Field(description="localRefs or attach_edges")
+    mentioned_keys: list[str] | None = Field(
+        default=None, description="Explicit @I1-style mention keys"
+    )
+
+
 class ListGenerationTasksInput(BaseModel):
     type: str | None = Field(default=None, description="Optional filter: image, video, etc.")
 
@@ -167,6 +177,21 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def focus_node(node_id: str) -> dict:
         return {"ok": True, "canvasCommands": [{"type": "focus_node", "nodeId": node_id}]}
+
+    async def apply_sidebar_attachments(
+        node_ids: list[str],
+        attachments: list[dict[str, Any]],
+        mode: str,
+        ref_order: list[str] | None = None,
+        mentioned_keys: list[str] | None = None,
+    ) -> dict:
+        return await client.apply_sidebar_attachments(
+            node_ids=node_ids,
+            attachments=attachments,
+            ref_order=ref_order,
+            mode=mode,
+            mentioned_keys=mentioned_keys,
+        )
 
     specs: list[tuple[str, StructuredTool]] = [
         (
@@ -354,6 +379,15 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="focus_node",
                 description="Pan/zoom the canvas viewport to a node (UI command)",
                 args_schema=NodeIdInput,
+            ),
+        ),
+        (
+            "apply_sidebar_attachments",
+            StructuredTool.from_function(
+                coroutine=apply_sidebar_attachments,
+                name="apply_sidebar_attachments",
+                description="Write sidebar attachments onto canvas nodes (localRefs or ref edges)",
+                args_schema=ApplySidebarAttachmentsInput,
             ),
         ),
     ]

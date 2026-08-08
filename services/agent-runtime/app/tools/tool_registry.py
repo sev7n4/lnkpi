@@ -35,6 +35,7 @@ EXPLORE_TOOL_NAMES = frozenset({
     "save_node_to_asset_library",
     "introduce_nodes_to_agent",
     "apply_asset_to_node",
+    "apply_sidebar_attachments",
     "focus_node",
 })
 

@@ -63,6 +63,39 @@ def test_validate_video_confirm_gate_default():
     assert out["items"][0]["confirm_gate"] is True
 
 
+def test_validate_preserves_video_p6_fields():
+    out = validate_parse_result(
+        {
+            "items": [
+                {
+                    "target_type": "video",
+                    "prompt": "产品展示",
+                    "title": "产品展示",
+                    "confirm_gate": True,
+                    "videoSettings": {
+                        "duration": 4,
+                        "aspectRatio": "9:16",
+                        "generateAudio": False,
+                    },
+                    "videoMode": "image_to_video",
+                    "referenceImageUrl": "https://cdn.example/ref.png",
+                }
+            ],
+            "confidence": 0.95,
+        },
+        utterance="做一个4秒竖屏视频",
+    )
+    assert out["kind"] == "success"
+    item = out["items"][0]
+    assert item.get("videoSettings") == {
+        "duration": 4,
+        "aspectRatio": "9:16",
+        "generateAudio": False,
+    }
+    assert item.get("videoMode") == "image_to_video"
+    assert item.get("referenceImageUrl") == "https://cdn.example/ref.png"
+
+
 def test_validate_preserves_turnaround_pipeline_fields():
     out = validate_parse_result(
         {

@@ -29,7 +29,35 @@ class AtomicParseItem(TypedDict, total=False):
     resolutionBump: bool
     promptMode: str
     prompt_mode: str
+    videoSettings: dict[str, Any]
+    videoMode: str
+    referenceImageUrl: str
 
+
+def _clamp_video_duration(value: Any) -> int | None:
+    try:
+        duration = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(4, min(15, duration))
+
+
+def _normalize_video_settings(raw: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    out: dict[str, Any] = {}
+    if raw.get("aspectRatio"):
+        out["aspectRatio"] = str(raw["aspectRatio"])
+    duration = _clamp_video_duration(raw.get("duration"))
+    if duration is not None:
+        out["duration"] = duration
+    if raw.get("resolution"):
+        out["resolution"] = str(raw["resolution"])
+    if raw.get("crop"):
+        out["crop"] = str(raw["crop"])
+    if raw.get("generateAudio") is not None:
+        out["generateAudio"] = bool(raw["generateAudio"])
+    return out or None
 
 class AtomicParseSuccess(TypedDict):
     kind: Literal["success"]
@@ -75,6 +103,13 @@ def _normalize_item(raw: dict[str, Any]) -> AtomicParseItem | None:
     pm = raw.get("promptMode") or raw.get("prompt_mode")
     if pm:
         item["promptMode"] = str(pm)
+    video_settings = _normalize_video_settings(raw.get("videoSettings"))
+    if video_settings:
+        item["videoSettings"] = video_settings
+    if raw.get("videoMode"):
+        item["videoMode"] = str(raw["videoMode"])
+    if raw.get("referenceImageUrl"):
+        item["referenceImageUrl"] = str(raw["referenceImageUrl"])
     return item  # type: ignore[return-value]
 
 
