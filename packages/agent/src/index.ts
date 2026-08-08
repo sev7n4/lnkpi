@@ -43,6 +43,16 @@ export {
   stripRefImagePromptTags,
   buildVideoProviderOptions,
 } from './studio/generation-adapter'
+export {
+  buildVideoReferenceBundle,
+  inferVideoScenario,
+} from './studio/video-refs'
+export type {
+  VideoReferenceItem,
+  VideoReferenceBundle,
+  VideoScenario,
+  VideoMode,
+} from './studio/video-refs'
 export type {
   AdapterMeta,
   BuiltAudioRequest,
