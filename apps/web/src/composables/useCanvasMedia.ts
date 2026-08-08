@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
-import { resolveMediaUrl } from '@/services/api-base'
+import { ElMessage } from 'element-plus'
+import { apiUrl, resolveMediaUrl } from '@/services/api-base'
 
 export type FileNodeKind = 'text' | 'image' | 'video' | 'audio'
 
@@ -11,12 +12,25 @@ export interface MediaFilePayload {
   textContent?: string
 }
 
+export interface DownloadMediaOptions {
+  sessionId?: string
+}
+
+export const UPSTREAM_MEDIA_DOWNLOAD_HINT = '第三方链接，可能过期，请及时下载'
+export const GENERATION_SAVE_LOCAL_HINT = '生成完成，建议立即下载到本机保存'
+
 const TEXT_EXTENSIONS = new Set(['txt', 'md', 'markdown', 'json', 'csv', 'html', 'htm', 'xml', 'log'])
+const REVOKE_OBJECT_URL_DELAY_MS = 1000
 
 function extensionOf(name: string) {
   const idx = name.lastIndexOf('.')
   if (idx < 0) return ''
   return name.slice(idx + 1).toLowerCase()
+}
+
+export function isUpstreamMediaUrl(url: string): boolean {
+  const trimmed = url.trim()
+  return /^https?:\/\//i.test(trimmed) && !trimmed.includes('/api/uploads/')
 }
 
 export function detectFileKind(file: File): MediaFilePayload['kind'] {
@@ -86,6 +100,7 @@ export function collectMediaFromNodes(
 export async function downloadMediaPackage(
   nodes: Array<{ id: string; type?: string; data: Record<string, unknown> }>,
   selectedIds: string[],
+  opts?: DownloadMediaOptions,
 ) {
   const items = collectMediaFromNodes(nodes, selectedIds)
   if (!items.length) return 0
@@ -100,35 +115,56 @@ export async function downloadMediaPackage(
 
   for (const item of items) {
     try {
-      const res = await fetch(resolveMediaUrl(item.url))
-      const blob = await res.blob()
-      triggerDownload(blob, item.fileName)
+      await downloadMediaFile(item.url, item.fileName, opts)
       await delay(280)
     } catch {
-      // blob/data URLs may fail cross-origin — skip
+      // continue remaining items
     }
   }
   return items.length
 }
 
 function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
+  const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
-  anchor.href = url
+  anchor.href = objectUrl
   anchor.download = filename
   anchor.click()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_OBJECT_URL_DELAY_MS)
 }
 
-/** 下载单个媒体文件；跨域 fetch 失败时退化为新标签页打开 */
-export async function downloadMediaFile(url: string, filename: string) {
-  try {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(String(res.status))
+/** 下载单个媒体文件；经鉴权 stream-download 代理，不再 window.open 假下载 */
+export async function downloadMediaFile(
+  url: string,
+  filename: string,
+  opts?: DownloadMediaOptions,
+) {
+  const resolved = resolveMediaUrl(url.trim())
+  if (!resolved) return
+
+  if (/^(blob:|data:)/i.test(resolved)) {
+    const res = await fetch(resolved)
     triggerDownload(await res.blob(), filename)
-  } catch {
-    window.open(url, '_blank', 'noopener')
+    return
   }
+
+  const token = localStorage.getItem('token')
+  if (!token) {
+    ElMessage.warning('请先登录后再下载')
+    return
+  }
+
+  const params = new URLSearchParams({ url: resolved, filename })
+  if (opts?.sessionId) params.set('sessionId', opts.sessionId)
+
+  const res = await fetch(apiUrl(`/media/stream-download?${params.toString()}`), {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    ElMessage.warning('下载失败，链接可能已过期，请稍后重试')
+    return
+  }
+  triggerDownload(await res.blob(), filename)
 }
 
 const EXT_BY_KIND: Record<string, string> = { image: 'png', video: 'mp4', audio: 'mp3' }
@@ -139,6 +175,10 @@ export function mediaDownloadName(url: string, kind: string, label?: string) {
   const ext = urlExt ?? EXT_BY_KIND[kind] ?? 'bin'
   const base = (label ?? 'lnkpi-media').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 48) || 'lnkpi-media'
   return base.toLowerCase().endsWith(`.${ext.toLowerCase()}`) ? base : `${base}.${ext}`
+}
+
+export function notifyGenerationSaveLocalHint() {
+  ElMessage.success({ message: GENERATION_SAVE_LOCAL_HINT, duration: 5000 })
 }
 
 function delay(ms: number) {

@@ -1915,6 +1915,7 @@ async function handlePackageDownload() {
   await downloadMediaPackage(
     nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
     multiSelectedIds.value,
+    { sessionId: sessionId.value },
   )
 }
 

@@ -13,6 +13,7 @@ import { UploadModule } from './upload/upload.module'
 import { UsersModule } from './users/users.module'
 import { HealthModule } from './health/health.module'
 import { ProviderModule } from './provider/provider.module'
+import { MediaModule } from './media/media.module'
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ProviderModule } from './provider/provider.module'
     UploadModule,
     HealthModule,
     ProviderModule,
+    MediaModule,
   ],
 })
 export class AppModule {}

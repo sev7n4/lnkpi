@@ -47,6 +47,7 @@ import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
 } from '../provider/provider-resolver.service'
+import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -731,9 +732,16 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
+      const genOptions =
+        options.referenceImages?.length
+          ? {
+              ...options,
+              referenceImages: await inlineUpstreamReferenceImages(options.referenceImages),
+            }
+          : options
       const { url, urls } = await createImageProvider(providerOpts(resolved)).generate(
         prompt,
-        options,
+        genOptions,
       )
       const imageUrls = urls?.length ? urls : [url]
       const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
@@ -1159,6 +1167,7 @@ export class StudioService {
           typeof meta.modelKey === 'string' && meta.modelKey.trim()
             ? meta.modelKey
             : undefined
+        const providerRefs = useNativeRefs ? await inlineUpstreamReferenceImages(refs) : undefined
         const { url, urls } = await createImageProvider(
           resolvePlatformImageProviderOpts(modelKey ?? modelId),
         ).generate(prompt, {
@@ -1166,7 +1175,7 @@ export class StudioService {
           resolution: typeof resolution === 'string' ? resolution : undefined,
           n,
           modelId,
-          referenceImages: useNativeRefs ? refs : undefined,
+          referenceImages: providerRefs,
           refWire:
             meta.refWire === 'agnes_extra_body' ||
             meta.refWire === 'apimart_image_urls' ||
