@@ -10,6 +10,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.apply_sidebar_refs import make_apply_sidebar_refs_node
 from app.graph.nodes.chat import make_chat_node
+from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_route import make_clarify_route_node
 from app.graph.nodes.intake import make_intake_node
@@ -35,6 +36,8 @@ def route_after_intake(state: AgentRuntimeState) -> str:
         return "parse_atomic_intent"
     if state.get("skill_id"):
         return "decide_plan_mode"
+    if state.get("flow_mode") == "explore_canvas":
+        return "explore"
     return "chat"
 
 
@@ -61,6 +64,7 @@ def build_agent_graph(
     graph.add_node("intake", make_intake_node(skills_path))
     graph.add_node("clarify_route", make_clarify_route_node())
     graph.add_node("chat", make_chat_node(llm=llm))
+    graph.add_node("explore", make_explore_node(llm=llm, nest=nest))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
     graph.add_node("apply_sidebar_refs", make_apply_sidebar_refs_node(nest=nest))
     graph.add_node("done", make_done_node(nest=nest))
@@ -83,9 +87,11 @@ def build_agent_graph(
             "clarify_route": "clarify_route",
             "decide_plan_mode": "decide_plan_mode",
             "chat": "chat",
+            "explore": "explore",
         },
     )
     graph.add_edge("chat", END)
+    graph.add_edge("explore", END)
     graph.add_edge("clarify_route", END)
     graph.add_edge("write_plan_node", "split")
     graph.add_conditional_edges(

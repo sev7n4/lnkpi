@@ -329,7 +329,7 @@ export class AgentService {
       // 新建对话应换 thread，避免 MemorySaver 把旧 await_confirm 状态续上
       threadId: threadId?.trim() || sessionId,
       // W5 修复：把前端结构化决策（按钮点击）传给 agent-runtime
-      // 让它走 Command(resume=...) 精确恢复 interrupt，不再重跑 route_entry→intake
+      // interrupt_before 恢复：注入 user_decision 后 astream(None)，不再重跑 intake
       userDecision,
       skillId: runtimeSkillId,
       llmModel,

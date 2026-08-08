@@ -60,6 +60,19 @@ def nest_client(captured):
             )
         if path.endswith("/get-generation-status"):
             return httpx.Response(200, json=_ok({"status": "completed", "url": "https://cdn.example/img.png"}))
+        if path.endswith("/get-canvas-summary"):
+            return httpx.Response(200, json=_ok({"nodes": [{"id": "n1", "type": "image"}]}))
+        if path.endswith("/get-generation-diagnostic"):
+            return httpx.Response(200, json=_ok({"errorCode": "upstream", "userMessage": "失败"}))
+        if path.endswith("/cancel-generation"):
+            return httpx.Response(200, json=_ok({"status": "cancelled", "generationRecordId": "rec-1", "actions": []}))
+        if path.endswith("/confirm-platform-fallback"):
+            return httpx.Response(
+                200,
+                json=_ok({"status": "completed", "generationRecordId": "rec-1", "url": "https://cdn/x.png", "actions": []}),
+            )
+        if path.endswith("/cancel-platform-fallback"):
+            return httpx.Response(200, json=_ok({"status": "failed", "generationRecordId": "rec-1", "actions": []}))
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -293,3 +306,21 @@ def test_build_canvas_tools_upsert_prompt_node_has_template_in_schema(nest_clien
     content_desc = schema["properties"]["content"]["description"]
     assert "character_turnaround" in content_desc
     assert any(t in content_desc for t in CHARACTER_TURNAROUND_TRIGGERS[:3])
+
+
+@pytest.mark.asyncio
+async def test_cancel_generation_lifecycle(nest_client, captured):
+    result = await nest_client.cancel_generation(node_id="n1")
+    assert result["status"] == "cancelled"
+    req = _last(captured)
+    assert req["json"]["nodeId"] == "n1"
+    assert req["json"]["sessionId"] == SESSION_ID
+
+
+@pytest.mark.asyncio
+async def test_get_generation_diagnostic(nest_client, captured):
+    result = await nest_client.get_generation_diagnostic(generation_record_id="rec-1")
+    assert result["errorCode"] == "upstream"
+    req = _last(captured)
+    assert req["json"]["generationRecordId"] == "rec-1"
+

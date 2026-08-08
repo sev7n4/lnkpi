@@ -22,6 +22,11 @@ describe('AgentCanvasToolsService', () => {
   const generateAudio = vi.fn()
   const expandPromptContent = vi.fn()
   const getGeneration = vi.fn()
+  const cancelGenerationStudio = vi.fn()
+  const getGenerationDiagnostic = vi.fn()
+  const confirmPlatformFallback = vi.fn()
+  const cancelPlatformFallback = vi.fn()
+  const listGenerations = vi.fn()
 
   const defaultPrefs = {
     userId: 'u1',
@@ -89,6 +94,30 @@ describe('AgentCanvasToolsService', () => {
       status: 'completed',
       url: 'https://cdn.example/audio.mp3',
     })
+    cancelGenerationStudio.mockResolvedValue({ id: 'rec-1', status: 'failed' })
+    getGenerationDiagnostic.mockResolvedValue({
+      errorCode: 'upstream',
+      userMessage: '上游失败',
+      providerSnippet: '',
+    })
+    confirmPlatformFallback.mockResolvedValue({
+      id: 'rec-1',
+      status: 'completed',
+      url: 'https://cdn.example/fallback.png',
+    })
+    cancelPlatformFallback.mockResolvedValue({ id: 'rec-1', status: 'failed' })
+    listGenerations.mockResolvedValue([
+      {
+        id: 'g1',
+        type: 'image',
+        status: 'completed',
+        prompt: 'test',
+        url: 'https://cdn/x.png',
+        nodeId: 'img-1',
+        sessionId: 's1',
+        createdAt: new Date('2026-08-08T00:00:00Z'),
+      },
+    ])
 
     // Serialize concurrent $transaction callbacks.
     // serializable / read-committed TX chain would queue concurrent
@@ -121,7 +150,20 @@ describe('AgentCanvasToolsService', () => {
         },
         {
           provide: StudioService,
-          useValue: { generateImage, generateVideo, generateText, generatePrompt, generateAudio, getGeneration, expandPromptContent },
+          useValue: {
+            generateImage,
+            generateVideo,
+            generateText,
+            generatePrompt,
+            generateAudio,
+            getGeneration,
+            expandPromptContent,
+            cancelGeneration: cancelGenerationStudio,
+            getGenerationDiagnostic,
+            confirmPlatformFallback,
+            cancelPlatformFallback,
+            listGenerations,
+          },
         },
       ],
     }).compile()
@@ -1026,6 +1068,95 @@ describe('AgentCanvasToolsService', () => {
           }),
         }),
       )
+    })
+  })
+
+  describe('generation lifecycle', () => {
+    beforeEach(() => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              prompt: 'test',
+              status: 'generating',
+              generationRecordId: 'rec-1',
+            },
+          },
+        ],
+        edges: [],
+      }
+    })
+
+    it('cancelGeneration resolves record from node and patches canvas', async () => {
+      const result = await svc.cancelGeneration({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+      expect(cancelGenerationStudio).toHaveBeenCalledWith('u1', 'rec-1')
+      expect(result.status).toBe('cancelled')
+      expect(canvas.nodes[0].data.status).toBe('error')
+      expect(canvas.nodes[0].data.errorMessage).toBe('已取消')
+    })
+
+    it('getGenerationDiagnostic delegates to studio', async () => {
+      const d = await svc.getGenerationDiagnostic({
+        sessionId: 's1',
+        userId: 'u1',
+        generationRecordId: 'rec-1',
+      })
+      expect(getGenerationDiagnostic).toHaveBeenCalledWith('u1', 'rec-1')
+      expect(d.userMessage).toBe('上游失败')
+    })
+  })
+
+  describe('P1 explore harness', () => {
+    beforeEach(() => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '主图',
+              url: 'https://cdn.example/img.png',
+              status: 'completed',
+            },
+          },
+          {
+            id: 'txt-1',
+            type: 'text',
+            position: { x: 0, y: 0 },
+            data: { content: '文案内容', title: '文案' },
+          },
+        ],
+        edges: [],
+      }
+    })
+
+    it('listGenerationTasks delegates to studio', async () => {
+      const result = await svc.listGenerationTasks({
+        sessionId: 's1',
+        userId: 'u1',
+      })
+      expect(listGenerations).toHaveBeenCalledWith('u1', undefined, 's1')
+      expect(result.tasks).toHaveLength(1)
+      expect(result.tasks[0].nodeId).toBe('img-1')
+    })
+
+    it('introduceNodesToAgent builds attachments and canvasCommands', async () => {
+      const result = await svc.introduceNodesToAgent({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: ['img-1', 'txt-1', 'missing'],
+      })
+      expect(result.attachments).toHaveLength(2)
+      expect(result.skipped).toEqual(['missing'])
+      expect(result.canvasCommands[0]?.type).toBe('introduce_nodes')
     })
   })
 })

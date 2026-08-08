@@ -37,6 +37,7 @@ RouteFlowMode = Literal[
     "atomic_regenerate",
     "single_node",
     "campaign",
+    "explore_canvas",
     "chat",
     "clarify_route",
 ]
@@ -63,6 +64,27 @@ def _image_attachment_count(attachments: list[dict]) -> int:
 
 def _image_mentioned_keys(keys: list[str]) -> list[str]:
     return [k for k in keys if k.upper().startswith("I")]
+
+
+def _explore_canvas_signal(ctx: RouteContext) -> bool:
+    utterance = str(ctx.get("utterance") or "").strip()
+    if not utterance:
+        return False
+    if atomic_create_intent(utterance) or single_node_gen_intent(utterance):
+        return False
+    if regenerate_phrase_intent(utterance) or atomic_regenerate_intent(utterance):
+        return False
+    if marketing_intent(utterance):
+        return False
+    nouns = ("画布", "节点", "分镜", "canvas", "生成状态", "生成任务", "任务状态")
+    verbs = ("看看", "有哪些", "列出", "查询", "检查", "状态", "什么情况", "怎么样")
+    lifecycle = any(
+        k in utterance
+        for k in ("取消生成", "平台回退", "fallback", "诊断", "失败原因")
+    )
+    has_noun = any(n in utterance for n in nouns)
+    has_verb = any(v in utterance for v in verbs)
+    return lifecycle or (has_noun and has_verb)
 
 
 def _sidebar_img2img_signal(ctx: RouteContext) -> bool:
@@ -212,6 +234,17 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "reason": "empty_utterance",
             "clarify_question": None,
             "guard_veto": None,
+            "is_modify": False,
+        }
+
+    if _explore_canvas_signal(ctx):
+        return {
+            "flow_mode": "explore_canvas",
+            "l0_action": l0,
+            "confidence": 0.85,
+            "reason": "explore_canvas_intent",
+            "clarify_question": None,
+            "guard_veto": guard_veto,
             "is_modify": False,
         }
 

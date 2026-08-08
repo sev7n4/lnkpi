@@ -567,7 +567,7 @@ async function send() {
 
   const message = input.value.trim()
   input.value = ''
-  // W5 修复：手动输入若匹配确认/修改关键词，也带上 userDecision 触发 Command(resume=...)
+  // W5：手动输入若匹配确认/修改关键词，带上 userDecision，供 interrupt_before gate 恢复
   await sendMessage(message, mapPresetToDecision(message))
 }
 
@@ -583,7 +583,7 @@ async function sendPreset(text: string) {
   }
   input.value = ''
   // W5 修复：按钮选择是结构化决策（confirm/revise），需显式传递 userDecision
-  // 否则后端 Command(resume=...) 不会触发，流程会卡在 await_confirm
+  // 否则后端 interrupt_before 恢复（aupdate_state + astream(None)）拿不到 userDecision，会卡在 await_confirm
   const decision = mapPresetToDecision(text)
   await sendMessage(text.trim(), decision)
 }
@@ -925,6 +925,25 @@ function handleEvent(event: { type: string; data: unknown }) {
     case 'explore':
       agent.trackExplore(event.data as Parameters<typeof agent.trackExplore>[0])
       break
+    case 'canvas_command': {
+      const cmd = event.data as {
+        type: string
+        nodeId?: string
+        nodeIds?: string[]
+        attachments?: SidebarAttachment[]
+      }
+      if (cmd.type === 'focus_node' && cmd.nodeId) {
+        emit('focusNode', cmd.nodeId)
+      } else if (cmd.type === 'focus_nodes' && cmd.nodeIds?.length) {
+        emit('focusAll', cmd.nodeIds)
+      } else if (cmd.type === 'introduce_nodes' && cmd.attachments?.length) {
+        for (const att of cmd.attachments) {
+          if (sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) break
+          sidebar.addFromPayload(att)
+        }
+      }
+      break
+    }
     case 'task_list':
     case 'task_update':
     case 'task_summary': {

@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions } from '@lnkpi/agent'
 import {
   resolveNodeRefs,
@@ -12,6 +12,7 @@ import {
   validateSidebarAttachments,
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
 
 const GRID_X = 280
@@ -61,6 +62,39 @@ function nodeTitle(node: CanvasNode): string {
 
 function nodeStatus(node: CanvasNode): string {
   return String(node.data?.status ?? 'draft')
+}
+
+function nodeToAgentAttachment(node: CanvasNode): SidebarAttachment | null {
+  const data = node.data ?? {}
+  const url = String(data.url ?? '').trim()
+  const text = String(data.content ?? data.prompt ?? '').trim()
+  if (!url && !text) return null
+
+  const t = String(node.type ?? '')
+  let mediaType: SidebarAttachment['mediaType'] = 'image'
+  if (t === 'text' || t === 'prompt') mediaType = 'text'
+  else if (t === 'video') mediaType = 'video'
+  else if (t === 'audio') mediaType = 'audio'
+  else if (t === 'image' || t === 'mediaInput') mediaType = 'image'
+  else if (text && !url) mediaType = 'text'
+  else if (!url) return null
+
+  return {
+    id: `agent-ref-${node.id}`,
+    mediaType,
+    sourceKind: 'canvasNode',
+    label: nodeTitle(node) || node.id,
+    url: url || undefined,
+    text: text || undefined,
+    sourceNodeId: node.id,
+  }
+}
+
+function assetKindFromNodeType(type: string): 'image' | 'video' | 'audio' | null {
+  if (type === 'image' || type === 'mediaInput') return 'image'
+  if (type === 'video') return 'video'
+  if (type === 'audio') return 'audio'
+  return null
 }
 
 function toStudioRefs(node: CanvasNode, canvas: CanvasData): StudioRefInput[] {
@@ -1206,11 +1240,313 @@ export class AgentCanvasToolsService {
   async getGenerationStatus(input: {
     sessionId: string
     nodeId: string
-  }): Promise<{ status: string; url?: string }> {
+  }): Promise<{ status: string; url?: string; generationRecordId?: string }> {
     const node = await this.getNode(input)
     const status = nodeStatus(node)
     const url = typeof node.data?.url === 'string' && node.data.url ? node.data.url : undefined
-    return url ? { status, url } : { status }
+    const generationRecordId =
+      typeof node.data?.generationRecordId === 'string' && node.data.generationRecordId
+        ? node.data.generationRecordId
+        : undefined
+    return generationRecordId
+      ? { status, url, generationRecordId }
+      : url
+        ? { status, url }
+        : { status }
+  }
+
+  private generationRecordIdFromNode(node: CanvasNode): string | undefined {
+    const id = node.data?.generationRecordId
+    return typeof id === 'string' && id.trim() ? id.trim() : undefined
+  }
+
+  private async resolveGenerationRecord(input: {
+    sessionId: string
+    userId: string
+    generationRecordId?: string
+    nodeId?: string
+  }): Promise<{ recordId: string; nodeId?: string }> {
+    const direct = input.generationRecordId?.trim()
+    if (direct) {
+      return { recordId: direct, nodeId: input.nodeId }
+    }
+    if (!input.nodeId) {
+      throw new BadRequestException('需要提供 generationRecordId 或 nodeId')
+    }
+    const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+    const recordId = this.generationRecordIdFromNode(node)
+    if (!recordId) {
+      throw new NotFoundException('节点无关联的生成记录')
+    }
+    return { recordId, nodeId: input.nodeId }
+  }
+
+  async getGenerationDiagnostic(input: {
+    sessionId: string
+    userId: string
+    generationRecordId?: string
+    nodeId?: string
+  }) {
+    const { recordId } = await this.resolveGenerationRecord(input)
+    return this.studio.getGenerationDiagnostic(input.userId, recordId)
+  }
+
+  async cancelGeneration(input: {
+    sessionId: string
+    userId: string
+    generationRecordId?: string
+    nodeId?: string
+  }): Promise<{ status: string; generationRecordId: string; actions: CanvasAction[] }> {
+    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
+    await this.studio.cancelGeneration(input.userId, recordId)
+    const actions: CanvasAction[] = []
+    if (nodeId) {
+      actions.push({
+        type: 'update_node',
+        payload: {
+          id: nodeId,
+          data: { status: 'error', errorMessage: '已取消' },
+        },
+      })
+      await this.persist(input.sessionId, actions)
+    }
+    return { status: 'cancelled', generationRecordId: recordId, actions }
+  }
+
+  async confirmPlatformFallback(input: {
+    sessionId: string
+    userId: string
+    generationRecordId?: string
+    nodeId?: string
+  }): Promise<{
+    status: string
+    generationRecordId: string
+    url?: string
+    actions: CanvasAction[]
+  }> {
+    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
+    const record = await this.studio.confirmPlatformFallback(input.userId, recordId)
+    const actions: CanvasAction[] = []
+    const url = typeof record.url === 'string' && record.url ? record.url : undefined
+    if (nodeId) {
+      const patch: Record<string, unknown> = {
+        status: record.status === 'completed' ? 'completed' : record.status,
+        generationRecordId: recordId,
+      }
+      if (url) patch.url = url
+      if (record.status === 'failed') {
+        patch.errorMessage = '平台回退失败'
+      }
+      actions.push({
+        type: 'update_node',
+        payload: { id: nodeId, data: patch },
+      })
+      await this.persist(input.sessionId, actions)
+    }
+    return {
+      status: record.status,
+      generationRecordId: recordId,
+      url,
+      actions,
+    }
+  }
+
+  async cancelPlatformFallback(input: {
+    sessionId: string
+    userId: string
+    generationRecordId?: string
+    nodeId?: string
+  }): Promise<{ status: string; generationRecordId: string; actions: CanvasAction[] }> {
+    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
+    await this.studio.cancelPlatformFallback(input.userId, recordId)
+    const actions: CanvasAction[] = []
+    if (nodeId) {
+      actions.push({
+        type: 'update_node',
+        payload: {
+          id: nodeId,
+          data: { status: 'error', errorMessage: '已拒绝平台回退' },
+        },
+      })
+      await this.persist(input.sessionId, actions)
+    }
+    return { status: 'failed', generationRecordId: recordId, actions }
+  }
+
+  async listGenerationTasks(input: {
+    sessionId: string
+    userId: string
+    type?: string
+  }): Promise<{
+    tasks: Array<{
+      id: string
+      type: string
+      status: string
+      prompt: string
+      url?: string | null
+      nodeId?: string | null
+      sessionId?: string | null
+      createdAt: Date
+    }>
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const rows = await this.studio.listGenerations(input.userId, input.type, input.sessionId)
+    return {
+      tasks: rows.map((row) => ({
+        id: row.id,
+        type: row.type,
+        status: row.status,
+        prompt: row.prompt,
+        url: row.url,
+        nodeId: row.nodeId,
+        sessionId: row.sessionId,
+        createdAt: row.createdAt,
+      })),
+    }
+  }
+
+  async listUserAssets(input: { userId: string }): Promise<{
+    items: Array<{
+      id: string
+      url: string
+      label: string
+      kind: string
+      sourceNodeId?: string | null
+      createdAt: Date
+    }>
+  }> {
+    const items = await this.prisma.userAsset.findMany({
+      where: { userId: input.userId },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    })
+    return { items }
+  }
+
+  async listPublicAssets(input?: {
+    kind?: 'image' | 'video' | 'audio'
+    search?: string
+  }): Promise<{ items: typeof PUBLIC_ASSETS }> {
+    let items = PUBLIC_ASSETS
+    if (input?.kind) {
+      items = items.filter((item) => item.kind === input.kind)
+    }
+    if (input?.search) {
+      const q = input.search.toLowerCase()
+      items = items.filter((item) => item.label.toLowerCase().includes(q))
+    }
+    return { items }
+  }
+
+  async saveNodeToAssetLibrary(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+    label?: string
+  }): Promise<{ assetId: string; url: string; kind: string }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+    const kind = assetKindFromNodeType(String(node.type ?? ''))
+    const url = String(node.data?.url ?? '').trim()
+    if (!kind || !url) {
+      throw new BadRequestException('节点缺少可保存的媒体 URL')
+    }
+    const item = await this.prisma.userAsset.upsert({
+      where: { userId_url: { userId: input.userId, url } },
+      create: {
+        userId: input.userId,
+        kind,
+        url,
+        label: input.label?.trim() || nodeTitle(node) || node.id,
+        sourceNodeId: node.id,
+      },
+      update: {
+        label: input.label?.trim() || nodeTitle(node) || node.id,
+        kind,
+        sourceNodeId: node.id,
+      },
+    })
+    return { assetId: item.id, url: item.url, kind: item.kind }
+  }
+
+  async introduceNodesToAgent(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+  }): Promise<{
+    attachments: SidebarAttachment[]
+    skipped: string[]
+    canvasCommands: Array<{ type: string; attachments: SidebarAttachment[] }>
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const attachments: SidebarAttachment[] = []
+    const skipped: string[] = []
+    for (const nodeId of input.nodeIds) {
+      try {
+        const node = await this.getNode({ sessionId: input.sessionId, nodeId })
+        const att = nodeToAgentAttachment(node)
+        if (att) attachments.push(att)
+        else skipped.push(nodeId)
+      } catch {
+        skipped.push(nodeId)
+      }
+    }
+    const canvasCommands =
+      attachments.length > 0
+        ? [{ type: 'introduce_nodes', attachments }]
+        : []
+    return { attachments, skipped, canvasCommands }
+  }
+
+  async applyAssetToNode(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+    assetId: string
+    source: 'user' | 'public'
+  }): Promise<{ actions: CanvasAction[]; canvasCommands: Array<{ type: string; nodeId: string }> }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    let url = ''
+    let label = ''
+    let kind: 'image' | 'video' | 'audio' | null = null
+    if (input.source === 'user') {
+      const asset = await this.prisma.userAsset.findFirst({
+        where: { id: input.assetId, userId: input.userId },
+      })
+      if (!asset) throw new NotFoundException('资产不存在')
+      url = asset.url
+      label = asset.label
+      kind = asset.kind as 'image' | 'video' | 'audio'
+    } else {
+      const asset = PUBLIC_ASSETS.find((item) => item.id === input.assetId)
+      if (!asset) throw new NotFoundException('公共资产不存在')
+      url = asset.url
+      label = asset.label
+      kind = asset.kind
+    }
+    const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+    const nodeKind = assetKindFromNodeType(String(node.type ?? ''))
+    if (!nodeKind || nodeKind !== kind) {
+      throw new BadRequestException('资产类型与节点类型不匹配')
+    }
+    const actions: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: {
+          id: input.nodeId,
+          data: {
+            url,
+            status: 'completed',
+            label: label || nodeTitle(node),
+          },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, actions)
+    return {
+      actions,
+      canvasCommands: [{ type: 'focus_node', nodeId: input.nodeId }],
+    }
   }
 
   async getAgentMessages(input: {
