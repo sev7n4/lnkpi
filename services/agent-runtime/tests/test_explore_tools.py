@@ -12,8 +12,14 @@ def test_explore_tools_exclude_generation():
     assert "get_canvas_summary" in names
     assert "cancel_generation" in names
     assert "apply_sidebar_attachments" in names
+    assert "focus_nodes" in names
+    assert "get_canvas_layout" in names
+    assert "duplicate_node" in names
+    assert "undo" in names
+    assert "open_image_editor" in names
     assert "run_image_generation" not in names
     assert "add_nodes_batch" not in names
+    assert "group_nodes" not in names
     assert names <= EXPLORE_TOOL_NAMES
 
 

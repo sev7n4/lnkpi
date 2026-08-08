@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
+from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
 from app.tools.definitions import build_explore_tools
 
@@ -75,8 +76,20 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 else:
                     try:
                         result = await tool.ainvoke(args or {})
+                    except AgentToolError as exc:
+                        err = exc.error
+                        result = {
+                            "error": err["message"],
+                            "error_type": err["error_type"],
+                            "retry_hint": err.get("retry_hint"),
+                        }
                     except Exception as exc:
-                        result = {"error": str(exc)}
+                        err = from_exception(str(name), exc)
+                        result = {
+                            "error": err["message"],
+                            "error_type": err["error_type"],
+                            "retry_hint": err.get("retry_hint"),
+                        }
                 for cmd in extract_canvas_commands(result):
                     if cmd not in canvas_commands:
                         canvas_commands.append(cmd)

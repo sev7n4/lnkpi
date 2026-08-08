@@ -37,6 +37,15 @@ EXPLORE_TOOL_NAMES = frozenset({
     "apply_asset_to_node",
     "apply_sidebar_attachments",
     "focus_node",
+    "focus_nodes",
+    "get_canvas_layout",
+    "duplicate_node",
+    "upload_media_to_canvas",
+    "export_media_package",
+    "get_image_edit_capabilities",
+    "undo",
+    "redo",
+    "open_image_editor",
 })
 
 TOOL_TIERS: dict[str, ToolTier] = {

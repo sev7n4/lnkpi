@@ -372,6 +372,95 @@ class ApplyAssetToNodeDto {
   source!: 'user' | 'public'
 }
 
+class DuplicateNodeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+
+  @IsOptional()
+  offset?: { x: number; y: number }
+}
+
+class UploadMediaToCanvasDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  url!: string
+
+  @IsIn(['image', 'video', 'audio'])
+  mediaType!: 'image' | 'video' | 'audio'
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  position?: { x: number; y: number }
+}
+
+class ExportMediaPackageDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+}
+
+class GroupNodesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+
+  @IsOptional()
+  @IsString()
+  title?: string
+}
+
+class UngroupNodeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  groupId!: string
+}
+
+class ArrangeNodesGridDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+
+  @IsOptional()
+  gap?: number
+}
+
 class SaveAgentMessageDto {
   @IsString()
   sessionId!: string
@@ -696,6 +785,54 @@ export class AgentCanvasToolsController {
   @Post('apply-asset-to-node')
   async applyAssetToNode(@Body() dto: ApplyAssetToNodeDto) {
     const data = await this.tools.applyAssetToNode(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('get-canvas-layout')
+  async getCanvasLayout(@Body() dto: SessionOnlyDto) {
+    const data = await this.tools.getCanvasLayout(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('duplicate-node')
+  async duplicateNode(@Body() dto: DuplicateNodeDto) {
+    const data = await this.tools.duplicateNode(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('upload-media-to-canvas')
+  async uploadMediaToCanvas(@Body() dto: UploadMediaToCanvasDto) {
+    const data = await this.tools.uploadMediaToCanvas(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('export-media-package')
+  async exportMediaPackage(@Body() dto: ExportMediaPackageDto) {
+    const data = await this.tools.exportMediaPackage(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('group-nodes')
+  async groupNodes(@Body() dto: GroupNodesDto) {
+    const data = await this.tools.groupNodes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('ungroup-node')
+  async ungroupNode(@Body() dto: UngroupNodeDto) {
+    const data = await this.tools.ungroupNode(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('arrange-nodes-grid')
+  async arrangeNodesGrid(@Body() dto: ArrangeNodesGridDto) {
+    const data = await this.tools.arrangeNodesGrid(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('get-image-edit-capabilities')
+  async getImageEditCapabilities(@Body() dto: SessionNodeDto) {
+    const data = await this.tools.getImageEditCapabilities(dto)
     return { code: 0, message: 'ok', data }
   }
 

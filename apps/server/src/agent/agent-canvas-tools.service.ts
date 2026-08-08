@@ -13,7 +13,15 @@ import {
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { PUBLIC_ASSETS } from '../assets/public-assets.data'
+import { MaterialService } from '../canvas/material.service'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
+import {
+  createGroupFromNodes,
+  getNodeSize,
+  layoutNodesInGrid,
+  type LayoutNode,
+  ungroupNode,
+} from './canvas-layout.util'
 
 const GRID_X = 280
 const GRID_Y = 220
@@ -238,6 +246,7 @@ export class AgentCanvasToolsService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(StudioService) private readonly studio: StudioService,
+    @Inject(MaterialService) private readonly material: MaterialService,
   ) {}
 
   private async loadAccountGenPrefs(userId: string): Promise<AccountGenPrefs> {
@@ -1266,23 +1275,35 @@ export class AgentCanvasToolsService {
   async getGenerationStatus(input: {
     sessionId: string
     nodeId: string
-  }): Promise<{ status: string; url?: string; generationRecordId?: string }> {
+  }): Promise<{
+    status: string
+    url?: string
+    generationRecordId?: string
+    materialId?: string
+    recordKind?: 'studio' | 'material'
+  }> {
     const node = await this.getNode(input)
     const status = nodeStatus(node)
     const url = typeof node.data?.url === 'string' && node.data.url ? node.data.url : undefined
-    const generationRecordId =
-      typeof node.data?.generationRecordId === 'string' && node.data.generationRecordId
-        ? node.data.generationRecordId
-        : undefined
-    return generationRecordId
-      ? { status, url, generationRecordId }
-      : url
-        ? { status, url }
-        : { status }
+    const generationRecordId = this.generationRecordIdFromNode(node)
+    const materialId = this.materialIdFromNode(node)
+    const recordKind = generationRecordId ? 'studio' : materialId ? 'material' : undefined
+    return {
+      status,
+      url,
+      generationRecordId,
+      materialId,
+      recordKind,
+    }
   }
 
   private generationRecordIdFromNode(node: CanvasNode): string | undefined {
     const id = node.data?.generationRecordId
+    return typeof id === 'string' && id.trim() ? id.trim() : undefined
+  }
+
+  private materialIdFromNode(node: CanvasNode): string | undefined {
+    const id = node.data?.materialId
     return typeof id === 'string' && id.trim() ? id.trim() : undefined
   }
 
@@ -1291,20 +1312,35 @@ export class AgentCanvasToolsService {
     userId: string
     generationRecordId?: string
     nodeId?: string
-  }): Promise<{ recordId: string; nodeId?: string }> {
+  }): Promise<{ recordId: string; recordKind: 'studio' | 'material'; nodeId?: string }> {
     const direct = input.generationRecordId?.trim()
     if (direct) {
-      return { recordId: direct, nodeId: input.nodeId }
+      try {
+        await this.studio.getGeneration(input.userId, direct)
+        return { recordId: direct, recordKind: 'studio', nodeId: input.nodeId }
+      } catch {
+        const material = await this.prisma.material.findFirst({
+          where: { id: direct, shot: { session: { userId: input.userId } } },
+        })
+        if (material) {
+          return { recordId: direct, recordKind: 'material', nodeId: input.nodeId }
+        }
+        throw new NotFoundException('生成记录不存在')
+      }
     }
     if (!input.nodeId) {
       throw new BadRequestException('需要提供 generationRecordId 或 nodeId')
     }
     const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
-    const recordId = this.generationRecordIdFromNode(node)
-    if (!recordId) {
-      throw new NotFoundException('节点无关联的生成记录')
+    const studioId = this.generationRecordIdFromNode(node)
+    if (studioId) {
+      return { recordId: studioId, recordKind: 'studio', nodeId: input.nodeId }
     }
-    return { recordId, nodeId: input.nodeId }
+    const materialId = this.materialIdFromNode(node)
+    if (materialId) {
+      return { recordId: materialId, recordKind: 'material', nodeId: input.nodeId }
+    }
+    throw new NotFoundException('节点无关联的生成记录')
   }
 
   async getGenerationDiagnostic(input: {
@@ -1313,7 +1349,10 @@ export class AgentCanvasToolsService {
     generationRecordId?: string
     nodeId?: string
   }) {
-    const { recordId } = await this.resolveGenerationRecord(input)
+    const { recordId, recordKind } = await this.resolveGenerationRecord(input)
+    if (recordKind === 'material') {
+      return this.material.getMaterialDiagnostic(input.userId, recordId)
+    }
     return this.studio.getGenerationDiagnostic(input.userId, recordId)
   }
 
@@ -1322,9 +1361,18 @@ export class AgentCanvasToolsService {
     userId: string
     generationRecordId?: string
     nodeId?: string
-  }): Promise<{ status: string; generationRecordId: string; actions: CanvasAction[] }> {
-    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
-    await this.studio.cancelGeneration(input.userId, recordId)
+  }): Promise<{
+    status: string
+    generationRecordId: string
+    recordKind: 'studio' | 'material'
+    actions: CanvasAction[]
+  }> {
+    const { recordId, recordKind, nodeId } = await this.resolveGenerationRecord(input)
+    if (recordKind === 'material') {
+      await this.material.cancelGeneration(input.userId, recordId)
+    } else {
+      await this.studio.cancelGeneration(input.userId, recordId)
+    }
     const actions: CanvasAction[] = []
     if (nodeId) {
       actions.push({
@@ -1336,7 +1384,12 @@ export class AgentCanvasToolsService {
       })
       await this.persist(input.sessionId, actions)
     }
-    return { status: 'cancelled', generationRecordId: recordId, actions }
+    return {
+      status: 'cancelled',
+      generationRecordId: recordId,
+      recordKind,
+      actions,
+    }
   }
 
   async confirmPlatformFallback(input: {
@@ -1347,18 +1400,23 @@ export class AgentCanvasToolsService {
   }): Promise<{
     status: string
     generationRecordId: string
+    recordKind: 'studio' | 'material'
     url?: string
     actions: CanvasAction[]
   }> {
-    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
-    const record = await this.studio.confirmPlatformFallback(input.userId, recordId)
+    const { recordId, recordKind, nodeId } = await this.resolveGenerationRecord(input)
+    const record =
+      recordKind === 'material'
+        ? await this.material.confirmPlatformFallback(input.userId, recordId)
+        : await this.studio.confirmPlatformFallback(input.userId, recordId)
     const actions: CanvasAction[] = []
     const url = typeof record.url === 'string' && record.url ? record.url : undefined
     if (nodeId) {
       const patch: Record<string, unknown> = {
         status: record.status === 'completed' ? 'completed' : record.status,
-        generationRecordId: recordId,
       }
+      if (recordKind === 'studio') patch.generationRecordId = recordId
+      if (recordKind === 'material') patch.materialId = recordId
       if (url) patch.url = url
       if (record.status === 'failed') {
         patch.errorMessage = '平台回退失败'
@@ -1372,6 +1430,7 @@ export class AgentCanvasToolsService {
     return {
       status: record.status,
       generationRecordId: recordId,
+      recordKind,
       url,
       actions,
     }
@@ -1382,9 +1441,18 @@ export class AgentCanvasToolsService {
     userId: string
     generationRecordId?: string
     nodeId?: string
-  }): Promise<{ status: string; generationRecordId: string; actions: CanvasAction[] }> {
-    const { recordId, nodeId } = await this.resolveGenerationRecord(input)
-    await this.studio.cancelPlatformFallback(input.userId, recordId)
+  }): Promise<{
+    status: string
+    generationRecordId: string
+    recordKind: 'studio' | 'material'
+    actions: CanvasAction[]
+  }> {
+    const { recordId, recordKind, nodeId } = await this.resolveGenerationRecord(input)
+    if (recordKind === 'material') {
+      await this.material.cancelPlatformFallback(input.userId, recordId)
+    } else {
+      await this.studio.cancelPlatformFallback(input.userId, recordId)
+    }
     const actions: CanvasAction[] = []
     if (nodeId) {
       actions.push({
@@ -1396,7 +1464,7 @@ export class AgentCanvasToolsService {
       })
       await this.persist(input.sessionId, actions)
     }
-    return { status: 'failed', generationRecordId: recordId, actions }
+    return { status: 'failed', generationRecordId: recordId, recordKind, actions }
   }
 
   async listGenerationTasks(input: {
@@ -1572,6 +1640,212 @@ export class AgentCanvasToolsService {
     return {
       actions,
       canvasCommands: [{ type: 'focus_node', nodeId: input.nodeId }],
+    }
+  }
+
+  async getCanvasLayout(input: { sessionId: string }): Promise<{
+    nodes: Array<{
+      id: string
+      type: string
+      title: string
+      status: string
+      position: { x: number; y: number }
+      size: { w: number; h: number }
+      parentNode?: string
+    }>
+  }> {
+    const { canvas } = await this.loadSession(input.sessionId)
+    const nodes = (canvas.nodes as LayoutNode[]).map((node) => {
+      const { w, h } = getNodeSize(node)
+      return {
+        id: node.id,
+        type: String(node.type ?? ''),
+        title: nodeTitle(node),
+        status: nodeStatus(node),
+        position: node.position,
+        size: { w, h },
+        ...(node.parentNode ? { parentNode: node.parentNode } : {}),
+      }
+    })
+    return { nodes }
+  }
+
+  async duplicateNode(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+    offset?: { x: number; y: number }
+  }): Promise<{ nodeId: string; actions: CanvasAction[]; canvasCommands: Array<{ type: string; nodeId: string }> }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const source = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+    const offset = input.offset ?? { x: 40, y: 40 }
+    const nodeType = String(source.type ?? 'image') as NodeType
+    const newId = nextNodeId(nodeType)
+    const cloned = JSON.parse(JSON.stringify(source.data ?? {})) as Record<string, unknown>
+    delete cloned.generationRecordId
+    delete cloned.materialId
+    cloned.status = 'draft'
+    const actions: CanvasAction[] = [
+      {
+        type: 'add_node',
+        payload: {
+          id: newId,
+          nodeType,
+          position: {
+            x: source.position.x + offset.x,
+            y: source.position.y + offset.y,
+          },
+          data: cloned,
+        },
+      },
+    ]
+    await this.persist(input.sessionId, actions)
+    return {
+      nodeId: newId,
+      actions,
+      canvasCommands: [{ type: 'focus_node', nodeId: newId }],
+    }
+  }
+
+  async uploadMediaToCanvas(input: {
+    sessionId: string
+    userId: string
+    url: string
+    mediaType: 'image' | 'video' | 'audio'
+    title?: string
+    position?: { x: number; y: number }
+  }): Promise<{ nodeId: string; actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const nodeType = input.mediaType === 'image' ? 'mediaInput' : input.mediaType
+    const nodeId = nextNodeId(nodeType)
+    const position =
+      input.position ?? {
+        x: 80 + (canvas.nodes.length % 4) * GRID_X,
+        y: 80 + Math.floor(canvas.nodes.length / 4) * GRID_Y,
+      }
+    const actions: CanvasAction[] = [
+      {
+        type: 'add_node',
+        payload: {
+          id: nodeId,
+          nodeType: nodeType as NodeType,
+          position,
+          data: {
+            title: input.title?.trim() || '上传媒体',
+            url: input.url.trim(),
+            status: 'completed',
+          },
+        },
+      },
+    ]
+    await this.persist(input.sessionId, actions)
+    return { nodeId, actions }
+  }
+
+  async exportMediaPackage(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+  }): Promise<{
+    manifest: {
+      exportedAt: string
+      count: number
+      items: Array<{ nodeId: string; url: string; fileName: string; downloadPath: string }>
+    }
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const idSet = new Set(input.nodeIds)
+    const items: Array<{ nodeId: string; url: string; fileName: string; downloadPath: string }> = []
+    for (const node of canvas.nodes) {
+      if (!idSet.has(node.id)) continue
+      const url = String(node.data?.url ?? '').trim()
+      if (!url) continue
+      const ext = url.includes('.mp4') ? 'mp4' : url.includes('.mp3') ? 'mp3' : 'png'
+      const fileName = `${nodeTitle(node) || node.id}.${ext}`.replace(/[^\w\u4e00-\u9fff.-]+/g, '_')
+      const params = new URLSearchParams({
+        url,
+        filename: fileName,
+        sessionId: input.sessionId,
+      })
+      items.push({
+        nodeId: node.id,
+        url,
+        fileName,
+        downloadPath: `/api/media/stream-download?${params.toString()}`,
+      })
+    }
+    return {
+      manifest: {
+        exportedAt: new Date().toISOString(),
+        count: items.length,
+        items,
+      },
+    }
+  }
+
+  async groupNodes(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+    title?: string
+  }): Promise<{ groupId: string; actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const before = canvas.nodes as LayoutNode[]
+    const result = createGroupFromNodes(before, input.nodeIds, input.title)
+    if (!result) throw new BadRequestException('至少需要 2 个可分组节点')
+    await this.persistLayoutNodes(input.sessionId, result.nodes)
+    return { groupId: result.groupId, actions: [] }
+  }
+
+  async ungroupNode(input: {
+    sessionId: string
+    userId: string
+    groupId: string
+  }): Promise<{ actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const before = canvas.nodes as LayoutNode[]
+    const after = ungroupNode(before, input.groupId)
+    await this.persistLayoutNodes(input.sessionId, after)
+    return { actions: [] }
+  }
+
+  async arrangeNodesGrid(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+    gap?: number
+  }): Promise<{ actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const before = canvas.nodes as LayoutNode[]
+    const after = layoutNodesInGrid(before, input.nodeIds, input.gap ?? 40)
+    await this.persistLayoutNodes(input.sessionId, after)
+    return { actions: [] }
+  }
+
+  async getImageEditCapabilities(input: {
+    sessionId: string
+    nodeId: string
+  }): Promise<{
+    canEdit: boolean
+    nodeType: string
+    hasUrl: boolean
+    supportedModes: string[]
+  }> {
+    const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+    const nodeType = String(node.type ?? '')
+    const url = String(node.data?.url ?? '').trim()
+    const isImageLike = nodeType === 'image' || nodeType === 'mediaInput'
+    const canEdit = isImageLike && Boolean(url)
+    return {
+      canEdit,
+      nodeType,
+      hasUrl: Boolean(url),
+      supportedModes: canEdit ? ['crop', 'inpaint', 'outpaint', 'remove_bg'] : [],
     }
   }
 
@@ -1973,6 +2247,33 @@ export class AgentCanvasToolsService {
       return
     }
     await this.persist(sessionId, actions)
+  }
+
+  /**
+   * Replace canvas nodes for layout operations (group/ungroup/grid) that need
+   * parentNode/style fields not supported by applyCanvasActions.
+   */
+  private async persistLayoutNodes(sessionId: string, nodes: LayoutNode[]): Promise<CanvasData> {
+    await this.expireStaleStage(sessionId)
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.findUnique({
+        where: { id: sessionId },
+        select: { canvasData: true, stagedActions: true },
+      })
+      if (!session) throw new NotFoundException('会话不存在')
+      if (session.stagedActions) {
+        throw new ConflictException(
+          'Canvas has staged actions pending commit; call commitStage or rollbackStage first',
+        )
+      }
+      const current = parseCanvas(session.canvasData)
+      const updated: CanvasData = { ...current, nodes: nodes as CanvasNode[] }
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { canvasData: JSON.stringify(updated) },
+      })
+      return updated
+    })
   }
 
   /**
