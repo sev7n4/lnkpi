@@ -1017,7 +1017,7 @@ export class MaterialService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createVideoProvider(providerOpts(resolved)).generate(
+      const { url, lastFrameUrl } = await createVideoProvider(providerOpts(resolved)).generate(
         effectivePrompt,
         providerOptions,
       )
@@ -1048,6 +1048,7 @@ export class MaterialService {
                 skippedMerge,
                 channelId: resolved.channelId,
                 effectivePrompt,
+                ...(lastFrameUrl ? { lastFrameUrl } : {}),
               },
               skipCharge ? 0 : cost,
             ),

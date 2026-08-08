@@ -133,6 +133,50 @@ describe('StudioService integration (provider params)', () => {
     })
   })
 
+  it('persists the returned video last frame URL in metadata', async () => {
+    const prisma = (
+      svc as unknown as {
+        prisma: {
+          generationRecord: {
+            create: ReturnType<typeof vi.fn>
+            findFirst: ReturnType<typeof vi.fn>
+            updateMany: ReturnType<typeof vi.fn>
+          }
+        }
+      }
+    ).prisma
+    let stored: Record<string, unknown> = {}
+    prisma.generationRecord.create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      stored = { id: 'g1', ...data }
+      return stored
+    })
+    prisma.generationRecord.findFirst = vi.fn(async () => stored)
+    prisma.generationRecord.updateMany = vi.fn(
+      async ({ data }: { data: Record<string, unknown> }) => {
+        stored = { ...stored, ...data }
+        return { count: 1 }
+      },
+    )
+    videoGenerate.mockResolvedValueOnce({
+      url: 'https://example.com/v.mp4',
+      lastFrameUrl: 'https://example.com/v-last.png',
+    })
+
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'seedance-2.0-min',
+      5,
+      '16:9',
+      [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/ref.png' }],
+    )
+
+    await vi.waitFor(() => expect(prisma.generationRecord.updateMany).toHaveBeenCalled())
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      lastFrameUrl: 'https://example.com/v-last.png',
+    })
+  })
+
   it('rejects audio-only video references', async () => {
     await expect(
       svc.generateVideo(

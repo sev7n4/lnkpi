@@ -197,6 +197,39 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
   })
 
+  it('video: persists the returned last frame URL in metadata', async () => {
+    resolveForGeneration.mockResolvedValue({
+      channelId: 'platform',
+      modelName: 'seedance-2.0-min',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'plat-key', baseUrl: 'https://platform.example.com/v1' },
+      source: 'platform',
+    })
+    videoGenerate.mockResolvedValueOnce({
+      url: 'https://example.com/video.mp4',
+      lastFrameUrl: 'https://example.com/video-last.png',
+    })
+
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'seedance-2.0-min',
+      refs: [
+        {
+          refKey: 'I1',
+          mediaType: 'image',
+          url: 'https://cdn.example.com/frame.png',
+        },
+      ],
+    })
+
+    await vi.waitFor(() => expect(stored.status).toBe('completed'))
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      lastFrameUrl: 'https://example.com/video-last.png',
+    })
+  })
+
   it('image confirm → platform generate called and consumes points', async () => {
     imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
     await svc.generateImage({

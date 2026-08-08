@@ -1482,7 +1482,7 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url } = await createVideoProvider(providerOpts(resolved)).generate(
+      const { url, lastFrameUrl } = await createVideoProvider(providerOpts(resolved)).generate(
         prompt,
         options,
       )
@@ -1492,7 +1492,13 @@ export class StudioService {
       if (isCancelledMeta(meta) || alreadyRefunded(meta)) return
       const updated = await this.prisma.generationRecord.updateMany({
         where: { id, status: 'generating' },
-        data: { url, status: 'completed' },
+        data: {
+          url,
+          status: 'completed',
+          ...(lastFrameUrl
+            ? { metadata: JSON.stringify({ ...meta, lastFrameUrl }) }
+            : {}),
+        },
       })
       if (updated.count === 0) return
     } catch (err) {

@@ -66,6 +66,36 @@ describe('buildVideoProviderOptions', () => {
     expect(r.effectivePromptSuffix).toBeUndefined()
   })
 
+  it.each(['S2', 'S3'] as const)(
+    'requests the last frame for seedance %s generations',
+    (scenario) => {
+      const bundle = buildVideoReferenceBundle([
+        { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      ])
+      const r = buildVideoProviderOptions({
+        modelKey: 'seedance-2.0-min',
+        referenceBundle: bundle,
+        scenario,
+      })
+
+      expect(r.providerOptions.returnLastFrame).toBe(true)
+    },
+  )
+
+  it('does not request the last frame for seedance first-last generation', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/last.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      videoMode: 'first_last_frame',
+      referenceBundle: bundle,
+    })
+
+    expect(r.providerOptions.returnLastFrame).toBeUndefined()
+  })
+
   it('uses agnes keyframes for 2+ images on agnes', () => {
     const bundle = buildVideoReferenceBundle([
       { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
@@ -186,10 +216,14 @@ describe('buildVideoProviderOptions', () => {
       referenceBundle: bundle,
     })
 
-    const prompt = buildEffectiveVideoPrompt('首尾帧过渡', built)
+    const prompt = buildEffectiveVideoPrompt(
+      '首尾帧从 @Image1 过渡到 @图片2，忽略 @Video1 和 @Audio1',
+      built,
+    )
 
-    expect(prompt).toContain('@Image1')
-    expect(prompt).toContain('@Image2')
+    expect(prompt).toContain('首帧')
+    expect(prompt).toContain('末帧')
+    expect(prompt).not.toMatch(/@(?:Image|图片)\d+\b/)
     expect(prompt).not.toContain('@Video1')
     expect(prompt).not.toContain('@Audio1')
     expect(built.meta.scenario).toBe('S5')

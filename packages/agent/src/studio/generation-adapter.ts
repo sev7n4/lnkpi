@@ -448,6 +448,15 @@ const SEEDANCE_IMAGE_TAG_RE = /@(?:Image|图片)(\d+)\b/g
 const SEEDANCE_VIDEO_TAG_RE = /@Video(\d+)\b/g
 const SEEDANCE_AUDIO_TAG_RE = /@Audio(\d+)\b/g
 
+function stripSeedanceRefTags(prompt: string): string {
+  return prompt
+    .replace(SEEDANCE_IMAGE_TAG_RE, '')
+    .replace(SEEDANCE_VIDEO_TAG_RE, '')
+    .replace(SEEDANCE_AUDIO_TAG_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 function hasSeedanceImageTag(prompt: string, index: number): boolean {
   return new RegExp(`@(?:Image|图片)${index}\\b`).test(prompt)
 }
@@ -519,6 +528,15 @@ export function buildVideoRefConsistencyBlock(bundle: VideoReferenceBundle): str
   return `【参考图一致性】\n${roles}\n保持 @Image1 的主体身份一致，不得被辅助参考覆盖。`
 }
 
+function buildFirstLastFrameConsistencyBlock(bundle: VideoReferenceBundle): string {
+  const [first, last] = bundle.images
+  if (!first || !last) return ''
+  return (
+    `【首尾帧约束】首帧参考 ${first.refKey}（${first.label}），` +
+    `末帧参考 ${last.refKey}（${last.label}）；在两帧间自然过渡并保持构图连续。`
+  )
+}
+
 export interface VideoProviderGenerateOptions {
   model?: string
   duration?: number
@@ -530,6 +548,7 @@ export interface VideoProviderGenerateOptions {
   referenceVideos?: string[]
   referenceAudios?: string[]
   imageWithRoles?: Array<{ url: string; role: string }>
+  returnLastFrame?: boolean
   pollIntervalMs?: number
   maxPollMs?: number
 }
@@ -556,13 +575,15 @@ export function buildEffectiveVideoPrompt(
 ): string {
   const bundle = built.effectiveReferenceBundle
   let prompt = [mergedText.trim(), built.effectivePromptSuffix].filter(Boolean).join('\n')
-  if (
-    built.meta.refWire === 'apimart_multimodal' ||
-    built.meta.refWire === 'apimart_first_last'
-  ) {
+  if (built.meta.refWire === 'apimart_first_last') {
+    prompt = stripSeedanceRefTags(prompt)
+  } else if (built.meta.refWire === 'apimart_multimodal') {
     prompt = ensureSeedanceRefTags(prompt, bundle)
   }
-  const consistency = buildVideoRefConsistencyBlock(bundle)
+  const consistency =
+    built.meta.refWire === 'apimart_first_last'
+      ? buildFirstLastFrameConsistencyBlock(bundle)
+      : buildVideoRefConsistencyBlock(bundle)
   return consistency ? `${prompt}\n\n${consistency}` : prompt
 }
 
@@ -641,6 +662,13 @@ export function buildVideoProviderOptions(input: {
     resolution: clamped.resolution,
     pollIntervalMs: profile.pollIntervalMs,
     maxPollMs: profile.maxPollMs,
+  }
+  if (
+    profile.refWire === 'apimart_multimodal' &&
+    (scenario === 'S2' || scenario === 'S3' || scenario === 'S8')
+  ) {
+    providerOptions.returnLastFrame = true
+    nativeParams.return_last_frame = true
   }
   if (crop !== undefined) {
     if (entry.params.crop === 'native') {
