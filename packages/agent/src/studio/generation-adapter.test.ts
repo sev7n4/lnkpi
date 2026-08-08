@@ -112,6 +112,28 @@ describe('buildVideoProviderOptions', () => {
     })
   })
 
+  it('strips user @Image10 when bundle has only 9 images', () => {
+    const bundle = buildVideoReferenceBundle(
+      Array.from({ length: 9 }, (_, index) => ({
+        refKey: `I${index + 1}`,
+        mediaType: 'image' as const,
+        url: `https://cdn/${index + 1}.png`,
+      })),
+    )
+    expect(ensureSeedanceRefTags('参考 @Image10 风格', bundle)).not.toContain('@Image10')
+    expect(ensureSeedanceRefTags('参考 @Image10 风格', bundle)).toContain('@Image1')
+  })
+
+  it('preserves @Image1 and does not treat @Image10 as a match', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/1.png' },
+    ])
+    expect(ensureSeedanceRefTags('保持 @Image1', bundle)).toBe('保持 @Image1')
+    const withTen = ensureSeedanceRefTags('use @Image10 only', bundle)
+    expect(withTen).not.toContain('@Image10')
+    expect(withTen).toMatch(/@Image1\b/)
+  })
+
   it('clamps seedance prompt image tags to the 9 provider references', () => {
     const bundle = buildVideoReferenceBundle(
       Array.from({ length: 10 }, (_, index) => ({
@@ -125,7 +147,7 @@ describe('buildVideoProviderOptions', () => {
       referenceBundle: bundle,
     })
 
-    const prompt = buildEffectiveVideoPrompt('保持角色', built)
+    const prompt = buildEffectiveVideoPrompt('保持角色 @Image10', built)
 
     expect(built.providerOptions.referenceImages).toHaveLength(9)
     expect(prompt).toContain('@Image9')

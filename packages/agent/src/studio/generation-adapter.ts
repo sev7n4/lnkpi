@@ -444,24 +444,59 @@ export function buildImageProviderOptions(input: {
   }
 }
 
+const SEEDANCE_IMAGE_TAG_RE = /@(?:Image|图片)(\d+)\b/g
+const SEEDANCE_VIDEO_TAG_RE = /@Video(\d+)\b/g
+const SEEDANCE_AUDIO_TAG_RE = /@Audio(\d+)\b/g
+
+function hasSeedanceImageTag(prompt: string, index: number): boolean {
+  return new RegExp(`@(?:Image|图片)${index}\\b`).test(prompt)
+}
+
+function hasSeedanceVideoTag(prompt: string, index: number): boolean {
+  return new RegExp(`@Video${index}\\b`).test(prompt)
+}
+
+function hasSeedanceAudioTag(prompt: string, index: number): boolean {
+  return new RegExp(`@Audio${index}\\b`).test(prompt)
+}
+
+function stripOutOfRangeSeedanceTags(
+  prompt: string,
+  bundle: VideoReferenceBundle,
+): string {
+  let out = prompt.replace(SEEDANCE_IMAGE_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num <= bundle.images.length ? match : ''
+  })
+  out = out.replace(SEEDANCE_VIDEO_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num <= bundle.videos.length ? match : ''
+  })
+  out = out.replace(SEEDANCE_AUDIO_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num <= bundle.audios.length ? match : ''
+  })
+  return out.replace(/\s{2,}/g, ' ')
+}
+
 export function ensureSeedanceRefTags(
   prompt: string,
   bundle: VideoReferenceBundle,
 ): string {
-  let out = prompt
+  let out = stripOutOfRangeSeedanceTags(prompt, bundle)
   bundle.images.forEach((_, i) => {
     const tag = `@Image${i + 1}`
-    if (!out.includes(tag) && !out.includes(`@图片${i + 1}`)) out += ` ${tag}`
+    if (!hasSeedanceImageTag(out, i + 1)) out += ` ${tag}`
   })
   bundle.videos.forEach((_, i) => {
     const tag = `@Video${i + 1}`
-    if (!out.includes(tag)) out += ` ${tag}`
+    if (!hasSeedanceVideoTag(out, i + 1)) out += ` ${tag}`
   })
   bundle.audios.forEach((_, i) => {
     const tag = `@Audio${i + 1}`
-    if (!out.includes(tag)) out += ` ${tag}`
+    if (!hasSeedanceAudioTag(out, i + 1)) out += ` ${tag}`
   })
-  return out.trim()
+  return out.replace(/\s{2,}/g, ' ').trim()
 }
 
 export function buildVideoRefConsistencyBlock(bundle: VideoReferenceBundle): string {
