@@ -4,9 +4,9 @@
 >
 > **Spec:** `docs/superpowers/specs/2026-08-08-seedance-agnes-video-adapter-design.md`
 
-**Goal:** 打通 Agnes keyframes 与 Seedance APIMart 多模态视频（I*/V*/A* native wire + @ 占位符），消除 Seedance BYOK placeholder，Studio/Material 双路径共用 adapter。
+**Goal:** 打通 Agnes keyframes 与 Seedance APIMart 多模态视频（I*/V*/A* native wire + @ 占位符），消除 Seedance BYOK placeholder，Studio/Material 双路径共用 adapter。**（PR #174 已完成）** 续作：**§14 E-P0/E-P1** 修复 BYOK profile 误路由并补齐 Seedance 2.0 全变体 catalog/profile；**§15 E2.5** 仅 W1 脚手架（上游 GA 前 blocked）。
 
-**Architecture:** 在 `@lnkpi/shared` 新增 `VideoModelProfile`（镜像 `imageModelProfiles.ts`）；`generation-adapter` 扩展 `buildVideoReferenceBundle` / `buildVideoProviderOptions` / `buildEffectiveVideoPrompt`；`video-provider` 新增 `ApimartVideoProvider` 并增强 `AgnesVideoProvider`；`studio.service` / `material.service` 统一引用 bundle 与 provider options。
+**Architecture:** 在 `@lnkpi/shared` 新增 `VideoModelProfile`（镜像 `imageModelProfiles.ts`）；`generation-adapter` 扩展 `buildVideoReferenceBundle` / `buildVideoProviderOptions` / `buildEffectiveVideoPrompt`；`video-provider` 新增 `ApimartVideoProvider` 并增强 `AgnesVideoProvider`；`studio.service` / `material.service` 统一引用 bundle 与 provider options。**扩展：** `resolveSeedance20Gateway` 精确映射 gateway id；`gatewayModelHint` 贯通 BYOK；per-variant `maxResolution` / `variantTag`；2.5 预留 profile + feature flag。
 
 **Tech Stack:** TypeScript, Vitest, NestJS (`studio.service`, `material.service`), `@lnkpi/agent`, `@lnkpi/shared`, fetch APIMart `/v1/videos/generations` + `/tasks/{id}`
 
@@ -20,7 +20,13 @@
 - 非 Agnes 且非 Apimart 的 BYOK → **不得** `PlaceholderVideoProvider`；抛可读错误
 - metadata 必须记录 `refWire`, `responseMode`, `scenario`, `refImageMode`, `refVideoMode`, `refAudioMode`, `droppedFields`
 - 禁止第三种「既不传也不记」
-- 实施顺序：**P0 → P3 → P2 → P5 → P4 → P1 → P7**（P6 UI 可选后续 PR）
+- 实施顺序：**P0 → P3 → P2 → P5 → P4 → P1 → P7**（P6 UI 可选后续 PR）— ✅ PR #174
+- **扩展顺序：E-P0 → E-P1 → P6 → E-P2 →（上游 GA）E2.5-W1+**
+- **取消** `resolveVideoGatewayModelId` 对所有 `doubao-seedance-*` 一律 rewrite mini
+- BYOK `doubao-seedance-1.x-*` → `BadRequestException('Seedance 1.x 不支持，请使用 seedance-2.0-min / seedance-2.0 / seedance-2.0-fast')`
+- per-variant `maxResolution`：mini/fast=720p，standard=4k，face=1080p
+- metadata 扩展记录 `variantTag`（`mini|standard|fast|face`）
+- Seedance 2.5：**W1 前零 Provider 改动**；`SEEDANCE_25_ENABLED=false` 默认关闭
 - 每 Task 完成后单独 commit；不 amend 已 push commit
 
 ---
@@ -43,6 +49,11 @@
 | `packages/agent/src/index.ts` | 导出新函数 |
 | `apps/server/src/studio/studio.service.ts` | Studio 视频生成链 |
 | `apps/server/src/canvas/material.service.ts` | Material 视频生成链 |
+| `deploy/prod-pr174-verify.py` | 生产回归（扩展 Task 12 更新） |
+
+---
+
+## Phase A — C3-video 首轮（Tasks 1–8）✅ PR #174 merged
 
 ---
 
@@ -760,31 +771,721 @@ Expected: all green
 
 ---
 
+`chore: verify seedance agnes video adapter tests and build`
+
+---
+
+## Phase B — C3-video-ext（§14 E-P0 + E-P1）
+
+### Task 9: resolveSeedance20Gateway + 取消 rewrite mini（E-P0-1）
+
+**Files:**
+- Modify: `packages/shared/src/videoModelProfiles.ts`
+- Modify: `packages/shared/src/videoModelProfiles.test.ts`
+- Modify: `packages/shared/src/index.ts`（若导出新符号）
+
+**Interfaces:**
+- Consumes: 现有 `VideoModelProfile`, `resolveVideoModelProfile`, `clampVideoGenerationInput`
+- Produces: `SeedanceVariantTag`, `SEEDANCE_20_GATEWAYS`, `isSeedance1x(gatewayModelId: string): boolean`, `resolveSeedance20Gateway(modelKey: string, gatewayModelId: string): string | null`, 更新后的 `resolveVideoGatewayModelId`, `resolveVideoModelProfile`（接受精确 gateway）
+
+- [ ] **Step 1: Write failing tests — gateway 精确映射**
+
+```typescript
+// packages/shared/src/videoModelProfiles.test.ts — append
+import {
+  isSeedance1x,
+  resolveSeedance20Gateway,
+  resolveVideoGatewayModelId,
+  resolveVideoModelProfile,
+} from './videoModelProfiles'
+
+describe('resolveSeedance20Gateway', () => {
+  it('maps catalog modelKey seedance-2.0-min to mini gateway', () => {
+    expect(resolveSeedance20Gateway('seedance-2.0-min', 'seedance-2.0-min')).toBe(
+      'doubao-seedance-2.0-mini',
+    )
+  })
+
+  it('maps BYOK gateway id doubao-seedance-2.0-fast without catalog entry', () => {
+    expect(resolveSeedance20Gateway('doubao-seedance-2.0-fast', 'doubao-seedance-2.0-fast')).toBe(
+      'doubao-seedance-2.0-fast',
+    )
+  })
+
+  it('returns null for non-seedance models', () => {
+    expect(resolveSeedance20Gateway('agnes-video-v2.0', 'agnes-video-v2.0')).toBeNull()
+  })
+})
+
+describe('isSeedance1x', () => {
+  it('detects legacy 1.0 gateway ids', () => {
+    expect(isSeedance1x('doubao-seedance-1-0-lite-i2v-250428')).toBe(true)
+    expect(isSeedance1x('doubao-seedance-2.0-fast')).toBe(false)
+  })
+})
+
+describe('resolveVideoGatewayModelId (extended)', () => {
+  it('preserves fast gateway instead of rewriting to mini', () => {
+    expect(
+      resolveVideoGatewayModelId('seedance-2.0-fast', 'doubao-seedance-2.0-fast'),
+    ).toBe('doubao-seedance-2.0-fast')
+  })
+
+  it('still maps seedance-2.0-min catalog key to mini', () => {
+    expect(resolveVideoGatewayModelId('seedance-2.0-min', 'seedance-2.0-min')).toBe(
+      'doubao-seedance-2.0-mini',
+    )
+  })
+})
+
+describe('resolveVideoModelProfile BYOK fast hint', () => {
+  it('uses apimart_multimodal for BYOK fast gateway hint', () => {
+    const p = resolveVideoModelProfile(
+      'doubao-seedance-2.0-fast',
+      'doubao-seedance-2.0-fast',
+      { channelBaseUrl: 'https://api.apimart.ai/v1' },
+    )
+    expect(p.refWire).toBe('apimart_multimodal')
+    expect(p.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+    expect(p.variantTag).toBe('fast')
+  })
+})
+```
+
+- [ ] **Step 2: Run test — expect FAIL**
+
+Run: `pnpm --filter @lnkpi/shared test -- videoModelProfiles.test.ts`
+Expected: FAIL — `resolveSeedance20Gateway` / `isSeedance1x` / `variantTag` not defined
+
+- [ ] **Step 3: Implement gateway resolver + profile fields**
+
+```typescript
+// packages/shared/src/videoModelProfiles.ts — key additions
+export type SeedanceVariantTag = 'mini' | 'standard' | 'fast' | 'face'
+
+export const SEEDANCE_20_GATEWAYS = {
+  mini: 'doubao-seedance-2.0-mini',
+  standard: 'doubao-seedance-2.0',
+  fast: 'doubao-seedance-2.0-fast',
+  face: 'doubao-seedance-2.0-face',
+} as const
+
+const GATEWAY_TO_VARIANT: Record<string, SeedanceVariantTag> = {
+  [SEEDANCE_20_GATEWAYS.mini]: 'mini',
+  [SEEDANCE_20_GATEWAYS.standard]: 'standard',
+  [SEEDANCE_20_GATEWAYS.fast]: 'fast',
+  [SEEDANCE_20_GATEWAYS.face]: 'face',
+}
+
+const RESOLUTION_RANK: Record<string, number> = { '480p': 1, '720p': 2, '1080p': 3, '4k': 4 }
+
+export interface VideoModelProfile {
+  // ...existing fields...
+  variantTag?: SeedanceVariantTag
+  maxResolution?: '480p' | '720p' | '1080p' | '4k'
+  supportsAssetUrl?: boolean
+}
+
+export function isSeedance1x(gatewayModelId: string): boolean {
+  return /^doubao-seedance-1[.-]/i.test(gatewayModelId)
+}
+
+export function resolveSeedance20Gateway(
+  modelKey: string,
+  gatewayModelId: string,
+): string | null {
+  const catalogGw = Object.values(SEEDANCE_20_GATEWAYS).find((gw) =>
+    [modelKey, gatewayModelId].some((v) => v.toLowerCase() === gw.toLowerCase()),
+  )
+  if (catalogGw) return catalogGw
+  if (/^seedance-2\.0-min$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.mini
+  if (/^seedance-2\.0-fast$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.fast
+  if (/^seedance-2\.0-face$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.face
+  if (/^seedance-2\.0$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.standard
+  if (isSeedance1x(gatewayModelId)) return null
+  if (/^doubao-seedance-2\.0/i.test(gatewayModelId)) {
+    const exact = Object.values(SEEDANCE_20_GATEWAYS).find(
+      (gw) => gw.toLowerCase() === gatewayModelId.toLowerCase(),
+    )
+    return exact ?? null
+  }
+  return null
+}
+
+export function resolveVideoGatewayModelId(modelKey: string, gatewayModelId: string): string {
+  return resolveSeedance20Gateway(modelKey, gatewayModelId) ?? gatewayModelId
+}
+
+function buildSeedance20Profile(gatewayModelId: string): VideoModelProfile {
+  const variantTag = GATEWAY_TO_VARIANT[gatewayModelId] ?? 'mini'
+  const maxResolution =
+    variantTag === 'standard' ? '4k' : variantTag === 'face' ? '1080p' : '720p'
+  const allowedResolutions =
+    variantTag === 'standard'
+      ? ['480p', '720p', '1080p', '4k']
+      : variantTag === 'face'
+        ? ['480p', '720p', '1080p']
+        : ['480p', '720p']
+  return {
+    refWire: 'apimart_multimodal',
+    sizeWire: 'ratio_duration',
+    responseMode: 'async_task',
+    gatewayModelId,
+    variantTag,
+    maxResolution,
+    supportsAssetUrl: variantTag === 'standard' || variantTag === 'fast',
+    maxImageRefs: 9,
+    maxVideoRefs: 3,
+    maxAudioRefs: 3,
+    minDuration: 4,
+    maxDuration: 15,
+    allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
+    allowedResolutions,
+    defaultGenerateAudio: true,
+    pollIntervalMs: 8_000,
+    maxPollMs: 600_000,
+  }
+}
+```
+
+在 `resolveVideoModelProfile` 内：若 `resolveSeedance20Gateway(modelKey, gatewayModelId)` 非 null → 返回 `buildSeedance20Profile(resolvedGw)`；**删除**旧 `isSeedanceModel → 恒 mini` 分支。
+
+更新 `clampVideoGenerationInput`：
+
+```typescript
+function clampResolution(
+  resolution: string,
+  profile: VideoModelProfile,
+  droppedFields: Array<{ field: string; reason: string }>,
+): string {
+  const cap = profile.maxResolution ?? '1080p'
+  if ((RESOLUTION_RANK[resolution] ?? 0) > (RESOLUTION_RANK[cap] ?? 0)) {
+    droppedFields.push({
+      field: 'resolution',
+      reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${cap}`,
+    })
+    return cap
+  }
+  return resolution
+}
+```
+
+- [ ] **Step 4: Run tests — PASS**
+
+Run: `pnpm --filter @lnkpi/shared test -- videoModelProfiles.test.ts`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/shared/src/videoModelProfiles.ts packages/shared/src/videoModelProfiles.test.ts packages/shared/src/index.ts
+git commit -m "fix(shared): resolve Seedance 2.0 gateways per variant instead of forcing mini"
+```
+
+---
+
+### Task 10: gatewayModelHint + 1.x 阻断（E-P0-2 / E-P0-3）
+
+**Files:**
+- Modify: `packages/agent/src/studio/generation-adapter.ts`
+- Modify: `packages/agent/src/studio/generation-adapter.test.ts`
+- Modify: `apps/server/src/studio/studio.service.ts`
+- Modify: `apps/server/src/canvas/material.service.ts`
+- Modify: `apps/server/src/studio/studio.integration.test.ts`
+- Modify: `apps/server/src/canvas/material.service.test.ts`
+
+**Interfaces:**
+- Consumes: `isSeedance1x`, `resolveVideoModelProfile` from `@lnkpi/shared`
+- Produces: `buildVideoProviderOptions` 新入参 `gatewayModelHint?: string`；抛出 `Seedance1xUnsupportedError`（message 含中文提示）
+
+- [ ] **Step 1: Write failing adapter test — BYOK fast hint**
+
+```typescript
+// packages/agent/src/studio/generation-adapter.test.ts — append
+it('uses apimart_multimodal for BYOK doubao-seedance-2.0-fast gateway hint', () => {
+  const r = buildVideoProviderOptions({
+    modelKey: 'doubao-seedance-2.0-fast',
+    gatewayModelHint: 'doubao-seedance-2.0-fast',
+    channelBaseUrl: 'https://api.apimart.ai/v1',
+    duration: 5,
+    aspectRatio: '16:9',
+    resolution: '720p',
+  })
+  expect(r.meta.refWire).toBe('apimart_multimodal')
+  expect(r.meta.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+  expect(r.meta.variantTag).toBe('fast')
+})
+
+it('throws for seedance 1.x gateway hint', () => {
+  expect(() =>
+    buildVideoProviderOptions({
+      modelKey: 'doubao-seedance-1-0-lite-i2v-250428',
+      gatewayModelHint: 'doubao-seedance-1-0-lite-i2v-250428',
+      channelBaseUrl: 'https://api.apimart.ai/v1',
+    }),
+  ).toThrow(/Seedance 1\.x 不支持/)
+})
+```
+
+- [ ] **Step 2: Run test — expect FAIL**
+
+Run: `pnpm --filter @lnkpi/agent test -- generation-adapter.test.ts`
+
+- [ ] **Step 3: Implement gatewayModelHint in adapter**
+
+```typescript
+// packages/agent/src/studio/generation-adapter.ts
+import { isSeedance1x, resolveVideoModelProfile } from '@lnkpi/shared'
+
+export class Seedance1xUnsupportedError extends Error {
+  constructor() {
+    super('Seedance 1.x 不支持，请使用 seedance-2.0-min / seedance-2.0 / seedance-2.0-fast')
+    this.name = 'Seedance1xUnsupportedError'
+  }
+}
+
+export function buildVideoProviderOptions(input: {
+  modelKey?: string
+  gatewayModelHint?: string
+  // ...existing fields...
+}): BuiltVideoProviderOptions {
+  const catalogResolved = resolveModelKey('video', input.modelKey)
+  const gatewayHint =
+    input.gatewayModelHint ??
+    (catalogResolved.fallback ? undefined : catalogResolved.entry.gatewayModelId)
+
+  if (gatewayHint && isSeedance1x(gatewayHint)) {
+    throw new Seedance1xUnsupportedError()
+  }
+
+  const profileKey = catalogResolved.fallback
+    ? (gatewayHint ?? catalogResolved.modelKey)
+    : catalogResolved.modelKey
+  const profileGw = gatewayHint ?? catalogResolved.entry.gatewayModelId
+
+  const profile = resolveVideoModelProfile(profileKey, profileGw, {
+    channelBaseUrl: input.channelBaseUrl,
+  })
+  // ...rest unchanged; meta includes variantTag + gatewayModelId from profile...
+}
+```
+
+- [ ] **Step 4: Wire server — pass gatewayModelHint + map error**
+
+```typescript
+// apps/server/src/studio/studio.service.ts — inside generateVideo
+import { Seedance1xUnsupportedError } from '@lnkpi/agent'
+
+let built
+try {
+  built = buildVideoProviderOptions({
+    modelKey: resolved.modelName,
+    gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
+    duration,
+    aspectRatio,
+    resolution,
+    crop,
+    referenceBundle,
+    videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
+    channelBaseUrl: resolved.credentials.baseUrl,
+  })
+} catch (err) {
+  if (err instanceof Seedance1xUnsupportedError) {
+    throw new BadRequestException(err.message)
+  }
+  throw err
+}
+```
+
+`material.service.ts` 同样改法。
+
+- [ ] **Step 5: Server integration test — 1.x blocked**
+
+```typescript
+// apps/server/src/studio/studio.integration.test.ts — append
+it('rejects seedance 1.x BYOK models', async () => {
+  await expect(
+    svc.generateVideo('u1', 'walk', 'ch_user::doubao-seedance-1-0-lite-i2v-250428', 5),
+  ).rejects.toThrow('Seedance 1.x 不支持')
+})
+```
+
+- [ ] **Step 6: Run tests**
+
+Run:
+```bash
+pnpm --filter @lnkpi/agent test -- generation-adapter.test.ts
+pnpm --filter @lnkpi/server test -- studio.integration.test.ts material.service.test.ts
+```
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git commit -m "fix(agent,server): gatewayModelHint for BYOK seedance and block 1.x"
+```
+
+---
+
+### Task 11: Catalog 三变体 + per-variant clamp + variantTag metadata（E-P1）
+
+**Files:**
+- Modify: `packages/shared/src/studioModelCatalog.ts`
+- Modify: `packages/shared/src/videoModelProfiles.test.ts`
+- Modify: `packages/agent/src/studio/generation-adapter.ts`（meta.variantTag 写入）
+- Modify: `apps/server/src/studio/studio.integration.test.ts`
+
+**Interfaces:**
+- Consumes: Task 9 `buildSeedance20Profile`, Task 10 `gatewayModelHint`
+- Produces: catalog entries `seedance-2.0`, `seedance-2.0-fast`, `seedance-2.0-face`；metadata `variantTag`
+
+- [ ] **Step 1: Write failing tests — standard 1080p / fast clamp**
+
+```typescript
+// packages/shared/src/videoModelProfiles.test.ts — append
+describe('per-variant resolution clamp', () => {
+  it('allows 1080p on seedance-2.0 standard', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0', 'doubao-seedance-2.0')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      aspectRatio: '16:9',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('1080p')
+    expect(r.droppedFields).toHaveLength(0)
+  })
+
+  it('clamps 1080p to 720p on seedance-2.0-fast', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0-fast', 'doubao-seedance-2.0-fast')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      aspectRatio: '16:9',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('720p')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('regresses mini 1080p clamp to 720p', () => {
+    const profile = resolveVideoModelProfile('seedance-2.0-min', 'doubao-seedance-2.0-mini')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      aspectRatio: '16:9',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('720p')
+  })
+})
+```
+
+- [ ] **Step 2: Add catalog entries**
+
+```typescript
+// packages/shared/src/studioModelCatalog.ts — after seedance-2.0-min block
+{
+  modelKey: 'seedance-2.0',
+  displayName: 'Seedance 2.0',
+  gatewayModelId: 'doubao-seedance-2.0',
+  modality: 'video',
+  providerBinding: 'gateway-openai-compat',
+  params: {
+    ...VIDEO_PARAMS,
+    generateAudio: 'native',
+    seed: 'native',
+    refImages: 'native',
+    refVideos: 'native',
+    refAudios: 'native',
+  },
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+{
+  modelKey: 'seedance-2.0-fast',
+  displayName: 'Seedance 2.0 Fast',
+  gatewayModelId: 'doubao-seedance-2.0-fast',
+  modality: 'video',
+  providerBinding: 'gateway-openai-compat',
+  params: {
+    ...VIDEO_PARAMS,
+    generateAudio: 'native',
+    seed: 'native',
+    refImages: 'native',
+    refVideos: 'native',
+    refAudios: 'native',
+  },
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+{
+  modelKey: 'seedance-2.0-face',
+  displayName: 'Seedance 2.0 Face',
+  gatewayModelId: 'doubao-seedance-2.0-face',
+  modality: 'video',
+  providerBinding: 'gateway-openai-compat',
+  params: {
+    ...VIDEO_PARAMS,
+    generateAudio: 'native',
+    seed: 'native',
+    refImages: 'native',
+    refVideos: 'native',
+    refAudios: 'native',
+  },
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+```
+
+- [ ] **Step 3: Ensure adapter meta includes variantTag**
+
+```typescript
+// generation-adapter.ts — in buildVideoProviderOptions return meta
+meta: {
+  modelKey: catalogResolved.fallback ? profileKey : catalogResolved.modelKey,
+  gatewayModelId: profile.gatewayModelId,
+  variantTag: profile.variantTag,
+  refWire,
+  // ...
+}
+```
+
+- [ ] **Step 4: Integration test — standard multimodal**
+
+```typescript
+// studio.integration.test.ts
+it('passes 1080p and apimart_multimodal for seedance-2.0 standard', async () => {
+  await svc.generateVideo(
+    'u1',
+    'walk @Image1',
+    'seedance-2.0',
+    5,
+    '16:9',
+    [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/ref.png' }],
+    [],
+    '1080p',
+  )
+  await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+  expect(videoGenerate.mock.calls[0]?.[1]).toMatchObject({
+    model: 'doubao-seedance-2.0',
+    resolution: '1080p',
+    referenceImages: ['https://example.com/ref.png'],
+  })
+})
+```
+
+- [ ] **Step 5: Run tests + build**
+
+```bash
+pnpm --filter @lnkpi/shared test -- videoModelProfiles.test.ts
+pnpm --filter @lnkpi/agent test -- generation-adapter.test.ts
+pnpm --filter @lnkpi/server test -- studio.integration.test.ts
+pnpm build
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git commit -m "feat(shared): add Seedance 2.0 standard/fast/face catalog and variant profiles"
+```
+
+---
+
+### Task 12: 生产验证脚本更新 + 全量回归（E-P0/E-P1 验收）
+
+**Files:**
+- Modify: `deploy/prod-pr174-verify.py`
+
+**Interfaces:**
+- Consumes: 生产 API `POST /studio/video/generate`
+- Produces: 覆盖 E0-1/E0-2/E1-2/E1-3 断言
+
+- [ ] **Step 1: Extend prod verify — BYOK fast refWire + 1.x block**
+
+```python
+# deploy/prod-pr174-verify.py — append after Seedance BYOK section
+
+def test_byok_fast_refwire(tok: str) -> None:
+    seedance = pick_seedance_model(tok, prefer="fast")  # helper: match '2.0-fast' in name
+    if not seedance:
+        record("BYOK fast refWire", False, "no BYOK fast channel", skip=True)
+        return
+    # start generation, poll metadata — assert refWire == apimart_multimodal, variantTag == fast
+
+def test_seedance_1x_blocked(tok: str) -> None:
+    st, payload = http_json_expect(
+        "POST",
+        "/studio/video/generate",
+        {
+            "prompt": "test",
+            "model": "USER_CHANNEL_ID::doubao-seedance-1-0-lite-i2v-250428",  # skip if channel unknown
+            "duration": 5,
+        },
+        tok,
+        expect_status=400,
+    )
+    # skip if channel not configured; else assert 400 + 1.x message
+```
+
+- [ ] **Step 2: Add standard 1080p smoke (optional BYOK/platform)**
+
+若平台配置了 `seedance-2.0` 或 BYOK standard channel，断言 `resolution` 未 downgrade。
+
+- [ ] **Step 3: Run local test suite**
+
+```bash
+pnpm --filter @lnkpi/shared test
+pnpm --filter @lnkpi/agent test
+pnpm --filter @lnkpi/server test
+pnpm build
+```
+
+- [ ] **Step 4: Run prod verify (manual / CI optional)**
+
+```bash
+python3 deploy/prod-pr174-verify.py
+```
+
+Expected: E0/E1 cases PASS；mini 回归仍绿
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add deploy/prod-pr174-verify.py
+git commit -m "test(deploy): extend prod verify for Seedance 2.0 variants"
+```
+
+---
+
+## Phase C — Seedance 2.5 演进（§15，blocked until upstream GA）
+
+> **Do not start Task 13 until §15.4 W0→W1 三条件全部满足。**
+
+### Task 13: E2.5-W1 脚手架（feature flag + 预留 profile）— BLOCKED
+
+**Trigger（须全部满足）：**
+1. APIMart 文档出现可调用 `doubao-seedance-2.5`（或公布最终 model id）
+2. 请求/响应 schema diff 发布
+3. 测试 API key t2v 5s 冒烟成功
+
+**Files:**
+- Modify: `packages/shared/src/videoModelProfiles.ts`
+- Modify: `packages/shared/src/studioModelCatalog.ts`
+- Modify: `packages/shared/src/videoModelProfiles.test.ts`
+- Create: `docs/superpowers/specs/seedance-2.5-upstream-changelog.md`（粘贴 APIMart GA 参数快照）
+
+**Interfaces:**
+- Produces: `SEEDANCE_25_ENABLED` env（默认 `false`）；catalog entry `seedance-2.5`（`hidden: true` 或 UI 灰显）；profile `maxDuration: 30`, `maxImageRefs: 50`, `maxPollMs: 900_000`
+
+- [ ] **Step 1: Write failing test — profile exists but disabled**
+
+```typescript
+it('returns seedance 2.5 profile when SEEDANCE_25_ENABLED=true', () => {
+  process.env.SEEDANCE_25_ENABLED = 'true'
+  const p = resolveVideoModelProfile('seedance-2.5', 'doubao-seedance-2.5')
+  expect(p.maxDuration).toBe(30)
+  expect(p.maxImageRefs).toBe(50)
+  delete process.env.SEEDANCE_25_ENABLED
+})
+
+it('throws when seedance-2.5 requested but flag off', () => {
+  expect(() => resolveVideoModelProfile('seedance-2.5', 'doubao-seedance-2.5')).toThrow(
+    /not enabled/i,
+  )
+})
+```
+
+- [ ] **Step 2: Implement gated profile + hidden catalog entry**
+
+```typescript
+function isSeedance25Enabled(): boolean {
+  return process.env.SEEDANCE_25_ENABLED === 'true'
+}
+
+// resolveVideoModelProfile — before legacy fallback
+if (/^seedance-2\.5$/i.test(modelKey) || /^doubao-seedance-2\.5/i.test(gatewayModelId)) {
+  if (!isSeedance25Enabled()) {
+    throw new Error('Seedance 2.5 is not enabled yet')
+  }
+  return {
+    refWire: 'apimart_multimodal',
+    gatewayModelId: 'doubao-seedance-2.5', // update when GA id known
+    variantTag: undefined,
+    maxDuration: 30,
+    maxImageRefs: 50,
+    maxVideoRefs: 50,
+    maxAudioRefs: 50,
+    maxResolution: '4k',
+    pollIntervalMs: 10_000,
+    maxPollMs: 900_000,
+    // ...fill remaining required VideoModelProfile fields same as 2.0 standard...
+  }
+}
+```
+
+- [ ] **Step 3: Document upstream snapshot**
+
+创建 `docs/superpowers/specs/seedance-2.5-upstream-changelog.md`，记录 GA 日 model id、参数 diff、定价。
+
+- [ ] **Step 4: Tests PASS, commit**
+
+```bash
+git commit -m "chore(shared): scaffold gated Seedance 2.5 profile (disabled by default)"
+```
+
+### Task 14: E2.5-W2+ 实施清单（plan-only，GA 后拆独立 plan）
+
+| 子阶段 | 工作项 | 文件 |
+|---|---|---|
+| W2 | Provider 白名单 + duration/refs clamp 50/30s | `video-provider.ts`, `videoModelProfiles.ts` |
+| W3 | UI 30s / 4K 控件（extends P6） | `VideoDockPanel.vue`, `VideoSettingsSelector.vue` |
+| W3 | 区域编辑 API 字段（若上游暴露 `region`/`mask`） | `generation-adapter.ts` |
+| W4 | `deploy/prod-seedance-25-verify.py` | `deploy/` |
+
+**W2 验收：** t2v/i2v 30s 请求不被 clamp 到 15s；metadata `maxDuration=30`。  
+**W4 验收：** 生产 30s 片源生成 poll 成功或明确上游 error（非 adapter bug）。
+
+---
+
 ## Spec Coverage Self-Review
 
 | Spec § | Task |
 |---|---|
-| §2 参数分析 / clamp | Task 1 |
+| §2 参数分析 / clamp | Task 1, **Task 9, 11** |
 | §3 最佳实践 prompt / @ tags | Task 4 |
-| §4 场景 S1–S10 | Task 3, 4, 6 |
-| §5 VideoModelProfile | Task 1 |
-| §6 Catalog | Task 1 |
-| §7 clamp | Task 1, 4 |
-| §8 metadata | Task 4, 6 |
-| §9 验收 | Task 8 |
+| §4 场景 S1–S10 | Task 3, 4, 6, **11** |
+| §5 VideoModelProfile | Task 1, **Task 9, 11, 13** |
+| §6 Catalog | Task 1, **Task 11, 13** |
+| §7 clamp | Task 1, 4, **Task 9, 11** |
+| §8 metadata | Task 4, 6, **Task 11** |
+| §9 验收 | Task 8, **Task 12** |
 | §4.6 用户路径示例 | Task 6 行为对齐 |
+| **§14 E-P0** | **Task 9, 10, 12** |
+| **§14 E-P1** | **Task 11, 12** |
+| **§14 E-P2** | deferred（asset:// 独立 PR） |
+| **§15 E2.5** | **Task 13 (W1), Task 14 (W2–W4 plan-only)** |
 
-**Deferred (P6 separate PR):** UI duration 4s、first_last_frame 模式、generate_audio 开关、lastFrameUrl 一键延续
+**Completed (PR #174):** Tasks 1–8  
+**Deferred (P6 separate PR):** UI duration 4s、first_last_frame 模式、generate_audio 开关、lastFrameUrl 一键延续  
+**Deferred (E-P2):** `asset://` inline + 4K UI  
+**Blocked (E2.5):** Task 13 until upstream GA
 
 ---
 
 ## Execution Handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-08-08-seedance-agnes-video-adapter.md`.
+Plan updated with **Phase B (Tasks 9–12)** and **Phase C (Tasks 13–14 blocked)** in `docs/superpowers/plans/2026-08-08-seedance-agnes-video-adapter.md`.
+
+**PR #174（Tasks 1–8）已合并。** 下一步执行扩展：
 
 **Two execution options:**
 
-1. **Subagent-Driven (recommended)** — fresh subagent per task, review between tasks  
-2. **Inline Execution** — implement tasks in this session with executing-plans checkpoints
+1. **Subagent-Driven (recommended)** — fresh subagent per Task 9→12, review between tasks  
+2. **Inline Execution** — implement Tasks 9–12 in this session with executing-plans checkpoints
+
+**Recommended order:** Task 9 → Task 10 → Task 11 → Task 12（Task 13 等 APIMart 2.5 GA）
 
 **Which approach?**
