@@ -2,9 +2,12 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import {
   buildAudioRequest,
   buildEffectiveImagePrompt,
+  buildEffectiveVideoPrompt,
   buildImageProviderGenerateOptions,
   buildImageProviderOptions,
+  buildVideoProviderGenerateOptions,
   buildVideoProviderOptions,
+  buildVideoReferenceBundle,
   createAudioProvider,
   createImageProvider,
   createTextProvider,
@@ -25,6 +28,7 @@ import {
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
   type ErrorCode,
+  type GenerationRefPayload,
   type GenerationDiagnostic,
   type ImageRefWire,
   type ImageResolutionTier,
@@ -234,6 +238,7 @@ export class StudioService {
     mentionedKeys?: string[],
     credentials?: { apiKey?: string; baseUrl?: string },
     model?: string,
+    videoImageRefs?: Array<{ refKey: string; label: string }>,
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
@@ -241,7 +246,11 @@ export class StudioService {
       downstreamType,
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       imageRefs:
-        downstreamType === 'image' ? imageRefDescriptorsFromRefs(refs) : undefined,
+        downstreamType === 'video'
+          ? videoImageRefs
+          : downstreamType === 'image'
+            ? imageRefDescriptorsFromRefs(refs)
+            : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
       model: mergeChatModel(downstreamType, model),
@@ -906,17 +915,39 @@ export class StudioService {
     crop = 'none',
     scope?: CanvasGenerationScope,
   ) {
+    const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
+      ...ref,
+      mediaType: ref.mediaType as GenerationRefPayload['mediaType'],
+    }))
+    const referenceBundle = buildVideoReferenceBundle(videoRefs)
+    for (const group of [
+      referenceBundle.images,
+      referenceBundle.videos,
+      referenceBundle.audios,
+    ]) {
+      for (const ref of group) {
+        ref.url = resolvePublicMediaUrls([ref.url])[0] ?? ref.url
+      }
+    }
+    if (
+      referenceBundle.audios.length
+      && !referenceBundle.images.length
+      && !referenceBundle.videos.length
+    ) {
+      throw new BadRequestException('参考音频须配合参考图或视频')
+    }
     const durationCredits = this.videoDurationCredits(duration)
     const chargeReason = '视频生成'
     await this.points.consume(userId, durationCredits, chargeReason)
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
-    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'video',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
       resolved.modelName,
+      referenceBundle.images.map(({ refKey, label }) => ({ refKey, label })),
     )
     const built = buildVideoProviderOptions({
       modelKey: resolved.modelName,
@@ -924,13 +955,18 @@ export class StudioService {
       aspectRatio,
       resolution,
       crop,
-      referenceImages,
+      referenceBundle,
+      videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
+      channelBaseUrl: resolved.credentials.baseUrl,
     })
-    const gatewayModel =
-      resolved.source === 'user' ? resolved.modelName : built.model
     const storeModel =
       resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
-    const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
+    const effectivePrompt = buildEffectiveVideoPrompt(mergedText, built)
+    const providerOptions = buildVideoProviderGenerateOptions(built)
+    if (resolved.source === 'user') {
+      providerOptions.model = resolved.modelName
+    }
+    const effectiveBundle = built.effectiveReferenceBundle
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
@@ -946,7 +982,9 @@ export class StudioService {
               aspectRatio,
               resolution,
               crop,
-              referenceImages,
+              referenceImages: effectiveBundle.images.map(({ url }) => url),
+              referenceVideos: effectiveBundle.videos.map(({ url }) => url),
+              referenceAudios: effectiveBundle.audios.map(({ url }) => url),
               skippedMerge,
               mergedText,
               channelId: resolved.channelId,
@@ -965,14 +1003,7 @@ export class StudioService {
       durationCredits,
       chargeReason,
       effectivePrompt,
-      {
-        model: gatewayModel,
-        duration: built.duration,
-        aspectRatio: built.aspectRatio,
-        resolution: built.resolution,
-        crop: built.crop,
-        image: built.image,
-      },
+      providerOptions,
       resolved,
     ).catch(console.error)
     return record
@@ -1443,14 +1474,7 @@ export class StudioService {
     cost: number,
     chargeReason: string,
     prompt: string,
-    options: {
-      model?: string
-      duration?: number
-      aspectRatio?: string
-      resolution?: string
-      crop?: string
-      image?: string
-    },
+    options: import('@lnkpi/agent').VideoProviderGenerateOptions,
     resolved: ResolvedGenerationProvider,
   ) {
     try {

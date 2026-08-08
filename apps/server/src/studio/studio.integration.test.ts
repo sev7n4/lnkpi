@@ -68,15 +68,21 @@ describe('StudioService integration (provider params)', () => {
     })
   })
 
-  it('passes reference image via options.image and native video params', async () => {
-    const refUrl = 'https://example.com/ref.png'
+  it('passes the full video reference bundle and image descriptors to the provider', async () => {
+    const imageUrl = 'https://example.com/ref.png'
+    const videoUrl = 'https://example.com/ref.mp4'
+    const audioUrl = 'https://example.com/ref.mp3'
     await svc.generateVideo(
       'u1',
       'a prompt',
       'seedance-2.0-min',
       10,
       '16:9',
-      [{ refKey: 'i1', mediaType: 'image', url: refUrl }],
+      [
+        { refKey: 'I1', mediaType: 'image', label: '人物', url: imageUrl },
+        { refKey: 'V1', mediaType: 'video', label: '运镜', url: videoUrl },
+        { refKey: 'A1', mediaType: 'audio', label: '节奏', url: audioUrl },
+      ],
       [],
       '720p',
       'none',
@@ -84,16 +90,40 @@ describe('StudioService integration (provider params)', () => {
 
     await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
     const [prompt, opts] = videoGenerate.mock.calls[0]
-    expect(prompt).toBe('a prompt')
+    expect(prompt).toContain('a prompt')
+    expect(prompt).toContain('@Image1')
+    expect(prompt).toContain('@Video1')
+    expect(prompt).toContain('@Audio1')
+    expect(prompt).toContain('【参考图一致性】')
     expect(opts).toMatchObject({
-      model: 'seedance-2.0-min',
+      model: 'doubao-seedance-2.0-mini',
       duration: 10,
       aspectRatio: '16:9',
       resolution: '720p',
-      image: refUrl,
+      referenceImages: [imageUrl],
+      referenceVideos: [videoUrl],
+      referenceAudios: [audioUrl],
     })
-    // crop is metadataOnly — adapter omits native value; service may still pass undefined
-    expect(opts?.crop).toBeUndefined()
+    expect(mergeRefsToPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        downstreamType: 'video',
+        imageRefs: [{ refKey: 'I1', label: '人物' }],
+      }),
+    )
+  })
+
+  it('rejects audio-only video references', async () => {
+    await expect(
+      svc.generateVideo(
+        'u1',
+        'a prompt',
+        'seedance-2.0-min',
+        5,
+        '16:9',
+        [{ refKey: 'A1', mediaType: 'audio', url: 'https://example.com/ref.mp3' }],
+      ),
+    ).rejects.toThrow('参考音频须配合参考图或视频')
+    expect(videoGenerate).not.toHaveBeenCalled()
   })
 
   it('passes built audio options (model, voice, speed) to audio provider', async () => {

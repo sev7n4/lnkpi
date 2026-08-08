@@ -7,9 +7,12 @@ import {
 } from '@nestjs/common'
 import {
   buildEffectiveImagePrompt,
+  buildEffectiveVideoPrompt,
   buildImageProviderGenerateOptions,
   buildImageProviderOptions,
+  buildVideoProviderGenerateOptions,
   buildVideoProviderOptions,
+  buildVideoReferenceBundle,
   createImageProvider,
   createVideoProvider,
   imageRefDescriptorsFromRefs,
@@ -76,6 +79,7 @@ export type CanvasVideoGenerateInput = {
   skipCharge?: boolean
   refs?: GenerationRefPayload[]
   mentionedKeys?: string[]
+  referenceImageUrl?: string
 }
 
 function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
@@ -384,6 +388,7 @@ export class MaterialService {
       skipCharge,
       refs,
       mentionedKeys,
+      referenceImageUrl,
     } = input
 
     const shot = await this.prisma.shot.findUnique({
@@ -395,6 +400,14 @@ export class MaterialService {
     }
 
     assertNoBlobRefs(refs)
+    const referenceBundle = buildVideoReferenceBundle(refs ?? [], referenceImageUrl)
+    if (
+      referenceBundle.audios.length
+      && !referenceBundle.images.length
+      && !referenceBundle.videos.length
+    ) {
+      throw new BadRequestException('参考音频须配合参考图或视频')
+    }
 
     const cost = videoCredits(duration)
     const chargeReason = '视频生成'
@@ -438,6 +451,7 @@ export class MaterialService {
       crop,
       refs,
       mentionedKeys,
+      referenceImageUrl,
       resolved,
       skipCharge,
     ).catch(console.error)
@@ -752,6 +766,7 @@ export class MaterialService {
     mentionedKeys?: string[],
     credentials?: { apiKey?: string; baseUrl?: string },
     model?: string,
+    videoImageRefs?: Array<{ refKey: string; label: string }>,
   ) {
     const { mergedText, skippedMerge } = await mergeRefsToPrompt({
       sources: extractTextSources(refs),
@@ -759,7 +774,11 @@ export class MaterialService {
       downstreamType,
       mentionedKeys: mentionedKeys?.length ? mentionedKeys : undefined,
       imageRefs:
-        downstreamType === 'image' ? imageRefDescriptorsFromRefs(refs) : undefined,
+        downstreamType === 'video'
+          ? videoImageRefs
+          : downstreamType === 'image'
+            ? imageRefDescriptorsFromRefs(refs)
+            : undefined,
       apiKey: credentials?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: credentials?.baseUrl ?? process.env.OPENAI_BASE_URL,
       model: mergeChatModel(downstreamType, model),
@@ -937,23 +956,44 @@ export class MaterialService {
     crop: string,
     refs: GenerationRefPayload[] | undefined,
     mentionedKeys: string[] | undefined,
+    referenceImageUrl: string | undefined,
     resolved: ResolvedGenerationProvider,
     skipCharge?: boolean,
   ) {
-    const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
+    const referenceBundle = buildVideoReferenceBundle(refs ?? [], referenceImageUrl)
+    for (const group of [
+      referenceBundle.images,
+      referenceBundle.videos,
+      referenceBundle.audios,
+    ]) {
+      for (const ref of group) {
+        ref.url = resolvePublicMediaUrls([ref.url])[0] ?? ref.url
+      }
+    }
+    if (
+      referenceBundle.audios.length
+      && !referenceBundle.images.length
+      && !referenceBundle.videos.length
+    ) {
+      throw new BadRequestException('参考音频须配合参考图或视频')
+    }
+    const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
       prompt,
       refs,
       'video',
       mentionedKeys,
       resolved.source === 'user' ? resolved.credentials : undefined,
       resolved.modelName,
+      referenceBundle.images.map(({ refKey, label }) => ({ refKey, label })),
     )
     this.logger.log(
       JSON.stringify({
         event: 'canvas_material_merge',
         skippedMerge,
         refsCount: refs?.length ?? 0,
-        referenceImages: referenceImages.length,
+        referenceImages: referenceBundle.images.length,
+        referenceVideos: referenceBundle.videos.length,
+        referenceAudios: referenceBundle.audios.length,
       }),
     )
     const built = buildVideoProviderOptions({
@@ -962,10 +1002,16 @@ export class MaterialService {
       aspectRatio,
       resolution,
       crop,
-      referenceImages,
+      referenceBundle,
+      videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
+      channelBaseUrl: resolved.credentials.baseUrl,
     })
-    const gatewayModel = resolved.source === 'user' ? resolved.modelName : built.model
-    const effectivePrompt = [mergedText, built.effectivePromptSuffix].filter(Boolean).join('\n')
+    const effectivePrompt = buildEffectiveVideoPrompt(mergedText, built)
+    const providerOptions = buildVideoProviderGenerateOptions(built)
+    if (resolved.source === 'user') {
+      providerOptions.model = resolved.modelName
+    }
+    const effectiveBundle = built.effectiveReferenceBundle
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
@@ -973,14 +1019,7 @@ export class MaterialService {
       }
       const { url } = await createVideoProvider(providerOpts(resolved)).generate(
         effectivePrompt,
-        {
-          model: gatewayModel,
-          duration: built.duration,
-          aspectRatio: built.aspectRatio,
-          resolution: built.resolution,
-          crop: built.crop,
-          image: built.image,
-        },
+        providerOptions,
       )
       const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existing || existing.status !== 'generating') return
@@ -1003,7 +1042,9 @@ export class MaterialService {
                 resolution,
                 crop,
                 image: built.image,
-                referenceImages,
+                referenceImages: effectiveBundle.images.map(({ url: refUrl }) => refUrl),
+                referenceVideos: effectiveBundle.videos.map(({ url: refUrl }) => refUrl),
+                referenceAudios: effectiveBundle.audios.map(({ url: refUrl }) => refUrl),
                 skippedMerge,
                 channelId: resolved.channelId,
                 effectivePrompt,
@@ -1041,7 +1082,9 @@ export class MaterialService {
                 resolution,
                 crop,
                 image: built.image,
-                referenceImages,
+                referenceImages: effectiveBundle.images.map(({ url: refUrl }) => refUrl),
+                referenceVideos: effectiveBundle.videos.map(({ url: refUrl }) => refUrl),
+                referenceAudios: effectiveBundle.audios.map(({ url: refUrl }) => refUrl),
                 skippedMerge,
                 effectivePrompt,
                 userId,

@@ -183,12 +183,13 @@ describe('MaterialService BYOK fallback_pending', () => {
     )
     const call = materialUpdate.mock.calls.find((c) => c[0].data.status === 'fallback_pending')![0]
     const meta = JSON.parse(String(call.data.metadata))
-    expect(meta.effectivePrompt).toBe('merged walk prompt')
+    expect(meta.effectivePrompt).toContain('merged walk prompt')
+    expect(meta.effectivePrompt).toContain('【参考图一致性】')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
     expect(meta.image).toBe('https://cdn.example.com/frame.png')
     expect(meta.refundedPoints).toBe(30)
     expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
-    expect(call.data.prompt).toBe('merged walk prompt')
+    expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
       apiKey: 'user-key',
