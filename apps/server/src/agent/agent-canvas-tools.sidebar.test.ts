@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing'
 import type { CanvasData, SidebarAttachment } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService } from '../studio/studio.service'
+import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 
 const emptyCanvas = (): CanvasData => ({ nodes: [], edges: [] })
@@ -59,6 +60,15 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
             generateAudio: vi.fn(),
             getGeneration: vi.fn(),
             expandPromptContent: vi.fn(),
+          },
+        },
+        {
+          provide: MaterialService,
+          useValue: {
+            cancelGeneration: vi.fn(),
+            getMaterialDiagnostic: vi.fn(),
+            confirmPlatformFallback: vi.fn(),
+            cancelPlatformFallback: vi.fn(),
           },
         },
       ],
