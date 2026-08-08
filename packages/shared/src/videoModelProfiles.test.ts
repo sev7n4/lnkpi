@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { clampVideoGenerationInput, resolveVideoGatewayModelId, resolveVideoModelProfile } from './videoModelProfiles'
+import {
+  clampVideoGenerationInput,
+  isSeedance1x,
+  resolveSeedance20Gateway,
+  resolveVideoGatewayModelId,
+  resolveVideoModelProfile,
+} from './videoModelProfiles'
 
 describe('resolveVideoModelProfile', () => {
   it('maps seedance-2.0-min to doubao-seedance-2.0-mini async multimodal', () => {
@@ -9,6 +15,7 @@ describe('resolveVideoModelProfile', () => {
     expect(p.maxImageRefs).toBe(9)
     expect(p.maxVideoRefs).toBe(3)
     expect(p.maxAudioRefs).toBe(3)
+    expect(p.variantTag).toBe('mini')
   })
 
   it('maps agnes-video to agnes_poll pixel_frames', () => {
@@ -39,5 +46,57 @@ describe('resolveVideoGatewayModelId', () => {
     expect(resolveVideoGatewayModelId('seedance-2.0-min', 'seedance-2.0-min')).toBe(
       'doubao-seedance-2.0-mini',
     )
+  })
+})
+
+describe('resolveSeedance20Gateway', () => {
+  it('maps catalog modelKey seedance-2.0-min to mini gateway', () => {
+    expect(resolveSeedance20Gateway('seedance-2.0-min', 'seedance-2.0-min')).toBe(
+      'doubao-seedance-2.0-mini',
+    )
+  })
+
+  it('maps BYOK gateway id doubao-seedance-2.0-fast without catalog entry', () => {
+    expect(resolveSeedance20Gateway('doubao-seedance-2.0-fast', 'doubao-seedance-2.0-fast')).toBe(
+      'doubao-seedance-2.0-fast',
+    )
+  })
+
+  it('returns null for non-seedance models', () => {
+    expect(resolveSeedance20Gateway('agnes-video-v2.0', 'agnes-video-v2.0')).toBeNull()
+  })
+})
+
+describe('isSeedance1x', () => {
+  it('detects legacy 1.0 gateway ids', () => {
+    expect(isSeedance1x('doubao-seedance-1-0-lite-i2v-250428')).toBe(true)
+    expect(isSeedance1x('doubao-seedance-2.0-fast')).toBe(false)
+  })
+})
+
+describe('resolveVideoGatewayModelId (extended)', () => {
+  it('preserves fast gateway instead of rewriting to mini', () => {
+    expect(
+      resolveVideoGatewayModelId('seedance-2.0-fast', 'doubao-seedance-2.0-fast'),
+    ).toBe('doubao-seedance-2.0-fast')
+  })
+
+  it('still maps seedance-2.0-min catalog key to mini', () => {
+    expect(resolveVideoGatewayModelId('seedance-2.0-min', 'seedance-2.0-min')).toBe(
+      'doubao-seedance-2.0-mini',
+    )
+  })
+})
+
+describe('resolveVideoModelProfile BYOK fast hint', () => {
+  it('uses apimart_multimodal for BYOK fast gateway hint', () => {
+    const p = resolveVideoModelProfile(
+      'doubao-seedance-2.0-fast',
+      'doubao-seedance-2.0-fast',
+      { channelBaseUrl: 'https://api.apimart.ai/v1' },
+    )
+    expect(p.refWire).toBe('apimart_multimodal')
+    expect(p.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+    expect(p.variantTag).toBe('fast')
   })
 })

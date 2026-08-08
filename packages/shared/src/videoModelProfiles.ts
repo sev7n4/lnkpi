@@ -8,6 +8,29 @@ export type VideoRefWire =
 
 export type VideoSizeWire = 'pixel_frames' | 'ratio_duration'
 export type VideoResponseMode = 'agnes_poll' | 'async_task'
+export type VideoResolutionTier = '480p' | '720p' | '1080p' | '4k'
+export type SeedanceVariantTag = 'mini' | 'standard' | 'fast' | 'face'
+
+export const SEEDANCE_20_GATEWAYS = {
+  mini: 'doubao-seedance-2.0-mini',
+  standard: 'doubao-seedance-2.0',
+  fast: 'doubao-seedance-2.0-fast',
+  face: 'doubao-seedance-2.0-face',
+} as const
+
+const GATEWAY_TO_VARIANT: Record<string, SeedanceVariantTag> = {
+  [SEEDANCE_20_GATEWAYS.mini]: 'mini',
+  [SEEDANCE_20_GATEWAYS.standard]: 'standard',
+  [SEEDANCE_20_GATEWAYS.fast]: 'fast',
+  [SEEDANCE_20_GATEWAYS.face]: 'face',
+}
+
+const RESOLUTION_RANK: Record<VideoResolutionTier, number> = {
+  '480p': 1,
+  '720p': 2,
+  '1080p': 3,
+  '4k': 4,
+}
 
 export interface VideoModelProfile {
   refWire: VideoRefWire
@@ -24,24 +47,91 @@ export interface VideoModelProfile {
   defaultGenerateAudio: boolean
   pollIntervalMs: number
   maxPollMs: number
-}
-
-const SEEDANCE_GATEWAY = 'doubao-seedance-2.0-mini'
-
-function isSeedanceModel(modelKey: string, gatewayModelId: string): boolean {
-  return (
-    /^seedance-2\.0-min$/i.test(modelKey) ||
-    /^doubao-seedance-/i.test(gatewayModelId)
-  )
+  variantTag?: SeedanceVariantTag
+  maxResolution?: VideoResolutionTier
+  supportsAssetUrl?: boolean
 }
 
 function isAgnesVideoModel(modelKey: string, gatewayModelId: string): boolean {
   return /^agnes-video-/i.test(modelKey) || /^agnes-video-/i.test(gatewayModelId)
 }
 
+export function isSeedance1x(gatewayModelId: string): boolean {
+  return /^doubao-seedance-1[.-]/i.test(gatewayModelId)
+}
+
+export function resolveSeedance20Gateway(
+  modelKey: string,
+  gatewayModelId: string,
+): string | null {
+  const catalogGw = Object.values(SEEDANCE_20_GATEWAYS).find((gw) =>
+    [modelKey, gatewayModelId].some((v) => v.toLowerCase() === gw.toLowerCase()),
+  )
+  if (catalogGw) return catalogGw
+  if (/^seedance-2\.0-min$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.mini
+  if (/^seedance-2\.0-fast$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.fast
+  if (/^seedance-2\.0-face$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.face
+  if (/^seedance-2\.0$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.standard
+  if (isSeedance1x(gatewayModelId)) return null
+  if (/^doubao-seedance-2\.0/i.test(gatewayModelId)) {
+    const exact = Object.values(SEEDANCE_20_GATEWAYS).find(
+      (gw) => gw.toLowerCase() === gatewayModelId.toLowerCase(),
+    )
+    return exact ?? null
+  }
+  return null
+}
+
 export function resolveVideoGatewayModelId(modelKey: string, gatewayModelId: string): string {
-  if (isSeedanceModel(modelKey, gatewayModelId)) return SEEDANCE_GATEWAY
-  return gatewayModelId
+  return resolveSeedance20Gateway(modelKey, gatewayModelId) ?? gatewayModelId
+}
+
+export function buildSeedance20Profile(gatewayModelId: string): VideoModelProfile {
+  const variantTag = GATEWAY_TO_VARIANT[gatewayModelId] ?? 'mini'
+  const maxResolution: VideoResolutionTier =
+    variantTag === 'standard' ? '4k' : variantTag === 'face' ? '1080p' : '720p'
+  const allowedResolutions: string[] =
+    variantTag === 'standard'
+      ? ['480p', '720p', '1080p', '4k']
+      : variantTag === 'face'
+        ? ['480p', '720p', '1080p']
+        : ['480p', '720p']
+
+  return {
+    refWire: 'apimart_multimodal',
+    sizeWire: 'ratio_duration',
+    responseMode: 'async_task',
+    gatewayModelId,
+    variantTag,
+    maxResolution,
+    supportsAssetUrl: variantTag === 'standard' || variantTag === 'fast',
+    maxImageRefs: 9,
+    maxVideoRefs: 3,
+    maxAudioRefs: 3,
+    minDuration: 4,
+    maxDuration: 15,
+    allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
+    allowedResolutions,
+    defaultGenerateAudio: true,
+    pollIntervalMs: 8_000,
+    maxPollMs: 600_000,
+  }
+}
+
+const APIMART_GENERIC_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
+  refWire: 'apimart_multimodal',
+  sizeWire: 'ratio_duration',
+  responseMode: 'async_task',
+  maxImageRefs: 9,
+  maxVideoRefs: 3,
+  maxAudioRefs: 3,
+  minDuration: 4,
+  maxDuration: 15,
+  allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
+  allowedResolutions: ['480p', '720p', '1080p'],
+  defaultGenerateAudio: true,
+  pollIntervalMs: 8_000,
+  maxPollMs: 600_000,
 }
 
 export function resolveVideoModelProfile(
@@ -49,6 +139,11 @@ export function resolveVideoModelProfile(
   gatewayModelId: string,
   opts?: { channelBaseUrl?: string },
 ): VideoModelProfile {
+  const seedanceGw = resolveSeedance20Gateway(modelKey, gatewayModelId)
+  if (seedanceGw) {
+    return buildSeedance20Profile(seedanceGw)
+  }
+
   const gw = resolveVideoGatewayModelId(modelKey, gatewayModelId)
   if (isAgnesVideoModel(modelKey, gw)) {
     return {
@@ -68,22 +163,10 @@ export function resolveVideoModelProfile(
       maxPollMs: 600_000,
     }
   }
-  if (isSeedanceModel(modelKey, gw) || opts?.channelBaseUrl?.includes('apimart.ai')) {
+  if (opts?.channelBaseUrl?.includes('apimart.ai')) {
     return {
-      refWire: 'apimart_multimodal',
-      sizeWire: 'ratio_duration',
-      responseMode: 'async_task',
+      ...APIMART_GENERIC_VIDEO_PROFILE,
       gatewayModelId: gw,
-      maxImageRefs: 9,
-      maxVideoRefs: 3,
-      maxAudioRefs: 3,
-      minDuration: 4,
-      maxDuration: 15,
-      allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'],
-      allowedResolutions: ['480p', '720p', '1080p'],
-      defaultGenerateAudio: true,
-      pollIntervalMs: 8_000,
-      maxPollMs: 600_000,
     }
   }
   return {
@@ -102,6 +185,24 @@ export function resolveVideoModelProfile(
     pollIntervalMs: 8_000,
     maxPollMs: 600_000,
   }
+}
+
+function clampResolution(
+  resolution: string,
+  profile: VideoModelProfile,
+  droppedFields: Array<{ field: string; reason: string }>,
+): string {
+  const cap = profile.maxResolution ?? '1080p'
+  const resolutionRank = RESOLUTION_RANK[resolution as VideoResolutionTier] ?? 0
+  const capRank = RESOLUTION_RANK[cap] ?? 0
+  if (resolutionRank > capRank) {
+    droppedFields.push({
+      field: 'resolution',
+      reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${cap}`,
+    })
+    return cap
+  }
+  return resolution
 }
 
 export function clampVideoGenerationInput(
@@ -125,10 +226,7 @@ export function clampVideoGenerationInput(
     droppedFields.push({ field: 'aspectRatio', reason: `fallback to 16:9` })
     aspectRatio = '16:9'
   }
-  if (profile.gatewayModelId === SEEDANCE_GATEWAY && resolution === '1080p') {
-    droppedFields.push({ field: 'resolution', reason: '1080p not on mini; use 720p' })
-    resolution = '720p'
-  }
+  resolution = clampResolution(resolution, profile, droppedFields)
 
   const referenceImages = input.referenceImages.slice(0, profile.maxImageRefs)
   const referenceVideos = input.referenceVideos.slice(0, profile.maxVideoRefs)
