@@ -2,11 +2,15 @@ import { describe, expect, it, vi } from 'vitest'
 import * as shared from '@lnkpi/shared'
 import {
   buildAudioRequest,
+  buildEffectiveVideoPrompt,
+  buildVideoProviderGenerateOptions,
   buildVideoProviderOptions,
   buildImageProviderOptions,
   buildEffectiveImagePrompt,
   buildImageProviderGenerateOptions,
+  ensureSeedanceRefTags,
 } from './generation-adapter'
+import { buildVideoReferenceBundle } from './video-refs'
 
 describe('buildAudioRequest', () => {
   it('maps native speed/volume/pitch for minimax and prefixes language when needed', () => {
@@ -35,17 +39,77 @@ describe('buildAudioRequest', () => {
 })
 
 describe('buildVideoProviderOptions', () => {
-  it('puts first reference image into options.image', () => {
+  it('uses native image_urls for seedance multi-ref', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/b.png' },
+    ])
     const r = buildVideoProviderOptions({
       modelKey: 'seedance-2.0-min',
-      referenceImages: ['https://cdn.example/a.png', 'https://cdn.example/b.png'],
       duration: 5,
       aspectRatio: '16:9',
       resolution: '720p',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refImageMode).toBe('native')
+    expect(r.meta.refWire).toBe('apimart_multimodal')
+    expect(r.providerOptions.referenceImages).toEqual([
+      'https://cdn/a.png',
+      'https://cdn/b.png',
+    ])
+    expect(r.meta.nativeParams.image_urls).toEqual([
+      'https://cdn/a.png',
+      'https://cdn/b.png',
+    ])
+    expect(r.meta.nativeParams.size).toBe('16:9')
+    expect(r.meta.nativeParams.aspectRatio).toBeUndefined()
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('uses agnes keyframes for 2+ images on agnes', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/b.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'agnes-video-v2.0',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refWire).toBe('agnes_keyframes')
+    expect(r.providerOptions.referenceImages).toHaveLength(2)
+    expect(r.image).toBeUndefined()
+  })
+
+  it('keeps referenceImages backward compatibility', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'agnes-video-v2.0',
+      referenceImages: ['https://cdn.example/a.png'],
     })
     expect(r.image).toBe('https://cdn.example/a.png')
-    expect(r.meta.refImageMode).toBe('primary_image')
-    expect(r.meta.referenceImageCount).toBe(2)
+    expect(r.meta.refWire).toBe('agnes_single_image')
+    expect(r.meta.referenceImageCount).toBe(1)
+  })
+
+  it('builds seedance tags, consistency prompt, and server options', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png', label: '人物' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/v.mp4', label: '运镜' },
+    ])
+    const built = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      referenceBundle: bundle,
+    })
+    expect(ensureSeedanceRefTags('保持 @Image1', bundle)).toBe('保持 @Image1 @Video1')
+    expect(buildEffectiveVideoPrompt('保持角色', built, bundle)).toMatch(
+      /保持角色 @Image1 @Video1[\s\S]*【参考图一致性】/,
+    )
+    expect(buildVideoProviderGenerateOptions(built)).toEqual(built.providerOptions)
+    expect(built.meta).toMatchObject({
+      scenario: 'S6',
+      refVideoMode: 'native',
+      refAudioMode: 'none',
+      responseMode: 'async_task',
+    })
   })
 })
 
