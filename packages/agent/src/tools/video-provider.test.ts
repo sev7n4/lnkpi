@@ -111,6 +111,29 @@ describe('ApimartVideoProvider', () => {
     expect(url).toBe('https://cdn/v.mp4')
     expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).image_urls).toBeUndefined()
   })
+
+  it('normalizes apimart result.url when returned as string array', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ task_id: 'task_arr' }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: {
+            status: 'completed',
+            result: {
+              url: [
+                'https://getapib.org/video/9998213808887624-db838584-132d-48ee-a487-440a1a26f801-video_task_01KZGMCY3V95MGPWVY46C3NWF3.mp4',
+              ],
+            },
+          },
+        }),
+      })
+    const provider = new ApimartVideoProvider('key', 'https://api.apimart.ai/v1', 0, 30_000)
+    const { url } = await provider.generate('hello', { model: 'doubao-seedance-2.0-mini', duration: 5 })
+    expect(url).toBe(
+      'https://getapib.org/video/9998213808887624-db838584-132d-48ee-a487-440a1a26f801-video_task_01KZGMCY3V95MGPWVY46C3NWF3.mp4',
+    )
+  })
 })
 
 describe('resolveVideoParams', () => {

@@ -176,15 +176,26 @@ function extractApimartTaskId(json: unknown): string | undefined {
   return (first as { task_id?: string })?.task_id
 }
 
+function pickFirstUrl(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const picked = pickFirstUrl(item)
+      if (picked) return picked
+    }
+  }
+  return undefined
+}
+
 function extractApimartVideoUrl(data: unknown): string | undefined {
   const result = (data as {
-    result?: { video_url?: string; url?: string; videos?: Array<{ url?: string }> }
+    result?: { video_url?: unknown; url?: unknown; videos?: Array<{ url?: unknown }> }
   }).result
   return (
-    result?.video_url ??
-    result?.url ??
-    result?.videos?.[0]?.url ??
-    (data as { url?: string }).url
+    pickFirstUrl(result?.video_url) ??
+    pickFirstUrl(result?.url) ??
+    pickFirstUrl(result?.videos?.[0]?.url) ??
+    pickFirstUrl((data as { url?: unknown }).url)
   )
 }
 
