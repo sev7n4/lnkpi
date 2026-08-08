@@ -28,6 +28,8 @@ describe('video generate controllers', () => {
       undefined,
       'https://example.com/node-ref.png',
       { sessionId: undefined, nodeId: undefined },
+      undefined,
+      undefined,
     )
   })
 
