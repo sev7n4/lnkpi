@@ -88,8 +88,44 @@ class ApplySidebarAttachmentsInput(BaseModel):
     )
 
 
+class FocusNodesInput(BaseModel):
+    node_ids: list[str] = Field(description="Canvas node ids to focus in viewport")
+
+
+class DuplicateNodeInput(BaseModel):
+    node_id: str = Field(description="Source canvas node id to duplicate")
+
+
+class UploadMediaInput(BaseModel):
+    url: str = Field(description="Public media URL to attach")
+    media_type: str = Field(description="image, video, or audio")
+    title: str | None = Field(default=None, description="Optional node title")
+
+
+class ExportMediaInput(BaseModel):
+    node_ids: list[str] = Field(description="Node ids whose media URLs to export")
+
+
+class GroupNodesInput(BaseModel):
+    node_ids: list[str] = Field(description="At least two node ids to group")
+    title: str | None = Field(default=None, description="Optional group title")
+
+
+class UngroupNodeInput(BaseModel):
+    group_id: str = Field(description="Group node id to dissolve")
+
+
+class ArrangeNodesGridInput(BaseModel):
+    node_ids: list[str] = Field(description="Node ids to arrange in a grid")
+    gap: int | None = Field(default=None, description="Grid gap in pixels")
+
+
 class ListGenerationTasksInput(BaseModel):
     type: str | None = Field(default=None, description="Optional filter: image, video, etc.")
+
+
+class OpenImageEditorInput(BaseModel):
+    node_id: str = Field(description="Image node id to open in the refine editor")
 
 
 def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]]:
@@ -177,6 +213,49 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def focus_node(node_id: str) -> dict:
         return {"ok": True, "canvasCommands": [{"type": "focus_node", "nodeId": node_id}]}
+
+    async def focus_nodes(node_ids: list[str]) -> dict:
+        return {"ok": True, "canvasCommands": [{"type": "focus_nodes", "nodeIds": node_ids}]}
+
+    async def undo() -> dict:
+        return {"ok": True, "canvasCommands": [{"type": "undo"}]}
+
+    async def redo() -> dict:
+        return {"ok": True, "canvasCommands": [{"type": "redo"}]}
+
+    async def open_image_editor(node_id: str) -> dict:
+        return {
+            "ok": True,
+            "canvasCommands": [{"type": "open_image_editor", "nodeId": node_id}],
+        }
+
+    async def get_canvas_layout() -> dict:
+        return await client.get_canvas_layout()
+
+    async def duplicate_node(node_id: str) -> dict:
+        return await client.duplicate_node(node_id=node_id)
+
+    async def upload_media_to_canvas(
+        url: str, media_type: str, title: str | None = None
+    ) -> dict:
+        return await client.upload_media_to_canvas(
+            url=url, media_type=media_type, title=title
+        )
+
+    async def export_media_package(node_ids: list[str]) -> dict:
+        return await client.export_media_package(node_ids=node_ids)
+
+    async def group_nodes(node_ids: list[str], title: str | None = None) -> dict:
+        return await client.group_nodes(node_ids=node_ids, title=title)
+
+    async def ungroup_node(group_id: str) -> dict:
+        return await client.ungroup_node(group_id=group_id)
+
+    async def arrange_nodes_grid(node_ids: list[str], gap: int | None = None) -> dict:
+        return await client.arrange_nodes_grid(node_ids=node_ids, gap=gap)
+
+    async def get_image_edit_capabilities(node_id: str) -> dict:
+        return await client.get_image_edit_capabilities(node_id=node_id)
 
     async def apply_sidebar_attachments(
         node_ids: list[str],
@@ -388,6 +467,111 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="apply_sidebar_attachments",
                 description="Write sidebar attachments onto canvas nodes (localRefs or ref edges)",
                 args_schema=ApplySidebarAttachmentsInput,
+            ),
+        ),
+        (
+            "focus_nodes",
+            StructuredTool.from_function(
+                coroutine=focus_nodes,
+                name="focus_nodes",
+                description="Pan/zoom the canvas viewport to multiple nodes (UI command)",
+                args_schema=FocusNodesInput,
+            ),
+        ),
+        (
+            "undo",
+            StructuredTool.from_function(
+                coroutine=undo,
+                name="undo",
+                description="Undo the last local canvas edit (client undo stack)",
+            ),
+        ),
+        (
+            "redo",
+            StructuredTool.from_function(
+                coroutine=redo,
+                name="redo",
+                description="Redo the last undone canvas edit (client undo stack)",
+            ),
+        ),
+        (
+            "open_image_editor",
+            StructuredTool.from_function(
+                coroutine=open_image_editor,
+                name="open_image_editor",
+                description="Open the image refine editor for a node (UI command)",
+                args_schema=OpenImageEditorInput,
+            ),
+        ),
+        (
+            "get_canvas_layout",
+            StructuredTool.from_function(
+                coroutine=get_canvas_layout,
+                name="get_canvas_layout",
+                description="List canvas node positions, sizes, and group hierarchy",
+            ),
+        ),
+        (
+            "duplicate_node",
+            StructuredTool.from_function(
+                coroutine=duplicate_node,
+                name="duplicate_node",
+                description="Clone a canvas node with offset position",
+                args_schema=DuplicateNodeInput,
+            ),
+        ),
+        (
+            "upload_media_to_canvas",
+            StructuredTool.from_function(
+                coroutine=upload_media_to_canvas,
+                name="upload_media_to_canvas",
+                description="Add a media node from a public URL",
+                args_schema=UploadMediaInput,
+            ),
+        ),
+        (
+            "export_media_package",
+            StructuredTool.from_function(
+                coroutine=export_media_package,
+                name="export_media_package",
+                description="Export downloadable URLs for node media",
+                args_schema=ExportMediaInput,
+            ),
+        ),
+        (
+            "get_image_edit_capabilities",
+            StructuredTool.from_function(
+                coroutine=get_image_edit_capabilities,
+                name="get_image_edit_capabilities",
+                description="Check whether a node supports image refine modes",
+                args_schema=NodeIdInput,
+            ),
+        ),
+        (
+            "group_nodes",
+            StructuredTool.from_function(
+                coroutine=group_nodes,
+                name="group_nodes",
+                description="Wrap nodes in a group container (graph batch)",
+                args_schema=GroupNodesInput,
+            ),
+        ),
+        (
+            "ungroup_node",
+            StructuredTool.from_function(
+                coroutine=ungroup_node,
+                name="ungroup_node",
+                description="Dissolve a group node and restore child positions",
+                args_schema=UngroupNodeInput,
+            ),
+        ),
+        (
+            "arrange_nodes_grid",
+            StructuredTool.from_function(
+                coroutine=arrange_nodes_grid,
+                name="arrange_nodes_grid",
+                description="Arrange nodes in a grid layout (graph batch)",
+                args_schema=ArrangeNodesGridInput,
             ),
         ),
     ]

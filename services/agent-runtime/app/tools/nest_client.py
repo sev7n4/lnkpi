@@ -475,6 +475,87 @@ class NestCanvasClient:
             },
         )
 
+    async def get_canvas_layout(self) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/get-canvas-layout",
+            {"sessionId": self._session_id},
+        )
+
+    async def duplicate_node(self, *, node_id: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/duplicate-node",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeId": node_id,
+            },
+        )
+
+    async def upload_media_to_canvas(
+        self,
+        *,
+        url: str,
+        media_type: str,
+        title: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "url": url,
+            "mediaType": media_type,
+        }
+        if title:
+            body["title"] = title
+        return await self._post("/agent/internal/upload-media-to-canvas", body)
+
+    async def export_media_package(self, *, node_ids: list[str]) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/export-media-package",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeIds": node_ids,
+            },
+        )
+
+    async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "nodeIds": node_ids,
+        }
+        if title:
+            body["title"] = title
+        return await self._post("/agent/internal/group-nodes", body)
+
+    async def ungroup_node(self, *, group_id: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/ungroup-node",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "groupId": group_id,
+            },
+        )
+
+    async def arrange_nodes_grid(
+        self, *, node_ids: list[str], gap: int | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "nodeIds": node_ids,
+        }
+        if gap is not None:
+            body["gap"] = gap
+        return await self._post("/agent/internal/arrange-nodes-grid", body)
+
+    async def get_image_edit_capabilities(self, *, node_id: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/get-image-edit-capabilities",
+            {"sessionId": self._session_id, "nodeId": node_id},
+        )
+
     async def get_agent_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
         """Load conversation history for one thread (Nest single-writer)."""
         return await self._post(

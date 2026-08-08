@@ -2021,6 +2021,27 @@ useCanvasKeyboard({
   },
 })
 
+function handleAgentUndo() {
+  if (canvasUndo.undo()) void saveCanvas()
+}
+
+function handleAgentRedo() {
+  if (canvasUndo.redo()) void saveCanvas()
+}
+
+function handleAgentOpenImageEditor(nodeId: string) {
+  const node = findNodeById(nodeId)
+  if (!node || (node.type !== 'image' && node.type !== 'mediaInput')) return
+  const data = node.data as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
+  if (!url) return
+  canvasEditor.openImageEditor({
+    nodeId: node.id,
+    url,
+    prompt: data.prompt as string | undefined,
+  })
+}
+
 function patchSelectedNode(patch: Record<string, unknown>) {
   if (!editorNode.value) return
   debouncedNodePatch.patchNode(editorNode.value.id, patch)
@@ -2805,6 +2826,9 @@ onMounted(() => {
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
         @focus-all="focusNodesByIds"
+        @undo="handleAgentUndo"
+        @redo="handleAgentRedo"
+        @open-image-editor="handleAgentOpenImageEditor"
       />
     </div>
 

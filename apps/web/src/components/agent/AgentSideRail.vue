@@ -89,6 +89,9 @@ const emit = defineEmits<{
   turnComplete: []
   focusNode: [nodeId: string]
   focusAll: [nodeIds: string[]]
+  undo: []
+  redo: []
+  openImageEditor: [nodeId: string]
   expandedChange: [expanded: boolean]
 }>()
 
@@ -936,6 +939,12 @@ function handleEvent(event: { type: string; data: unknown }) {
         emit('focusNode', cmd.nodeId)
       } else if (cmd.type === 'focus_nodes' && cmd.nodeIds?.length) {
         emit('focusAll', cmd.nodeIds)
+      } else if (cmd.type === 'undo') {
+        emit('undo')
+      } else if (cmd.type === 'redo') {
+        emit('redo')
+      } else if (cmd.type === 'open_image_editor' && cmd.nodeId) {
+        emit('openImageEditor', cmd.nodeId)
       } else if (cmd.type === 'introduce_nodes' && cmd.attachments?.length) {
         for (const att of cmd.attachments) {
           if (sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) break
