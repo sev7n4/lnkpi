@@ -380,11 +380,53 @@ describe('AgentCanvasToolsService', () => {
       undefined,
       '1080p',
       'center',
+      undefined,
       { sessionId: 's1', nodeId: 'vid-1' },
     )
     expect(result.status).toBe('completed')
     expect(result.url).toBe('https://cdn.example/vid.mp4')
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/vid.mp4')
+  })
+
+  it('runVideoGeneration passes node referenceImageUrl to Studio', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'vid-1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '产品展示视频',
+            status: 'draft',
+            referenceImageUrl: 'https://example.com/node-ref.png',
+          },
+        },
+      ],
+      edges: [],
+    }
+    getGeneration.mockResolvedValue({
+      id: 'gen-v1',
+      status: 'completed',
+      url: 'https://cdn.example/vid.mp4',
+    })
+    await svc.runVideoGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'vid-1',
+    })
+    expect(generateVideo).toHaveBeenCalledWith(
+      'u1',
+      '产品展示视频',
+      'platform::user-default-video',
+      10,
+      '9:16',
+      expect.any(Array),
+      undefined,
+      '1080p',
+      'center',
+      'https://example.com/node-ref.png',
+      { sessionId: 's1', nodeId: 'vid-1' },
+    )
   })
 
   it('runTextGeneration calls Studio and writes content', async () => {

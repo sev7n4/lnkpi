@@ -224,7 +224,7 @@ describe('MaterialService video', () => {
     expect(videoGenerate).toHaveBeenCalledWith(
       'walk',
       expect.objectContaining({
-        model: 'seedance-2.0-min',
+        model: 'doubao-seedance-2.0-mini',
         duration: 10,
         aspectRatio: '16:9',
         resolution: '720p',
@@ -245,17 +245,75 @@ describe('MaterialService video', () => {
     expect(materialCreate).not.toHaveBeenCalled()
   })
 
-  it('passes I1 as video options.image', async () => {
+  it('passes the full video reference bundle and image descriptors', async () => {
     await svc.generateVideo({
       userId: 'u1',
       shotId: 'shot-1',
       prompt: 'walk',
       model: 'seedance-2.0-min',
       duration: 5,
-      refs: [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/ref.png' }],
+      refs: [
+        {
+          refKey: 'I1',
+          mediaType: 'image',
+          label: '人物',
+          url: 'https://example.com/ref.png',
+        },
+        { refKey: 'V1', mediaType: 'video', url: 'https://example.com/ref.mp4' },
+        { refKey: 'A1', mediaType: 'audio', url: 'https://example.com/ref.mp3' },
+      ],
     })
     await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
-    const [, opts] = videoGenerate.mock.calls[0]
-    expect(opts).toMatchObject({ image: 'https://example.com/ref.png' })
+    const [effectivePrompt, opts] = videoGenerate.mock.calls[0]
+    expect(effectivePrompt).toContain('@Image1')
+    expect(effectivePrompt).toContain('@Video1')
+    expect(effectivePrompt).toContain('@Audio1')
+    expect(opts).toMatchObject({
+      model: 'doubao-seedance-2.0-mini',
+      referenceImages: ['https://example.com/ref.png'],
+      referenceVideos: ['https://example.com/ref.mp4'],
+      referenceAudios: ['https://example.com/ref.mp3'],
+    })
+    expect(mergeRefsToPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        downstreamType: 'video',
+        imageRefs: [{ refKey: 'I1', label: '人物' }],
+      }),
+    )
+  })
+
+  it('uses the node referenceImageUrl when refs contain no image', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'seedance-2.0-min',
+      referenceImageUrl: 'https://example.com/node-ref.png',
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls[0]?.[1]).toMatchObject({
+      referenceImages: ['https://example.com/node-ref.png'],
+    })
+  })
+
+  it('rejects audio-only video references before charging', async () => {
+    await expect(
+      svc.generateVideo({
+        userId: 'u1',
+        shotId: 'shot-1',
+        prompt: 'walk',
+        model: 'seedance-2.0-min',
+        refs: [
+          {
+            refKey: 'A1',
+            mediaType: 'audio',
+            url: 'https://example.com/ref.mp3',
+          },
+        ],
+      }),
+    ).rejects.toThrow('参考音频须配合参考图或视频')
+    expect(consume).not.toHaveBeenCalled()
+    expect(materialCreate).not.toHaveBeenCalled()
+    expect(videoGenerate).not.toHaveBeenCalled()
   })
 })

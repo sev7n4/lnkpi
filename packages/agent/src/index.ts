@@ -41,11 +41,27 @@ export {
   imageRefDescriptorsFromRefs,
   providerReferenceImages,
   stripRefImagePromptTags,
+  ensureSeedanceRefTags,
+  buildVideoRefConsistencyBlock,
+  buildEffectiveVideoPrompt,
   buildVideoProviderOptions,
+  buildVideoProviderGenerateOptions,
 } from './studio/generation-adapter'
+export {
+  buildVideoReferenceBundle,
+  inferVideoScenario,
+} from './studio/video-refs'
+export type {
+  VideoReferenceItem,
+  VideoReferenceBundle,
+  VideoScenario,
+  VideoMode,
+} from './studio/video-refs'
 export type {
   AdapterMeta,
   BuiltAudioRequest,
   ImageRefDescriptor,
   ImageProviderGenerateOptions,
+  BuiltVideoProviderOptions,
+  VideoProviderGenerateOptions,
 } from './studio/generation-adapter'

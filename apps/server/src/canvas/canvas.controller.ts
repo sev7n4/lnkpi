@@ -130,6 +130,10 @@ class GenerateVideoDto {
   crop?: string
 
   @IsOptional()
+  @IsString()
+  referenceImageUrl?: string
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CanvasRefDto)
@@ -435,6 +439,7 @@ export class CanvasController {
       crop: dto.crop,
       refs: dto.refs,
       mentionedKeys: dto.mentionedKeys,
+      referenceImageUrl: dto.referenceImageUrl,
     })
     return { code: 0, message: 'ok', data }
   }

@@ -50,6 +50,7 @@ export const canvasApi = {
       model?: string
       refs?: GenerationRefPayload[]
       mentionedKeys?: string[]
+      referenceImageUrl?: string
     },
   ) =>
     api.post('/agent/canvas/material/generate-video', {
@@ -62,6 +63,7 @@ export const canvasApi = {
       resolution: settings?.resolution,
       refs: settings?.refs,
       mentionedKeys: settings?.mentionedKeys,
+      referenceImageUrl: settings?.referenceImageUrl,
     }),
   statusBatch: (ids: string[]) =>
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),

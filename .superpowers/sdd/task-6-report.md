@@ -1,0 +1,125 @@
+# Task 6 实施报告：Server Studio + Material 视频接线
+
+## 完成内容
+
+- Studio 与 Material 视频生成均改用 `buildVideoReferenceBundle` 组装图片、视频、音频引用。
+- 视频 prompt 合并向 `mergeRefsToPrompt` 传入图片引用描述，并通过 `buildEffectiveVideoPrompt` 生成含引用标签及一致性约束的最终提示词。
+- 使用 `buildVideoProviderOptions` 与 `buildVideoProviderGenerateOptions` 生成完整 provider 参数，并原样传给 `createVideoProvider().generate()`。
+- Material 支持在 refs 缺少图片时使用节点 `referenceImageUrl` 作为后备引用图。
+- 图片、视频、音频引用 URL 均经过公共媒体地址解析；有效引用数组写入生成元数据，供失败回退链路保留。
+- 仅提供参考音频时，在扣费和创建生成记录前抛出 `BadRequestException('参考音频须配合参考图或视频')`。
+
+## 测试覆盖
+
+- Studio：完整图片/视频/音频引用、视频合并图片描述、有效 prompt、完整 providerOptions、仅音频拒绝。
+- Material：完整引用链路、节点后备参考图、仅音频扣费前拒绝、BYOK fallback prompt 与引用保留。
+
+## 验证结果
+
+- `pnpm --filter @lnkpi/server test -- studio.fallback.test.ts studio.integration.test.ts material.fallback.test.ts material.service.test.ts`
+  - 4 个测试文件、49 项测试全部通过。
+- `pnpm --filter @lnkpi/server build`
+  - 通过。
+- `pnpm build`
+  - shared、agent、web、server 全仓构建通过。
+- 编辑文件 IDE lint
+  - 无诊断。
+
+# Task 6 Report: Frontend store — loadHistory + linkedOutputs
+
+**Branch:** `feat/agent-conversation-isolation`  
+**Commit:** `feat(web): agent store linkedOutputs in loadHistory`
+
+## Summary
+
+Extended the Pinia agent store so `loadHistory` parses persisted `linkedOutputs` JSON into typed `LinkedCanvasOutput[]` on each message, and always replaces the in-memory messages array (no append/merge).
+
+## Changes
+
+| File | Action |
+|------|--------|
+| `apps/web/src/stores/agent.ts` | **Modified** — `AgentStreamMessage.linkedOutputs`, `parseLinkedOutputs()`, updated `loadHistory()` |
+| `apps/web/src/stores/agent.test.ts` | **Modified** — tests for linkedOutputs restore + replace semantics |
+
+## API
+
+```typescript
+export interface AgentStreamMessage {
+  // ...
+  linkedOutputs?: LinkedCanvasOutput[]
+}
+
+function parseLinkedOutputs(raw: string | undefined | null): LinkedCanvasOutput[] | undefined
+// JSON.parse → validate each item with LinkedCanvasOutputSchema → undefined if empty/invalid
+
+function loadHistory(history: AgentChatMessage[]): void
+// messages.value = history.map(...) — full replace, not append
+```
+
+## Verification
+
+```bash
+pnpm --filter @lnkpi/web test agent.test.ts
+```
+
+```
+✓ src/stores/agent.test.ts (4 tests)
+Test Files  1 passed (1)
+Tests       4 passed (4)
+```
+
+## Notes
+
+- `AgentChatMessage` in `@lnkpi/shared` does not yet declare `linkedOutputs?: string`; store uses local `PersistedAgentMessage` cast until shared type is extended.
+- `clear()` unchanged — thread bootstrap in Task 7 will call `clear()` before `loadHistory()`.
+
+## Status
+
+- [x] Step 1: Extend `AgentStreamMessage` with `linkedOutputs`
+- [x] Step 2: `loadHistory` always replaces messages + `parseLinkedOutputs`
+- [x] Step 3: Tests + commit
+
+## Seedance/Agnes Review Fix：referenceImageUrl HTTP 透传
+
+- Canvas 与 Studio 的 `GenerateVideoDto` 新增可选字符串字段 `referenceImageUrl`，避免全局 DTO 白名单过滤该字段。
+- Canvas Controller 将字段传给 `MaterialService.generateVideo`；Studio Controller 与 `StudioService.generateVideo` 将字段传给 `buildVideoReferenceBundle`。
+- 前端检查结论：普通上游图片引用会进入 `refs`，但节点 `data.referenceImageUrl` 此前不会进入视频生成请求；现已在 Studio 和 Canvas 两条生成路径透传。
+- 新增 Controller 透传测试和 Studio 后备参考图集成测试，并调整节点生成、Agent Canvas 调用测试。
+
+验证：
+
+- `pnpm --filter @lnkpi/server test`：26 个测试文件、200 项测试通过。
+- `pnpm --filter @lnkpi/web test -- useNodeGeneration.test.ts`：39 项测试通过。
+- `pnpm build`：shared、agent、web、server 全仓构建通过。
+- 编辑文件 IDE lint：无诊断。
+
+## Agent Canvas 视频 referenceImageUrl 透传
+
+**Commit:** `fix(server): pass referenceImageUrl from agent canvas video tools`
+
+### 问题
+
+`AgentCanvasToolsService.runVideoGeneration` 调用 `studio.generateVideo` 时第 10 个参数固定传 `undefined`，节点 `data.referenceImageUrl` 未进入 Studio 视频生成链路。
+
+### 修复
+
+| File | Action |
+|------|--------|
+| `apps/server/src/agent/agent-canvas-tools.service.ts` | **Modified** — 从 `node.data.referenceImageUrl` 提取并传给 `generateVideo` |
+| `apps/server/src/agent/agent-canvas-tools.service.test.ts` | **Modified** — 新增 `runVideoGeneration passes node referenceImageUrl to Studio` 测试 |
+
+`StudioService.generateVideo` 已支持 `referenceImageUrl` 参数（第 10 个 positional arg），并通过 `buildVideoReferenceBundle` 在 refs 无图片时作为 I1 后备。
+
+### 验证
+
+```bash
+pnpm --filter @lnkpi/server test -- agent-canvas-tools.service.test.ts studio.integration.test.ts video-reference.controller.test.ts
+```
+
+```
+✓ agent-canvas-tools.service.test.ts (32 tests)
+✓ studio.integration.test.ts (7 tests)
+✓ video-reference.controller.test.ts (2 tests)
+Test Files  3 passed (3)
+Tests       41 passed (41)
+```

@@ -663,6 +663,7 @@ async function cancelRemoteGeneration(nodeId: string) {
     const linkedShotEdge = findIncomingEdge(deps.edges.value, node.id)
     const shotId = linkedShotEdge?.source
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
+    const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
 
     if (shotNode?.type === 'shot' && shotId) {
       deps.patchNodeData(node.id, {
@@ -677,7 +678,12 @@ async function cancelRemoteGeneration(nodeId: string) {
       })
       if (nodeType === 'video') {
         const params = resolveCanvasVideoParams(data)
-        const { data: matRes } = await canvasApi.generateVideo(shotId, prompt, { ...params, refs, mentionedKeys })
+        const { data: matRes } = await canvasApi.generateVideo(shotId, prompt, {
+          ...params,
+          refs,
+          mentionedKeys,
+          referenceImageUrl: refImage || undefined,
+        })
         const materialId = (matRes.data as { id: string }).id
         deps.patchNodeData(node.id, { materialId })
         deps.patchNodeData(shotId, { materialId })
@@ -699,8 +705,6 @@ async function cancelRemoteGeneration(nodeId: string) {
       status: NODE_GENERATION_STATUS.generating,
       prompt,
     })
-
-    const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
 
     if (nodeType === 'image') {
       const aspectRatio = String(data.imageAspect ?? '16:9')
@@ -738,6 +742,7 @@ async function cancelRemoteGeneration(nodeId: string) {
       mentionedKeys,
       settings?.resolution,
       settings?.crop,
+      refImage || undefined,
       signal,
       canvasScope(node.id),
     )
@@ -851,7 +856,16 @@ async function cancelRemoteGeneration(nodeId: string) {
     if (shouldGenerateVideo) {
       const childNode = findShotMediaChild(deps.nodes.value, deps.edges.value, node.id, 'video')
       const params = resolveCanvasVideoParams(childNode?.data ?? {})
-      const { data: matRes } = await canvasApi.generateVideo(node.id, prompt, { ...params, refs, mentionedKeys })
+      const referenceImageUrl =
+        firstImageRefUrl(refs)
+        || String(childNode?.data?.referenceImageUrl ?? '').trim()
+        || undefined
+      const { data: matRes } = await canvasApi.generateVideo(node.id, prompt, {
+        ...params,
+        refs,
+        mentionedKeys,
+        referenceImageUrl,
+      })
       const materialId = (matRes.data as { id: string }).id
       deps.patchNodeData(node.id, { materialId })
       if (childNode) deps.patchNodeData(childNode.id, { materialId })

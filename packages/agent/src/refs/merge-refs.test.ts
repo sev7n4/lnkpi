@@ -128,6 +128,39 @@ describe('mergeRefsToPrompt LLM merge', () => {
     expect(empty.mergedText).toContain('【T2·B】')
   })
 
+  it('includes imageRefs role guidance for video downstream', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'merged result' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await mergeRefsToPrompt({
+      sources: [{ refKey: 'T1', label: '镜头', text: '主角奔跑' }],
+      localPrompt: '城市夜景',
+      downstreamType: 'video',
+      imageRefs: [
+        { refKey: 'I1', label: '主角' },
+        { refKey: 'I2', label: '场景' },
+      ],
+      apiKey: 'test-key',
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string) as {
+      messages: Array<{ role: string; content: string }>
+    }
+    const system = body.messages.find((m) => m.role === 'system')?.content ?? ''
+    const user = body.messages.find((m) => m.role === 'user')?.content ?? ''
+    expect(system).toContain('I1、I2')
+    expect(system).toContain('第一张为主参考')
+    expect(system).toContain('参考图 In')
+    expect(user).toContain('【参考图（按传入顺序）】')
+    expect(user).toContain('第1张参考图 I1（主角）')
+    expect(user).toContain('第2张参考图 I2（场景）')
+    expect(user).toContain('明确各参考图角色')
+  })
+
   it('includes mentionedKeys in LLM system and user messages', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

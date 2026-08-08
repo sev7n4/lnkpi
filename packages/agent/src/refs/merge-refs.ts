@@ -14,7 +14,8 @@ const DOWNSTREAM_SYSTEM: Record<'text' | 'image' | 'video' | 'audio', string> = 
   text: '你是专业 AI 创作助手。将多条文本参考归纳成一条清晰、完整的中文文案，保留关键约束与细节，注明曾参考哪些 Tn。',
   image:
     '你是图像提示词专家。将多条文本参考归纳成一条适合文生图/图生图的中文提示词，保留风格、主体与构图约束，注明曾参考哪些 Tn；若存在参考图 In，须在提示词中明确每张参考图的角色，并强调保留参考图的主体形态、关键细节与构图一致性。',
-  video: '你是视频脚本专家。将多条文本参考归纳成一条适合文生视频的中文提示词，保留镜头与动作描述，注明曾参考哪些 Tn。',
+  video:
+    '你是视频脚本专家。将多条文本参考归纳成一条适合文生视频的中文提示词，保留镜头与动作描述，注明曾参考哪些 Tn；若存在参考图 In，须在提示词中明确每张参考图的角色，并强调保留参考图的主体形态、关键细节与构图一致性。',
   audio: '你是配音文案专家。将多条文本参考归纳成一条适合 TTS 朗读的中文旁白/台词，口语自然，注明曾参考哪些 Tn。',
 }
 
@@ -50,7 +51,7 @@ function buildSystemPrompt(
   imageRefs?: ImageRefDescriptor[],
 ): string {
   let base = DOWNSTREAM_SYSTEM[downstreamType]
-  if (downstreamType === 'image') {
+  if (downstreamType === 'image' || downstreamType === 'video') {
     base += buildImageRefSystemNote(imageRefs)
   }
   if (!mentionedKeys?.length) return base

@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AgnesVideoProvider, createVideoProvider, resolveVideoParams } from './video-provider'
+import {
+  AgnesVideoProvider,
+  ApimartVideoProvider,
+  createVideoProvider,
+  resolveVideoParams,
+} from './video-provider'
 
 describe('createVideoProvider', () => {
   const env = { ...process.env }
@@ -43,6 +48,70 @@ describe('createVideoProvider', () => {
   })
 })
 
+
+describe('createVideoProvider apimart', () => {
+  const env = { ...process.env }
+
+  beforeEach(() => {
+    process.env = { ...env }
+  })
+
+  afterEach(() => {
+    process.env = env
+  })
+
+  it('returns ApimartVideoProvider for apimart baseUrl', () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.apimart.ai/v1',
+      model: 'doubao-seedance-2.0-mini',
+    })
+    expect(p).toBeInstanceOf(ApimartVideoProvider)
+  })
+
+  it('rejects apimart.ai suffix attacker domains', async () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://apimart.ai.attacker.example/v1',
+    })
+    expect(p).not.toBeInstanceOf(ApimartVideoProvider)
+    await expect(p.generate('test')).rejects.toThrow(/unsupported video gateway/i)
+  })
+
+  it('throws readable error for unknown BYOK instead of placeholder', async () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://unknown.example.com/v1',
+    })
+    await expect(p.generate('test')).rejects.toThrow(/unsupported video gateway/i)
+  })
+})
+
+describe('ApimartVideoProvider', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('polls apimart task and returns video url', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ task_id: 'task_1' }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { status: 'completed', result: { video_url: 'https://cdn/v.mp4' } } }),
+      })
+    const provider = new ApimartVideoProvider('key', 'https://api.apimart.ai/v1', 0, 30_000)
+    const { url } = await provider.generate('hello', { model: 'doubao-seedance-2.0-mini', duration: 5 })
+    expect(url).toBe('https://cdn/v.mp4')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).image_urls).toBeUndefined()
+  })
+})
 
 describe('resolveVideoParams', () => {
   it('maps duration to 8n+1 frames at 24fps', () => {
@@ -110,5 +179,71 @@ describe('AgnesVideoProvider', () => {
     expect(body.image).toBe('https://example.com/ref.png')
     expect(body).not.toHaveProperty('crop')
     expect(body.model).toBe('agnes-video-v2.0')
+  })
+
+  it('sends extra_body keyframes when referenceImages length >= 2', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-kf' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/kf.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    await provider.generate('transition', {
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png'],
+      refWire: 'agnes_keyframes',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.extra_body).toEqual({
+      image: ['https://cdn/a.png', 'https://cdn/b.png'],
+      mode: 'keyframes',
+    })
+    expect(body).not.toHaveProperty('image')
+  })
+
+  it('returns url from metadata when top-level url is absent', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-meta' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'completed',
+          metadata: { url: 'https://example.com/meta-video.mp4' },
+        }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    const { url } = await provider.generate('animate')
+    expect(url).toBe('https://example.com/meta-video.mp4')
+  })
+
+  it('passes seed and negative_prompt in create body', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-seed' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/seed.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider('test-key', 'https://apihub.agnes-ai.com/v1', 'https://apihub.agnes-ai.com', 'agnes-video-v2.0', 0)
+    await provider.generate('animate', {
+      seed: 42,
+      negativePrompt: 'watermark, blur',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.seed).toBe(42)
+    expect(body.negative_prompt).toBe('watermark, blur')
   })
 })

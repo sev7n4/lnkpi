@@ -1,18 +1,29 @@
 import {
   clampImageGenerationInput,
+  clampVideoGenerationInput,
   formatImageResolutionForProvider,
   resolveImageGatewayModelId,
   resolveImageModelProfile,
+  resolveVideoModelProfile,
   usesNativeImageRefs,
   isApimartBackedImageModel,
   SUPPORTED_ASPECT_RATIOS,
   type ImageRefWire,
   type ImageResolutionTier,
   type ImageResponseMode,
+  type VideoRefWire,
+  type VideoResponseMode,
   resolveModelKey,
   resolveImageSize,
   type StudioModelEntry,
 } from '@lnkpi/shared'
+import {
+  buildVideoReferenceBundle,
+  inferVideoScenario,
+  type VideoMode,
+  type VideoReferenceBundle,
+  type VideoScenario,
+} from './video-refs'
 
 export interface AdapterMeta {
   modelKey: string
@@ -22,8 +33,13 @@ export interface AdapterMeta {
   droppedFields: Array<{ field: string; reason: string }>
   refImageMode?: 'native' | 'primary_image' | 'prompt_url_tags' | 'none'
   referenceImageCount?: number
-  responseMode?: ImageResponseMode
-  refWire?: ImageRefWire
+  responseMode?: ImageResponseMode | VideoResponseMode
+  refWire?: ImageRefWire | VideoRefWire
+  scenario?: VideoScenario
+  refVideoMode?: 'native' | 'metadata_only' | 'none'
+  refAudioMode?: 'native' | 'metadata_only' | 'none'
+  referenceVideoCount?: number
+  referenceAudioCount?: number
   modelFallback?: boolean
 }
 
@@ -294,8 +310,8 @@ export function buildImageProviderGenerateOptions(
         ? built.meta.nativeParams.quality
         : undefined,
     referenceImages: providerReferenceImages(built),
-    refWire: built.meta.refWire,
-    responseMode: built.meta.responseMode,
+    refWire: built.meta.refWire as ImageRefWire | undefined,
+    responseMode: built.meta.responseMode as ImageResponseMode | undefined,
     pollIntervalMs:
       typeof built.meta.nativeParams.pollIntervalMs === 'number'
         ? built.meta.nativeParams.pollIntervalMs
@@ -428,14 +444,116 @@ export function buildImageProviderOptions(input: {
   }
 }
 
-export function buildVideoProviderOptions(input: {
-  modelKey?: string
+const SEEDANCE_IMAGE_TAG_RE = /@(?:Image|图片)(\d+)\b/g
+const SEEDANCE_VIDEO_TAG_RE = /@Video(\d+)\b/g
+const SEEDANCE_AUDIO_TAG_RE = /@Audio(\d+)\b/g
+
+function stripSeedanceRefTags(prompt: string): string {
+  return prompt
+    .replace(SEEDANCE_IMAGE_TAG_RE, '')
+    .replace(SEEDANCE_VIDEO_TAG_RE, '')
+    .replace(SEEDANCE_AUDIO_TAG_RE, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function hasSeedanceImageTag(prompt: string, index: number): boolean {
+  return new RegExp(`@(?:Image|图片)${index}\\b`).test(prompt)
+}
+
+function hasSeedanceVideoTag(prompt: string, index: number): boolean {
+  return new RegExp(`@Video${index}\\b`).test(prompt)
+}
+
+function hasSeedanceAudioTag(prompt: string, index: number): boolean {
+  return new RegExp(`@Audio${index}\\b`).test(prompt)
+}
+
+function stripOutOfRangeSeedanceTags(
+  prompt: string,
+  bundle: VideoReferenceBundle,
+): string {
+  let out = prompt.replace(SEEDANCE_IMAGE_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num >= 1 && num <= bundle.images.length ? match : ''
+  })
+  out = out.replace(SEEDANCE_VIDEO_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num >= 1 && num <= bundle.videos.length ? match : ''
+  })
+  out = out.replace(SEEDANCE_AUDIO_TAG_RE, (match, numStr) => {
+    const num = Number.parseInt(numStr, 10)
+    return num >= 1 && num <= bundle.audios.length ? match : ''
+  })
+  return out.replace(/\s{2,}/g, ' ')
+}
+
+export function ensureSeedanceRefTags(
+  prompt: string,
+  bundle: VideoReferenceBundle,
+): string {
+  let out = stripOutOfRangeSeedanceTags(prompt, bundle)
+  bundle.images.forEach((_, i) => {
+    const tag = `@Image${i + 1}`
+    if (!hasSeedanceImageTag(out, i + 1)) out += ` ${tag}`
+  })
+  bundle.videos.forEach((_, i) => {
+    const tag = `@Video${i + 1}`
+    if (!hasSeedanceVideoTag(out, i + 1)) out += ` ${tag}`
+  })
+  bundle.audios.forEach((_, i) => {
+    const tag = `@Audio${i + 1}`
+    if (!hasSeedanceAudioTag(out, i + 1)) out += ` ${tag}`
+  })
+  return out.replace(/\s{2,}/g, ' ').trim()
+}
+
+export function buildVideoRefConsistencyBlock(bundle: VideoReferenceBundle): string {
+  if (bundle.images.length === 0) return ''
+  if (bundle.images.length === 1) {
+    const ref = bundle.images[0]
+    return (
+      `【参考图一致性】以 @Image1 / 参考图 ${ref.refKey}（${ref.label}）为主，` +
+      '严格保留主体外形、关键细节与构图。'
+    )
+  }
+
+  const roles = bundle.images
+    .map((ref, index) =>
+      index === 0
+        ? `- @Image1 / ${ref.refKey}（${ref.label}）：主参考，保持主体身份与关键特征`
+        : `- @Image${index + 1} / ${ref.refKey}（${ref.label}）：辅助参考，融合场景、服装或风格`,
+    )
+    .join('\n')
+  return `【参考图一致性】\n${roles}\n保持 @Image1 的主体身份一致，不得被辅助参考覆盖。`
+}
+
+function buildFirstLastFrameConsistencyBlock(bundle: VideoReferenceBundle): string {
+  const [first, last] = bundle.images
+  if (!first || !last) return ''
+  return (
+    `【首尾帧约束】首帧参考 ${first.refKey}（${first.label}），` +
+    `末帧参考 ${last.refKey}（${last.label}）；在两帧间自然过渡并保持构图连续。`
+  )
+}
+
+export interface VideoProviderGenerateOptions {
+  model?: string
   duration?: number
   aspectRatio?: string
   resolution?: string
   crop?: string
-  referenceImages: string[]
-}): {
+  image?: string
+  referenceImages?: string[]
+  referenceVideos?: string[]
+  referenceAudios?: string[]
+  imageWithRoles?: Array<{ url: string; role: string }>
+  returnLastFrame?: boolean
+  pollIntervalMs?: number
+  maxPollMs?: number
+}
+
+export interface BuiltVideoProviderOptions {
   model: string
   duration?: number
   aspectRatio?: string
@@ -443,75 +561,248 @@ export function buildVideoProviderOptions(input: {
   crop?: string
   image?: string
   effectivePromptSuffix?: string
+  effectiveReferenceBundle: VideoReferenceBundle
+  providerOptions: VideoProviderGenerateOptions
   meta: AdapterMeta
-} {
-  const { modelKey, duration, aspectRatio, resolution, crop, referenceImages } = input
-  const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('video', modelKey)
+}
 
-  const droppedFields: AdapterMeta['droppedFields'] = []
-  const nativeParams: Record<string, unknown> = { model: entry.gatewayModelId }
+export function buildEffectiveVideoPrompt(
+  mergedText: string,
+  built: Pick<
+    BuiltVideoProviderOptions,
+    'effectivePromptSuffix' | 'effectiveReferenceBundle' | 'meta'
+  >,
+): string {
+  const bundle = built.effectiveReferenceBundle
+  let prompt = [mergedText.trim(), built.effectivePromptSuffix].filter(Boolean).join('\n')
+  if (built.meta.refWire === 'apimart_first_last') {
+    prompt = stripSeedanceRefTags(prompt)
+  } else if (built.meta.refWire === 'apimart_multimodal') {
+    prompt = ensureSeedanceRefTags(prompt, bundle)
+  }
+  const consistency =
+    built.meta.refWire === 'apimart_first_last'
+      ? buildFirstLastFrameConsistencyBlock(bundle)
+      : buildVideoRefConsistencyBlock(bundle)
+  return consistency ? `${prompt}\n\n${consistency}` : prompt
+}
 
-  const result: {
-    model: string
-    duration?: number
-    aspectRatio?: string
-    resolution?: string
-    crop?: string
-    image?: string
-    effectivePromptSuffix?: string
-  } = { model: entry.gatewayModelId }
+export function buildVideoProviderGenerateOptions(
+  built: BuiltVideoProviderOptions,
+): VideoProviderGenerateOptions {
+  return { ...built.providerOptions }
+}
 
-  const scalarParams: Record<string, string | number | undefined> = {
+export function buildVideoProviderOptions(input: {
+  modelKey?: string
+  duration?: number
+  aspectRatio?: string
+  resolution?: string
+  crop?: string
+  referenceBundle?: VideoReferenceBundle
+  /** @deprecated Pass referenceBundle instead. */
+  referenceImages?: string[]
+  videoMode?: VideoMode
+  scenario?: VideoScenario
+  channelBaseUrl?: string
+}): BuiltVideoProviderOptions {
+  const {
+    modelKey,
     duration,
     aspectRatio,
     resolution,
     crop,
+    videoMode,
+    channelBaseUrl,
+  } = input
+  const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('video', modelKey)
+  const profile = resolveVideoModelProfile(resolvedKey, entry.gatewayModelId, {
+    channelBaseUrl,
+  })
+  const sourceBundle =
+    input.referenceBundle ??
+    buildVideoReferenceBundle(
+      (input.referenceImages ?? []).map((url, index) => ({
+        refKey: `I${index + 1}`,
+        mediaType: 'image',
+        url,
+      })),
+    )
+  const clamped = clampVideoGenerationInput(profile, {
+    duration,
+    aspectRatio,
+    resolution,
+    referenceImages: sourceBundle.images.map((ref) => ref.url),
+    referenceVideos: sourceBundle.videos.map((ref) => ref.url),
+    referenceAudios: sourceBundle.audios.map((ref) => ref.url),
+  })
+  const clampedBundle: VideoReferenceBundle = {
+    images: sourceBundle.images.slice(0, clamped.referenceImages.length),
+    videos: sourceBundle.videos.slice(0, clamped.referenceVideos.length),
+    audios: sourceBundle.audios.slice(0, clamped.referenceAudios.length),
   }
-
-  for (const [field, value] of Object.entries(scalarParams)) {
-    if (value === undefined) continue
-    const disposition = entry.params[field] ?? 'metadataOnly'
-
-    if (disposition === 'native') {
-      ;(result as Record<string, unknown>)[field] = value
-      nativeParams[field] = value
-    } else if (disposition === 'metadataOnly') {
-      droppedFields.push({
-        field,
-        reason: `${field} not supported natively by ${entry.modelKey}`,
-      })
+  const useFirstLast =
+    profile.refWire === 'apimart_multimodal' &&
+    videoMode === 'first_last_frame' &&
+    clampedBundle.images.length === 2
+  const bundle: VideoReferenceBundle = useFirstLast
+    ? { images: clampedBundle.images, videos: [], audios: [] }
+    : clampedBundle
+  const scenario = input.scenario ?? inferVideoScenario(bundle, videoMode)
+  const droppedFields: AdapterMeta['droppedFields'] = [...clamped.droppedFields]
+  const nativeParams: Record<string, unknown> = {
+    model: profile.gatewayModelId,
+    duration: clamped.duration,
+    resolution: clamped.resolution,
+  }
+  const providerOptions: VideoProviderGenerateOptions = {
+    model: profile.gatewayModelId,
+    duration: clamped.duration,
+    aspectRatio: clamped.aspectRatio,
+    resolution: clamped.resolution,
+    pollIntervalMs: profile.pollIntervalMs,
+    maxPollMs: profile.maxPollMs,
+  }
+  if (
+    profile.refWire === 'apimart_multimodal' &&
+    (scenario === 'S2' || scenario === 'S3' || scenario === 'S8')
+  ) {
+    providerOptions.returnLastFrame = true
+    nativeParams.return_last_frame = true
+  }
+  if (crop !== undefined) {
+    if (entry.params.crop === 'native') {
+      providerOptions.crop = crop
+      nativeParams.crop = crop
     } else {
       droppedFields.push({
-        field,
-        reason: `${field} configured as promptPrefix but not applied for video scalars`,
+        field: 'crop',
+        reason: `crop not supported natively by ${entry.modelKey}`,
       })
     }
   }
 
-  const refCount = referenceImages.length
-  if (refCount > 0) {
-    result.image = referenceImages[0]
-    nativeParams.image = referenceImages[0]
+  if (profile.sizeWire === 'ratio_duration') {
+    nativeParams.size = clamped.aspectRatio
+  } else {
+    nativeParams.aspectRatio = clamped.aspectRatio
   }
 
-  if (refCount > 1) {
-    result.effectivePromptSuffix = referenceImages
-      .slice(1)
-      .map((url) => `[ref-image:${url}]`)
-      .join(' ')
-  }
+  const imageCount = bundle.images.length
+  const videoCount = bundle.videos.length
+  const audioCount = bundle.audios.length
+  const hasRefs = imageCount + videoCount + audioCount > 0
+  let refWire: VideoRefWire = hasRefs ? profile.refWire : 'none'
+  let refImageMode: AdapterMeta['refImageMode'] = 'none'
+  let refVideoMode: AdapterMeta['refVideoMode'] = 'none'
+  let refAudioMode: AdapterMeta['refAudioMode'] = 'none'
+  let image: string | undefined
+  let effectivePromptSuffix: string | undefined
 
-  const refImageMode = refCount > 0 ? 'primary_image' : 'none'
+  if (profile.refWire === 'agnes_single_image') {
+    if (imageCount >= 2) {
+      refWire = 'agnes_keyframes'
+      providerOptions.referenceImages = clamped.referenceImages
+      nativeParams.image = clamped.referenceImages
+      nativeParams.mode = 'keyframes'
+      refImageMode = 'native'
+    } else if (imageCount === 1) {
+      image = clamped.referenceImages[0]
+      providerOptions.image = image
+      nativeParams.image = image
+      refImageMode = 'native'
+    }
+    if (sourceBundle.videos.length) {
+      refVideoMode = 'metadata_only'
+      droppedFields.push({
+        field: 'referenceVideos',
+        reason: `referenceVideos not supported natively by ${entry.modelKey}`,
+      })
+    }
+    if (sourceBundle.audios.length) {
+      refAudioMode = 'metadata_only'
+      droppedFields.push({
+        field: 'referenceAudios',
+        reason: `referenceAudios not supported natively by ${entry.modelKey}`,
+      })
+    }
+  } else if (profile.refWire === 'apimart_multimodal') {
+    if (useFirstLast) {
+      refWire = 'apimart_first_last'
+      providerOptions.imageWithRoles = [
+        { url: bundle.images[0].url, role: 'first_frame' },
+        { url: bundle.images[1].url, role: 'last_frame' },
+      ]
+      nativeParams.image_with_roles = providerOptions.imageWithRoles
+      refImageMode = 'native'
+      if (clampedBundle.videos.length) {
+        droppedFields.push({
+          field: 'referenceVideos',
+          reason: 'referenceVideos omitted in first_last_frame mode',
+        })
+      }
+      if (clampedBundle.audios.length) {
+        droppedFields.push({
+          field: 'referenceAudios',
+          reason: 'referenceAudios omitted in first_last_frame mode',
+        })
+      }
+      refVideoMode = clampedBundle.videos.length ? 'metadata_only' : 'none'
+      refAudioMode = clampedBundle.audios.length ? 'metadata_only' : 'none'
+    } else {
+      if (imageCount) {
+        providerOptions.referenceImages = bundle.images.map((ref) => ref.url)
+        nativeParams.image_urls = providerOptions.referenceImages
+        refImageMode = 'native'
+      }
+      if (videoCount) {
+        providerOptions.referenceVideos = bundle.videos.map((ref) => ref.url)
+        nativeParams.video_urls = providerOptions.referenceVideos
+        refVideoMode = 'native'
+      }
+      if (audioCount) {
+        providerOptions.referenceAudios = bundle.audios.map((ref) => ref.url)
+        nativeParams.audio_urls = providerOptions.referenceAudios
+        refAudioMode = 'native'
+      }
+    }
+  } else if (imageCount) {
+    image = clamped.referenceImages[0]
+    providerOptions.image = image
+    nativeParams.image = image
+    refImageMode = 'primary_image'
+    if (sourceBundle.images.length > 1) {
+      effectivePromptSuffix = sourceBundle.images
+        .slice(1)
+        .map((ref) => `[ref-image:${ref.url}]`)
+        .join(' ')
+    }
+  }
 
   return {
-    ...result,
+    model: profile.gatewayModelId,
+    duration: clamped.duration,
+    aspectRatio: clamped.aspectRatio,
+    resolution: clamped.resolution,
+    ...(providerOptions.crop ? { crop: providerOptions.crop } : {}),
+    image,
+    effectivePromptSuffix,
+    effectiveReferenceBundle: bundle,
+    providerOptions,
     meta: {
       modelKey: resolvedKey,
-      gatewayModelId: entry.gatewayModelId,
+      gatewayModelId: profile.gatewayModelId,
       nativeParams,
       droppedFields,
       refImageMode,
-      referenceImageCount: refCount,
+      refVideoMode,
+      refAudioMode,
+      referenceImageCount: imageCount,
+      referenceVideoCount: videoCount,
+      referenceAudioCount: audioCount,
+      refWire,
+      responseMode: profile.responseMode,
+      scenario,
       ...(fallback ? { modelFallback: true } : {}),
     },
   }

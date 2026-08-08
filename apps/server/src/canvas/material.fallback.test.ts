@@ -183,16 +183,50 @@ describe('MaterialService BYOK fallback_pending', () => {
     )
     const call = materialUpdate.mock.calls.find((c) => c[0].data.status === 'fallback_pending')![0]
     const meta = JSON.parse(String(call.data.metadata))
-    expect(meta.effectivePrompt).toBe('merged walk prompt')
+    expect(meta.effectivePrompt).toContain('merged walk prompt')
+    expect(meta.effectivePrompt).toContain('【参考图一致性】')
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
     expect(meta.image).toBe('https://cdn.example.com/frame.png')
     expect(meta.refundedPoints).toBe(30)
     expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
-    expect(call.data.prompt).toBe('merged walk prompt')
+    expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
       apiKey: 'user-key',
       baseUrl: 'https://user.example.com/v1',
+    })
+  })
+
+  it('video: persists the returned last frame URL in metadata', async () => {
+    resolveForGeneration.mockResolvedValue({
+      channelId: 'platform',
+      modelName: 'seedance-2.0-min',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'plat-key', baseUrl: 'https://platform.example.com/v1' },
+      source: 'platform',
+    })
+    videoGenerate.mockResolvedValueOnce({
+      url: 'https://example.com/video.mp4',
+      lastFrameUrl: 'https://example.com/video-last.png',
+    })
+
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'seedance-2.0-min',
+      refs: [
+        {
+          refKey: 'I1',
+          mediaType: 'image',
+          url: 'https://cdn.example.com/frame.png',
+        },
+      ],
+    })
+
+    await vi.waitFor(() => expect(stored.status).toBe('completed'))
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      lastFrameUrl: 'https://example.com/video-last.png',
     })
   })
 
