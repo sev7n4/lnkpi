@@ -124,6 +124,25 @@ describe('buildVideoProviderOptions', () => {
     expect(ensureSeedanceRefTags('参考 @Image10 风格', bundle)).toContain('@Image1')
   })
 
+  it('strips zero-index @Image0/@Video0/@Audio0 tags (1-based only)', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/1.png' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/v.mp4' },
+      { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/a.mp3' },
+    ])
+    const result = ensureSeedanceRefTags(
+      '参考 @Image0 @Video0 @Audio0 @图片0 风格',
+      bundle,
+    )
+    expect(result).not.toContain('@Image0')
+    expect(result).not.toContain('@Video0')
+    expect(result).not.toContain('@Audio0')
+    expect(result).not.toContain('@图片0')
+    expect(result).toContain('@Image1')
+    expect(result).toContain('@Video1')
+    expect(result).toContain('@Audio1')
+  })
+
   it('preserves @Image1 and does not treat @Image10 as a match', () => {
     const bundle = buildVideoReferenceBundle([
       { refKey: 'I1', mediaType: 'image', url: 'https://cdn/1.png' },

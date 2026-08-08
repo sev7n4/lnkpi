@@ -466,15 +466,15 @@ function stripOutOfRangeSeedanceTags(
 ): string {
   let out = prompt.replace(SEEDANCE_IMAGE_TAG_RE, (match, numStr) => {
     const num = Number.parseInt(numStr, 10)
-    return num <= bundle.images.length ? match : ''
+    return num >= 1 && num <= bundle.images.length ? match : ''
   })
   out = out.replace(SEEDANCE_VIDEO_TAG_RE, (match, numStr) => {
     const num = Number.parseInt(numStr, 10)
-    return num <= bundle.videos.length ? match : ''
+    return num >= 1 && num <= bundle.videos.length ? match : ''
   })
   out = out.replace(SEEDANCE_AUDIO_TAG_RE, (match, numStr) => {
     const num = Number.parseInt(numStr, 10)
-    return num <= bundle.audios.length ? match : ''
+    return num >= 1 && num <= bundle.audios.length ? match : ''
   })
   return out.replace(/\s{2,}/g, ' ')
 }
