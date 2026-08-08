@@ -22,7 +22,10 @@ describe('studioModelCatalog', () => {
       'seedream-5.0-pro',
       'midjourney-8.1',
     ])
-    expect(listModels('video')).toHaveLength(4)
+    expect(listModels('video')).toHaveLength(7)
+    expect(getModelEntry('seedance-2.0')?.gatewayModelId).toBe('doubao-seedance-2.0')
+    expect(getModelEntry('seedance-2.0-fast')?.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+    expect(getModelEntry('seedance-2.0-face')?.gatewayModelId).toBe('doubao-seedance-2.0-face')
     expect(listModels('audio').map((m) => m.modelKey)).toEqual([
       'seed-audio-1.0',
       'minimax-speech-2.8-hd',

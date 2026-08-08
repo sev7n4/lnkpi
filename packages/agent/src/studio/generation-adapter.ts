@@ -13,9 +13,11 @@ import {
   type ImageResponseMode,
   type VideoRefWire,
   type VideoResponseMode,
+  type SeedanceVariantTag,
   resolveModelKey,
   resolveImageSize,
   type StudioModelEntry,
+  isSeedance1x,
 } from '@lnkpi/shared'
 import {
   buildVideoReferenceBundle,
@@ -41,6 +43,7 @@ export interface AdapterMeta {
   referenceVideoCount?: number
   referenceAudioCount?: number
   modelFallback?: boolean
+  variantTag?: SeedanceVariantTag
 }
 
 export interface BuiltAudioRequest {
@@ -544,6 +547,7 @@ export interface VideoProviderGenerateOptions {
   resolution?: string
   crop?: string
   image?: string
+  generateAudio?: boolean
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
@@ -564,6 +568,13 @@ export interface BuiltVideoProviderOptions {
   effectiveReferenceBundle: VideoReferenceBundle
   providerOptions: VideoProviderGenerateOptions
   meta: AdapterMeta
+}
+
+export class Seedance1xUnsupportedError extends Error {
+  constructor(gatewayModelId: string) {
+    super(`不支持 Seedance 1.x 视频模型（${gatewayModelId}），请改用 Seedance 2.0`)
+    this.name = 'Seedance1xUnsupportedError'
+  }
 }
 
 export function buildEffectiveVideoPrompt(
@@ -604,7 +615,10 @@ export function buildVideoProviderOptions(input: {
   referenceImages?: string[]
   videoMode?: VideoMode
   scenario?: VideoScenario
+  /** BYOK: upstream gateway id for profile resolution when catalog misses. */
+  gatewayModelHint?: string
   channelBaseUrl?: string
+  generateAudio?: boolean
 }): BuiltVideoProviderOptions {
   const {
     modelKey,
@@ -613,10 +627,23 @@ export function buildVideoProviderOptions(input: {
     resolution,
     crop,
     videoMode,
+    gatewayModelHint,
     channelBaseUrl,
+    generateAudio,
   } = input
-  const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('video', modelKey)
-  const profile = resolveVideoModelProfile(resolvedKey, entry.gatewayModelId, {
+  if (gatewayModelHint && isSeedance1x(gatewayModelHint)) {
+    throw new Seedance1xUnsupportedError(gatewayModelHint)
+  }
+  const catalog = resolveModelKey('video', modelKey)
+  let resolvedKey = catalog.modelKey
+  let catalogGateway = catalog.entry.gatewayModelId
+  let catalogFallback = catalog.fallback
+  if (gatewayModelHint && catalog.fallback) {
+    resolvedKey = gatewayModelHint
+    catalogGateway = gatewayModelHint
+    catalogFallback = false
+  }
+  const profile = resolveVideoModelProfile(resolvedKey, catalogGateway, {
     channelBaseUrl,
   })
   const sourceBundle =
@@ -671,13 +698,24 @@ export function buildVideoProviderOptions(input: {
     nativeParams.return_last_frame = true
   }
   if (crop !== undefined) {
-    if (entry.params.crop === 'native') {
+    if (catalog.entry.params.crop === 'native') {
       providerOptions.crop = crop
       nativeParams.crop = crop
     } else {
       droppedFields.push({
         field: 'crop',
-        reason: `crop not supported natively by ${entry.modelKey}`,
+        reason: `crop not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
+  }
+  if (generateAudio !== undefined) {
+    if (catalog.entry.params.generateAudio === 'native') {
+      providerOptions.generateAudio = generateAudio
+      nativeParams.generate_audio = generateAudio
+    } else {
+      droppedFields.push({
+        field: 'generateAudio',
+        reason: `generateAudio not supported natively by ${catalog.entry.modelKey}`,
       })
     }
   }
@@ -716,14 +754,14 @@ export function buildVideoProviderOptions(input: {
       refVideoMode = 'metadata_only'
       droppedFields.push({
         field: 'referenceVideos',
-        reason: `referenceVideos not supported natively by ${entry.modelKey}`,
+        reason: `referenceVideos not supported natively by ${catalog.entry.modelKey}`,
       })
     }
     if (sourceBundle.audios.length) {
       refAudioMode = 'metadata_only'
       droppedFields.push({
         field: 'referenceAudios',
-        reason: `referenceAudios not supported natively by ${entry.modelKey}`,
+        reason: `referenceAudios not supported natively by ${catalog.entry.modelKey}`,
       })
     }
   } else if (profile.refWire === 'apimart_multimodal') {
@@ -803,7 +841,8 @@ export function buildVideoProviderOptions(input: {
       refWire,
       responseMode: profile.responseMode,
       scenario,
-      ...(fallback ? { modelFallback: true } : {}),
+      ...(profile.variantTag ? { variantTag: profile.variantTag } : {}),
+      ...(catalogFallback ? { modelFallback: true } : {}),
     },
   }
 }

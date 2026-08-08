@@ -15,7 +15,7 @@ describe('estimateVideoCredits tiers', () => {
 describe('clampVideoDuration', () => {
   it('clamps and rounds', () => {
     expect(clampVideoDuration(7.4)).toBe(7)
-    expect(clampVideoDuration(3)).toBe(5)
+    expect(clampVideoDuration(3)).toBe(4)
     expect(clampVideoDuration(99)).toBe(15)
     expect(clampVideoDuration('x')).toBe(5)
   })

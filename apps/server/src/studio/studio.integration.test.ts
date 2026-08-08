@@ -1,4 +1,5 @@
 import 'reflect-metadata'
+import { BadRequestException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createAudioProvider,
@@ -8,6 +9,7 @@ import {
   generateTextWithImages,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
+import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { createStudioService } from './studio.test-utils'
 import type { StudioService } from './studio.service'
 
@@ -175,6 +177,95 @@ describe('StudioService integration (provider params)', () => {
     expect(JSON.parse(String(stored.metadata))).toMatchObject({
       lastFrameUrl: 'https://example.com/v-last.png',
     })
+  })
+
+  it('keeps seedance standard 1080p in provider options and metadata variantTag', async () => {
+    const prisma = (
+      svc as unknown as {
+        prisma: {
+          generationRecord: {
+            create: ReturnType<typeof vi.fn>
+          }
+        }
+      }
+    ).prisma
+    let stored: Record<string, unknown> = {}
+    prisma.generationRecord.create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      stored = { id: 'g-standard', ...data }
+      return stored
+    })
+
+    await svc.generateVideo('u1', 'a prompt', 'seedance-2.0', 5, '16:9', [], [], '1080p')
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls.at(-1)?.[1]).toMatchObject({
+      model: 'doubao-seedance-2.0',
+      resolution: '1080p',
+    })
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      variantTag: 'standard',
+      gatewayModelId: 'doubao-seedance-2.0',
+    })
+    expect(
+      JSON.parse(String(stored.metadata)).droppedFields?.some(
+        (d: { field: string }) => d.field === 'resolution',
+      ),
+    ).toBeFalsy()
+  })
+
+  it('clamps seedance fast 1080p to 720p and records variantTag in metadata', async () => {
+    const prisma = (
+      svc as unknown as {
+        prisma: {
+          generationRecord: {
+            create: ReturnType<typeof vi.fn>
+          }
+        }
+      }
+    ).prisma
+    let stored: Record<string, unknown> = {}
+    prisma.generationRecord.create = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      stored = { id: 'g-fast', ...data }
+      return stored
+    })
+
+    await svc.generateVideo('u1', 'a prompt', 'seedance-2.0-fast', 5, '16:9', [], [], '1080p')
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls.at(-1)?.[1]).toMatchObject({
+      model: 'doubao-seedance-2.0-fast',
+      resolution: '720p',
+    })
+    const meta = JSON.parse(String(stored.metadata))
+    expect(meta).toMatchObject({
+      variantTag: 'fast',
+      gatewayModelId: 'doubao-seedance-2.0-fast',
+    })
+    expect(meta.droppedFields).toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'resolution' })]),
+    )
+  })
+
+  it('rejects 1.x BYOK seedance with BadRequestException', async () => {
+    const resolver = (svc as unknown as { resolver: ProviderResolverService }).resolver
+    vi.spyOn(resolver, 'resolveForGeneration').mockResolvedValueOnce({
+      channelId: 'ch_user',
+      modelName: 'doubao-seedance-1-0-lite-i2v-250428',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'user-key', baseUrl: 'https://api.apimart.ai/v1' },
+      source: 'user',
+    })
+
+    const promise = svc.generateVideo(
+      'u1',
+      'a prompt',
+      'ch_user::doubao-seedance-1-0-lite-i2v-250428',
+      5,
+      '16:9',
+    )
+    await expect(promise).rejects.toBeInstanceOf(BadRequestException)
+    await expect(promise).rejects.toThrow(/不支持.*Seedance 1\.x/)
+    expect(videoGenerate).not.toHaveBeenCalled()
   })
 
   it('rejects audio-only video references', async () => {

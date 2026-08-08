@@ -1,9 +1,9 @@
 # Seedance 2.0 / agnes-video-v2.0 视频生成对接规格
 
-> 状态：**规格已定 / 待开发**  
-> 日期：2026-08-08  
-> 实施计划：`docs/superpowers/plans/2026-08-08-seedance-agnes-video-adapter.md`  
-> 范围：补齐 `agnes-video-v2.0`、`seedance-2.0-min` 在 Agnes / APIMart 网关下的 **native 参考图/视频/音频、多模态 @ 占位符、异步任务、引用一致性** 全链路  
+> 状态：**C3-video P0–P5 已落地（PR #174）/ P6 UI 待做 / §14–§15 扩展规格草稿**  
+> 日期：2026-08-08（§14–§15 增补：2026-08-08）  
+> 实施计划：`docs/superpowers/plans/2026-08-08-seedance-agnes-video-adapter.md`（§14 扩展待独立 plan）  
+> 范围：补齐 `agnes-video-v2.0`、`seedance-2.0-min` 在 Agnes / APIMart 网关下的 **native 参考图/视频/音频、多模态 @ 占位符、异步任务、引用一致性** 全链路；并规划 **Seedance 2.0 全变体 catalog/profile 扩展（§14）** 与 **Seedance 2.5 演进路线（§15）**  
 > 前置：`2026-07-19-dock-studio-model-adapter-design.md`（C1 适配层）、`2026-08-06-seedream-gpt-image2-apimart-design.md`（ImageModelProfile 先例）  
 > 后续：`2026-07-19-dock-studio-model-adapter-design.md` **C3**（V* 抽帧/理解增强，本规格先消费 V*/A* URL 引用）  
 > 参考文档：  
@@ -28,7 +28,10 @@
 | 首尾帧模式 | Seedance `image_with_roles`（`first_frame` / `last_frame`）；detect 或 UI 扩展 `first_last_frame` |
 | 一致性 prompt | 有 I* 时追加 **【参考图一致性】** 块；Seedance 多模态时由 adapter 注入 `@ImageN` / `@VideoN` / `@AudioN` |
 | 内网 upload URL | 生成前须公网 HTTPS 或 Data URI（与图像链路相同 `inlineUpstreamReferenceImages`） |
-| 明确不做 | fal 直连 SDK；Seedance `asset://` 虚拟资产库；web_search tools；4K 视频；shot/scene composer 旁路统一（C2） |
+| 明确不做（C3-video 首轮） | fal 直连 SDK；web_search tools；shot/scene composer 旁路统一（C2） |
+| 明确不做（§14 扩展前） | Seedance 1.x / 1.5 Pro 混用 2.0 Provider；Seedance 2.5（见 §15，上游 GA 前） |
+| 延后至 §14 | `asset://`（仅 standard/fast）；1080p/4K（standard）；`seedance-2.0-face` |
+| 延后至 §15 | 30s 单 pass、50 路多模态、原生 4K/10-bit、区域编辑 |
 
 ---
 
@@ -39,7 +42,9 @@
 | 模型 | 估算利用率 | 说明 |
 |---|---|---|
 | `agnes-video-v2.0`（Agnes 网关） | ~40% | 文生视频 + 单图 i2v + 基础分辨率/时长可用；关键帧、seed、negative_prompt 未用 |
-| `seedance-2.0-min`（Apimart/通用网关） | ~0–5% | 无真实 Provider；非 Agnes baseUrl 走 `OpenAIVideoProvider` → **Unsplash 占位** |
+| `seedance-2.0-min`（Apimart/通用网关） | ~85%（PR #174 后） | mini 全链路已通；**2.0 其他变体 / BYOK 非 catalog 仍有问题（§14）** |
+| `seedance-2.0` / `-fast` / `-face` | 0% | Catalog 无条目；gateway 被 rewrite 为 mini（§14.3） |
+| Seedance 2.5 | 0% | 上游 Coming Soon（§15） |
 | 引用一致性 | 偏低 | 多 I* 降级为 `[ref-image:url]` prompt tag；V*/A* 完全未消费 |
 
 ### 1.2 代码级缺口
@@ -54,8 +59,11 @@
 | `extractReferenceImages` 只取 `mediaType === 'image'` | `studio.service.ts`, `material.service.ts` | **V* / A* 引用被丢弃** |
 | video merge 不传 `imageRefs` | `resolveMergedPrompt()` | 多 I* 一致性仅靠 T* 文本合并 |
 | 未传 seed / negative_prompt / generate_audio | `AgnesVideoProvider`, adapter | 上游支持的可复现/有声视频未释放 |
-| catalog `gatewayModelId` 与 APIMart 不一致 | `studioModelCatalog.ts` | `seedance-2.0-min` ≠ `doubao-seedance-2.0-mini` |
-| metadata 缺 refWire / responseMode | video 生成 metadata | 可观测性不足，难排障 |
+| catalog `gatewayModelId` 与 APIMart 不一致 | `studioModelCatalog.ts` | ✅ PR #174 已修正 mini |
+| metadata 缺 refWire / responseMode | video 生成 metadata | ✅ PR #174 已补 |
+| **BYOK 非 catalog Seedance → profile 回退 Agnes** | `resolveModelKey` + `buildVideoProviderOptions` | metadata `refWire=agnes_*` 但出站 model 为 Seedance；**§14 P0** |
+| **所有 `doubao-seedance-*` rewrite 为 mini** | `resolveVideoGatewayModelId` | standard/fast/face 无法拿到正确档位；**§14 P1** |
+| 2.0 standard/fast/face 无 catalog | `studioModelCatalog.ts` | UI/BYOK 无法显式选型；**§14 P1** |
 
 ### 1.3 平台默认路径
 
@@ -166,9 +174,12 @@ V* / A*      →  本轮不支持（Agnes 无 video_urls/audio_urls）
 
 | gateway id | 适用场景 | 本项目 catalog |
 |---|---|---|
-| `doubao-seedance-2.0-mini` | 默认、成本友好 | `seedance-2.0-min` ✅ |
-| `doubao-seedance-2.0-fast` | 预览/迭代 | 后续可选 BYOK |
-| `doubao-seedance-2.0` | 1080p / 4K / asset:// | 非 mini 档位，后续扩展 |
+| `doubao-seedance-2.0-mini` | 默认、成本友好 | `seedance-2.0-min` ✅（PR #174） |
+| `doubao-seedance-2.0-fast` | 预览/迭代 | §14 P1 catalog + profile |
+| `doubao-seedance-2.0` | 1080p / 4K / asset:// | §14 P1 catalog + profile |
+| `doubao-seedance-2.0-face` | 真人参考上传 | §14 P1 可选 catalog |
+| `doubao-seedance-1.x-*` | 旧版 Volcano/Apimart | **明确不支持**；BYOK 须阻断或报错 |
+| Seedance 2.5 | 30s / 4K / 50 refs | §15 演进路线 |
 
 ---
 
@@ -994,7 +1005,11 @@ interface VideoModelProfile {
 | modelKey / 模式 | gatewayModelId | refWire | sizeWire | response | max I* | max V* | max A* |
 |---|---|---|---|---|---|---|---|
 | `agnes-video-v2.0`, `agnes-video-*` | 同名 | 1 图：`agnes_single_image`；≥2：`agnes_keyframes` | `pixel_frames` | `agnes_poll` | 8 | 0 | 0 |
-| `seedance-2.0-min`, `doubao-seedance-*` | `doubao-seedance-2.0-mini` | `apimart_multimodal` / `apimart_first_last` | `ratio_duration` | `async_task` | 9 | 3 | 3 |
+| `seedance-2.0-min` | `doubao-seedance-2.0-mini` | `apimart_multimodal` / `apimart_first_last` | `ratio_duration` | `async_task` | 9 | 3 | 3 |
+| `seedance-2.0` | `doubao-seedance-2.0` | 同上 | 同上 | 同上 | 9 | 3 | 3 |
+| `seedance-2.0-fast` | `doubao-seedance-2.0-fast` | 同上 | 同上 | 同上 | 9 | 3 | 3 |
+| `seedance-2.0-face` | `doubao-seedance-2.0-face` | 同上 + `face_upload` 标记 | 同上 | 同上 | 9 | 3 | 3 |
+| BYOK `doubao-seedance-*`（非 catalog） | **按 gateway id 解析，禁止 rewrite mini** | 同上 | 同上 | 同上 | 9 | 3 | 3 |
 | `happyhose-1.1`, `wan-2.7` 等 legacy | catalog 默认 | `legacy_prompt_tags` | `ratio_duration` | `async_task`‡ | 1 | 0 | 0 |
 
 ‡ 未实测模型暂走 legacy；网关实测后升级 profile。
@@ -1028,6 +1043,8 @@ refs + referenceImageUrl
 
 ## 6. Catalog 变更
 
+### 6.1 已落地（PR #174）
+
 ```typescript
 // agnes-video-v2.0
 params: { model, duration, aspectRatio, resolution, image, seed, negativePrompt, crop: 'metadataOnly' }
@@ -1036,6 +1053,20 @@ params: { model, duration, aspectRatio, resolution, image, seed, negativePrompt,
 gatewayModelId: 'doubao-seedance-2.0-mini'
 params: { model, duration, aspectRatio, resolution, generateAudio, seed, refImages, refVideos, refAudios, crop: 'metadataOnly' }
 defaults: { duration: 5, generateAudio: true }
+```
+
+### 6.2 规划（§14 E-P1）
+
+```typescript
+// seedance-2.0 / seedance-2.0-fast / seedance-2.0-face
+// gatewayModelId 分别为 doubao-seedance-2.0 / -fast / -face
+// params 与 mini 相同；defaults.resolution 见 §14.4.2
+```
+
+### 6.3 规划（§15 E2.5-W1）
+
+```typescript
+// seedance-2.5 — feature flag 关闭，gatewayModelId TBD
 ```
 
 ---
@@ -1047,9 +1078,14 @@ defaults: { duration: 5, generateAudio: true }
 | 模型 | 规则 |
 |---|---|
 | Agnes | num_frames ≤441 且 8n+1；多图 ≤8 |
-| Seedance | duration 4–15；image≤9；video≤3；audio≤3；仅 A* 阻断 |
-| Seedance mini | 1080p → 720p |
+| Seedance 2.0 全系 | duration 4–15；image≤9；video≤3；audio≤3；仅 A* 阻断 |
+| Seedance mini | 1080p/4k → 720p（`maxResolution=720p`） |
+| Seedance fast | 1080p/4k → 720p |
+| Seedance standard | 允许至 4k；见 §14.4.2 |
+| Seedance face | 允许至 1080p（待上游确认） |
 | 互斥 | first_last 模式下 V*/A* → droppedFields |
+| Seedance 1.x | **请求阻断**（§14.3） |
+| Seedance 2.5 | duration 至 30s；refs 至 50（§15，GA 后启用） |
 
 ---
 
@@ -1094,24 +1130,43 @@ defaults: { duration: 5, generateAudio: true }
 
 ## 10. 分阶段实施
 
-| Phase | 内容 | 覆盖场景 |
-|---|---|---|
-| P0 | VideoModelProfile + catalog | 全部 |
-| P1 | `buildVideoReferenceBundle` + merge-refs imageRefs | S2–S7 |
-| P2 | adapter scenario + @ 注入 + consistency block | S2–S7 |
-| P3 | ApimartVideoProvider + 路由 | S1–S7 Seedance |
-| P4 | Agnes keyframes + seed + negative | S3–S4 |
-| P5 | server Studio + Material 统一 | S9–S10 |
-| P6 | UI duration 4s / first_last / generate_audio | S5,S8 |
-| P7 | 测试 | 全部 |
+| Phase | 内容 | 覆盖场景 | 状态 |
+|---|---|---|---|
+| P0 | VideoModelProfile + catalog（mini） | 全部 | ✅ PR #174 |
+| P1 | `buildVideoReferenceBundle` + merge-refs imageRefs | S2–S7 | ✅ PR #174 |
+| P2 | adapter scenario + @ 注入 + consistency block | S2–S7 | ✅ PR #174 |
+| P3 | ApimartVideoProvider + 路由 | S1–S7 Seedance mini | ✅ PR #174 |
+| P4 | Agnes keyframes + seed + negative | S3–S4 | ✅ PR #174 |
+| P5 | server Studio + Material 统一 | S9–S10 | ✅ PR #174 |
+| P6 | UI duration 4s / first_last / generate_audio | S5,S8 | ⏳ 待做 |
+| P7 | 测试 | 全部 | ✅ PR #174 |
+| **E-P0** | BYOK 非 catalog Seedance profile 修复 | S10 | 📋 §14 |
+| **E-P1** | 2.0 全变体 catalog + per-variant profile | S1–S8 全档位 | 📋 §14 |
+| **E-P2** | `asset://` + 4K clamp（standard） | 高阶 Seedance | 📋 §14 |
+| **E2.5** | Seedance 2.5 演进 | 长片/4K/50 refs | 📋 §15 |
 
-**建议顺序：** P0 → P3 → P2 → P5 → P4 → P1 → P6 → P7
+**已完成顺序：** P0 → P3 → P2 → P5 → P4 → P1 → P7（PR #174）  
+**扩展建议顺序：** E-P0 → E-P1 → P6 → E-P2 →（等上游）E2.5
 
 ---
 
 ## 11. 非目标
 
-- fal 直连；`asset://`；V* 抽帧理解（C3 完整）；A* ASR（C4）；C2 composer 旁路；4K
+### 11.1 C3-video 首轮（PR #174，已完成）
+
+- fal 直连；V* 抽帧理解（C3 完整）；A* ASR（C4）；C2 composer 旁路
+
+### 11.2 §14 扩展前仍不做
+
+- Seedance **1.x / 1.5 Pro** 接入（API 形态与 2.0 不兼容，须独立 Provider 或显式拒绝）
+- Seedance **2.5** 实现（见 §15，等上游 GA）
+- fal / 直连 BytePlus SDK（继续走 APIMart 统一网关）
+
+### 11.3 从「非目标」移出、纳入 §14
+
+- `asset://` 虚拟资产（**仅** `doubao-seedance-2.0` / `-fast`）
+- 1080p / 4K（**仅** `doubao-seedance-2.0` standard）
+- `seedance-2.0-face` 真人参考档位
 
 ---
 
@@ -1119,8 +1174,13 @@ defaults: { duration: 5, generateAudio: true }
 
 | modelKey | gatewayModelId | 实测状态 | 备注 |
 |---|---|---|---|
-| `agnes-video-v2.0` | 同名 | 部分可用 | 缺 keyframes |
-| `seedance-2.0-min` | `doubao-seedance-2.0-mini` | 未对接 | 需 P3 |
+| `agnes-video-v2.0` | 同名 | ✅ 生产可用 | keyframes PR #174 |
+| `seedance-2.0-min` | `doubao-seedance-2.0-mini` | ✅ 生产可用 | refWire 正确；上游偶发 failed |
+| `seedance-2.0` | `doubao-seedance-2.0` | ❌ 未 catalog | §14 E-P1 |
+| `seedance-2.0-fast` | `doubao-seedance-2.0-fast` | ❌ 未 catalog | §14 E-P1 |
+| `seedance-2.0-face` | `doubao-seedance-2.0-face` | ❌ 未 catalog | §14 E-P1 可选 |
+| BYOK `doubao-seedance-1.0-*` | 各版本 | ⚠️ 误路由 | metadata agnes_*；§14 E-P0 须阻断 |
+| Seedance 2.5 | TBD | ⏳ Coming Soon | §15 |
 
 ---
 
@@ -1132,3 +1192,360 @@ defaults: { duration: 5, generateAudio: true }
 | `2026-08-06-seedream-gpt-image2-apimart-design.md` | ImageModelProfile 架构模板 |
 | `2026-07-18-node-data-flow-refs-design.md` | I*/V*/A* 芯片语义 |
 | `2026-07-19-c21-canvas-refs-design.md` | refs 透传与 refOrder |
+
+---
+
+## 14. Seedance 2.0 全变体 Catalog / Profile 扩展（E-P0 + E-P1 规格草稿）
+
+> **背景：** PR #174 仅 catalog 收录 `seedance-2.0-min`，且 `resolveVideoGatewayModelId` 将所有 `doubao-seedance-*` 强制 rewrite 为 mini。生产复测发现 BYOK channel 配置 `doubao-seedance-1-0-lite-i2v-*` 时 metadata `refWire=agnes_single_image`，adapter 按 Agnes 路径组包但出站 model 仍为 Seedance——**行为不一致、难排障**。  
+> **目标：** E-P0 修复 profile 误路由；E-P1 补齐 2.0 标准版 / fast / face 的 catalog 与 per-variant profile，复用现有 `ApimartVideoProvider` + adapter 多模态能力。  
+> **参考：** [APIMart doubao-seedance-2.0 generation](https://docs.apimart.ai/en/api-reference/videos/doubao-seedance-2-0/generation)
+
+### 14.0 决策摘要
+
+| 项 | 结论 |
+|---|---|
+| 代号 | **C3-video-ext**（PR #174 的增量扩展，不新开 Provider） |
+| 范围 | E-P0 profile 修复 + E-P1 catalog/profile 四变体；**不含** 1.x/1.5、2.5 |
+| Provider | 继续 `ApimartVideoProvider`；hostname 仍限 `apimart.ai` |
+| Profile 策略 | **按 gatewayModelId 精确映射**，取消「一律 rewrite mini」 |
+| BYOK 1.x | 显式 **400 阻断**，提示用户换 2.0 变体 |
+| `asset://` | E-P2（standard/fast）；E-P1 仅预留 profile 字段 `supportsAssetUrl` |
+| UI | E-P1 仅 catalog 可见性；分辨率/档位 selector 仍随 P6 统一 |
+
+### 14.1 问题复盘（PR #174 后）
+
+| # | 现象 | 根因 | 严重度 |
+|---|---|---|---|
+| B1 | BYOK `doubao-seedance-1-0-lite-*` → metadata `refWire=agnes_*` | `resolveModelKey('video', gatewayId)` 无 catalog 命中 → 回退 `agnes-video-v2.0` | **P0** |
+| B2 | BYOK `doubao-seedance-2.0-fast` 出站 fast、profile 按 mini clamp | `resolveVideoGatewayModelId` 一律返回 mini | **P1** |
+| B3 | 用户无法选 standard 拿 1080p/4K | catalog 无 `seedance-2.0` | **P1** |
+| B4 | `asset://` 无法使用 | 非目标 + mini 不支持 | E-P2 |
+
+**关键代码路径（须改）：**
+
+```text
+studio.service.generateVideo
+  → resolveForGeneration → modelName (BYOK 可为任意 gateway id)
+  → buildVideoProviderOptions({ modelKey: resolved.modelName, channelBaseUrl })
+       → resolveModelKey('video', modelKey)          // ← B1：非 catalog 回退 Agnes
+       → resolveVideoModelProfile(resolvedKey, entry.gatewayModelId)
+       → resolveVideoGatewayModelId → 恒 mini       // ← B2
+  → if (user) providerOptions.model = resolved.modelName  // 出站 model 与 profile 脱节
+```
+
+### 14.2 方案对比
+
+| 方案 | 做法 | 优点 | 缺点 | 结论 |
+|---|---|---|---|---|
+| **A（推荐）** | 新增 `resolveVideoModelKey(modelKey, gatewayHint?)`：优先 catalog；否则按 `doubao-seedance-*` 正则匹配已知变体；1.x 阻断 | 最小 diff；BYOK/平台一致 | 须维护 gateway 前缀表 | ✅ E-P0+E-P1 |
+| B | catalog 外置 YAML 全量 gateway 列表 | 运维可配 | 与 ImageModelProfile 模式不一致 | 备选 |
+| C | BYOK 仅允许 catalog 内 modelKey | 简单 | 破坏现有 `channel::gatewayId` 习惯 | ❌ |
+
+**推荐 A：** 与 `imageModelProfiles.ts` 先例一致——**profile 层识别 gateway id**，catalog 负责 UI 展示名与默认参数。
+
+### 14.3 E-P0：BYOK 非 catalog Seedance profile 修复
+
+#### 14.3.1 新增 gateway 解析
+
+```typescript
+/** 已知 Seedance 2.0 变体；1.x 不在此列 */
+const SEEDANCE_20_GATEWAYS = {
+  mini: 'doubao-seedance-2.0-mini',
+  standard: 'doubao-seedance-2.0',
+  fast: 'doubao-seedance-2.0-fast',
+  face: 'doubao-seedance-2.0-face',
+} as const
+
+function isSeedance1x(gatewayModelId: string): boolean {
+  return /^doubao-seedance-1[.-]/i.test(gatewayModelId)
+}
+
+function resolveSeedance20Gateway(modelKey: string, gatewayModelId: string): string | null {
+  // 1) catalog modelKey 精确匹配
+  // 2) gatewayModelId 精确匹配 SEEDANCE_20_GATEWAYS 值
+  // 3) 前缀 doubao-seedance-2.0 且非 1.x
+  // 4) null → 非 Seedance 2.0
+}
+```
+
+#### 14.3.2 修改 `resolveVideoGatewayModelId`
+
+**现状（错误）：**
+
+```typescript
+if (isSeedanceModel(...)) return SEEDANCE_GATEWAY // 恒 mini
+```
+
+**目标：**
+
+```typescript
+export function resolveVideoGatewayModelId(modelKey: string, gatewayModelId: string): string {
+  const resolved = resolveSeedance20Gateway(modelKey, gatewayModelId)
+  if (resolved) return resolved
+  return gatewayModelId
+}
+```
+
+#### 14.3.3 修改 `buildVideoProviderOptions` 入参解析
+
+新增 **`gatewayModelHint`**（BYOK 时传 `resolved.modelName`）：
+
+```typescript
+const catalogResolved = resolveModelKey('video', modelKey)
+const gatewayHint = input.gatewayModelHint ?? catalogResolved.entry.gatewayModelId
+if (isSeedance1x(gatewayHint)) {
+  throw new Error('Seedance 1.x 不支持，请使用 seedance-2.0-min / seedance-2.0 / seedance-2.0-fast')
+}
+const profile = resolveVideoModelProfile(
+  catalogResolved.fallback ? gatewayHint : catalogResolved.modelKey,
+  gatewayHint,
+  { channelBaseUrl },
+)
+```
+
+规则：
+
+| 条件 | profile 依据 |
+|---|---|
+| catalog 命中 | catalog `modelKey` + `gatewayModelId` |
+| BYOK + `doubao-seedance-2.0-*` | `gatewayHint` 精确变体 |
+| BYOK + `doubao-seedance-1.*` | **400 阻断** |
+| 其他未知 video model | 现有 `legacy_prompt_tags` |
+
+#### 14.3.4 E-P0 验收
+
+| # | 条件 |
+|---|---|
+| E0-1 | BYOK `channel::doubao-seedance-2.0-fast` → metadata `refWire=apimart_multimodal`，非 `agnes_*` |
+| E0-2 | BYOK `channel::doubao-seedance-1-0-lite-i2v-*` → 400 + 中文提示 |
+| E0-3 | 平台 `seedance-2.0-min` 行为与 PR #174 回归一致 |
+| E0-4 | 单元测试覆盖上述三路径 |
+
+### 14.4 E-P1：2.0 全变体 Catalog + Per-Variant Profile
+
+#### 14.4.1 Catalog 新增条目
+
+```typescript
+// packages/shared/src/studioModelCatalog.ts — 新增（mini 保持不动）
+{
+  modelKey: 'seedance-2.0',
+  displayName: 'Seedance 2.0',
+  gatewayModelId: 'doubao-seedance-2.0',
+  modality: 'video',
+  params: { ...VIDEO_PARAMS, generateAudio: 'native', seed: 'native',
+            refImages: 'native', refVideos: 'native', refAudios: 'native' },
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+{
+  modelKey: 'seedance-2.0-fast',
+  displayName: 'Seedance 2.0 Fast',
+  gatewayModelId: 'doubao-seedance-2.0-fast',
+  // params 同上
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+{
+  modelKey: 'seedance-2.0-face',
+  displayName: 'Seedance 2.0 Face',
+  gatewayModelId: 'doubao-seedance-2.0-face',
+  // params 同上；UI 可标注「真人参考」
+  defaults: { duration: 5, generateAudio: true, resolution: '720p' },
+},
+```
+
+**默认模型不变：** 平台 video 默认仍为 `agnes-video-v2.0`；Seedance 默认推荐档位仍为 `seedance-2.0-min`（成本）。
+
+#### 14.4.2 Per-Variant Profile 参数表
+
+| 字段 | mini | standard | fast | face |
+|---|---|---|---|---|
+| `gatewayModelId` | `doubao-seedance-2.0-mini` | `doubao-seedance-2.0` | `doubao-seedance-2.0-fast` | `doubao-seedance-2.0-face` |
+| `refWire` | `apimart_multimodal` | 同左 | 同左 | 同左 |
+| `responseMode` | `async_task` | 同左 | 同左 | 同左 |
+| `minDuration` / `maxDuration` | 4 / 15 | 4 / 15 | 4 / 15 | 4 / 15 |
+| `maxImageRefs` / V / A | 9 / 3 / 3 | 同左 | 同左 | 同左 |
+| `allowedResolutions` | 480p, 720p | 480p, 720p, **1080p, 4k** | 480p, 720p | 480p, 720p, 1080p |
+| `maxResolution`（clamp 用） | **720p** | **4k** | **720p** | **1080p** |
+| `supportsAssetUrl` | false | **true** | **true** | false（待上游确认） |
+| `defaultGenerateAudio` | true | true | true | true |
+| `variantTag`（metadata） | `mini` | `standard` | `fast` | `face` |
+
+**clamp 规则调整（替代 §7 单一 mini 规则）：**
+
+```typescript
+if (resolution rank > profile.maxResolution) {
+  droppedFields.push({ field: 'resolution', reason: `${resolution} not on ${variantTag}; use ${profile.maxResolution}` })
+  resolution = profile.maxResolution
+}
+```
+
+#### 14.4.3 变体选型指引（产品 / Prompt）
+
+| 用户意图 | 推荐 modelKey | 理由 |
+|---|---|---|
+| 日常分镜 / 多模态参考 / 成本敏感 | `seedance-2.0-min` | 已验证；720p 足够 |
+| Prompt 迭代 / 预览 | `seedance-2.0-fast` | 延迟低 ~19%（APIMart 定价） |
+| 交付成片 / 1080p / 4K | `seedance-2.0` | 唯一支持 4K + `asset://` |
+| 真人模特 i2v / 口型 | `seedance-2.0-face` | 上游 `-face` 档位 |
+
+#### 14.4.4 Server / Adapter 改动面
+
+| 文件 | 改动 |
+|---|---|
+| `packages/shared/src/videoModelProfiles.ts` | 变体表 + `resolveSeedance20Gateway` + per-variant clamp |
+| `packages/shared/src/studioModelCatalog.ts` | §14.4.1 三条目 |
+| `packages/agent/src/studio/generation-adapter.ts` | `buildVideoProviderOptions` 接收 `gatewayModelHint` |
+| `apps/server/src/studio/studio.service.ts` | 传 `gatewayModelHint: resolved.modelName`；1.x 转 `BadRequestException` |
+| `apps/server/src/canvas/material.service.ts` | 同上 |
+| `apps/web` ModelSelector | 展示新条目（无新 UI 控件） |
+
+**不改：** `ApimartVideoProvider` 请求体结构；`ensureSeedanceRefTags`；场景 S1–S8 推断逻辑。
+
+#### 14.4.5 E-P1 验收
+
+| # | 条件 |
+|---|---|
+| E1-1 | UI/BYOK 可选 `seedance-2.0` / `-fast` / `-face` |
+| E1-2 | standard + resolution=1080p → 出站 1080p，metadata 无 mini downgrade |
+| E1-3 | fast + resolution=1080p → clamp 720p + `droppedFields` |
+| E1-4 | mini 回归：1080p → 720p（与 PR #174 一致） |
+| E1-5 | metadata 含 `variantTag` + 正确 `gatewayModelId` |
+| E1-6 | S3/S6/S7 多模态在四个变体上 refWire 均为 `apimart_multimodal` |
+
+### 14.5 E-P2 预览（本规格仅登记，不实施）
+
+| 能力 | 适用变体 | 说明 |
+|---|---|---|
+| `asset://` URL | standard, fast | 上游限制；须在 inline 阶段跳过 HTTP 下载 |
+| 4K 出站 | standard | UI resolution selector 随 P6 |
+| `doubao-seedance-2.0-face` 特参 | face | 若上游有 `face` / `portrait` 额外字段，单独 sub-profile |
+
+### 14.6 E-P0 + E-P1 实施顺序
+
+```text
+E-P0-1  videoModelProfiles: resolveSeedance20Gateway + 取消 rewrite mini
+E-P0-2  generation-adapter: gatewayModelHint + 1.x 阻断
+E-P0-3  studio/material: 传 hint + BadRequestException 映射
+E-P0-4  单元测试 + prod BYOK 回归
+
+E-P1-1  catalog 三条目 + profile 变体表
+E-P1-2  per-variant resolution clamp
+E-P1-3  metadata variantTag
+E-P1-4  UI model list + 集成测试
+```
+
+---
+
+## 15. Seedance 2.5 规划演进路线
+
+> **背景：** APIMart 已发布 [Seedance 2.5 Coming Soon](https://apimart.ai/model/doubao-seedance-2-5-comingsoon) 页面；BytePlus ModelArk 截至 2026-06 公开 ID 仍为 `doubao-seedance-2-0-260128`，**2.5 无 GA model id**。本项目 PR #174 / §14 均基于 2.0 API 形态。  
+> **原则：** 2.5 **不提前写 Provider**；先做 **profile 脚手架 + feature flag + 文档追踪**，上游 GA 后按阶段接入。
+
+### 15.0 2.0 vs 2.5 能力差异（据 APIMart / ByteDance 公开材料）
+
+| 维度 | Seedance 2.0（当前 §14） | Seedance 2.5（规划） |
+|---|---|---|
+| 单 pass 时长 | 4–15s | **~30s** |
+| 分辨率 | mini 720p；standard 至 4K | **原生 4K + 10-bit** |
+| 多模态引用上限 | I*≤9, V*≤3, A*≤3 | **≤50**（图/视/音合计） |
+| 区域编辑 | ✗ | **预告支持**（参数名待 GA 确认） |
+| 有声视频 | `generate_audio` | 增强对白/环境音/口型 |
+| API 形态 | APIMart async task | 预期仍为 async task + webhook |
+| 项目状态 | E-P0/E-P1 扩展中 | **零代码；§15 追踪** |
+
+### 15.1 演进阶段（E2.5）
+
+| 阶段 | 触发条件 | 交付 | 依赖 |
+|---|---|---|---|
+| **E2.5-W0 观望** | APIMart 页面 Coming Soon | 本 §15 + 附录追踪表更新；**零代码** | — |
+| **E2.5-W1 脚手架** | APIMart 公布 model id + 请求/响应 schema | `VideoModelProfile` 预留 `seedance-2.5` 条目（feature flag 关闭）；catalog 灰显 | §14 E-P1 完成 |
+| **E2.5-W2 基础 GA** | 2.5 t2v / i2v 与 2.0 同 schema 或向后兼容 | 扩展 `ApimartVideoProvider` model 白名单；duration clamp 至 30s；refs clamp 至 50 | W1 |
+| **E2.5-W3 高阶能力** | 官方文档确认 4K/10-bit/区域编辑参数 | 独立 sub-profile；UI 分辨率/时长档位；`region` / `mask` 等待定字段 | W2 |
+| **E2.5-W4 生产验证** | W3 测试通过 | `deploy/prod-pr2xx-verify.py`；与 2.0 并存，用户可选档位 | W3 |
+
+```mermaid
+flowchart LR
+  W0[E2.5-W0 观望] --> W1[E2.5-W1 脚手架]
+  W1 --> W2[E2.5-W2 基础 GA]
+  W2 --> W3[E2.5-W3 高阶能力]
+  W3 --> W4[E2.5-W4 生产验证]
+
+  E14[§14 E-P0/E-P1] --> W1
+  P6[P6 UI 控件] --> W3
+```
+
+### 15.2 预期 Profile 草案（W1，字段名待 GA 确认）
+
+```typescript
+// 伪代码 — feature flag: SEEDANCE_25_ENABLED=false
+{
+  modelKey: 'seedance-2.5',
+  gatewayModelId: 'doubao-seedance-2.5', // TBD
+  refWire: 'apimart_multimodal_v2',      // 或复用 apimart_multimodal + 提高上限
+  responseMode: 'async_task',
+  minDuration: 4,
+  maxDuration: 30,
+  maxImageRefs: 50,  // 或 totalMultimodalRefs: 50
+  maxVideoRefs: 50,
+  maxAudioRefs: 50,
+  maxResolution: '4k',
+  defaultGenerateAudio: true,
+  pollIntervalMs: 10_000,
+  maxPollMs: 900_000,  // 30s 片源生成更慢
+}
+```
+
+**与 2.0 共存策略：**
+
+| 策略 | 说明 |
+|---|---|
+| catalog 并存 | `seedance-2.0-min` / `-standard` / `-fast` 保留；新增 `seedance-2.5` |
+| 默认不升级 | 现有用户默认不变；Agent 仅在用户显式选 2.5 或 prompt 含「30秒长片」等意图时推荐 |
+| adapter 复用 | `@ImageN` 1-based、bundle、scenario S1–S8 **逻辑复用**；仅 clamp 上限与 Provider poll 超时调整 |
+| 2.0 不废弃 | 2.5 定价更高时，2.0-fast 仍为预览默认 |
+
+### 15.3 风险与阻塞项
+
+| 风险 | 缓解 |
+|---|---|
+| model id 与 2.0 不兼容 | W1 先只加 profile + flag，不默认启用 |
+| 50 refs 性能/成本 | clamp + UI 警告；metadata 记录 ref 总数 |
+| 30s 生成超时 | `maxPollMs` 提至 15min；异步 UX 已有 |
+| 区域编辑 API 不稳定 | W3 独立 feature flag；非阻塞 W2 |
+| 1.x BYOK 用户误选 2.5 | §14 E-P0 已阻断 1.x；2.5 仅 catalog 显式入口 |
+
+### 15.4 追踪清单（维护者）
+
+| 检查项 | 来源 | 上次更新 |
+|---|---|---|
+| APIMart 2.5 model id | https://apimart.ai/model/doubao-seedance-2-5-comingsoon | 2026-08-08 |
+| APIMart 2.0 generation schema | https://docs.apimart.ai/en/api-reference/videos/doubao-seedance-2-0/generation | 2026-08-08 |
+| BytePlus 公开 model id | `doubao-seedance-2-0-260128`（2.0 only） | 2026-08-08 |
+| 本项目 mini 生产状态 | PR #174 merged | 2026-08-08 |
+
+**W0 → W1 切换条件（须全部满足）：**
+
+1. APIMart 文档页出现可调用 `model` 枚举值  
+2. 请求/响应与 2.0 diff 文档或 changelog 发布  
+3. 测试 API key 可完成至少一次 t2v 5s 冒烟  
+
+### 15.5 与 §14 的衔接
+
+| §14 交付 | 对 2.5 的价值 |
+|---|---|
+| E-P0 gateway 精确解析 | 避免 2.5 GA 后重复踩 BYOK 回退 Agnes 坑 |
+| E-P1 per-variant profile | 变体表模式可直接加 `seedance-2.5` 行 |
+| E-P2 asset:// | 2.5 若沿用 asset 协议可复用 inline 逻辑 |
+| P6 UI duration/resolution | 2.5 的 30s/4K 控件扩展同一组件 |
+
+---
+
+## 16. 附录：扩展验收汇总（§14 + §15）
+
+| 阶段 | 自动化 | 生产 |
+|---|---|---|
+| E-P0 | `videoModelProfiles.test.ts` BYOK/fast/1.x | BYOK channel 不再出现 agnes refWire |
+| E-P1 | catalog 四变体 + resolution clamp 用例 | standard 1080p 真实出站 |
+| E-P2 | asset:// inline 单测 | 可选 |
+| E2.5-W2+ | 新 profile + Provider 白名单 | `prod-pr2xx-verify.py` 30s 冒烟 |
+

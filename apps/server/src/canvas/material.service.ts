@@ -17,6 +17,7 @@ import {
   createVideoProvider,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
+  Seedance1xUnsupportedError,
   stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -80,6 +81,8 @@ export type CanvasVideoGenerateInput = {
   refs?: GenerationRefPayload[]
   mentionedKeys?: string[]
   referenceImageUrl?: string
+  videoMode?: string
+  generateAudio?: boolean
 }
 
 function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
@@ -89,6 +92,20 @@ function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
       throw new BadRequestException('参考图尚未上传')
     }
   }
+}
+
+function resolveVideoModeForProvider(
+  explicit: string | undefined,
+  referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
+): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+  if (
+    explicit === 'first_last_frame'
+    || explicit === 'image_to_video'
+    || explicit === 'text_to_video'
+  ) {
+    return explicit
+  }
+  return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
 }
 
 function extractTextSources(refs?: GenerationRefPayload[]): MergeTextSource[] {
@@ -389,6 +406,8 @@ export class MaterialService {
       refs,
       mentionedKeys,
       referenceImageUrl,
+      videoMode,
+      generateAudio,
     } = input
 
     const shot = await this.prisma.shot.findUnique({
@@ -454,6 +473,8 @@ export class MaterialService {
       referenceImageUrl,
       resolved,
       skipCharge,
+      videoMode,
+      generateAudio,
     ).catch(console.error)
     return material
   }
@@ -959,6 +980,8 @@ export class MaterialService {
     referenceImageUrl: string | undefined,
     resolved: ResolvedGenerationProvider,
     skipCharge?: boolean,
+    videoMode?: string,
+    generateAudio?: boolean,
   ) {
     const referenceBundle = buildVideoReferenceBundle(refs ?? [], referenceImageUrl)
     for (const group of [
@@ -996,16 +1019,26 @@ export class MaterialService {
         referenceAudios: referenceBundle.audios.length,
       }),
     )
-    const built = buildVideoProviderOptions({
-      modelKey: resolved.modelName,
-      duration,
-      aspectRatio,
-      resolution,
-      crop,
-      referenceBundle,
-      videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
-      channelBaseUrl: resolved.credentials.baseUrl,
-    })
+    let built: ReturnType<typeof buildVideoProviderOptions>
+    try {
+      built = buildVideoProviderOptions({
+        modelKey: resolved.modelName,
+        duration,
+        aspectRatio,
+        resolution,
+        crop,
+        referenceBundle,
+        videoMode: resolveVideoModeForProvider(videoMode, referenceBundle),
+        gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
+        channelBaseUrl: resolved.credentials.baseUrl,
+        generateAudio,
+      })
+    } catch (err) {
+      if (err instanceof Seedance1xUnsupportedError) {
+        throw new BadRequestException(err.message)
+      }
+      throw err
+    }
     const effectivePrompt = buildEffectiveVideoPrompt(mergedText, built)
     const providerOptions = buildVideoProviderGenerateOptions(built)
     if (resolved.source === 'user') {

@@ -57,6 +57,11 @@ const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateVideoCredits(videoSettings.value.duration))
 
+const imageRefCount = computed(() =>
+  (props.refs ?? []).filter((r) => r.mediaType === 'image' && !r.stale && r.payload.url).length,
+)
+const canUseFirstLastFrame = computed(() => imageRefCount.value >= 2)
+
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
   if (local) return local
@@ -110,9 +115,18 @@ function onGenerate() {
     videoModel: videoModel.value,
     videoSettings: { ...videoSettings.value },
     videoMode: videoMode.value,
-    referenceImageUrl: videoMode.value === 'image_to_video' ? (effectiveRefUrl.value || undefined) : undefined,
+    referenceImageUrl:
+      videoMode.value === 'image_to_video' ? (effectiveRefUrl.value || undefined) : undefined,
   })
   emit('generate')
+}
+
+function continueFromLastFrame() {
+  const url = props.upstream.lastFrameUrl.trim()
+  if (!url) return
+  referenceImageUrl.value = url
+  videoMode.value = 'image_to_video'
+  emit('patch', { referenceImageUrl: url, videoMode: 'image_to_video' })
 }
 
 function toggleVoice() {
@@ -240,7 +254,29 @@ function onRefMention(refKey: string) {
         >
           <DockTypeIcon icon="image" :size="12" />
         </button>
+        <button
+          v-if="canUseFirstLastFrame"
+          type="button"
+          class="rounded-md px-1.5 py-1 text-[10px] transition"
+          :class="videoMode === 'first_last_frame' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
+          :disabled="readonly"
+          title="首尾帧"
+          @click="setVideoMode('first_last_frame')"
+        >
+          首尾帧
+        </button>
       </div>
+
+      <button
+        v-if="upstream.lastFrameUrl"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :disabled="readonly"
+        title="使用上游视频末帧作为参考图"
+        @click="continueFromLastFrame"
+      >
+        延续上一镜
+      </button>
 
       <UniversalModelSelector
         v-model="videoModel"
@@ -295,7 +331,11 @@ function onRefMention(refKey: string) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!generating && (!prompt.trim() || (videoMode === 'image_to_video' && !effectiveRefUrl))"
+          :disabled="!generating && (
+            !prompt.trim()
+            || (videoMode === 'image_to_video' && !effectiveRefUrl)
+            || (videoMode === 'first_last_frame' && !canUseFirstLastFrame)
+          )"
           @generate="onGenerate"
         />
       </div>

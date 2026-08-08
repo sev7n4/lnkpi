@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Param, Post, Put, Query, Req, UseGuards } from '@nestjs/common'
-import { IsArray, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import type {
   RefMediaType,
@@ -114,8 +114,9 @@ class GenerateVideoDto {
 
   @IsOptional()
   @IsNumber()
-  @IsIn([5, 10, 15])
-  duration?: 5 | 10 | 15
+  @Min(4)
+  @Max(15)
+  duration?: number
 
   @IsOptional()
   @IsString()
@@ -132,6 +133,14 @@ class GenerateVideoDto {
   @IsOptional()
   @IsString()
   referenceImageUrl?: string
+
+  @IsOptional()
+  @IsString()
+  videoMode?: string
+
+  @IsOptional()
+  @IsBoolean()
+  generateAudio?: boolean
 
   @IsOptional()
   @IsArray()
@@ -440,6 +449,8 @@ export class CanvasController {
       refs: dto.refs,
       mentionedKeys: dto.mentionedKeys,
       referenceImageUrl: dto.referenceImageUrl,
+      videoMode: dto.videoMode,
+      generateAudio: dto.generateAudio,
     })
     return { code: 0, message: 'ok', data }
   }

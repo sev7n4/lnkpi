@@ -159,15 +159,17 @@ export type VideoResolution = '480p' | '720p' | '1080p'
 
 export interface VideoSettings {
   aspectRatio: VideoAspectRatio
-  duration: number // 5–15 整数秒
+  duration: number // 4–15 整数秒
   crop: VideoCropMode
   resolution: VideoResolution
+  /** Seedance 等模型：是否生成音频，默认 true */
+  generateAudio?: boolean
 }
 
 export function clampVideoDuration(n: unknown): number {
   const v = typeof n === 'number' ? n : Number(n)
   if (!Number.isFinite(v)) return 5
-  return Math.min(15, Math.max(5, Math.round(v)))
+  return Math.min(15, Math.max(4, Math.round(v)))
 }
 
 export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: string }[] = [
@@ -176,9 +178,10 @@ export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: strin
   { value: '1:1', label: '1:1 方形' },
 ]
 
-export const VIDEO_DURATION_MARKS = [5, 10, 15] as const
+export const VIDEO_DURATION_MARKS = [4, 5, 10, 15] as const
 
-export const VIDEO_DURATION_OPTIONS: { value: 5 | 10 | 15; label: string }[] = [
+export const VIDEO_DURATION_OPTIONS: { value: 4 | 5 | 10 | 15; label: string }[] = [
+  { value: 4, label: '4 秒' },
   { value: 5, label: '5 秒' },
   { value: 10, label: '10 秒' },
   { value: 15, label: '15 秒' },
@@ -201,6 +204,7 @@ export const DEFAULT_VIDEO_SETTINGS: VideoSettings = {
   duration: 5,
   crop: 'none',
   resolution: '720p',
+  generateAudio: true,
 }
 
 // --- Shot/Material 模型（对标 NeoWOW Canvas Domain）---

@@ -16,6 +16,7 @@ import {
   generateTextWithImages,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
+  Seedance1xUnsupportedError,
   stripRefImagePromptTags,
   type MergeTextSource,
 } from '@lnkpi/agent'
@@ -84,6 +85,20 @@ function extractReferenceImages(refs?: StudioRefInput[]): string[] {
       .filter((r) => r.mediaType === 'image' && r.url?.trim())
       .map((r) => r.url!.trim()),
   )
+}
+
+function resolveStudioVideoMode(
+  explicit: string | undefined,
+  referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
+): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+  if (
+    explicit === 'first_last_frame'
+    || explicit === 'image_to_video'
+    || explicit === 'text_to_video'
+  ) {
+    return explicit
+  }
+  return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
 }
 
 function providerOpts(resolved: ResolvedGenerationProvider) {
@@ -915,6 +930,8 @@ export class StudioService {
     crop = 'none',
     referenceImageUrl?: string,
     scope?: CanvasGenerationScope,
+    videoMode?: string,
+    generateAudio?: boolean,
   ) {
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
@@ -950,16 +967,27 @@ export class StudioService {
       resolved.modelName,
       referenceBundle.images.map(({ refKey, label }) => ({ refKey, label })),
     )
-    const built = buildVideoProviderOptions({
-      modelKey: resolved.modelName,
-      duration,
-      aspectRatio,
-      resolution,
-      crop,
-      referenceBundle,
-      videoMode: referenceBundle.images.length ? 'image_to_video' : 'text_to_video',
-      channelBaseUrl: resolved.credentials.baseUrl,
-    })
+    const built = (() => {
+      try {
+        return buildVideoProviderOptions({
+          modelKey: resolved.modelName,
+          duration,
+          aspectRatio,
+          resolution,
+          crop,
+          referenceBundle,
+          videoMode: resolveStudioVideoMode(videoMode, referenceBundle),
+          gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
+          channelBaseUrl: resolved.credentials.baseUrl,
+          generateAudio,
+        })
+      } catch (err) {
+        if (err instanceof Seedance1xUnsupportedError) {
+          throw new BadRequestException(err.message)
+        }
+        throw err
+      }
+    })()
     const storeModel =
       resolved.source === 'user' ? model ?? built.meta.modelKey : built.meta.modelKey
     const effectivePrompt = buildEffectiveVideoPrompt(mergedText, built)

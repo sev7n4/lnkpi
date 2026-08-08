@@ -165,14 +165,17 @@ export function resolveCanvasImageParams(data: Record<string, unknown>) {
 
 export function resolveCanvasVideoParams(
   data: Record<string, unknown>,
-): Partial<VideoSettings> & { model: string } {
+): Partial<VideoSettings> & { model: string; videoMode?: string; generateAudio?: boolean } {
   const settings = (data.videoSettings as Partial<VideoSettings> | undefined) ?? {}
+  const videoMode = data.videoMode as string | undefined
   return {
     model: resolveGenerationModel('video', data.videoModel as string | undefined),
     duration: settings.duration ?? DEFAULT_VIDEO_SETTINGS.duration,
     aspectRatio: settings.aspectRatio ?? DEFAULT_VIDEO_SETTINGS.aspectRatio,
     resolution: settings.resolution ?? DEFAULT_VIDEO_SETTINGS.resolution,
     crop: settings.crop ?? DEFAULT_VIDEO_SETTINGS.crop,
+    generateAudio: settings.generateAudio ?? DEFAULT_VIDEO_SETTINGS.generateAudio,
+    ...(videoMode ? { videoMode } : {}),
   }
 }
 

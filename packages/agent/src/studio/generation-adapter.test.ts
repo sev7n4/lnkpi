@@ -9,6 +9,7 @@ import {
   buildEffectiveImagePrompt,
   buildImageProviderGenerateOptions,
   ensureSeedanceRefTags,
+  Seedance1xUnsupportedError,
 } from './generation-adapter'
 import { buildVideoReferenceBundle } from './video-refs'
 
@@ -201,6 +202,65 @@ describe('buildVideoProviderOptions', () => {
     expect(built.providerOptions.referenceImages).toHaveLength(9)
     expect(prompt).toContain('@Image9')
     expect(prompt).not.toContain('@Image10')
+  })
+
+  it('resolves BYOK fast gateway hint to apimart_multimodal with fast variant clamp', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'unknown-byok-video',
+      gatewayModelHint: 'doubao-seedance-2.0-fast',
+      resolution: '1080p',
+      referenceBundle: bundle,
+      channelBaseUrl: 'https://api.apimart.ai/v1',
+    })
+    expect(r.meta.refWire).toBe('apimart_multimodal')
+    expect(r.model).toBe('doubao-seedance-2.0-fast')
+    expect(r.meta.gatewayModelId).toBe('doubao-seedance-2.0-fast')
+    expect(r.meta.variantTag).toBe('fast')
+    expect(r.resolution).toBe('720p')
+    expect(r.meta.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('includes variantTag in meta for catalog seedance standard', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0',
+      resolution: '1080p',
+    })
+    expect(r.meta.variantTag).toBe('standard')
+    expect(r.resolution).toBe('1080p')
+    expect(r.model).toBe('doubao-seedance-2.0')
+  })
+
+  it('includes variantTag in meta for catalog seedance fast with resolution clamp', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-fast',
+      resolution: '1080p',
+    })
+    expect(r.meta.variantTag).toBe('fast')
+    expect(r.resolution).toBe('720p')
+    expect(r.meta.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('throws Seedance1xUnsupportedError for 1.x BYOK gateway hint', () => {
+    expect(() =>
+      buildVideoProviderOptions({
+        modelKey: 'doubao-seedance-1-0-lite-i2v-250428',
+        gatewayModelHint: 'doubao-seedance-1-0-lite-i2v-250428',
+        channelBaseUrl: 'https://api.apimart.ai/v1',
+      }),
+    ).toThrow(Seedance1xUnsupportedError)
+    try {
+      buildVideoProviderOptions({
+        modelKey: 'doubao-seedance-1-0-lite-i2v-250428',
+        gatewayModelHint: 'doubao-seedance-1-0-lite-i2v-250428',
+        channelBaseUrl: 'https://api.apimart.ai/v1',
+      })
+    } catch (err) {
+      expect(err).toBeInstanceOf(Seedance1xUnsupportedError)
+      expect((err as Error).message).toMatch(/不支持.*Seedance 1\.x/)
+    }
   })
 
   it('drops video and audio prompt tags before first-last scenario inference', () => {
