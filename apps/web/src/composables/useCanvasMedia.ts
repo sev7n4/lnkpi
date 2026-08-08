@@ -161,7 +161,15 @@ export async function downloadMediaFile(
     headers: { Authorization: `Bearer ${token}` },
   })
   if (!res.ok) {
-    ElMessage.warning('下载失败，链接可能已过期，请稍后重试')
+    if (res.status === 401) {
+      ElMessage.warning('登录已过期，请重新登录后再下载')
+    } else if (res.status === 403) {
+      ElMessage.warning('无权下载该文件，请刷新画布后重试')
+    } else if (res.status >= 500) {
+      ElMessage.warning('下载服务异常，请稍后重试')
+    } else {
+      ElMessage.warning('下载失败，链接可能已过期，请稍后重试')
+    }
     return
   }
   triggerDownload(await res.blob(), filename)

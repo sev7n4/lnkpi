@@ -220,9 +220,12 @@ export function mimeFromExt(fileName: string): string | undefined {
   }
 }
 
+/** RFC 5987: `filename=` must be ASCII; CJK and symbols go in `filename*=` only. */
 export function contentDispositionAttachment(filename: string): string {
   const safe = sanitizeFilename(filename)
-  return `attachment; filename="${safe}"; filename*=UTF-8''${encodeURIComponent(safe)}`
+  const asciiFallback =
+    safe.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_').trim() || 'download.bin'
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(safe)}`
 }
 
 export async function openDownloadStream(
