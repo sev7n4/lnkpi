@@ -78,3 +78,17 @@ Tests       4 passed (4)
 - [x] Step 1: Extend `AgentStreamMessage` with `linkedOutputs`
 - [x] Step 2: `loadHistory` always replaces messages + `parseLinkedOutputs`
 - [x] Step 3: Tests + commit
+
+## Seedance/Agnes Review Fix：referenceImageUrl HTTP 透传
+
+- Canvas 与 Studio 的 `GenerateVideoDto` 新增可选字符串字段 `referenceImageUrl`，避免全局 DTO 白名单过滤该字段。
+- Canvas Controller 将字段传给 `MaterialService.generateVideo`；Studio Controller 与 `StudioService.generateVideo` 将字段传给 `buildVideoReferenceBundle`。
+- 前端检查结论：普通上游图片引用会进入 `refs`，但节点 `data.referenceImageUrl` 此前不会进入视频生成请求；现已在 Studio 和 Canvas 两条生成路径透传。
+- 新增 Controller 透传测试和 Studio 后备参考图集成测试，并调整节点生成、Agent Canvas 调用测试。
+
+验证：
+
+- `pnpm --filter @lnkpi/server test`：26 个测试文件、200 项测试通过。
+- `pnpm --filter @lnkpi/web test -- useNodeGeneration.test.ts`：39 项测试通过。
+- `pnpm build`：shared、agent、web、server 全仓构建通过。
+- 编辑文件 IDE lint：无诊断。

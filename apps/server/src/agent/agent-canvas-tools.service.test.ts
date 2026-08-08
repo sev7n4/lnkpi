@@ -380,6 +380,7 @@ describe('AgentCanvasToolsService', () => {
       undefined,
       '1080p',
       'center',
+      undefined,
       { sessionId: 's1', nodeId: 'vid-1' },
     )
     expect(result.status).toBe('completed')

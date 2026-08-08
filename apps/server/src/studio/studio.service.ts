@@ -913,13 +913,14 @@ export class StudioService {
     mentionedKeys?: string[],
     resolution = '720p',
     crop = 'none',
+    referenceImageUrl?: string,
     scope?: CanvasGenerationScope,
   ) {
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
       mediaType: ref.mediaType as GenerationRefPayload['mediaType'],
     }))
-    const referenceBundle = buildVideoReferenceBundle(videoRefs)
+    const referenceBundle = buildVideoReferenceBundle(videoRefs, referenceImageUrl)
     for (const group of [
       referenceBundle.images,
       referenceBundle.videos,

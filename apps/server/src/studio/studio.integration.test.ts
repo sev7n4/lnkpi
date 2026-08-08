@@ -112,6 +112,27 @@ describe('StudioService integration (provider params)', () => {
     )
   })
 
+  it('uses referenceImageUrl when refs contain no image', async () => {
+    const imageUrl = 'https://example.com/node-ref.png'
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'seedance-2.0-min',
+      5,
+      '16:9',
+      [],
+      [],
+      '720p',
+      'none',
+      imageUrl,
+    )
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls[0]?.[1]).toMatchObject({
+      referenceImages: [imageUrl],
+    })
+  })
+
   it('rejects audio-only video references', async () => {
     await expect(
       svc.generateVideo(

@@ -891,6 +891,7 @@ export class AgentCanvasToolsService {
         undefined,
         resolution,
         crop,
+        undefined,
         { sessionId: input.sessionId, nodeId: input.nodeId },
       )
 

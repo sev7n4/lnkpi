@@ -117,6 +117,7 @@ export const studioApi = {
     mentionedKeys?: string[],
     resolution?: string,
     crop?: string,
+    referenceImageUrl?: string,
     signal?: AbortSignal,
     scope?: CanvasGenerationScope,
   ) =>
@@ -131,6 +132,7 @@ export const studioApi = {
         mentionedKeys,
         resolution,
         crop,
+        referenceImageUrl,
         ...scopeBody(scope),
       },
       { timeout: 60_000, signal },

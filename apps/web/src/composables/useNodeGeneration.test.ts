@@ -705,6 +705,7 @@ describe('useNodeGeneration', () => {
     const video = createNode('video', {
       prompt: 'motion',
       videoModel: encodeChannelModel('platform', 'happyhose-1.1'),
+      referenceImageUrl: 'https://example.com/node-ref.png',
       videoSettings: {
         duration: 10,
         aspectRatio: '9:16',
@@ -726,6 +727,7 @@ describe('useNodeGeneration', () => {
       crop: 'center',
       refs: [],
       mentionedKeys: [],
+      referenceImageUrl: 'https://example.com/node-ref.png',
     })
     expect(studioApi.generateVideo).not.toHaveBeenCalled()
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])

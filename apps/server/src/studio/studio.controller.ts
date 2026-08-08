@@ -92,6 +92,10 @@ class GenerateVideoDto extends CanvasScopeFields {
   crop?: string
 
   @IsOptional()
+  @IsString()
+  referenceImageUrl?: string
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
@@ -314,6 +318,7 @@ export class StudioController {
       dto.mentionedKeys,
       dto.resolution,
       dto.crop,
+      dto.referenceImageUrl,
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
