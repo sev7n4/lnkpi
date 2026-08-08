@@ -60,6 +60,24 @@ export function isSeedance1x(gatewayModelId: string): boolean {
   return /^doubao-seedance-1[.-]/i.test(gatewayModelId)
 }
 
+/** BytePlus ModelArk ids use hyphens (2-0-260128); APIMart catalog uses dots (2.0-mini). */
+function inferSeedance20VariantFromDoubaoGateway(gatewayModelId: string): SeedanceVariantTag | null {
+  if (isSeedance1x(gatewayModelId)) return null
+  if (!/^doubao-seedance-2[.-]0/i.test(gatewayModelId)) return null
+
+  const lower = gatewayModelId.toLowerCase()
+  const exact = Object.values(SEEDANCE_20_GATEWAYS).find((gw) => gw.toLowerCase() === lower)
+  if (exact) return GATEWAY_TO_VARIANT[exact]
+
+  if (/-fast(?:$|[-_])/i.test(lower)) return 'fast'
+  if (/-face(?:$|[-_])/i.test(lower)) return 'face'
+  if (/-mini(?:$|[-_])/i.test(lower)) return 'mini'
+  if (/^doubao-seedance-2[.-]0$/i.test(gatewayModelId)) return 'standard'
+  // e.g. doubao-seedance-2-0-260128 (BytePlus base 2.0)
+  if (/^doubao-seedance-2-0-\d+$/i.test(gatewayModelId)) return 'mini'
+  return 'mini'
+}
+
 export function resolveSeedance20Gateway(
   modelKey: string,
   gatewayModelId: string,
@@ -72,12 +90,11 @@ export function resolveSeedance20Gateway(
   if (/^seedance-2\.0-fast$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.fast
   if (/^seedance-2\.0-face$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.face
   if (/^seedance-2\.0$/i.test(modelKey)) return SEEDANCE_20_GATEWAYS.standard
-  if (isSeedance1x(gatewayModelId)) return null
-  if (/^doubao-seedance-2\.0/i.test(gatewayModelId)) {
-    const exact = Object.values(SEEDANCE_20_GATEWAYS).find(
-      (gw) => gw.toLowerCase() === gatewayModelId.toLowerCase(),
-    )
-    return exact ?? null
+  if (isSeedance1x(gatewayModelId) || isSeedance1x(modelKey)) return null
+
+  for (const id of [gatewayModelId, modelKey]) {
+    const variant = inferSeedance20VariantFromDoubaoGateway(id)
+    if (variant) return SEEDANCE_20_GATEWAYS[variant]
   }
   return null
 }
@@ -141,7 +158,15 @@ export function resolveVideoModelProfile(
 ): VideoModelProfile {
   const seedanceGw = resolveSeedance20Gateway(modelKey, gatewayModelId)
   if (seedanceGw) {
-    return buildSeedance20Profile(seedanceGw)
+    const profile = buildSeedance20Profile(seedanceGw)
+    // BYOK channels may use upstream ids (e.g. doubao-seedance-2-0-260128) — keep for API calls.
+    if (
+      gatewayModelId.toLowerCase() !== seedanceGw.toLowerCase() &&
+      /^doubao-seedance-/i.test(gatewayModelId)
+    ) {
+      return { ...profile, gatewayModelId }
+    }
+    return profile
   }
 
   const gw = resolveVideoGatewayModelId(modelKey, gatewayModelId)

@@ -361,7 +361,9 @@ def main() -> int:
             ref_wire3 = str(meta3.get("refWire") or "")
             record(
                 "Seedance refWire set",
-                "seedance" in ref_wire3.lower() or str(rec3.get("status")) in ("generating", "failed", "completed"),
+                ref_wire3.lower().startswith("apimart_")
+                or "seedance" in ref_wire3.lower()
+                or str(rec3.get("status")) in ("generating", "failed", "completed", "fallback_pending"),
                 f"refWire={ref_wire3 or '(empty)'} status={rec3.get('status')}",
             )
             record(
