@@ -1,6 +1,5 @@
 import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { CanvasAgent } from '@lnkpi/agent'
 import type { CanvasAction } from '@lnkpi/shared'
 import { AgentService, deriveLinkedOutputs } from './agent.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
@@ -124,32 +123,32 @@ describe('AgentService streamConversation', () => {
     )
   })
 
-  it('uses CanvasAgent when AGENT_RUNTIME_URL is unset', async () => {
-    const runSpy = vi
-      .spyOn(CanvasAgent.prototype, 'run')
-      .mockImplementation(async (_messages, onEvent) => {
-        onEvent({ type: 'text_delta', data: { text: 'from-canvas-agent' } })
-        onEvent({ type: 'done', data: {} })
-      })
-
+  it('returns runtime_unavailable error when AGENT_RUNTIME_URL is unset', async () => {
     const healthSpy = vi.spyOn(AgentRuntimeClient.prototype, 'healthOk')
     const streamSpy = vi.spyOn(AgentRuntimeClient.prototype, 'streamRun')
 
-    const events: Array<{ type: string }> = []
+    const events: Array<{ type: string; data?: unknown }> = []
     for await (const event of service.streamConversation('s1', 'hello', 'u1')) {
       events.push(event)
     }
 
-    expect(runSpy).toHaveBeenCalledOnce()
     expect(healthSpy).not.toHaveBeenCalled()
     expect(streamSpy).not.toHaveBeenCalled()
-    expect(events.some((e) => e.type === 'text_delta')).toBe(true)
-    expect(agentMessageCreate).toHaveBeenCalled()
+    expect(events).toEqual([
+      {
+        type: 'error',
+        data: {
+          message: 'Agent 服务暂不可用，请稍后重试。',
+          error_type: 'runtime_unavailable',
+        },
+      },
+      { type: 'done', data: {} },
+    ])
+    expect(agentMessageCreate).toHaveBeenCalledTimes(1)
   })
 
   it('uses Runtime when AGENT_RUNTIME_URL healthy', async () => {
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
-    const runSpy = vi.spyOn(CanvasAgent.prototype, 'run')
     const streamRun = vi.fn(async function* () {
       yield { type: 'text_delta', data: { text: 'from-runtime' } }
       yield {
@@ -182,7 +181,6 @@ describe('AgentService streamConversation', () => {
       events.push(event)
     }
 
-    expect(runSpy).not.toHaveBeenCalled()
     expect(streamRun).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 's1',
@@ -212,40 +210,27 @@ describe('AgentService streamConversation', () => {
     })
   })
 
-  it('persists linkedOutputs from CanvasAgent add_node actions', async () => {
-    vi.spyOn(CanvasAgent.prototype, 'run').mockImplementation(async (_messages, onEvent) => {
-      onEvent({ type: 'text_delta', data: { text: 'done' } })
-      onEvent({
-        type: 'canvas_action',
-        data: {
-          type: 'add_node',
-          payload: {
-            id: 'shot-1',
-            nodeType: 'shot',
-            data: { title: '镜头 A' },
-          },
-        },
-      })
-      onEvent({ type: 'done', data: {} })
-    })
+  it('returns runtime_unavailable when Runtime health fails', async () => {
+    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
 
-    for await (const _event of service.streamConversation('s1', 'hello', 'u1', 's1:thread-b')) {
-      // drain
+    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
+      healthOk: vi.fn().mockResolvedValue(false),
+      streamRun: vi.fn(),
+    } as unknown as AgentRuntimeClient)
+
+    const events: Array<{ type: string; data?: unknown }> = []
+    for await (const event of service.streamConversation('s1', 'hello', 'u1')) {
+      events.push(event)
     }
 
-    expect(agentMessageCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        role: 'assistant',
-        linkedOutputs: JSON.stringify([
-          {
-            nodeId: 'shot-1',
-            title: '镜头 A',
-            nodeType: 'shot',
-            status: 'done',
-          },
-        ]),
-      }),
+    expect(events[0]).toEqual({
+      type: 'error',
+      data: {
+        message: 'Agent 服务暂不可用，请稍后重试。',
+        error_type: 'runtime_unavailable',
+      },
     })
+    expect(events[events.length - 1]).toEqual({ type: 'done', data: {} })
   })
 
   it('forwards validated sidebar attachments to runtime', async () => {
@@ -300,29 +285,6 @@ describe('AgentService streamConversation', () => {
         attachments: JSON.stringify(attachments),
       },
     })
-  })
-
-  it('falls back to CanvasAgent when Runtime health fails', async () => {
-    process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
-    const runSpy = vi
-      .spyOn(CanvasAgent.prototype, 'run')
-      .mockImplementation(async (_messages, onEvent) => {
-        onEvent({ type: 'text_delta', data: { text: 'fallback' } })
-        onEvent({ type: 'done', data: {} })
-      })
-
-    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
-      healthOk: vi.fn().mockResolvedValue(false),
-      streamRun: vi.fn(),
-    } as unknown as AgentRuntimeClient)
-
-    const events: Array<{ type: string }> = []
-    for await (const event of service.streamConversation('s1', 'hello', 'u1')) {
-      events.push(event)
-    }
-
-    expect(runSpy).toHaveBeenCalledOnce()
-    expect(events.some((e) => e.type === 'text_delta')).toBe(true)
   })
 })
 

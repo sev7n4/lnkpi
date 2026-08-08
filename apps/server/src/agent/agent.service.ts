@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
-import { CanvasAgent, applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
+import { applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
 import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment } from '@lnkpi/shared'
 import {
   IMAGE_MODELS,
@@ -28,19 +28,12 @@ export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput
 
 @Injectable()
 export class AgentService {
-  private agent: CanvasAgent
-
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(ShotService) private readonly shotService: ShotService,
     @Inject(MaterialService) private readonly materialService: MaterialService,
     @Inject(ProviderResolverService) private readonly providerResolver: ProviderResolverService,
-  ) {
-    this.agent = new CanvasAgent(
-      process.env.OPENAI_API_KEY,
-      process.env.OPENAI_BASE_URL,
-    )
-  }
+  ) {}
 
   getCapabilities() {
     return {
@@ -174,16 +167,23 @@ export class AgentService {
       }
     }
 
-    for await (const event of this.streamFromCanvasAgent(sessionId, effectiveThreadId, userId)) {
-      if (event.type === 'text_delta') {
-        assistantText += (event.data as { text: string }).text
-      }
+    for await (const event of this.streamRuntimeUnavailable()) {
       yield event
     }
-    // Complete idempotency key after canvas agent fallback
     if (idempotencyKey) {
-      await this.completeIdempotencyKey(idempotencyKey, assistantText)
+      await this.completeIdempotencyKey(idempotencyKey, '')
     }
+  }
+
+  private async *streamRuntimeUnavailable(): AsyncGenerator<AgentStreamEvent> {
+    yield {
+      type: 'error',
+      data: {
+        message: 'Agent 服务暂不可用，请稍后重试。',
+        error_type: 'runtime_unavailable',
+      },
+    }
+    yield { type: 'done', data: {} }
   }
 
   // ── Idempotency ──────────────────────────────────────────────
@@ -356,59 +356,6 @@ export class AgentService {
     await this.finalizeTurn(sessionId, effectiveThreadId, userId, assistantText, canvasActions, {
       // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
       rewriteCanvasData: false,
-      linkedOutputs: deriveLinkedOutputs(canvasActions),
-    })
-  }
-
-  private async *streamFromCanvasAgent(
-    sessionId: string,
-    threadId: string,
-    userId?: string,
-  ): AsyncGenerator<AgentStreamEvent> {
-    const history = await this.getMessages(sessionId, threadId, 20)
-
-    const messages = history.map((m) => ({
-      role: m.role,
-      content: m.content,
-    }))
-
-    let assistantText = ''
-    const canvasActions: CanvasAction[] = []
-
-    const eventQueue: AgentStreamEvent[] = []
-    let resolveNext: (() => void) | null = null
-    let done = false
-
-    const pushEvent = (event: AgentStreamEvent) => {
-      eventQueue.push(event)
-      resolveNext?.()
-    }
-
-    this.agent.run(messages, pushEvent).then(() => {
-      done = true
-      resolveNext?.()
-    })
-
-    while (!done || eventQueue.length > 0) {
-      if (eventQueue.length === 0) {
-        await new Promise<void>((r) => { resolveNext = r })
-        continue
-      }
-
-      const event = eventQueue.shift()!
-
-      if (event.type === 'text_delta') {
-        assistantText += (event.data as { text: string }).text
-      }
-      if (event.type === 'canvas_action') {
-        canvasActions.push(event.data as CanvasAction)
-      }
-
-      yield event
-    }
-
-    await this.finalizeTurn(sessionId, threadId, userId, assistantText, canvasActions, {
-      rewriteCanvasData: true,
       linkedOutputs: deriveLinkedOutputs(canvasActions),
     })
   }
