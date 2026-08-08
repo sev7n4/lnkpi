@@ -164,10 +164,17 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
   {
     modelKey: 'seedance-2.0-min',
     displayName: 'Seedance 2.0 Min',
-    gatewayModelId: 'seedance-2.0-min',
+    gatewayModelId: 'doubao-seedance-2.0-mini',
     modality: 'video',
     providerBinding: 'gateway-openai-compat',
-    params: VIDEO_PARAMS,
+    params: {
+      ...VIDEO_PARAMS,
+      generateAudio: 'native',
+      seed: 'native',
+      refImages: 'native',
+      refVideos: 'native',
+      refAudios: 'native',
+    },
   },
   {
     modelKey: 'happyhose-1.1',
