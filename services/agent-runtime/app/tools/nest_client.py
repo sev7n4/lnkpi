@@ -342,6 +342,139 @@ class NestCanvasClient:
             {"sessionId": self._session_id, "nodeId": node_id},
         )
 
+    def _lifecycle_body(
+        self,
+        *,
+        generation_record_id: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+        }
+        if generation_record_id:
+            body["generationRecordId"] = generation_record_id
+        if node_id:
+            body["nodeId"] = node_id
+        return body
+
+    async def get_generation_diagnostic(
+        self,
+        *,
+        generation_record_id: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/get-generation-diagnostic",
+            self._lifecycle_body(
+                generation_record_id=generation_record_id, node_id=node_id
+            ),
+        )
+
+    async def cancel_generation(
+        self,
+        *,
+        generation_record_id: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/cancel-generation",
+            self._lifecycle_body(
+                generation_record_id=generation_record_id, node_id=node_id
+            ),
+        )
+
+    async def confirm_platform_fallback(
+        self,
+        *,
+        generation_record_id: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/confirm-platform-fallback",
+            self._lifecycle_body(
+                generation_record_id=generation_record_id, node_id=node_id
+            ),
+            timeout=timeout_sec,
+        )
+
+    async def cancel_platform_fallback(
+        self,
+        *,
+        generation_record_id: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/cancel-platform-fallback",
+            self._lifecycle_body(
+                generation_record_id=generation_record_id, node_id=node_id
+            ),
+        )
+
+    async def list_generation_tasks(
+        self, *, type: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+        }
+        if type:
+            body["type"] = type
+        return await self._post("/agent/internal/list-generation-tasks", body)
+
+    async def list_user_assets(self) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/list-user-assets",
+            {"userId": self._user_id},
+        )
+
+    async def list_public_assets(
+        self, *, kind: str | None = None, search: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {}
+        if kind:
+            body["kind"] = kind
+        if search:
+            body["search"] = search
+        return await self._post("/agent/internal/list-public-assets", body)
+
+    async def save_node_to_asset_library(
+        self, *, node_id: str, label: str | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "nodeId": node_id,
+        }
+        if label:
+            body["label"] = label
+        return await self._post("/agent/internal/save-node-to-asset-library", body)
+
+    async def introduce_nodes_to_agent(self, *, node_ids: list[str]) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/introduce-nodes-to-agent",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeIds": node_ids,
+            },
+        )
+
+    async def apply_asset_to_node(
+        self, *, node_id: str, asset_id: str, source: str
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/apply-asset-to-node",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeId": node_id,
+                "assetId": asset_id,
+                "source": source,
+            },
+        )
+
     async def get_agent_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
         """Load conversation history for one thread (Nest single-writer)."""
         return await self._post(

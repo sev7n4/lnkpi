@@ -1,5 +1,5 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
-import { IsArray, IsBoolean, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
@@ -258,6 +258,101 @@ class WaitImageGenerationDto {
 
   @IsString()
   generationRecordId!: string
+}
+
+class GenerationLifecycleDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsOptional()
+  @IsString()
+  generationRecordId?: string
+
+  @IsOptional()
+  @IsString()
+  nodeId?: string
+}
+
+class SessionUserDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+}
+
+class ListGenerationTasksDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsOptional()
+  @IsString()
+  type?: string
+}
+
+class UserOnlyDto {
+  @IsString()
+  userId!: string
+}
+
+class ListPublicAssetsDto {
+  @IsOptional()
+  @IsIn(['image', 'video', 'audio'])
+  kind?: 'image' | 'video' | 'audio'
+
+  @IsOptional()
+  @IsString()
+  search?: string
+}
+
+class SaveNodeAssetDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+
+  @IsOptional()
+  @IsString()
+  label?: string
+}
+
+class IntroduceNodesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+}
+
+class ApplyAssetToNodeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+
+  @IsString()
+  assetId!: string
+
+  @IsIn(['user', 'public'])
+  source!: 'user' | 'public'
 }
 
 class SaveAgentMessageDto {
@@ -524,6 +619,66 @@ export class AgentCanvasToolsController {
   @Post('get-generation-status')
   async getGenerationStatus(@Body() dto: SessionNodeDto) {
     const data = await this.tools.getGenerationStatus(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('get-generation-diagnostic')
+  async getGenerationDiagnostic(@Body() dto: GenerationLifecycleDto) {
+    const data = await this.tools.getGenerationDiagnostic(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('cancel-generation')
+  async cancelGeneration(@Body() dto: GenerationLifecycleDto) {
+    const data = await this.tools.cancelGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('confirm-platform-fallback')
+  async confirmPlatformFallback(@Body() dto: GenerationLifecycleDto) {
+    const data = await this.tools.confirmPlatformFallback(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('cancel-platform-fallback')
+  async cancelPlatformFallback(@Body() dto: GenerationLifecycleDto) {
+    const data = await this.tools.cancelPlatformFallback(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('list-generation-tasks')
+  async listGenerationTasks(@Body() dto: ListGenerationTasksDto) {
+    const data = await this.tools.listGenerationTasks(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('list-user-assets')
+  async listUserAssets(@Body() dto: UserOnlyDto) {
+    const data = await this.tools.listUserAssets(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('list-public-assets')
+  async listPublicAssets(@Body() dto: ListPublicAssetsDto) {
+    const data = await this.tools.listPublicAssets(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('save-node-to-asset-library')
+  async saveNodeToAssetLibrary(@Body() dto: SaveNodeAssetDto) {
+    const data = await this.tools.saveNodeToAssetLibrary(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('introduce-nodes-to-agent')
+  async introduceNodesToAgent(@Body() dto: IntroduceNodesDto) {
+    const data = await this.tools.introduceNodesToAgent(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('apply-asset-to-node')
+  async applyAssetToNode(@Body() dto: ApplyAssetToNodeDto) {
+    const data = await this.tools.applyAssetToNode(dto)
     return { code: 0, message: 'ok', data }
   }
 

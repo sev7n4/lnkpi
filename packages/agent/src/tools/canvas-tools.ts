@@ -1,5 +1,9 @@
 import type { AgentToolDefinition } from '../types'
 
+/**
+ * @deprecated Runtime 生产路径使用 Nest `/agent/internal/*` + agent-runtime StructuredTool。
+ * 保留仅为 TS Agent 包降级 mock；新能力请加到 agent-canvas-tools Harness。
+ */
 export const CANVAS_TOOLS: AgentToolDefinition[] = [
   {
     name: 'create_shot',

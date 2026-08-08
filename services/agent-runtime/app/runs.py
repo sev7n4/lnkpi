@@ -695,6 +695,11 @@ async def stream_run_events(
                         explore = delta.get("explore_summary")
                         if isinstance(explore, dict):
                             await emit({"type": "explore", "data": explore})
+                        commands = delta.get("canvas_commands")
+                        if isinstance(commands, list):
+                            for cmd in commands:
+                                if isinstance(cmd, dict) and cmd.get("type"):
+                                    await emit({"type": "canvas_command", "data": cmd})
                         thinking = delta.get("thinking_summary")
                         if thinking and settings.agent_thinking_ui:
                             await emit(

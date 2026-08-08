@@ -11,6 +11,7 @@ from app.tools.prompt_templates import (
     UPSERT_PROMPT_NODE_PROMPT_FIELD,
     upsert_prompt_node_tool_description,
 )
+from app.tools.tool_registry import EXPLORE_TOOL_NAMES, is_explore_tool
 
 
 class UpsertPromptNodeInput(BaseModel):
@@ -21,6 +22,15 @@ class UpsertPromptNodeInput(BaseModel):
 
 class NodeIdInput(BaseModel):
     node_id: str = Field(description="Canvas node id")
+
+
+class GenerationRecordInput(BaseModel):
+    generation_record_id: str | None = Field(
+        default=None, description="Studio generation record id"
+    )
+    node_id: str | None = Field(
+        default=None, description="Canvas node id (resolves generationRecordId from node data)"
+    )
 
 
 class AddNodesBatchInput(BaseModel):
@@ -38,16 +48,48 @@ class SetNodePromptInput(BaseModel):
     prompt: str = Field(description="Updated prompt text")
 
 
+class SetNodeContentInput(BaseModel):
+    node_id: str = Field(description="Canvas node id")
+    content: str = Field(description="Updated node content text")
+
+
 class AttachRefsInput(BaseModel):
     node_id: str = Field(description="Target node id")
     ref_order: list[str] = Field(description="Ordered reference node ids")
 
 
-def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
-    """Build LangChain tools with session/user injected via the Nest client."""
+class IntroduceNodesInput(BaseModel):
+    node_ids: list[str] = Field(description="Canvas node ids to add as agent sidebar refs")
+
+
+class ListPublicAssetsInput(BaseModel):
+    kind: str | None = Field(default=None, description="Filter: image, video, or audio")
+    search: str | None = Field(default=None, description="Label search substring")
+
+
+class ApplyAssetInput(BaseModel):
+    node_id: str = Field(description="Target canvas node id")
+    asset_id: str = Field(description="User or public asset id")
+    source: str = Field(description="user or public")
+
+
+class SaveNodeAssetInput(BaseModel):
+    node_id: str = Field(description="Canvas node with media to save")
+    label: str | None = Field(default=None, description="Optional asset label override")
+
+
+class ListGenerationTasksInput(BaseModel):
+    type: str | None = Field(default=None, description="Optional filter: image, video, etc.")
+
+
+def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]]:
+    """Return (name, tool) pairs for registry filtering."""
 
     async def upsert_prompt_node(prompt: str, content: str, node_id: str | None = None) -> dict:
         return await client.upsert_prompt_node(prompt=prompt, content=content, node_id=node_id)
+
+    async def get_canvas_summary() -> dict:
+        return await client.get_canvas_summary()
 
     async def get_node(node_id: str) -> dict:
         return await client.get_node(node_id)
@@ -61,6 +103,9 @@ def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
     async def set_node_prompt(node_id: str, prompt: str) -> dict:
         return await client.set_node_prompt(node_id, prompt)
 
+    async def set_node_content(node_id: str, content: str) -> dict:
+        return await client.set_node_content(node_id, content)
+
     async def attach_refs(node_id: str, ref_order: list[str]) -> dict:
         return await client.attach_refs(node_id, ref_order)
 
@@ -70,53 +115,261 @@ def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
     async def get_generation_status(node_id: str) -> dict:
         return await client.get_generation_status(node_id)
 
-    return [
-        StructuredTool.from_function(
-            coroutine=upsert_prompt_node,
-            name="upsert_prompt_node",
-            description=upsert_prompt_node_tool_description(),
-            args_schema=UpsertPromptNodeInput,
+    async def get_generation_diagnostic(
+        generation_record_id: str | None = None, node_id: str | None = None
+    ) -> dict:
+        return await client.get_generation_diagnostic(
+            generation_record_id=generation_record_id, node_id=node_id
+        )
+
+    async def cancel_generation(
+        generation_record_id: str | None = None, node_id: str | None = None
+    ) -> dict:
+        return await client.cancel_generation(
+            generation_record_id=generation_record_id, node_id=node_id
+        )
+
+    async def confirm_platform_fallback(
+        generation_record_id: str | None = None, node_id: str | None = None
+    ) -> dict:
+        return await client.confirm_platform_fallback(
+            generation_record_id=generation_record_id, node_id=node_id
+        )
+
+    async def cancel_platform_fallback(
+        generation_record_id: str | None = None, node_id: str | None = None
+    ) -> dict:
+        return await client.cancel_platform_fallback(
+            generation_record_id=generation_record_id, node_id=node_id
+        )
+
+    async def list_generation_tasks(type: str | None = None) -> dict:
+        return await client.list_generation_tasks(type=type)
+
+    async def list_user_assets() -> dict:
+        return await client.list_user_assets()
+
+    async def list_public_assets(kind: str | None = None, search: str | None = None) -> dict:
+        return await client.list_public_assets(kind=kind, search=search)
+
+    async def save_node_to_asset_library(
+        node_id: str, label: str | None = None
+    ) -> dict:
+        return await client.save_node_to_asset_library(node_id=node_id, label=label)
+
+    async def introduce_nodes_to_agent(node_ids: list[str]) -> dict:
+        return await client.introduce_nodes_to_agent(node_ids=node_ids)
+
+    async def apply_asset_to_node(node_id: str, asset_id: str, source: str) -> dict:
+        return await client.apply_asset_to_node(
+            node_id=node_id, asset_id=asset_id, source=source
+        )
+
+    async def focus_node(node_id: str) -> dict:
+        return {"ok": True, "canvasCommands": [{"type": "focus_node", "nodeId": node_id}]}
+
+    specs: list[tuple[str, StructuredTool]] = [
+        (
+            "upsert_prompt_node",
+            StructuredTool.from_function(
+                coroutine=upsert_prompt_node,
+                name="upsert_prompt_node",
+                description=upsert_prompt_node_tool_description(),
+                args_schema=UpsertPromptNodeInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=get_node,
-            name="get_node",
-            description="Fetch a canvas node snapshot by id",
-            args_schema=NodeIdInput,
+        (
+            "get_canvas_summary",
+            StructuredTool.from_function(
+                coroutine=get_canvas_summary,
+                name="get_canvas_summary",
+                description="List canvas nodes with id, type, title, status for exploration",
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=add_nodes_batch,
-            name="add_nodes_batch",
-            description="Add multiple canvas nodes in one batch",
-            args_schema=AddNodesBatchInput,
+        (
+            "get_node",
+            StructuredTool.from_function(
+                coroutine=get_node,
+                name="get_node",
+                description="Fetch a canvas node snapshot by id",
+                args_schema=NodeIdInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=connect_nodes,
-            name="connect_nodes",
-            description="Connect canvas nodes with directed edges",
-            args_schema=ConnectNodesInput,
+        (
+            "add_nodes_batch",
+            StructuredTool.from_function(
+                coroutine=add_nodes_batch,
+                name="add_nodes_batch",
+                description="Add multiple canvas nodes in one batch",
+                args_schema=AddNodesBatchInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=set_node_prompt,
-            name="set_node_prompt",
-            description="Update the prompt text on an existing node",
-            args_schema=SetNodePromptInput,
+        (
+            "connect_nodes",
+            StructuredTool.from_function(
+                coroutine=connect_nodes,
+                name="connect_nodes",
+                description="Connect canvas nodes with directed edges",
+                args_schema=ConnectNodesInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=attach_refs,
-            name="attach_refs",
-            description="Attach ordered reference nodes to a target node",
-            args_schema=AttachRefsInput,
+        (
+            "set_node_prompt",
+            StructuredTool.from_function(
+                coroutine=set_node_prompt,
+                name="set_node_prompt",
+                description="Update the prompt text on an existing node",
+                args_schema=SetNodePromptInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=run_image_generation,
-            name="run_image_generation",
-            description="Run image generation for a canvas node and wait for completion",
-            args_schema=NodeIdInput,
+        (
+            "set_node_content",
+            StructuredTool.from_function(
+                coroutine=set_node_content,
+                name="set_node_content",
+                description="Update the content text on an existing node",
+                args_schema=SetNodeContentInput,
+            ),
         ),
-        StructuredTool.from_function(
-            coroutine=get_generation_status,
-            name="get_generation_status",
-            description="Poll image generation status for a canvas node",
-            args_schema=NodeIdInput,
+        (
+            "attach_refs",
+            StructuredTool.from_function(
+                coroutine=attach_refs,
+                name="attach_refs",
+                description="Attach ordered reference nodes to a target node",
+                args_schema=AttachRefsInput,
+            ),
+        ),
+        (
+            "run_image_generation",
+            StructuredTool.from_function(
+                coroutine=run_image_generation,
+                name="run_image_generation",
+                description="Run image generation for a canvas node and wait for completion",
+                args_schema=NodeIdInput,
+            ),
+        ),
+        (
+            "get_generation_status",
+            StructuredTool.from_function(
+                coroutine=get_generation_status,
+                name="get_generation_status",
+                description="Poll generation status for a canvas node",
+                args_schema=NodeIdInput,
+            ),
+        ),
+        (
+            "get_generation_diagnostic",
+            StructuredTool.from_function(
+                coroutine=get_generation_diagnostic,
+                name="get_generation_diagnostic",
+                description="Fetch failure/fallback diagnostic for a generation record or node",
+                args_schema=GenerationRecordInput,
+            ),
+        ),
+        (
+            "cancel_generation",
+            StructuredTool.from_function(
+                coroutine=cancel_generation,
+                name="cancel_generation",
+                description="Cancel an in-progress generation by record id or node id",
+                args_schema=GenerationRecordInput,
+            ),
+        ),
+        (
+            "confirm_platform_fallback",
+            StructuredTool.from_function(
+                coroutine=confirm_platform_fallback,
+                name="confirm_platform_fallback",
+                description="Confirm platform fallback billing and retry after BYOK failure",
+                args_schema=GenerationRecordInput,
+            ),
+        ),
+        (
+            "cancel_platform_fallback",
+            StructuredTool.from_function(
+                coroutine=cancel_platform_fallback,
+                name="cancel_platform_fallback",
+                description="Decline platform fallback and mark generation failed",
+                args_schema=GenerationRecordInput,
+            ),
+        ),
+        (
+            "list_generation_tasks",
+            StructuredTool.from_function(
+                coroutine=list_generation_tasks,
+                name="list_generation_tasks",
+                description="List generation records for the current session (task panel)",
+                args_schema=ListGenerationTasksInput,
+            ),
+        ),
+        (
+            "list_user_assets",
+            StructuredTool.from_function(
+                coroutine=list_user_assets,
+                name="list_user_assets",
+                description="List assets in the user's asset library",
+            ),
+        ),
+        (
+            "list_public_assets",
+            StructuredTool.from_function(
+                coroutine=list_public_assets,
+                name="list_public_assets",
+                description="List platform public assets",
+                args_schema=ListPublicAssetsInput,
+            ),
+        ),
+        (
+            "save_node_to_asset_library",
+            StructuredTool.from_function(
+                coroutine=save_node_to_asset_library,
+                name="save_node_to_asset_library",
+                description="Save a canvas node's media URL to the user asset library",
+                args_schema=SaveNodeAssetInput,
+            ),
+        ),
+        (
+            "introduce_nodes_to_agent",
+            StructuredTool.from_function(
+                coroutine=introduce_nodes_to_agent,
+                name="introduce_nodes_to_agent",
+                description="Add canvas node content to agent sidebar context",
+                args_schema=IntroduceNodesInput,
+            ),
+        ),
+        (
+            "apply_asset_to_node",
+            StructuredTool.from_function(
+                coroutine=apply_asset_to_node,
+                name="apply_asset_to_node",
+                description="Apply a user or public asset URL to a compatible canvas node",
+                args_schema=ApplyAssetInput,
+            ),
+        ),
+        (
+            "focus_node",
+            StructuredTool.from_function(
+                coroutine=focus_node,
+                name="focus_node",
+                description="Pan/zoom the canvas viewport to a node (UI command)",
+                args_schema=NodeIdInput,
+            ),
         ),
     ]
+    return specs
+
+
+def build_explore_tools(client: NestCanvasClient) -> list[StructuredTool]:
+    """Tools bindable in explore sub-graph (read + light write + lifecycle)."""
+    return [tool for name, tool in _all_tool_specs(client) if name in EXPLORE_TOOL_NAMES]
+
+
+def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
+    """All canvas tools — used by tests and future graph tool nodes."""
+    return [tool for _, tool in _all_tool_specs(client)]
+
+
+def build_graph_only_tools(client: NestCanvasClient) -> list[StructuredTool]:
+    """Generation / destructive tools reserved for deterministic graph paths."""
+    return [tool for name, tool in _all_tool_specs(client) if not is_explore_tool(name)]
