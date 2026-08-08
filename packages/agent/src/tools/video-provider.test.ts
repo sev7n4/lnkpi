@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AgnesVideoProvider, createVideoProvider, resolveVideoParams } from './video-provider'
+import {
+  AgnesVideoProvider,
+  ApimartVideoProvider,
+  createVideoProvider,
+  resolveVideoParams,
+} from './video-provider'
 
 describe('createVideoProvider', () => {
   const env = { ...process.env }
@@ -43,6 +48,61 @@ describe('createVideoProvider', () => {
   })
 })
 
+
+describe('createVideoProvider apimart', () => {
+  const env = { ...process.env }
+
+  beforeEach(() => {
+    process.env = { ...env }
+  })
+
+  afterEach(() => {
+    process.env = env
+  })
+
+  it('returns ApimartVideoProvider for apimart baseUrl', () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://api.apimart.ai/v1',
+      model: 'doubao-seedance-2.0-mini',
+    })
+    expect(p).toBeInstanceOf(ApimartVideoProvider)
+  })
+
+  it('throws readable error for unknown BYOK instead of placeholder', async () => {
+    const p = createVideoProvider({
+      apiKey: 'sk-test',
+      baseUrl: 'https://unknown.example.com/v1',
+    })
+    await expect(p.generate('test')).rejects.toThrow(/unsupported video gateway/i)
+  })
+})
+
+describe('ApimartVideoProvider', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('polls apimart task and returns video url', async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: [{ task_id: 'task_1' }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { status: 'completed', result: { video_url: 'https://cdn/v.mp4' } } }),
+      })
+    const provider = new ApimartVideoProvider('key', 'https://api.apimart.ai/v1', 0, 30_000)
+    const { url } = await provider.generate('hello', { model: 'doubao-seedance-2.0-mini', duration: 5 })
+    expect(url).toBe('https://cdn/v.mp4')
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1].body)).image_urls).toBeUndefined()
+  })
+})
 
 describe('resolveVideoParams', () => {
   it('maps duration to 8n+1 frames at 24fps', () => {

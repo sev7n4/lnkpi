@@ -1,15 +1,23 @@
+export interface VideoGenerateOptions {
+  model?: string
+  duration?: number
+  aspectRatio?: string
+  resolution?: string
+  crop?: string
+  image?: string
+  seed?: number
+  generateAudio?: boolean
+  returnLastFrame?: boolean
+  referenceImages?: string[]
+  referenceVideos?: string[]
+  referenceAudios?: string[]
+  imageWithRoles?: Array<{ url: string; role: string }>
+  pollIntervalMs?: number
+  maxPollMs?: number
+}
+
 export interface VideoProvider {
-  generate(
-    prompt: string,
-    options?: {
-      model?: string
-      duration?: number
-      aspectRatio?: string
-      resolution?: string
-      crop?: string
-      image?: string
-    },
-  ): Promise<{ url: string }>
+  generate(prompt: string, options?: VideoGenerateOptions): Promise<{ url: string; lastFrameUrl?: string }>
 }
 
 export class PlaceholderVideoProvider implements VideoProvider {
@@ -28,9 +36,17 @@ export class PlaceholderVideoProvider implements VideoProvider {
 export class OpenAIVideoProvider implements VideoProvider {
   constructor(private fallback: VideoProvider = new PlaceholderVideoProvider()) {}
 
-  async generate(prompt: string, options?: { model?: string; duration?: number }): Promise<{ url: string }> {
+  async generate(prompt: string, options?: VideoGenerateOptions): Promise<{ url: string }> {
     console.log(`[VideoProvider] model=${options?.model} duration=${options?.duration} prompt=${prompt.slice(0, 50)}`)
     return this.fallback.generate(prompt, options)
+  }
+}
+
+class UnsupportedVideoGatewayProvider implements VideoProvider {
+  constructor(private baseUrl?: string) {}
+
+  async generate(): Promise<{ url: string }> {
+    throw new Error(`unsupported video gateway: ${this.baseUrl}`)
   }
 }
 
@@ -57,17 +73,7 @@ export class AgnesVideoProvider implements VideoProvider {
     private maxPollAttempts = 120,
   ) {}
 
-  async generate(
-    prompt: string,
-    options?: {
-      model?: string
-      duration?: number
-      aspectRatio?: string
-      resolution?: string
-      crop?: string
-      image?: string
-    },
-  ): Promise<{ url: string }> {
+  async generate(prompt: string, options?: VideoGenerateOptions): Promise<{ url: string }> {
     const model = options?.model || this.defaultModel
     const { width, height, num_frames, frame_rate } = resolveVideoParams(
       options?.duration,
@@ -122,6 +128,95 @@ export class AgnesVideoProvider implements VideoProvider {
     }
 
     throw new Error(`Agnes video timed out after ${this.maxPollAttempts} polls`)
+  }
+}
+
+function isApimartBaseUrl(baseUrl?: string): boolean {
+  return Boolean(baseUrl?.includes('apimart.ai'))
+}
+
+function extractApimartTaskId(json: unknown): string | undefined {
+  const data = (json as { data?: unknown[] }).data
+  const first = Array.isArray(data) ? data[0] : undefined
+  return (first as { task_id?: string })?.task_id
+}
+
+function extractApimartVideoUrl(data: unknown): string | undefined {
+  const result = (data as {
+    result?: { video_url?: string; url?: string; videos?: Array<{ url?: string }> }
+  }).result
+  return (
+    result?.video_url ??
+    result?.url ??
+    result?.videos?.[0]?.url ??
+    (data as { url?: string }).url
+  )
+}
+
+/** APIMart 异步视频：POST /v1/videos/generations → 轮询 /tasks/{task_id} */
+export class ApimartVideoProvider implements VideoProvider {
+  constructor(
+    private apiKey: string,
+    private baseUrl = 'https://api.apimart.ai/v1',
+    private pollIntervalMs = 8_000,
+    private maxPollMs = 600_000,
+  ) {}
+
+  async generate(
+    prompt: string,
+    options?: VideoGenerateOptions,
+  ): Promise<{ url: string; lastFrameUrl?: string }> {
+    const root = this.baseUrl.replace(/\/$/, '')
+    const body: Record<string, unknown> = {
+      model: options?.model ?? 'doubao-seedance-2.0-mini',
+      prompt,
+      duration: options?.duration ?? 5,
+      size: options?.aspectRatio ?? '16:9',
+      resolution: options?.resolution ?? '720p',
+      generate_audio: options?.generateAudio ?? true,
+    }
+    if (options?.seed != null) body.seed = options.seed
+    if (options?.returnLastFrame) body.return_last_frame = true
+    if (options?.imageWithRoles?.length) {
+      body.image_with_roles = options.imageWithRoles
+    } else if (options?.referenceImages?.length) {
+      body.image_urls = options.referenceImages
+    }
+    if (options?.referenceVideos?.length) body.video_urls = options.referenceVideos
+    if (options?.referenceAudios?.length) body.audio_urls = options.referenceAudios
+
+    const createRes = await fetch(`${root}/videos/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify(body),
+    })
+    if (!createRes.ok) throw new Error(`Apimart video create ${createRes.status}: ${await createRes.text()}`)
+
+    const created = await createRes.json()
+    const taskId = extractApimartTaskId(created)
+    if (!taskId) throw new Error(`Apimart video missing task_id: ${JSON.stringify(created)}`)
+
+    const deadline = Date.now() + (options?.maxPollMs ?? this.maxPollMs)
+    while (Date.now() < deadline) {
+      await sleep(options?.pollIntervalMs ?? this.pollIntervalMs)
+      const pollRes = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}`, {
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+      })
+      if (!pollRes.ok) continue
+      const json = await pollRes.json()
+      const data = (json as { data?: unknown }).data ?? json
+      const status = (data as { status?: string }).status
+      if (status === 'completed') {
+        const url = extractApimartVideoUrl(data)
+        if (!url) throw new Error(`Apimart video completed without url: ${JSON.stringify(data)}`)
+        const lastFrameUrl = (data as { result?: { last_frame_url?: string } }).result?.last_frame_url
+        return { url, lastFrameUrl }
+      }
+      if (status === 'failed') {
+        throw new Error(`Apimart video failed: ${JSON.stringify((data as { error?: unknown }).error ?? data)}`)
+      }
+    }
+    throw new Error(`Apimart video poll timeout (${options?.maxPollMs ?? this.maxPollMs}ms)`)
   }
 }
 
@@ -185,7 +280,10 @@ export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvide
         opts.model ?? 'agnes-video-v2.0',
       )
     }
-    return new OpenAIVideoProvider()
+    if (isApimartBaseUrl(opts.baseUrl)) {
+      return new ApimartVideoProvider(opts.apiKey, opts.baseUrl)
+    }
+    return new UnsupportedVideoGatewayProvider(opts.baseUrl)
   }
   const key = process.env.OPENAI_API_KEY || process.env.VIDEO_API_KEY
   const baseUrl = process.env.OPENAI_BASE_URL
@@ -197,8 +295,11 @@ export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvide
       process.env.OPENAI_VIDEO_MODEL ?? 'agnes-video-v2.0',
     )
   }
+  if (key && isApimartBaseUrl(baseUrl)) {
+    return new ApimartVideoProvider(key, baseUrl)
+  }
   if (key) {
-    return new OpenAIVideoProvider()
+    return new UnsupportedVideoGatewayProvider(baseUrl)
   }
   return new PlaceholderVideoProvider()
 }
