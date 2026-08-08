@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import type { CanvasData } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService } from '../studio/studio.service'
+import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 
 const emptyCanvas = (): CanvasData => ({ nodes: [], edges: [] })
@@ -26,7 +27,12 @@ describe('AgentCanvasToolsService', () => {
   const getGenerationDiagnostic = vi.fn()
   const confirmPlatformFallback = vi.fn()
   const cancelPlatformFallback = vi.fn()
+  const cancelPlatformFallbackMaterial = vi.fn()
   const listGenerations = vi.fn()
+  const cancelGenerationMaterial = vi.fn()
+  const getMaterialDiagnostic = vi.fn()
+  const confirmPlatformFallbackMaterial = vi.fn()
+  const materialFindFirst = vi.fn()
 
   const defaultPrefs = {
     userId: 'u1',
@@ -106,6 +112,18 @@ describe('AgentCanvasToolsService', () => {
       url: 'https://cdn.example/fallback.png',
     })
     cancelPlatformFallback.mockResolvedValue({ id: 'rec-1', status: 'failed' })
+    cancelGenerationMaterial.mockResolvedValue({ id: 'mat-1', status: 'failed' })
+    getMaterialDiagnostic.mockResolvedValue({
+      errorCode: 'upstream',
+      userMessage: '素材生成失败',
+    })
+    confirmPlatformFallbackMaterial.mockResolvedValue({
+      id: 'mat-1',
+      status: 'completed',
+      url: 'https://cdn.example/mat.png',
+    })
+    cancelPlatformFallbackMaterial.mockResolvedValue({ id: 'mat-1', status: 'failed' })
+    materialFindFirst.mockResolvedValue(null)
     listGenerations.mockResolvedValue([
       {
         id: 'g1',
@@ -145,6 +163,7 @@ describe('AgentCanvasToolsService', () => {
           useValue: {
             session: { findUnique: sessionFindUnique, update: sessionUpdate },
             userAiPreferences: { findUnique: prefsFindUnique },
+            material: { findFirst: materialFindFirst },
             $transaction,
           },
         },
@@ -163,6 +182,15 @@ describe('AgentCanvasToolsService', () => {
             confirmPlatformFallback,
             cancelPlatformFallback,
             listGenerations,
+          },
+        },
+        {
+          provide: MaterialService,
+          useValue: {
+            cancelGeneration: cancelGenerationMaterial,
+            getMaterialDiagnostic,
+            confirmPlatformFallback: confirmPlatformFallbackMaterial,
+            cancelPlatformFallback: cancelPlatformFallbackMaterial,
           },
         },
       ],
@@ -1191,6 +1219,51 @@ describe('AgentCanvasToolsService', () => {
       expect(getGenerationDiagnostic).toHaveBeenCalledWith('u1', 'rec-1')
       expect(d.userMessage).toBe('上游失败')
     })
+
+    it('cancelGeneration routes material records to MaterialService', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-mat',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { materialId: 'mat-1', status: 'generating' },
+          },
+        ],
+        edges: [],
+      }
+      const result = await svc.cancelGeneration({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-mat',
+      })
+      expect(cancelGenerationMaterial).toHaveBeenCalledWith('u1', 'mat-1')
+      expect(cancelGenerationStudio).not.toHaveBeenCalled()
+      expect(result.recordKind).toBe('material')
+      expect(result.status).toBe('cancelled')
+    })
+
+    it('getGenerationDiagnostic routes material records to MaterialService', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-mat',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { materialId: 'mat-1' },
+          },
+        ],
+        edges: [],
+      }
+      const d = await svc.getGenerationDiagnostic({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-mat',
+      })
+      expect(getMaterialDiagnostic).toHaveBeenCalledWith('u1', 'mat-1')
+      expect(getGenerationDiagnostic).not.toHaveBeenCalled()
+      expect(d.userMessage).toBe('素材生成失败')
+    })
   })
 
   describe('P1 explore harness', () => {
@@ -1237,6 +1310,33 @@ describe('AgentCanvasToolsService', () => {
       expect(result.attachments).toHaveLength(2)
       expect(result.skipped).toEqual(['missing'])
       expect(result.canvasCommands[0]?.type).toBe('introduce_nodes')
+    })
+
+    it('getCanvasLayout returns node positions and sizes', async () => {
+      const layout = await svc.getCanvasLayout({ sessionId: 's1' })
+      expect(layout.nodes).toHaveLength(2)
+      expect(layout.nodes[0]?.id).toBe('img-1')
+      expect(layout.nodes[0]?.size.w).toBeGreaterThan(0)
+    })
+
+    it('duplicateNode clones node and focuses copy', async () => {
+      const result = await svc.duplicateNode({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+      expect(result.nodeId).not.toBe('img-1')
+      expect(canvas.nodes).toHaveLength(3)
+      expect(result.canvasCommands[0]?.type).toBe('focus_node')
+    })
+
+    it('getImageEditCapabilities reports image node support', async () => {
+      const caps = await svc.getImageEditCapabilities({
+        sessionId: 's1',
+        nodeId: 'img-1',
+      })
+      expect(caps.canEdit).toBe(true)
+      expect(caps.supportedModes).toContain('inpaint')
     })
   })
 })
