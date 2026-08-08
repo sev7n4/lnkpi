@@ -6,7 +6,7 @@ import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
-import { downloadMediaFile, mediaDownloadName } from '@/composables/useCanvasMedia'
+import { downloadMediaFile, isUpstreamMediaUrl, mediaDownloadName, UPSTREAM_MEDIA_DOWNLOAD_HINT } from '@/composables/useCanvasMedia'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 
 const props = defineProps<{
@@ -43,6 +43,11 @@ const taskKind = computed(() =>
       : undefined,
 )
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
+const downloadTitle = computed(() =>
+  isUpstreamMediaUrl(String(props.data.url ?? ''))
+    ? UPSTREAM_MEDIA_DOWNLOAD_HINT
+    : '下载图片',
+)
 const {
   accept,
   dragOver,
@@ -78,6 +83,7 @@ function download() {
   void downloadMediaFile(
     displayUrl.value,
     mediaDownloadName(displayUrl.value, 'image', props.data.label ?? props.data.prompt),
+    { sessionId: sessionId.value },
   )
 }
 
@@ -124,7 +130,7 @@ function saveToLibrary() {
         <button
           type="button"
           class="neo-node-download-btn nodrag"
-          title="下载图片"
+          :title="downloadTitle"
           @pointerdown.stop
           @mousedown.stop
           @click.stop="download"

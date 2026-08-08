@@ -49,6 +49,7 @@ import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
 } from '../provider/provider-resolver.service'
+import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 
 export type CanvasImageGenerateInput = {
   userId: string
@@ -484,6 +485,7 @@ export class MaterialService {
         const fallbackPrompt = useNativeRefs
           ? stripRefImagePromptTags(String(meta.effectivePrompt ?? material.prompt ?? ''))
           : String(meta.effectivePrompt ?? material.prompt ?? '')
+        const providerRefs = useNativeRefs ? await inlineUpstreamReferenceImages(refs) : undefined
         const { url } = await createImageProvider(
           resolvePlatformImageProviderOpts(modelKey),
         ).generate(fallbackPrompt, {
@@ -491,7 +493,7 @@ export class MaterialService {
           size,
           resolution,
           n: 1,
-          referenceImages: useNativeRefs ? refs : undefined,
+          referenceImages: providerRefs,
           refWire:
             meta.refWire === 'agnes_extra_body' ||
             meta.refWire === 'apimart_image_urls' ||
@@ -820,6 +822,11 @@ export class MaterialService {
       imageRefDescriptorsFromRefs(refs),
     )
     const providerOptions = buildImageProviderGenerateOptions(built)
+    if (providerOptions.referenceImages?.length) {
+      providerOptions.referenceImages = await inlineUpstreamReferenceImages(
+        providerOptions.referenceImages,
+      )
+    }
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {

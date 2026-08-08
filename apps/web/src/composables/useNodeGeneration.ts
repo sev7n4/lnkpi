@@ -18,6 +18,7 @@ import {
   type GenerationPollTask,
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
+import { notifyGenerationSaveLocalHint } from '@/composables/useCanvasMedia'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type CanvasGenerationScope, type GenerationRecord, type StudioRefPayload } from '@/services/studio-api'
 import {
@@ -428,6 +429,7 @@ async function cancelRemoteGeneration(nodeId: string) {
       return false
     }
     if (record.status === NODE_GENERATION_STATUS.completed) {
+      const wasGenerating = current?.data?.status === NODE_GENERATION_STATUS.generating
       const urls = parseRecordUrls(record)
       const patch: Record<string, unknown> = {
         status: NODE_GENERATION_STATUS.completed,
@@ -449,6 +451,13 @@ async function cancelRemoteGeneration(nodeId: string) {
         if (urls.length) patch.images = urls
       }
       deps.patchNodeData(nodeId, patch)
+      if (
+        wasGenerating &&
+        (record.type === 'image' || record.type === 'video') &&
+        (patch.url || urls.length)
+      ) {
+        notifyGenerationSaveLocalHint()
+      }
       return true
     }
     if (

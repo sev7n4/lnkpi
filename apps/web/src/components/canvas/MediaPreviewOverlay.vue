@@ -1,10 +1,22 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { downloadMediaFile, mediaDownloadName } from '@/composables/useCanvasMedia'
+import {
+  downloadMediaFile,
+  isUpstreamMediaUrl,
+  mediaDownloadName,
+  UPSTREAM_MEDIA_DOWNLOAD_HINT,
+} from '@/composables/useCanvasMedia'
 
 const editor = useCanvasEditorStore()
+const route = useRoute()
+const sessionId = computed(() => route.params.sessionId as string | undefined)
 const target = computed(() => editor.previewTarget)
+const downloadTitle = computed(() => {
+  if (!target.value) return '下载'
+  return isUpstreamMediaUrl(target.value.url) ? UPSTREAM_MEDIA_DOWNLOAD_HINT : '下载'
+})
 
 function close() {
   editor.closeMediaPreview()
@@ -22,6 +34,7 @@ async function download() {
   await downloadMediaFile(
     target.value.url,
     mediaDownloadName(target.value.url, target.value.kind, target.value.label),
+    { sessionId: sessionId.value },
   )
 }
 
@@ -42,7 +55,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
           <button
             type="button"
             class="preview-ctl"
-            title="下载"
+            :title="downloadTitle"
             @click.stop="download"
           >
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
