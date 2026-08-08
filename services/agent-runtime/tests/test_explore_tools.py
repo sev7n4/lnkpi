@@ -11,6 +11,7 @@ def test_explore_tools_exclude_generation():
     names = {t.name for t in tools}
     assert "get_canvas_summary" in names
     assert "cancel_generation" in names
+    assert "apply_sidebar_attachments" in names
     assert "run_image_generation" not in names
     assert "add_nodes_batch" not in names
     assert names <= EXPLORE_TOOL_NAMES

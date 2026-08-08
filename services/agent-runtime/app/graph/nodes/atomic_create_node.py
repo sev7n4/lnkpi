@@ -32,6 +32,21 @@ def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     if item.get("imageAspect")
                     else {}
                 ),
+                **(
+                    {"videoSettings": item["videoSettings"]}
+                    if item.get("videoSettings")
+                    else {}
+                ),
+                **(
+                    {"videoMode": item["videoMode"]}
+                    if item.get("videoMode")
+                    else {}
+                ),
+                **(
+                    {"referenceImageUrl": item["referenceImageUrl"]}
+                    if item.get("referenceImageUrl")
+                    else {}
+                ),
             }
         )
     return batch

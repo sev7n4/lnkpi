@@ -63,6 +63,7 @@ PROMPT_EXPLICIT_KEYWORDS = tuple(_TAXONOMY.get("prompt_explicit_keywords") or (
 ))
 
 VIDEO_KEYWORDS = ("视频", "短片", "短视频", "15s", "15秒", "30s", "30秒")
+_VIDEO_DURATION_RE = re.compile(r"(\d+)\s*(?:秒|s)", re.IGNORECASE)
 AUDIO_KEYWORDS = ("配音", "旁白", "音频", "语音")
 # Avoid bare 「图」— it matches campaign phrases like 「确认出图」.
 IMAGE_KEYWORDS = ("海报", "banner", "视觉", "主图", "白底", "场景图", "产品图", "人物图", "风图")
@@ -440,6 +441,17 @@ def confirm_gate_for_type(target_type: AtomicTargetType) -> bool:
     return target_type in ("video", "audio")
 
 
+def infer_video_duration(text: str) -> int | None:
+    match = _VIDEO_DURATION_RE.search(text or "")
+    if not match:
+        return None
+    try:
+        duration = int(match.group(1))
+    except ValueError:
+        return None
+    return max(4, min(15, duration))
+
+
 def build_atomic_spec(text: str) -> dict[str, Any]:
     """Build atomic_spec from raw user utterance."""
     utterance = (text or "").strip()
@@ -455,6 +467,10 @@ def build_atomic_spec(text: str) -> dict[str, Any]:
         spec["pipeline"] = TURNAROUND_PIPELINE
         spec["imageAspect"] = TURNAROUND_ASPECT_RATIO
         spec["resolutionBump"] = True
+    if target_type == "video":
+        duration = infer_video_duration(utterance)
+        if duration is not None:
+            spec["videoSettings"] = {"duration": duration}
     return spec
 
 

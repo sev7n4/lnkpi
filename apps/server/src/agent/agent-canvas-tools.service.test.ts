@@ -424,6 +424,8 @@ describe('AgentCanvasToolsService', () => {
       'center',
       undefined,
       { sessionId: 's1', nodeId: 'vid-1' },
+      undefined,
+      undefined,
     )
     expect(result.status).toBe('completed')
     expect(result.url).toBe('https://cdn.example/vid.mp4')
@@ -468,7 +470,85 @@ describe('AgentCanvasToolsService', () => {
       'center',
       'https://example.com/node-ref.png',
       { sessionId: 's1', nodeId: 'vid-1' },
+      undefined,
+      undefined,
     )
+  })
+
+  it('runVideoGeneration passes videoMode and generateAudio from node data', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'vid-1',
+          type: 'video',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '产品展示视频',
+            status: 'draft',
+            videoMode: 'image_to_video',
+            videoSettings: {
+              aspectRatio: '9:16',
+              duration: 4,
+              resolution: '1080p',
+              crop: 'center',
+              generateAudio: false,
+            },
+          },
+        },
+      ],
+      edges: [],
+    }
+    getGeneration.mockResolvedValue({
+      id: 'gen-v1',
+      status: 'completed',
+      url: 'https://cdn.example/vid.mp4',
+    })
+    await svc.runVideoGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'vid-1',
+    })
+    expect(generateVideo).toHaveBeenCalledWith(
+      'u1',
+      '产品展示视频',
+      'platform::user-default-video',
+      4,
+      '9:16',
+      expect.any(Array),
+      undefined,
+      '1080p',
+      'center',
+      undefined,
+      { sessionId: 's1', nodeId: 'vid-1' },
+      'image_to_video',
+      false,
+    )
+  })
+
+  it('addNodesBatch merges explicit video P6 overrides onto video skeleton', async () => {
+    const result = await svc.addNodesBatch({
+      sessionId: 's1',
+      userId: 'u1',
+      items: [
+        {
+          key: 'show_video',
+          title: '视频',
+          targetType: 'video',
+          videoSettings: { duration: 4, generateAudio: false },
+          videoMode: 'image_to_video',
+          referenceImageUrl: 'https://cdn.example/ref.png',
+        },
+      ],
+    })
+    expect(result.nodes).toHaveLength(1)
+    const videoNode = canvas.nodes.find((n) => n.type === 'video')
+    expect(videoNode?.data.videoSettings).toMatchObject({
+      duration: 4,
+      generateAudio: false,
+      aspectRatio: '9:16',
+    })
+    expect(videoNode?.data.videoMode).toBe('image_to_video')
+    expect(videoNode?.data.referenceImageUrl).toBe('https://cdn.example/ref.png')
   })
 
   it('runTextGeneration calls Studio and writes content', async () => {

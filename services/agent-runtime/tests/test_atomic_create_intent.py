@@ -100,6 +100,12 @@ def test_turnaround_prompt_with_hint_word_not_pipeline():
     assert "pipeline" not in spec
 
 
+def test_build_atomic_spec_infers_video_duration():
+    spec = build_atomic_spec("帮我做一个15秒产品展示视频")
+    assert spec["target_type"] == "video"
+    assert spec.get("videoSettings") == {"duration": 15}
+
+
 def test_atomic_create_intent_negative_campaign():
     assert not atomic_create_intent("帮我做一套天猫蓝牙耳机详情页营销方案")
     assert atomic_create_intent("帮我生成一个模特人物图")

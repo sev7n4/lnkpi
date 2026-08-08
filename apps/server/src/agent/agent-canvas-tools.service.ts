@@ -345,6 +345,15 @@ export class AgentCanvasToolsService {
       position?: { x: number; y: number }
       pipeline?: string
       imageAspect?: string
+      videoSettings?: {
+        aspectRatio?: string
+        duration?: number
+        resolution?: string
+        crop?: string
+        generateAudio?: boolean
+      }
+      videoMode?: string
+      referenceImageUrl?: string
     }>
     stage?: boolean
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
@@ -374,6 +383,15 @@ export class AgentCanvasToolsService {
       }
       if (item.pipeline) nodeData.pipeline = item.pipeline
       if (item.imageAspect) nodeData.imageAspect = item.imageAspect
+      if (item.videoSettings && typeof item.videoSettings === 'object') {
+        const base =
+          nodeData.videoSettings && typeof nodeData.videoSettings === 'object'
+            ? (nodeData.videoSettings as Record<string, unknown>)
+            : {}
+        nodeData.videoSettings = { ...base, ...item.videoSettings }
+      }
+      if (item.videoMode) nodeData.videoMode = item.videoMode
+      if (item.referenceImageUrl) nodeData.referenceImageUrl = item.referenceImageUrl
       actions.push({
         type: 'add_node',
         payload: {
@@ -916,6 +934,12 @@ export class AgentCanvasToolsService {
       const model = pickString(node.data?.videoModel, prefs.defaultVideoModel) || undefined
       const referenceImageUrl =
         String(node.data?.referenceImageUrl ?? '').trim() || undefined
+      const videoMode =
+        String(node.data?.videoMode ?? '').trim() || undefined
+      const generateAudio =
+        typeof settings.generateAudio === 'boolean'
+          ? settings.generateAudio
+          : undefined
 
       const record = await this.studio.generateVideo(
         input.userId,
@@ -929,6 +953,8 @@ export class AgentCanvasToolsService {
         crop,
         referenceImageUrl,
         { sessionId: input.sessionId, nodeId: input.nodeId },
+        videoMode,
+        generateAudio,
       )
 
       const recordId = record.id
