@@ -1,6 +1,4 @@
-export { CanvasAgent, RuleBasedAgent, OpenAIAgent } from './agent'
-export { CANVAS_TOOLS } from './tools/canvas-tools'
-export { CanvasToolExecutor, applyCanvasActions } from './tools/executor'
+export { applyCanvasActions } from './tools/executor'
 export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } from './tools/image-provider'
 export {
   createTextProvider,
