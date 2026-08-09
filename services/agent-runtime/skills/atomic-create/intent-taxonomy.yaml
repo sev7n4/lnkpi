@@ -28,22 +28,16 @@ target_types:
     confirm_gate: false
     write_field: content
     notes: |
-      脚本/广告词/文案/口播稿 → text 节点。
-      凡含「提示词」→ prompt 节点（由 /studio/prompt/generate 按 promptMode 生成 content）。
+      纯脚本/广告词/口播稿写作 → text 节点。
+      「基于文案/提示词/文本生成视频/图片」→ 输出 video/image，文案/提示词仅为来源描述。
+      扩写类（提示词模式、分镜提示词、的提示词）→ prompt 节点。
   prompt:
     node_type: prompt
     studio_tool: run_prompt_generation
     confirm_gate: false
     write_field: prompt
-    trigger_phrases:
-      - prompt扩写
-      - 提示词模式
-      - 多模式扩写
-      - 扩写prompt
-      - 三视图提示词
-      - 四视图提示词
-      - 多视图提示词
-      - 的提示词
+    notes: |
+      prompt 扩写/分镜提示词/三视图提示词等，且用户未要求生成视频/图片。
   audio:
     node_type: audio
     studio_tool: run_audio_generation

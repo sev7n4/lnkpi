@@ -31,9 +31,10 @@ _PARSE_SYSTEM = """你是 Atomic Studio 意图解析器。根据用户一句话�
 }
 
 规则：
-- D1：「脚本/广告词/文案/口播稿」→ target_type=text（不含「提示词」字样）
+- D1：「脚本/广告词/口播稿」→ target_type=text（纯写作，无生成视频/图片）
 - D2：video/audio → confirm_gate=true
-- 凡含「提示词」→ target_type=prompt（含分镜提示词、三视图提示词、提示词模式扩写等）
+- **源内容+媒体生成**：「基于文案/提示词/文本生成视频/图片」或 @引用+生成视频/图片 → target_type=video 或 image（「提示词/文案」是来源描述，不是 prompt 节点）
+- **扩写 prompt**：「提示词模式/扩写/分镜提示词/三视图提示词/的提示词」且无生成视频/图片 → target_type=prompt
 - 「生成一张三视图/三视图各来一张」且无「提示词」→ target_type=image，pipeline=turnaround_image（内部扩写后出图，非原句直出）
 - multi：用户要多张/多项时 structure=multi，items 逐条拆分 prompt/title
 - 营销方案/14节点/全链路 → confidence<0.7，clarify_question 建议走 Campaign

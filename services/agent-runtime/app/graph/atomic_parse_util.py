@@ -312,11 +312,14 @@ def build_atomic_spec_enriched(
     canvas_summary: dict[str, Any] | None = None,
     focus_node_id: str | None = None,
     parse_context: str | None = None,
+    mentioned_keys: list[str] | None = None,
 ) -> dict[str, Any]:
     """Keyword routing + prompt/title cleanup + canvas context (P4-04/05)."""
     nodes = canvas_summary_nodes(canvas_summary)
-    base = build_atomic_spec(utterance)
+    base = build_atomic_spec(utterance, mentioned_keys=mentioned_keys)
     prompt = extract_atomic_prompt(utterance)
+    if base.get("prompt") and base["prompt"] != utterance:
+        prompt = str(base["prompt"])
     focus_seed = resolve_focus_seed(utterance, focus_node_id, nodes)
     if focus_seed:
         if "扩写" in utterance or base.get("target_type") == "prompt":
@@ -381,9 +384,12 @@ def rule_parse_confidence(
     multi_items: list[dict[str, Any]] | None,
 ) -> float:
     """Heuristic confidence for rule-only parse (Phase 2 fast path)."""
+    from app.graph.atomic_intent_ir import has_modality_conflict_risk
     from app.graph.planning_guard import planning_guard_confidence_cap
 
     t = (utterance or "").strip()
+    if has_modality_conflict_risk(t):
+        return planning_guard_confidence_cap(t, 0.84)
     if multi_items and len(multi_items) >= 2:
         conf = 0.98
     elif not t or t in _VAGUE_UTTERANCES:
@@ -407,6 +413,7 @@ def rule_parse_atomic(
     canvas_summary: dict[str, Any] | None = None,
     focus_node_id: str | None = None,
     parse_context: str | None = None,
+    mentioned_keys: list[str] | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     """Rule-based parse returning items + confidence."""
     multi_items = build_atomic_items_enriched(
@@ -421,6 +428,7 @@ def rule_parse_atomic(
         canvas_summary=canvas_summary,
         focus_node_id=focus_node_id,
         parse_context=parse_context,
+        mentioned_keys=mentioned_keys,
     )
     return [spec], rule_parse_confidence(utterance, spec, None)
 

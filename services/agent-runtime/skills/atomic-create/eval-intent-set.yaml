@@ -512,3 +512,23 @@ cases:
     focus_node_id: null
     gold: { route: campaign, target_type: image, confirm_gate: false }
     notes: planning guard — intake routes campaign; target_type ignored when not atomic_create
+
+  - id: ir-video-01
+    utterance: 基于提示词生成视频
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: ir-video-02
+    utterance: "@T1 请基于文案生成视频"
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: video, confirm_gate: true }
+
+  - id: ir-image-01
+    utterance: 基于文本生成图片
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: ir-image-02
+    utterance: 根据文案生成一张主图
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }

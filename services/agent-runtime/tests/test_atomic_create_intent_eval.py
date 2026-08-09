@@ -24,9 +24,9 @@ def taxonomy_doc() -> dict:
     return yaml.safe_load(TAXONOMY_PATH.read_text(encoding="utf-8"))
 
 
-def test_eval_set_has_96_cases(eval_doc: dict):
+def test_eval_set_has_ir_cases(eval_doc: dict):
     cases = eval_doc.get("cases") or []
-    assert len(cases) == 96
+    assert len(cases) >= 100
     ids = [c["id"] for c in cases]
     assert len(ids) == len(set(ids)), "duplicate case ids"
 
@@ -42,7 +42,7 @@ def test_eval_gold_schema(eval_doc: dict):
             expect_confirm = tt in ("video", "audio")
             assert gold["confirm_gate"] is expect_confirm, f"{case['id']} confirm_gate mismatch"
         else:
-            assert gold.get("target_type") is None or gold["route"] == "single_node"
+            assert gold.get("target_type") is None or gold["route"] in ("single_node", "campaign")
 
 
 def test_d1_storyboard_script_cases_are_text(eval_doc: dict):

@@ -42,6 +42,8 @@ _STRUCTURED_PARSE_SYSTEM = """你是 Lnkpi 意图结构化解析器。根据用�
 - action=plan 且含「主图+详情页/构图方案」→ route=campaign 或 needs_clarify=true，禁止 items 仅 image 直出
 - action=write → route=atomic_create，items 为 text（vision_text 策划文档）
 - action=expand → route=atomic_create，items 为 prompt，可带 prompt_mode
+- action=generate + 「基于文案/提示词/文本生成视频」→ target_type=video，confirm_gate=true
+- action=generate + 「基于文本/文案生成图片」→ target_type=image
 - action=generate + 「生成一张/来一张」→ route=atomic_create，target_type=image，confidence≥0.85
 - video/audio → confirm_gate=true
 - 营销方案/14节点/全链路 → route=campaign，scope=campaign

@@ -197,6 +197,22 @@ def validate_parse_result(
             "clarify_question": clarify_q or _default_clarify_question(utterance),
         }
 
+    from app.graph.atomic_intent_ir import expected_output_modality
+
+    expected = expected_output_modality(utterance)
+    rewrite_reason = str(data.get("reason") or "validated")
+    if expected:
+        first_type = str(items[0].get("target_type") or "")
+        if first_type != expected:
+            from app.graph.atomic_intent import build_atomic_spec
+
+            fixed = build_atomic_spec(utterance)
+            fixed_item = _normalize_item(fixed)
+            if fixed_item is not None:
+                items[0] = fixed_item
+                confidence = max(confidence, 0.92)
+                rewrite_reason = "modality_ir_rewrite"
+
     if len(items) > MAX_ATOMIC_MULTI_ITEMS:
         return {
             "kind": "clarify",
@@ -218,7 +234,7 @@ def validate_parse_result(
         "structure": structure,
         "items": items,
         "confidence": confidence,
-        "reason": str(data.get("reason") or "validated"),
+        "reason": rewrite_reason,
     }
 
 

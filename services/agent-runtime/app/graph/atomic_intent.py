@@ -15,6 +15,13 @@ from app.graph.intent import (
     modify_intent,
     single_node_gen_intent,
 )
+from app.graph.atomic_intent_ir import (
+    derive_studio_prompt,
+    is_prompt_expand_intent,
+    is_source_backed_media_generation,
+    resolve_atomic_intent,
+    resolve_output_modality,
+)
 
 _TAXONOMY_PATH = (
     Path(__file__).resolve().parents[2] / "skills" / "atomic-create" / "intent-taxonomy.yaml"
@@ -268,7 +275,7 @@ def _storyboard_shot_count(text: str) -> int | None:
 def is_turnaround_image_intent(text: str) -> bool:
     """True when user wants multi-view character sheet as image (not prompt-only)."""
     t = (text or "").strip()
-    if not t or _has_prompt_explicit(t):
+    if not t or is_prompt_expand_intent(t):
         return False
     return bool(TURNAROUND_IMAGE_PATTERN.search(t))
 
@@ -284,18 +291,6 @@ def turnaround_pipeline_user_note() -> str:
     )
 
 
-def _has_prompt_explicit(text: str) -> bool:
-    n = _normalize(text)
-    if any(_normalize(k) in n for k in PROMPT_EXPLICIT_KEYWORDS):
-        return True
-    if "扩写" in text and ("prompt" in n or "提示词" in text):
-        return True
-    # 凡含「提示词」→ prompt 节点（分镜/三视图/扩写等均走 prompt + 对应 promptMode）
-    if "提示词" in text:
-        return True
-    return False
-
-
 _BATCH_IMAGE_COUNT = re.compile(
     r"(?:生成|做|来)\s*([一二三四五六七八九十两\d]+)\s*张|"
     r"([一二三四五六七八九十两\d]+)\s*张(?:图|图片)",
@@ -309,14 +304,16 @@ def atomic_create_intent(text: str) -> bool:
         return False
     if _matches_regenerate_hints(text):
         return False
-    if any(h in text for h in CONFIRM_GEN_HINTS):
-        return False
     if _is_campaign_override(text):
         return False
     if is_turnaround_image_intent(text):
         return True
-    if _has_prompt_explicit(text):
+    if is_source_backed_media_generation(text):
         return True
+    if is_prompt_expand_intent(text):
+        return True
+    if any(h in text for h in CONFIRM_GEN_HINTS) and not is_source_backed_media_generation(text):
+        return False
     batch_m = _BATCH_IMAGE_COUNT.search(text or "")
     if batch_m:
         token = batch_m.group(1) or batch_m.group(2) or ""
@@ -412,25 +409,13 @@ def resolve_intake_route(
     return "chat"
 
 
-def parse_atomic_target_type(text: str) -> AtomicTargetType:
-    """Classify modality from user utterance."""
-    from app.graph.planning_guard import is_explicit_generation_intent, is_planning_intent
-
-    t = (text or "").strip()
-    lowered = t.lower()
-    if _has_prompt_explicit(t):
-        return "prompt"
-    if any(k in t for k in AUDIO_KEYWORDS):
-        return "audio"
-    if any(k in t for k in TEXT_DEFAULT_KEYWORDS):
-        return "text"
-    if any(k in lowered for k in VIDEO_KEYWORDS):
-        return "video"
-    if is_planning_intent(t) and not is_explicit_generation_intent(t):
-        return "text"
-    if any(k in lowered for k in IMAGE_KEYWORDS):
-        return "image"
-    return "image"
+def parse_atomic_target_type(
+    text: str,
+    *,
+    mentioned_keys: list[str] | None = None,
+) -> AtomicTargetType:
+    """Classify output modality via structured Intent IR."""
+    return resolve_output_modality(text, mentioned_keys=mentioned_keys)  # type: ignore[return-value]
 
 
 def confirm_gate_for_type(target_type: AtomicTargetType) -> bool:
@@ -452,14 +437,20 @@ def infer_video_duration(text: str) -> int | None:
     return max(4, min(15, duration))
 
 
-def build_atomic_spec(text: str) -> dict[str, Any]:
-    """Build atomic_spec from raw user utterance."""
-    utterance = (text or "").strip()
-    target_type = parse_atomic_target_type(utterance)
+def build_atomic_spec(
+    text: str,
+    *,
+    mentioned_keys: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build atomic_spec from utterance + optional sidebar refs."""
+    intent = resolve_atomic_intent(text, mentioned_keys=mentioned_keys)
+    target_type = intent.output_modality
+    utterance = intent.utterance
+    studio_prompt = derive_studio_prompt(intent)
     title = utterance[:24] + ("…" if len(utterance) > 24 else "")
     spec: dict[str, Any] = {
         "target_type": target_type,
-        "prompt": utterance,
+        "prompt": studio_prompt,
         "title": title or target_type,
         "confirm_gate": confirm_gate_for_type(target_type),
     }
