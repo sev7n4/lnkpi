@@ -10,6 +10,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
+from app.graph.explore_dispatch import (
+    MANDATORY_INTENTS,
+    classify_explore_intent,
+    run_mandatory_explore,
+)
 from app.tools.definitions import build_explore_tools
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
@@ -197,6 +202,26 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             summary = {"error": "无法拉取画布摘要"}
 
         user_text = _latest_user_text(state.get("messages") or []) or "看看画布状态"
+
+        intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
+        if intent in MANDATORY_INTENTS:
+            mandatory = await run_mandatory_explore(
+                intent,
+                user_text,
+                summary=summary if isinstance(summary, dict) else {},
+                tools_by_name=tools_by_name,
+            )
+            out: dict[str, Any] = {
+                "phase": "done",
+                "skill_id": None,
+                "user_decision": "none",
+                "messages": [AIMessage(content=mandatory.reply_text or "已完成操作。")],
+                "explore_summary": summary if isinstance(summary, dict) else None,
+            }
+            if mandatory.canvas_commands:
+                out["canvas_commands"] = mandatory.canvas_commands
+            return out
+
         convo: list[Any] = [
             SystemMessage(content=_EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))),
             HumanMessage(content=user_text),
