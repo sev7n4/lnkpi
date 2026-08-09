@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
+    "dev": "NODE_OPTIONS='--env-file=.env' tsx watch src/main.ts",
     "build": "tsc",
     "start": "node dist/main.js",
     "db:generate": "prisma generate",
