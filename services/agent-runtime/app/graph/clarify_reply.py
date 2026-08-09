@@ -37,11 +37,20 @@ def classify_clarify_reply(
 
     lowered = _normalize_reply(raw)
     if lowered in _CHOICE_ONE or any(k in raw for k in ("单张主图", "直接出图", "只要主图")):
-        prompt = "生成一张蓝牙耳机主图"
-        if "蓝牙耳机" in original_utterance:
+        original = (original_utterance or "").strip()
+        if original and (
+            "@" in original
+            or "出图" in original
+            or "按风格" in original
+            or is_img2img_utterance(original)
+        ):
+            prompt = original
+        else:
             prompt = "生成一张蓝牙耳机主图"
-        elif "主图" in original_utterance:
-            prompt = "生成一张主图"
+            if "蓝牙耳机" in original_utterance:
+                prompt = "生成一张蓝牙耳机主图"
+            elif "主图" in original_utterance:
+                prompt = "生成一张主图"
         return {
             "action": "generate",
             "scope": "atomic",
