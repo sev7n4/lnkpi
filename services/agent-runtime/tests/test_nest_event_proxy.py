@@ -96,6 +96,25 @@ async def test_proxy_forwards_run_text_generation():
 
 
 @pytest.mark.asyncio
+async def test_proxy_delegates_explore_harness_methods():
+    inner = FakeInner()
+
+    async def get_generation_diagnostic(**kwargs: object) -> dict:
+        inner.calls.append(("get_generation_diagnostic", str(kwargs)))
+        return {"reason": "upstream_timeout"}
+
+    inner.get_generation_diagnostic = get_generation_diagnostic  # type: ignore[method-assign]
+
+    async def noop(_ev: dict) -> None:
+        return None
+
+    proxy = NestEventProxy(inner, noop)
+    result = await proxy.get_generation_diagnostic(node_id="image-1")
+    assert result["reason"] == "upstream_timeout"
+    assert ("get_generation_diagnostic", str({"node_id": "image-1"})) in inner.calls
+
+
+@pytest.mark.asyncio
 async def test_proxy_run_text_generation_missing_inner_raises():
     async def noop(_ev: dict) -> None:
         return None
