@@ -1674,8 +1674,9 @@ defineExpose({
 }
 
 .agent-head-btn.is-active {
-  background: var(--neo-accent-soft);
-  color: var(--neo-accent-text);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 
 .agent-readonly-btn {
@@ -1759,9 +1760,9 @@ defineExpose({
 }
 
 .agent-input-dock.is-drop-target {
-  border-color: var(--neo-accent-border);
-  background: var(--neo-accent-soft);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-accent-border) 32%, transparent);
+  border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
+  background: var(--neo-hover-bg);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 18%, transparent);
 }
 
 .agent-prompt-field {
@@ -1818,7 +1819,7 @@ defineExpose({
 }
 
 .agent-skill-icon {
-  background: var(--neo-accent-soft);
-  color: var(--neo-accent-text);
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
 }
 </style>

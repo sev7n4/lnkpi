@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Work } from '@lnkpi/shared'
@@ -10,12 +10,12 @@ import { useAuthStore } from '@/stores/auth'
 import { useSessionRedirect } from '@/composables/useSessionRedirect'
 import WorkCard from '@/components/works/WorkCard.vue'
 import CreativeLauncher from '@/components/workflow/CreativeLauncher.vue'
+import SessionCard from '@/components/workflow/SessionCard.vue'
 import CarouselBanner from '@/components/workflow/CarouselBanner.vue'
 import CategoryTabs from '@/components/workflow/CategoryTabs.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 import type { Session } from '@lnkpi/shared'
-import { formatSessionTime } from '@/utils/formatSessionTime'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -29,7 +29,26 @@ const showPublish = ref(false)
 const userSessions = ref<Session[]>([])
 const mySessions = ref<Session[]>([])
 const openMenuId = ref<string | null>(null)
-const menuRefs = new Map<string, HTMLElement>()
+const sessionSearch = ref('')
+const showAllSessions = ref(false)
+const manageSessions = ref(false)
+const selectedSessionIds = ref<string[]>([])
+const DEFAULT_VISIBLE_SESSIONS = 5
+
+const filteredSessions = computed(() => {
+  const q = sessionSearch.value.trim().toLowerCase()
+  if (!q) return mySessions.value
+  return mySessions.value.filter((s) => (s.title || '未命名画布').toLowerCase().includes(q))
+})
+
+const visibleSessions = computed(() => {
+  if (showAllSessions.value || sessionSearch.value.trim()) return filteredSessions.value
+  return filteredSessions.value.slice(0, DEFAULT_VISIBLE_SESSIONS)
+})
+
+const hasMoreSessions = computed(
+  () => !sessionSearch.value.trim() && filteredSessions.value.length > DEFAULT_VISIBLE_SESSIONS,
+)
 const greeting = getGreeting()
 
 function handlePublishLocateNode(payload: { sessionId: string; nodeId: string }) {
@@ -102,11 +121,6 @@ async function fetchMySessions() {
   }
 }
 
-function setMenuRef(id: string, el: HTMLElement | null) {
-  if (el) menuRefs.set(id, el)
-  else menuRefs.delete(id)
-}
-
 function toggleMenu(sessionId: string) {
   openMenuId.value = openMenuId.value === sessionId ? null : sessionId
 }
@@ -115,10 +129,45 @@ function closeMenu() {
   openMenuId.value = null
 }
 
+function toggleManageSessions() {
+  manageSessions.value = !manageSessions.value
+  selectedSessionIds.value = []
+  closeMenu()
+}
+
+function toggleSessionSelect(sessionId: string) {
+  const set = new Set(selectedSessionIds.value)
+  if (set.has(sessionId)) set.delete(sessionId)
+  else set.add(sessionId)
+  selectedSessionIds.value = [...set]
+}
+
+async function batchDeleteSessions() {
+  if (!selectedSessionIds.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selectedSessionIds.value.length} 个画布？此操作不可恢复。`,
+      '批量删除',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const { data } = await sessionsApi.removeMany(selectedSessionIds.value)
+    await fetchMySessions()
+    selectedSessionIds.value = []
+    manageSessions.value = false
+    ElMessage.success(`已删除 ${data.data.deleted} 个画布`)
+  } catch {
+    ElMessage.error('批量删除失败，请稍后重试')
+  }
+}
+
 function onDocumentPointerDown(event: PointerEvent) {
   if (!openMenuId.value) return
-  const el = menuRefs.get(openMenuId.value)
-  if (el && !el.contains(event.target as Node)) closeMenu()
+  const target = event.target as HTMLElement
+  if (!target.closest('.session-card-menu-anchor')) closeMenu()
 }
 
 async function renameSession(session: Session) {
@@ -287,14 +336,40 @@ watch(() => auth.isLoggedIn, () => {
 
     <!-- 我的画布：历史画布 + 新建入口 -->
     <section v-if="auth.isLoggedIn" class="mb-12">
-      <div class="mb-4 flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-white/90">我的画布</h2>
-        <span v-if="mySessions.length" class="text-xs text-white/35">{{ mySessions.length }} 个画布</span>
+      <div class="mb-4 flex flex-wrap items-center gap-3">
+        <h2 class="text-lg font-semibold text-[var(--neo-text-primary)]">我的画布</h2>
+        <span v-if="mySessions.length" class="text-xs text-[var(--neo-text-muted)]">{{ filteredSessions.length }} 个</span>
+        <span class="flex-1" />
+        <input
+          v-if="mySessions.length"
+          v-model="sessionSearch"
+          type="search"
+          class="w-44 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--neo-accent-border)]"
+          placeholder="搜索画布..."
+        >
+        <button
+          v-if="mySessions.length"
+          type="button"
+          class="rounded-lg px-2.5 py-1.5 text-xs transition"
+          :class="manageSessions ? 'bg-[var(--neo-hi-bg)] text-[var(--neo-hi-text)]' : 'text-[var(--neo-text-muted)] hover:bg-[var(--neo-hover-bg)]'"
+          @click="toggleManageSessions"
+        >
+          {{ manageSessions ? '完成' : '管理' }}
+        </button>
+        <button
+          v-if="manageSessions && selectedSessionIds.length"
+          type="button"
+          class="rounded-lg bg-red-500/15 px-2.5 py-1.5 text-xs text-red-400 transition hover:bg-red-500/25"
+          @click="batchDeleteSessions"
+        >
+          删除选中 ({{ selectedSessionIds.length }})
+        </button>
       </div>
       <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         <button
+          v-if="!manageSessions"
           type="button"
-          class="flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-white/[0.02] text-white/50 transition hover:border-[#6366f1]/50 hover:bg-[#6366f1]/5 hover:text-[#818cf8]"
+          class="session-create-card flex aspect-[4/3] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed transition"
           @click="createCanvas"
         >
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -302,75 +377,34 @@ watch(() => auth.isLoggedIn, () => {
           </svg>
           <span class="text-xs font-medium">新建画布</span>
         </button>
-        <div
-          v-for="session in mySessions.slice(0, 11)"
+        <SessionCard
+          v-for="session in visibleSessions"
           :key="session.id"
-          class="group relative flex aspect-[4/3] flex-col justify-between overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1a1a1a] p-3 text-left transition hover:border-[#6366f1]/40 hover:bg-[#1f1f24]"
-        >
-          <div
-            :ref="(el) => setMenuRef(session.id, el as HTMLElement | null)"
-            class="absolute right-2 top-2 z-10"
-          >
-            <button
-              type="button"
-              class="flex h-7 w-7 items-center justify-center rounded-lg bg-black/50 text-white/70 opacity-0 transition hover:bg-black/70 hover:text-white group-hover:opacity-100"
-              :class="{ 'opacity-100': openMenuId === session.id }"
-              title="更多操作"
-              @click.stop="toggleMenu(session.id)"
-            >
-              <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                <circle cx="5" cy="12" r="2" />
-                <circle cx="12" cy="12" r="2" />
-                <circle cx="19" cy="12" r="2" />
-              </svg>
-            </button>
-            <div
-              v-if="openMenuId === session.id"
-              class="neo-popover absolute right-0 top-full mt-1 min-w-[120px] rounded-xl py-1"
-              @click.stop
-            >
-              <button
-                type="button"
-                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
-                @click="renameSession(session)"
-              >
-                重命名
-              </button>
-              <button
-                type="button"
-                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs"
-                @click="duplicateSession(session)"
-              >
-                复制副本
-              </button>
-              <button
-                type="button"
-                class="neo-popover-item flex w-full px-3 py-2 text-left text-xs text-red-400"
-                @click="deleteSession(session)"
-              >
-                删除
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            class="flex flex-1 flex-col justify-between text-left"
-            @click="openCanvas(session.id)"
-          >
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[#6366f1]/15 text-[#818cf8]">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 2h6m-3-3v6" />
-              </svg>
-            </div>
-            <div class="min-w-0">
-              <p class="truncate text-[13px] font-medium text-white/85 group-hover:text-white">
-                {{ session.title || '未命名画布' }}
-              </p>
-              <p class="mt-0.5 text-[10px] text-white/35">{{ formatSessionTime(session.updatedAt) }}</p>
-            </div>
-          </button>
-        </div>
+          :session="session"
+          :manage-mode="manageSessions"
+          :selected="selectedSessionIds.includes(session.id)"
+          :menu-open="openMenuId === session.id"
+          class="session-card-menu-anchor"
+          @open="openCanvas(session.id)"
+          @toggle-menu="toggleMenu(session.id)"
+          @rename="renameSession(session)"
+          @duplicate="duplicateSession(session)"
+          @delete="deleteSession(session)"
+          @toggle-select="toggleSessionSelect(session.id)"
+        />
       </div>
+      <div v-if="hasMoreSessions" class="mt-4 text-center">
+        <button
+          type="button"
+          class="rounded-lg px-4 py-2 text-xs text-[var(--neo-text-muted)] transition hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-primary)]"
+          @click="showAllSessions = !showAllSessions"
+        >
+          {{ showAllSessions ? '收起' : `查看更多（${filteredSessions.length - DEFAULT_VISIBLE_SESSIONS}）` }}
+        </button>
+      </div>
+      <p v-if="sessionSearch && !filteredSessions.length" class="py-8 text-center text-sm text-[var(--neo-text-muted)]">
+        没有匹配的画布
+      </p>
     </section>
 
     <section class="mb-10">
@@ -414,3 +448,17 @@ watch(() => auth.isLoggedIn, () => {
     />
   </div>
 </template>
+
+<style scoped>
+.session-create-card {
+  border-color: var(--neo-border);
+  background: color-mix(in srgb, var(--neo-hover-bg) 40%, transparent);
+  color: var(--neo-text-muted);
+}
+
+.session-create-card:hover {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
+  background: var(--neo-hover-bg);
+  color: var(--neo-hi-text);
+}
+</style>

@@ -231,11 +231,12 @@ useClickOutside(rootRef, closePopovers)
 }
 .rail-btn:hover {
   background: var(--neo-hover-bg);
-  color: var(--neo-accent-text);
+  color: var(--neo-text-primary);
 }
 .rail-btn.is-active {
-  background: var(--neo-accent-soft);
-  color: var(--neo-accent-text);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 
 /* 统一大小的圆形图标底座 */
@@ -249,8 +250,8 @@ useClickOutside(rootRef, closePopovers)
   background: var(--neo-active-bg);
 }
 .rail-btn.is-active .rail-circle {
-  border-color: var(--neo-accent-border);
-  background: var(--neo-accent-soft);
+  border-color: color-mix(in srgb, var(--neo-hi-text) 30%, var(--neo-border));
+  background: var(--neo-active-bg);
 }
 
 /* 添加节点：白色高亮凸显（浅色主题下自动转深色高亮） */

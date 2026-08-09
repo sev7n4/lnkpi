@@ -1096,9 +1096,9 @@
 }
 
 .group-node-wrapper.is-active .group-node-container {
-  border-color: var(--neo-accent-border);
-  background: var(--neo-accent-soft);
-  box-shadow: 0 0 0 1px var(--neo-accent-border);
+  border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
+  background: var(--neo-hover-bg);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--neo-hi-text) 25%, transparent);
 }
 
 /* ============================================================
@@ -1111,18 +1111,23 @@
      方向沿 dash 流动，帮助视觉回溯上游节点
    ============================================================ */
 .vue-flow__edge .vue-flow__edge-path {
-  stroke: var(--neo-edge) !important;
-  stroke-width: 1.5px;
+  stroke: var(--canvas-edge-color, var(--neo-edge)) !important;
+  stroke-width: var(--canvas-edge-width, 1.5px);
+  filter: var(--canvas-edge-glow, none);
   transition: stroke 0.2s ease, stroke-width 0.2s ease;
 }
 
+.vue-flow__edge:not(.animated):not(.neo-edge-upstream):not(.neo-edge-downstream) .vue-flow__edge-path {
+  stroke-dasharray: var(--canvas-edge-dash, none);
+}
+
 .vue-flow__edge:hover .vue-flow__edge-path {
-  stroke: var(--neo-edge-hover) !important;
+  stroke: var(--canvas-edge-color, var(--neo-edge-hover)) !important;
 }
 
 .vue-flow__edge.selected .vue-flow__edge-path {
-  stroke: var(--neo-edge-selected) !important;
-  stroke-width: 2px;
+  stroke: var(--canvas-edge-color, var(--neo-edge-selected)) !important;
+  stroke-width: calc(var(--canvas-edge-width, 1.5px) + 0.5px);
 }
 
 /* 连线过程中的预览线：电流青、发光、流动 */

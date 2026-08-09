@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Inject, Param, Post, Put, Req, UseGuards } from '@nestjs/common'
-import { IsOptional, IsString } from 'class-validator'
+import { IsArray, IsOptional, IsString } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { SessionsService } from './sessions.service'
 
@@ -22,6 +22,12 @@ class UpdateSessionDto {
   canvasData?: unknown
 }
 
+class BatchDeleteSessionsDto {
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[]
+}
+
 @Controller('sessions')
 export class SessionsController {
   constructor(@Inject(SessionsService) private readonly sessionsService: SessionsService) {}
@@ -37,6 +43,13 @@ export class SessionsController {
   @UseGuards(AuthGuard)
   async findAll(@Req() req: { user: { sub: string } }) {
     const data = await this.sessionsService.findAll(req.user.sub)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('batch-delete')
+  @UseGuards(AuthGuard)
+  async removeMany(@Req() req: { user: { sub: string } }, @Body() dto: BatchDeleteSessionsDto) {
+    const data = await this.sessionsService.removeMany(req.user.sub, dto.ids)
     return { code: 0, message: 'ok', data }
   }
 

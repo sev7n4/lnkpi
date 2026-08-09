@@ -8,5 +8,7 @@ export const sessionsApi = {
   update: (id: string, data: { title?: string; canvasData?: unknown }) =>
     api.put<{ data: Session }>(`/sessions/${id}`, data),
   remove: (id: string) => api.delete(`/sessions/${id}`),
+  removeMany: (ids: string[]) =>
+    api.post<{ data: { deleted: number } }>('/sessions/batch-delete', { ids }),
   duplicate: (id: string) => api.post<{ data: Session }>(`/sessions/${id}/duplicate`),
 }
