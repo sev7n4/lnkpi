@@ -17,7 +17,7 @@ async def test_intake_variant_phrase_without_checkpoint_clarifies():
     intake = make_intake_node(skills)
     out = await intake({"messages": [HumanMessage(content="按刚才那个风格再生成一张")]})
     assert out["phase"] == "clarify"
-    assert route_after_intake(out) == "clarify_atomic_intent"
+    assert route_after_intake(out) == "clarify_gate"
 
 
 @pytest.mark.asyncio

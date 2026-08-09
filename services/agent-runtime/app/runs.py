@@ -25,6 +25,7 @@ from app.graph.hitl_resume import (
     prepare_interrupt_resume,
 )
 from app.graph.step_copy import phase_hint_event, step_event
+from app.graph.route_trace import route_decision_event
 from app.history_trim import trim_history
 from app.metrics import record_stream_error, thread_finished, thread_started, track_node
 from app.tracing import end_run_span, is_tracing_enabled, start_run_span, trace_node
@@ -727,6 +728,10 @@ async def stream_run_events(
                                     "data": {"status": "done", "summary": str(thinking)},
                                 }
                             )
+                        if node_key == "intake":
+                            route_decision = delta.get("route_decision")
+                            if isinstance(route_decision, dict):
+                                await emit(route_decision_event(route_decision))
                     await emit(
                         step_event(
                             node_key,

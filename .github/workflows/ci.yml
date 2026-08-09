@@ -54,6 +54,11 @@ jobs:
           cd services/agent-runtime
           python3 -m pytest tests/test_explore_28_contract.py tests/test_explore_mandatory.py -q
 
+      - name: eval-route-set gold (P1 route gate)
+        run: |
+          cd services/agent-runtime
+          python3 -m pytest tests/test_eval_route_set.py -q
+
       - name: Contract verification summary
         if: always()
         run: |

@@ -39,6 +39,10 @@ def _state_from_fixture(raw: dict) -> dict:
     return state
 
 
+def test_eval_route_set_minimum_cases(route_cases: list[dict]):
+    assert len(route_cases) >= 30, f"eval-route-set needs ≥30 cases, got {len(route_cases)}"
+
+
 def test_eval_route_set_gold(route_cases: list[dict]):
     mismatches: list[str] = []
     for case in route_cases:

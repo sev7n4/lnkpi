@@ -26,6 +26,7 @@
 | **R-S6** | **侧栏 ref 参与 L1** | `mentionedKeys` + `sidebarAttachments` 为 P1 信号；双图 ref + 变换动词 → 优先 `atomic_create`（img2img） |
 | **R-S7** | **L0 `preserve` 修饰 `generate`** | 「保持构图/主图风格/背景不变」→ 禁止 `planning_guard` 触发 campaign override |
 | **R-S8** | **`flow_mode=campaign` 更名为 `orchestration`**（可选 R2） | 语义为平台多节点编排能力，不隐含任何 skill；过渡期允许 alias |
+| **R-S9** | **Route Unification 完成（P1c）** | L0 路由仅经 `extract_route_features` + `apply_route_precedence`；废止 `decide_route_legacy` 与 shadow diff；`orchestration_phrases` / IR 替代 L1 substring hint 表 |
 
 ---
 
@@ -472,3 +473,4 @@ flow_mode: str         # 来自 route_decision，不再默认 campaign
 | 版本 | 日期 | 说明 |
 |------|------|------|
 | v1.0 | 2026-08-07 | 初稿：平台路由 vs Skill 边界、route_decide、RouteContext、分阶段 R0–R4 |
+| v1.1 | 2026-08-09 | R-S9：P1 Route Unification — precedence 表为唯一 L0 冲突消解；legacy hint 路由删除 |
