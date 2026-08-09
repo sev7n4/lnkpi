@@ -480,13 +480,15 @@ def build_generation_request_from_dock(node, upstream, refs, mentioned_keys) -> 
 
 ## 计划自检（全部完成后勾选）
 
-- [ ] design §3 全部 R-* 有 Task
-- [ ] design §9 全部 RU-* 有 Task（T12–T21）
-- [ ] AC-01–AC-07 有明确验证 Task
-- [ ] Q1–Q5、E1–E10 覆盖索引已满足
-- [ ] 无 TBD / placeholder 步骤
-- [ ] P0 未新增 permanent hint 条目
-- [ ] P1c 后零 substring 路由
+- [x] design §3 全部 R-* 有 Task
+- [x] design §9 全部 RU-* 有 Task（T12–T21）
+- [x] AC-01–AC-07 有明确验证 Task
+- [x] Q1–Q5、E1–E10 覆盖索引已满足
+- [x] 无 TBD / placeholder 步骤
+- [x] P0 未新增 permanent hint 条目
+- [x] P1c 后零 substring 路由
+
+> **收尾（2026-08-10）：** T1–T24 代码已合并 main；本次收尾完成 §9.13 路由 bool 迁移、`GenerationRequest` runtime 接入、prod verify PASS=5、§9.16 验收勾选。
 
 ---
 

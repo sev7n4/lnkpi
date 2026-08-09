@@ -6,20 +6,18 @@ import re
 from typing import Any, Callable
 
 from app.graph.atomic_intent import (
-    atomic_create_intent,
     atomic_regenerate_intent,
     is_regenerate_new_variant,
-    orchestration_complexity_intent,
     regenerate_phrase_intent,
     resolve_intake_route,
 )
-from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation
+from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create, is_ref_media_generation
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
 from app.graph.explore_route import explore_canvas_signal
 from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.l0_action import TRANSFORM_VERBS, detect_l0_action, has_preserve_intent
 from app.graph.route_context import RouteContext
-from app.graph.route_features import RouteFeatures
+from app.graph.route_features import RouteFeatures, orchestration_campaign_signal
 
 ROUTE_CLARIFY_ORCHESTRATION = (
     "听起来像多节点编排或 Skill 工作流需求。请确认：\n"
@@ -264,7 +262,7 @@ def _rule_orch_ambiguous(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
     guard = _guard_veto(ctx)
-    orch = orchestration_complexity_intent(intent.utterance) == "campaign"
+    orch = orchestration_campaign_signal(intent.utterance)
     if guard or (orch and not _valid_skill_id(ctx, valid_skill_ids)):
         return _base_decision(
             ctx,
@@ -304,7 +302,7 @@ def _rule_atomic_generate(
     l0 = detect_l0_action(utterance)
     route = resolve_intake_route(utterance, focus_node_id=ctx.get("focus_node_id"))
     is_variant = bool(features.get("has_atomic_checkpoint")) and is_regenerate_new_variant(utterance)
-    is_atomic = route == "atomic_create" or atomic_create_intent(utterance)
+    is_atomic = route == "atomic_create" or intent_suggests_atomic_create(intent)
     if is_atomic or is_variant or (
         has_preserve_intent(utterance) and l0 in ("preserve", "generate", "unknown")
     ):

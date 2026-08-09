@@ -16,6 +16,7 @@ from app.graph.intent import (
 )
 from app.graph.atomic_intent_ir import (
     derive_studio_prompt,
+    intent_suggests_atomic_create,
     is_prompt_expand_intent,
     is_source_backed_media_generation,
     resolve_atomic_intent,
@@ -296,8 +297,8 @@ _BATCH_IMAGE_COUNT = re.compile(
 )
 
 
-def atomic_create_intent(text: str) -> bool:
-    """True when user wants a single-shot create-and-generate flow."""
+def utterance_suggests_atomic_create(text: str) -> bool:
+    """True when user wants a single-shot create-and-generate flow (shared IR + taxonomy)."""
     lowered = (text or "").strip().lower()
     if not lowered:
         return False
@@ -332,6 +333,11 @@ def atomic_create_intent(text: str) -> bool:
     if re.search(r"(?:出图|出一张图|生成图)", text or ""):
         return True
     return False
+
+
+def atomic_create_intent(text: str) -> bool:
+    """Deprecated routing helper — prefer intent_suggests_atomic_create in L0 path."""
+    return utterance_suggests_atomic_create(text)
 
 
 def regenerate_phrase_intent(text: str) -> bool:
@@ -397,7 +403,8 @@ def resolve_intake_route(
 
     if detect_action(text) == "write":
         return "atomic_create"
-    if atomic_create_intent(text):
+    intent = resolve_atomic_intent(text, mentioned_keys=None)
+    if intent_suggests_atomic_create(intent):
         return "atomic_create"
     return "chat"
 

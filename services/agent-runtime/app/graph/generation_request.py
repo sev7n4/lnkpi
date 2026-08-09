@@ -73,13 +73,50 @@ def _intent_from_state(state: dict[str, Any], utterance: str, mentioned_keys: li
     return resolve_atomic_intent(utterance, mentioned_keys=mentioned_keys or None)
 
 
+def apply_generation_request_to_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Build GenerationRequest and sync prompt/refs fields on atomic state (runtime AC-05)."""
+    req = build_generation_request_from_atomic_state(state)
+    patch: dict[str, Any] = {"generation_request": req}
+    prompt = str(req.get("prompt") or "").strip()
+    modality = req.get("modality")
+
+    spec = dict(state.get("atomic_spec") or {}) if isinstance(state.get("atomic_spec"), dict) else {}
+    if prompt:
+        spec["prompt"] = prompt
+    if modality:
+        spec["target_type"] = modality
+    if spec:
+        patch["atomic_spec"] = spec
+
+    items = state.get("atomic_items")
+    if isinstance(items, list) and items:
+        synced: list[dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            it = dict(item)
+            if prompt:
+                it["prompt"] = prompt
+            if modality:
+                it["target_type"] = modality
+            synced.append(it)
+        if synced:
+            patch["atomic_items"] = synced
+    return patch
+
+
 def build_generation_request_from_atomic_state(state: dict[str, Any]) -> GenerationRequest:
     """Sidebar atomic path: prompt + refs + mentioned_keys aligned with Dock."""
     spec = state.get("atomic_spec") if isinstance(state.get("atomic_spec"), dict) else {}
     utterance = latest_user_text(state.get("messages") or []) or str(spec.get("prompt") or "")
     mentioned = resolve_sidebar_mentioned_keys(state)
     intent = _intent_from_state(state, utterance, mentioned)
-    prompt = str(spec.get("prompt") or derive_studio_prompt(intent)).strip()
+    derived = derive_studio_prompt(intent).strip()
+    spec_prompt = str(spec.get("prompt") or "").strip()
+    if intent.mentioned_keys and derived:
+        prompt = derived
+    else:
+        prompt = spec_prompt or derived
     modality = str(spec.get("target_type") or intent.output_modality or "image")  # type: ignore[assignment]
     node_id = str(state.get("atomic_node_id") or state.get("focus_node_id") or "").strip() or None
     refs = _refs_from_sidebar(state.get("sidebar_attachments"), mentioned)

@@ -76,6 +76,11 @@ async def _emit_atomic_task_list(nest: Any, created_items: list[dict[str, Any]])
 
 def make_create_atomic_node(*, nest: Any) -> Callable:
     async def create_atomic_node(state: dict) -> dict:
+        from app.graph.generation_request import apply_generation_request_to_state
+
+        gen_patch = apply_generation_request_to_state(state)
+        state = {**state, **gen_patch}
+
         items = [dict(i) for i in (state.get("atomic_items") or []) if isinstance(i, dict)]
         spec = state.get("atomic_spec") or {}
         if not items:
@@ -145,6 +150,7 @@ def make_create_atomic_node(*, nest: Any) -> Callable:
             "atomic_node_id": str(first.get("node_id") or ""),
             "atomic_spec": first,
             "atomic_items": created_items,
+            "generation_request": gen_patch.get("generation_request"),
             "messages": [AIMessage(content=msg)],
         }
 

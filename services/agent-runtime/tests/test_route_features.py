@@ -6,7 +6,7 @@ import pytest
 
 from app.graph.atomic_intent_ir import AtomicIntent, resolve_atomic_intent
 from app.graph.route_context import assemble_route_context
-from app.graph.route_features import extract_route_features
+from app.graph.route_features import extract_route_features, orchestration_campaign_signal
 
 STYLE3 = "@T1 请按风格3出图"
 
@@ -99,3 +99,8 @@ def test_preserve_composition_feature():
     intent = _intent(utterance)
     features = extract_route_features(ctx, intent)
     assert features["preserve_composition"] is True
+
+
+def test_orchestration_campaign_signal_storyboard():
+    assert orchestration_campaign_signal("帮我生成12个分镜镜头") is True
+    assert orchestration_campaign_signal("@T1 请按风格3出图") is False
