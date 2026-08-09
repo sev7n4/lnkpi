@@ -112,6 +112,7 @@ class AgentRuntimeState(TypedDict, total=False):
     clarify_question: str | None  # Phase 2: low-confidence clarify prompt
     clarify_context: dict | None  # P0: route/atomic clarify checkpoint (see clarify_context.py)
     pre_parsed_intent: dict | None  # P0: shortcut from route clarify follow-up
+    thinking_summary: str | None  # UX: short routing/parse status for stream UI
 
     # 工作记忆（轻量；禁止存完整 canvas nodes/edges）
     plan_summary: str

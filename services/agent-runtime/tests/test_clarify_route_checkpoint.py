@@ -29,3 +29,5 @@ async def test_clarify_route_writes_route_orchestration_checkpoint():
     assert ctx.get("mentioned_keys") == ["T1"]
     assert out.get("phase") == "clarify"
     assert out.get("flow_mode") != "chat"
+    msg = out.get("messages") or []
+    assert msg and "已看到引用 @T1" in str(msg[0].content)

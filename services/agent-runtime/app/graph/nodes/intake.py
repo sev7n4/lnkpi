@@ -18,6 +18,8 @@ REGENERATE_NO_CHECKPOINT_CLARIFY = (
     "也可以说「重新生成一张」或「按刚才那个风格再生成一张」。"
 )
 
+ROUTE_CLARIFY_UNKNOWN = "未能识别您的选择，请回复 1 / 2 / 3。"
+
 SKILL_REQUIRED_CLARIFY = (
     "完整编排需要先在侧栏选用已安装的 Skill，再发送需求或回复 2。"
 )
@@ -79,6 +81,14 @@ def make_intake_node(skills_dir: Path) -> Callable:
                     if mk:
                         out["sidebar_mentioned_keys"] = mk
                     return out
+            return {
+                "phase": "clarify",
+                "flow_mode": "chat",
+                "skill_id": None,
+                "clarify_question": ROUTE_CLARIFY_UNKNOWN,
+                "route_clarify": True,
+                "clarify_context": pending,
+            }
 
         ctx = assemble_route_context(state)
         decision = decide_route(ctx, valid_skill_ids=set(by_id.keys()))
@@ -148,6 +158,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
             out["phase"] = "clarify"
             out["route_clarify"] = True
             out["clarify_question"] = decision.get("clarify_question") or ROUTE_CLARIFY_ORCHESTRATION
+            out["thinking_summary"] = "待确认：单张出图还是完整编排"
         focus_node_id = ctx.get("focus_node_id")
         if focus_node_id:
             out["focus_node_id"] = focus_node_id

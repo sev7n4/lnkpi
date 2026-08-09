@@ -29,6 +29,14 @@ def test_extract_atomic_prompt_strips_prefix():
     assert extract_atomic_prompt("写一段天猫详情页开场文案") == "天猫详情页开场文案"
 
 
+def test_rule_parse_atomic_keeps_style_number():
+    from app.graph.atomic_parse_util import rule_parse_atomic
+
+    items, conf = rule_parse_atomic("@T1 请按风格3出图", mentioned_keys=["T1"])
+    assert conf >= 0.8
+    assert "按风格3" in items[0]["prompt"]
+
+
 def test_extract_atomic_prompt_preserves_audio_vo_utterance():
     utterance = "给这段文案配一段旁白"
     assert extract_atomic_prompt(utterance) == utterance

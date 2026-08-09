@@ -121,3 +121,16 @@ cases:
         - { mediaType: image, url: "https://a/1.jpg" }
         - { mediaType: image, url: "https://a/2.jpg" }
     gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }
+
+  - id: sidebar-t1-style3-atomic
+    state:
+      messages: [{ role: user, content: "@T1 请按风格3出图" }]
+      sidebar_mentioned_keys: [T1]
+      sidebar_attachments:
+        - { refKey: T1, mediaType: text, content: "风格3说明" }
+    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+
+  - id: tmall-detail-campaign-clarify
+    state:
+      messages: [{ role: user, content: "帮我做天猫详情页营销方案出图" }]
+    gold: { flow_mode: clarify_route }
