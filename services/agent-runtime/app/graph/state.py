@@ -165,3 +165,7 @@ class AgentRuntimeState(TypedDict, total=False):
     gen_failed_keys: Annotated[list[str] | None, reset_or_union]
     gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]
     gen_fail_details: Annotated[dict[str, dict] | None, reset_or_merge]
+
+    # explore_canvas path (Phase 2)
+    explore_summary: dict | None
+    canvas_commands: list[dict] | None

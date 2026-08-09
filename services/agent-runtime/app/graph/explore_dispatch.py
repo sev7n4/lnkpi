@@ -116,7 +116,7 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):
         return "ui_command"
 
-    if "精修" in u and ("打开" in u or "编辑器" in u or "编辑" in u):
+    if "精修" in u and ("打开" in u or "编辑器" in u):
         return "ui_command"
 
     if ("定位" in u or "视口" in u) and ("节点" in u or "「" in u or has_canvas_node_id_reference(u)):
