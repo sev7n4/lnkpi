@@ -9,6 +9,7 @@ from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.atomic_clarify import is_affirmative_clarify_reply, pending_atomic_clarify
 from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route
+from app.graph.route_trace import serialize_route_decision
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
@@ -91,7 +92,9 @@ def make_intake_node(skills_dir: Path) -> Callable:
             }
 
         ctx = assemble_route_context(state)
-        decision = decide_route(ctx, valid_skill_ids=set(by_id.keys()))
+        decision = serialize_route_decision(
+            decide_route(ctx, valid_skill_ids=set(by_id.keys()))
+        )
 
         requested = str(ctx.get("requested_skill_id") or "").strip()
         skill_id: str | None = requested if requested in by_id else None
