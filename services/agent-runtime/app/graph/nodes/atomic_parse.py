@@ -28,6 +28,7 @@ from app.graph.atomic_parse_util import (
 )
 from app.graph.atomic_intent import is_regenerate_new_variant
 from app.graph.atomic_clarify import is_img2img_utterance, pending_atomic_clarify
+from app.graph.sidebar_attachments import resolve_sidebar_mentioned_keys
 from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.intent_parse_llm import LLM_PARSE_TIMEOUT_SEC, llm_parse_intent
 from app.graph.intent_parse_schema import IntentParseResult, intent_result_to_parse_outcome
@@ -180,6 +181,14 @@ async def _maybe_shadow_diff(
         logger.info("intent_parse_shadow agree label=%s", rule_label)
 
 
+def _mentioned_keys_from_state(state: dict) -> list[str]:
+    ctx = state.get("route_context") if isinstance(state.get("route_context"), dict) else {}
+    keys = ctx.get("mentioned_keys") or state.get("mentioned_keys") or []
+    if isinstance(keys, list):
+        return [str(k) for k in keys if str(k).strip()]
+    return resolve_sidebar_mentioned_keys(state)
+
+
 def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = None) -> Callable:
     async def parse_atomic_intent(state: dict) -> dict:
         text = _latest_user_text(state.get("messages") or [])
@@ -201,6 +210,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
 
         focus_node_id = state.get("focus_node_id")
         sidebar_attachments = state.get("sidebar_attachments") or None
+        mentioned_keys = _mentioned_keys_from_state(state)
         context_packet = build_atomic_parse_packet(state, canvas_summary=canvas_summary)
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
         prior_atomic = state.get("atomic_spec")
@@ -254,6 +264,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 canvas_summary=canvas_summary,
                 focus_node_id=focus_node_id,
                 parse_context=parse_ctx or None,
+                mentioned_keys=mentioned_keys or None,
             )
             if rule_items:
                 outcome = outcome_from_rule_items(
@@ -315,6 +326,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_summary=canvas_summary,
                     focus_node_id=focus_node_id,
                     parse_context=parse_ctx or None,
+                    mentioned_keys=mentioned_keys or None,
                 )
                 canvas_ctx = parse_ctx or (rule_items[0].get("canvas_context") if rule_items else None)
                 if rule_conf >= CLARIFY_THRESHOLD:

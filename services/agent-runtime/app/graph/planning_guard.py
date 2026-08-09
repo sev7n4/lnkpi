@@ -50,10 +50,14 @@ def detect_action(text: str) -> ActionKind:
     t = (text or "").strip()
     if not t:
         return "unknown"
-    if any(m in t for m in EXPAND_MARKERS):
-        return "expand"
+    from app.graph.atomic_intent_ir import is_prompt_expand_intent, is_source_backed_media_generation
+
+    if is_source_backed_media_generation(t):
+        return "generate"
     if is_explicit_generation_intent(t):
         return "generate"
+    if is_prompt_expand_intent(t):
+        return "expand"
     if any(v in t for v in WRITE_VERBS):
         return "write"
     if is_planning_intent(t):
@@ -128,10 +132,25 @@ def planning_clarify_question(utterance: str) -> str:
 
 def validate_llm_parse(result: "IntentParseResult", utterance: str) -> "ParseOutcome | None":
     """Return clarify outcome if LLM parse conflicts with planning guard; None if OK."""
+    from app.graph.atomic_intent_ir import expected_output_modality
     from app.graph.atomic_parse_schema import ParseOutcome
 
     action = str(result.get("action") or "unknown")
     items = result.get("items") or []
+
+    expected = expected_output_modality(utterance)
+    if expected and items:
+        parsed = str(items[0].get("target_type") or "")
+        if parsed and parsed != expected:
+            return {
+                "kind": "clarify",
+                "confidence": min(float(result.get("confidence") or 0.0), 0.75),
+                "reason": "modality_ir_mismatch",
+                "clarify_question": (
+                    f"您是要生成{expected}，还是{parsed}？"
+                    f"请明确，例如：「基于引用内容生成视频」。"
+                ),
+            }
 
     if action == "generate" and has_planning_image_conflict(utterance):
         out: ParseOutcome = {
