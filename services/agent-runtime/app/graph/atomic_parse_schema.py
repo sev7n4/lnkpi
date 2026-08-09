@@ -9,7 +9,6 @@ from langchain_core.messages import AIMessage
 from app.graph.atomic_intent import confirm_gate_for_type, _is_campaign_override
 from app.graph.sidebar_attachments import assign_sidebar_ref_keys
 from app.graph.sidebar_copy import format_atomic_multi_ack, format_atomic_parse_ack
-from app.graph.intent import marketing_intent
 from app.graph.planning_guard import has_planning_image_conflict, planning_clarify_question
 
 CLARIFY_THRESHOLD = 0.70
@@ -142,9 +141,7 @@ def validate_parse_result(
             "clarify_question": planning_clarify_question(utterance),
         }
 
-    if _is_campaign_override(utterance) or (
-        marketing_intent(utterance) and "营销方案" in utterance
-    ):
+    if _is_campaign_override(utterance):
         return {
             "kind": "clarify",
             "confidence": 0.0,

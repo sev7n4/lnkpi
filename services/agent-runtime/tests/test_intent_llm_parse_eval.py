@@ -11,6 +11,8 @@ import yaml
 from app.graph.atomic_intent import parse_atomic_target_type, resolve_intake_route
 from app.graph.intent_parse_schema import intent_result_to_parse_outcome
 from app.graph.planning_guard import validate_llm_parse
+from app.graph.route_context import assemble_route_context
+from app.graph.route_decide import decide_route
 
 EVAL_PATH = (
     Path(__file__).resolve().parents[1]
@@ -91,10 +93,12 @@ def test_eval_fixture_rule_route_agreement(llm_cases: list[dict]):
     for case in routable:
         utterance = case["utterance"]
         gold_route = case["gold"]["route"]
-        pred = resolve_intake_route(utterance, focus_node_id=None)
         if gold_route == "campaign":
-            ok = pred == "campaign"
+            ctx = assemble_route_context({"messages": [{"role": "user", "content": utterance}]})
+            pred = decide_route(ctx)["flow_mode"]
+            ok = pred == "clarify_route"
         else:
+            pred = resolve_intake_route(utterance, focus_node_id=None)
             ok = pred == "atomic_create"
             if not ok and parse_atomic_target_type(utterance):
                 ok = pred == "atomic_create"

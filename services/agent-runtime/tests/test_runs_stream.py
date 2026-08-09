@@ -145,14 +145,9 @@ def test_runs_stream_ndjson_smoke():
         events = [json.loads(line) for line in response.iter_lines() if line]
 
     types = [e["type"] for e in events]
-    # plan 确认前不写画布，首轮只有文本门
+    # 无显式 Skill 时不 silent 进入 campaign；应 route clarify 而非 plan interrupt
     assert "text_replace" in types or "text_delta" in types
-    assert "interrupt" in types
-    interrupt_ev = next(e for e in events if e["type"] == "interrupt")
-    assert interrupt_ev["data"]["interrupted"] is True
-    assert interrupt_ev["data"]["node"] == "await_confirm"
-    assert interrupt_ev["data"]["phase"] == "await_confirm"
-    assert types.index("interrupt") < types.index("done")
+    assert "interrupt" not in types
     assert "done" in types
     assert "error" not in types
     assert "upsert_prompt_node" not in nest.calls
@@ -162,4 +157,4 @@ def test_runs_stream_ndjson_smoke():
         e["data"]["text"] for e in events if e["type"] in ("text_delta", "text_replace")
     ]
     text = text_parts[-1] if text_parts else ""
-    assert "1 / A" in text or "确认方案" in text or "方案" in text
+    assert "Skill" in text or "1）" in text or "编排" in text

@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent
+from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.atomic_clarify import is_affirmative_clarify_reply, pending_atomic_clarify
 from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route

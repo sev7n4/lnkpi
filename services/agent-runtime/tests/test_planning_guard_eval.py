@@ -16,6 +16,8 @@ from app.graph.atomic_intent import (
 from app.graph.atomic_parse_schema import validate_parse_result
 from app.graph.atomic_parse_util import rule_parse_confidence
 from app.graph.planning_guard import has_planning_image_conflict
+from app.graph.route_context import assemble_route_context
+from app.graph.route_decide import decide_route
 
 EVAL_PATH = (
     Path(__file__).resolve().parents[1]
@@ -37,6 +39,12 @@ def test_eval_planning_guard_gold(planning_cases: list[dict]):
         utterance = case["utterance"]
         gold = case["gold"]
         case_id = case["id"]
+
+        if "platform_flow" in gold:
+            ctx = assemble_route_context({"messages": [{"role": "user", "content": utterance}]})
+            flow = decide_route(ctx)["flow_mode"]
+            if flow != gold["platform_flow"]:
+                mismatches.append(f"{case_id}: platform_flow {flow} != {gold['platform_flow']}")
 
         if "route" in gold:
             route = resolve_intake_route(utterance, focus_node_id=None)

@@ -1,30 +1,17 @@
 """Unified intent classification constants and functions (W9).
 
 This module consolidates intent-related keywords that were previously scattered across:
-- intake.py: _MODIFY_HINTS, _MARKETING_HINTS
+- intake.py: _MODIFY_HINTS
 - await_topo.py: _NODE_REVISE_HINTS, _TOPO_REVISE_HINTS, _CONFIRM_GEN_HINTS
 - await_confirm.py: _CONFIRM_HINTS, _REVISE_HINTS
+
+Orchestration / Campaign routing no longer uses keyword-based marketing_intent.
+Use explicit requested_skill_id in route_decide (platform-route R-S1/R-S2).
 """
 
 from __future__ import annotations
 
 from typing import Literal
-
-# Intake node: marketing intent keywords
-MARKETING_HINTS = (
-    "营销",
-    "主图",
-    "详情页",
-    "banner",
-    "campaign",
-    "洁具",
-    "卫浴",
-    "电商",
-    "天猫",
-    "拆画布",
-    "出图",
-    "分镜",
-)
 
 # Intake node: modification intent keywords
 MODIFY_HINTS = (
@@ -145,14 +132,6 @@ CONFIRM_NEGATIONS = (
     "无需修改",
     "没有修改",
 )
-
-
-def marketing_intent(text: str) -> bool:
-    """Check if text indicates marketing/campaign canvas orchestration intent."""
-    lowered = (text or "").strip().lower()
-    if not lowered:
-        return False
-    return any(h in lowered for h in MARKETING_HINTS)
 
 
 def modify_intent(text: str) -> bool:
