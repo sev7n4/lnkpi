@@ -8,6 +8,7 @@ Sections:
      1. focusNodeId alone → no silent localRefs (M3 D-A/D-B)
      2. atomic_create + attachments + mentionedKeys → localRefs + node.data.mentionedKeys
      3. campaign plan → confirm split → seed image ref edges
+     4. P1: marketing without skillId → clarify_route (not silent campaign)
 
 Usage:
   python3 deploy/prod-sidebar-attachments-verify.py
@@ -87,6 +88,7 @@ def sse_collect(
     msg: str,
     tid: str,
     *,
+    skill_id: str | None = None,
     attachments: list[dict[str, Any]] | None = None,
     ref_order: list[str] | None = None,
     mentioned_keys: list[str] | None = None,
@@ -94,6 +96,8 @@ def sse_collect(
     timeout: float = 300,
 ) -> tuple[list[dict], str, set[str], str]:
     body: dict[str, Any] = {"sessionId": sid, "message": msg, "threadId": tid}
+    if skill_id:
+        body["skillId"] = skill_id
     if attachments:
         body["attachments"] = attachments
     if ref_order:
@@ -308,17 +312,54 @@ def _seed_image_with_media_edges(canvas: dict[str, Any]) -> tuple[dict[str, Any]
     return None, []
 
 
-def verify_campaign_attach_edges(tok: str) -> None:
-    sid = http("POST", "/sessions", {"title": f"sidebar-campaign-{int(time.time())}"}, t=tok)["data"]["id"]
+def verify_campaign_orch_clarify_without_skill(tok: str) -> None:
+    """P1 AC-04: orchestration utterance + attachment without Skill → clarify_route."""
+    sid = http("POST", "/sessions", {"title": f"sidebar-orch-clarify-{int(time.time())}"}, t=tok)["data"]["id"]
     tid = f"{sid}:{uuid.uuid4()}"
     attachments = [dict(MOCK_ATTACHMENT)]
     ref_order = [attachments[0]["id"]]
-
-    _, text1, types1, exit1 = sse_collect(
+    _, text, types, exit_reason = sse_collect(
         tok,
         sid,
         "天猫蓝牙耳机详情页营销方案，主图参考 @I1，品牌 lnkpi",
         tid,
+        attachments=attachments,
+        ref_order=ref_order,
+        mentioned_keys=["I1"],
+        timeout=SSE_TIMEOUT_SEC,
+    )
+    at_clarify = (
+        "1）" in text
+        or "Skill" in text
+        or "编排" in text
+        or "await_confirm" not in types
+    ) and "error" not in types
+    record(
+        "campaign orch without skill → clarify",
+        at_clarify and "拟定拆解约 14" not in text[:240],
+        text[:140],
+    )
+    record(
+        "campaign clarify shows ref acknowledgment",
+        "已看到引用" in text or "@I1" in text,
+        f"exit={exit_reason}",
+    )
+
+
+def verify_campaign_attach_edges(tok: str) -> None:
+    """Explicit skillId required for campaign path (P1 R-S1 / R-S2)."""
+    sid = http("POST", "/sessions", {"title": f"sidebar-campaign-{int(time.time())}"}, t=tok)["data"]["id"]
+    tid = f"{sid}:{uuid.uuid4()}"
+    attachments = [dict(MOCK_ATTACHMENT)]
+    ref_order = [attachments[0]["id"]]
+    campaign_msg = "天猫蓝牙耳机详情页营销方案，主图参考 @I1，品牌 lnkpi"
+
+    _, text1, types1, exit1 = sse_collect(
+        tok,
+        sid,
+        campaign_msg,
+        tid,
+        skill_id="canvas",
         attachments=attachments,
         ref_order=ref_order,
         mentioned_keys=["I1"],
@@ -330,10 +371,13 @@ def verify_campaign_attach_edges(tok: str) -> None:
         or "拟定拆解" in text1
         or ("拟定" in text1 and "请确认" in text1)
         or ("请确认" in text1 and ("拆解" in text1 or "模块" in text1))
+        or "确认方案" in text1
+        or "采纳推荐" in text1
     )
-    record("campaign plan with attachment", at_plan and "error" not in types1, text1[:140])
+    record("campaign plan with explicit skill", at_plan and "error" not in types1, text1[:140])
 
-    _, text2, types2, exit2 = sse_collect(tok, sid, "1", tid, timeout=SSE_TIMEOUT_SEC)
+    confirm_msg = "确认方案" if "确认方案" in text1 or "采纳推荐" in text1 else "确认出图"
+    _, text2, types2, exit2 = sse_collect(tok, sid, confirm_msg, tid, timeout=SSE_TIMEOUT_SEC)
     confirm_ok = "error" not in types2 and len(text2) > 0
     record("campaign confirm split", confirm_ok, f"exit={exit2} text={text2[:100]}")
 
@@ -374,6 +418,7 @@ def run_prod_smoke() -> None:
 
     verify_focus_only_no_silent_ref(tok)
     verify_atomic_local_refs(tok)
+    verify_campaign_orch_clarify_without_skill(tok)
     verify_campaign_attach_edges(tok)
 
 

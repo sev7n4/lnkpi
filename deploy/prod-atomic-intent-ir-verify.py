@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Production verify — source-backed video/image intent IR (B+C)."""
+"""Production verify — source-backed video/image intent IR (B+C).
+
+P1 note: ref-backed utterances (@T1 …) require sidebar mentionedKeys + text attachment
+to materialize image/video nodes (same as AC-01 / prod-route-unification-verify).
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,7 @@ import sys
 import time
 import uuid
 from http.client import IncompleteRead
-from typing import Any
+from typing import Any, TypedDict
 from urllib.request import Request, urlopen
 
 BASE = os.environ.get("BASE_URL", "http://119.29.173.89:8888").rstrip("/")
@@ -17,12 +21,39 @@ API = f"{BASE}/api"
 PHONE = os.environ.get("PHONE", "17279698608")
 CODE = os.environ.get("CODE", "123456")
 
-CASES = [
-    ("基于提示词生成视频", "video"),
-    ("@T1 请基于文案生成视频", "video"),
-    ("基于文本生成图片", "image"),
-    ("帮我生成一个蓝牙耳机的分镜提示词", "prompt"),
-    ("@T1 请按风格3出图", "image"),
+T1_TEXT_ATTACHMENT: dict[str, Any] = {
+    "id": "t1-text-ref",
+    "refKey": "T1",
+    "mediaType": "text",
+    "sourceKind": "asset",
+    "label": "T1文案",
+    "text": "蓝牙耳机详情页文案：轻量降噪，续航30小时。",
+}
+
+
+class IrCase(TypedDict, total=False):
+    utterance: str
+    expect: str
+    mentioned_keys: list[str]
+    attachments: list[dict[str, Any]]
+
+
+CASES: list[IrCase] = [
+    {"utterance": "基于提示词生成视频", "expect": "video"},
+    {
+        "utterance": "@T1 请基于文案生成视频",
+        "expect": "video",
+        "mentioned_keys": ["T1"],
+        "attachments": [dict(T1_TEXT_ATTACHMENT)],
+    },
+    {"utterance": "基于文本生成图片", "expect": "image"},
+    {"utterance": "帮我生成一个蓝牙耳机的分镜提示词", "expect": "prompt"},
+    {
+        "utterance": "@T1 请按风格3出图",
+        "expect": "image",
+        "mentioned_keys": ["T1"],
+        "attachments": [dict(T1_TEXT_ATTACHMENT)],
+    },
 ]
 
 PASS = FAIL = 0
@@ -51,8 +82,23 @@ def http(m: str, p: str, b: dict | None = None, t: str | None = None) -> Any:
         return json.loads(resp.read())
 
 
-def sse_collect(t: str, sid: str, msg: str, tid: str, *, timeout: float = 180) -> tuple[list[dict], list[dict]]:
+def sse_collect(
+    t: str,
+    sid: str,
+    msg: str,
+    tid: str,
+    *,
+    mentioned_keys: list[str] | None = None,
+    attachments: list[dict] | None = None,
+    timeout: float = 180,
+) -> tuple[list[dict], list[dict]]:
     body: dict[str, Any] = {"sessionId": sid, "message": msg, "threadId": tid}
+    if mentioned_keys:
+        body["mentionedKeys"] = mentioned_keys
+    if attachments:
+        body["attachments"] = attachments
+        if attachments and attachments[0].get("id"):
+            body["refOrder"] = [str(attachments[0]["id"])]
     h = {
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
@@ -118,13 +164,22 @@ def main() -> int:
     tok = http("POST", "/auth/login", {"phone": PHONE, "code": CODE})["data"]["token"]
     record("Login", True)
 
-    sid = http("POST", "/sessions", {"title": f"ir-verify-{int(time.time())}"}, t=tok)["data"]["id"]
-
-    for utterance, expect_type in CASES:
+    for case in CASES:
+        utterance = case["utterance"]
+        expect_type = case["expect"]
+        sid = http("POST", "/sessions", {"title": f"ir-verify-{expect_type}-{int(time.time())}"}, t=tok)["data"]["id"]
         tid = f"{sid}:{uuid.uuid4().hex[:8]}"
-        actions, linked = sse_collect(tok, sid, utterance, tid, timeout=120)
+        actions, linked = sse_collect(
+            tok,
+            sid,
+            utterance,
+            tid,
+            mentioned_keys=case.get("mentioned_keys"),
+            attachments=case.get("attachments"),
+            timeout=120,
+        )
         node_type = first_node_type(actions)
-        lo_type = (linked[0].get("nodeType") if linked else None)
+        lo_type = linked[0].get("nodeType") if linked else None
         got = node_type or lo_type or "?"
         ok = got == expect_type
         record(f"{utterance} → {expect_type}", ok, f"got={got}, actions={len(actions)}")
