@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Production verify — canvas layout workflow harness (PR #183).
 
-With LNKPI_SERVICE_TOKEN:
+With AGENT_RUNTIME_SERVICE_TOKEN (or LNKPI_SERVICE_TOKEN):
   1. Login → session + seed 3 nodes on canvas
   2. get-canvas-layout → absolutePosition + groups[]
   3. move-nodes → position updated
@@ -13,6 +13,7 @@ Without token:
 Usage:
   python3 deploy/prod-layout-workflow-verify.py
   LNKPI_SERVICE_TOKEN=... python3 deploy/prod-layout-workflow-verify.py
+  AGENT_RUNTIME_SERVICE_TOKEN=... python3 deploy/prod-layout-workflow-verify.py
 """
 
 from __future__ import annotations
@@ -31,7 +32,10 @@ API = f"{BASE}/api"
 INTERNAL = f"{API}/agent/internal"
 PHONE = os.environ.get("PHONE", "17279698608")
 CODE = os.environ.get("CODE", "123456")
-SERVICE_TOKEN = os.environ.get("LNKPI_SERVICE_TOKEN", "").strip()
+SERVICE_TOKEN = (
+    os.environ.get("LNKPI_SERVICE_TOKEN", "").strip()
+    or os.environ.get("AGENT_RUNTIME_SERVICE_TOKEN", "").strip()
+)
 
 PASS = FAIL = SKIP = 0
 
@@ -189,7 +193,8 @@ def seed_canvas(user_token: str, session_id: str) -> tuple[str, str, str]:
 
 
 def internal_post(path: str, body: dict, service_token: str) -> dict[str, Any]:
-    resp = http("POST", path, body, service_token=service_token, base="")
+    suffix = path if path.startswith("/agent/internal/") else f"/agent/internal/{path.lstrip('/')}"
+    resp = http("POST", suffix, body, service_token=service_token)
     if resp.get("code") != 0:
         raise RuntimeError(f"{path} code={resp.get('code')} msg={resp.get('message')}")
     data = resp.get("data")
@@ -287,9 +292,9 @@ def main() -> int:
 
     if not service_token:
         record(
-            "Full E2E (needs LNKPI_SERVICE_TOKEN)",
+            "Full E2E (needs AGENT_RUNTIME_SERVICE_TOKEN)",
             False,
-            "set env or ensure deploy-cvm /opt/lnkpi/.env readable",
+            "set env or run on CVM where /opt/lnkpi/.env is sourced",
             skip=True,
         )
     else:

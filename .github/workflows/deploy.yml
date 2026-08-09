@@ -275,6 +275,18 @@ jobs:
             exit 1
           fi
 
+      - name: Layout workflow smoke (on CVM)
+        if: >-
+          ${{
+            github.event.inputs.recover_only != 'true'
+            && github.event.inputs.deploy_web_only != 'true'
+          }}
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+          API_PORT="${{ env.API_PORT }}"
+          ssh deploy-cvm "bash -lc 'cd ${DEPLOY_DIR} && set -a && source .env && set +a && export LNKPI_SERVICE_TOKEN=\${AGENT_RUNTIME_SERVICE_TOKEN} && BASE_URL=http://127.0.0.1:${API_PORT} python3 deploy/prod-layout-workflow-verify.py'"
+
       - name: Enable Agent Runtime on CVM
         if: >-
           ${{
