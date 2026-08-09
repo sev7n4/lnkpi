@@ -16,6 +16,7 @@ CASES = [
     ("查询「换logo李宁」节点，把视口定位到它", "ui_command"),
     ("查询颜色变体1到4节点，把视口定位到它们", "ui_command"),
     ("查询「换logo李宁」图片节点并打开精修编辑器", "ui_command"),
+    ("查询「换logo李宁」这个图片节点支持哪些精修编辑模式？", "node_read"),
     ("查询「换logo李宁」节点并引入到 Agent 侧栏对话上下文", "ui_command"),
     ("取消 image-16 节点上正在进行的生成任务", "lifecycle"),
     ("查询「让模特穿上这双鞋子」节点，取消这次平台回退 fallback", "lifecycle"),
