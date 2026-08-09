@@ -91,6 +91,7 @@ describe('createTextProvider', () => {
     })
     await provider.generate('hello', 'deepseek-v4-pro')
     const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body.stream).toBe(false)
     expect(body.thinking).toEqual({ type: 'disabled' })
     expect(body.reasoning_effort).toBeUndefined()
   })

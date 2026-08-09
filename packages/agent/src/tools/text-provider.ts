@@ -48,6 +48,7 @@ export class OpenAITextProvider implements TextProvider {
     const resolvedModel = model ?? this.model
     const body: Record<string, unknown> = {
       model: resolvedModel,
+      stream: false,
       messages: [
         { role: 'system', content: '你是专业 AI 创作助手，擅长脚本、旁白与分镜描述。用中文回复，结构清晰。' },
         { role: 'user', content: prompt },

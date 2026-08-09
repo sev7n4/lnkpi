@@ -45,8 +45,10 @@ describe('generateTextWithImages with key', () => {
     expect(fetchMock).toHaveBeenCalledOnce()
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
     const body = JSON.parse(init.body as string) as {
+      stream?: boolean
       messages: Array<{ role: string; content: unknown }>
     }
+    expect(body.stream).toBe(false)
     expect(body.messages[0]).toEqual({ role: 'system', content: ECOMMERCE_VISION_SYSTEM })
     const userContent = body.messages[1].content as Array<{ type: string; text?: string; image_url?: { url: string } }>
     expect(userContent[0]).toEqual({ type: 'text', text: '衣服图' })

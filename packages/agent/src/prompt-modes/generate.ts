@@ -16,6 +16,7 @@ async function callChat(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
     body: JSON.stringify({
       model: opts.model,
+      stream: false,
       temperature: opts.temperature,
       messages,
     }),
