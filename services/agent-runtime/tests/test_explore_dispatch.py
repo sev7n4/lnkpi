@@ -27,6 +27,8 @@ CASES = [
     ("查询节点 image-16 的详细信息，包括 url 和 status", "node_read"),
     ("查询 image-16 这个节点当前的生成状态", "node_read"),
     ("查询画布上有哪些节点？列出每个节点的类型和状态", "open_query"),
+    ("查询并导出「换logo李宁」节点的图片下载链接", "node_read"),
+    ("查询「换logo李宁」节点并保存到我的资产库", "node_write"),
 ]
 
 

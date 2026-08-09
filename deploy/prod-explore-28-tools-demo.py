@@ -160,7 +160,7 @@ DEMOS: list[DemoCase] = [
     ),
     DemoCase(
         "cancel_generation",
-        "取消 image-16 节点上正在进行的生成任务",
+        "查询并取消 image-16 节点上正在进行的生成任务",
         ["取消", "cancel", "image-16", "没有", "未", "idle", "无"],
         allow_skip=True,
     ),

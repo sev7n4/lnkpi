@@ -34,7 +34,6 @@ _WRITE_VERBS = (
     "应用",
     "attach",
     "挂",
-    "导出",
 )
 _QUERY_VERBS = (
     "看看",
@@ -131,14 +130,20 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     if "确认" in u and any(x in u for x in ("回退", "fallback", "平台")):
         return "lifecycle"
 
-    if any(k in u for k in ("资产库", "素材库", "公共素材")):
-        if any(v in u for v in _QUERY_VERBS) and "保存" not in u:
-            return "asset_read"
-
     has_node = has_canvas_node_id_reference(u) or "「" in u or (
         isinstance(summary, dict)
         and resolve_node_ref(u, summary) is not None
     )
+
+    if any(k in u for k in ("资产库", "素材库", "公共素材")):
+        if any(v in u for v in _QUERY_VERBS) and "保存" not in u and not has_node:
+            return "asset_read"
+
+    if has_node and "保存" in u and "资产库" in u:
+        return "node_write"
+
+    if has_node and "导出" in u:
+        return "node_read"
 
     if has_node and any(v in u for v in _WRITE_VERBS):
         return "node_write"
@@ -279,18 +284,6 @@ async def _mandatory_ui(
 ) -> MandatoryExploreResult:
     u = user_text or ""
 
-    if "撤销" in u and ("画布" in u or "操作" in u):
-        await _invoke_tool(
-            tools_by_name, "undo", {}, canvas_commands=canvas_commands,
-            tool_results=tool_results, tools_called=tools_called,
-        )
-        return MandatoryExploreResult(
-            tool_results=tool_results,
-            canvas_commands=canvas_commands,
-            reply_text="已撤销上一步画布操作。",
-            tools_called=tools_called,
-        )
-
     if "重做" in u:
         await _invoke_tool(
             tools_by_name, "redo", {}, canvas_commands=canvas_commands,
@@ -300,6 +293,18 @@ async def _mandatory_ui(
             tool_results=tool_results,
             canvas_commands=canvas_commands,
             reply_text="已重做画布操作。",
+            tools_called=tools_called,
+        )
+
+    if "撤销" in u and ("画布" in u or "操作" in u):
+        await _invoke_tool(
+            tools_by_name, "undo", {}, canvas_commands=canvas_commands,
+            tool_results=tool_results, tools_called=tools_called,
+        )
+        return MandatoryExploreResult(
+            tool_results=tool_results,
+            canvas_commands=canvas_commands,
+            reply_text="已撤销上一步画布操作。",
             tools_called=tools_called,
         )
 
