@@ -31,6 +31,12 @@ export type { MergeTextSource } from './refs/merge-refs'
 export { generateTextWithImages, ECOMMERCE_VISION_SYSTEM, DEFAULT_VISION_USER_PROMPT } from './refs/vision-text'
 export type { VisionTextOptions } from './refs/vision-text'
 export {
+  appendImageRefsForTextOnlyPrompt,
+  generateTextForRefs,
+  supportsVisionTextModel,
+} from './refs/text-generation'
+export type { TextGenerationWithRefsOptions } from './refs/text-generation'
+export {
   buildAudioRequest,
   buildImageProviderOptions,
   buildImageProviderGenerateOptions,

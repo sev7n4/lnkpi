@@ -66,6 +66,7 @@ export async function generateTextWithImages(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
+      stream: false,
       temperature: 0.7,
       messages: [
         { role: 'system', content: ECOMMERCE_VISION_SYSTEM },

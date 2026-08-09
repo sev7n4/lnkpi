@@ -6,7 +6,7 @@ import {
   createImageProvider,
   createTextProvider,
   createVideoProvider,
-  generateTextWithImages,
+  generateTextForRefs,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
@@ -22,7 +22,6 @@ const videoGenerate = vi.fn(async (_prompt: string, _opts?: Record<string, unkno
 }))
 const audioGenerate = vi.fn(async () => ({ url: 'https://example.com/a.mp3' }))
 const textGenerate = vi.fn(async (prompt: string) => ({ text: `ok:${prompt}` }))
-const visionGenerate = vi.fn(async (prompt: string) => ({ text: `vision:${prompt}` }))
 
 vi.mock('@lnkpi/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@lnkpi/agent')>()
@@ -36,7 +35,12 @@ vi.mock('@lnkpi/agent', async (importOriginal) => {
     createVideoProvider: vi.fn(() => ({ generate: videoGenerate })),
     createAudioProvider: vi.fn(() => ({ generate: audioGenerate })),
     createTextProvider: vi.fn(() => ({ generate: textGenerate })),
-    generateTextWithImages: vi.fn(async (prompt: string) => visionGenerate(prompt)),
+    generateTextForRefs: vi.fn(async (prompt: string, refs: string[]) => {
+      if (refs.length > 0) {
+        return { text: `vision:${prompt}`, visionUsed: true }
+      }
+      return { text: `ok:${prompt}`, visionUsed: false }
+    }),
   }
 })
 
@@ -304,25 +308,30 @@ describe('StudioService integration (provider params)', () => {
   it('resolves text model via catalog gateway id when no image refs', async () => {
     await svc.generateText('u1', 'hello world', 'gemini-3.1-flash')
 
-    expect(createTextProvider).toHaveBeenCalled()
-    expect(textGenerate).toHaveBeenCalledWith('hello world', 'gemini-3.1-flash', {
-      thinking: false,
-      thinkingEffort: 'high',
-    })
-    expect(generateTextWithImages).not.toHaveBeenCalled()
+    expect(generateTextForRefs).toHaveBeenCalledWith(
+      'hello world',
+      [],
+      expect.objectContaining({
+        model: 'gemini-3.1-flash',
+        textOpts: { thinking: false, thinkingEffort: 'high' },
+      }),
+    )
   })
 
-  it('passes catalog gateway model to generateTextWithImages when image refs present', async () => {
+  it('passes catalog gateway model to generateTextForRefs when image refs present', async () => {
     const refUrl = 'https://example.com/dress.jpg'
     await svc.generateText('u1', 'describe dress', 'gemini-3.1-flash', [
       { refKey: 'i1', mediaType: 'image', url: refUrl },
     ])
 
-    expect(generateTextWithImages).toHaveBeenCalledWith('describe dress', [refUrl], {
-      model: 'gemini-3.1-flash',
-      apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: process.env.OPENAI_BASE_URL,
-    })
-    expect(createTextProvider).not.toHaveBeenCalled()
+    expect(generateTextForRefs).toHaveBeenCalledWith(
+      'describe dress',
+      [refUrl],
+      expect.objectContaining({
+        model: 'gemini-3.1-flash',
+        apiKey: process.env.OPENAI_API_KEY,
+        baseUrl: process.env.OPENAI_BASE_URL,
+      }),
+    )
   })
 })

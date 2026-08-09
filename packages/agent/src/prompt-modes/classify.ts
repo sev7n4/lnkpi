@@ -35,6 +35,7 @@ export async function classifyPromptMode(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: opts?.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o',
+      stream: false,
       temperature: 0,
       messages: [
         {

@@ -13,7 +13,7 @@ import {
   createTextProvider,
   createVideoProvider,
   generatePromptFromUserInput,
-  generateTextWithImages,
+  generateTextForRefs,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
   Seedance1xUnsupportedError,
@@ -376,7 +376,7 @@ export class StudioService {
       channelId: resolved.channelId,
       skippedMerge,
       refsCount: refs?.length ?? 0,
-      visionUsed: referenceImages.length > 0,
+      visionUsed: false,
       referenceImages,
       thinking: textOpts.thinking,
       thinkingEffort: textOpts.thinking ? textOpts.thinkingEffort : undefined,
@@ -388,14 +388,12 @@ export class StudioService {
         throw new Error('missing api key')
       }
       const opts = providerOpts(resolved)
-      const { text } =
-        referenceImages.length > 0
-          ? await generateTextWithImages(mergedText, referenceImages, {
-              model: gatewayModelId,
-              apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-              baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
-            })
-          : await createTextProvider(opts).generate(mergedText, gatewayModelId, textOpts)
+      const { text, visionUsed } = await generateTextForRefs(mergedText, referenceImages, {
+        model: gatewayModelId,
+        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        textOpts,
+      })
       if (cancel?.isCancelled()) {
         await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
         throwCancelledException(cost)
@@ -408,7 +406,7 @@ export class StudioService {
           model: storeModel,
           url: null,
           status: 'completed',
-          metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, text }, cost)),
+          metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, text, visionUsed }, cost)),
           ...withCanvasScope(scope),
         },
       })
@@ -1291,7 +1289,7 @@ export class StudioService {
           text = content
           promptMeta = { mode, content }
         } else if (referenceImages.length > 0) {
-          const result = await generateTextWithImages(record.prompt, referenceImages, {
+          const result = await generateTextForRefs(record.prompt, referenceImages, {
             model: gatewayModelId,
             apiKey: process.env.OPENAI_API_KEY,
             baseUrl: process.env.OPENAI_BASE_URL,

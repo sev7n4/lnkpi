@@ -103,6 +103,7 @@ export async function mergeRefsToPrompt(input: {
   const model = input.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
   const body: Record<string, unknown> = {
     model,
+    stream: false,
     temperature: 0.3,
     messages: [
       {

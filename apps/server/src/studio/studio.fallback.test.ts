@@ -6,6 +6,7 @@ import {
   createImageProvider,
   createTextProvider,
   createVideoProvider,
+  generateTextForRefs,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
 import { BadRequestException } from '@nestjs/common'
@@ -33,7 +34,10 @@ vi.mock('@lnkpi/agent', async (importOriginal) => {
     createVideoProvider: vi.fn(() => ({ generate: videoGenerate })),
     createAudioProvider: vi.fn(() => ({ generate: audioGenerate })),
     createTextProvider: vi.fn(() => ({ generate: textGenerate })),
-    generateTextWithImages: vi.fn(),
+    generateTextForRefs: vi.fn(async (prompt: string, refs: string[], opts?: { model?: string; textOpts?: unknown }) => {
+      const result = await textGenerate(prompt, opts?.model, opts?.textOpts)
+      return { text: result.text, visionUsed: refs.length > 0 }
+    }),
   }
 })
 
@@ -137,10 +141,10 @@ describe('StudioService BYOK fallback_pending', () => {
       name: 'text',
       cost: 5,
       refundReason: '文本生成-BYOK失败退款',
-      failOnce: () => textGenerate.mockRejectedValueOnce(new Error('unauthorized api key')),
+      failOnce: () => vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('unauthorized api key')),
       run: () => svc.generateText('u1', 'hello', 'ch_user::custom-model'),
-      createProvider: createTextProvider,
-      generate: textGenerate,
+      createProvider: generateTextForRefs,
+      generate: generateTextForRefs,
       platformModel: 'gemini-3.1-flash',
     },
     {
@@ -169,11 +173,22 @@ describe('StudioService BYOK fallback_pending', () => {
       expect(meta.refundReason).toBe('byok_failed')
       expect(pointsRefund).toHaveBeenCalledWith('u1', cost, refundReason)
       expect(createProvider).toHaveBeenCalledTimes(1)
-      expect(createProvider).toHaveBeenCalledWith({
-        apiKey: 'user-key',
-        baseUrl: 'https://user.example.com/v1',
-      })
-      expect(generate).toHaveBeenCalledTimes(1)
+      if (createProvider === generateTextForRefs) {
+        expect(generate).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.any(Array),
+          expect.objectContaining({
+            apiKey: 'user-key',
+            baseUrl: 'https://user.example.com/v1',
+          }),
+        )
+      } else {
+        expect(createProvider).toHaveBeenCalledWith({
+          apiKey: 'user-key',
+          baseUrl: 'https://user.example.com/v1',
+        })
+        expect(generate).toHaveBeenCalledTimes(1)
+      }
 
       resolveForGeneration.mockClear()
       vi.mocked(createProvider).mockClear()
@@ -221,7 +236,7 @@ describe('StudioService BYOK fallback_pending', () => {
       name: 'text',
       platformCost: 5,
       setupPending: async () => {
-        textGenerate.mockRejectedValueOnce(new Error('unauthorized'))
+        vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('unauthorized'))
         await svc.generateText('u1', 'hello', 'ch_user::custom-model')
         textGenerate.mockResolvedValueOnce({ text: 'platform ok' })
       },
@@ -266,7 +281,7 @@ describe('StudioService BYOK fallback_pending', () => {
   })
 
   it('text confirm → platform uses catalog gateway model, not user custom', async () => {
-    textGenerate.mockRejectedValueOnce(new Error('unauthorized'))
+    vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('unauthorized'))
     await svc.generateText('u1', 'hello', 'ch_user::custom-model')
     vi.clearAllMocks()
     textGenerate.mockResolvedValueOnce({ text: 'platform ok' })
@@ -355,7 +370,7 @@ describe('StudioService BYOK fallback_pending', () => {
 
   it('text: platform source failure → refund after consume', async () => {
     resolveForGeneration.mockResolvedValue(platformResolved)
-    textGenerate.mockRejectedValueOnce(new Error('platform upstream 502'))
+    vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('platform upstream 502'))
     await expect(svc.generateText('u1', 'hello')).rejects.toThrow('platform upstream 502')
     expect(pointsConsume).toHaveBeenCalledWith('u1', 5, expect.any(String))
     expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-失败退款')
@@ -466,8 +481,8 @@ describe('StudioService BYOK fallback_pending', () => {
 
   it('text: client abort after generate → refund once and throw 已取消', async () => {
     resolveForGeneration.mockResolvedValue(platformResolved)
-    textGenerate.mockReset()
-    textGenerate.mockResolvedValue({ text: 'done' })
+    vi.mocked(generateTextForRefs).mockReset()
+    vi.mocked(generateTextForRefs).mockResolvedValue({ text: 'done', visionUsed: false })
     const listeners: Record<string, (() => void)[]> = {}
     const req = {
       aborted: false,
