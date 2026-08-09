@@ -1,5 +1,5 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
-import { IsArray, IsBoolean, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
@@ -461,6 +461,41 @@ class ArrangeNodesGridDto {
   gap?: number
 }
 
+class MoveNodeItemDto {
+  @IsString()
+  nodeId!: string
+
+  @IsNumber()
+  x!: number
+
+  @IsNumber()
+  y!: number
+}
+
+class MoveNodesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MoveNodeItemDto)
+  items!: MoveNodeItemDto[]
+}
+
+class ApplyLayoutOpsDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  ops!: Array<Record<string, unknown>>
+}
+
 class SaveAgentMessageDto {
   @IsString()
   sessionId!: string
@@ -827,6 +862,22 @@ export class AgentCanvasToolsController {
   @Post('arrange-nodes-grid')
   async arrangeNodesGrid(@Body() dto: ArrangeNodesGridDto) {
     const data = await this.tools.arrangeNodesGrid(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('move-nodes')
+  async moveNodes(@Body() dto: MoveNodesDto) {
+    const data = await this.tools.moveNodes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('apply-layout-ops')
+  async applyLayoutOps(@Body() dto: ApplyLayoutOpsDto) {
+    const data = await this.tools.applyLayoutOps({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      ops: dto.ops as Parameters<AgentCanvasToolsService['applyLayoutOps']>[0]['ops'],
+    })
     return { code: 0, message: 'ok', data }
   }
 

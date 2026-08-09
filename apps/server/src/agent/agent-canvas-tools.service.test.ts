@@ -1317,6 +1317,8 @@ describe('AgentCanvasToolsService', () => {
       expect(layout.nodes).toHaveLength(2)
       expect(layout.nodes[0]?.id).toBe('img-1')
       expect(layout.nodes[0]?.size.w).toBeGreaterThan(0)
+      expect(layout.nodes[0]?.absolutePosition).toEqual(layout.nodes[0]?.position)
+      expect(layout.groups).toEqual([])
     })
 
     it('duplicateNode clones node and focuses copy', async () => {
@@ -1337,6 +1339,97 @@ describe('AgentCanvasToolsService', () => {
       })
       expect(caps.canEdit).toBe(true)
       expect(caps.supportedModes).toContain('inpaint')
+    })
+  })
+
+  describe('P2 layout harness', () => {
+    beforeEach(() => {
+      canvas = {
+        nodes: [
+          { id: 'img-1', type: 'image', position: { x: 100, y: 100 }, data: { title: 'A' } },
+          { id: 'txt-1', type: 'text', position: { x: 420, y: 160 }, data: { title: 'B' } },
+          { id: 'vid-1', type: 'video', position: { x: 760, y: 80 }, data: { title: 'C' } },
+        ],
+        edges: [],
+      }
+    })
+
+    it('groupNodes persists a group with child parentNode links', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+      const result = await svc.groupNodes({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: ['img-1', 'txt-1'],
+        title: 'Block A',
+      })
+      expect(result.groupId).toBe('group-1700000000000')
+      const group = canvas.nodes.find((n) => n.id === result.groupId)
+      expect(group?.type).toBe('group')
+      expect(group?.data?.title).toBe('Block A')
+      expect(canvas.nodes.find((n) => n.id === 'img-1')?.parentNode).toBe(result.groupId)
+      expect(canvas.nodes.find((n) => n.id === 'txt-1')?.parentNode).toBe(result.groupId)
+      vi.restoreAllMocks()
+    })
+
+    it('ungroupNode restores flat coordinates and removes the group node', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
+      const grouped = await svc.groupNodes({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: ['img-1', 'txt-1'],
+      })
+      await svc.ungroupNode({
+        sessionId: 's1',
+        userId: 'u1',
+        groupId: grouped.groupId,
+      })
+      expect(canvas.nodes.some((n) => n.id === grouped.groupId)).toBe(false)
+      expect(canvas.nodes.find((n) => n.id === 'img-1')?.position).toEqual({ x: 100, y: 100 })
+      expect(canvas.nodes.find((n) => n.id === 'txt-1')?.position).toEqual({ x: 420, y: 160 })
+      expect(canvas.nodes.find((n) => n.id === 'img-1')?.parentNode).toBeUndefined()
+      vi.restoreAllMocks()
+    })
+
+    it('arrangeNodesGrid repositions selected nodes on canvas', async () => {
+      await svc.arrangeNodesGrid({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: ['img-1', 'txt-1', 'vid-1'],
+        gap: 20,
+      })
+      const img = canvas.nodes.find((n) => n.id === 'img-1')
+      const txt = canvas.nodes.find((n) => n.id === 'txt-1')
+      const vid = canvas.nodes.find((n) => n.id === 'vid-1')
+      expect(img?.position).toEqual({ x: 100, y: 80 })
+      expect(txt?.position.x).toBe(100 + 280 + 20)
+      expect(vid?.position.y).toBeGreaterThan(img!.position.y)
+    })
+
+    it('moveNodes updates absolute coordinates', async () => {
+      await svc.moveNodes({
+        sessionId: 's1',
+        userId: 'u1',
+        items: [{ nodeId: 'img-1', x: 300, y: 400 }],
+      })
+      expect(canvas.nodes.find((n) => n.id === 'img-1')?.position).toEqual({ x: 300, y: 400 })
+    })
+
+    it('applyLayoutOps runs group then grid atomically', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_001)
+      const result = await svc.applyLayoutOps({
+        sessionId: 's1',
+        userId: 'u1',
+        ops: [
+          { op: 'group', nodeIds: ['img-1', 'txt-1'], title: 'Workflow block' },
+          { op: 'move', items: [{ nodeId: 'vid-1', x: 900, y: 900 }] },
+        ],
+      })
+      expect(result.results).toHaveLength(2)
+      expect(result.results[0]?.op).toBe('group')
+      expect(result.layout.groups).toHaveLength(1)
+      expect(canvas.nodes.find((n) => n.id === 'img-1')?.parentNode).toBeTruthy()
+      expect(canvas.nodes.find((n) => n.id === 'vid-1')?.position).toEqual({ x: 900, y: 900 })
+      vi.restoreAllMocks()
     })
   })
 })

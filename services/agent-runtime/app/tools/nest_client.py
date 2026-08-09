@@ -550,6 +550,26 @@ class NestCanvasClient:
             body["gap"] = gap
         return await self._post("/agent/internal/arrange-nodes-grid", body)
 
+    async def move_nodes(self, *, items: list[dict[str, Any]]) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/move-nodes",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "items": items,
+            },
+        )
+
+    async def apply_layout_ops(self, *, ops: list[dict[str, Any]]) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/apply-layout-ops",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "ops": ops,
+            },
+        )
+
     async def get_image_edit_capabilities(self, *, node_id: str) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/get-image-edit-capabilities",

@@ -128,6 +128,25 @@ class OpenImageEditorInput(BaseModel):
     node_id: str = Field(description="Image node id to open in the refine editor")
 
 
+class MoveNodeItemInput(BaseModel):
+    node_id: str = Field(description="Canvas node id")
+    x: float = Field(description="Absolute canvas X coordinate")
+    y: float = Field(description="Absolute canvas Y coordinate")
+
+
+class MoveNodesInput(BaseModel):
+    items: list[MoveNodeItemInput] = Field(description="Nodes to move by absolute coordinates")
+
+
+class ApplyLayoutOpsInput(BaseModel):
+    ops: list[dict[str, Any]] = Field(
+        description=(
+            "Ordered layout ops: group, ungroup, arrange_grid, move "
+            "(see canvas layout workflow harness)"
+        )
+    )
+
+
 def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]]:
     """Return (name, tool) pairs for registry filtering."""
 
@@ -253,6 +272,20 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def arrange_nodes_grid(node_ids: list[str], gap: int | None = None) -> dict:
         return await client.arrange_nodes_grid(node_ids=node_ids, gap=gap)
+
+    async def move_nodes(items: list[dict[str, Any]]) -> dict:
+        normalized = [
+            {
+                "nodeId": str(item.get("node_id") or item.get("nodeId") or ""),
+                "x": float(item["x"]),
+                "y": float(item["y"]),
+            }
+            for item in items
+        ]
+        return await client.move_nodes(items=normalized)
+
+    async def apply_layout_ops(ops: list[dict[str, Any]]) -> dict:
+        return await client.apply_layout_ops(ops=ops)
 
     async def get_image_edit_capabilities(node_id: str) -> dict:
         return await client.get_image_edit_capabilities(node_id=node_id)
@@ -572,6 +605,26 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="arrange_nodes_grid",
                 description="Arrange nodes in a grid layout (graph batch)",
                 args_schema=ArrangeNodesGridInput,
+            ),
+        ),
+        (
+            "move_nodes",
+            StructuredTool.from_function(
+                coroutine=move_nodes,
+                name="move_nodes",
+                description="Move canvas nodes to absolute coordinates (graph batch)",
+                args_schema=MoveNodesInput,
+            ),
+        ),
+        (
+            "apply_layout_ops",
+            StructuredTool.from_function(
+                coroutine=apply_layout_ops,
+                name="apply_layout_ops",
+                description=(
+                    "Apply ordered layout workflow ops (group/ungroup/grid/move) atomically"
+                ),
+                args_schema=ApplyLayoutOpsInput,
             ),
         ),
     ]

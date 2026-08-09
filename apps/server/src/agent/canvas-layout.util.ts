@@ -218,3 +218,111 @@ export function layoutNodesInGrid(
   }
   return next
 }
+
+export type CanvasLayoutOp =
+  | { op: 'group'; nodeIds: string[]; title?: string }
+  | { op: 'ungroup'; groupId: string }
+  | { op: 'arrange_grid'; nodeIds: string[]; gap?: number }
+  | { op: 'move'; items: Array<{ nodeId: string; x: number; y: number }> }
+
+export type CanvasLayoutOpResult =
+  | { op: 'group'; groupId: string; nodeIds: string[] }
+  | { op: 'ungroup'; groupId: string; nodeIds: string[] }
+  | { op: 'arrange_grid'; nodeIds: string[] }
+  | { op: 'move'; nodeIds: string[] }
+
+/** Move nodes by absolute canvas coordinates (converts to parent-relative when nested). */
+export function moveNodes(
+  nodes: LayoutNode[],
+  items: Array<{ nodeId: string; x: number; y: number }>,
+): { nodes: LayoutNode[]; movedIds: string[] } {
+  const next = nodes.map((n) => ({ ...n, data: { ...(n.data ?? {}) } }))
+  const movedIds: string[] = []
+  for (const item of items) {
+    const idx = next.findIndex((n) => n.id === item.nodeId)
+    if (idx < 0) continue
+    const node = next[idx]!
+    let position = { x: item.x, y: item.y }
+    if (node.parentNode) {
+      const parent = next.find((n) => n.id === node.parentNode)
+      if (parent) {
+        const parentAbs = getAbsolutePosition(parent, next)
+        position = {
+          x: item.x - parentAbs.x,
+          y: item.y - parentAbs.y,
+        }
+      }
+    }
+    next[idx] = { ...node, position }
+    movedIds.push(item.nodeId)
+  }
+  return { nodes: next, movedIds }
+}
+
+/** Apply ordered layout ops on an in-memory node list (no persistence). */
+export function applyLayoutOps(
+  nodes: LayoutNode[],
+  ops: CanvasLayoutOp[],
+): { nodes: LayoutNode[]; results: CanvasLayoutOpResult[] } {
+  let current = nodes.map((n) => ({ ...n, data: { ...(n.data ?? {}) } }))
+  const results: CanvasLayoutOpResult[] = []
+
+  for (const op of ops) {
+    switch (op.op) {
+      case 'group': {
+        const grouped = createGroupFromNodes(current, op.nodeIds, op.title)
+        if (!grouped) {
+          throw new Error(`group requires at least 2 eligible nodes: ${op.nodeIds.join(', ')}`)
+        }
+        current = grouped.nodes
+        results.push({ op: 'group', groupId: grouped.groupId, nodeIds: op.nodeIds })
+        break
+      }
+      case 'ungroup': {
+        const childIds = getGroupChildIds(current, op.groupId)
+        current = ungroupNode(current, op.groupId)
+        results.push({ op: 'ungroup', groupId: op.groupId, nodeIds: childIds })
+        break
+      }
+      case 'arrange_grid': {
+        current = layoutNodesInGrid(current, op.nodeIds, op.gap ?? 40)
+        results.push({ op: 'arrange_grid', nodeIds: op.nodeIds })
+        break
+      }
+      case 'move': {
+        const moved = moveNodes(current, op.items)
+        current = moved.nodes
+        results.push({ op: 'move', nodeIds: moved.movedIds })
+        break
+      }
+      default: {
+        const _exhaustive: never = op
+        throw new Error(`unknown layout op: ${JSON.stringify(_exhaustive)}`)
+      }
+    }
+  }
+
+  return { nodes: current, results }
+}
+
+export function summarizeLayoutGroups(nodes: LayoutNode[]): Array<{
+  id: string
+  title: string
+  childIds: string[]
+  position: { x: number; y: number }
+  size: { w: number; h: number }
+}> {
+  return nodes
+    .filter((n) => n.type === 'group')
+    .map((group) => {
+      const childIds = getGroupChildIds(nodes, group.id)
+      const { w, h } = getNodeSize(group)
+      return {
+        id: group.id,
+        title: String(group.data?.title ?? '分组'),
+        childIds,
+        position: group.position,
+        size: { w, h },
+      }
+    })
+}

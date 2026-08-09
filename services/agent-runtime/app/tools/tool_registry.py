@@ -75,6 +75,8 @@ TOOL_TIERS: dict[str, ToolTier] = {
     "group_nodes": ToolTier.GRAPH_BATCH,
     "ungroup_node": ToolTier.GRAPH_BATCH,
     "arrange_nodes_grid": ToolTier.GRAPH_BATCH,
+    "move_nodes": ToolTier.GRAPH_BATCH,
+    "apply_layout_ops": ToolTier.GRAPH_BATCH,
     "run_icon_refine": ToolTier.GEN,
     "get_image_edit_capabilities": ToolTier.READ,
     "add_nodes_batch": ToolTier.GRAPH_BATCH,
