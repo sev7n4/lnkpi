@@ -2,11 +2,12 @@
 import { computed } from 'vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { resolveMediaUrl } from '@/services/api-base'
+import type { AnchorRect } from '@/utils/refPreviewPosition'
+import { computeRefPreviewStyle } from '@/utils/refPreviewPosition'
 
 const props = defineProps<{
   refItem: NodeRef
-  x: number
-  y: number
+  anchor: AnchorRect
 }>()
 
 const emit = defineEmits<{
@@ -23,18 +24,7 @@ const textContent = computed(() => {
   return props.refItem.payload.text ?? props.refItem.preview ?? ''
 })
 
-const style = computed(() => {
-  const margin = 12
-  let left = props.x
-  let top = props.y
-  if (typeof window !== 'undefined') {
-    if (left + 360 > window.innerWidth - margin) left = window.innerWidth - 360 - margin
-    if (top + 280 > window.innerHeight - margin) top = Math.max(margin, props.y - 280)
-    left = Math.max(margin, left)
-    top = Math.max(margin, top)
-  }
-  return { left: `${left}px`, top: `${top}px` }
-})
+const style = computed(() => computeRefPreviewStyle(props.anchor))
 </script>
 
 <template>

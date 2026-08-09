@@ -319,6 +319,31 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.neo-node-agent-add {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 4;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--neo-accent-border);
+  border-radius: 8px;
+  background: var(--neo-surface-elevated, rgba(20, 20, 28, 0.92));
+  color: var(--neo-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.neo-node-agent-add:hover {
+  transform: scale(1.06);
+  background: var(--neo-accent);
+  color: #fff;
+}
+
 .neo-node.selected {
   box-shadow: 0 0 0 1px var(--neo-node-selected-ring);
 }

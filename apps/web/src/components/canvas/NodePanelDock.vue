@@ -23,6 +23,7 @@ const emit = defineEmits<{
   add: [type: DockNodeType]
   'open-settings': []
   'asset-apply': [asset: CanvasAssetItem]
+  'asset-add-to-agent': [asset: CanvasAssetItem]
   'history-locate': [payload: { recordId: string; nodeId?: string | null }]
   'history-retry': [nodeId: string]
 }>()
@@ -200,7 +201,10 @@ useClickOutside(rootRef, closePopovers)
           class="asset-popover neo-popover absolute left-[calc(100%+10px)] top-0 overflow-hidden rounded-2xl"
           @click.stop
         >
-          <CanvasAssetPanel @apply="emit('asset-apply', $event)" />
+          <CanvasAssetPanel
+            @apply="emit('asset-apply', $event)"
+            @add-to-agent="emit('asset-add-to-agent', $event)"
+          />
         </div>
       </Transition>
 

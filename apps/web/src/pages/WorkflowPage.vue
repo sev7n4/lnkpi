@@ -196,7 +196,13 @@ async function createCanvas() {
       title: prompt.value || '未命名画布',
       prompt: prompt.value,
     })
-    router.push(`/workflow/${data.data.id}`)
+    router.push({
+      path: `/workflow/${data.data.id}`,
+      query: {
+        openAgent: '1',
+        ...(prompt.value.trim() ? { initialPrompt: prompt.value.trim() } : {}),
+      },
+    })
   } catch {
     router.push(`/workflow/demo-${Date.now()}`)
   }

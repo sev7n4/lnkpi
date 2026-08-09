@@ -93,6 +93,8 @@ const emit = defineEmits<{
   redo: []
   openImageEditor: [nodeId: string]
   expandedChange: [expanded: boolean]
+  /** 从「添加引用 → 画布节点」触发，由画布页注入当前选中节点 */
+  requestCanvasRefs: []
 }>()
 
 const agent = useAgentStore()
@@ -106,6 +108,11 @@ const sidebar = useSidebarAttachments()
 const isUploading = ref(false)
 const isDragOver = ref(false)
 const assetPickerOpen = ref(false)
+const attachMenuOpen = ref(false)
+const attachMenuRef = ref<HTMLElement | null>(null)
+useClickOutside(attachMenuRef, () => {
+  attachMenuOpen.value = false
+})
 
 function makeAttachmentItems(
   attachments: SidebarAttachment[] | undefined,
@@ -258,6 +265,36 @@ function openFilePicker() {
 function addAssetReference(attachment: SidebarAttachment) {
   if (props.readOnly) return
   sidebar.addFromPayload(attachment)
+}
+
+function addAttachment(attachment: SidebarAttachment) {
+  if (props.readOnly) return
+  sidebar.addFromPayload({ ...attachment, id: randomId() })
+}
+
+function setComposerInput(text: string) {
+  input.value = text
+  nextTick(() => composerRef.value?.focus())
+}
+
+function toggleAttachMenu() {
+  if (props.readOnly || isUploading.value) return
+  attachMenuOpen.value = !attachMenuOpen.value
+}
+
+function pickLocalUpload() {
+  attachMenuOpen.value = false
+  openFilePicker()
+}
+
+function pickCanvasNodes() {
+  attachMenuOpen.value = false
+  emit('requestCanvasRefs')
+}
+
+function pickAssetLibrary() {
+  attachMenuOpen.value = false
+  assetPickerOpen.value = true
 }
 
 async function addFiles(files: FileList | File[]) {
@@ -1058,6 +1095,8 @@ function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
 
 defineExpose({
   openPanel,
+  setComposerInput,
+  addAttachment,
   reconcileFromNodes,
   addFromCanvasNodes: (nodes: FocusNodeLike[]) => {
     const n = sidebar.addFromCanvasNodes(nodes)
@@ -1406,29 +1445,40 @@ defineExpose({
               />
 
               <div class="agent-dock-actions">
-                <UniversalModelSelector v-model="planningModel" type="text" />
+                <div class="agent-dock-params">
+                  <UniversalModelSelector v-model="planningModel" type="text" />
 
-                <button
-                  type="button"
-                  class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg text-base"
-                  :disabled="readOnly || isUploading"
-                  :title="readOnly ? '只读画布不能上传参考素材' : '添加参考素材'"
-                  @click="openFilePicker"
-                >
-                  <span aria-hidden="true">{{ isUploading ? '…' : '+' }}</span>
-                </button>
-                <button
-                  type="button"
-                  class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg text-sm"
-                  :disabled="readOnly || isUploading"
-                  :title="readOnly ? '只读画布不能添加参考素材' : '从资产库添加参考素材'"
-                  @click="assetPickerOpen = true"
-                >
-                  <span aria-hidden="true">📁</span>
-                </button>
+                  <div ref="attachMenuRef" class="relative">
+                    <button
+                      type="button"
+                      class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg"
+                      :disabled="readOnly || isUploading"
+                      :title="readOnly ? '只读画布不能添加参考素材' : '添加引用素材'"
+                      @click="toggleAttachMenu"
+                    >
+                      <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.75">
+                        <path stroke-linecap="round" d="M12 5v14M5 12h14" />
+                      </svg>
+                    </button>
+                    <div
+                      v-if="attachMenuOpen"
+                      class="neo-popover absolute bottom-full left-0 z-30 mb-1 w-[200px] rounded-xl py-1"
+                      @click.stop
+                    >
+                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickLocalUpload">
+                        本地上传
+                      </button>
+                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickCanvasNodes">
+                        画布节点
+                      </button>
+                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickAssetLibrary">
+                        我的资产库
+                      </button>
+                    </div>
+                  </div>
 
-                <!-- 技能选择 -->
-                <div ref="skillMenuRef" class="relative">
+                  <!-- 技能选择 -->
+                  <div ref="skillMenuRef" class="relative">
                   <button
                     type="button"
                     class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
@@ -1484,8 +1534,9 @@ defineExpose({
                     <p v-if="!AGENT_SKILLS.length" class="px-3 py-2 text-[10px] opacity-50">暂无已安装技能</p>
                   </div>
                 </div>
+                </div>
 
-                <div class="ml-auto flex items-center gap-2">
+                <div class="agent-dock-primary">
                   <DockMicButton
                     :listening="speech.listening.value"
                     :disabled="agent.isStreaming || isUploading"
@@ -1737,6 +1788,33 @@ defineExpose({
   gap: 6px;
   padding-top: 8px;
   border-top: 1px solid var(--neo-border);
+}
+
+.agent-dock-params {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: max-height 0.2s ease, opacity 0.2s ease;
+}
+
+.agent-input-dock:hover .agent-dock-params,
+.agent-input-dock:focus-within .agent-dock-params {
+  max-height: 120px;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.agent-dock-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .agent-skill-icon {
