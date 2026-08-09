@@ -393,6 +393,25 @@ class NestEventProxy:
     async def get_generation_status(self, node_id: str) -> dict[str, Any]:
         return await self._inner.get_generation_status(node_id)
 
+    async def _call_inner(self, name: str, /, *args: Any, **kwargs: Any) -> Any:
+        method = getattr(self._inner, name)
+        result = await method(*args, **kwargs)
+        if isinstance(result, dict) and result.get("actions"):
+            return await self._forward_actions(result)
+        return result
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        inner_attr = getattr(self._inner, name)
+        if not callable(inner_attr):
+            return inner_attr
+
+        async def _proxy(*args: Any, **kwargs: Any) -> Any:
+            return await self._call_inner(name, *args, **kwargs)
+
+        return _proxy
+
 
 def resolve_skills_dir(skills_dir: str | Path | None = None) -> Path:
     raw = Path(skills_dir if skills_dir is not None else settings.skills_dir)
