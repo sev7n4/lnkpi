@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     intent_llm_parse: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE")
     intent_llm_parse_shadow: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE_SHADOW")
     agent_thinking_ui: bool = Field(default=False, validation_alias="AGENT_THINKING_UI")
+    route_shadow_mode: bool = Field(default=False, validation_alias="ROUTE_SHADOW_MODE")
 
     class Config:
         env_prefix = "LNKPI_"
