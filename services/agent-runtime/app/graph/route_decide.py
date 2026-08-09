@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Literal, TypedDict
 
 from app.config import settings
@@ -15,7 +14,7 @@ from app.graph.atomic_intent import (
     regenerate_phrase_intent,
     resolve_intake_route,
 )
-from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation, resolve_atomic_intent, resolve_output_modality
+from app.graph.atomic_intent_ir import AtomicIntent, resolve_atomic_intent
 from app.graph.clarify_reply import ClarifyReplyResult
 from app.graph.explore_route import explore_canvas_signal, explore_explicit_intent
 from app.graph.intent import modify_intent, single_node_gen_intent
@@ -93,34 +92,6 @@ def _image_attachment_count(attachments: list[dict]) -> int:
 
 def _image_mentioned_keys(keys: list[str]) -> list[str]:
     return [k for k in keys if k.upper().startswith("I")]
-
-
-def _text_mentioned_keys(keys: list[str]) -> list[str]:
-    return [k for k in keys if k.upper().startswith("T")]
-
-
-def _sidebar_ref_atomic_signal(ctx: RouteContext) -> bool:
-    """T/I ref + image/video generate utterance → atomic (explicit-skill model)."""
-    utterance = str(ctx.get("utterance") or "").strip()
-    if not utterance:
-        return False
-    keys = list(ctx.get("mentioned_keys") or [])
-    text_keys = _text_mentioned_keys(keys)
-    attachments = ctx.get("sidebar_attachments") or []
-    has_ref = bool(text_keys or keys) or any(
-        str(a.get("mediaType") or "").lower() in ("text", "image") for a in attachments
-    )
-    if not has_ref:
-        return False
-    mk = keys or None
-    if is_ref_media_generation(utterance, mk):
-        return True
-    modality = resolve_output_modality(utterance, mentioned_keys=mk)
-    if modality in ("image", "video") and (
-        "出图" in utterance or "生成图" in utterance or re.search(r"按?风格\s*\d+", utterance)
-    ):
-        return True
-    return False
 
 
 def _explore_canvas_signal(ctx: RouteContext) -> bool:
@@ -212,17 +183,6 @@ def decide_route_legacy(ctx: RouteContext, *, valid_skill_ids: set[str] | None =
             "l0_action": l0,
             "confidence": 0.95,
             "reason": "sidebar_img2img_p1",
-            "clarify_question": None,
-            "guard_veto": guard_veto,
-            "is_modify": False,
-        }
-
-    if _sidebar_ref_atomic_signal(ctx):
-        return {
-            "flow_mode": "atomic_create",
-            "l0_action": l0,
-            "confidence": 0.92,
-            "reason": "sidebar_ref_atomic",
             "clarify_question": None,
             "guard_veto": guard_veto,
             "is_modify": False,
@@ -342,9 +302,18 @@ def decide_route_unified(
     )
 
 
-def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) -> RouteDecision:
-    legacy = decide_route_legacy(ctx, valid_skill_ids=valid_skill_ids)
+def decide_route(
+    ctx: RouteContext,
+    *,
+    valid_skill_ids: set[str] | None = None,
+    pending_clarify_reply: ClarifyReplyResult | None = None,
+) -> RouteDecision:
+    unified = decide_route_unified(
+        ctx,
+        valid_skill_ids=valid_skill_ids,
+        pending_clarify_reply=pending_clarify_reply,
+    )
     if settings.route_shadow_mode:
-        unified = decide_route_unified(ctx, valid_skill_ids=valid_skill_ids)
+        legacy = decide_route_legacy(ctx, valid_skill_ids=valid_skill_ids)
         _log_shadow_diff(ctx, legacy, unified)
-    return legacy
+    return unified

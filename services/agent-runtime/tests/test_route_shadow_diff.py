@@ -49,12 +49,12 @@ def test_route_shadow_eval_route_set(route_cases: list[dict]):
         ctx = assemble_route_context(state)
         legacy = decide_route_legacy(ctx, valid_skill_ids=VALID_SKILLS)
         unified = decide_route_unified(ctx, valid_skill_ids=VALID_SKILLS)
-        if legacy.get("flow_mode") != unified.get("flow_mode") or legacy.get("reason") != unified.get(
-            "reason"
+        if legacy.get("flow_mode") != unified.get("flow_mode") or legacy.get("is_modify") != unified.get(
+            "is_modify"
         ):
             mismatches.append(
-                f"{case_id}: legacy={legacy.get('flow_mode')}/{legacy.get('reason')} "
-                f"unified={unified.get('flow_mode')}/{unified.get('reason')} "
+                f"{case_id}: legacy={legacy.get('flow_mode')}/modify={legacy.get('is_modify')} "
+                f"unified={unified.get('flow_mode')}/modify={unified.get('is_modify')} "
                 f"rule={unified.get('precedence_rule_id')}"
             )
     agreement = (total - len(mismatches)) / total if total else 1.0
