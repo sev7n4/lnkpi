@@ -532,3 +532,8 @@ cases:
     utterance: 根据文案生成一张主图
     focus_node_id: null
     gold: { route: atomic_create, target_type: image, confirm_gate: false }
+
+  - id: sidebar-t1-style3-image
+    utterance: "@T1 请按风格3出图"
+    focus_node_id: null
+    gold: { route: atomic_create, target_type: image, confirm_gate: false }
