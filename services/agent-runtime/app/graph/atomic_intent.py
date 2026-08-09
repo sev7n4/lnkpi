@@ -11,7 +11,6 @@ import yaml
 
 from app.graph.intent import (
     CONFIRM_GEN_HINTS,
-    marketing_intent,
     modify_intent,
     single_node_gen_intent,
 )
@@ -330,6 +329,8 @@ def atomic_create_intent(text: str) -> bool:
         return True
     if any(h in lowered for h in IMAGE_KEYWORDS):
         return True
+    if re.search(r"(?:出图|出一张图|生成图)", text or ""):
+        return True
     return False
 
 
@@ -377,8 +378,6 @@ def orchestration_complexity_intent(text: str) -> OrchestrationComplexity:
         return "atomic"
     if atomic_create_intent(t):
         return "atomic"
-    if marketing_intent(t):
-        return "campaign"
     return "clarify"
 
 
@@ -386,26 +385,20 @@ def resolve_intake_route(
     text: str,
     *,
     focus_node_id: str | None,
-) -> Literal["campaign", "single_node", "atomic_create", "chat"]:
-    """Intake routing per ADR-003 priority."""
+) -> Literal["single_node", "atomic_create", "chat"]:
+    """Intake routing — campaign/orchestration requires explicit skill in route_decide."""
     if (
         focus_node_id
         and single_node_gen_intent(text)
         and not modify_intent(text)
     ):
         return "single_node"
-    from app.graph.planning_guard import detect_action, has_planning_image_conflict, is_planning_intent
+    from app.graph.planning_guard import detect_action
 
-    if has_planning_image_conflict(text):
-        return "campaign"
-    if "详情页" in text and is_planning_intent(text) and detect_action(text) != "write":
-        return "campaign"
     if detect_action(text) == "write":
         return "atomic_create"
     if atomic_create_intent(text):
         return "atomic_create"
-    if marketing_intent(text):
-        return "campaign"
     return "chat"
 
 

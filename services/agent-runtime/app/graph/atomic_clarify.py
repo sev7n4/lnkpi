@@ -2,20 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
+from app.graph.clarify_context import pending_atomic_clarify, pending_clarify
 from app.graph.l0_action import TRANSFORM_VERBS, utterance_has_multi_image_refs
 
 _AFFIRMATIVE_EXACT = frozenset(
     {"是的", "对", "好", "ok", "确认", "可以", "嗯", "行", "1", "要", "需要", "生成", "是", "对的"}
 )
-
-
-def pending_atomic_clarify(state: dict[str, Any]) -> dict[str, Any] | None:
-    ctx = state.get("clarify_context")
-    if isinstance(ctx, dict) and str(ctx.get("original_utterance") or "").strip():
-        return ctx
-    return None
 
 
 def is_affirmative_clarify_reply(text: str) -> bool:
@@ -33,3 +25,11 @@ def is_img2img_utterance(utterance: str) -> bool:
     if not t:
         return False
     return utterance_has_multi_image_refs(t) and any(v in t for v in TRANSFORM_VERBS)
+
+
+__all__ = [
+    "is_affirmative_clarify_reply",
+    "is_img2img_utterance",
+    "pending_atomic_clarify",
+    "pending_clarify",
+]

@@ -8,43 +8,43 @@ cases:
   # --- plan-campaign (10) ---
   - id: pg-01
     utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
-    gold: { route: campaign, complexity: campaign, forbid_target: image, allow_clarify: true }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image, allow_clarify: true }
 
   - id: pg-02
     utterance: 帮我规划天猫蓝牙耳机详情页的视觉结构和模块顺序
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-03
     utterance: 蓝牙耳机详情页构图方案
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-04
     utterance: 设计一套详情页视觉方案，含主图和白底
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-05
     utterance: 详情页营销视觉策划，运动耳机
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-06
     utterance: 帮我做详情页方案，主图场景图布局
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-07
     utterance: 电商详情页整体框架设计，蓝牙耳机
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-08
     utterance: 主图加详情页模块的完整视觉方案
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-09
     utterance: 详情页结构布局方案，3C数码耳机
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   - id: pg-10
     utterance: 帮我设计详情页Banner和主图的整体思路
-    gold: { route: campaign, complexity: campaign, forbid_target: image }
+    gold: { platform_flow: clarify_route, complexity: campaign, forbid_target: image }
 
   # --- plan-clarify via validate (5) ---
   - id: pg-cl-01

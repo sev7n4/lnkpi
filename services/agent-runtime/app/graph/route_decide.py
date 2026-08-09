@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal, TypedDict
 
 from app.graph.atomic_intent import (
@@ -12,8 +13,9 @@ from app.graph.atomic_intent import (
     regenerate_phrase_intent,
     resolve_intake_route,
 )
+from app.graph.atomic_intent_ir import is_ref_media_generation, resolve_output_modality
 from app.graph.explore_route import explore_canvas_signal, explore_explicit_intent
-from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent
+from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.l0_action import (
     TRANSFORM_VERBS,
     detect_l0_action,
@@ -26,9 +28,9 @@ from app.graph.route_context import RouteContext
 CLARIFY_THRESHOLD = 0.70
 
 ROUTE_CLARIFY_ORCHESTRATION = (
-    "听起来像多节点编排或营销方案需求。请确认：\n"
-    "1）单张/图生图原子出图；\n"
-    "2）完整编排（请在侧栏选用已安装的 Skill）；\n"
+    "听起来像多节点编排或 Skill 工作流需求。请确认：\n"
+    "1）按引用内容单张出图（保留 @T* / @I*）；\n"
+    "2）完整编排（请先在侧栏选用已安装的 Skill）；\n"
     "3）其他说明。\n"
     "回复 1 / 2 / 3。"
 )
@@ -67,6 +69,34 @@ def _image_mentioned_keys(keys: list[str]) -> list[str]:
     return [k for k in keys if k.upper().startswith("I")]
 
 
+def _text_mentioned_keys(keys: list[str]) -> list[str]:
+    return [k for k in keys if k.upper().startswith("T")]
+
+
+def _sidebar_ref_atomic_signal(ctx: RouteContext) -> bool:
+    """T/I ref + image/video generate utterance → atomic (explicit-skill model)."""
+    utterance = str(ctx.get("utterance") or "").strip()
+    if not utterance:
+        return False
+    keys = list(ctx.get("mentioned_keys") or [])
+    text_keys = _text_mentioned_keys(keys)
+    attachments = ctx.get("sidebar_attachments") or []
+    has_ref = bool(text_keys or keys) or any(
+        str(a.get("mediaType") or "").lower() in ("text", "image") for a in attachments
+    )
+    if not has_ref:
+        return False
+    mk = keys or None
+    if is_ref_media_generation(utterance, mk):
+        return True
+    modality = resolve_output_modality(utterance, mentioned_keys=mk)
+    if modality in ("image", "video") and (
+        "出图" in utterance or "生成图" in utterance or re.search(r"按?风格\s*\d+", utterance)
+    ):
+        return True
+    return False
+
+
 def _explore_canvas_signal(ctx: RouteContext) -> bool:
     utterance = str(ctx.get("utterance") or "").strip()
     if not utterance:
@@ -76,7 +106,6 @@ def _explore_canvas_signal(ctx: RouteContext) -> bool:
         or single_node_gen_intent(utterance)
         or regenerate_phrase_intent(utterance)
         or atomic_regenerate_intent(utterance)
-        or marketing_intent(utterance)
     )
     return explore_canvas_signal(utterance, blocked_by_atomic=blocked)
 
@@ -162,19 +191,21 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "is_modify": False,
         }
 
+    if _sidebar_ref_atomic_signal(ctx):
+        return {
+            "flow_mode": "atomic_create",
+            "l0_action": l0,
+            "confidence": 0.92,
+            "reason": "sidebar_ref_atomic",
+            "clarify_question": None,
+            "guard_veto": guard_veto,
+            "is_modify": False,
+        }
+
     route = resolve_intake_route(utterance, focus_node_id=focus)
     orch = orchestration_complexity_intent(utterance)
     is_atomic = route == "atomic_create" or atomic_create_intent(utterance)
     is_variant = has_checkpoint and is_regenerate_new_variant(utterance)
-
-    if orch == "campaign" and (is_atomic or is_variant):
-        preserve_or_img2img = has_preserve_intent(utterance) or (
-            utterance_has_multi_image_refs(utterance) and any(v in utterance for v in TRANSFORM_VERBS)
-        )
-        if not preserve_or_img2img:
-            is_atomic = False
-            is_variant = False
-            route = "campaign"
 
     if focus and route == "single_node" and single_node_gen_intent(utterance) and not modify_intent(utterance):
         return {
@@ -187,13 +218,24 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "is_modify": False,
         }
 
-    if skill_id and (marketing_intent(utterance) or route == "campaign" or orch == "campaign"):
+    if skill_id:
         return {
             "flow_mode": "campaign",
             "l0_action": l0,
             "confidence": 0.90,
             "reason": "explicit_skill_orchestration",
             "clarify_question": None,
+            "guard_veto": guard_veto,
+            "is_modify": False,
+        }
+
+    if guard_veto or (orch == "campaign" and not skill_id):
+        return {
+            "flow_mode": "clarify_route",
+            "l0_action": l0,
+            "confidence": 0.75,
+            "reason": "orchestration_without_skill",
+            "clarify_question": ROUTE_CLARIFY_ORCHESTRATION,
             "guard_veto": guard_veto,
             "is_modify": False,
         }
@@ -217,17 +259,6 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "confidence": 0.88,
             "reason": "atomic_create_intent",
             "clarify_question": None,
-            "guard_veto": guard_veto,
-            "is_modify": False,
-        }
-
-    if marketing_intent(utterance) or (orch == "campaign" and route == "campaign") or guard_veto:
-        return {
-            "flow_mode": "clarify_route",
-            "l0_action": l0,
-            "confidence": 0.75,
-            "reason": "orchestration_without_skill",
-            "clarify_question": ROUTE_CLARIFY_ORCHESTRATION,
             "guard_veto": guard_veto,
             "is_modify": False,
         }

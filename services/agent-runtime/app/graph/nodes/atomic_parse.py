@@ -220,6 +220,19 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             "atomic_spec": state.get("atomic_spec"),
         }
 
+        pre_parsed = state.get("pre_parsed_intent")
+        if isinstance(pre_parsed, dict) and pre_parsed.get("items"):
+            outcome = intent_result_to_parse_outcome(pre_parsed, text)
+            patch = parse_outcome_to_state(
+                outcome,
+                canvas_context=parse_ctx,
+                prior_spec=prior_spec,
+                sidebar_attachments=sidebar_attachments,
+            )
+            patch.pop("pre_parsed_intent", None)
+            patch.pop("clarify_context", None)
+            return patch
+
         clarify_ctx = pending_atomic_clarify(state)
         if clarify_ctx:
             original = str(clarify_ctx.get("original_utterance") or "")
@@ -422,7 +435,9 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 title = str(first.get("title") or first.get("prompt") or "")[:48]
                 patch["thinking_summary"] = f"识别为{target}创作：{title or '未命名'}"
         if outcome["kind"] == "clarify":
+            kind = "img2img_confirm" if is_img2img_utterance(text) else "atomic_parse"
             patch["clarify_context"] = {
+                "kind": kind,
                 "original_utterance": text,
                 "clarify_question": outcome.get("clarify_question") or "",
                 "clarify_kind": outcome.get("reason") or "unknown",

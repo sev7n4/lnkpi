@@ -76,9 +76,10 @@ def test_parse_atomic_target_type_planning_detail_page_is_text():
     assert parse_atomic_target_type(u) == "text"
 
 
-def test_resolve_intake_route_planning_goes_campaign():
+def test_resolve_intake_route_planning_may_atomic_without_skill():
+    """resolve_intake_route is atomic-first; orchestration clarify is in decide_route."""
     u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
-    assert resolve_intake_route(u, focus_node_id=None) == "campaign"
+    assert resolve_intake_route(u, focus_node_id=None) == "atomic_create"
 
 
 def test_turnaround_pipeline_spec_for_direct_image_request():

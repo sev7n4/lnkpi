@@ -155,12 +155,12 @@ cases:
   - id: neg-camp-01
     utterance: 帮我做一套天猫蓝牙耳机详情页营销方案
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   - id: neg-camp-02
     utterance: 天猫详情页，拆14个画布节点，品牌lnkpi
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   # --- negative: chat (1) ---
   - id: neg-chat-01
@@ -221,7 +221,7 @@ cases:
   - id: trap-confirm-02
     utterance: 开始出图
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
     notes: campaign confirm reply, not atomic_create
 
   - id: trap-confirm-03
@@ -259,12 +259,12 @@ cases:
   - id: neg-camp-03
     utterance: 帮我策划一套全链路营销方案，要拆画布
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   - id: neg-camp-04
     utterance: 做一套详情页 campaign，14个节点
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   - id: neg-chat-02
     utterance: 谢谢
@@ -360,12 +360,12 @@ cases:
   - id: p2-camp-01
     utterance: 帮我策划天猫详情页全链路
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   - id: p2-camp-02
     utterance: 做一套蓝牙耳机营销方案，要拆画布
     focus_node_id: null
-    gold: { route: campaign, target_type: null, confirm_gate: false }
+    gold: { route: chat, target_type: null, confirm_gate: false }
 
   - id: p2-chat-01
     utterance: 你好
@@ -510,7 +510,7 @@ cases:
   - id: plan-01
     utterance: 请你帮我设计一个蓝牙耳机主图，详情页的构图方案
     focus_node_id: null
-    gold: { route: campaign, target_type: image, confirm_gate: false }
+    gold: { route: atomic_create, target_type: text, confirm_gate: false }
     notes: planning guard — intake routes campaign; target_type ignored when not atomic_create
 
   - id: ir-video-01

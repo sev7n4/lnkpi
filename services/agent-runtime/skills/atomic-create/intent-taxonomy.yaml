@@ -50,9 +50,10 @@ target_types:
     write_field: prompt
 
 intake_priority:
-  - id: campaign_override
-    when: marketing_intent and not atomic_create_intent
+  - id: explicit_skill
+    when: requested_skill_id is set
     route: campaign
+    notes: Orchestration only via user-selected Skill (platform-route R-S1)
   - id: single_node
     when: focus_node_id and single_node_gen_intent and not modify_intent
     route: single_node
@@ -61,12 +62,12 @@ intake_priority:
     route: atomic_regenerate
     notes: Same-node retry only (no variant/adjust tail). Variant phrases route to atomic_create.
   - id: atomic_create
-    when: atomic_create_intent and not marketing_intent
+    when: atomic_create_intent
     route: atomic_create
-  - id: orchestration_campaign
-    when: orchestration_complexity_intent == campaign
-    route: campaign
-    notes: Overrides atomic_create for high-complexity storyboard / full-funnel requests
+  - id: orchestration_clarify
+    when: orchestration_complexity_intent == campaign and not requested_skill_id
+    route: clarify_route
+    notes: High-complexity utterance without Skill → clarify, not silent campaign
   - id: fallback
     when: default
     route: chat

@@ -83,6 +83,8 @@ def has_generate_verb(text: str) -> bool:
         return True
     if re.search(r"(?:生成|做|来|出)(?:一张|一个|一段|一条)", t):
         return True
+    if re.search(r"(?:出图|出一张图|生成图)", t):
+        return True
     return False
 
 
@@ -96,6 +98,8 @@ def has_image_output(text: str) -> bool:
     t = (text or "").strip()
     lowered = t.lower()
     if _IMAGE_GENERATE_RE.search(t):
+        return True
+    if "出图" in t or "生成图" in t or re.search(r"按?风格\s*\d+", t):
         return True
     return any(k in t or k in lowered for k in IMAGE_OUTPUT_KEYWORDS)
 
@@ -122,6 +126,11 @@ def is_source_backed_media_generation(text: str) -> bool:
 def is_ref_media_generation(text: str, mentioned_keys: list[str] | None = None) -> bool:
     t = (text or "").strip()
     keys = mentioned_keys or []
+    text_keys = [k for k in keys if k.upper().startswith("T")]
+    if text_keys and (
+        re.search(r"按?风格\s*\d+", t) or "出图" in t or "生成图" in t
+    ):
+        return True
     if keys and has_generate_verb(t) and (has_video_output(t) or has_image_output(t)):
         return True
     if re.search(r"@\w", t) and has_generate_verb(t) and (has_video_output(t) or has_image_output(t)):
@@ -216,11 +225,15 @@ def resolve_output_modality(
     return "image"
 
 
-def resolve_atomic_action(text: str) -> AtomicAction:
+def resolve_atomic_action(
+    text: str,
+    *,
+    mentioned_keys: list[str] | None = None,
+) -> AtomicAction:
     t = (text or "").strip()
     if not t:
         return "unknown"
-    if is_source_backed_media_generation(t) or is_ref_media_generation(t):
+    if is_source_backed_media_generation(t) or is_ref_media_generation(t, mentioned_keys):
         return "generate"
     if is_prompt_expand_intent(t):
         return "expand"
@@ -237,7 +250,7 @@ def resolve_atomic_intent(
     t = (text or "").strip()
     keys = tuple(mentioned_keys or [])
     markers = tuple(m for m in SOURCE_MARKERS if m in t)
-    action = resolve_atomic_action(t)
+    action = resolve_atomic_action(t, mentioned_keys=list(keys))
     output = resolve_output_modality(t, mentioned_keys=list(keys))
     if action == "expand" and output not in ("prompt",):
         output = "prompt"
@@ -254,7 +267,10 @@ def resolve_atomic_intent(
 
 def derive_studio_prompt(intent: AtomicIntent) -> str:
     """Short node prompt for Studio; sidebar/canvas refs carry source body."""
-    t = intent.utterance
+    t = intent.utterance.strip()
+    if intent.mentioned_keys and t and not re.fullmatch(r"@\w+\s*", t):
+        if re.search(r"按?风格\s*\d+", t) or "出图" in t or "生成图" in t:
+            return t
     if intent.output_modality == "video" and (
         intent.source_markers or intent.mentioned_keys or is_source_backed_media_generation(t)
     ):

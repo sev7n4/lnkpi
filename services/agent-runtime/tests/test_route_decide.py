@@ -56,3 +56,14 @@ def test_prod_utterance_atomic_without_attachments():
     ctx = assemble_route_context({"messages": [{"role": "user", "content": PROD}]})
     d = decide_route(ctx)
     assert d["flow_mode"] == "atomic_create"
+
+
+def test_sidebar_t1_style3_atomic():
+    ctx = assemble_route_context({
+        "messages": [{"role": "user", "content": "@T1 请按风格3出图"}],
+        "sidebar_mentioned_keys": ["T1"],
+        "sidebar_attachments": [{"refKey": "T1", "mediaType": "text"}],
+    })
+    d = decide_route(ctx)
+    assert d["flow_mode"] == "atomic_create"
+    assert d["reason"] == "sidebar_ref_atomic"

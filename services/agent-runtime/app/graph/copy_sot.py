@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from app.graph.intent import marketing_intent
-
 
 @dataclass(frozen=True)
 class CopySoT:
@@ -38,9 +36,6 @@ def brief_from_messages(messages: list[Any]) -> str:
         ):
             continue
         candidates.append(text)
-    for text in candidates:
-        if marketing_intent(text):
-            return text
     return candidates[0] if candidates else ""
 
 
