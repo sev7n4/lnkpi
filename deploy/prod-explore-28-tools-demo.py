@@ -17,14 +17,20 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Literal
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+BUSY_SNIPPETS = ("上一轮仍在处理中", "出图仍在进行中")
 BASE = os.environ.get("BASE_URL", "http://119.29.173.89:8888").rstrip("/")
 API = f"{BASE}/api"
 PHONE = os.environ.get("PHONE", "17279698608")
 CODE = os.environ.get("CODE", "123456")
 SESSION_ID = os.environ.get("SESSION_ID", "cmsjq3rpj005op801frieqj42").strip()
 SSE_TIMEOUT = float(os.environ.get("EXPLORE_DEMO_SSE_TIMEOUT", "120"))
+BUSY_RETRY_MAX = int(os.environ.get("EXPLORE_DEMO_BUSY_RETRIES", "8"))
+BUSY_RETRY_WAIT = float(os.environ.get("EXPLORE_DEMO_BUSY_WAIT", "15"))
+# 每工具独立 thread 可避免同 thread 锁冲突（默认开启，UI 仍可按 session 查看各 thread）
+PER_TOOL_THREAD = os.environ.get("EXPLORE_DEMO_PER_TOOL_THREAD", "1") != "0"
 
 ATOMIC_STEPS = frozenset({
     "parse_atomic_intent",
@@ -264,13 +270,17 @@ def sse_chat(
     canvas_cmds: list[str] = []
     parts: list[str] = []
     explore_payload: dict | None = None
+    saw_done = False
     end = time.time() + timeout
     with urlopen(r, timeout=timeout + 30) as resp:
         buf = ""
         while time.time() < end:
             chunk = resp.read(4096)
             if not chunk:
-                break
+                if saw_done:
+                    break
+                time.sleep(0.2)
+                continue
             buf += chunk.decode(errors="replace")
             while "\n\n" in buf:
                 block, buf = buf.split("\n\n", 1)
@@ -279,6 +289,7 @@ def sse_chat(
                         continue
                     pl = line[5:].strip()
                     if pl == "[DONE]":
+                        saw_done = True
                         break
                     try:
                         ev = json.loads(pl)
@@ -300,14 +311,21 @@ def sse_chat(
                     if et == "explore":
                         explore_payload = data if isinstance(data, dict) else None
                     if et == "done":
+                        saw_done = True
                         break
                     if et == "error":
                         err_msg = str((data or {}).get("message") or data)
                         parts.append(f"[ERROR: {err_msg}]")
+                        saw_done = True
                         break
+                if saw_done:
+                    break
+            if saw_done:
+                break
     text = parts[-1] if len(parts) == 1 and parts[0] else "".join(parts)
     explore_ran = "explore" in steps
     atomic_ran = any(s in ATOMIC_STEPS for s in steps)
+    busy = any(s in text for s in BUSY_SNIPPETS)
     return {
         "text": text,
         "types": sorted(types),
@@ -316,7 +334,34 @@ def sse_chat(
         "explore_ran": explore_ran,
         "atomic_ran": atomic_ran,
         "explore_payload": explore_payload,
+        "busy": busy,
+        "saw_done": saw_done,
     }
+
+
+def chat_with_retry(
+    tok: str,
+    sid: str,
+    msg: str,
+    tid: str,
+    *,
+    timeout: float,
+) -> dict[str, Any]:
+    last: dict[str, Any] = {}
+    for attempt in range(BUSY_RETRY_MAX + 1):
+        try:
+            last = sse_chat(tok, sid, msg, tid, timeout=timeout)
+        except (HTTPError, URLError, TimeoutError, ConnectionError) as exc:
+            if attempt >= BUSY_RETRY_MAX:
+                raise
+            time.sleep(BUSY_RETRY_WAIT)
+            continue
+        if not last.get("busy"):
+            return last
+        if attempt >= BUSY_RETRY_MAX:
+            return last
+        time.sleep(BUSY_RETRY_WAIT)
+    return last
 
 
 def _keyword_hit(text: str, keywords: list[str]) -> bool:
@@ -358,9 +403,11 @@ def verify_case(case: DemoCase, result: dict[str, Any]) -> tuple[Verdict, str]:
 
 
 def main() -> int:
-    tid = f"{SESSION_ID}:explore28-{uuid.uuid4().hex[:8]}"
+    run_id = uuid.uuid4().hex[:8]
+    base_tid = f"{SESSION_ID}:explore28-{run_id}"
     print("=== Explore 28 tools live demo (production user path) ===")
-    print(f"BASE={BASE} SESSION={SESSION_ID} THREAD={tid}\n")
+    print(f"BASE={BASE} SESSION={SESSION_ID} RUN={run_id}")
+    print(f"PER_TOOL_THREAD={PER_TOOL_THREAD} base_thread={base_tid}\n")
 
     try:
         http("POST", "/auth/send-code", {"phone": PHONE})
@@ -372,11 +419,15 @@ def main() -> int:
     record("Runtime health", "tool" if runtime_ok else "fail", str(rt.get("data")))
 
     results: list[dict[str, Any]] = []
+    threads: list[str] = []
     for i, case in enumerate(DEMOS, 1):
+        tid = f"{SESSION_ID}:demo-{case.tool}-{run_id}" if PER_TOOL_THREAD else base_tid
+        threads.append(tid)
         print(f"\n--- [{i}/28] {case.tool} ---")
+        print(f"THREAD: {tid}")
         print(f"USER: {case.message}")
         try:
-            result = sse_chat(tok, SESSION_ID, case.message, tid, timeout=SSE_TIMEOUT)
+            result = chat_with_retry(tok, SESSION_ID, case.message, tid, timeout=SSE_TIMEOUT)
             verdict, detail = verify_case(case, result)
             if verdict in ("fail", "wrong_route") and case.allow_skip:
                 record(case.tool, "skip", detail)
@@ -388,6 +439,7 @@ def main() -> int:
                     "tool": case.tool,
                     "verdict": verdict,
                     "detail": detail,
+                    "threadId": tid,
                     "message": case.message,
                     "steps": result.get("steps"),
                     "canvas_cmds": result.get("canvas_cmds"),
@@ -401,13 +453,18 @@ def main() -> int:
             else:
                 record(case.tool, "fail", str(exc))
                 verdict = "fail"
-            results.append({"tool": case.tool, "verdict": verdict, "detail": str(exc), "message": case.message})
-        time.sleep(1.5)
+            results.append(
+                {"tool": case.tool, "verdict": verdict, "detail": str(exc), "threadId": tid, "message": case.message}
+            )
+        time.sleep(2 if PER_TOOL_THREAD else 3)
 
     out_path = os.path.join(os.path.dirname(__file__), "prod-explore-28-tools-demo-results.json")
     summary = {
-        "threadId": tid,
+        "runId": run_id,
+        "baseThreadId": base_tid,
+        "threadIds": threads,
         "sessionId": SESSION_ID,
+        "perToolThread": PER_TOOL_THREAD,
         "pass_tool": PASS,
         "weak": WEAK,
         "fail": FAIL,
@@ -418,7 +475,8 @@ def main() -> int:
         json.dump(summary, f, ensure_ascii=False, indent=2)
 
     print(f"\n=== Summary: ✅ tool={PASS} ⚠️ weak={WEAK} ❌ fail={FAIL} ⏭️ skip={SKIP} ===")
-    print(f"UI replay: {BASE}/workflow/{SESSION_ID}  (thread: {tid})")
+    print(f"UI: {BASE}/workflow/{SESSION_ID}")
+    print(f"Sample threads: {threads[0]} … {threads[-1]}")
     print(f"Results JSON: {out_path}")
     return 0 if FAIL == 0 else 1
 

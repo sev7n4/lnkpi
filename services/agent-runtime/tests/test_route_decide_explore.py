@@ -25,3 +25,31 @@ def test_explore_lifecycle_diagnostic():
     })
     d = decide_route(ctx)
     assert d["flow_mode"] == "explore_canvas"
+
+
+def test_set_node_prompt_before_atomic():
+    ctx = assemble_route_context({
+        "messages": [{
+            "role": "user",
+            "content": "查询 prompt-1 节点，把它的 prompt 字段更新为 explore-set-prompt-测试文案",
+        }],
+    })
+    d = decide_route(ctx)
+    assert d["flow_mode"] == "explore_canvas"
+    assert d["flow_mode"] != "atomic_create"
+
+
+def test_list_user_assets_explore():
+    ctx = assemble_route_context({
+        "messages": [{"role": "user", "content": "查询我的资产库有哪些素材"}],
+    })
+    d = decide_route(ctx)
+    assert d["flow_mode"] == "explore_canvas"
+
+
+def test_cancel_generation_explore():
+    ctx = assemble_route_context({
+        "messages": [{"role": "user", "content": "取消 image-16 节点上正在进行的生成任务"}],
+    })
+    d = decide_route(ctx)
+    assert d["flow_mode"] == "explore_canvas"
