@@ -16,9 +16,15 @@ import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { MaterialService } from '../canvas/material.service'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
 import {
+  applyLayoutOps,
   createGroupFromNodes,
+  getAbsolutePosition,
   getNodeSize,
   layoutNodesInGrid,
+  moveNodes,
+  summarizeLayoutGroups,
+  type CanvasLayoutOp,
+  type CanvasLayoutOpResult,
   type LayoutNode,
   ungroupNode,
 } from './canvas-layout.util'
@@ -1650,12 +1656,21 @@ export class AgentCanvasToolsService {
       title: string
       status: string
       position: { x: number; y: number }
+      absolutePosition: { x: number; y: number }
       size: { w: number; h: number }
       parentNode?: string
     }>
+    groups: Array<{
+      id: string
+      title: string
+      childIds: string[]
+      position: { x: number; y: number }
+      size: { w: number; h: number }
+    }>
   }> {
     const { canvas } = await this.loadSession(input.sessionId)
-    const nodes = (canvas.nodes as LayoutNode[]).map((node) => {
+    const layoutNodes = canvas.nodes as LayoutNode[]
+    const nodes = layoutNodes.map((node) => {
       const { w, h } = getNodeSize(node)
       return {
         id: node.id,
@@ -1663,11 +1678,12 @@ export class AgentCanvasToolsService {
         title: nodeTitle(node),
         status: nodeStatus(node),
         position: node.position,
+        absolutePosition: getAbsolutePosition(node, layoutNodes),
         size: { w, h },
         ...(node.parentNode ? { parentNode: node.parentNode } : {}),
       }
     })
-    return { nodes }
+    return { nodes, groups: summarizeLayoutGroups(layoutNodes) }
   }
 
   async duplicateNode(input: {
@@ -1825,6 +1841,46 @@ export class AgentCanvasToolsService {
     const after = layoutNodesInGrid(before, input.nodeIds, input.gap ?? 40)
     await this.persistLayoutNodes(input.sessionId, after)
     return { actions: [] }
+  }
+
+  async moveNodes(input: {
+    sessionId: string
+    userId: string
+    items: Array<{ nodeId: string; x: number; y: number }>
+  }): Promise<{ movedNodeIds: string[]; actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const before = canvas.nodes as LayoutNode[]
+    const { nodes: after, movedIds } = moveNodes(before, input.items)
+    if (!movedIds.length) {
+      throw new BadRequestException('未找到可移动的节点')
+    }
+    await this.persistLayoutNodes(input.sessionId, after)
+    return { movedNodeIds: movedIds, actions: [] }
+  }
+
+  async applyLayoutOps(input: {
+    sessionId: string
+    userId: string
+    ops: CanvasLayoutOp[]
+  }): Promise<{
+    results: CanvasLayoutOpResult[]
+    layout: Awaited<ReturnType<AgentCanvasToolsService['getCanvasLayout']>>
+    actions: CanvasAction[]
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const before = canvas.nodes as LayoutNode[]
+    let after: LayoutNode[]
+    let results: CanvasLayoutOpResult[]
+    try {
+      ;({ nodes: after, results } = applyLayoutOps(before, input.ops))
+    } catch (err) {
+      throw new BadRequestException(err instanceof Error ? err.message : '布局操作失败')
+    }
+    await this.persistLayoutNodes(input.sessionId, after)
+    const layout = await this.getCanvasLayout({ sessionId: input.sessionId })
+    return { results, layout, actions: [] }
   }
 
   async getImageEditCapabilities(input: {

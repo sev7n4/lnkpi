@@ -20,6 +20,8 @@ def test_explore_tools_exclude_generation():
     assert "run_image_generation" not in names
     assert "add_nodes_batch" not in names
     assert "group_nodes" not in names
+    assert "move_nodes" not in names
+    assert "apply_layout_ops" not in names
     assert names <= EXPLORE_TOOL_NAMES
 
 
