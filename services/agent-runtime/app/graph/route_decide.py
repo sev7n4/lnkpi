@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Literal, TypedDict
 
+from app.config import settings
 from app.graph.atomic_intent import (
     atomic_create_intent,
     atomic_regenerate_intent,
@@ -13,7 +15,8 @@ from app.graph.atomic_intent import (
     regenerate_phrase_intent,
     resolve_intake_route,
 )
-from app.graph.atomic_intent_ir import is_ref_media_generation, resolve_output_modality
+from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation, resolve_atomic_intent, resolve_output_modality
+from app.graph.clarify_reply import ClarifyReplyResult
 from app.graph.explore_route import explore_canvas_signal, explore_explicit_intent
 from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.l0_action import (
@@ -24,6 +27,10 @@ from app.graph.l0_action import (
 )
 from app.graph.planning_guard import ActionKind, has_planning_image_conflict
 from app.graph.route_context import RouteContext
+from app.graph.route_features import RouteFeatures, extract_route_features
+from app.graph.route_precedence import apply_route_precedence
+
+logger = logging.getLogger(__name__)
 
 CLARIFY_THRESHOLD = 0.70
 
@@ -54,6 +61,25 @@ class RouteDecision(TypedDict, total=False):
     clarify_question: str | None
     guard_veto: str | None
     is_modify: bool
+    precedence_rule_id: str
+    atomic_intent: AtomicIntent
+    route_features: RouteFeatures
+
+
+def _log_shadow_diff(ctx: RouteContext, legacy: RouteDecision, unified: RouteDecision) -> None:
+    if legacy.get("flow_mode") == unified.get("flow_mode") and legacy.get("reason") == unified.get(
+        "reason"
+    ):
+        return
+    logger.warning(
+        "route_shadow_diff utterance=%r legacy=%s/%s unified=%s/%s rule=%s",
+        ctx.get("utterance"),
+        legacy.get("flow_mode"),
+        legacy.get("reason"),
+        unified.get("flow_mode"),
+        unified.get("reason"),
+        unified.get("precedence_rule_id"),
+    )
 
 
 def _image_attachment_count(attachments: list[dict]) -> int:
@@ -129,7 +155,7 @@ def _sidebar_img2img_signal(ctx: RouteContext) -> bool:
     return len(keys) >= 2 or utterance_has_multi_image_refs(utterance)
 
 
-def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) -> RouteDecision:
+def decide_route_legacy(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) -> RouteDecision:
     utterance = str(ctx.get("utterance") or "").strip()
     focus = ctx.get("focus_node_id")
     checkpoint = ctx.get("checkpoint") or {}
@@ -283,3 +309,42 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
         "guard_veto": guard_veto,
         "is_modify": False,
     }
+
+
+def decide_route_unified(
+    ctx: RouteContext,
+    *,
+    valid_skill_ids: set[str] | None = None,
+    pending_clarify_reply: ClarifyReplyResult | None = None,
+) -> RouteDecision:
+    utterance = str(ctx.get("utterance") or "").strip()
+    keys = list(ctx.get("mentioned_keys") or [])
+    intent = resolve_atomic_intent(utterance, mentioned_keys=keys or None)
+    features = extract_route_features(ctx, intent)
+    raw = apply_route_precedence(
+        intent,
+        features,
+        ctx,
+        pending_clarify_reply=pending_clarify_reply,
+        valid_skill_ids=valid_skill_ids,
+    )
+    return RouteDecision(
+        flow_mode=raw["flow_mode"],  # type: ignore[typeddict-item]
+        l0_action=raw["l0_action"],
+        confidence=raw["confidence"],
+        reason=raw["reason"],
+        clarify_question=raw.get("clarify_question"),
+        guard_veto=raw.get("guard_veto"),
+        is_modify=raw.get("is_modify", False),
+        precedence_rule_id=raw.get("precedence_rule_id"),
+        atomic_intent=intent,
+        route_features=features,
+    )
+
+
+def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) -> RouteDecision:
+    legacy = decide_route_legacy(ctx, valid_skill_ids=valid_skill_ids)
+    if settings.route_shadow_mode:
+        unified = decide_route_unified(ctx, valid_skill_ids=valid_skill_ids)
+        _log_shadow_diff(ctx, legacy, unified)
+    return legacy
