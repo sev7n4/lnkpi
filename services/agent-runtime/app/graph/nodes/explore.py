@@ -14,8 +14,9 @@ from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
     run_mandatory_explore,
+    select_explore_tool_names,
 )
-from app.tools.definitions import build_explore_tools
+from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
 
@@ -59,6 +60,8 @@ _ASSET_NUDGE = "请调用 list_user_assets 或 list_public_assets 查询资产�
 _CANCEL_NUDGE = (
     "请调用 cancel_generation 或 cancel_platform_fallback，传入 node_id，不要让用户手动操作。"
 )
+
+_NODE_WRITE_CLARIFY = "未能更新节点，请提供节点 id（如 prompt-1）。"
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -192,9 +195,8 @@ async def _direct_focus_or_editor(
 
 def make_explore_node(*, llm: Any, nest: Any) -> Callable:
     async def explore(state: dict) -> dict:
-        tools = build_explore_tools(nest)
-        tools_by_name = {t.name: t for t in tools}
-        llm_bound = llm.bind_tools(tools)
+        all_tools = build_explore_tools(nest)
+        tools_by_name = {t.name: t for t in all_tools}
 
         try:
             summary = await nest.get_canvas_summary()
@@ -222,8 +224,17 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 out["canvas_commands"] = mandatory.canvas_commands
             return out
 
+        tool_names = select_explore_tool_names(intent, user_text)
+        bound_tools = [tools_by_name[n] for n in sorted(tool_names) if n in tools_by_name]
+        llm_bound = llm.bind_tools(bound_tools)
+
+        system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
+        if intent == "node_write":
+            allowed = ", ".join(sorted(tool_names))
+            system_content += f"\n6. 本轮只允许调用下列工具之一：{allowed}。"
+
         convo: list[Any] = [
-            SystemMessage(content=_EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))),
+            SystemMessage(content=system_content),
             HumanMessage(content=user_text),
         ]
 
@@ -231,12 +242,30 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         canvas_commands: list[dict[str, Any]] = []
         called_tools: set[str] = set()
         nudged = False
+        write_retry_done = False
 
         for _ in range(MAX_EXPLORE_TOOL_ROUNDS):
             ai = await llm_bound.ainvoke(convo)
             tool_calls = getattr(ai, "tool_calls", None) or []
             if not tool_calls:
                 final_reply = str(getattr(ai, "content", "") or "").strip()
+                if (
+                    intent == "node_write"
+                    and not called_tools.intersection(EXPLORE_WRITE_TOOLS)
+                    and not write_retry_done
+                ):
+                    write_retry_done = True
+                    tool_names = select_explore_tool_names("node_write", user_text)
+                    bound_tools = [tools_by_name[n] for n in sorted(tool_names) if n in tools_by_name]
+                    llm_bound = llm.bind_tools(bound_tools)
+                    allowed = ", ".join(sorted(tool_names))
+                    convo.append(ai)
+                    convo.append(
+                        SystemMessage(
+                            content=f"必须调用下列写入工具之一完成操作：{allowed}。"
+                        )
+                    )
+                    continue
                 nudge = _pick_nudge(user_text, called_tools, canvas_commands)
                 if nudge and not nudged:
                     convo.append(ai)
@@ -289,6 +318,9 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         canvas_commands = await _direct_focus_or_editor(
             user_text, summary, tools_by_name, called_tools, canvas_commands
         )
+
+        if intent == "node_write" and not called_tools.intersection(EXPLORE_WRITE_TOOLS):
+            final_reply = _NODE_WRITE_CLARIFY
 
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
