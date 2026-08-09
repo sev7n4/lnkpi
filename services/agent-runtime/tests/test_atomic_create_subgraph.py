@@ -159,7 +159,7 @@ async def test_multi_image_atomic_create_and_gen():
 async def test_parse_clarify_routes_to_clarify_node():
     out = await make_parse_atomic_intent_node()({"messages": [HumanMessage(content="帮我生成")]})
     assert out["phase"] == "clarify"
-    assert route_after_atomic_parse(out) == "clarify_atomic_intent"
+    assert route_after_atomic_parse(out) == "clarify_gate"
 
 
 @pytest.mark.asyncio
@@ -167,7 +167,7 @@ async def test_clarify_does_not_create_nodes():
     nest = FakeNest()
     create = make_create_atomic_node(nest=nest)
     parsed = await make_parse_atomic_intent_node()({"messages": [HumanMessage(content="帮我生成")]})
-    assert route_after_atomic_parse(parsed) == "clarify_atomic_intent"
+    assert route_after_atomic_parse(parsed) == "clarify_gate"
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
     # create node should not be invoked — verify nest still empty if we skip create
     _ = create  # create not called in clarify path
