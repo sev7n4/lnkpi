@@ -643,12 +643,12 @@ skills/atomic-create/
 
 ### 9.16 P1 验收标准
 
-- [ ] `decide_route` 单文件内 **零** `MARKETING_HINTS` / `ATOMIC_CREATE_HINTS` substring 路由
-- [ ] 任意路由变更必须附带 `eval-route-set` case 或修改既有 case 期望
-- [ ] AC-01–AC-07 + platform-route img2img case + video IR case 全绿
-- [ ] clarify follow-up（route + atomic）100% 不落入 default chat（自动化测试）
-- [ ] 文档：[platform-route-skill-boundary](./2026-08-07-platform-route-skill-boundary-design.md) 追加 R-S9「Route Unification 完成」
-- [ ] execution trace 含 `precedence_rule_id`（§9.14）
+- [x] `decide_route` 单文件内 **零** `MARKETING_HINTS` / `ATOMIC_CREATE_HINTS` substring 路由
+- [x] 任意路由变更必须附带 `eval-route-set` case 或修改既有 case 期望
+- [x] AC-01–AC-07 + platform-route img2img case + video IR case 全绿
+- [x] clarify follow-up（route + atomic）100% 不落入 default chat（自动化测试）
+- [x] 文档：[platform-route-skill-boundary](./2026-08-07-platform-route-skill-boundary-design.md) 追加 R-S9「Route Unification 完成」
+- [x] execution trace 含 `precedence_rule_id`（§9.14）
 
 ### 9.17 治理：禁止再次堆 hint 表
 

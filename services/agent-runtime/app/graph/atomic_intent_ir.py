@@ -303,6 +303,13 @@ def derive_studio_prompt(intent: AtomicIntent) -> str:
     return t
 
 
+def intent_suggests_atomic_create(intent: AtomicIntent) -> bool:
+    """IR entry for L0 atomic_create — delegates to shared utterance signal (§9.13)."""
+    from app.graph.atomic_intent import utterance_suggests_atomic_create
+
+    return utterance_suggests_atomic_create(intent.utterance)
+
+
 def expected_output_modality(
     text: str,
     *,

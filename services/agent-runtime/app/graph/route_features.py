@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from typing import TypedDict
 
-from app.graph.atomic_intent import atomic_create_intent, atomic_regenerate_intent, regenerate_phrase_intent
-from app.graph.atomic_intent_ir import AtomicIntent
+from app.graph.atomic_intent import atomic_regenerate_intent, regenerate_phrase_intent
+from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create
 from app.graph.explore_route import explore_explicit_intent
 from app.graph.intent import single_node_gen_intent
 from app.graph.l0_action import has_preserve_intent, utterance_has_multi_image_refs
@@ -62,16 +63,37 @@ def _has_orchestration_phrases(utterance: str) -> bool:
     return any(p in t for p in _ORCHESTRATION_PHRASES)
 
 
-def _explore_blocked(utterance: str) -> bool:
+def _explore_blocked(utterance: str, intent: AtomicIntent) -> bool:
     if not utterance:
         return False
     blocked = (
-        (atomic_create_intent(utterance) and not explore_explicit_intent(utterance))
+        (intent_suggests_atomic_create(intent) and not explore_explicit_intent(utterance))
         or single_node_gen_intent(utterance)
         or regenerate_phrase_intent(utterance)
         or atomic_regenerate_intent(utterance)
     )
     return blocked
+
+
+def orchestration_campaign_signal(utterance: str) -> bool:
+    """High-complexity orchestration without Skill → clarify_route (§9.13, no bool classifier)."""
+    t = (utterance or "").strip()
+    if not t:
+        return False
+    if _has_orchestration_phrases(t):
+        return True
+    from app.graph.planning_guard import detect_action, is_planning_intent
+
+    if "详情页" in t and is_planning_intent(t) and detect_action(t) != "write":
+        return True
+    from app.graph.atomic_intent import _parse_orch_count, _storyboard_shot_count
+
+    shots = _storyboard_shot_count(t)
+    if shots is not None and shots >= 4:
+        return True
+    if "分镜" in t and any(x in t for x in ("12", "十二", "整套", "全套")):
+        return True
+    return False
 
 
 def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeatures:
@@ -110,5 +132,5 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
         orchestration_phrases=_has_orchestration_phrases(utterance),
         modality_conflict_risk=has_planning_image_conflict(utterance)
         and not has_preserve_intent(utterance),
-        explore_blocked=_explore_blocked(utterance),
+        explore_blocked=_explore_blocked(utterance, intent),
     )
