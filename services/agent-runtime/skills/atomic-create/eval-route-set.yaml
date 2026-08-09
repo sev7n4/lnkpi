@@ -134,3 +134,47 @@ cases:
     state:
       messages: [{ role: user, content: "帮我做天猫详情页营销方案出图" }]
     gold: { flow_mode: clarify_route }
+
+  - id: rt-explore-01
+    state:
+      messages: [{ role: user, content: "看看画布上有哪些节点，状态怎么样？" }]
+    gold: { flow_mode: explore_canvas, reason: explore_canvas_intent }
+
+  - id: rt-explore-02
+    state:
+      messages: [{ role: user, content: "查询我的资产库有哪些素材" }]
+    gold: { flow_mode: explore_canvas }
+
+  - id: rt-explore-cancel-01
+    state:
+      messages: [{ role: user, content: "取消 image-16 节点上正在进行的生成任务" }]
+    gold: { flow_mode: explore_canvas }
+
+  - id: rt-video-ref-t1
+    state:
+      messages: [{ role: user, content: "@T1 请基于文案生成视频" }]
+      sidebar_mentioned_keys: [T1]
+    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+
+  - id: rt-video-plain-01
+    state:
+      messages: [{ role: user, content: "帮我做一个15秒产品展示视频" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-ref-i1-image
+    state:
+      messages: [{ role: user, content: "@I1 按这张出图" }]
+      sidebar_mentioned_keys: [I1]
+    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+
+  - id: rt-orch-clarify-04
+    state:
+      messages: [{ role: user, content: "全链路详情页营销方案" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-variant-checkpoint-01
+    state:
+      messages: [{ role: user, content: "按刚才那个风格再生成一张" }]
+      atomic_node_id: node-1
+      atomic_spec: { target_type: image, prompt: x, title: x }
+    gold: { flow_mode: atomic_create }
