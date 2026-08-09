@@ -12,6 +12,7 @@ from app.graph.atomic_intent import (
     regenerate_phrase_intent,
     resolve_intake_route,
 )
+from app.graph.explore_route import explore_canvas_signal, explore_explicit_intent
 from app.graph.intent import marketing_intent, modify_intent, single_node_gen_intent
 from app.graph.l0_action import (
     TRANSFORM_VERBS,
@@ -70,21 +71,14 @@ def _explore_canvas_signal(ctx: RouteContext) -> bool:
     utterance = str(ctx.get("utterance") or "").strip()
     if not utterance:
         return False
-    if atomic_create_intent(utterance) or single_node_gen_intent(utterance):
-        return False
-    if regenerate_phrase_intent(utterance) or atomic_regenerate_intent(utterance):
-        return False
-    if marketing_intent(utterance):
-        return False
-    nouns = ("画布", "节点", "分镜", "canvas", "生成状态", "生成任务", "任务状态")
-    verbs = ("看看", "有哪些", "列出", "查询", "检查", "状态", "什么情况", "怎么样")
-    lifecycle = any(
-        k in utterance
-        for k in ("取消生成", "平台回退", "fallback", "诊断", "失败原因")
+    blocked = (
+        (atomic_create_intent(utterance) and not explore_explicit_intent(utterance))
+        or single_node_gen_intent(utterance)
+        or regenerate_phrase_intent(utterance)
+        or atomic_regenerate_intent(utterance)
+        or marketing_intent(utterance)
     )
-    has_noun = any(n in utterance for n in nouns)
-    has_verb = any(v in utterance for v in verbs)
-    return lifecycle or (has_noun and has_verb)
+    return explore_canvas_signal(utterance, blocked_by_atomic=blocked)
 
 
 def _sidebar_img2img_signal(ctx: RouteContext) -> bool:
@@ -204,6 +198,18 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "is_modify": False,
         }
 
+    # Explore before atomic: existing-node read/write must not hijack atomic_create.
+    if _explore_canvas_signal(ctx):
+        return {
+            "flow_mode": "explore_canvas",
+            "l0_action": l0,
+            "confidence": 0.88,
+            "reason": "explore_canvas_intent",
+            "clarify_question": None,
+            "guard_veto": guard_veto,
+            "is_modify": False,
+        }
+
     if is_atomic or is_variant or (has_preserve_intent(utterance) and l0 in ("preserve", "generate", "unknown")):
         return {
             "flow_mode": "atomic_create",
@@ -234,17 +240,6 @@ def decide_route(ctx: RouteContext, *, valid_skill_ids: set[str] | None = None) 
             "reason": "empty_utterance",
             "clarify_question": None,
             "guard_veto": None,
-            "is_modify": False,
-        }
-
-    if _explore_canvas_signal(ctx):
-        return {
-            "flow_mode": "explore_canvas",
-            "l0_action": l0,
-            "confidence": 0.85,
-            "reason": "explore_canvas_intent",
-            "clarify_question": None,
-            "guard_veto": guard_veto,
             "is_modify": False,
         }
 

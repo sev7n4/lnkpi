@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from langchain_core.tools import StructuredTool
@@ -26,10 +27,14 @@ class NodeIdInput(BaseModel):
 
 class GenerationRecordInput(BaseModel):
     generation_record_id: str | None = Field(
-        default=None, description="Studio generation record id"
+        default=None, description="Studio generation record id (optional if node_id provided)"
     )
     node_id: str | None = Field(
-        default=None, description="Canvas node id (resolves generationRecordId from node data)"
+        default=None,
+        description=(
+            "Canvas node id such as image-16 — required for lifecycle tools when "
+            "generation_record_id is unknown; resolve from canvas summary, not title text"
+        ),
     )
 
 
@@ -297,6 +302,18 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
         ref_order: list[str] | None = None,
         mentioned_keys: list[str] | None = None,
     ) -> dict:
+        if isinstance(ref_order, str):
+            try:
+                parsed = json.loads(ref_order)
+                ref_order = parsed if isinstance(parsed, list) else None
+            except json.JSONDecodeError:
+                ref_order = None
+        if isinstance(mentioned_keys, str):
+            try:
+                parsed = json.loads(mentioned_keys)
+                mentioned_keys = parsed if isinstance(parsed, list) else None
+            except json.JSONDecodeError:
+                mentioned_keys = None
         return await client.apply_sidebar_attachments(
             node_ids=node_ids,
             attachments=attachments,

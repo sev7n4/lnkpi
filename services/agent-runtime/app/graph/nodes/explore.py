@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -11,13 +12,47 @@ from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
 from app.tools.definitions import build_explore_tools
 
-MAX_EXPLORE_TOOL_ROUNDS = 3
+MAX_EXPLORE_TOOL_ROUNDS = 4
+
+_UI_COMMAND_TOOLS = frozenset({
+    "focus_node",
+    "focus_nodes",
+    "undo",
+    "redo",
+    "open_image_editor",
+    "introduce_nodes_to_agent",
+})
+
+_ASSET_READ_TOOLS = frozenset({"list_user_assets", "list_public_assets"})
+
+_LIFECYCLE_TOOLS = frozenset({
+    "cancel_generation",
+    "cancel_platform_fallback",
+    "confirm_platform_fallback",
+})
 
 _EXPLORE_SYSTEM = (
-    "你是 lnkpi 画布探索助手。用简洁中文回答。"
-    "可通过工具读取画布节点、查询生成状态、取消任务或处理平台回退。"
-    "不要调用 run_*_generation；用户要出图/生成视频时，提示其直接描述创作需求。"
-    "\n\n当前画布摘要：\n{summary}"
+    "你是 lnkpi 画布探索助手。用简洁中文回答。\n"
+    "规则：\n"
+    "1. 必须通过工具完成读写操作，禁止假装已执行。\n"
+    "2. UI 操作（focus_node/focus_nodes/undo/redo/open_image_editor/introduce_nodes_to_agent）"
+    "必须调用对应工具，不要仅用文字回复。\n"
+    "3. list_user_assets / list_public_assets 必须调用工具，不可拒答。\n"
+    "4. lifecycle 工具（cancel_* / confirm_platform_fallback）必须传 node_id"
+    "（从画布摘要解析节点 id，不要用标题字符串代替）。\n"
+    "5. 不要调用 run_*_generation；用户要出图/生成视频时，提示其直接描述创作需求。\n"
+    "\n当前画布摘要：\n{summary}"
+)
+
+_UI_NUDGE = (
+    "请调用对应的 explore 工具完成 UI/侧栏操作（focus_node、focus_nodes、undo、redo、"
+    "open_image_editor、introduce_nodes_to_agent），不要只用文字描述已执行。"
+)
+
+_ASSET_NUDGE = "请调用 list_user_assets 或 list_public_assets 查询资产库，不要拒答。"
+
+_CANCEL_NUDGE = (
+    "请调用 cancel_generation 或 cancel_platform_fallback，传入 node_id，不要让用户手动操作。"
 )
 
 
@@ -39,6 +74,117 @@ def _serialize_tool_result(result: Any) -> str:
         return str(result)
 
 
+def _needs_ui_nudge(user_text: str, called: set[str], canvas_commands: list[dict[str, Any]]) -> bool:
+    if canvas_commands:
+        return False
+    t = user_text
+    if any(k in t for k in ("定位", "视口", "撤销", "重做", "精修", "编辑器", "引入", "侧栏")):
+        return not called.intersection(_UI_COMMAND_TOOLS)
+    return False
+
+
+def _needs_asset_nudge(user_text: str, called: set[str]) -> bool:
+    if "资产" in user_text or "素材库" in user_text:
+        return not called.intersection(_ASSET_READ_TOOLS)
+    return False
+
+
+def _needs_cancel_nudge(user_text: str, called: set[str]) -> bool:
+    if "取消" in user_text and ("生成" in user_text or "任务" in user_text):
+        return "cancel_generation" not in called
+    return False
+
+
+def _pick_nudge(user_text: str, called: set[str], canvas_commands: list[dict[str, Any]]) -> str | None:
+    if _needs_ui_nudge(user_text, called, canvas_commands):
+        return _UI_NUDGE
+    if _needs_asset_nudge(user_text, called):
+        return _ASSET_NUDGE
+    if _needs_cancel_nudge(user_text, called):
+        return _CANCEL_NUDGE
+    return None
+
+
+async def _direct_undo_redo(
+    user_text: str,
+    tools_by_name: dict[str, Any],
+    called: set[str],
+    canvas_commands: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Deterministic fallback when LLM skips zero-arg UI tools."""
+    if canvas_commands:
+        return canvas_commands
+    out = list(canvas_commands)
+    if "撤销" in user_text and ("画布" in user_text or "操作" in user_text) and "undo" not in called:
+        result = await tools_by_name["undo"].ainvoke({})
+        called.add("undo")
+        for cmd in extract_canvas_commands(result):
+            if cmd not in out:
+                out.append(cmd)
+    elif "重做" in user_text and ("画布" in user_text or "撤销" in user_text) and "redo" not in called:
+        result = await tools_by_name["redo"].ainvoke({})
+        called.add("redo")
+        for cmd in extract_canvas_commands(result):
+            if cmd not in out:
+                out.append(cmd)
+    return out
+
+
+def _resolve_node_id_by_title(summary: Any, title_fragment: str) -> str | None:
+    if not isinstance(summary, dict):
+        return None
+    nodes = summary.get("nodes") or summary.get("nodeSummaries") or []
+    if not isinstance(nodes, list):
+        return None
+    frag = title_fragment.strip()
+    if not frag:
+        return None
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_title = str(node.get("title") or node.get("label") or "")
+        if frag in node_title or node_title in frag:
+            nid = str(node.get("id") or node.get("nodeId") or "")
+            if nid:
+                return nid
+    return None
+
+
+async def _direct_focus_or_editor(
+    user_text: str,
+    summary: Any,
+    tools_by_name: dict[str, Any],
+    called: set[str],
+    canvas_commands: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if canvas_commands:
+        return canvas_commands
+    out = list(canvas_commands)
+    title_match = re.search(r"[「『\"]([^」』\"]+)[」』\"]", user_text)
+    title = title_match.group(1) if title_match else ""
+    node_id = _resolve_node_id_by_title(summary, title) if title else None
+
+    if node_id and "精修" in user_text and "open_image_editor" not in called:
+        result = await tools_by_name["open_image_editor"].ainvoke({"node_id": node_id})
+        called.add("open_image_editor")
+        for cmd in extract_canvas_commands(result):
+            if cmd not in out:
+                out.append(cmd)
+    elif node_id and ("定位" in user_text or "视口" in user_text) and "focus_node" not in called:
+        result = await tools_by_name["focus_node"].ainvoke({"node_id": node_id})
+        called.add("focus_node")
+        for cmd in extract_canvas_commands(result):
+            if cmd not in out:
+                out.append(cmd)
+    elif node_id and ("引入" in user_text or "侧栏" in user_text) and "introduce_nodes_to_agent" not in called:
+        result = await tools_by_name["introduce_nodes_to_agent"].ainvoke({"node_ids": [node_id]})
+        called.add("introduce_nodes_to_agent")
+        for cmd in extract_canvas_commands(result):
+            if cmd not in out:
+                out.append(cmd)
+    return out
+
+
 def make_explore_node(*, llm: Any, nest: Any) -> Callable:
     async def explore(state: dict) -> dict:
         tools = build_explore_tools(nest)
@@ -58,11 +204,20 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
 
         final_reply = ""
         canvas_commands: list[dict[str, Any]] = []
+        called_tools: set[str] = set()
+        nudged = False
+
         for _ in range(MAX_EXPLORE_TOOL_ROUNDS):
             ai = await llm_bound.ainvoke(convo)
             tool_calls = getattr(ai, "tool_calls", None) or []
             if not tool_calls:
                 final_reply = str(getattr(ai, "content", "") or "").strip()
+                nudge = _pick_nudge(user_text, called_tools, canvas_commands)
+                if nudge and not nudged:
+                    convo.append(ai)
+                    convo.append(HumanMessage(content=nudge))
+                    nudged = True
+                    continue
                 break
 
             convo.append(ai)
@@ -71,6 +226,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
                 tool_call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
                 tool = tools_by_name.get(name)
+                called_tools.add(str(name))
                 if tool is None:
                     result: Any = {"error": f"unknown tool: {name}"}
                 else:
@@ -101,6 +257,13 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 )
         else:
             final_reply = str(getattr(convo[-1], "content", "") or "").strip()
+
+        canvas_commands = await _direct_undo_redo(
+            user_text, tools_by_name, called_tools, canvas_commands
+        )
+        canvas_commands = await _direct_focus_or_editor(
+            user_text, summary, tools_by_name, called_tools, canvas_commands
+        )
 
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
