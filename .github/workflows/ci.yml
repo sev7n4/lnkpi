@@ -44,7 +44,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           cd services/agent-runtime
-          pip install -e .
+          pip install -e ".[dev]"
 
       - name: Verify contract schemas
         run: pnpm verify-contract
