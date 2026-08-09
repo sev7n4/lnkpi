@@ -1,6 +1,6 @@
 # Agent 侧栏引用生图路由与澄清续接 — 设计规格
 
-> 状态：**待评审**（2026-08-09）  
+> 状态：**Implemented P0–P2**（2026-08-09）  
 > 范围：**Phase 0（P0 止血）** — 修复 `@T1 请按风格3出图` 类 utterance 的 L1 路由误判、route 澄清回复断裂、侧栏与 Dock 引用语义不对齐、执行过程 UX 误导  
 > **Phase 1（P1 架构收敛）** — 见本文 §9 [Route Unification ADR]；**禁止**在 P0 之后继续堆 hint 表，新 case 应推动 P1 落地  
 > 前置：[2026-08-09-atomic-intent-ir-design.md](./2026-08-09-atomic-intent-ir-design.md)、[2026-08-07-agent-sidebar-m3-explicit-refs-design.md](./2026-08-07-agent-sidebar-m3-explicit-refs-design.md)、[2026-08-07-platform-route-skill-boundary-design.md](./2026-08-07-platform-route-skill-boundary-design.md)  
@@ -666,3 +666,4 @@ skills/atomic-create/
 | v1.1 | 2026-08-09 | 追加 §9 Route Unification ADR；明确 P0/P1 边界 |
 | v1.2 | 2026-08-09 | §9.3–§9.11 目标架构 + 业界最佳实践；§2.4 预览 |
 | v1.3 | 2026-08-09 | 链全量实施计划 full.md |
+| v1.4 | 2026-08-09 | P2 GenerationRequest DTO + IR slots；状态 Implemented P0–P2 |

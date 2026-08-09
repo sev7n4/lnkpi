@@ -40,6 +40,16 @@ cases:
     focus_node_id: null
     gold: { route: atomic_create, target_type: image, confirm_gate: false }
 
+  - id: img-style3-t1-ref
+    utterance: "@T1 请按风格3出图"
+    mentioned_keys: [T1]
+    focus_node_id: null
+    gold:
+      route: atomic_create
+      target_type: image
+      confirm_gate: false
+      slots: { style: "3", ref: T1 }
+
   # --- text / D1 脚本文案 (6) ---
   - id: txt-01
     utterance: 帮我生成一个蓝牙耳机的分镜提示词

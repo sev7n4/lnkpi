@@ -62,6 +62,9 @@ _PROMPT_OBJECT_RE = re.compile(
 )
 
 
+_STYLE_SLOT_RE = re.compile(r"按?风格\s*(\d+)")
+
+
 @dataclass(frozen=True)
 class AtomicIntent:
     action: AtomicAction
@@ -69,6 +72,23 @@ class AtomicIntent:
     utterance: str
     source_markers: tuple[str, ...] = ()
     mentioned_keys: tuple[str, ...] = ()
+    slots: tuple[tuple[str, str], ...] = ()
+
+
+def intent_slots_dict(intent: AtomicIntent) -> dict[str, str]:
+    return dict(intent.slots)
+
+
+def _resolve_ir_slots(text: str, mentioned_keys: list[str] | None) -> tuple[tuple[str, str], ...]:
+    t = (text or "").strip()
+    items: dict[str, str] = {}
+    style_m = _STYLE_SLOT_RE.search(t)
+    if style_m:
+        items["style"] = style_m.group(1)
+    keys = [str(k) for k in (mentioned_keys or []) if str(k).strip()]
+    if keys:
+        items["ref"] = keys[0]
+    return tuple(sorted(items.items()))
 
 
 def _normalize(text: str) -> str:
@@ -262,6 +282,7 @@ def resolve_atomic_intent(
         utterance=t,
         source_markers=markers,
         mentioned_keys=keys,
+        slots=_resolve_ir_slots(t, list(keys)),
     )
 
 
