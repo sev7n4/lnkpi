@@ -18,6 +18,7 @@ from app.graph.atomic_intent import (
     resolve_intake_route,
     turnaround_pipeline_user_note,
 )
+from app.graph.atomic_intent_ir import intent_slots_dict, resolve_atomic_intent
 from app.graph.nodes.intake import make_intake_node
 
 EVAL_PATH = Path(__file__).resolve().parents[1] / "skills" / "atomic-create" / "eval-intent-set.yaml"
@@ -35,12 +36,13 @@ def test_eval_routing_gold(eval_cases: list[dict]):
         utterance = case["utterance"]
         focus = case.get("focus_node_id")
         gold = case["gold"]
+        mentioned = list(case.get("mentioned_keys") or [])
         route = resolve_intake_route(utterance, focus_node_id=focus)
         if route != gold["route"]:
             mismatches.append(f"{case['id']}: route {route} != {gold['route']}")
             continue
         if gold["route"] == "atomic_create":
-            spec = build_atomic_spec(utterance)
+            spec = build_atomic_spec(utterance, mentioned_keys=mentioned or None)
             if spec["target_type"] != gold["target_type"]:
                 mismatches.append(
                     f"{case['id']}: target {spec['target_type']} != {gold['target_type']}"
@@ -49,6 +51,14 @@ def test_eval_routing_gold(eval_cases: list[dict]):
                 mismatches.append(
                     f"{case['id']}: confirm_gate {spec['confirm_gate']} != {gold['confirm_gate']}"
                 )
+            expected_slots = gold.get("slots")
+            if expected_slots is not None:
+                ir = resolve_atomic_intent(utterance, mentioned_keys=mentioned or None)
+                got_slots = intent_slots_dict(ir)
+                if got_slots != dict(expected_slots):
+                    mismatches.append(
+                        f"{case['id']}: slots {got_slots} != {expected_slots}"
+                    )
     assert not mismatches, "\n".join(mismatches)
 
 

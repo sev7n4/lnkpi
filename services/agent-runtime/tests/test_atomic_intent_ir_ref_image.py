@@ -27,6 +27,12 @@ def test_resolve_atomic_intent_style3():
     assert ir.action == "generate"
     assert ir.output_modality == "image"
     assert ir.mentioned_keys == ("T1",)
+    assert dict(ir.slots) == {"ref": "T1", "style": "3"}
+
+
+def test_resolve_atomic_intent_style_only_without_ref_key():
+    ir = resolve_atomic_intent("请按风格2出图", mentioned_keys=None)
+    assert dict(ir.slots) == {"style": "2"}
 
 
 def test_derive_studio_prompt_keeps_style3_utterance():

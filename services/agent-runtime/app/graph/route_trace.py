@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.graph.atomic_intent_ir import AtomicIntent
+from app.graph.atomic_intent_ir import AtomicIntent, intent_slots_dict
 from app.graph.route_decide import RouteDecision
 
 
@@ -17,6 +17,7 @@ def atomic_intent_snapshot(intent: AtomicIntent | None) -> dict[str, Any] | None
         "utterance": intent.utterance,
         "source_markers": list(intent.source_markers),
         "mentioned_keys": list(intent.mentioned_keys),
+        "slots": intent_slots_dict(intent),
     }
 
 
