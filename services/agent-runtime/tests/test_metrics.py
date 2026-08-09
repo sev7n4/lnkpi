@@ -41,7 +41,29 @@ def test_metrics_payload_contains_series():
     payload, content_type = metrics.metrics_payload()
     text = payload.decode()
     assert "agent_threads_total" in text
+    assert "explore_dispatch_total" in text
     assert content_type.startswith("text/plain")
+
+
+def test_explore_dispatch_metrics():
+    before = _sample_value("explore_dispatch_total", {"intent": "ui_command", "strategy": "mandatory"})
+    metrics.record_explore_dispatch("ui_command", "mandatory")
+    metrics.record_explore_dispatch("node_write", "llm")
+    assert (
+        _sample_value("explore_dispatch_total", {"intent": "ui_command", "strategy": "mandatory"})
+        == before + 1
+    )
+    assert _sample_value("explore_dispatch_total", {"intent": "node_write", "strategy": "llm"}) >= 1
+    metrics.record_explore_tool_skipped("lifecycle")
+    assert _sample_value("explore_tool_skipped_total", {"intent": "lifecycle"}) >= 1
+    metrics.record_explore_route_mismatch(expected="lifecycle", actual="open_query")
+    assert (
+        _sample_value(
+            "explore_route_mismatch_total",
+            {"expected": "lifecycle", "actual": "open_query"},
+        )
+        >= 1
+    )
 
 
 def test_metrics_endpoint(client=None):

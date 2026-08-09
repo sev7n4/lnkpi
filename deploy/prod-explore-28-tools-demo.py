@@ -10,12 +10,14 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
 import time
 import uuid
 from dataclasses import dataclass, field
+from http.client import IncompleteRead
 from typing import Any, Literal
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -274,54 +276,65 @@ def sse_chat(
     end = time.time() + timeout
     with urlopen(r, timeout=timeout + 30) as resp:
         buf = ""
-        while time.time() < end:
-            chunk = resp.read(4096)
-            if not chunk:
+        try:
+            while time.time() < end:
+                try:
+                    chunk = resp.read(4096)
+                except IncompleteRead as exc:
+                    if exc.partial:
+                        buf += exc.partial.decode(errors="replace")
+                    if saw_done:
+                        break
+                    time.sleep(0.2)
+                    continue
+                if not chunk:
+                    if saw_done:
+                        break
+                    time.sleep(0.2)
+                    continue
+                buf += chunk.decode(errors="replace")
+                while "\n\n" in buf:
+                    block, buf = buf.split("\n\n", 1)
+                    for line in block.splitlines():
+                        if not line.startswith("data:"):
+                            continue
+                        pl = line[5:].strip()
+                        if pl == "[DONE]":
+                            saw_done = True
+                            break
+                        try:
+                            ev = json.loads(pl)
+                        except json.JSONDecodeError:
+                            continue
+                        events.append(ev)
+                        et = str(ev.get("type") or "")
+                        types.add(et)
+                        data = ev.get("data") or {}
+                        if et == "text_delta":
+                            parts.append(str(data.get("text") or ""))
+                        if et == "text_replace":
+                            parts = [str(data.get("text") or "")]
+                        if et == "step":
+                            node_id = str((data.get("id") if isinstance(data, dict) else "") or "")
+                            steps.append(node_id.replace("node:", ""))
+                        if et == "canvas_command":
+                            canvas_cmds.append(str(data.get("type") or ""))
+                        if et == "explore":
+                            explore_payload = data if isinstance(data, dict) else None
+                        if et == "done":
+                            saw_done = True
+                            break
+                        if et == "error":
+                            err_msg = str((data or {}).get("message") or data)
+                            parts.append(f"[ERROR: {err_msg}]")
+                            saw_done = True
+                            break
+                    if saw_done:
+                        break
                 if saw_done:
                     break
-                time.sleep(0.2)
-                continue
-            buf += chunk.decode(errors="replace")
-            while "\n\n" in buf:
-                block, buf = buf.split("\n\n", 1)
-                for line in block.splitlines():
-                    if not line.startswith("data:"):
-                        continue
-                    pl = line[5:].strip()
-                    if pl == "[DONE]":
-                        saw_done = True
-                        break
-                    try:
-                        ev = json.loads(pl)
-                    except json.JSONDecodeError:
-                        continue
-                    events.append(ev)
-                    et = str(ev.get("type") or "")
-                    types.add(et)
-                    data = ev.get("data") or {}
-                    if et == "text_delta":
-                        parts.append(str(data.get("text") or ""))
-                    if et == "text_replace":
-                        parts = [str(data.get("text") or "")]
-                    if et == "step":
-                        node_id = str((data.get("id") if isinstance(data, dict) else "") or "")
-                        steps.append(node_id.replace("node:", ""))
-                    if et == "canvas_command":
-                        canvas_cmds.append(str(data.get("type") or ""))
-                    if et == "explore":
-                        explore_payload = data if isinstance(data, dict) else None
-                    if et == "done":
-                        saw_done = True
-                        break
-                    if et == "error":
-                        err_msg = str((data or {}).get("message") or data)
-                        parts.append(f"[ERROR: {err_msg}]")
-                        saw_done = True
-                        break
-                if saw_done:
-                    break
-            if saw_done:
-                break
+        except IncompleteRead:
+            pass
     text = parts[-1] if len(parts) == 1 and parts[0] else "".join(parts)
     explore_ran = "explore" in steps
     atomic_ran = any(s in ATOMIC_STEPS for s in steps)
@@ -403,6 +416,15 @@ def verify_case(case: DemoCase, result: dict[str, Any]) -> tuple[Verdict, str]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Live demo all 28 explore-bound tools")
+    parser.add_argument(
+        "--min-pass",
+        type=int,
+        default=int(os.environ.get("EXPLORE_DEMO_MIN_PASS", "0")),
+        help="Minimum tool-pass count (default: EXPLORE_DEMO_MIN_PASS env or 0)",
+    )
+    args = parser.parse_args()
+
     run_id = uuid.uuid4().hex[:8]
     base_tid = f"{SESSION_ID}:explore28-{run_id}"
     print("=== Explore 28 tools live demo (production user path) ===")
@@ -478,6 +500,9 @@ def main() -> int:
     print(f"UI: {BASE}/workflow/{SESSION_ID}")
     print(f"Sample threads: {threads[0]} … {threads[-1]}")
     print(f"Results JSON: {out_path}")
+    if args.min_pass and PASS < args.min_pass:
+        print(f"FAIL: pass_tool {PASS} < min_pass {args.min_pass}")
+        return 1
     return 0 if FAIL == 0 else 1
 
 

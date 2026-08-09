@@ -49,6 +49,11 @@ jobs:
       - name: Verify contract schemas
         run: pnpm verify-contract
 
+      - name: Explore 28-tool contract tests
+        run: |
+          cd services/agent-runtime
+          python3 -m pytest tests/test_explore_28_contract.py tests/test_explore_mandatory.py -q
+
       - name: Contract verification summary
         if: always()
         run: |

@@ -17,6 +17,7 @@ from app.graph.explore_dispatch import (
     select_explore_tool_names,
 )
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
+from app.metrics import record_explore_dispatch
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
 
@@ -207,6 +208,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:
+            record_explore_dispatch(intent, "mandatory")
             mandatory = await run_mandatory_explore(
                 intent,
                 user_text,
@@ -224,6 +226,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 out["canvas_commands"] = mandatory.canvas_commands
             return out
 
+        record_explore_dispatch(intent, "llm")
         tool_names = select_explore_tool_names(intent, user_text)
         bound_tools = [tools_by_name[n] for n in sorted(tool_names) if n in tools_by_name]
         llm_bound = llm.bind_tools(bound_tools)
