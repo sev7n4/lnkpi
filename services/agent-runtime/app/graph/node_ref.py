@@ -18,6 +18,8 @@ _PREFIX_RANGE_PATTERN = re.compile(
     r"([\u4e00-\u9fff\w]+)(\d+)\s*(?:到|至|-)\s*(\d+)",
 )
 
+_QUERY_PREFIXES = ("查询", "看看", "列出", "检查", "定位")
+
 
 def extract_quoted_title(text: str) -> str | None:
     match = _QUOTED_TITLE_PATTERN.search(text or "")
@@ -65,6 +67,10 @@ def _resolve_prefix_range(text: str, summary: dict[str, Any] | None) -> list[str
     if not match:
         return []
     prefix, start_s, end_s = match.group(1), int(match.group(2)), int(match.group(3))
+    for qp in _QUERY_PREFIXES:
+        if prefix.startswith(qp):
+            prefix = prefix[len(qp) :]
+            break
     if end_s < start_s:
         start_s, end_s = end_s, start_s
     wanted_titles = {f"{prefix}{i}" for i in range(start_s, end_s + 1)}
