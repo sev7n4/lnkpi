@@ -107,6 +107,23 @@ async def test_mandatory_cancel_generation():
 
 
 @pytest.mark.asyncio
+async def test_mandatory_redo_before_undo_when_both_present():
+    tools = {
+        "redo": FakeTool("redo", {"ok": True, "canvasCommands": [{"type": "redo"}]}),
+        "undo": FakeTool("undo", {"ok": True, "canvasCommands": [{"type": "undo"}]}),
+    }
+    out = await run_mandatory_explore(
+        "ui_command",
+        "查询画布，重做刚才撤销的画布操作",
+        summary=SUMMARY,
+        tools_by_name=tools,
+    )
+    assert out.tools_called == ["redo"]
+    assert out.canvas_commands == [{"type": "redo"}]
+    assert tools["undo"].calls == []
+
+
+@pytest.mark.asyncio
 async def test_mandatory_list_user_assets():
     tools = {
         "list_user_assets": FakeTool(
