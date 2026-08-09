@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.errors import AgentToolError
 from app.graph.canvas_commands import extract_canvas_commands
 from app.graph.explore_route import has_canvas_node_id_reference
 from app.graph.node_ref import resolve_node_ref, resolve_node_refs
@@ -193,10 +194,12 @@ def _lifecycle_user_message(result: Any) -> str | None:
     low = err.lower()
     if "generationrecord" in low or "无进行" in err or "no generation" in low:
         return "该节点无进行中的生成任务。"
+    if "无关联" in err or "无生成记录" in err or "不存在" in err:
+        return "该节点无进行中的生成任务。"
     if "fallback_pending" in low or "非 fallback" in err or "不在平台回退" in err:
         return "该节点不在平台回退待确认状态。"
     if err_type == "param_error" or "param" in err_type:
-        return "参数有误，请先查询该节点的生成状态后再重试。"
+        return "该节点无进行中的生成任务。"
     if result.get("ok"):
         return None
     return err or None
@@ -215,7 +218,15 @@ async def _invoke_tool(
     if tool is None:
         result: Any = {"error": f"unknown tool: {name}"}
     else:
-        result = await tool.ainvoke(args)
+        try:
+            result = await tool.ainvoke(args)
+        except AgentToolError as exc:
+            err = exc.error
+            result = {
+                "error": err["message"],
+                "error_type": err["error_type"],
+                "retry_hint": err.get("retry_hint"),
+            }
     tools_called.append(name)
     tool_results.append(result)
     for cmd in extract_canvas_commands(result):

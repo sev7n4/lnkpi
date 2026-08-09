@@ -32,6 +32,21 @@ STREAM_ERRORS = Counter(
     "Agent stream terminal errors",
     ["error_type"],
 )
+EXPLORE_DISPATCH = Counter(
+    "explore_dispatch_total",
+    "Explore intent dispatch by strategy",
+    ["intent", "strategy"],
+)
+EXPLORE_TOOL_SKIPPED = Counter(
+    "explore_tool_skipped_total",
+    "Explore mandatory path finished without calling a tool",
+    ["intent"],
+)
+EXPLORE_ROUTE_MISMATCH = Counter(
+    "explore_route_mismatch_total",
+    "Explore route intent mismatch (reserved for intake compare)",
+    ["expected", "actual"],
+)
 PROMPT_INVOCATIONS = Counter(
     "agent_prompt_invocations_total",
     "LLM prompt template invocations",
@@ -73,6 +88,18 @@ def record_prompt_invocation(skill_id: str, prompt_version: str, node_name: str)
         prompt_version=prompt_version or "unknown",
         node_name=node_name or "unknown",
     ).inc()
+
+
+def record_explore_dispatch(intent: str, strategy: str) -> None:
+    EXPLORE_DISPATCH.labels(intent=intent or "unknown", strategy=strategy or "unknown").inc()
+
+
+def record_explore_tool_skipped(intent: str) -> None:
+    EXPLORE_TOOL_SKIPPED.labels(intent=intent or "unknown").inc()
+
+
+def record_explore_route_mismatch(*, expected: str, actual: str) -> None:
+    EXPLORE_ROUTE_MISMATCH.labels(expected=expected or "unknown", actual=actual or "unknown").inc()
 
 
 @contextmanager
