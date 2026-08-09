@@ -14,6 +14,37 @@ from app.tools.prompt_templates import (
 )
 from app.tools.tool_registry import EXPLORE_TOOL_NAMES, is_explore_tool
 
+EXPLORE_READ_TOOLS = frozenset({
+    "get_canvas_summary",
+    "get_node",
+    "get_canvas_layout",
+    "get_generation_status",
+    "get_generation_diagnostic",
+    "list_generation_tasks",
+    "get_image_edit_capabilities",
+    "export_media_package",
+})
+
+EXPLORE_WRITE_TOOLS = frozenset({
+    "set_node_prompt",
+    "set_node_content",
+    "attach_refs",
+    "upsert_prompt_node",
+    "duplicate_node",
+    "upload_media_to_canvas",
+    "apply_sidebar_attachments",
+    "save_node_to_asset_library",
+    "apply_asset_to_node",
+})
+
+DEFAULT_WRITE_BIND = frozenset({
+    "set_node_prompt",
+    "set_node_content",
+    "attach_refs",
+    "duplicate_node",
+    "upsert_prompt_node",
+})
+
 
 class UpsertPromptNodeInput(BaseModel):
     prompt: str = Field(description=UPSERT_PROMPT_NODE_PROMPT_FIELD)
@@ -651,6 +682,16 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 def build_explore_tools(client: NestCanvasClient) -> list[StructuredTool]:
     """Tools bindable in explore sub-graph (read + light write + lifecycle)."""
     return [tool for name, tool in _all_tool_specs(client) if name in EXPLORE_TOOL_NAMES]
+
+
+def build_explore_tools_subset(
+    client: NestCanvasClient,
+    names: frozenset[str],
+) -> list[StructuredTool]:
+    """Build a filtered explore tool list (narrow bind)."""
+    allowed = names & EXPLORE_TOOL_NAMES
+    by_name = {name: tool for name, tool in _all_tool_specs(client) if name in allowed}
+    return [by_name[n] for n in sorted(by_name)]
 
 
 def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:

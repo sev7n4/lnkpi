@@ -9,6 +9,8 @@ from typing import Any, Literal
 from app.graph.canvas_commands import extract_canvas_commands
 from app.graph.explore_route import has_canvas_node_id_reference
 from app.graph.node_ref import resolve_node_ref, resolve_node_refs
+from app.tools.definitions import DEFAULT_WRITE_BIND, EXPLORE_READ_TOOLS, EXPLORE_WRITE_TOOLS
+from app.tools.tool_registry import EXPLORE_TOOL_NAMES
 
 ExploreIntent = Literal[
     "ui_command",
@@ -71,6 +73,38 @@ class MandatoryExploreResult:
     canvas_commands: list[dict[str, Any]] = field(default_factory=list)
     reply_text: str = ""
     tools_called: list[str] = field(default_factory=list)
+
+
+def select_narrow_write_tools(user_text: str) -> frozenset[str]:
+    """Pick ≤5 write tools from user_text keywords (Phase 2b narrow bind)."""
+    u = user_text or ""
+    low = u.lower()
+    if "prompt" in low or "prompt-" in low:
+        return frozenset({"set_node_prompt", "upsert_prompt_node"})
+    if "复制" in u:
+        return frozenset({"duplicate_node"})
+    if any(k in low for k in ("上传", "url", "picsum", "http")):
+        return frozenset({"upload_media_to_canvas"})
+    if any(k in low for k in ("attach", "参考", "侧栏", "localrefs")):
+        return frozenset({"attach_refs", "apply_sidebar_attachments"})
+    if "保存" in u and "资产" in u:
+        return frozenset({"save_node_to_asset_library"})
+    if "应用" in u and "资产" in u:
+        return frozenset({"apply_asset_to_node"})
+    if "text-" in low or "文案" in u:
+        return frozenset({"set_node_content", "set_node_prompt"})
+    return DEFAULT_WRITE_BIND
+
+
+def select_explore_tool_names(intent: ExploreIntent, user_text: str) -> frozenset[str]:
+    """Tool names to bind for LLM explore branch."""
+    if intent == "node_read":
+        return EXPLORE_READ_TOOLS
+    if intent == "node_write":
+        names = select_narrow_write_tools(user_text)
+        assert len(names) <= 5
+        return names
+    return EXPLORE_TOOL_NAMES
 
 
 def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> ExploreIntent:
