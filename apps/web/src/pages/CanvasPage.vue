@@ -96,6 +96,7 @@ import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type Me
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
+  CANVAS_NODE_ADD_AGENT_KEY,
   CANVAS_NODE_CANCEL_KEY,
   CANVAS_NODE_LOCATE_FLASH_KEY,
   CANVAS_NODE_PATCH_KEY,
@@ -1121,6 +1122,20 @@ async function handlePublishLocateNode(payload: { sessionId: string; nodeId: str
   await focusNodeById(payload.nodeId)
 }
 
+async function consumeAgentLaunchQuery() {
+  const shouldOpen = route.query.openAgent === '1'
+  const initial =
+    typeof route.query.initialPrompt === 'string' ? route.query.initialPrompt.trim() : ''
+  if (!shouldOpen && !initial) return
+  await nextTick()
+  if (shouldOpen) agentRailRef.value?.openPanel()
+  if (initial) agentRailRef.value?.setComposerInput(initial)
+  const nextQuery = { ...route.query }
+  delete nextQuery.openAgent
+  delete nextQuery.initialPrompt
+  await router.replace({ query: nextQuery })
+}
+
 async function consumeFocusNodeQuery() {
   const focusId = typeof route.query.focusNode === 'string' ? route.query.focusNode : ''
   if (!focusId) return
@@ -1452,6 +1467,10 @@ function patchNodeMediaById(nodeId: string, patch: Record<string, unknown>) {
 }
 
 provide(CANVAS_NODE_PATCH_KEY, patchNodeMediaById)
+
+provide(CANVAS_NODE_ADD_AGENT_KEY, (nodeId: string) => {
+  handleAddToAgentRefs([nodeId])
+})
 
 function resolveDropPosition(clientPos: { x: number; y: number }, nodeType: string) {
   const flowPoint = screenToFlowPoint(clientPos.x, clientPos.y)
@@ -1923,6 +1942,18 @@ async function handleAssetApply(asset: CanvasAssetItem) {
   if (payload) await createFileNodeAt(payload, clientPos)
 }
 
+function handleAssetAddToAgent(asset: CanvasAssetItem) {
+  if (asset.kind === 'other') return
+  agentRailRef.value?.addAttachment({
+    id: asset.id,
+    mediaType: asset.kind,
+    sourceKind: 'asset',
+    label: asset.label,
+    url: asset.url,
+  })
+  agentRailRef.value?.openPanel()
+}
+
 async function handlePackageDownload() {
   await downloadMediaPackage(
     nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
@@ -2160,6 +2191,7 @@ function handleAddToAgentRefs(sourceIds?: string[]) {
       data: (node.data ?? {}) as Record<string, unknown>,
     }))
   agentRailRef.value?.addFromCanvasNodes(focusNodes)
+  agentRailRef.value?.openPanel()
 }
 
 function handleContextAction(action: string) {
@@ -2457,6 +2489,7 @@ async function loadSession() {
   // persisted back to session.canvasData in the streamFromRuntime path.
   void reconcileMissingGenerationRecords()
   await consumeFocusNodeQuery()
+  await consumeAgentLaunchQuery()
 }
 
 /**
@@ -2756,6 +2789,7 @@ onMounted(() => {
           @add="handleDockAdd"
           @open-settings="showModelSettings = true"
           @asset-apply="handleAssetApply"
+          @asset-add-to-agent="handleAssetAddToAgent"
           @history-locate="handleHistoryLocate"
           @history-retry="handleHistoryRetry"
         />
@@ -2829,6 +2863,7 @@ onMounted(() => {
         @undo="handleAgentUndo"
         @redo="handleAgentRedo"
         @open-image-editor="handleAgentOpenImageEditor"
+        @request-canvas-refs="handleAddToAgentRefs()"
       />
     </div>
 

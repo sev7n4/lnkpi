@@ -5,6 +5,7 @@ import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vu
 import AgentRefHoverPreview from '@/components/agent/AgentRefHoverPreview.vue'
 import { resolveMediaUrl } from '@/services/api-base'
 import type { DockNodeIconKind } from '@/components/canvas/dock-studio/shared/dockIcons'
+import { anchorFromElement, type AnchorRect } from '@/utils/refPreviewPosition'
 
 const props = defineProps<{
   refItem: NodeRef
@@ -25,7 +26,7 @@ const emit = defineEmits<{
 }>()
 
 const previewOpen = ref(false)
-const previewPos = ref({ x: 0, y: 0 })
+const previewAnchor = ref<AnchorRect | null>(null)
 const hoverTimer = ref<number | null>(null)
 const isHoveringPreview = ref(false)
 
@@ -51,7 +52,10 @@ function clearHoverTimer() {
 
 function onEnter(event: MouseEvent) {
   clearHoverTimer()
-  previewPos.value = { x: event.clientX + 8, y: event.clientY + 8 }
+  const el = event.currentTarget
+  if (el instanceof HTMLElement) {
+    previewAnchor.value = anchorFromElement(el)
+  }
   hoverTimer.value = window.setTimeout(() => {
     previewOpen.value = true
   }, 200)
@@ -144,10 +148,9 @@ function onClick() {
   </div>
 
   <AgentRefHoverPreview
-    v-if="previewOpen"
+    v-if="previewOpen && previewAnchor"
     :ref-item="refItem"
-    :x="previewPos.x"
-    :y="previewPos.y"
+    :anchor="previewAnchor"
     @mouseenter="onPreviewEnter"
     @mouseleave="onPreviewLeave"
   />

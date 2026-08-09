@@ -21,6 +21,7 @@ export interface CanvasAssetItem {
 
 const emit = defineEmits<{
   apply: [asset: CanvasAssetItem]
+  addToAgent: [asset: CanvasAssetItem]
 }>()
 
 const editor = useCanvasEditorStore()
@@ -185,6 +186,11 @@ function preview(asset: CanvasAssetItem) {
 /** hover 操作：加载到当前画布（选中节点则作为引用，否则新建节点） */
 function apply(asset: CanvasAssetItem) {
   emit('apply', asset)
+}
+
+function addToAgent(asset: CanvasAssetItem) {
+  if (asset.kind === 'other') return
+  emit('addToAgent', asset)
 }
 
 async function removeAsset(asset: CanvasAssetItem) {
@@ -397,6 +403,14 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
             <div
               class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/85 to-transparent px-1 pb-1 pt-4 opacity-0 transition group-hover:opacity-100"
             >
+              <button
+                type="button"
+                class="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-black transition hover:bg-white"
+                title="加入 Agent 引用"
+                @click.stop="addToAgent(asset)"
+              >
+                加入 Agent
+              </button>
               <button
                 type="button"
                 class="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-black transition hover:bg-white"
