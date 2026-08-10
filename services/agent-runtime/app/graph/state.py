@@ -92,6 +92,11 @@ class AgentRuntimeState(TypedDict, total=False):
         "clarify",
         "done",
         "error",
+        "image_qa",
+        "await_image_qa",
+        "plan_product_visual",
+        "await_scheme_select",
+        "delivery_confirm",
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn
@@ -172,3 +177,10 @@ class AgentRuntimeState(TypedDict, total=False):
     # explore_canvas path (Phase 2)
     explore_summary: dict | None
     canvas_commands: list[dict] | None
+
+    # ecommerce-product-visual (Phase 1 image-only)
+    product_visual_plan: dict | None
+    image_qa_result: Literal["pass", "fail", "remediated"] | None
+    scheme_revision_count: int | None
+    phase1_asset_keys: list[str] | None
+    delivery_selections: dict[str, str] | None  # type_id -> scheme_id
