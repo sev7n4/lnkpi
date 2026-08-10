@@ -36,6 +36,9 @@ _PRODUCT_VISUAL_TYPE_PHRASES = (
     "电商图",
     "视觉",
     "定稿",
+    "搭配板",
+    "置入",
+    "空间",
 )
 _PRODUCT_VISUAL_MULTI_INDICATORS = (
     "和",
