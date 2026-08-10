@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { Session } from '@lnkpi/shared'
 import { extractSessionCover } from './sessionCover'
 
+const pos = { x: 0, y: 0 }
+
 describe('extractSessionCover', () => {
   it('returns first image node cover', () => {
     const session = {
@@ -12,8 +14,8 @@ describe('extractSessionCover', () => {
       createdAt: '',
       canvasData: {
         nodes: [
-          { id: 'a', type: 'text', data: { content: 'hello' } },
-          { id: 'b', type: 'image', data: { url: 'https://cdn/x.jpg' } },
+          { id: 'a', type: 'text', position: pos, data: { content: 'hello' } },
+          { id: 'b', type: 'image', position: pos, data: { url: 'https://cdn/x.jpg' } },
         ],
         edges: [],
       },
@@ -29,7 +31,7 @@ describe('extractSessionCover', () => {
       updatedAt: '',
       createdAt: '',
       canvasData: {
-        nodes: [{ id: 'b', type: 'image', data: { url: 'a.jpg', coverUrl: 'cover.jpg' } }],
+        nodes: [{ id: 'b', type: 'image', position: pos, data: { url: 'a.jpg', coverUrl: 'cover.jpg' } }],
         edges: [],
       },
     } satisfies Session
