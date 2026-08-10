@@ -399,25 +399,33 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
               公共
             </span>
 
-            <!-- hover 操作层：加载到画布 / 删除 -->
+            <!-- hover 操作层 -->
             <div
-              class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-gradient-to-t from-black/85 to-transparent px-1 pb-1 pt-4 opacity-0 transition group-hover:opacity-100"
+              class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1.5 pt-5 opacity-0 transition group-hover:opacity-100"
             >
               <button
                 type="button"
-                class="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-black transition hover:bg-white"
+                class="asset-hover-btn"
                 title="加入 Agent 引用"
+                aria-label="加入 Agent 引用"
                 @click.stop="addToAgent(asset)"
               >
-                加入 Agent
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+                  <path d="M5 19h14M12 15v4" stroke-linecap="round" />
+                </svg>
               </button>
               <button
                 type="button"
-                class="rounded-md bg-white/90 px-1.5 py-0.5 text-[9px] font-medium text-black transition hover:bg-white"
+                class="asset-hover-btn"
                 title="加载到当前画布"
+                aria-label="加载到当前画布"
                 @click.stop="apply(asset)"
               >
-                加载到画布
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0-12l-4 4m4-4l4 4" />
+                  <path stroke-linecap="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                </svg>
               </button>
               <button
                 v-if="asset.source === 'user'"
@@ -448,3 +456,23 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
     </div>
   </div>
 </template>
+
+<style scoped>
+.asset-hover-btn {
+  display: flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.92);
+  color: #111;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.asset-hover-btn:hover {
+  transform: scale(1.06);
+  background: #fff;
+}
+</style>

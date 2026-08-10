@@ -16,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const { viewport, zoomTo, fitView, nodes: flowNodes, setCenter } = useVueFlow()
-const showGridPanel = ref(false)
+const showCanvasSettings = ref(false)
 const showEdgePanel = ref(false)
 const showListPanel = ref(false)
 const showMinimapPopover = ref(false)
@@ -24,7 +24,7 @@ const minimapBodyRef = ref<HTMLElement | null>(null)
 const rootRef = ref<HTMLElement | null>(null)
 
 useClickOutside(rootRef, () => {
-  showGridPanel.value = false
+  showCanvasSettings.value = false
   showEdgePanel.value = false
   if (props.settings.minimapExpanded !== 0) {
     emit('update:settings', { minimapExpanded: 0 })
@@ -180,7 +180,20 @@ function onMapToggle() {
   emit('cycleMinimap')
 }
 
+function toggleEdgePanel() {
+  showEdgePanel.value = !showEdgePanel.value
+  if (showEdgePanel.value) showCanvasSettings.value = false
+}
+
+function toggleCanvasSettings() {
+  showCanvasSettings.value = !showCanvasSettings.value
+  if (showCanvasSettings.value) showEdgePanel.value = false
+}
+
 const mapActive = computed(() => props.settings.minimapExpanded > 0)
+const edgeActive = computed(
+  () => showEdgePanel.value || props.settings.edgeAnimated || props.settings.edgeGlow || props.settings.edgeDash === 'dashed',
+)
 
 watch(
   () => props.settings.minimapExpanded,
@@ -246,9 +259,8 @@ watch(
       </div>
     </div>
 
-    <!-- 单行底栏 -->
-    <div class="toolbar-row neo-glass-lite pointer-events-auto flex flex-nowrap items-center gap-1 rounded-xl px-1.5 py-1">
-      <!-- 小地图切换 -->
+    <!-- 单行底栏：小地图 | 缩放 | 适应 | 连线 | 画布设置 -->
+    <div class="toolbar-row neo-glass-lite pointer-events-auto flex flex-nowrap items-center gap-1 rounded-full px-1.5 py-1">
       <button
         type="button"
         class="bar-btn"
@@ -263,7 +275,6 @@ watch(
 
       <span class="toolbar-divider" />
 
-      <!-- 缩放组：固定宽度，避免挤压重叠 -->
       <div class="zoom-group flex shrink-0 items-center gap-1">
         <button type="button" class="bar-btn" title="缩小" @click="zoomBy(-10)">−</button>
         <input
@@ -281,203 +292,187 @@ watch(
 
       <span class="toolbar-divider" />
 
-      <!-- 工具组 -->
-      <div class="tool-group flex shrink-0 items-center gap-1">
-        <button type="button" class="bar-btn" title="适应画布" @click="resetView">
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
-          </svg>
-        </button>
+      <button type="button" class="bar-btn" title="适应画布" @click="resetView">
+        <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
+        </svg>
+      </button>
 
-        <div class="relative">
-          <button
-            type="button"
-            class="bar-btn"
-            :class="showGridPanel ? 'is-accent' : ''"
-            title="网格设置"
-            @click="showGridPanel = !showGridPanel; showEdgePanel = false"
-          >
-            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16M8 4v16M16 4v16" />
-            </svg>
-          </button>
-          <div
-            v-if="showGridPanel"
-            class="grid-settings-popover neo-popover pointer-events-auto absolute bottom-full left-0 z-10 mb-1.5 w-[200px] rounded-xl p-3"
-            @click.stop
-          >
-            <div class="mb-2 flex items-center justify-between">
-              <span class="panel-label text-xs">网格底纹</span>
-              <button
-                type="button"
-                class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
-                :class="settings.gridVisible ? 'is-on' : ''"
-                @click="patch({ gridVisible: !settings.gridVisible })"
-              >
-                {{ settings.gridVisible ? '显示' : '隐藏' }}
-              </button>
-            </div>
-            <div class="mb-3 flex gap-1">
-              <button
-                type="button"
-                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.gridVariant === 'dots' ? 'is-on' : ''"
-                @click="patch({ gridVariant: 'dots' })"
-              >
-                点阵
-              </button>
-              <button
-                type="button"
-                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.gridVariant === 'lines' ? 'is-on' : ''"
-                @click="patch({ gridVariant: 'lines' })"
-              >
-                线格
-              </button>
-            </div>
-            <label class="panel-caption mb-2 block text-[10px]">
-              间距 {{ settings.gridGap }}px
-              <input
-                type="range"
-                min="8"
-                max="48"
-                step="2"
-                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
-                :value="settings.gridGap"
-                @input="patch({ gridGap: Number(($event.target as HTMLInputElement).value) })"
-              >
-            </label>
-            <label class="panel-caption block text-[10px]">
-              点大小 {{ settings.gridDotSize.toFixed(1) }}
-              <input
-                type="range"
-                min="0.5"
-                max="4"
-                step="0.1"
-                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
-                :value="settings.gridDotSize"
-                @input="patch({ gridDotSize: Number(($event.target as HTMLInputElement).value) })"
-              >
-            </label>
-            <label class="panel-caption mt-3 block text-[10px]">
-              Dock 缩放 {{ settings.bottomToolbarScale.toFixed(1) }}x
-              <input
-                type="range"
-                min="0.8"
-                max="2"
-                step="0.1"
-                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
-                :value="settings.bottomToolbarScale"
-                @input="patch({ bottomToolbarScale: Number(($event.target as HTMLInputElement).value) })"
-              >
-            </label>
-          </div>
-        </div>
-
+      <div class="relative">
         <button
           type="button"
           class="bar-btn"
-          :class="settings.snapToGrid ? 'is-accent' : ''"
-          title="节点吸附网格"
-          @click="patch({ snapToGrid: !settings.snapToGrid })"
-        >
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 0h6v6h-6v-6z" />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="bar-btn"
-          :class="settings.edgeAnimated ? 'is-accent' : ''"
-          title="连线动画"
-          @click="patch({ edgeAnimated: !settings.edgeAnimated })"
+          :class="edgeActive ? 'is-accent' : ''"
+          title="连线设置"
+          @click="toggleEdgePanel"
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </button>
-
-        <div class="relative">
-          <button
-            type="button"
-            class="bar-btn"
-            :class="showEdgePanel ? 'is-accent' : ''"
-            title="连线样式"
-            @click="showEdgePanel = !showEdgePanel; showGridPanel = false"
-          >
-            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h16M4 6h10M4 18h14" />
-            </svg>
-          </button>
-          <div
-            v-if="showEdgePanel"
-            class="grid-settings-popover neo-popover pointer-events-auto absolute bottom-full left-0 z-10 mb-1.5 w-[210px] rounded-xl p-3"
-            @click.stop
-          >
-            <p class="panel-label mb-2 text-xs">连线样式</p>
-            <label class="panel-caption mb-2 block text-[10px]">
-              粗细 {{ settings.edgeWidth.toFixed(1) }}px
-              <input
-                type="range"
-                min="1"
-                max="4"
-                step="0.5"
-                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
-                :value="settings.edgeWidth"
-                @input="patch({ edgeWidth: Number(($event.target as HTMLInputElement).value) })"
-              >
-            </label>
-            <label class="panel-caption mb-2 block text-[10px]">
-              颜色
-              <input
-                type="color"
-                class="mt-1 h-7 w-full cursor-pointer rounded border border-[var(--neo-border)] bg-transparent"
-                :value="settings.edgeColor || '#6b7280'"
-                @input="patch({ edgeColor: ($event.target as HTMLInputElement).value })"
-              >
-            </label>
-            <div class="mb-2 flex gap-1">
-              <button
-                type="button"
-                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.edgeDash === 'solid' ? 'is-on' : ''"
-                @click="patch({ edgeDash: 'solid' })"
-              >
-                实线
-              </button>
-              <button
-                type="button"
-                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
-                :class="settings.edgeDash === 'dashed' ? 'is-on' : ''"
-                @click="patch({ edgeDash: 'dashed' })"
-              >
-                虚线
-              </button>
-            </div>
+        <div
+          v-if="showEdgePanel"
+          class="settings-popover neo-popover pointer-events-auto absolute bottom-full right-0 z-10 mb-1.5 w-[220px] rounded-xl p-3"
+          @click.stop
+        >
+          <p class="panel-label mb-2 text-xs">连线</p>
+          <div class="mb-3 flex items-center justify-between">
+            <span class="panel-caption text-[10px]">流动动画</span>
             <button
               type="button"
-              class="seg-btn w-full rounded-lg py-1 text-[10px]"
-              :class="settings.edgeGlow ? 'is-on' : ''"
-              @click="patch({ edgeGlow: !settings.edgeGlow })"
+              class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
+              :class="settings.edgeAnimated ? 'is-on' : ''"
+              @click="patch({ edgeAnimated: !settings.edgeAnimated })"
             >
-              {{ settings.edgeGlow ? '发光：开' : '发光：关' }}
+              {{ settings.edgeAnimated ? '开' : '关' }}
             </button>
           </div>
+          <label class="panel-caption mb-2 block text-[10px]">
+            粗细 {{ settings.edgeWidth.toFixed(1) }}px
+            <input
+              type="range"
+              min="1"
+              max="4"
+              step="0.5"
+              class="mt-1 w-full accent-[var(--neo-slider-accent)]"
+              :value="settings.edgeWidth"
+              @input="patch({ edgeWidth: Number(($event.target as HTMLInputElement).value) })"
+            >
+          </label>
+          <label class="panel-caption mb-2 block text-[10px]">
+            颜色
+            <input
+              type="color"
+              class="mt-1 h-7 w-full cursor-pointer rounded border border-[var(--neo-border)] bg-transparent"
+              :value="settings.edgeColor || '#6b7280'"
+              @input="patch({ edgeColor: ($event.target as HTMLInputElement).value })"
+            >
+          </label>
+          <div class="mb-2 flex gap-1">
+            <button
+              type="button"
+              class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+              :class="settings.edgeDash === 'solid' ? 'is-on' : ''"
+              @click="patch({ edgeDash: 'solid' })"
+            >
+              实线
+            </button>
+            <button
+              type="button"
+              class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+              :class="settings.edgeDash === 'dashed' ? 'is-on' : ''"
+              @click="patch({ edgeDash: 'dashed' })"
+            >
+              虚线
+            </button>
+          </div>
+          <button
+            type="button"
+            class="seg-btn w-full rounded-lg py-1 text-[10px]"
+            :class="settings.edgeGlow ? 'is-on' : ''"
+            @click="patch({ edgeGlow: !settings.edgeGlow })"
+          >
+            {{ settings.edgeGlow ? '发光：开' : '发光：关' }}
+          </button>
         </div>
+      </div>
 
+      <div class="relative">
         <button
           type="button"
           class="bar-btn"
-          :class="settings.viewLocked ? 'bg-amber-500/20 text-amber-300' : ''"
-          title="锁定视图"
-          @click="patch({ viewLocked: !settings.viewLocked })"
+          :class="showCanvasSettings ? 'is-accent' : ''"
+          title="画布设置"
+          @click="toggleCanvasSettings"
         >
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path v-if="settings.viewLocked" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 8 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 8a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 8 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 8c.36 0 .7.07 1 .2H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
+        <div
+          v-if="showCanvasSettings"
+          class="settings-popover neo-popover pointer-events-auto absolute bottom-full right-0 z-10 mb-1.5 w-[220px] rounded-xl p-3"
+          @click.stop
+        >
+          <p class="panel-label mb-2 text-xs">画布视图</p>
+          <div class="mb-2 flex items-center justify-between">
+            <span class="panel-caption text-[10px]">网格底纹</span>
+            <button
+              type="button"
+              class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
+              :class="settings.gridVisible ? 'is-on' : ''"
+              @click="patch({ gridVisible: !settings.gridVisible })"
+            >
+              {{ settings.gridVisible ? '显示' : '隐藏' }}
+            </button>
+          </div>
+          <div class="mb-3 flex gap-1">
+            <button
+              type="button"
+              class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+              :class="settings.gridVariant === 'dots' ? 'is-on' : ''"
+              @click="patch({ gridVariant: 'dots' })"
+            >
+              点阵
+            </button>
+            <button
+              type="button"
+              class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+              :class="settings.gridVariant === 'lines' ? 'is-on' : ''"
+              @click="patch({ gridVariant: 'lines' })"
+            >
+              线格
+            </button>
+          </div>
+          <label class="panel-caption mb-2 block text-[10px]">
+            网格间距 {{ settings.gridGap }}px
+            <input
+              type="range"
+              min="8"
+              max="48"
+              step="2"
+              class="mt-1 w-full accent-[var(--neo-slider-accent)]"
+              :value="settings.gridGap"
+              @input="patch({ gridGap: Number(($event.target as HTMLInputElement).value) })"
+            >
+          </label>
+          <div class="mb-3 flex items-center justify-between">
+            <span class="panel-caption text-[10px]">节点吸附网格</span>
+            <button
+              type="button"
+              class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
+              :class="settings.snapToGrid ? 'is-on' : ''"
+              title="拖动节点时对齐网格，便于整齐排版"
+              @click="patch({ snapToGrid: !settings.snapToGrid })"
+            >
+              {{ settings.snapToGrid ? '开' : '关' }}
+            </button>
+          </div>
+          <div class="mb-3 flex items-center justify-between">
+            <span class="panel-caption text-[10px]">锁定视图</span>
+            <button
+              type="button"
+              class="seg-btn rounded-md px-2 py-0.5 text-[10px]"
+              :class="settings.viewLocked ? 'is-on' : ''"
+              @click="patch({ viewLocked: !settings.viewLocked })"
+            >
+              {{ settings.viewLocked ? '已锁' : '未锁' }}
+            </button>
+          </div>
+          <label class="panel-caption block text-[10px]">
+            Dock 缩放 {{ settings.bottomToolbarScale.toFixed(1) }}x
+            <input
+              type="range"
+              min="0.8"
+              max="2"
+              step="0.1"
+              class="mt-1 w-full accent-[var(--neo-slider-accent)]"
+              :value="settings.bottomToolbarScale"
+              @input="patch({ bottomToolbarScale: Number(($event.target as HTMLInputElement).value) })"
+            >
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -485,7 +480,7 @@ watch(
 
 <style scoped>
 .toolbar-row {
-  height: 36px;
+  height: 38px;
 }
 
 .toolbar-divider {
@@ -494,7 +489,7 @@ watch(
 }
 
 .bar-btn {
-  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm leading-none transition;
+  @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm leading-none transition;
   color: var(--neo-text-muted);
 }
 

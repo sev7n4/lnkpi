@@ -9,6 +9,7 @@
   position: absolute;
   top: -32px;
   left: 0;
+  right: 0;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -320,28 +321,34 @@
 }
 
 .neo-node-agent-add {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 4;
   display: flex;
-  width: 28px;
-  height: 28px;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--neo-accent-border);
-  border-radius: 8px;
-  background: var(--neo-surface-elevated, rgba(20, 20, 28, 0.92));
-  color: var(--neo-accent);
+  border: 1px solid transparent;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease;
+  background: transparent;
+  color: var(--neo-text-muted);
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.neo-node-agent-add:hover {
-  transform: scale(1.06);
-  background: var(--neo-accent);
-  color: #fff;
+.neo-node-agent-add--title {
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border-radius: 999px;
+}
+
+.neo-node-external-title:hover .neo-node-agent-add--title,
+.neo-node-agent-add--title:hover {
+  border-color: var(--neo-border);
+  background: var(--neo-hover-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
+}
+
+.neo-node-agent-add--title:hover {
+  transform: scale(1.05);
 }
 
 .neo-node.selected {

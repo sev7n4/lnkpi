@@ -136,6 +136,20 @@ function onAddToAgent(event: MouseEvent) {
       >
       <span v-else class="neo-node-title">{{ displayTitle }}</span>
       <span class="neo-node-status" :class="nodeStatus" />
+      <button
+        v-if="addToAgent && isHovered && !selected"
+        type="button"
+        class="neo-node-agent-add neo-node-agent-add--title"
+        title="加入 Agent 引用"
+        aria-label="加入 Agent 引用"
+        @click="onAddToAgent"
+        @mousedown.stop
+      >
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
+          <path d="M5 19h14M12 15v4" stroke-linecap="round" />
+        </svg>
+      </button>
     </div>
 
     <div
@@ -143,20 +157,6 @@ function onAddToAgent(event: MouseEvent) {
       :class="[meta.variant, { selected, 'neo-node-locate-flash': isLocateFlashing }]"
       :style="shellStyle"
     >
-      <button
-        v-if="addToAgent && isHovered && !selected"
-        type="button"
-        class="neo-node-agent-add"
-        title="加入 Agent 引用"
-        aria-label="加入 Agent 引用"
-        @click="onAddToAgent"
-        @mousedown.stop
-      >
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-          <path d="M5 19h14M12 15v4" stroke-linecap="round" />
-        </svg>
-      </button>
       <div class="neo-node-content">
         <slot />
       </div>
