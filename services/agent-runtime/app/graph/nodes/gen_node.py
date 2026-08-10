@@ -54,6 +54,15 @@ def _result_record_id(result: Any) -> str | None:
     return str(rid) if rid else None
 
 
+def _result_url(result: Any) -> str | None:
+    if not isinstance(result, dict):
+        return None
+    url = result.get("url")
+    if isinstance(url, str) and url.strip():
+        return url.strip()
+    return None
+
+
 def _result_status(result: Any, exc: BaseException | None = None) -> str:
     if exc is not None:
         return str(exc)
@@ -161,7 +170,18 @@ def make_gen_node(*, nest: Any) -> Callable:
                         payload["recordId"] = last_record_id
                     await _emit_task_update(nest, **payload)
                     await _emit_line(nest, format_gen_progress_line(title=title, status="completed"))
-                    return {"gen_completed_keys": [key]}
+                    update: dict[str, Any] = {"gen_completed_keys": [key]}
+                    url = _result_url(result)
+                    if url:
+                        update["gen_by_key"] = {
+                            key: {
+                                **dict(item),
+                                "url": url,
+                                "status": "completed",
+                                **({"generationRecordId": last_record_id} if last_record_id else {}),
+                            }
+                        }
+                    return update
 
                 last_status = _result_status(result)
                 last_reason = last_status

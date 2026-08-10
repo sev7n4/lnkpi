@@ -8,31 +8,90 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
-from app.graph.gen_run_state import clear_tier_b_gen_run_state
+from app.graph.gen_run_state import clear_tier_b_gen_run_state, reset_tier_b_reducers_for_new_run
 
 _DELIVERY_DECISION_PREFIX = "__delivery_decision__"
 _NONE_TIP = "请切换各类型定稿图，或点「确认全部定稿」完成交付。"
 _CONFIRM_ACK = "已定稿全部视觉产出，感谢确认。"
 _REFINE_ACK = "好的，正在微调重绘该类型…"
 _SWITCH_ACK = "已切换定稿候选。"
+_INCOMPLETE_DELIVERY_TIP = (
+    "部分类型尚未生成成功，无法确认全部定稿。请重试出图、切换候选，或等待生成完成。"
+)
+
+
+def _plan_type_ids(plan: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for image_type in plan.get("image_types") or []:
+        if not isinstance(image_type, dict):
+            continue
+        type_id = str(image_type.get("type_id") or "").strip()
+        if type_id:
+            ids.append(type_id)
+    return ids
+
+
+def _gen_key_ready(
+    key: str,
+    gen_by_key: dict[str, dict],
+    completed_keys: set[str] | None,
+) -> bool:
+    entry = gen_by_key.get(key) or {}
+    url = entry.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return False
+    if completed_keys and key not in completed_keys:
+        return False
+    return True
+
+
+def validate_delivery_confirm(
+    plan: dict[str, Any],
+    selections: dict[str, str],
+    gen_by_key: dict[str, dict],
+    completed_keys: set[str] | None = None,
+) -> tuple[bool, str]:
+    """AC-8: every plan type must have a successful gen with url before confirm."""
+    type_ids = _plan_type_ids(plan)
+    if not type_ids:
+        return False, "视觉方案无交付类型。"
+    missing: list[str] = []
+    for type_id in type_ids:
+        scheme_id = str(selections.get(type_id) or "").strip()
+        if not scheme_id:
+            missing.append(type_id)
+            continue
+        key = _scheme_key(type_id, scheme_id)
+        if not _gen_key_ready(key, gen_by_key, completed_keys):
+            missing.append(type_id)
+    if missing:
+        labels = ", ".join(missing)
+        return False, f"{_INCOMPLETE_DELIVERY_TIP}（未完成：{labels}）"
+    return True, ""
 
 
 def _scheme_key(type_id: str, scheme_id: str) -> str:
     return f"{type_id}__{scheme_id}"
 
 
-def _candidate_scheme_ids(image_type: dict[str, Any], gen_by_key: dict[str, dict]) -> list[str]:
+def _candidate_scheme_ids(
+    image_type: dict[str, Any],
+    gen_by_key: dict[str, dict],
+    completed_keys: set[str] | None = None,
+) -> list[str]:
     type_id = str(image_type.get("type_id") or "").strip()
     schemes = [s for s in (image_type.get("schemes") or []) if isinstance(s, dict)]
     selected = [str(s) for s in (image_type.get("selected_scheme_ids") or []) if str(s).strip()]
     ids: list[str] = []
     for sid in selected:
-        if _scheme_key(type_id, sid) in gen_by_key:
+        key = _scheme_key(type_id, sid)
+        if key in gen_by_key and _gen_key_ready(key, gen_by_key, completed_keys):
             ids.append(sid)
     if not ids:
         for scheme in schemes:
             sid = str(scheme.get("scheme_id") or "").strip()
-            if sid and _scheme_key(type_id, sid) in gen_by_key:
+            key = _scheme_key(type_id, sid)
+            if sid and key in gen_by_key and _gen_key_ready(key, gen_by_key, completed_keys):
                 ids.append(sid)
     if not ids:
         ids = selected or [str(s.get("scheme_id") or "").strip() for s in schemes if s.get("scheme_id")]
@@ -42,6 +101,7 @@ def _candidate_scheme_ids(image_type: dict[str, Any], gen_by_key: dict[str, dict
 def build_delivery_selections(
     plan: dict[str, Any],
     gen_by_key: dict[str, dict] | None,
+    completed_keys: set[str] | None = None,
 ) -> dict[str, str]:
     """Default recommended scheme per type (AC-7)."""
     by_key = gen_by_key or {}
@@ -53,7 +113,7 @@ def build_delivery_selections(
         if not type_id:
             continue
         schemes = [s for s in (image_type.get("schemes") or []) if isinstance(s, dict)]
-        candidate_ids = _candidate_scheme_ids(image_type, by_key)
+        candidate_ids = _candidate_scheme_ids(image_type, by_key, completed_keys)
         if not candidate_ids:
             continue
         recommended = [str(s["scheme_id"]) for s in schemes if s.get("recommended")]
@@ -128,11 +188,13 @@ def apply_delivery_decision(state: dict, decision: dict[str, Any]) -> dict[str, 
 
     current = dict(state.get("delivery_selections") or {})
     gen_by_key = dict(state.get("gen_by_key") or {})
+    completed_keys = set(state.get("gen_completed_keys") or [])
 
     if action == "switch_scheme":
         type_id = str(decision.get("type_id") or "").strip()
         scheme_id = str(decision.get("scheme_id") or "").strip()
-        if type_id and scheme_id and _scheme_key(type_id, scheme_id) in gen_by_key:
+        key = _scheme_key(type_id, scheme_id)
+        if type_id and scheme_id and _gen_key_ready(key, gen_by_key, completed_keys or None):
             current[type_id] = scheme_id
             return {
                 "delivery_selections": current,
@@ -152,7 +214,16 @@ def apply_delivery_decision(state: dict, decision: dict[str, Any]) -> dict[str, 
                     merged[tid] = sid
             current = merged
         if not current:
-            current = build_delivery_selections(plan, gen_by_key)
+            current = build_delivery_selections(plan, gen_by_key, completed_keys or None)
+        ok, err = validate_delivery_confirm(
+            plan, current, gen_by_key, completed_keys or None
+        )
+        if not ok:
+            return {
+                "phase": "await_delivery_confirm",
+                "delivery_selections": current,
+                "messages": [AIMessage(content=err)],
+            }
         return {
             "delivery_selections": current,
             "phase": "done",
@@ -185,7 +256,7 @@ def apply_delivery_decision(state: dict, decision: dict[str, Any]) -> dict[str, 
             "delivery_selections": current,
             "phase": "orchestrate_gen",
             "messages": [AIMessage(content=_REFINE_ACK)],
-            **clear_tier_b_gen_run_state(),
+            **reset_tier_b_reducers_for_new_run(),
         }
 
     return {"phase": "await_delivery_confirm", "messages": [AIMessage(content=_NONE_TIP)]}
@@ -226,14 +297,15 @@ def make_delivery_summary_node() -> Callable:
                 "messages": [AIMessage(content="视觉方案缺失，无法汇总定稿。")],
             }
         gen_by_key = dict(state.get("gen_by_key") or {})
+        completed_keys = set(state.get("gen_completed_keys") or [])
         existing = state.get("delivery_selections")
         if isinstance(existing, dict) and existing:
             selections = {**existing}
-            defaults = build_delivery_selections(plan, gen_by_key)
+            defaults = build_delivery_selections(plan, gen_by_key, completed_keys or None)
             for type_id, scheme_id in defaults.items():
                 selections.setdefault(type_id, scheme_id)
         else:
-            selections = build_delivery_selections(plan, gen_by_key)
+            selections = build_delivery_selections(plan, gen_by_key, completed_keys or None)
         return {
             "delivery_selections": selections,
             "phase": "await_delivery_confirm",

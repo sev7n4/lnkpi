@@ -12,6 +12,7 @@ from app.graph.nodes.delivery_summary import (
     make_await_delivery_confirm_node,
     make_delivery_summary_node,
     route_after_collect_gen,
+    validate_delivery_confirm,
 )
 
 
@@ -67,14 +68,74 @@ def test_classify_delivery_confirm_message():
 async def test_await_delivery_confirm_routes_done():
     node = make_await_delivery_confirm_node()
     state = {
-        "product_visual_plan": {"image_types": []},
-        "gen_by_key": {},
+        "product_visual_plan": {
+            "image_types": [
+                {
+                    "type_id": "hero_main",
+                    "schemes": [{"scheme_id": "c1", "recommended": True}],
+                    "selected_scheme_ids": ["c1"],
+                }
+            ]
+        },
+        "gen_by_key": {"hero_main__c1": {"node_id": "n1", "url": "https://cdn/x.png"}},
         "delivery_selections": {"hero_main": "c1"},
         "messages": [AIMessage(content="summary"), HumanMessage(content="确认全部定稿")],
     }
     out = await node(state)
     assert out["phase"] == "done"
     assert out["delivery_selections"] == {"hero_main": "c1"}
+
+
+def test_confirm_rejects_incomplete_delivery():
+    plan = {
+        "image_types": [
+            {"type_id": "hero_main", "schemes": [{"scheme_id": "c1"}]},
+            {"type_id": "scene", "schemes": [{"scheme_id": "c1"}]},
+        ]
+    }
+    gen_by_key = {"hero_main__c1": {"url": "https://cdn/a.png"}}
+    ok, err = validate_delivery_confirm(
+        plan,
+        {"hero_main": "c1", "scene": "c1"},
+        gen_by_key,
+    )
+    assert not ok
+    assert "scene" in err
+
+    out = apply_delivery_decision(
+        {
+            "product_visual_plan": plan,
+            "gen_by_key": gen_by_key,
+            "delivery_selections": {"hero_main": "c1", "scene": "c1"},
+            "messages": [],
+        },
+        {"action": "confirm_delivery"},
+    )
+    assert out["phase"] == "await_delivery_confirm"
+    assert "无法确认" in out["messages"][0].content
+
+
+def test_confirm_accepts_complete_delivery():
+    plan = {
+        "image_types": [
+            {"type_id": "hero_main", "schemes": [{"scheme_id": "c1"}]},
+            {"type_id": "scene", "schemes": [{"scheme_id": "c1"}]},
+        ]
+    }
+    gen_by_key = {
+        "hero_main__c1": {"url": "https://cdn/a.png"},
+        "scene__c1": {"url": "https://cdn/b.png"},
+    }
+    out = apply_delivery_decision(
+        {
+            "product_visual_plan": plan,
+            "gen_by_key": gen_by_key,
+            "delivery_selections": {"hero_main": "c1", "scene": "c1"},
+            "messages": [],
+        },
+        {"action": "confirm_delivery"},
+    )
+    assert out["phase"] == "done"
 
 
 def test_apply_delivery_decision_refine_type():

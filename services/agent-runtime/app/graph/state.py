@@ -56,6 +56,21 @@ def reset_or_merge(left: dict | None, right: dict | None) -> dict | None:
     return {**(left or {}), **(right or {})}
 
 
+def gen_by_key_reducer(left: dict | None, right: dict | None) -> dict | None:
+    """Reducer for gen_by_key: per-key shallow merge; None resets (Send fan-out safe)."""
+    if right is None:
+        return None
+    if not left:
+        return dict(right)
+    out = dict(left)
+    for k, v in right.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = {**out[k], **v}
+        else:
+            out[k] = v
+    return out
+
+
 class SplitManifestItem(TypedDict, total=False):
     key: str
     title: str
@@ -172,7 +187,7 @@ class AgentRuntimeState(TypedDict, total=False):
 
     # --- Tier B: gen run transient (start_gen → collect_gen only; see gen_run_state.py) ---
     gen_deps_of: dict[str, list[str]] | None
-    gen_by_key: dict[str, dict] | None
+    gen_by_key: Annotated[dict[str, dict] | None, gen_by_key_reducer]
     gen_completed_keys: Annotated[list[str] | None, reset_or_union]
     gen_failed_keys: Annotated[list[str] | None, reset_or_union]
     gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]

@@ -73,6 +73,21 @@ def make_start_gen_node(*, nest: Any = None) -> Callable:
                     "messages": [AIMessage(content=f"出图编排失败：{exc}")],
                 }
 
+        regen_keys = set(ordered_keys)
+        prev_by_key = state.get("gen_by_key") or {}
+        if isinstance(prev_by_key, dict):
+            for k, item in by_key.items():
+                if k in regen_keys:
+                    continue
+                prev = prev_by_key.get(k)
+                if not isinstance(prev, dict):
+                    continue
+                merged = dict(item)
+                for field in ("url", "generationRecordId", "status"):
+                    if prev.get(field):
+                        merged[field] = prev[field]
+                by_key[k] = merged
+
         if not ordered_keys:
             return {
                 "phase": "done",

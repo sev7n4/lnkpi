@@ -87,7 +87,7 @@ class FakeNest:
             raise RuntimeError(f"gen failed: {key}")
         if key in self.soft_error_keys:
             return {"nodeId": node_id, "status": "error", "actions": []}
-        return {"nodeId": node_id, "status": "completed"}
+        return {"nodeId": node_id, "status": "completed", "url": f"https://cdn.example/{key}.png"}
 
 
 def _item(
@@ -121,7 +121,8 @@ async def test_gen_node_success_returns_completed():
     node = make_gen_node(nest=nest)
     by_key = {"k": _item("k", node_id="node-k")}
     out = await node(_state("k", by_key))
-    assert out == {"gen_completed_keys": ["k"]}
+    assert out["gen_completed_keys"] == ["k"]
+    assert out["gen_by_key"]["k"]["url"] == "https://cdn.example/k.png"
     assert nest.image_calls == ["k"]
     assert any(u.get("status") == "done" for u in nest.task_updates)
 
@@ -177,6 +178,11 @@ async def test_gen_node_fallback_pending_needs_user_no_chat_line():
         assert "Banner" not in chunk
 
 
+def _assert_gen_success(out: dict, key: str = "k") -> None:
+    assert out.get("gen_completed_keys") == [key]
+    assert out.get("gen_by_key", {}).get(key, {}).get("url")
+
+
 @pytest.mark.asyncio
 async def test_gen_node_recoverable_then_success():
     nest = FakeNest(fail_times={"k": 2})  # fail twice, succeed on 3rd
@@ -184,7 +190,7 @@ async def test_gen_node_recoverable_then_success():
     by_key = {"k": _item("k", node_id="node-k")}
     out = await node(_state("k", by_key))
     assert nest.image_calls == ["k", "k", "k"]
-    assert out == {"gen_completed_keys": ["k"]}
+    _assert_gen_success(out)
     assert any(u.get("status") == "retrying" for u in nest.task_updates)
 
 
@@ -196,7 +202,7 @@ async def test_gen_node_video_calls_run_video_generation():
     out = await node(_state("k", by_key))
     assert nest.video_calls == ["k"]
     assert nest.image_calls == []
-    assert out == {"gen_completed_keys": ["k"]}
+    _assert_gen_success(out)
 
 
 @pytest.mark.asyncio
