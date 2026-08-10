@@ -53,6 +53,7 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike, type CanvasRefAddResult } from '@/composables/useSidebarAttachments'
 import { parseRefMentions, splitRefMentions } from '@/composables/useRefMentions'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
+import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import {
@@ -207,6 +208,46 @@ function reattachTurnFromHistory(msg: AgentStreamMessage) {
 
   nextTick(() => composerRef.value?.focus())
   ElMessage.success('已复用本轮提示词与引用')
+}
+
+const messageFeedback = ref<Record<string, 'up' | 'down'>>({})
+const copiedMessageId = ref<string | null>(null)
+let copiedMessageTimer: number | null = null
+
+function canShowMessageActions(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'assistant' || msg.streaming) return false
+  if (isLiveTurnMessage(msg) && (agent.isStreaming || showTaskCard.value)) return false
+  return Boolean(
+    msg.content.trim()
+    || (assistantOutputsById.value.get(msg.id)?.length ?? 0) > 0
+    || msg.executionTrace,
+  )
+}
+
+function toggleMessageFeedback(msgId: string, vote: 'up' | 'down') {
+  if (messageFeedback.value[msgId] === vote) {
+    const next = { ...messageFeedback.value }
+    delete next[msgId]
+    messageFeedback.value = next
+    return
+  }
+  messageFeedback.value = { ...messageFeedback.value, [msgId]: vote }
+}
+
+async function copyAssistantMessage(msg: AgentStreamMessage) {
+  const text = msg.content.trim()
+  if (!text) return
+  try {
+    await copyTextToClipboard(text)
+    copiedMessageId.value = msg.id
+    if (copiedMessageTimer !== null) window.clearTimeout(copiedMessageTimer)
+    copiedMessageTimer = window.setTimeout(() => {
+      if (copiedMessageId.value === msg.id) copiedMessageId.value = null
+      copiedMessageTimer = null
+    }, 1600)
+  } catch {
+    ElMessage.error('复制失败')
+  }
 }
 
 const threadHasReattachableHistory = computed(() =>
@@ -1378,19 +1419,19 @@ defineExpose({
           </div>
 
           <!-- 消息列表 -->
-          <div ref="chatContainer" class="min-h-0 flex-1 overflow-y-auto space-y-3 px-3 py-3">
-            <div v-if="!agent.messages.length" class="agent-empty py-10 text-center">
+          <div ref="chatContainer" class="agent-chat-scroll min-h-0 flex-1 overflow-y-auto py-3">
+            <div v-if="!agent.messages.length" class="agent-empty px-3 py-10 text-center">
               <p class="text-sm">描述你的创意</p>
               <p class="mt-1 text-[11px] opacity-70">我会驱动画布创建节点、连线与生成任务</p>
             </div>
             <div
               v-for="msg in agent.messages"
               :key="msg.id"
-              class="flex"
-              :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
+              class="agent-turn"
+              :class="msg.role === 'user' ? 'agent-turn--user' : 'agent-turn--assistant'"
             >
               <div
-                class="agent-bubble max-w-[94%] rounded-2xl px-3 py-2 text-[13px] leading-relaxed"
+                class="agent-bubble text-[13px] leading-relaxed"
                 :class="msg.role === 'user' ? 'agent-bubble-user' : 'agent-bubble-assistant'"
               >
                 <p class="whitespace-pre-wrap">
@@ -1435,10 +1476,56 @@ defineExpose({
                 <div v-if="msg.toolCalls?.length" class="agent-tools mt-1 space-y-0.5 pt-1">
                   <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-text-secondary)]">⚙ {{ tc.name }}</div>
                 </div>
+                <div
+                  v-if="canShowMessageActions(msg)"
+                  class="agent-msg-actions"
+                >
+                  <button
+                    type="button"
+                    class="agent-msg-action-btn"
+                    :class="{ 'is-active': messageFeedback[msg.id] === 'up' }"
+                    title="有帮助"
+                    aria-label="有帮助"
+                    @click="toggleMessageFeedback(msg.id, 'up')"
+                  >
+                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M7 11v8m0-8V7a2 2 0 0 1 2-2h1.5a1.5 1.5 0 0 1 1.4 1.02l1.12 3.36a2 2 0 0 0 1.9 1.34H17a2 2 0 0 1 2 2v1a2 2 0 0 1-2 2h-1.5l-.84 2.52A1.5 1.5 0 0 1 13.18 21H10a2 2 0 0 1-2-2v-8z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="agent-msg-action-btn"
+                    :class="{ 'is-active': messageFeedback[msg.id] === 'down' }"
+                    title="无帮助"
+                    aria-label="无帮助"
+                    @click="toggleMessageFeedback(msg.id, 'down')"
+                  >
+                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M17 13V5m0 8v3a2 2 0 0 1-2 2h-1.5a1.5 1.5 0 0 1-1.4-1.02l-1.12-3.36a2 2 0 0 0-1.9-1.34H7a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h1.5l.84-2.52A1.5 1.5 0 0 0 10.82 3H14a2 2 0 0 1 2 2v8z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    class="agent-msg-action-btn"
+                    :class="{ 'is-active': copiedMessageId === msg.id }"
+                    :title="copiedMessageId === msg.id ? '已复制' : '复制回复'"
+                    aria-label="复制回复"
+                    @click="copyAssistantMessage(msg)"
+                  >
+                    <svg v-if="copiedMessageId !== msg.id" viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                      <rect x="9" y="9" width="11" height="11" rx="2" />
+                      <path stroke-linecap="round" d="M5 15V5a2 2 0 0 1 2-2h10" />
+                    </svg>
+                    <svg v-else viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <AgentTaskProgressCard
               v-if="showTaskCard"
+              class="mx-3"
               :progress="taskProgress"
               @focus-node="emit('focusNode', $event)"
             />
@@ -1901,52 +1988,92 @@ defineExpose({
   background: rgba(251, 191, 36, 0.28);
 }
 
-/* ---- 消息气泡 ---- */
+/* ---- 消息列表 ---- */
+.agent-chat-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-turn--user {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 12px;
+}
+
+.agent-turn--assistant {
+  width: 100%;
+  padding: 0 12px;
+}
+
 .agent-empty {
   color: var(--neo-text-muted);
 }
 
 .agent-bubble-user {
+  max-width: 88%;
   border: 1px solid var(--agent-user-border);
+  border-radius: 16px;
   background: var(--agent-user-bg);
   color: var(--agent-user-text);
   box-shadow: var(--agent-user-shadow);
+  padding: 8px 12px;
 }
 
 .agent-bubble-assistant {
-  position: relative;
-  border: 1px solid var(--agent-assistant-border);
-  background: var(--agent-assistant-bg);
+  width: 100%;
+  max-width: none;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--agent-assistant-text);
-  box-shadow: var(--agent-assistant-shadow);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.agent-bubble-assistant::before {
-  content: '';
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 0;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--agent-assistant-accent);
-  opacity: 0.85;
-}
-
-.agent-bubble-assistant:hover {
-  border-color: color-mix(in srgb, var(--agent-assistant-accent) 35%, var(--agent-assistant-border));
-  box-shadow:
-    var(--agent-assistant-shadow),
-    0 0 0 1px color-mix(in srgb, var(--agent-assistant-accent) 12%, transparent);
+  box-shadow: none;
+  padding: 4px 0 8px;
 }
 
 .agent-bubble-assistant :deep(.agent-tools) {
-  border-color: color-mix(in srgb, var(--agent-assistant-text) 12%, transparent);
+  border-color: var(--agent-assistant-divider);
 }
 
 .agent-bubble-assistant :deep(.agent-canvas-outputs) {
-  border-color: color-mix(in srgb, var(--agent-assistant-text) 12%, transparent);
+  border-color: var(--agent-assistant-divider);
+}
+
+.agent-msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.agent-turn--assistant:hover .agent-msg-actions,
+.agent-msg-actions:focus-within {
+  opacity: 1;
+}
+
+.agent-msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--agent-assistant-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.agent-msg-action-btn:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.agent-msg-action-btn.is-active {
+  background: var(--neo-active-bg);
+  color: var(--neo-text-primary);
 }
 
 /* 用户气泡内引用 chip：棋盘底 + 描边，白/浅图也能辨认 */
