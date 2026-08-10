@@ -19,6 +19,12 @@ export const AGENT_SKILLS: AgentSkillDef[] = [
     desc: '多节点 Campaign 方案与画布拆分（enterprise-marketing-campaign）',
     runtimeSkillId: 'enterprise-marketing-campaign',
   },
+  {
+    id: 'product-visual',
+    label: '实物产品视觉出图',
+    desc: '实拍产品多类型视觉方案与并行出图（ecommerce-product-visual）',
+    runtimeSkillId: 'ecommerce-product-visual',
+  },
 ]
 
 export function getAgentSkill(id: string | null | undefined): AgentSkillDef | undefined {

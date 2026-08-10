@@ -78,6 +78,25 @@ def test_precedence_sidebar_img2img():
     assert d["reason"] == "sidebar_img2img_p1"
 
 
+def test_precedence_product_visual_beats_ref_backed_with_product_photo():
+    d = _decide(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "帮我出一套电商推广图：天猫主图、详情图、模特展示图、卖点图、推广海报",
+                }
+            ],
+            "sidebar_attachments": [
+                {"mediaType": "image", "role": "product", "url": "https://cdn.example/p.jpg"}
+            ],
+        },
+        valid_skill_ids={"ecommerce-product-visual"},
+    )
+    assert d["flow_mode"] == "product_visual"
+    assert d["precedence_rule_id"] == "product_visual_intent"
+
+
 def test_precedence_ref_backed_generate_style3():
     d = _decide(
         {
