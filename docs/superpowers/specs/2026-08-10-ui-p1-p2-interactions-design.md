@@ -1,38 +1,32 @@
-# UI P1/P2 交互与视觉设计（待实现）
+# UI P1/P2 交互与视觉设计
 
-> P0 已在 `2026-08-10-ui-p0-interactions-design.md` 完成并合并。本文档跟踪剩余需求，建议拆成独立 PR。
+> P0 已在 `2026-08-10-ui-p0-interactions-design.md` 完成（PR #207）。
 
-## P1 — 主页画布列表
+## P1 — 主页画布列表 ✅
 
-- 默认只展示少量最近画布，其余「查看更多」
-- 每个画布卡片需有封面缩略图
-- 支持批量删除
-- 支持搜索 / 筛选画布
+- [x] 默认展示 5 个 +「查看更多」
+- [x] 封面缩略图（从 canvasData 首图/视频节点推导）
+- [x] 批量删除（`POST /sessions/batch-delete`）
+- [x] 搜索（客户端 title 过滤）
 
-## P2 — 视觉重做
+## P2 — 视觉重做（部分完成）
 
-### 主页 Studio 与 Agent 侧栏 Studio
+### 主页 Studio ✅
 
-- 重新设计输入区、模型选择与生成按钮布局
-- 与画布 dock-studio 视觉语言统一，降低信息密度
+- [x] `CreativeLauncher` 对齐 neo-glass / hi-bg 白钮
 
-### 画布主题与紫色背景
+### 画布主题与紫色背景（部分）
 
-- 去掉扎眼的紫色背景/高亮
-- 黑夜模式：画布 hover、工具栏、Agent 对话卡片改用白色/亮白 subtle 效果
-- 单击/双击反馈改为低对比度边框或 glow，而非大面积紫色填充
+- [x] Agent 顶栏 active、drop-target、skill icon
+- [x] 左侧 dock active 态
+- [x] 底栏 seg-btn、group 选中
+- [ ] 全站 token  sweep（main.css chips、selection rect 等）
 
-### 连线样式自定义
+### 连线样式自定义 ✅
 
-- 左下角工具栏「连线设置」支持：
-  - 线条粗细
-  - 线条颜色
-  - 发光效果开关
-  - 实线 / 虚线
+- [x] 粗细 / 颜色 / 发光 / 实虚线（localStorage + 底栏 popover）
 
-## 建议实现顺序
+### Agent 侧栏 Studio 布局
 
-1. P1 主页画布列表（独立 feature 分支）
-2. P2 画布主题 token 清理（fix/theme）
-3. P2 连线样式面板（feature/edge-style）
-4. P2 Studio 视觉重做（可与 theme 合并或分 PR）
+- [ ] 与 dock-studio 进一步统一（P0 已做 hover 参数条）
+

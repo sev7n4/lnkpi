@@ -71,6 +71,15 @@ export class SessionsService {
     return { message: '已删除' }
   }
 
+  async removeMany(userId: string, ids: string[]) {
+    const uniqueIds = [...new Set(ids.filter(Boolean))]
+    if (!uniqueIds.length) return { deleted: 0 }
+    const result = await this.prisma.session.deleteMany({
+      where: { userId, id: { in: uniqueIds } },
+    })
+    return { deleted: result.count }
+  }
+
   async duplicate(userId: string, id: string) {
     const src = await this.prisma.session.findFirst({ where: { id, userId } })
     if (!src) throw new NotFoundException('会话不存在')

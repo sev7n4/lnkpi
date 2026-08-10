@@ -2,6 +2,7 @@ import { ref, watch } from 'vue'
 
 export type MinimapExpandedState = 0 | 1 | 2
 export type GridVariant = 'dots' | 'lines'
+export type EdgeDashStyle = 'solid' | 'dashed'
 
 export interface CanvasViewportSettings {
   gridVisible: boolean
@@ -12,6 +13,10 @@ export interface CanvasViewportSettings {
   minimapExpanded: MinimapExpandedState
   snapToGrid: boolean
   edgeAnimated: boolean
+  edgeWidth: number
+  edgeColor: string
+  edgeGlow: boolean
+  edgeDash: EdgeDashStyle
   viewLocked: boolean
   bottomToolbarScale: number
 }
@@ -27,6 +32,10 @@ const defaults: CanvasViewportSettings = {
   minimapExpanded: 0,
   snapToGrid: true,
   edgeAnimated: true,
+  edgeWidth: 1.5,
+  edgeColor: '',
+  edgeGlow: false,
+  edgeDash: 'solid',
   viewLocked: false,
   bottomToolbarScale: 1,
 }

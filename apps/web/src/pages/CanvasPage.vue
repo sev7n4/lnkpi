@@ -427,6 +427,19 @@ watch(
 
 const canvasInteractionEnabled = computed(() => canvasMode.value === 'vueflow' && !viewportSettings.value.viewLocked)
 
+const canvasEdgeStyle = computed(() => {
+  const s = viewportSettings.value
+  const vars: Record<string, string> = {
+    '--canvas-edge-width': `${s.edgeWidth}px`,
+  }
+  if (s.edgeColor.trim()) vars['--canvas-edge-color'] = s.edgeColor.trim()
+  vars['--canvas-edge-glow'] = s.edgeGlow
+    ? 'drop-shadow(0 0 5px color-mix(in srgb, var(--canvas-edge-color, var(--neo-edge)) 55%, transparent))'
+    : 'none'
+  vars['--canvas-edge-dash'] = s.edgeDash === 'dashed' && !s.edgeAnimated ? '6 8' : 'none'
+  return vars
+})
+
 let onFallbackPendingFromPoll:
   | ((kind: 'studio' | 'material', id: string, nodeId: string, message?: string) => Promise<void>)
   | null = null
@@ -2691,6 +2704,7 @@ onMounted(() => {
           :delete-key-code="null"
           fit-view-on-init
           class="canvas-flow h-full"
+          :style="canvasEdgeStyle"
           @connect="onConnect"
           @connect-start="onConnectStart"
           @connect-end="onConnectEnd"

@@ -17,6 +17,7 @@ const emit = defineEmits<{
 
 const { viewport, zoomTo, fitView, nodes: flowNodes, setCenter } = useVueFlow()
 const showGridPanel = ref(false)
+const showEdgePanel = ref(false)
 const showListPanel = ref(false)
 const showMinimapPopover = ref(false)
 const minimapBodyRef = ref<HTMLElement | null>(null)
@@ -24,6 +25,7 @@ const rootRef = ref<HTMLElement | null>(null)
 
 useClickOutside(rootRef, () => {
   showGridPanel.value = false
+  showEdgePanel.value = false
   if (props.settings.minimapExpanded !== 0) {
     emit('update:settings', { minimapExpanded: 0 })
   }
@@ -293,7 +295,7 @@ watch(
             class="bar-btn"
             :class="showGridPanel ? 'is-accent' : ''"
             title="网格设置"
-            @click="showGridPanel = !showGridPanel"
+            @click="showGridPanel = !showGridPanel; showEdgePanel = false"
           >
             <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16M8 4v16M16 4v16" />
@@ -396,6 +398,74 @@ watch(
           </svg>
         </button>
 
+        <div class="relative">
+          <button
+            type="button"
+            class="bar-btn"
+            :class="showEdgePanel ? 'is-accent' : ''"
+            title="连线样式"
+            @click="showEdgePanel = !showEdgePanel; showGridPanel = false"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 12h16M4 6h10M4 18h14" />
+            </svg>
+          </button>
+          <div
+            v-if="showEdgePanel"
+            class="grid-settings-popover neo-popover pointer-events-auto absolute bottom-full left-0 z-10 mb-1.5 w-[210px] rounded-xl p-3"
+            @click.stop
+          >
+            <p class="panel-label mb-2 text-xs">连线样式</p>
+            <label class="panel-caption mb-2 block text-[10px]">
+              粗细 {{ settings.edgeWidth.toFixed(1) }}px
+              <input
+                type="range"
+                min="1"
+                max="4"
+                step="0.5"
+                class="mt-1 w-full accent-[var(--neo-slider-accent)]"
+                :value="settings.edgeWidth"
+                @input="patch({ edgeWidth: Number(($event.target as HTMLInputElement).value) })"
+              >
+            </label>
+            <label class="panel-caption mb-2 block text-[10px]">
+              颜色
+              <input
+                type="color"
+                class="mt-1 h-7 w-full cursor-pointer rounded border border-[var(--neo-border)] bg-transparent"
+                :value="settings.edgeColor || '#6b7280'"
+                @input="patch({ edgeColor: ($event.target as HTMLInputElement).value })"
+              >
+            </label>
+            <div class="mb-2 flex gap-1">
+              <button
+                type="button"
+                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+                :class="settings.edgeDash === 'solid' ? 'is-on' : ''"
+                @click="patch({ edgeDash: 'solid' })"
+              >
+                实线
+              </button>
+              <button
+                type="button"
+                class="seg-btn flex-1 rounded-lg py-1 text-[10px]"
+                :class="settings.edgeDash === 'dashed' ? 'is-on' : ''"
+                @click="patch({ edgeDash: 'dashed' })"
+              >
+                虚线
+              </button>
+            </div>
+            <button
+              type="button"
+              class="seg-btn w-full rounded-lg py-1 text-[10px]"
+              :class="settings.edgeGlow ? 'is-on' : ''"
+              @click="patch({ edgeGlow: !settings.edgeGlow })"
+            >
+              {{ settings.edgeGlow ? '发光：开' : '发光：关' }}
+            </button>
+          </div>
+        </div>
+
         <button
           type="button"
           class="bar-btn"
@@ -473,8 +543,9 @@ watch(
 }
 
 .seg-btn.is-on {
-  background: var(--neo-accent-soft);
-  color: var(--neo-accent-text);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 
 .zoom-group {
