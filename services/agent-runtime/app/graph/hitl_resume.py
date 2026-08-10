@@ -160,6 +160,23 @@ def build_interrupt_state_update(
     return update
 
 
+# Gates that must resume via Command(goto=...) — astream(None) can no-op on stale checkpoints.
+GATE_RESUME_COMMAND_GOTO: frozenset[str] = frozenset({"await_atomic_confirm"})
+
+
+def build_interrupt_resume_command(
+    gate: str,
+    message: str,
+    *,
+    user_decision: str | None = None,
+) -> Command:
+    """Jump directly to a gate with user reply (fixes interrupt_before no-op resume)."""
+    return Command(
+        goto=gate,
+        update=build_interrupt_state_update(message, user_decision=user_decision),
+    )
+
+
 # interrupt_before gate → last completed node for ambiguous checkpoint updates.
 GATE_RESUME_AS_NODE: dict[str, str] = {
     "await_atomic_confirm": "create_atomic_node",
