@@ -14,11 +14,98 @@ inject new messages and the gate classifier will not see the user's reply.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 
 GATE_DECISION_CLEAR = {"user_decision": "none", "force_choice": None}
+
+REF_MENTION_RE = re.compile(r"@[TIVA]\d+", re.IGNORECASE)
+
+# Cleared when a new user task arrives while a HITL gate is still pending.
+FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
+    **GATE_DECISION_CLEAR,
+    "phase": None,
+    "flow_mode": None,
+    "mode": None,
+    "atomic_spec": None,
+    "atomic_items": None,
+    "atomic_node_id": None,
+    "atomic_record_id": None,
+    "clarify_context": None,
+    "clarify_question": None,
+    "route_clarify": False,
+    "pre_parsed_intent": None,
+    "route_decision": None,
+    "route_context": None,
+    "split_manifest": None,
+    "last_error": None,
+}
+
+
+def should_resume_interrupt(
+    message: str,
+    next_nodes: list[str] | tuple[str, ...],
+    *,
+    user_decision: str | None = None,
+) -> bool:
+    """Return True when *message* is a gate reply; False for a fresh task."""
+    if not next_nodes:
+        return False
+    if user_decision and str(user_decision).strip().lower() not in ("", "none"):
+        return True
+
+    text = (message or "").strip()
+    if not text:
+        return False
+
+    gate = str(next_nodes[0])
+
+    from app.graph.atomic_intent import atomic_create_intent, classify_atomic_confirm
+    from app.graph.intent import classify_topo_decision, classify_user_decision
+
+    if gate == "await_confirm":
+        decision = classify_user_decision(text)
+        if decision is not None:
+            return True
+        # Long @ref task while plan gate is open → restart intake, not confirm/revise.
+        if len(text) >= 12 and REF_MENTION_RE.search(text) and atomic_create_intent(text):
+            return False
+        return len(text) <= 16
+
+    if gate == "await_topo":
+        if classify_topo_decision(text) != "none":
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 16
+
+    if gate == "await_copy_confirm":
+        lowered = text.lower()
+        from app.graph.intent import COPY_CONFIRM_HINTS
+
+        if any(h in text for h in COPY_CONFIRM_HINTS):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 20
+
+    if gate == "await_atomic_confirm":
+        if classify_atomic_confirm(text) != "none":
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 16
+
+    # Unknown gate: only resume short gate-like replies.
+    return len(text) <= 16 and not REF_MENTION_RE.search(text)
+
+
+def build_fresh_turn_command(*, update: dict[str, Any]) -> Command:
+    """Jump back to intake with cleared gate / atomic checkpoint fields."""
+    return Command(goto="intake", update={**FRESH_TURN_STATE_CLEAR, **update})
 
 
 def build_interrupt_state_update(

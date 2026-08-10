@@ -51,7 +51,7 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike, type CanvasRefAddResult } from '@/composables/useSidebarAttachments'
-import { parseRefMentions, splitRefMentions } from '@/composables/useRefMentions'
+import { parseRefMentions } from '@/composables/useRefMentions'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import { useClickOutside } from '@/composables/useClickOutside'
@@ -169,30 +169,18 @@ function dismissHistoryReattachCoachmark() {
   }
 }
 
-function stripRefMentionsFromText(text: string): string {
-  return splitRefMentions(text)
-    .filter((segment) => segment.kind === 'text')
-    .map((segment) => segment.value)
-    .join('')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-}
-
 function canReuseTurn(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'user') return false
   return Boolean(msg.content?.trim()) || (msg.attachments?.length ?? 0) > 0
 }
 
-function reattachTurnFromHistory(msg: AgentStreamMessage) {
+async function reattachTurnFromHistory(msg: AgentStreamMessage) {
   if (props.readOnly || !canReuseTurn(msg)) return
 
   dismissHistoryReattachCoachmark()
   sidebar.clear()
 
   const items = makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)
-  const plainText = stripRefMentionsFromText(msg.content ?? '')
-  input.value = plainText
-
   for (const { attachment } of items) {
     if (sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) {
       ElMessage.warning(`最多 ${SIDEBAR_ATTACHMENT_MAX} 个引用，已跳过其余项`)
@@ -201,12 +189,19 @@ function reattachTurnFromHistory(msg: AgentStreamMessage) {
     sidebar.addFromPayload({ ...attachment, id: randomId() })
   }
 
-  const keys = sidebar.assignRefKeys()
-  for (const key of keys) {
-    insertRefMention(key)
+  sidebar.assignRefKeys()
+
+  const original = (msg.content ?? '').trim()
+  if (original) {
+    // 保留原始 @ 提及与提示词顺序；避免 insertText 与 v-model 竞态导致只剩引用
+    input.value = original
+  } else {
+    const keys = sidebar.assignRefKeys()
+    input.value = keys.map((key) => `@${key}`).join(' ')
   }
 
-  nextTick(() => composerRef.value?.focus())
+  await nextTick()
+  composerRef.value?.focus()
   ElMessage.success('已复用本轮提示词与引用')
 }
 

@@ -20,9 +20,10 @@ from app.checkpoint_observability import checkpoint_diagnostics
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
-    GATE_DECISION_CLEAR,
+    build_fresh_turn_command,
     interrupt_event_payload,
     prepare_interrupt_resume,
+    should_resume_interrupt,
 )
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
@@ -640,7 +641,25 @@ async def stream_run_events(
         bool(next_nodes),
         checkpoint_diagnostics(pre_vals),
     )
-    if next_nodes:
+    history = await _load_history(inner_nest, thread_id)
+    input_messages = history + [HumanMessage(content=req.message)]
+    turn_update = {
+        "messages": input_messages,
+        "session_id": req.session_id,
+        "user_id": req.user_id,
+        "thread_id": thread_id,
+        "requested_skill_id": req.skill_id,
+        "focus_node_id": req.focus_node_id,
+        "sidebar_attachments": normalized_attachments,
+        "sidebar_ref_order": req.sidebar_ref_order,
+        "sidebar_mentioned_keys": normalized_mentioned_keys,
+    }
+
+    if next_nodes and should_resume_interrupt(
+        req.message,
+        list(next_nodes),
+        user_decision=req.user_decision,
+    ):
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         input_state, _ = await prepare_interrupt_resume(
@@ -649,21 +668,17 @@ async def stream_run_events(
             req.message,
             user_decision=req.user_decision,
         )
+    elif next_nodes:
+        # Fresh @ref task while a gate is still pending — restart at intake.
+        logger.info(
+            "agent_turn_fresh_restart thread_id=%s session_id=%s gate=%s",
+            thread_id,
+            req.session_id,
+            list(next_nodes),
+        )
+        input_state = build_fresh_turn_command(update=turn_update)
     else:
-        # 新对话或已完成：加载历史并创建 input_state (C1 decision)
-        history = await _load_history(inner_nest, thread_id)
-        input_messages = history + [HumanMessage(content=req.message)]
-        input_state = {
-            "messages": input_messages,
-            "session_id": req.session_id,
-            "user_id": req.user_id,
-            "thread_id": thread_id,
-            "requested_skill_id": req.skill_id,
-            "focus_node_id": req.focus_node_id,
-            "sidebar_attachments": normalized_attachments,
-            "sidebar_ref_order": req.sidebar_ref_order,
-            "sidebar_mentioned_keys": normalized_mentioned_keys,
-        }
+        input_state = turn_update
 
     async def run_graph() -> None:
         last_text_delta: str | None = None
