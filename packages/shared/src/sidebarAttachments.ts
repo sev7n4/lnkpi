@@ -2,6 +2,8 @@ import { z } from 'zod'
 
 export const SIDEBAR_ATTACHMENT_MAX = 5
 
+export const SidebarAttachmentRoleSchema = z.enum(['product', 'model']).optional()
+
 export const SidebarAttachmentSchema = z.object({
   id: z.string().min(1),
   mediaType: z.enum(['text', 'image', 'video', 'audio']),
@@ -10,6 +12,8 @@ export const SidebarAttachmentSchema = z.object({
   url: z.string().optional(),
   text: z.string().optional(),
   sourceNodeId: z.string().optional(),
+  /** product_visual Phase 1: product vs model ref for QA / routing. */
+  role: SidebarAttachmentRoleSchema,
 })
 
 export type SidebarAttachment = z.infer<typeof SidebarAttachmentSchema>

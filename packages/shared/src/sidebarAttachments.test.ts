@@ -13,8 +13,10 @@ describe('SidebarAttachmentSchema', () => {
       sourceKind: 'upload',
       label: 'product.jpg',
       url: 'https://cdn.example.com/a.jpg',
+      role: 'product',
     })
     expect(parsed.mediaType).toBe('image')
+    expect(parsed.role).toBe('product')
   })
 
   it('rejects blob url', () => {

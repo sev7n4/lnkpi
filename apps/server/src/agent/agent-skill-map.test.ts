@@ -11,6 +11,11 @@ describe('mapUiSkillId', () => {
     expect(mapUiSkillId('canvas')).toBe('enterprise-marketing-campaign')
   })
 
+  it('maps product-visual to ecommerce-product-visual', () => {
+    expect(mapUiSkillId('product-visual')).toBe('ecommerce-product-visual')
+    expect(mapUiSkillId('ecommerce-product-visual')).toBe('ecommerce-product-visual')
+  })
+
   it('returns undefined for unmapped dock skills', () => {
     expect(mapUiSkillId('storyboard')).toBeUndefined()
     expect(mapUiSkillId('polish')).toBeUndefined()

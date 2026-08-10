@@ -44,6 +44,11 @@ class SidebarAttachmentDto {
   @IsOptional()
   @IsString()
   sourceNodeId?: string
+
+  /** product_visual: product vs model attachment role (forwarded to agent-runtime). */
+  @IsOptional()
+  @IsIn(['product', 'model'])
+  role?: 'product' | 'model'
 }
 
 class ConversationDto {
