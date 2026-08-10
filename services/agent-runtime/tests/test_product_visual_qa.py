@@ -17,13 +17,13 @@ from app.graph.nodes.image_qa_gate import (
     make_await_image_qa_node,
     make_image_qa_check_node,
     make_image_qa_remedy_node,
-    make_plan_product_visual_stub_node,
 )
 from app.graph.state import AgentRuntimeState
 from app.graph.subgraphs.product_visual_gate import (
     register_product_visual_gate,
     route_after_image_qa_check,
     route_after_image_qa_remedy,
+    route_after_plan_product_visual,
 )
 
 
@@ -193,11 +193,33 @@ async def test_image_qa_check_pass_skips_existing_nodes():
     assert not any(c[0] == "add_nodes_batch" for c in nest.calls)
 
 
-@pytest.mark.asyncio
-async def test_plan_product_visual_stub():
-    node = make_plan_product_visual_stub_node()
-    out = await node({})
-    assert out["phase"] == "plan_product_visual"
+def test_route_after_image_qa_check_pass_goes_plan():
+    assert route_after_image_qa_check({"image_qa_result": "pass"}) == "plan_product_visual"
+    assert route_after_image_qa_check({"image_qa_result": "remediated"}) == "plan_product_visual"
+
+
+def test_route_after_plan_product_visual_multi_scheme():
+    assert (
+        route_after_plan_product_visual(
+            {
+                "phase": "await_scheme_select",
+                "product_visual_plan": {"image_types": [{"schemes": [{}, {}]}]},
+            }
+        )
+        == "await_scheme_select_stub"
+    )
+
+
+def test_route_after_plan_product_visual_single_scheme():
+    assert (
+        route_after_plan_product_visual(
+            {
+                "phase": "split_product_visual",
+                "product_visual_plan": {"image_types": [{"schemes": [{}]}]},
+            }
+        )
+        == "split_product_visual_stub"
+    )
 
 
 def test_route_after_image_qa_check_seed_error_goes_done():
@@ -243,9 +265,16 @@ async def test_image_qa_remedy_seed_failure_routes_done_not_plan_stub():
 def test_product_visual_gate_subgraph_compiles():
     from app.graph.nodes.done import make_done_node
 
+    class _LLM:
+        async def ainvoke(self, _messages: Any) -> Any:
+            class _R:
+                content = '{"visual_intent":{"primary_goal":"generic","confidence":0.5},"image_types":[{"type_id":"hero_main","type_label":"主图","schemes":[{"scheme_id":"c1","prompt":"x"}]}]}'
+
+            return _R()
+
     graph = StateGraph(AgentRuntimeState)
     graph.add_node("done", make_done_node())
-    register_product_visual_gate(graph)
+    register_product_visual_gate(graph, llm=_LLM())
     graph.add_edge(START, "image_qa_check")
     graph.add_edge("done", END)
     compiled = graph.compile(interrupt_before=["await_image_qa"])

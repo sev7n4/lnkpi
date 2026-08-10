@@ -77,7 +77,7 @@ def build_agent_graph(
     register_topo_gate(graph, nest=nest)
     register_single_node_gate(graph, nest=nest)
     register_atomic_create_gate(graph, nest=nest, llm=llm)
-    register_product_visual_gate(graph, nest=nest)
+    register_product_visual_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(

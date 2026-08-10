@@ -170,9 +170,3 @@ def make_image_qa_remedy_node(*, nest: Any | None = None) -> Callable:
 
     return image_qa_remedy
 
-
-def make_plan_product_visual_stub_node() -> Callable:
-    async def plan_product_visual_stub(_state: dict) -> dict:
-        return {"phase": "plan_product_visual"}
-
-    return plan_product_visual_stub

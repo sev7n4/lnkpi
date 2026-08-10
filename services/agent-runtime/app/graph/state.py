@@ -96,6 +96,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "await_image_qa",
         "plan_product_visual",
         "await_scheme_select",
+        "split_product_visual",
         "delivery_confirm",
     ]
     skill_id: str | None

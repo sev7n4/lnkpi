@@ -1,0 +1,24 @@
+version: 1
+nodes:
+  plan_product_visual:
+    - user: |
+        根据用户实拍需求与上下文，输出 product_visual_plan JSON（不要 markdown 代码块）。
+        只输出 JSON 对象，禁止寒暄与过程说明。
+
+        【用户需求锚定】
+        这是我们要上架的保温杯，帮我出一套电商推广图：天猫主图、详情图、模特展示图。风格简约高级，强调 316 不锈钢和 12 小时保温。
+
+        【本轮用户表述】
+        这是我们要上架的保温杯，帮我出一套电商推广图：天猫主图、详情图、模特展示图。风格简约高级，强调 316 不锈钢和 12 小时保温。
+      assistant: |
+        {"visual_intent":{"industry_context":"consumer_electronics","primary_goal":"mixed_ecommerce","domain_tags":["ecommerce"],"user_stated_constraints":["简约高级","316不锈钢","12小时保温"],"output_types_requested":["主图","详情图","模特展示图"],"confidence":0.92},"image_types":[{"type_id":"hero_main","type_label":"天猫主图","domain_tags":["ecommerce"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"白底居中","recommended":true,"key_elements":{"selling_points":["316不锈钢","12小时保温"]},"prompt":"保温杯电商主图，白底居中，简约高级，突出不锈钢材质与保温卖点"}]},{"type_id":"detail_page","type_label":"详情图","domain_tags":["ecommerce"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"功能分区","recommended":true,"prompt":"保温杯详情页视觉，分区展示材质、容量、保温时长"}]},{"type_id":"model_display","type_label":"模特展示图","domain_tags":["ecommerce"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"手持展示","recommended":true,"key_elements":{"human_presence":true,"model_source":"generated"},"prompt":"模特手持保温杯展示，简约高级办公场景"}]}]}
+    - user: |
+        根据用户实拍需求与上下文，输出 product_visual_plan JSON（不要 markdown 代码块）。
+
+        【用户需求锚定】
+        帮我做主图、场景图，再加一个物流包装效果图，突出新鲜，运输不能压坏。
+
+        【本轮用户表述】
+        帮我做主图、场景图，再加一个物流包装效果图，突出新鲜，运输不能压坏。
+      assistant: |
+        {"visual_intent":{"industry_context":"food","primary_goal":"mixed","domain_tags":["ecommerce","packaging"],"user_stated_constraints":["突出新鲜","物流不破坏"],"output_types_requested":["主图","场景图","包装效果图"],"confidence":0.91},"image_types":[{"type_id":"hero_main","type_label":"电商主图","domain_tags":["ecommerce"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"白底居中","recommended":true,"prompt":"生鲜产品白底主图，突出新鲜水珠光泽"}]},{"type_id":"scene_lifestyle","type_label":"场景图","domain_tags":["ecommerce"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"厨房场景","recommended":true,"prompt":"产品在明亮厨房场景中的生活方式图"}]},{"type_id":"packaging_hero","type_label":"包装效果图","domain_tags":["packaging"],"target_type":"image","schemes":[{"scheme_id":"c1","name":"缓冲纸盒","recommended":false,"prompt":"带缓冲结构的物流包装效果图，强调防压损"},{"scheme_id":"c2","name":"开窗盒","recommended":true,"prompt":"开窗展示产品的物流包装效果图，兼顾保护与新鲜可视"}]}]}
