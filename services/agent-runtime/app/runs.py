@@ -20,7 +20,9 @@ from app.checkpoint_observability import checkpoint_diagnostics
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
+    GATE_RESUME_AS_NODE,
     build_fresh_turn_command,
+    build_interrupt_state_update,
     interrupt_event_payload,
     prepare_interrupt_resume,
     should_resume_interrupt,
@@ -661,6 +663,9 @@ async def stream_run_events(
         "sidebar_mentioned_keys": normalized_mentioned_keys,
     }
 
+    pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
+    resume_attempt = False
+
     if next_nodes and should_resume_interrupt(
         req.message,
         list(next_nodes),
@@ -668,6 +673,7 @@ async def stream_run_events(
     ):
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
+        resume_attempt = True
         input_state, _ = await prepare_interrupt_resume(
             graph,
             config,
@@ -688,78 +694,114 @@ async def stream_run_events(
 
     async def run_graph() -> None:
         last_text_delta: str | None = None
+        executed_nodes: set[str] = set()
+        stream_input: Any = input_state
         try:
-            async for update in graph.astream(input_state, config, stream_mode="updates"):
-                if not isinstance(update, dict):
-                    continue
-                for node_name, delta in update.items():
-                    node_key = str(node_name)
-                    t0 = time.monotonic()
-                    await emit(step_event(node_key, status="running"))
-                    with track_node(node_key), trace_node(node_key):
-                        if not isinstance(delta, dict):
-                            await emit(
-                                step_event(
-                                    node_key,
-                                    status="done",
-                                    ms=int((time.monotonic() - t0) * 1000),
+            for pass_idx in range(2):
+                async for update in graph.astream(stream_input, config, stream_mode="updates"):
+                    if not isinstance(update, dict):
+                        continue
+                    for node_name, delta in update.items():
+                        node_key = str(node_name)
+                        if node_key != "__interrupt__":
+                            executed_nodes.add(node_key)
+                        t0 = time.monotonic()
+                        await emit(step_event(node_key, status="running"))
+                        with track_node(node_key), trace_node(node_key):
+                            if not isinstance(delta, dict):
+                                await emit(
+                                    step_event(
+                                        node_key,
+                                        status="done",
+                                        ms=int((time.monotonic() - t0) * 1000),
+                                    )
                                 )
-                            )
-                            continue
-                        force_choice = delta.get("force_choice")
-                        if force_choice:
-                            await emit(
-                                {
-                                    "type": "force_choice",
-                                    "data": {"kind": str(force_choice)},
-                                }
-                            )
-                        messages = delta.get("messages")
-                        if messages:
-                            seq = messages if isinstance(messages, list) else [messages]
-                            for msg in seq:
-                                content = getattr(msg, "content", None)
-                                if content is None and isinstance(msg, dict):
-                                    content = msg.get("content")
-                                if not content:
-                                    continue
-                                # Prefer AI replies for text_delta
-                                msg_type = getattr(msg, "type", None) or (
-                                    msg.get("role") if isinstance(msg, dict) else None
+                                continue
+                            force_choice = delta.get("force_choice")
+                            if force_choice:
+                                await emit(
+                                    {
+                                        "type": "force_choice",
+                                        "data": {"kind": str(force_choice)},
+                                    }
                                 )
-                                if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
-                                    text = str(content)
-                                    if text == last_text_delta:
+                            messages = delta.get("messages")
+                            if messages:
+                                seq = messages if isinstance(messages, list) else [messages]
+                                for msg in seq:
+                                    content = getattr(msg, "content", None)
+                                    if content is None and isinstance(msg, dict):
+                                        content = msg.get("content")
+                                    if not content:
                                         continue
-                                    last_text_delta = text
-                                    await emit({"type": "text_replace", "data": {"text": text}})
-                        explore = delta.get("explore_summary")
-                        if isinstance(explore, dict):
-                            await emit({"type": "explore", "data": explore})
-                        commands = delta.get("canvas_commands")
-                        if isinstance(commands, list):
-                            for cmd in commands:
-                                if isinstance(cmd, dict) and cmd.get("type"):
-                                    await emit({"type": "canvas_command", "data": cmd})
-                        thinking = delta.get("thinking_summary")
-                        if thinking and settings.agent_thinking_ui:
-                            await emit(
-                                {
-                                    "type": "thinking",
-                                    "data": {"status": "done", "summary": str(thinking)},
-                                }
+                                    # Prefer AI replies for text_delta
+                                    msg_type = getattr(msg, "type", None) or (
+                                        msg.get("role") if isinstance(msg, dict) else None
+                                    )
+                                    if msg_type in ("ai", "assistant") or isinstance(msg, AIMessage):
+                                        text = str(content)
+                                        if text == last_text_delta:
+                                            continue
+                                        last_text_delta = text
+                                        await emit({"type": "text_replace", "data": {"text": text}})
+                            explore = delta.get("explore_summary")
+                            if isinstance(explore, dict):
+                                await emit({"type": "explore", "data": explore})
+                            commands = delta.get("canvas_commands")
+                            if isinstance(commands, list):
+                                for cmd in commands:
+                                    if isinstance(cmd, dict) and cmd.get("type"):
+                                        await emit({"type": "canvas_command", "data": cmd})
+                            thinking = delta.get("thinking_summary")
+                            if thinking and settings.agent_thinking_ui:
+                                await emit(
+                                    {
+                                        "type": "thinking",
+                                        "data": {"status": "done", "summary": str(thinking)},
+                                    }
+                                )
+                            if node_key == "intake":
+                                route_decision = delta.get("route_decision")
+                                if isinstance(route_decision, dict):
+                                    await emit(route_decision_event(route_decision))
+                        await emit(
+                            step_event(
+                                node_key,
+                                status="done",
+                                ms=int((time.monotonic() - t0) * 1000),
                             )
-                        if node_key == "intake":
-                            route_decision = delta.get("route_decision")
-                            if isinstance(route_decision, dict):
-                                await emit(route_decision_event(route_decision))
-                    await emit(
-                        step_event(
-                            node_key,
-                            status="done",
-                            ms=int((time.monotonic() - t0) * 1000),
                         )
+
+                mid = await graph.aget_state(config)
+                mid_next = [str(n) for n in (getattr(mid, "next", None) or [])]
+                gate = pre_next[0] if pre_next else None
+                noop_resume = (
+                    resume_attempt
+                    and pass_idx == 0
+                    and gate
+                    and mid_next == pre_next
+                    and gate not in executed_nodes
+                )
+                if not noop_resume:
+                    break
+                logger.warning(
+                    "agent_turn_resume_noop thread_id=%s session_id=%s gate=%s retry=1",
+                    thread_id,
+                    req.session_id,
+                    gate,
+                )
+                retry_as_node = GATE_RESUME_AS_NODE.get(gate or "")
+                if retry_as_node:
+                    await graph.aupdate_state(
+                        config,
+                        build_interrupt_state_update(
+                            req.message,
+                            user_decision=req.user_decision,
+                        ),
+                        as_node=retry_as_node,
                     )
+                stream_input = None
+
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]
             post_vals = getattr(post, "values", None) or {}

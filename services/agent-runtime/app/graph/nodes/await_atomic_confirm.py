@@ -21,10 +21,20 @@ def _latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
+def _resolve_atomic_confirm_decision(state: dict, text: str) -> str:
+    """Prefer chip-injected user_decision; fall back to text classifier."""
+    injected = str(state.get("user_decision") or "").strip().lower()
+    if injected == "confirm":
+        return "confirm"
+    if injected in ("revise", "replan"):
+        return "cancel"
+    return classify_atomic_confirm(text)
+
+
 def make_await_atomic_confirm_node() -> Callable:
     async def await_atomic_confirm(state: dict) -> dict:
         text = _latest_user_text(state.get("messages") or [])
-        decision = classify_atomic_confirm(text)
+        decision = _resolve_atomic_confirm_decision(state, text)
         spec = state.get("atomic_spec") or {}
         target = str(spec.get("target_type") or "video")
 
