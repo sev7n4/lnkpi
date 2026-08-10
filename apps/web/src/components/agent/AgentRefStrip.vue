@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { SidebarAttachment } from '@lnkpi/shared'
 import AgentSidebarRefChip from '@/components/agent/AgentSidebarRefChip.vue'
-import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
 import { computed, ref } from 'vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
 
@@ -10,16 +9,12 @@ const props = defineProps<{
   removable?: boolean
   /** History messages: click re-adds attachment to composer */
   historyInteractive?: boolean
-  /** 无 chip 时展示「从画布选节点」入口 */
-  showEmptyPickCta?: boolean
-  pickModeActive?: boolean
 }>()
 const emit = defineEmits<{
   remove: [id: string]
   mention: [refKey: string]
   reattach: [attachment: SidebarAttachment]
   reorder: [ids: string[]]
-  startCanvasPick: []
 }>()
 
 const dragRefId = ref<string | null>(null)
@@ -118,16 +113,6 @@ function onChipMention(refKey: string) {
       />
     </div>
   </div>
-  <button
-    v-else-if="showEmptyPickCta"
-    type="button"
-    class="agent-ref-strip-empty"
-    :class="{ 'is-active': pickModeActive }"
-    @click="emit('startCanvasPick')"
-  >
-    <CanvasRefTargetIcon :size="14" :filled="pickModeActive" />
-    <span>从画布选节点</span>
-  </button>
 </template>
 
 <style scoped>
@@ -160,28 +145,5 @@ function onChipMention(refKey: string) {
 
 .agent-ref-strip__chip--readonly :deep(.dock-ref-chip__remove) {
   display: none;
-}
-
-.agent-ref-strip-empty {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 36px;
-  margin-bottom: 4px;
-  border: 1px dashed var(--neo-border);
-  border-radius: 12px;
-  background: transparent;
-  font-size: 11px;
-  color: var(--neo-text-muted);
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.agent-ref-strip-empty:hover,
-.agent-ref-strip-empty.is-active {
-  border-color: color-mix(in srgb, var(--neo-hi-text) 20%, var(--neo-border));
-  background: var(--neo-hover-bg);
-  color: var(--neo-text-primary);
 }
 </style>

@@ -100,7 +100,7 @@ function isPulsing(nodeId: string): boolean {
 </script>
 
 <template>
-  <div v-if="outputs.length" class="agent-canvas-outputs mt-1.5 border-t border-white/10 pt-1.5">
+  <div v-if="outputs.length" class="agent-canvas-outputs mt-1.5 border-t border-[var(--agent-assistant-border)] pt-1.5">
     <div class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[var(--neo-text-muted)]">
       <span>画布产出 · {{ outputs.length }}</span>
       <CanvasLocateButton
@@ -141,7 +141,7 @@ function isPulsing(nodeId: string): boolean {
     <button
       v-if="showCollapse && !expanded"
       type="button"
-      class="mt-1 text-[10px] text-[var(--neo-accent-text)] hover:underline"
+      class="mt-1 text-[10px] text-[var(--neo-text-secondary)] underline-offset-2 hover:text-[var(--neo-text-primary)] hover:underline"
       @click="expanded = true"
     >
       展开全部 {{ outputs.length }} 项

@@ -86,7 +86,7 @@ const emit = defineEmits<{
   opacity: 1 !important;
   pointer-events: auto !important;
   cursor: pointer;
-  box-shadow: 0 0 0 2px var(--neo-accent-border);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 18%, transparent);
 }
 
 .dock-generate-btn.is-generating:hover:not(:disabled) {

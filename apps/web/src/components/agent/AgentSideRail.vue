@@ -151,6 +151,13 @@ const pendingAttachmentItems = computed(() =>
   makeAttachmentItems(sidebar.pendingAttachments.value, sidebar.assignRefKeys()),
 )
 
+const showPickHint = computed(
+  () => !props.readOnly && pendingAttachmentItems.value.length === 0 && !pickMode.active.value,
+)
+
+/** 输入框左上角 🎯 圆心重合时的文字起始内边距（半径 + 小间距） */
+const COMPOSER_PICK_INSET = 18
+
 const mentionOptions = computed((): MentionOption[] =>
   pendingAttachmentItems.value.map(({ refKey, attachment }) => ({
     id: attachment.id,
@@ -296,6 +303,11 @@ function pickAssetLibrary() {
   assetPickerOpen.value = true
 }
 
+function pickCanvasFromMenu() {
+  attachMenuOpen.value = false
+  onStartCanvasPick()
+}
+
 function onCanvasRefPickToggle() {
   emit('canvasRefPickToggle')
 }
@@ -306,7 +318,9 @@ function onStartCanvasPick() {
 
 function onInputDockPointerDown(event: PointerEvent) {
   if (!pickMode.active.value) return
-  if ((event.target as Element).closest('.canvas-ref-pick-btn')) return
+  const target = event.target as Element
+  if (target.closest('.composer-canvas-pick-btn')) return
+  if (target.closest('.agent-attach-menu')) return
   pickMode.deactivate()
 }
 
@@ -1205,7 +1219,7 @@ defineExpose({
                     :key="thread.id"
                     type="button"
                     class="neo-popover-item block w-full px-3 py-2 text-left text-xs"
-                    :class="thread.id === agentThreadId ? '!text-[var(--neo-accent-text)]' : ''"
+                    :class="thread.id === agentThreadId ? '!bg-[var(--neo-hi-bg)] !text-[var(--neo-hi-text)] shadow-[var(--neo-hi-shadow)]' : ''"
                     :title="thread.title"
                     @click="selectThread(thread.id)"
                   >
@@ -1310,7 +1324,7 @@ defineExpose({
                 </p>
                 <AgentRefStrip
                   v-if="msg.role === 'user' && msg.attachments?.length"
-                  class="mt-2"
+                  class="agent-ref-strip--in-user-bubble mt-2"
                   :items="makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)"
                   :removable="false"
                   history-interactive
@@ -1329,7 +1343,7 @@ defineExpose({
                   @focus-node="emit('focusNode', $event)"
                 />
                 <div v-if="msg.toolCalls?.length" class="agent-tools mt-1 space-y-0.5 pt-1">
-                  <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-accent-text)]">⚙ {{ tc.name }}</div>
+                  <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-text-secondary)]">⚙ {{ tc.name }}</div>
                 </div>
               </div>
             </div>
@@ -1345,7 +1359,7 @@ defineExpose({
             <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('1')"
               >
@@ -1371,7 +1385,7 @@ defineExpose({
             <div v-else-if="awaitingAtomicConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('确认生成')"
               >
@@ -1389,7 +1403,7 @@ defineExpose({
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('确认出图')"
               >
@@ -1415,7 +1429,7 @@ defineExpose({
             <div v-else-if="awaitingCopyConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--neo-accent-text)]"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('写入主文案')"
               >
@@ -1438,16 +1452,43 @@ defineExpose({
               @drop.prevent="onDrop"
               @pointerdown="onInputDockPointerDown"
             >
-              <AgentRefStrip
-                :items="pendingAttachmentItems"
-                :removable="true"
-                :show-empty-pick-cta="!readOnly"
-                :pick-mode-active="pickMode.active.value"
-                @remove="sidebar.remove"
-                @mention="insertRefMention"
-                @reorder="sidebar.reorder"
-                @start-canvas-pick="onStartCanvasPick"
-              />
+              <div class="agent-composer">
+                <AgentRefStrip
+                  v-if="pendingAttachmentItems.length"
+                  class="agent-composer__refs"
+                  :items="pendingAttachmentItems"
+                  :removable="true"
+                  @remove="sidebar.remove"
+                  @mention="insertRefMention"
+                  @reorder="sidebar.reorder"
+                />
+                <div class="agent-composer__input-wrap">
+                  <MentionInput
+                    ref="composerRef"
+                    v-model="input"
+                    class="agent-composer__mention w-full"
+                    :mentions="mentionOptions"
+                    :placeholder="inputPlaceholder"
+                    :disabled="agent.isStreaming"
+                    :leading-inset="readOnly ? 0 : COMPOSER_PICK_INSET"
+                    @submit="send"
+                  />
+                  <button
+                    v-if="!readOnly"
+                    type="button"
+                    class="composer-canvas-pick-btn"
+                    :class="{ 'is-active': pickMode.active.value, 'is-hint': showPickHint }"
+                    :disabled="isUploading"
+                    aria-label="从画布选节点作引用"
+                    @click.stop="onCanvasRefPickToggle"
+                  >
+                    <span class="composer-canvas-pick-btn__halo" aria-hidden="true" />
+                    <span class="composer-canvas-pick-btn__lens" aria-hidden="true" />
+                    <CanvasRefTargetIcon :size="14" :filled="pickMode.active.value" class="composer-canvas-pick-btn__icon" />
+                    <span class="composer-canvas-pick-tip">从画布选节点作引用</span>
+                  </button>
+                </div>
+              </div>
               <input
                 ref="fileInputRef"
                 type="file"
@@ -1456,31 +1497,10 @@ defineExpose({
                 :disabled="readOnly || isUploading"
                 @change="onFileChange"
               >
-              <MentionInput
-                ref="composerRef"
-                v-model="input"
-                :mentions="mentionOptions"
-                :placeholder="inputPlaceholder"
-                :disabled="agent.isStreaming"
-                @submit="send"
-              />
 
               <div class="agent-dock-actions">
                 <div class="agent-dock-params">
-                  <UniversalModelSelector v-model="planningModel" type="text" ghost />
-
-                  <button
-                    type="button"
-                    class="canvas-ref-pick-btn dock-ghost-ctl flex h-8 w-8 items-center justify-center rounded-lg"
-                    :class="{ 'is-active': pickMode.active.value, 'is-open': pickMode.active.value }"
-                    :disabled="readOnly || isUploading"
-                    title="从画布选节点作引用"
-                    @click.stop="onCanvasRefPickToggle"
-                  >
-                    <CanvasRefTargetIcon :size="16" :filled="pickMode.active.value" />
-                  </button>
-
-                  <div ref="attachMenuRef" class="relative">
+                  <div ref="attachMenuRef" class="agent-attach-menu relative">
                     <button
                       type="button"
                       class="dock-ghost-ctl flex h-8 w-8 items-center justify-center rounded-lg"
@@ -1495,31 +1515,63 @@ defineExpose({
                     </button>
                     <div
                       v-if="attachMenuOpen"
-                      class="neo-popover absolute bottom-full left-0 z-30 mb-1 w-[200px] rounded-xl py-1"
+                      class="neo-popover absolute bottom-full left-0 z-30 mb-1 w-[220px] rounded-xl py-1"
                       @click.stop
                     >
-                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickLocalUpload">
-                        本地上传
+                      <button
+                        type="button"
+                        class="neo-popover-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs"
+                        @click="pickLocalUpload"
+                      >
+                        <span class="agent-attach-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4" />
+                            <path stroke-linecap="round" d="M4 17v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1" />
+                          </svg>
+                        </span>
+                        <span>本地上传</span>
                       </button>
-                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickAssetLibrary">
-                        我的资产库
+                      <button
+                        type="button"
+                        class="neo-popover-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs"
+                        @click="pickAssetLibrary"
+                      >
+                        <span class="agent-attach-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                          <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                            <rect x="3" y="5" width="18" height="14" rx="2" />
+                            <path stroke-linecap="round" d="M3 9h18M8 5V3m8 2V3" />
+                          </svg>
+                        </span>
+                        <span>我的资产库</span>
+                      </button>
+                      <button
+                        type="button"
+                        class="neo-popover-item flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs"
+                        @click="pickCanvasFromMenu"
+                      >
+                        <span class="agent-attach-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                          <CanvasRefTargetIcon :size="14" />
+                        </span>
+                        <span>从画布选节点</span>
                       </button>
                     </div>
                   </div>
 
-                  <!-- 技能选择 -->
+                  <UniversalModelSelector v-model="planningModel" type="text" ghost />
+
                   <div ref="skillMenuRef" class="relative">
                   <button
                     type="button"
-                    class="dock-ghost-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+                    class="agent-skill-trigger dock-ghost-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
                     :class="{ 'is-open': skillMenuOpen, 'has-value': activeSkillId !== null }"
                     title="技能"
                     @click="skillMenuOpen = !skillMenuOpen"
                   >
-                    <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-[var(--neo-accent-text)]" fill="none" stroke="currentColor" stroke-width="1.75">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 3l1.9 5.2L19 10l-5.1 1.8L12 17l-1.9-5.2L5 10l5.1-1.8L12 3z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
-                    </svg>
+                    <span class="agent-skill-trigger__icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM16.5 6.75h.008v.008H16.5V6.75z" />
+                      </svg>
+                    </span>
                     <span class="max-w-[72px] truncate font-medium">{{ skillButtonLabel }}</span>
                   </button>
                   <div
@@ -1529,13 +1581,13 @@ defineExpose({
                   >
                     <button
                       type="button"
-                      class="neo-popover-item flex w-full items-start gap-2 px-3 py-2 text-left"
-                      :class="activeSkillId === null ? '!text-[var(--neo-accent-text)]' : ''"
+                      class="neo-popover-item agent-popover-skill-item flex w-full items-start gap-2 px-3 py-2 text-left"
+                      :class="{ 'is-selected': activeSkillId === null }"
                       @click="activeSkillId = null; skillMenuOpen = false"
                     >
                       <span class="agent-skill-icon mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
                         <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3M5.6 5.6l2.1 2.1m8.6 8.6l2.1 2.1M5.6 18.4l2.1-2.1m8.6-8.6l2.1-2.1" />
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                         </svg>
                       </span>
                       <span class="min-w-0">
@@ -1548,13 +1600,13 @@ defineExpose({
                       v-for="skill in AGENT_SKILLS"
                       :key="skill.id"
                       type="button"
-                      class="neo-popover-item flex w-full items-start gap-2 px-3 py-2 text-left"
-                      :class="skill.id === activeSkillId ? '!text-[var(--neo-accent-text)]' : ''"
+                      class="neo-popover-item agent-popover-skill-item flex w-full items-start gap-2 px-3 py-2 text-left"
+                      :class="{ 'is-selected': skill.id === activeSkillId }"
                       @click="activeSkillId = skill.id; skillMenuOpen = false"
                     >
                       <span class="agent-skill-icon mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md">
                         <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
-                          <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /><path stroke-linecap="round" d="M10 6.5h5.5A1.5 1.5 0 0 1 17 8v6" />
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                         </svg>
                       </span>
                       <span class="min-w-0">
@@ -1673,7 +1725,7 @@ defineExpose({
 }
 
 .agent-resize-handle:hover::after {
-  background: var(--neo-accent-border);
+  background: color-mix(in srgb, var(--neo-hi-text) 35%, transparent);
 }
 
 .agent-panel-floating .agent-resize-handle {
@@ -1742,20 +1794,78 @@ defineExpose({
 }
 
 .agent-bubble-user {
-  background: var(--neo-hi-bg);
-  color: var(--neo-hi-text);
-  box-shadow: var(--neo-hi-shadow);
+  border: 1px solid var(--agent-user-border);
+  background: var(--agent-user-bg);
+  color: var(--agent-user-text);
+  box-shadow: var(--agent-user-shadow);
 }
 
 .agent-bubble-assistant {
-  background: var(--neo-surface-elevated);
-  border: 1px solid var(--neo-border);
-  color: var(--neo-text-primary);
-  transition: border-color 0.15s ease, background 0.15s ease;
+  position: relative;
+  border: 1px solid var(--agent-assistant-border);
+  background: var(--agent-assistant-bg);
+  color: var(--agent-assistant-text);
+  box-shadow: var(--agent-assistant-shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.agent-bubble-assistant::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--agent-assistant-accent);
+  opacity: 0.85;
 }
 
 .agent-bubble-assistant:hover {
-  border-color: color-mix(in srgb, var(--neo-hi-text) 18%, var(--neo-border));
+  border-color: color-mix(in srgb, var(--agent-assistant-accent) 35%, var(--agent-assistant-border));
+  box-shadow:
+    var(--agent-assistant-shadow),
+    0 0 0 1px color-mix(in srgb, var(--agent-assistant-accent) 12%, transparent);
+}
+
+.agent-bubble-assistant :deep(.agent-tools) {
+  border-color: color-mix(in srgb, var(--agent-assistant-text) 12%, transparent);
+}
+
+.agent-bubble-assistant :deep(.agent-canvas-outputs) {
+  border-color: color-mix(in srgb, var(--agent-assistant-text) 12%, transparent);
+}
+
+/* 用户气泡内引用 chip：棋盘底 + 描边，白/浅图也能辨认 */
+.agent-bubble-user :deep(.dock-ref-chip.has-media) {
+  border-color: color-mix(in srgb, var(--agent-user-text) 16%, transparent);
+  background-color: var(--agent-user-media-bg);
+  background-image:
+    linear-gradient(45deg, var(--agent-user-media-checker) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--agent-user-media-checker) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--agent-user-media-checker) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--agent-user-media-checker) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, #fff 42%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+.agent-bubble-user :deep(.dock-ref-chip.has-media .dock-ref-chip__key) {
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+}
+
+.agent-bubble-user :deep(.dock-ref-chip:not(.has-media)) {
+  border-color: color-mix(in srgb, var(--agent-user-text) 14%, transparent);
+  background: color-mix(in srgb, var(--agent-user-text) 8%, transparent);
+  color: color-mix(in srgb, var(--agent-user-text) 72%, transparent);
+}
+
+.agent-bubble-user :deep(.dock-ref-chip:not(.has-media) .dock-ref-chip__key) {
+  color: var(--agent-user-text);
+  text-shadow: none;
 }
 
 .agent-tools {
@@ -1776,8 +1886,12 @@ defineExpose({
   background: var(--neo-glass-bg);
   backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.5);
   -webkit-backdrop-filter: blur(var(--neo-glass-blur)) saturate(1.5);
-  box-shadow: var(--neo-glass-shadow);
-  transition: border-color 0.2s ease;
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .agent-input-dock::before {
@@ -1792,7 +1906,13 @@ defineExpose({
 }
 
 .agent-input-dock:focus-within {
-  border-color: var(--neo-accent-border);
+  border-color: color-mix(in srgb, var(--neo-hi-text) 28%, var(--neo-glass-border));
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.42),
+    0 2px 6px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+    0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 14%, transparent);
 }
 
 .agent-input-dock.is-drop-target {
@@ -1845,5 +1965,251 @@ defineExpose({
 .agent-skill-icon {
   background: var(--neo-hover-bg);
   color: var(--neo-text-secondary);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.agent-skill-trigger__icon {
+  display: inline-flex;
+  color: var(--neo-text-secondary);
+  transition: color 0.15s ease;
+}
+
+.agent-skill-trigger:hover .agent-skill-trigger__icon,
+.agent-skill-trigger.is-open .agent-skill-trigger__icon {
+  color: var(--neo-text-primary);
+}
+
+.agent-skill-trigger.has-value {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 12%, var(--neo-border));
+  background: color-mix(in srgb, var(--neo-hi-bg) 10%, var(--neo-hover-bg));
+}
+
+.agent-skill-trigger.has-value .agent-skill-trigger__icon {
+  color: var(--neo-text-primary);
+}
+
+.agent-popover-skill-item.is-selected {
+  background: var(--neo-hi-bg) !important;
+  color: var(--neo-hi-text) !important;
+  box-shadow: var(--neo-hi-shadow);
+}
+
+.agent-popover-skill-item.is-selected .agent-skill-icon {
+  background: color-mix(in srgb, var(--neo-hi-text) 10%, transparent);
+  color: var(--neo-hi-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--neo-hi-text) 12%, transparent);
+}
+
+.agent-preset-primary {
+  background: var(--neo-hi-bg) !important;
+  color: var(--neo-hi-text) !important;
+  border-color: transparent !important;
+  box-shadow: var(--neo-hi-shadow);
+}
+
+.agent-preset-primary:hover:not(:disabled) {
+  filter: brightness(1.04);
+}
+
+.agent-composer {
+  min-width: 0;
+}
+
+.agent-composer__refs {
+  margin-bottom: 4px;
+}
+
+.agent-composer__input-wrap {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+  overflow: visible;
+}
+
+.agent-composer__mention {
+  min-width: 0;
+}
+
+.composer-canvas-pick-btn {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  isolation: isolate;
+  overflow: visible;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--neo-glass-border);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 28% 22%, rgba(255, 255, 255, 0.24) 0%, transparent 46%),
+    var(--neo-glass-lite-bg);
+  color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(var(--neo-glass-lite-blur)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--neo-glass-lite-blur)) saturate(1.4);
+  box-shadow:
+    var(--neo-glass-lite-shadow),
+    0 4px 12px rgba(0, 0, 0, 0.18);
+  transform: translate(-50%, -50%);
+  transition:
+    background 0.22s ease,
+    border-color 0.22s ease,
+    color 0.22s ease,
+    box-shadow 0.22s ease,
+    transform 0.14s cubic-bezier(0.34, 1.2, 0.64, 1);
+}
+
+.composer-canvas-pick-btn__halo {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.55;
+  transition: opacity 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.composer-canvas-pick-btn__lens {
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 90% 70% at 24% 18%, rgba(255, 255, 255, 0.16) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 45% at 78% 88%, rgba(255, 255, 255, 0.05) 0%, transparent 48%);
+  opacity: 0.9;
+  transition: opacity 0.22s ease, background 0.22s ease;
+}
+
+.composer-canvas-pick-btn__icon {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  transition: filter 0.22s ease, transform 0.14s ease;
+}
+
+.composer-canvas-pick-btn:hover:not(:disabled):not(.is-active) {
+  border-color: var(--neo-glass-border-hover);
+  color: #fff;
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow:
+    var(--neo-glass-lite-shadow),
+    0 6px 16px rgba(0, 0, 0, 0.22);
+}
+
+.composer-canvas-pick-btn:hover:not(:disabled):not(.is-active) .composer-canvas-pick-btn__halo {
+  opacity: 0.85;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.composer-canvas-pick-btn:active:not(:disabled):not(.is-active) {
+  transform: translate(-50%, -50%) scale(0.94);
+}
+
+.composer-canvas-pick-btn.is-active {
+  border-color: rgba(255, 255, 255, 0.92);
+  background:
+    radial-gradient(circle at 30% 24%, rgba(255, 255, 255, 0.95) 0%, transparent 46%),
+    linear-gradient(165deg, #ffffff 0%, #f3f3f6 48%, #e6e6ec 100%);
+  color: var(--neo-hi-text);
+  box-shadow:
+    var(--neo-hi-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.55),
+    0 8px 20px rgba(0, 0, 0, 0.34);
+}
+
+.composer-canvas-pick-btn.is-active .composer-canvas-pick-btn__halo {
+  inset: -5px;
+  border-color: rgba(255, 255, 255, 0.42);
+  opacity: 1;
+  animation: composer-pick-target-ring 1.75s ease-out infinite;
+}
+
+.composer-canvas-pick-btn.is-active .composer-canvas-pick-btn__lens {
+  background:
+    radial-gradient(ellipse 85% 65% at 28% 22%, rgba(255, 255, 255, 0.72) 0%, transparent 54%),
+    radial-gradient(ellipse 50% 40% at 72% 82%, rgba(255, 255, 255, 0.18) 0%, transparent 50%);
+  opacity: 1;
+}
+
+.composer-canvas-pick-btn.is-active .composer-canvas-pick-btn__icon {
+  filter: none;
+}
+
+.composer-canvas-pick-btn.is-active:active:not(:disabled) {
+  transform: translate(-50%, -50%) scale(0.96);
+  box-shadow:
+    var(--neo-hi-shadow),
+    0 0 0 2px rgba(255, 255, 255, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.composer-canvas-pick-btn.is-hint:not(.is-active) .composer-canvas-pick-btn__halo {
+  animation: composer-pick-halo-breathe 2.6s ease-in-out infinite;
+}
+
+:global(:root[data-canvas-theme='light']) .composer-canvas-pick-btn:not(.is-active) {
+  color: var(--neo-text-secondary);
+}
+
+:global(:root[data-canvas-theme='light']) .composer-canvas-pick-btn.is-active {
+  color: var(--neo-hi-text);
+}
+
+.composer-canvas-pick-tip {
+  position: absolute;
+  bottom: calc(100% + 7px);
+  left: 50%;
+  z-index: 5;
+  padding: 4px 8px;
+  border: 1px solid var(--neo-border);
+  border-radius: 8px;
+  background: var(--neo-surface-elevated);
+  font-size: 10px;
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--neo-text-secondary);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.composer-canvas-pick-btn:hover:not(:disabled) .composer-canvas-pick-tip,
+.composer-canvas-pick-btn:focus-visible .composer-canvas-pick-tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.agent-attach-icon {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
+}
+
+@keyframes composer-pick-halo-breathe {
+  0%, 100% {
+    opacity: 0.42;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.92;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes composer-pick-target-ring {
+  0% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
+  }
 }
 </style>
