@@ -21,7 +21,9 @@ from app.errors import AgentToolError, error_to_sse_payload, from_exception
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
+    GATE_RESUME_COMMAND_GOTO,
     build_fresh_turn_command,
+    build_interrupt_resume_command,
     build_interrupt_state_update,
     interrupt_event_payload,
     prepare_interrupt_resume,
@@ -674,12 +676,20 @@ async def stream_run_events(
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         resume_attempt = True
-        input_state, _ = await prepare_interrupt_resume(
-            graph,
-            config,
-            req.message,
-            user_decision=req.user_decision,
-        )
+        gate = str(next_nodes[0])
+        if gate in GATE_RESUME_COMMAND_GOTO:
+            input_state = build_interrupt_resume_command(
+                gate,
+                req.message,
+                user_decision=req.user_decision,
+            )
+        else:
+            input_state, _ = await prepare_interrupt_resume(
+                graph,
+                config,
+                req.message,
+                user_decision=req.user_decision,
+            )
     elif next_nodes:
         # Fresh @ref task while a gate is still pending — restart at intake.
         logger.info(
@@ -791,7 +801,13 @@ async def stream_run_events(
                     gate,
                 )
                 retry_as_node = GATE_RESUME_AS_NODE.get(gate or "")
-                if retry_as_node:
+                if gate in GATE_RESUME_COMMAND_GOTO:
+                    stream_input = build_interrupt_resume_command(
+                        gate,
+                        req.message,
+                        user_decision=req.user_decision,
+                    )
+                elif retry_as_node:
                     await graph.aupdate_state(
                         config,
                         build_interrupt_state_update(
@@ -800,7 +816,9 @@ async def stream_run_events(
                         ),
                         as_node=retry_as_node,
                     )
-                stream_input = None
+                    stream_input = None
+                else:
+                    stream_input = None
 
             post = await graph.aget_state(config)
             post_next = [str(n) for n in (getattr(post, "next", None) or [])]

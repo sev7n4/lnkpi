@@ -8,6 +8,7 @@ from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.hitl_resume import (
     GATE_DECISION_CLEAR,
+    build_interrupt_resume_command,
     build_interrupt_state_update,
     interrupt_event_payload,
     prepare_interrupt_resume,
@@ -138,8 +139,8 @@ async def test_prepare_interrupt_resume_atomic_confirm_cancel():
     snap = await graph.aget_state(config)
     assert snap.next == ("await_atomic_confirm",)
 
-    _, _ = await prepare_interrupt_resume(graph, config, "取消", user_decision="revise")
-    result = await graph.ainvoke(None, config)
+    cmd = build_interrupt_resume_command("await_atomic_confirm", "取消", user_decision="revise")
+    result = await graph.ainvoke(cmd, config)
     assert result.get("phase") == "done"
     assert result.get("user_decision") == "revise"
     texts = [
@@ -148,6 +149,12 @@ async def test_prepare_interrupt_resume_atomic_confirm_cancel():
         if getattr(m, "type", None) == "ai"
     ]
     assert any("已取消" in t for t in texts)
+
+
+def test_build_interrupt_resume_command_atomic_confirm():
+    cmd = build_interrupt_resume_command("await_atomic_confirm", "取消", user_decision="revise")
+    assert cmd.goto == "await_atomic_confirm"
+    assert cmd.update["user_decision"] == "revise"
 
 
 def test_should_resume_interrupt_atomic_exit_phrase():
