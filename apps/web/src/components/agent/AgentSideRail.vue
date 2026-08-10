@@ -1446,12 +1446,13 @@ defineExpose({
 
               <div class="agent-dock-actions">
                 <div class="agent-dock-params">
-                  <UniversalModelSelector v-model="planningModel" type="text" />
+                  <UniversalModelSelector v-model="planningModel" type="text" ghost />
 
                   <div ref="attachMenuRef" class="relative">
                     <button
                       type="button"
-                      class="neo-ctl flex h-8 w-8 items-center justify-center rounded-lg"
+                      class="dock-ghost-ctl flex h-8 w-8 items-center justify-center rounded-lg"
+                      :class="{ 'is-open': attachMenuOpen }"
                       :disabled="readOnly || isUploading"
                       :title="readOnly ? '只读画布不能添加参考素材' : '添加引用素材'"
                       @click="toggleAttachMenu"
@@ -1481,7 +1482,8 @@ defineExpose({
                   <div ref="skillMenuRef" class="relative">
                   <button
                     type="button"
-                    class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+                    class="dock-ghost-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+                    :class="{ 'is-open': skillMenuOpen, 'has-value': activeSkillId !== null }"
                     title="技能"
                     @click="skillMenuOpen = !skillMenuOpen"
                   >
@@ -1787,8 +1789,7 @@ defineExpose({
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--neo-border);
+  padding-top: 6px;
 }
 
 .agent-dock-params {
@@ -1796,19 +1797,8 @@ defineExpose({
   flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  max-height: 0;
-  overflow: hidden;
-  opacity: 0;
-  pointer-events: none;
-  transition: max-height 0.2s ease, opacity 0.2s ease;
-}
-
-.agent-input-dock:hover .agent-dock-params,
-.agent-input-dock:focus-within .agent-dock-params {
-  max-height: 120px;
-  opacity: 1;
-  pointer-events: auto;
+  gap: 4px;
+  min-width: 0;
 }
 
 .agent-dock-primary {

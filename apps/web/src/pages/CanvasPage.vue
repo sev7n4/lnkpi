@@ -1274,6 +1274,14 @@ function onNodeDragStop(event: NodeDragEvent) {
   if (node.parentNode) {
     nodes.value = resizeGroupToFitChildren(nodes.value as unknown as FlowNode[], node.parentNode) as EditableFlowNode[]
   }
+  if (viewportSettings.value.snapToGrid) {
+    locateFlashNodeIds.value = new Set([node.id])
+    window.setTimeout(() => {
+      if (locateFlashNodeIds.value.has(node.id)) {
+        locateFlashNodeIds.value = new Set()
+      }
+    }, 500)
+  }
   persistUserEdit()
 }
 

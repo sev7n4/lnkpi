@@ -15,12 +15,17 @@ export type SelectorModelOption = {
   disabled?: boolean
 }
 
-const props = defineProps<{
-  modelValue: string
-  type: GenerationType
-  /** Override catalog modality (e.g. audio when type is not in GenerationType) */
-  modality?: StudioModality
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    type: GenerationType
+    /** Override catalog modality (e.g. audio when type is not in GenerationType) */
+    modality?: StudioModality
+    /** ghost：无边框，hover 才高亮（Agent / 单层 dock） */
+    ghost?: boolean
+  }>(),
+  { ghost: false },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -111,7 +116,8 @@ function select(id: string) {
   <div ref="rootRef" class="relative">
     <button
       type="button"
-      class="neo-ctl flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+      class="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+      :class="[ghost ? 'dock-ghost-ctl' : 'neo-ctl', open ? 'is-open' : '']"
       :title="typeTitle"
       @click="open = !open"
     >

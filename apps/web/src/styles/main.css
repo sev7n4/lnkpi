@@ -138,6 +138,31 @@
     border-color: var(--neo-border-strong);
   }
 
+  /* dock / Agent 单层 ghost 控件：默认无边框，hover/focus 才显形 */
+  .dock-ghost-ctl {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--neo-text-secondary);
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .dock-ghost-ctl:hover,
+  .dock-ghost-ctl:focus-visible {
+    border-color: var(--neo-border);
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-primary);
+  }
+
+  .dock-ghost-ctl.is-open,
+  .dock-ghost-ctl.has-value {
+    color: var(--neo-text-primary);
+  }
+
+  .dock-ghost-ctl.is-open {
+    border-color: var(--neo-border);
+    background: var(--neo-hover-bg);
+  }
+
   /* 选项 chip：is-on 时品牌色高亮 */
   .neo-chip {
     background: var(--neo-hover-bg);
