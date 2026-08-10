@@ -206,7 +206,7 @@ def test_route_after_plan_product_visual_multi_scheme():
                 "product_visual_plan": {"image_types": [{"schemes": [{}, {}]}]},
             }
         )
-        == "await_scheme_select_stub"
+        == "await_scheme_select"
     )
 
 
@@ -277,5 +277,5 @@ def test_product_visual_gate_subgraph_compiles():
     register_product_visual_gate(graph, llm=_LLM())
     graph.add_edge(START, "image_qa_check")
     graph.add_edge("done", END)
-    compiled = graph.compile(interrupt_before=["await_image_qa"])
+    compiled = graph.compile(interrupt_before=["await_image_qa", "await_scheme_select"])
     assert compiled is not None

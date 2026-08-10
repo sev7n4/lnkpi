@@ -30,6 +30,32 @@ export interface RuntimeThreadState {
   atomicTargetType?: string | null
   atomicTitle?: string | null
   flowMode?: string | null
+  productVisualPlan?: ProductVisualPlan | null
+}
+
+export interface ProductVisualScheme {
+  scheme_id: string
+  name?: string | null
+  recommended?: boolean
+  prompt: string
+}
+
+export interface ProductVisualImageType {
+  type_id: string
+  type_label: string
+  schemes: ProductVisualScheme[]
+  selected_scheme_ids?: string[]
+}
+
+export interface ProductVisualPlan {
+  visual_intent: {
+    primary_goal?: string
+    industry_context?: string | null
+    confidence?: number
+    user_stated_constraints?: string[]
+    output_types_requested?: string[]
+  }
+  image_types: ProductVisualImageType[]
 }
 
 export interface RuntimeThreadTimelineEntry {

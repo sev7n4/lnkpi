@@ -541,12 +541,14 @@ async def get_thread_state(
     phase = vals.get("phase")
     phase_str = str(phase) if phase is not None else None
     diag = checkpoint_diagnostics(vals)
+    plan = vals.get("product_visual_plan")
     return {
         "threadId": thread_id,
         "phase": phase_str,
         "nextNodes": next_nodes,
         "interrupted": bool(next_nodes),
         "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+        "productVisualPlan": plan if isinstance(plan, dict) else None,
         **diag,
     }
 

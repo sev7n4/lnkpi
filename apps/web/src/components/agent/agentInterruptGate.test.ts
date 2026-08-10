@@ -27,6 +27,12 @@ describe('chipSetFromInterrupt', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_image_qa' })).toBe('image_qa')
   })
 
+  it('maps await_scheme_select to scheme_select chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_scheme_select' })).toBe(
+      'scheme_select',
+    )
+  })
+
   it('returns null for unknown gate', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'orchestrate_gen' })).toBe(null)
   })

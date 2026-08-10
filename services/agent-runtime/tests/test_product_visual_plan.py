@@ -132,3 +132,60 @@ async def test_plan_node_routes_scheme_select_when_multi_variant(tmp_path):
     assert out["phase"] == "await_scheme_select"
     packaging = next(t for t in out["product_visual_plan"]["image_types"] if t["type_id"] == "packaging_hero")
     assert packaging.get("selected_scheme_ids") in (None, [])
+
+
+def test_revise_limit_forces_gen():
+    from app.graph.nodes.scheme_select_gate import apply_scheme_decision
+
+    state = {"scheme_revision_count": 3, "product_visual_plan": {"image_types": []}}
+    out = apply_scheme_decision(state, decision={"action": "revise", "feedback": "加包装"})
+    assert out["phase"] == "split_product_visual"
+    assert "超限" in (out.get("assistant_note") or "")
+
+
+def test_confirm_schemes_writes_selected_ids():
+    from app.graph.nodes.scheme_select_gate import apply_scheme_decision
+
+    plan = {
+        "visual_intent": {"primary_goal": "mixed", "confidence": 0.9},
+        "image_types": [
+            {
+                "type_id": "packaging_hero",
+                "type_label": "包装",
+                "schemes": [
+                    {"scheme_id": "c1", "recommended": False, "prompt": "a"},
+                    {"scheme_id": "c2", "recommended": True, "prompt": "b"},
+                ],
+            }
+        ],
+    }
+    out = apply_scheme_decision(
+        {"product_visual_plan": plan},
+        decision={
+            "action": "confirm_schemes",
+            "selections": {"packaging_hero": ["c1", "c2"]},
+        },
+    )
+    assert out["phase"] == "split_product_visual"
+    selected = out["product_visual_plan"]["image_types"][0]["selected_scheme_ids"]
+    assert selected == ["c1", "c2"]
+
+
+def test_revise_under_limit_routes_plan():
+    from app.graph.nodes.scheme_select_gate import apply_scheme_decision
+
+    state = {
+        "scheme_revision_count": 1,
+        "product_visual_plan": {"image_types": [{"type_id": "hero_main", "schemes": [{}, {}]}]},
+    }
+    out = apply_scheme_decision(state, decision={"action": "revise", "feedback": "加包装"})
+    assert out["phase"] == "plan_product_visual"
+    assert out["scheme_revision_count"] == 2
+
+
+def test_classify_scheme_decision_confirm_and_revise():
+    from app.graph.nodes.scheme_select_gate import classify_scheme_decision
+
+    assert classify_scheme_decision("确认所选变体")["action"] == "confirm_schemes"
+    assert classify_scheme_decision("需要调整方案：加包装")["action"] == "revise"
+    assert classify_scheme_decision("", user_decision="confirm")["action"] == "confirm_schemes"

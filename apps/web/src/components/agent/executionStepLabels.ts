@@ -85,6 +85,7 @@ const PHASE_HINT_LABELS: Record<string, string> = {
   await_topo: '等待你确认节点结构',
   await_atomic_confirm: '等待你确认生成参数',
   await_image_qa: '等待你确认成图效果',
+  await_scheme_select: '等待你选择变体',
 }
 
 export function phaseHintFromInterrupt(payload: {

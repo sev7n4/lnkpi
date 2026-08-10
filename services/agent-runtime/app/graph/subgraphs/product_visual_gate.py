@@ -12,10 +12,13 @@ from app.graph.nodes.image_qa_gate import (
     make_image_qa_remedy_node,
 )
 from app.graph.nodes.plan_product_visual import (
-    make_await_scheme_select_stub_node,
     make_plan_product_visual_node,
     make_split_product_visual_stub_node,
     resolve_plan_phase,
+)
+from app.graph.nodes.scheme_select_gate import (
+    make_await_scheme_select_node,
+    route_after_await_scheme_select,
 )
 from app.graph.state import AgentRuntimeState
 
@@ -54,7 +57,7 @@ def route_after_plan_product_visual(state: AgentRuntimeState) -> str:
         return "end"
     phase = state.get("phase") or resolve_plan_phase(plan)
     if phase == "await_scheme_select":
-        return "await_scheme_select_stub"
+        return "await_scheme_select"
     if phase == "split_product_visual":
         return "split_product_visual_stub"
     return "end"
@@ -81,7 +84,7 @@ def register_product_visual_gate(
         "plan_product_visual",
         make_plan_product_visual_node(llm=llm, skills_dir=resolved_skills, nest=nest),
     )
-    graph.add_node("await_scheme_select_stub", make_await_scheme_select_stub_node())
+    graph.add_node("await_scheme_select", make_await_scheme_select_node())
     graph.add_node("split_product_visual_stub", make_split_product_visual_stub_node())
 
     graph.add_conditional_edges(
@@ -115,13 +118,22 @@ def register_product_visual_gate(
         "plan_product_visual",
         route_after_plan_product_visual,
         {
-            "await_scheme_select_stub": "await_scheme_select_stub",
+            "await_scheme_select": "await_scheme_select",
             "split_product_visual_stub": "split_product_visual_stub",
             "done": "done",
             "end": END,
         },
     )
-    graph.add_edge("await_scheme_select_stub", END)
+    graph.add_conditional_edges(
+        "await_scheme_select",
+        route_after_await_scheme_select,
+        {
+            "plan_product_visual": "plan_product_visual",
+            "split_product_visual_stub": "split_product_visual_stub",
+            "done": "done",
+            "end": END,
+        },
+    )
     graph.add_edge("split_product_visual_stub", END)
 
 
@@ -144,5 +156,5 @@ def build_product_visual_gate_subgraph(
     graph.add_edge("done", END)
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["await_image_qa"],
+        interrupt_before=["await_image_qa", "await_scheme_select"],
     )

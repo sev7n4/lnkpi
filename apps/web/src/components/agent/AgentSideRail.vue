@@ -35,7 +35,7 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
-import { chipSetFromInterrupt, IMAGE_QA_OPTIONS, interruptPayloadFromThreadState, type AgentInterruptPayload } from '@/components/agent/agentInterruptGate'
+import { chipSetFromInterrupt, IMAGE_QA_OPTIONS, interruptPayloadFromThreadState, buildSchemeConfirmMessage, buildVisualIntentSummary, defaultSchemeSelections, selectableImageTypes, type AgentInterruptPayload, type ProductVisualPlan } from '@/components/agent/agentInterruptGate'
 import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
   buildIdempotencyKey,
@@ -377,6 +377,32 @@ const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
+const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
+const productVisualPlan = ref<ProductVisualPlan | null>(null)
+const schemeSelections = ref<Record<string, string[]>>({})
+const schemeSelectTypes = computed(() => selectableImageTypes(productVisualPlan.value))
+const visualIntentSummary = computed(() => buildVisualIntentSummary(productVisualPlan.value))
+
+function syncSchemeSelectionsFromPlan(plan: ProductVisualPlan | null | undefined) {
+  productVisualPlan.value = plan ?? null
+  schemeSelections.value = defaultSchemeSelections(plan)
+}
+
+function toggleSchemeSelection(typeId: string, schemeId: string, checked: boolean) {
+  const current = new Set(schemeSelections.value[typeId] ?? [])
+  if (checked) current.add(schemeId)
+  else current.delete(schemeId)
+  schemeSelections.value = { ...schemeSelections.value, [typeId]: [...current] }
+}
+
+async function sendSchemeConfirm() {
+  const message = buildSchemeConfirmMessage(schemeSelections.value)
+  await sendMessage(message, 'confirm')
+}
+
+async function sendSchemeRevisePreset() {
+  await sendMessage('需要调整方案', 'revise')
+}
 
 const canSubmitComposer = computed(() =>
   Boolean(input.value.trim() || sidebar.pendingAttachments.value.length),
@@ -695,9 +721,17 @@ async function refreshThreadCheckpoint() {
       { headers: { Authorization: `Bearer ${token}` } },
     )
     const json = (await res.json()) as {
-      data?: { hasAtomicCheckpoint?: boolean; interrupted?: boolean; phase?: string | null }
+      data?: {
+        hasAtomicCheckpoint?: boolean
+        interrupted?: boolean
+        phase?: string | null
+        productVisualPlan?: ProductVisualPlan | null
+      }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualPlan) {
+      syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
+    }
     if (json.data?.interrupted) {
       interruptGate.value = interruptPayloadFromThreadState(json.data)
     }
@@ -954,10 +988,14 @@ async function reconnectStream() {
         finished?: boolean
         nextNodes?: string[]
         hasAtomicCheckpoint?: boolean
+        productVisualPlan?: ProductVisualPlan | null
       } | null
     }
     const phase = json.data?.phase ?? null
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualPlan) {
+      syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
+    }
     interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     const hint = phaseHintFromInterrupt(interruptGate.value)
@@ -1176,6 +1214,9 @@ function handleEvent(event: { type: string; data: unknown }) {
         interrupted: data.interrupted ?? true,
         phase: data.phase ?? null,
         node: data.node ?? null,
+      }
+      if (data.phase === 'await_scheme_select' || data.node === 'await_scheme_select') {
+        void refreshThreadCheckpoint()
       }
       break
     }
@@ -1585,6 +1626,58 @@ defineExpose({
               >
                 {{ opt.label }}
               </button>
+            </div>
+            <div v-else-if="awaitingSchemeSelect && productVisualPlan" class="mb-2 px-0.5">
+              <p v-if="visualIntentSummary" class="mb-2 text-xs text-[var(--neo-muted)]">
+                系统理解：{{ visualIntentSummary }}
+              </p>
+              <div class="space-y-2">
+                <div
+                  v-for="imageType in schemeSelectTypes"
+                  :key="imageType.type_id"
+                  class="rounded-lg border border-[var(--neo-border)] p-2"
+                >
+                  <div class="mb-1.5 text-xs font-medium">{{ imageType.type_label }}</div>
+                  <div class="flex flex-col gap-1.5">
+                    <label
+                      v-for="scheme in imageType.schemes"
+                      :key="scheme.scheme_id"
+                      class="flex cursor-pointer items-start gap-2 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        class="mt-0.5"
+                        :checked="(schemeSelections[imageType.type_id] ?? []).includes(scheme.scheme_id)"
+                        :disabled="agent.isStreaming"
+                        @change="toggleSchemeSelection(imageType.type_id, scheme.scheme_id, ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>
+                        <span class="font-medium">{{ scheme.name || scheme.scheme_id }}</span>
+                        <span v-if="scheme.recommended" class="ml-1 text-[var(--neo-accent)]">推荐</span>
+                        <span class="mt-0.5 block text-[var(--neo-muted)]">{{ scheme.prompt.slice(0, 80) }}{{ scheme.prompt.length > 80 ? '…' : '' }}</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  :disabled="agent.isStreaming"
+                  @click="sendSchemeConfirm()"
+                >
+                  确认所选变体
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendSchemeRevisePreset()"
+                >
+                  需要调整方案
+                </button>
+              </div>
             </div>
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button

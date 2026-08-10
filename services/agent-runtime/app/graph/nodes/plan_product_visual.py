@@ -56,7 +56,7 @@ def make_plan_product_visual_node(
         existing_plan = state.get("product_visual_plan")
         revision_feedback = None
         if isinstance(existing_plan, dict) and state.get("scheme_revision_count"):
-            revision_feedback = user_text
+            revision_feedback = state.get("scheme_revision_feedback") or user_text
 
         user_content = build_plan_user_content(
             user_brief=user_brief,
@@ -104,13 +104,6 @@ def make_plan_product_visual_node(
         }
 
     return plan_product_visual
-
-
-def make_await_scheme_select_stub_node() -> Callable:
-    async def await_scheme_select_stub(state: dict) -> dict:
-        return {"phase": "await_scheme_select"}
-
-    return await_scheme_select_stub
 
 
 def make_split_product_visual_stub_node() -> Callable:

@@ -119,5 +119,6 @@ def build_agent_graph(
             "await_copy_confirm",
             "await_atomic_confirm",
             "await_image_qa",
+            "await_scheme_select",
         ],
     )

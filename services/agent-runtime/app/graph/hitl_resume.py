@@ -114,6 +114,18 @@ def should_resume_interrupt(
             return False
         return len(text) <= 20
 
+    if gate == "await_scheme_select":
+        from app.graph.nodes.scheme_select_gate import classify_scheme_decision
+
+        decision = classify_scheme_decision(text, user_decision=user_decision)
+        if decision.get("action") != "none":
+            return True
+        if text.startswith("__scheme_decision__"):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 24
+
     # Unknown gate: only resume short gate-like replies.
     return len(text) <= 16 and not REF_MENTION_RE.search(text)
 
