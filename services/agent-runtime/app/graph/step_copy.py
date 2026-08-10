@@ -25,7 +25,7 @@ NODE_STEP_LABELS: dict[str, str] = {
     "await_image_qa": "等待你确认成图效果",
     "plan_product_visual": "策划视觉方案",
     "await_scheme_select": "等待你选择变体",
-    "split_product_visual_stub": "拆解视觉任务",
+    "split_product_visual": "拆解视觉任务",
     "prepare_atomic_regenerate": "准备重新生成",
     "prepare_single_gen": "准备单节点生成",
     "run_single_gen": "单节点生成",

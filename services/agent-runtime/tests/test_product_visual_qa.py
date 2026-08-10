@@ -218,7 +218,7 @@ def test_route_after_plan_product_visual_single_scheme():
                 "product_visual_plan": {"image_types": [{"schemes": [{}]}]},
             }
         )
-        == "split_product_visual_stub"
+        == "split_product_visual"
     )
 
 
@@ -263,6 +263,7 @@ async def test_image_qa_remedy_seed_failure_routes_done_not_plan_stub():
 
 
 def test_product_visual_gate_subgraph_compiles():
+    from app.graph.nodes.await_topo import make_await_topo_node
     from app.graph.nodes.done import make_done_node
 
     class _LLM:
@@ -274,8 +275,10 @@ def test_product_visual_gate_subgraph_compiles():
 
     graph = StateGraph(AgentRuntimeState)
     graph.add_node("done", make_done_node())
+    graph.add_node("await_topo", make_await_topo_node())
     register_product_visual_gate(graph, llm=_LLM())
     graph.add_edge(START, "image_qa_check")
+    graph.add_edge("await_topo", END)
     graph.add_edge("done", END)
     compiled = graph.compile(interrupt_before=["await_image_qa", "await_scheme_select"])
     assert compiled is not None

@@ -13,9 +13,9 @@ from app.graph.nodes.image_qa_gate import (
 )
 from app.graph.nodes.plan_product_visual import (
     make_plan_product_visual_node,
-    make_split_product_visual_stub_node,
     resolve_plan_phase,
 )
+from app.graph.nodes.split_product_visual import make_split_product_visual_node
 from app.graph.nodes.scheme_select_gate import (
     make_await_scheme_select_node,
     route_after_await_scheme_select,
@@ -59,7 +59,7 @@ def route_after_plan_product_visual(state: AgentRuntimeState) -> str:
     if phase == "await_scheme_select":
         return "await_scheme_select"
     if phase == "split_product_visual":
-        return "split_product_visual_stub"
+        return "split_product_visual"
     return "end"
 
 
@@ -85,7 +85,10 @@ def register_product_visual_gate(
         make_plan_product_visual_node(llm=llm, skills_dir=resolved_skills, nest=nest),
     )
     graph.add_node("await_scheme_select", make_await_scheme_select_node())
-    graph.add_node("split_product_visual_stub", make_split_product_visual_stub_node())
+    graph.add_node(
+        "split_product_visual",
+        make_split_product_visual_node(nest=nest, skills_dir=resolved_skills),
+    )
 
     graph.add_conditional_edges(
         "image_qa_check",
@@ -119,7 +122,7 @@ def register_product_visual_gate(
         route_after_plan_product_visual,
         {
             "await_scheme_select": "await_scheme_select",
-            "split_product_visual_stub": "split_product_visual_stub",
+            "split_product_visual": "split_product_visual",
             "done": "done",
             "end": END,
         },
@@ -129,12 +132,12 @@ def register_product_visual_gate(
         route_after_await_scheme_select,
         {
             "plan_product_visual": "plan_product_visual",
-            "split_product_visual_stub": "split_product_visual_stub",
+            "split_product_visual": "split_product_visual",
             "done": "done",
             "end": END,
         },
     )
-    graph.add_edge("split_product_visual_stub", END)
+    graph.add_edge("split_product_visual", "await_topo")
 
 
 def build_product_visual_gate_subgraph(
@@ -147,12 +150,15 @@ def build_product_visual_gate_subgraph(
     """Standalone compiled subgraph for isolated pytest."""
     from langgraph.graph import START
 
+    from app.graph.nodes.await_topo import make_await_topo_node
     from app.graph.nodes.done import make_done_node
 
     graph = StateGraph(AgentRuntimeState)
     graph.add_node("done", make_done_node(nest=nest))
+    graph.add_node("await_topo", make_await_topo_node())
     register_product_visual_gate(graph, llm=llm, skills_dir=skills_dir, nest=nest)
     graph.add_edge(START, "image_qa_check")
+    graph.add_edge("await_topo", END)
     graph.add_edge("done", END)
     return graph.compile(
         checkpointer=checkpointer,

@@ -61,3 +61,44 @@ def build_plan_llm_messages(
 ) -> list[Any]:
     few_shots = few_shots_for_skill(SKILL_ID, NODE_NAME, skills_dir=skills_dir)
     return build_llm_messages(system=system_prompt, user=user_content, few_shots=few_shots)
+
+
+def _format_key_elements(key_elements: dict[str, Any]) -> str | None:
+    hints: list[str] = []
+    for key, value in key_elements.items():
+        if value is True:
+            hints.append(str(key))
+        elif value is False or value is None:
+            continue
+        elif isinstance(value, list):
+            hints.append(f"{key}: {', '.join(str(v) for v in value)}")
+        else:
+            hints.append(f"{key}: {value}")
+    return "；".join(hints) if hints else None
+
+
+def build_scheme_prompt_hint(
+    scheme: dict[str, Any],
+    visual_intent: dict[str, Any] | None = None,
+) -> str:
+    """Per-scheme prompt hint — never merge multiple schemes (AC-6 / L4)."""
+    parts: list[str] = []
+    prompt = str(scheme.get("prompt") or "").strip()
+    if prompt:
+        parts.append(prompt)
+
+    key_elements = scheme.get("key_elements")
+    if isinstance(key_elements, dict) and key_elements:
+        formatted = _format_key_elements(key_elements)
+        if formatted:
+            parts.append(f"关键元素：{formatted}")
+
+    if visual_intent:
+        style_hints = visual_intent.get("style_hints") or []
+        constraints = visual_intent.get("user_stated_constraints") or []
+        if style_hints:
+            parts.append("风格：" + "、".join(str(s) for s in style_hints))
+        if constraints:
+            parts.append("约束：" + "、".join(str(c) for c in constraints))
+
+    return "\n".join(parts)

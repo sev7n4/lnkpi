@@ -174,7 +174,7 @@ def route_after_await_scheme_select(state: dict) -> str:
     if phase == "plan_product_visual":
         return "plan_product_visual"
     if phase == "split_product_visual":
-        return "split_product_visual_stub"
+        return "split_product_visual"
     return "end"
 
 

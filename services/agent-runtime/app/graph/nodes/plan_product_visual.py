@@ -104,10 +104,3 @@ def make_plan_product_visual_node(
         }
 
     return plan_product_visual
-
-
-def make_split_product_visual_stub_node() -> Callable:
-    async def split_product_visual_stub(state: dict) -> dict:
-        return {"phase": "split_product_visual"}
-
-    return split_product_visual_stub
