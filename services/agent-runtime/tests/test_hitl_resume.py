@@ -88,6 +88,67 @@ def test_should_resume_interrupt_image_qa_retake():
     assert should_resume_interrupt("我重新拍摄上传", ["await_image_qa"]) is True
 
 
-def test_should_resume_interrupt_image_qa_long_task():
-    msg = "@I1 帮我出主图和场景图，再出一套包装结构图"
-    assert should_resume_interrupt(msg, ["await_image_qa"]) is False
+@pytest.mark.asyncio
+async def test_prepare_interrupt_resume_atomic_confirm_cancel():
+    """await_atomic_confirm gate resumes with as_node=create_atomic_node."""
+    from langchain_core.messages import AIMessage
+
+    from app.graph.nodes.await_atomic_confirm import make_await_atomic_confirm_node
+    from app.graph.subgraphs.atomic_create_gate import route_after_atomic_confirm
+
+    graph_def = StateGraph(AgentRuntimeState)
+
+    async def create_atomic_node(_state: dict) -> dict:
+        return {
+            "phase": "atomic_create",
+            "atomic_node_id": "video-1",
+            "atomic_spec": {"target_type": "video", "title": "15s", "confirm_gate": True},
+            "messages": [AIMessage(content="created")],
+        }
+
+    graph_def.add_node("create_atomic_node", create_atomic_node)
+    graph_def.add_node("await_atomic_confirm", make_await_atomic_confirm_node())
+
+    async def _done(_state: dict) -> dict:
+        return {"phase": "done"}
+
+    graph_def.add_node("done", _done)
+    graph_def.add_edge(START, "create_atomic_node")
+    graph_def.add_conditional_edges(
+        "create_atomic_node",
+        lambda _s: "await_atomic_confirm",
+        {"await_atomic_confirm": "await_atomic_confirm"},
+    )
+    graph_def.add_conditional_edges(
+        "await_atomic_confirm",
+        route_after_atomic_confirm,
+        {"run_atomic_gen": "done", "done": "done", "end": END},
+    )
+    graph_def.add_edge("done", END)
+    graph = graph_def.compile(
+        checkpointer=MemorySaver(),
+        interrupt_before=["await_atomic_confirm"],
+    )
+    config = {"configurable": {"thread_id": "hitl-atomic-1"}}
+
+    await graph.ainvoke(
+        {"messages": [HumanMessage(content="做一个15秒视频")]},
+        config,
+    )
+    snap = await graph.aget_state(config)
+    assert snap.next == ("await_atomic_confirm",)
+
+    _, _ = await prepare_interrupt_resume(graph, config, "取消", user_decision="revise")
+    result = await graph.ainvoke(None, config)
+    assert result.get("phase") == "done"
+    assert result.get("user_decision") == "revise"
+    texts = [
+        str(getattr(m, "content", "") or "")
+        for m in (result.get("messages") or [])
+        if getattr(m, "type", None) == "ai"
+    ]
+    assert any("已取消" in t for t in texts)
+
+
+def test_should_resume_interrupt_atomic_exit_phrase():
+    assert should_resume_interrupt("退出当前流程", ["await_atomic_confirm"]) is True

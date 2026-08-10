@@ -90,7 +90,7 @@ ATOMIC_CONFIRM_KEYWORDS = tuple(_TAXONOMY.get("atomic_confirm_keywords") or (
     "确认",
 ))
 
-ATOMIC_CANCEL_KEYWORDS = ("取消", "不要了", "算了", "放弃")
+ATOMIC_CANCEL_KEYWORDS = ("取消", "不要了", "算了", "放弃", "退出", "退出当前流程")
 
 ATOMIC_REGENERATE_HINTS = tuple(_TAXONOMY.get("atomic_regenerate_hints") or (
     "再试一次",

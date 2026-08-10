@@ -18,6 +18,7 @@ import re
 from typing import Any
 
 from langchain_core.messages import HumanMessage
+from langgraph.errors import InvalidUpdateError
 from langgraph.types import Command
 
 GATE_DECISION_CLEAR = {"user_decision": "none", "force_choice": None}
@@ -159,25 +160,44 @@ def build_interrupt_state_update(
     return update
 
 
+# interrupt_before gate → last completed node for ambiguous checkpoint updates.
+GATE_RESUME_AS_NODE: dict[str, str] = {
+    "await_atomic_confirm": "create_atomic_node",
+}
+
+
 async def prepare_interrupt_resume(
     graph: Any,
     config: dict[str, Any],
     message: str,
     *,
     user_decision: str | None = None,
+    as_node: str | None = None,
 ) -> tuple[None, int]:
     """Inject user input and return ``(None, assistant_save_after)`` for streaming.
 
     Returns graph input ``None`` (continue from interrupt) and the message index
     after which new assistant replies should be persisted.
+
+    Some gates (e.g. ``await_atomic_confirm``) need ``as_node`` set to the upstream
+    node so LangGraph applies the update and actually runs the gate on ``ainvoke(None)``.
     """
     snap = await graph.aget_state(config)
     vals = getattr(snap, "values", None) or {}
+    next_nodes = [str(n) for n in (getattr(snap, "next", None) or ())]
+    gate_node = next_nodes[0] if next_nodes else None
+    resume_as_node = as_node or (GATE_RESUME_AS_NODE.get(gate_node or "") if gate_node else None)
     assistant_save_after = len(vals.get("messages") or []) + 1
-    await graph.aupdate_state(
-        config,
-        build_interrupt_state_update(message, user_decision=user_decision),
-    )
+    update = build_interrupt_state_update(message, user_decision=user_decision)
+    update_kwargs: dict[str, Any] = {}
+    if resume_as_node:
+        update_kwargs["as_node"] = resume_as_node
+    try:
+        await graph.aupdate_state(config, update, **update_kwargs)
+    except InvalidUpdateError:
+        if resume_as_node:
+            raise
+        await graph.aupdate_state(config, update)
     return None, assistant_save_after
 
 

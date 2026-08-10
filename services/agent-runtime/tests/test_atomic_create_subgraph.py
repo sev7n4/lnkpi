@@ -185,6 +185,21 @@ async def test_video_routes_to_confirm_gate():
 
 
 @pytest.mark.asyncio
+async def test_await_atomic_confirm_honors_injected_user_decision():
+    nest = FakeNest()
+    await_node = make_await_atomic_confirm_node()
+    confirmed = await await_node(
+        {"messages": [HumanMessage(content="")], "user_decision": "confirm"},
+    )
+    assert confirmed["user_decision"] == "confirm"
+    cancelled = await await_node(
+        {"messages": [HumanMessage(content="")], "user_decision": "revise"},
+    )
+    assert cancelled["user_decision"] == "revise"
+    assert cancelled["phase"] == "done"
+
+
+@pytest.mark.asyncio
 async def test_await_atomic_confirm_then_gen():
     nest = FakeNest()
     await_node = make_await_atomic_confirm_node()

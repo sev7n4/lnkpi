@@ -864,10 +864,29 @@ async function sendPreset(text: string) {
 /** 把按钮文本映射为后端可识别的 userDecision 值。 */
 function mapPresetToDecision(text: string): 'confirm' | 'revise' | undefined {
   const t = (text || '').trim()
-  if (t === '1' || t === 'A' || t === '确认方案' || t === '确认出图' || t === '写入主文案') {
+  if (
+    t === '1'
+    || t === 'A'
+    || t === '确认方案'
+    || t === '确认出图'
+    || t === '确认生成'
+    || t === '写入主文案'
+  ) {
     return 'confirm'
   }
-  if (t === '2' || t === 'B' || t === '3' || t === 'C' || t === '换方向' || t === '自己说明修改' || t === '要修改' || t === '要改拓扑：') {
+  if (
+    t === '2'
+    || t === 'B'
+    || t === '3'
+    || t === 'C'
+    || t === '取消'
+    || t === '换方向'
+    || t === '自己说明修改'
+    || t === '要修改'
+    || t === '要改拓扑：'
+    || t === '退出'
+    || t === '退出当前流程'
+  ) {
     return 'revise'
   }
   return undefined
