@@ -13,6 +13,13 @@ export type FocusNodeLike = {
   data?: Record<string, unknown>
 }
 
+export type CanvasRefAddResult = {
+  added: number
+  empty: number
+  duplicate: number
+  addedNodeIds: string[]
+}
+
 export function assignRefKeysFor(attachments: SidebarAttachment[]): string[] {
   const counters = { text: 0, image: 0, video: 0, audio: 0 }
   return attachments.map((a) => {
@@ -132,9 +139,35 @@ export function useSidebarAttachments() {
     return count
   }
 
+  function addFromCanvasNodesDetailed(nodes: FocusNodeLike[]): CanvasRefAddResult {
+    let added = 0
+    let empty = 0
+    let duplicate = 0
+    const addedNodeIds: string[] = []
+    for (const n of nodes) {
+      if (pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) break
+      const item = nodeToSidebarAttachment(n)
+      if (!item) {
+        empty += 1
+        continue
+      }
+      const dup = pendingAttachments.value.some(
+        (a) => (item.url && a.url === item.url) || (item.sourceNodeId && a.sourceNodeId === item.sourceNodeId),
+      )
+      if (dup) {
+        duplicate += 1
+        continue
+      }
+      addFromPayload(item)
+      added += 1
+      if (n.id) addedNodeIds.push(n.id)
+    }
+    return { added, empty, duplicate, addedNodeIds }
+  }
+
   function toPayload() {
     return { attachments: [...pendingAttachments.value], refOrder: refOrder.value }
   }
 
-  return { pendingAttachments, refOrder, addFromFile, addFromPayload, addFromCanvasNode, addFromCanvasNodes, remove, reorder, clear, toPayload, assignRefKeys }
+  return { pendingAttachments, refOrder, addFromFile, addFromPayload, addFromCanvasNode, addFromCanvasNodes, addFromCanvasNodesDetailed, remove, reorder, clear, toPayload, assignRefKeys }
 }

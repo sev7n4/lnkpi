@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import type { CanvasTheme } from '@/composables/useCanvasTheme'
 
-/** 逆向 NeoWOW MouseTrailEffect：SVG 单圈 + rAF，600ms / r 6→28 */
+/** 画布空白处单击/双击涟漪：暗色主题用亮白圈，亮色主题用淡灰圈 */
 interface RippleCircle {
   id: number
   x: number
@@ -19,19 +20,21 @@ interface RippleCircle {
 const props = withDefaults(
   defineProps<{
     container?: HTMLElement | null
-    color?: string
+    theme?: CanvasTheme
   }>(),
-  { color: '#a78bfa' },
+  { theme: 'dark' },
 )
 
-const RIPPLE_DURATION = 600
-const MIN_RADIUS = 6
-const MAX_RADIUS = 28
+const RIPPLE_DURATION = 520
 const BASE_STROKE = 1.5
 
 const circles = ref<RippleCircle[]>([])
 let circleId = 0
 let boundEl: HTMLElement | null = null
+
+const clickColor = computed(() =>
+  props.theme === 'light' ? 'rgba(23, 25, 35, 0.5)' : 'rgba(255, 255, 255, 0.78)',
+)
 
 const SKIP_SELECTOR = [
   'button',
@@ -86,8 +89,8 @@ function animateCircle(seed: RippleCircle) {
     circles.value[idx] = {
       ...circles.value[idx],
       radius: seed.minRadius + (seed.maxRadius - seed.minRadius) * progress,
-      opacity: 1 - progress,
-      strokeWidth: seed.baseStrokeWidth * (1 - progress * 0.5),
+      opacity: (1 - progress) * 0.95,
+      strokeWidth: seed.baseStrokeWidth * (1 - progress * 0.45),
     }
     requestAnimationFrame(tick)
   }
@@ -95,18 +98,24 @@ function animateCircle(seed: RippleCircle) {
   requestAnimationFrame(tick)
 }
 
-function spawnCircle(clientX: number, clientY: number) {
+function spawnCircle(
+  clientX: number,
+  clientY: number,
+  opts?: { minRadius?: number; maxRadius?: number; stroke?: number },
+) {
+  const minRadius = opts?.minRadius ?? 5
+  const maxRadius = opts?.maxRadius ?? 26
   const seed: RippleCircle = {
     id: circleId++,
     x: clientX,
     y: clientY,
-    radius: MIN_RADIUS,
-    opacity: 1,
-    color: props.color,
-    strokeWidth: BASE_STROKE,
-    baseStrokeWidth: BASE_STROKE,
-    maxRadius: MAX_RADIUS,
-    minRadius: MIN_RADIUS,
+    radius: minRadius,
+    opacity: 0.95,
+    color: clickColor.value,
+    strokeWidth: opts?.stroke ?? BASE_STROKE,
+    baseStrokeWidth: opts?.stroke ?? BASE_STROKE,
+    maxRadius,
+    minRadius,
     startTime: performance.now(),
   }
   circles.value.push(seed)
@@ -119,14 +128,22 @@ function onClick(event: MouseEvent) {
   spawnCircle(event.clientX, event.clientY)
 }
 
+function onDblClick(event: MouseEvent) {
+  if (event.button !== 0) return
+  if (shouldSkip(event.target)) return
+  spawnCircle(event.clientX, event.clientY, { minRadius: 8, maxRadius: 42, stroke: 2 })
+}
+
 function bindTarget(el: HTMLElement | null | undefined) {
   if (boundEl) {
     boundEl.removeEventListener('click', onClick, { capture: true })
+    boundEl.removeEventListener('dblclick', onDblClick, { capture: true })
     boundEl = null
   }
   if (!el) return
   boundEl = el
   boundEl.addEventListener('click', onClick, { capture: true })
+  boundEl.addEventListener('dblclick', onDblClick, { capture: true })
 }
 
 watch(
@@ -144,7 +161,7 @@ onUnmounted(() => bindTarget(null))
       <svg class="trail-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <filter id="neo-click-ripple-glow">
-            <feGaussianBlur stdDeviation="1" result="coloredBlur" />
+            <feGaussianBlur stdDeviation="0.8" result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
               <feMergeNode in="SourceGraphic" />

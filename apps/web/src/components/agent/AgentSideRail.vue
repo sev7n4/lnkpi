@@ -50,7 +50,7 @@ import ForceChoiceDialog, { type ForceChoiceKind } from '@/components/agent/Forc
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
-import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike } from '@/composables/useSidebarAttachments'
+import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike, type CanvasRefAddResult } from '@/composables/useSidebarAttachments'
 import { parseRefMentions } from '@/composables/useRefMentions'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
@@ -61,6 +61,8 @@ import {
   getAgentSkill,
 } from '@/constants/agentSkillMap'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
+import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
+import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import { formatDuration as formatTraceDuration } from '@/components/agent/executionStepLabels'
 import { formatSessionTime, lastThreadStorageKey } from '@/utils/formatSessionTime'
 import { randomId } from '@/utils/randomId'
@@ -93,9 +95,11 @@ const emit = defineEmits<{
   redo: []
   openImageEditor: [nodeId: string]
   expandedChange: [expanded: boolean]
-  /** 从「添加引用 → 画布节点」触发，由画布页注入当前选中节点 */
-  requestCanvasRefs: []
+  /** 切换画布引用 Pick 模式（由 CanvasPage 处理选中 seed） */
+  canvasRefPickToggle: []
 }>()
+
+const pickMode = useCanvasRefPickMode()
 
 const agent = useAgentStore()
 const auth = useAuthStore()
@@ -287,14 +291,23 @@ function pickLocalUpload() {
   openFilePicker()
 }
 
-function pickCanvasNodes() {
-  attachMenuOpen.value = false
-  emit('requestCanvasRefs')
-}
-
 function pickAssetLibrary() {
   attachMenuOpen.value = false
   assetPickerOpen.value = true
+}
+
+function onCanvasRefPickToggle() {
+  emit('canvasRefPickToggle')
+}
+
+function onStartCanvasPick() {
+  if (!pickMode.active.value) emit('canvasRefPickToggle')
+}
+
+function onInputDockPointerDown(event: PointerEvent) {
+  if (!pickMode.active.value) return
+  if ((event.target as Element).closest('.canvas-ref-pick-btn')) return
+  pickMode.deactivate()
 }
 
 async function addFiles(files: FileList | File[]) {
@@ -1098,10 +1111,15 @@ defineExpose({
   setComposerInput,
   addAttachment,
   reconcileFromNodes,
-  addFromCanvasNodes: (nodes: FocusNodeLike[]) => {
-    const n = sidebar.addFromCanvasNodes(nodes)
-    if (n < nodes.length) ElMessage.warning(`最多添加 ${SIDEBAR_ATTACHMENT_MAX} 个参考素材`)
-    return n
+  addFromCanvasNodes: (nodes: FocusNodeLike[]): CanvasRefAddResult => {
+    const result = sidebar.addFromCanvasNodesDetailed(nodes)
+    if (result.added < nodes.length && nodes.length === 1) {
+      if (result.empty) ElMessage.warning('该节点暂无可用内容')
+      else if (result.duplicate) ElMessage.info('该节点已在引用中')
+    } else if (result.added < nodes.length && sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) {
+      ElMessage.warning(`最多 ${SIDEBAR_ATTACHMENT_MAX} 个参考素材`)
+    }
+    return result
   },
 })
 </script>
@@ -1418,14 +1436,17 @@ defineExpose({
               @dragover.prevent="onDragOver"
               @dragleave.prevent="onDragLeave"
               @drop.prevent="onDrop"
+              @pointerdown="onInputDockPointerDown"
             >
               <AgentRefStrip
-                v-if="pendingAttachmentItems.length"
                 :items="pendingAttachmentItems"
                 :removable="true"
+                :show-empty-pick-cta="!readOnly"
+                :pick-mode-active="pickMode.active.value"
                 @remove="sidebar.remove"
                 @mention="insertRefMention"
                 @reorder="sidebar.reorder"
+                @start-canvas-pick="onStartCanvasPick"
               />
               <input
                 ref="fileInputRef"
@@ -1448,6 +1469,17 @@ defineExpose({
                 <div class="agent-dock-params">
                   <UniversalModelSelector v-model="planningModel" type="text" ghost />
 
+                  <button
+                    type="button"
+                    class="canvas-ref-pick-btn dock-ghost-ctl flex h-8 w-8 items-center justify-center rounded-lg"
+                    :class="{ 'is-active': pickMode.active.value, 'is-open': pickMode.active.value }"
+                    :disabled="readOnly || isUploading"
+                    title="从画布选节点作引用"
+                    @click.stop="onCanvasRefPickToggle"
+                  >
+                    <CanvasRefTargetIcon :size="16" :filled="pickMode.active.value" />
+                  </button>
+
                   <div ref="attachMenuRef" class="relative">
                     <button
                       type="button"
@@ -1468,9 +1500,6 @@ defineExpose({
                     >
                       <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickLocalUpload">
                         本地上传
-                      </button>
-                      <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickCanvasNodes">
-                        画布节点
                       </button>
                       <button type="button" class="neo-popover-item block w-full px-3 py-2 text-left text-xs" @click="pickAssetLibrary">
                         我的资产库
@@ -1713,15 +1742,20 @@ defineExpose({
 }
 
 .agent-bubble-user {
-  background: var(--neo-brand-gradient);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(109, 93, 252, 0.25);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
 }
 
 .agent-bubble-assistant {
   background: var(--neo-surface-elevated);
   border: 1px solid var(--neo-border);
   color: var(--neo-text-primary);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.agent-bubble-assistant:hover {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 18%, var(--neo-border));
 }
 
 .agent-tools {

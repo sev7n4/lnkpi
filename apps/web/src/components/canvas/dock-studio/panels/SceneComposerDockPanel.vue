@@ -171,7 +171,7 @@ const canBatchGenerate = computed(() =>
           <span class="text-[10px] uppercase tracking-wide text-white/40">场景</span>
           <button
             type="button"
-            class="text-[10px] text-[#818cf8] hover:text-[#a5b4fc]"
+            class="text-[10px] text-[var(--neo-hi-text)] hover:opacity-80"
             :disabled="locked"
             @click="addScene"
           >
@@ -245,8 +245,8 @@ const canBatchGenerate = computed(() =>
                     v-for="opt in ([['image', '图'], ['video', '视'], ['none', '无']] as const)"
                     :key="opt[0]"
                     type="button"
-                    class="rounded px-1.5 py-0.5 text-[10px]"
-                    :class="shot.mediaType === opt[0] ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
+                    class="dock-seg-btn rounded px-1.5 py-0.5"
+                    :class="{ 'is-on': shot.mediaType === opt[0] }"
                     :disabled="locked"
                     @click="setShotMediaType(activeScene.id, shot.id, opt[0])"
                   >

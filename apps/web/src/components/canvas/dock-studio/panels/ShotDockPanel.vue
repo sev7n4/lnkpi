@@ -120,8 +120,8 @@ function toggleVoice() {
           v-for="opt in SHOT_GENERATE_MODE_OPTIONS"
           :key="opt.value"
           type="button"
-          class="rounded-md px-2 py-1 text-[10px] transition"
-          :class="shotGenerateMode === opt.value ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/50'"
+          class="dock-seg-btn rounded-md px-2 py-1"
+          :class="{ 'is-on': shotGenerateMode === opt.value }"
           :disabled="readonly"
           @click="setMode(opt.value)"
         >

@@ -7,7 +7,8 @@ import {
   resolveNeoNodeTitle,
   type NeoNodeStatus,
 } from '@/components/canvas/neoNodeMeta'
-import { CANVAS_NODE_ADD_AGENT_KEY, CANVAS_NODE_LOCATE_FLASH_KEY, CANVAS_NODE_RENAME_KEY } from '@/composables/canvasNodeActions'
+import { CANVAS_NODE_ADD_AGENT_KEY, CANVAS_NODE_LOCATE_FLASH_KEY, CANVAS_NODE_RENAME_KEY, CANVAS_REF_PICK_ACTIVE_KEY, CANVAS_REF_PICK_NODE_IDS_KEY, CANVAS_REF_PICK_REJECT_KEY } from '@/composables/canvasNodeActions'
+import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -51,9 +52,30 @@ const shellStyle = computed(() => {
 const { id: nodeId } = useNode()
 const renameNode = inject(CANVAS_NODE_RENAME_KEY, null)
 const addToAgent = inject(CANVAS_NODE_ADD_AGENT_KEY, null)
+const pickActive = inject(CANVAS_REF_PICK_ACTIVE_KEY, ref(false))
+const pickedNodeIds = inject(CANVAS_REF_PICK_NODE_IDS_KEY, ref(new Set<string>()))
+const pickRejectNodeId = inject(CANVAS_REF_PICK_REJECT_KEY, ref<string | null>(null))
+const isPickMarked = computed(() => pickedNodeIds.value.has(nodeId))
+const isPickReject = computed(() => pickRejectNodeId.value === nodeId)
 const locateFlashNodeIds = inject(CANVAS_NODE_LOCATE_FLASH_KEY, ref(new Set<string>()))
 const isLocateFlashing = computed(() => locateFlashNodeIds.value.has(nodeId))
 const isHovered = ref(false)
+let hoverLeaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function setHovered(next: boolean) {
+  if (hoverLeaveTimer) {
+    clearTimeout(hoverLeaveTimer)
+    hoverLeaveTimer = null
+  }
+  if (next) {
+    isHovered.value = true
+    return
+  }
+  hoverLeaveTimer = setTimeout(() => {
+    isHovered.value = false
+    hoverLeaveTimer = null
+  }, 80)
+}
 
 const showHandles = computed(() => props.selected || isHovered.value)
 const isRenaming = ref(false)
@@ -87,11 +109,23 @@ function onAddToAgent(event: MouseEvent) {
 <template>
   <div
     class="neo-node-wrapper"
-    :class="{ 'is-active': selected, 'show-handles': showHandles }"
-    @mouseenter="isHovered = true"
-    @mouseleave="isHovered = false"
+    :class="{
+      'is-active': selected,
+      'show-handles': showHandles,
+      'is-hovered': isHovered,
+      'is-ref-pick-active': pickActive,
+      'is-ref-pick-marked': isPickMarked,
+      'is-ref-pick-reject': isPickReject,
+    }"
+    @mouseenter="setHovered(true)"
+    @mouseleave="setHovered(false)"
   >
-    <div class="neo-node-external-title" @dblclick.stop="startRename">
+    <div
+      class="neo-node-external-title"
+      @dblclick.stop="startRename"
+      @mouseenter="setHovered(true)"
+      @mouseleave="setHovered(false)"
+    >
       <div class="neo-node-icon" :class="meta.variant">
         <svg v-if="meta.icon === 'prompt'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -134,21 +168,18 @@ function onAddToAgent(event: MouseEvent) {
         @click.stop
         @mousedown.stop
       >
-      <span v-else class="neo-node-title">{{ displayTitle }}</span>
-      <span class="neo-node-status" :class="nodeStatus" />
+      <span v-else class="neo-node-title min-w-0 flex-1 truncate">{{ displayTitle }}</span>
+      <span class="neo-node-status shrink-0" :class="nodeStatus" />
       <button
-        v-if="addToAgent && isHovered && !selected"
+        v-if="addToAgent"
         type="button"
-        class="neo-node-agent-add neo-node-agent-add--title"
+        class="neo-node-agent-add neo-node-agent-add--title shrink-0"
         title="加入 Agent 引用"
         aria-label="加入 Agent 引用"
         @click="onAddToAgent"
         @mousedown.stop
       >
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-          <path d="M5 19h14M12 15v4" stroke-linecap="round" />
-        </svg>
+        <CanvasRefTargetIcon :size="13" />
       </button>
     </div>
 

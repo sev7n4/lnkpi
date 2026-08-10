@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { AgentTaskProgressState } from './agentTaskProgress'
+import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 
 defineProps<{
   progress: AgentTaskProgressState
@@ -29,7 +30,7 @@ const statusLabel: Record<string, string> = {
       <li
         v-for="item in progress.items"
         :key="item.id"
-        class="flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-[var(--neo-hover)]"
+        class="group flex cursor-pointer items-start gap-2 rounded-lg px-1.5 py-1 hover:bg-[var(--neo-hover)]"
         @click="item.nodeId && emit('focusNode', item.nodeId)"
       >
         <span class="mt-0.5 w-14 shrink-0 opacity-70">{{ statusLabel[item.status] || item.status }}</span>
@@ -40,6 +41,9 @@ const statusLabel: Record<string, string> = {
           </span>
           <div v-if="item.errorHint" class="mt-0.5 opacity-60">{{ item.errorHint }}</div>
           <div v-if="item.errorCode && !item.errorHint" class="mt-0.5 opacity-50">{{ item.errorCode }}</div>
+        </span>
+        <span v-if="item.nodeId" class="mt-0.5 shrink-0 opacity-0 transition group-hover:opacity-70">
+          <CanvasLocatePinIcon :size="12" />
         </span>
       </li>
     </ul>

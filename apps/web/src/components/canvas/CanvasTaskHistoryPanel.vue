@@ -6,6 +6,8 @@ import { modelOptionName } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import NodeDiagnosticPopover from '@/components/canvas/NodeDiagnosticPopover.vue'
+import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
+import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
@@ -99,8 +101,8 @@ const TYPE_LABELS: Record<string, string> = {
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   completed: { label: '成功', cls: 'bg-emerald-500/15 text-emerald-300' },
-  generating: { label: '生成中', cls: 'bg-indigo-500/15 text-indigo-300 animate-pulse' },
-  pending: { label: '排队中', cls: 'bg-indigo-500/15 text-indigo-300 animate-pulse' },
+  generating: { label: '生成中', cls: 'bg-sky-500/15 text-sky-300 animate-pulse' },
+  pending: { label: '排队中', cls: 'bg-[var(--neo-active-bg)] text-[var(--neo-text-secondary)] animate-pulse' },
   fallback_pending: { label: '待确认', cls: 'bg-amber-500/15 text-amber-300' },
   failed: { label: '失败', cls: 'bg-red-500/15 text-red-300' },
   error: { label: '失败', cls: 'bg-red-500/15 text-red-300' },
@@ -673,10 +675,7 @@ onUnmounted(stopPolling)
           class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--neo-hi-bg)] py-2 text-[11px] font-medium text-[var(--neo-hi-text)] transition hover:brightness-105"
           @click="emitLocate(detailGroup.latest)"
         >
-          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3" />
-            <path stroke-linecap="round" d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-          </svg>
+          <CanvasLocatePinIcon :size="14" />
           定位到画布节点
         </button>
       </div>
@@ -706,14 +705,14 @@ onUnmounted(stopPolling)
           v-for="tab in LIFECYCLE_TABS"
           :key="tab.key"
           type="button"
-          class="flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] transition"
-          :class="lifecycle === tab.key ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'text-[var(--neo-text-muted)] hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-secondary)]'"
+          class="neo-dock-panel-tab flex flex-1 items-center justify-center gap-1 px-2 py-1.5"
+          :class="lifecycle === tab.key ? 'is-active' : ''"
           @click="lifecycle = tab.key"
         >
           <span>{{ tab.label }}</span>
           <span
             class="min-w-[1.1rem] rounded-md px-1 text-center text-[9px] tabular-nums"
-            :class="lifecycle === tab.key ? 'bg-[var(--neo-accent-border)]/30' : 'bg-[var(--neo-active-bg)]'"
+            :class="lifecycle === tab.key ? 'bg-[var(--neo-active-bg)] text-[var(--neo-hi-text)]' : 'bg-[var(--neo-active-bg)]'"
           >
             {{ lifecycleCounts[tab.key] }}
           </span>
@@ -725,8 +724,8 @@ onUnmounted(stopPolling)
           v-for="f in FILTERS"
           :key="f.key"
           type="button"
-          class="rounded-full px-2.5 py-1 text-[10px] transition"
-          :class="filter === f.key ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'bg-[var(--neo-hover-bg)] text-[var(--neo-text-muted)] hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-secondary)]'"
+          class="neo-dock-panel-chip"
+          :class="filter === f.key ? 'is-active' : ''"
           @click="filter = f.key"
         >
           {{ f.label }}
@@ -743,7 +742,7 @@ onUnmounted(stopPolling)
             :key="groupKey(group)"
             role="button"
             tabindex="0"
-            class="group flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2.5 py-2 transition hover:border-[var(--neo-accent-border)]"
+            class="group flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2.5 py-2 transition hover:border-[var(--neo-border-strong)] hover:bg-[var(--neo-active-bg)]/35"
             title="点击查看详情"
             @click="openGroupDetail(group)"
             @keydown.enter="openGroupDetail(group)"
@@ -788,17 +787,11 @@ onUnmounted(stopPolling)
             >
               重试
             </button>
-            <button
-              type="button"
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[var(--neo-text-muted)] opacity-0 transition hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-primary)] group-hover:opacity-100"
+            <CanvasLocateButton
+              class="opacity-0 transition group-hover:opacity-100"
               title="定位到画布节点"
-              @click.stop="emitLocate(group.latest)"
-            >
-              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3" />
-                <path stroke-linecap="round" d="M12 2v4m0 12v4M2 12h4m12 0h4" />
-              </svg>
-            </button>
+              @click="(e) => { e.stopPropagation(); emitLocate(group.latest) }"
+            />
           </div>
         </div>
       </div>

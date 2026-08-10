@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import type { LinkedCanvasOutput } from '@lnkpi/shared'
 import { ElMessage } from 'element-plus'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
+import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
 import {
   locatableNodeIds,
   shouldCollapseOutputs,
@@ -79,7 +80,7 @@ function statusIcon(status: LinkedCanvasOutput['status']): string {
 function maybeShowLocateHint() {
   if (localStorage.getItem(LOCATE_HINT_KEY)) return
   localStorage.setItem(LOCATE_HINT_KEY, '1')
-  ElMessage.info('点击定位可在画布中找到对应节点')
+  ElMessage.info('点击图钉可在画布中找到对应节点')
 }
 
 function onLocate(nodeId: string) {
@@ -102,15 +103,13 @@ function isPulsing(nodeId: string): boolean {
   <div v-if="outputs.length" class="agent-canvas-outputs mt-1.5 border-t border-white/10 pt-1.5">
     <div class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[var(--neo-text-muted)]">
       <span>画布产出 · {{ outputs.length }}</span>
-      <button
+      <CanvasLocateButton
         v-if="showFocusAll"
-        type="button"
-        class="agent-locate-btn neo-ctl rounded-md px-2 py-0.5 text-[10px]"
+        :size="12"
+        label="全部"
         title="在画布中定位全部"
         @click="onFocusAll"
-      >
-        全部定位
-      </button>
+      />
     </div>
     <ul class="space-y-1">
       <li
@@ -127,15 +126,12 @@ function isPulsing(nodeId: string): boolean {
           class="min-w-0 flex-1 truncate"
           :class="item.status === 'failed' ? 'text-red-400/90' : 'text-[var(--neo-fg)]'"
         >{{ item.title }}</span>
-        <button
+        <CanvasLocateButton
           v-if="item.status === 'done' || item.status === 'failed'"
-          type="button"
-          :class="['agent-locate-btn neo-ctl shrink-0 rounded-md px-2 py-0.5 text-[10px]', { 'agent-locate-btn--pulse': isPulsing(item.nodeId) }]"
+          :pulse="isPulsing(item.nodeId)"
           title="在画布中定位"
-          @click="onLocate(item.nodeId)"
-        >
-          定位
-        </button>
+          @click="() => onLocate(item.nodeId)"
+        />
         <span
           v-else-if="item.status === 'running'"
           class="shrink-0 text-[10px] text-[var(--neo-text-muted)] animate-pulse"
@@ -152,33 +148,3 @@ function isPulsing(nodeId: string): boolean {
     </button>
   </div>
 </template>
-
-<style scoped>
-.agent-locate-btn {
-  color: var(--neo-text-muted);
-  background: transparent;
-  border: 1px solid transparent;
-}
-
-.agent-locate-btn:hover {
-  color: var(--neo-accent-text);
-  background: var(--neo-hover);
-  border-color: var(--neo-border);
-}
-
-.agent-locate-btn--pulse {
-  animation: agent-locate-pulse 2s ease-out 1;
-}
-
-@keyframes agent-locate-pulse {
-  0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--neo-accent-border) 55%, transparent);
-  }
-  40% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--neo-accent-border) 25%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 0 transparent;
-  }
-}
-</style>

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { ExecutionTraceState, ExecutionStep } from '@/components/agent/executionTraceReducer'
 import { formatDuration } from '@/components/agent/executionStepLabels'
+import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 
 const props = defineProps<{
   trace: ExecutionTraceState
@@ -84,7 +85,7 @@ function onStepClick(step: ExecutionStep) {
       <li
         v-for="step in trace.steps"
         :key="step.id"
-        class="text-[10px] leading-snug"
+        class="flex items-start gap-1.5 text-[10px] leading-snug"
         :class="[
           step.meta?.nodeId ? 'cursor-pointer hover:text-[var(--neo-accent-text)]' : '',
           step.status === 'failed' ? 'text-red-400/90' : 'text-[var(--neo-text-muted)]',
@@ -94,8 +95,11 @@ function onStepClick(step: ExecutionStep) {
         ]"
         @click="onStepClick(step)"
       >
-        <span>{{ statusIcon(step) }} {{ step.label }}{{ stepDuration(step) }}</span>
-        <p v-if="step.detail" class="mt-0.5 pl-3 opacity-75">{{ step.detail }}</p>
+        <span class="min-w-0 flex-1">
+          <span>{{ statusIcon(step) }} {{ step.label }}{{ stepDuration(step) }}</span>
+          <p v-if="step.detail" class="mt-0.5 pl-3 opacity-75">{{ step.detail }}</p>
+        </span>
+        <CanvasLocatePinIcon v-if="step.meta?.nodeId" :size="11" class="mt-0.5 shrink-0 opacity-60" />
       </li>
     </ul>
   </div>

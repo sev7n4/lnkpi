@@ -187,8 +187,8 @@ function onClick() {
 }
 
 .dock-ref-chip.is-drag-over {
-  border-color: var(--neo-accent-border);
-  background: var(--neo-accent-soft);
+  border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
+  background: var(--neo-hover-bg);
 }
 
 .dock-ref-chip:active[draggable='true'] {

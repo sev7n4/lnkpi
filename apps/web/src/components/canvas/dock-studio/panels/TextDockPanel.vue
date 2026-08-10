@@ -177,8 +177,8 @@ function onRefMention(refKey: string) {
       >
         <button
           type="button"
-          class="text-[10px] transition"
-          :class="textThinking ? 'text-[#818cf8]' : 'text-white/50 hover:text-white/70'"
+          class="dock-seg-btn rounded-md px-1.5 py-1"
+          :class="{ 'is-on': textThinking }"
           :disabled="readonly"
           title="深度思考（DeepSeek V4）"
           @click="setThinking(!textThinking)"
@@ -188,8 +188,8 @@ function onRefMention(refKey: string) {
         <template v-if="textThinking">
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-[10px] transition"
-            :class="textThinkingEffort === 'high' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45 hover:bg-white/10'"
+            class="dock-seg-btn"
+            :class="{ 'is-on': textThinkingEffort === 'high' }"
             :disabled="readonly"
             @click="setThinkingEffort('high')"
           >
@@ -197,8 +197,8 @@ function onRefMention(refKey: string) {
           </button>
           <button
             type="button"
-            class="rounded px-1.5 py-0.5 text-[10px] transition"
-            :class="textThinkingEffort === 'max' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45 hover:bg-white/10'"
+            class="dock-seg-btn"
+            :class="{ 'is-on': textThinkingEffort === 'max' }"
             :disabled="readonly"
             @click="setThinkingEffort('max')"
           >
