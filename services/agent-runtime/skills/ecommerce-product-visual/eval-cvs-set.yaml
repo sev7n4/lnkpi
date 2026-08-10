@@ -1,0 +1,315 @@
+# CVS classic validation set (spec §10.2–10.4, §10.6)
+# Run: uv run pytest tests/test_eval_cvs_set.py -v
+schema_version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-10-ecommerce-product-visual-design.md
+
+cases:
+  - id: CVS-01-ecommerce-listing
+    utterance: "这是我们要上架的保温杯，帮我出一套电商推广图：天猫主图、详情图、模特展示图、模特手持使用的效果图、卖点图、推广海报。风格简约高级，强调316不锈钢和12小时保温。"
+    requested_skill_id: ecommerce-product-visual
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs01-thermos.jpg }
+    optional_attachments:
+      - { kind: image, role: model, url: fixture/cvs01-model.jpg }
+    assert_flow_mode: product_visual
+    assert_plan_types_include: [hero_main, model_display, model_holding_product]
+    assert_plan_types_exclude: [packaging_hero]
+    assert_all_target_type: image
+    assert_human_presence_in_delivery: true
+    plan_fixture:
+      visual_intent:
+        industry_context: consumer_electronics
+        primary_goal: mixed_ecommerce
+        domain_tags: [ecommerce]
+        user_stated_constraints: ["简约高级", "316不锈钢", "12小时保温"]
+        output_types_requested: ["主图", "详情图", "模特展示图", "模特手持", "卖点图", "推广海报"]
+        confidence: 0.92
+      image_types:
+        - type_id: hero_main
+          type_label: 天猫主图
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 白底居中, recommended: true, prompt: "保温杯电商主图，白底居中，简约高级" }
+        - type_id: detail_page
+          type_label: 详情图
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 功能分区, recommended: true, prompt: "保温杯详情页视觉，分区展示材质与保温时长" }
+        - type_id: model_display
+          type_label: 模特展示图
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 手持展示
+              recommended: true
+              key_elements: { human_presence: true, model_source: generated }
+              prompt: "模特手持保温杯展示，简约高级办公场景"
+        - type_id: model_holding_product
+          type_label: 模特手持使用效果图
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 饮用场景
+              recommended: true
+              key_elements: { human_presence: true, model_source: generated }
+              prompt: "模特饮用保温杯，真实使用场景"
+        - type_id: selling_point
+          type_label: 卖点图
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 材质保温, recommended: true, key_elements: { selling_points: ["316不锈钢", "12小时保温"] }, prompt: "突出316不锈钢与12小时保温卖点" }
+        - type_id: promo_poster
+          type_label: 推广海报
+          domain_tags: [ecommerce]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 简约海报, recommended: true, prompt: "保温杯推广海报，简约高级风格" }
+    subcases:
+      - id: CVS-01-ai-model
+        assert_model_source: generated
+        plan_fixture:
+          visual_intent:
+            industry_context: consumer_electronics
+            primary_goal: mixed_ecommerce
+            domain_tags: [ecommerce]
+            confidence: 0.9
+          image_types:
+            - type_id: model_display
+              type_label: 模特展示图
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: generated }
+                  prompt: "AI生成模特展示保温杯"
+            - type_id: model_holding_product
+              type_label: 模特手持
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: generated }
+                  prompt: "AI生成模特手持使用"
+      - id: CVS-01-user-model-ref
+        assert_model_source: user_ref
+        sidebar_attachments:
+          - { kind: image, role: model, nodeId: model-ref-1, url: fixture/cvs01-model.jpg }
+        plan_fixture:
+          visual_intent:
+            industry_context: consumer_electronics
+            primary_goal: mixed_ecommerce
+            domain_tags: [ecommerce]
+            confidence: 0.9
+          image_types:
+            - type_id: model_display
+              type_label: 模特展示图
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: user_ref }
+                  prompt: "采用用户上传模特展示保温杯"
+            - type_id: model_holding_product
+              type_label: 模特手持
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: user_ref }
+                  prompt: "采用用户上传模特手持使用"
+
+  - id: CVS-02-product-packaging-crab
+    utterance: "这是我们中秋要卖的大闸蟹，帮我设计礼盒和快递运输包装视觉，要保鲜防损。出包装效果图、冷链/缓冲结构示意，再加一张模特手持礼盒的送礼效果图，要有中秋节日氛围。"
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs02-hairy-crab.jpg }
+    optional_attachments:
+      - { kind: image, role: model, url: fixture/cvs02-gift-model.jpg }
+    assert_flow_mode: product_visual
+    assert_plan_types_include: [packaging_hero, model_holding_pack]
+    assert_plan_types_exclude: [promo_poster]
+    assert_all_target_type: image
+    assert_human_presence_in_delivery: true
+    plan_fixture:
+      visual_intent:
+        industry_context: food
+        primary_goal: packaging_design
+        domain_tags: [packaging]
+        user_stated_constraints: ["保鲜防损", "中秋节日氛围"]
+        output_types_requested: ["包装效果图", "冷链结构示意", "模特手持礼盒"]
+        confidence: 0.9
+      image_types:
+        - type_id: packaging_hero
+          type_label: 包装主图
+          domain_tags: [packaging]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 中秋礼盒, recommended: true, key_elements: { materials: ["冷链"], style: ["中秋红金"] }, prompt: "大闸蟹中秋礼盒包装效果图" }
+        - type_id: packaging_structure
+          type_label: 冷链缓冲结构示意
+          domain_tags: [packaging]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 缓冲剖面, recommended: true, prompt: "大闸蟹冷链缓冲包装结构示意" }
+        - type_id: model_holding_pack
+          type_label: 模特手持礼盒
+          domain_tags: [packaging]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 中秋送礼
+              recommended: true
+              key_elements: { human_presence: true, model_source: generated }
+              prompt: "模特手持大闸蟹礼盒，中秋节日送礼氛围"
+    subcases:
+      - id: CVS-02-ai-model
+        assert_model_source: generated
+        plan_fixture:
+          visual_intent: { primary_goal: packaging_design, confidence: 0.85 }
+          image_types:
+            - type_id: model_holding_pack
+              type_label: 模特手持礼盒
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: generated }
+                  prompt: "AI生成模特手持礼盒"
+      - id: CVS-02-user-model-ref
+        assert_model_source: user_ref
+        sidebar_attachments:
+          - { kind: image, role: model, nodeId: model-ref-2, url: fixture/cvs02-gift-model.jpg }
+        plan_fixture:
+          visual_intent: { primary_goal: packaging_design, confidence: 0.85 }
+          image_types:
+            - type_id: model_holding_pack
+              type_label: 模特手持礼盒
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: user_ref }
+                  prompt: "用户模特手持大闸蟹礼盒"
+
+  - id: CVS-03-interior-design
+    utterance: "这是待装修客厅，出有人在里面的现代简约空间效果图、材质软装搭配板，沙发置入效果，最好有一位女性在客厅使用沙发的真实生活感。暖白原木色调。"
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs03-living-room.jpg }
+      - { kind: image, role: product, url: fixture/cvs03-sofa.jpg }
+    optional_attachments:
+      - { kind: image, role: model, url: fixture/cvs03-occupant-ref.jpg }
+    assert_flow_mode: product_visual
+    assert_plan_types_include: [space_with_people, material_board, product_in_space]
+    assert_plan_types_exclude: [packaging_hero, promo_poster]
+    assert_all_target_type: image
+    assert_human_presence_in_delivery: true
+    assert_qa_white_bg_relaxed: true
+    plan_fixture:
+      visual_intent:
+        industry_context: interior
+        primary_goal: mixed
+        domain_tags: [interior]
+        user_stated_constraints: ["现代简约", "暖白原木色调", "真实生活感"]
+        output_types_requested: ["空间效果图", "材质搭配板", "沙发置入"]
+        confidence: 0.88
+      image_types:
+        - type_id: space_with_people
+          type_label: 空间效果图（含人物）
+          domain_tags: [interior]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 女性使用沙发
+              recommended: true
+              key_elements: { human_presence: true, model_source: generated, style: ["现代简约", "暖白原木"] }
+              prompt: "现代简约客厅，女性在沙发上休息，暖白原木色调"
+        - type_id: material_board
+          type_label: 材质软装搭配板
+          domain_tags: [interior]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 暖白原木, recommended: true, prompt: "客厅材质与软装搭配板，暖白原木色调" }
+        - type_id: product_in_space
+          type_label: 沙发置入效果
+          domain_tags: [interior]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 沙发置入
+              recommended: true
+              key_elements: { human_presence: true, model_source: generated }
+              prompt: "沙发置入待装修客厅，含使用者生活场景"
+    subcases:
+      - id: CVS-03-ai-model
+        assert_model_source: generated
+        plan_fixture:
+          visual_intent: { primary_goal: mixed, confidence: 0.85 }
+          image_types:
+            - type_id: space_with_people
+              type_label: 空间含人物
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: generated }
+                  prompt: "AI生成女性在客厅使用沙发"
+      - id: CVS-03-user-model-ref
+        assert_model_source: user_ref
+        sidebar_attachments:
+          - { kind: image, role: model, nodeId: model-ref-3, url: fixture/cvs03-occupant-ref.jpg }
+        plan_fixture:
+          visual_intent: { primary_goal: mixed, confidence: 0.85 }
+          image_types:
+            - type_id: space_with_people
+              type_label: 空间含人物
+              target_type: image
+              schemes:
+                - scheme_id: c1
+                  recommended: true
+                  key_elements: { human_presence: true, model_source: user_ref }
+                  prompt: "用户参考人物在客厅使用沙发"
+
+  - id: CVS-04-industrial-pump
+    utterance: "这是实物拍的照片，帮我出外观主图、一张带尺寸标注的规格图，再加一张工厂机房安装场景图。"
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs04-industrial-pump.jpg }
+    assert_flow_mode: product_visual
+    assert_plan_types_include: [hero_main, spec_annotated, installation_scene]
+    assert_plan_types_exclude: [selling_point, promo_poster, packaging_hero]
+    assert_all_target_type: image
+    plan_fixture:
+      visual_intent:
+        industry_context: industrial
+        primary_goal: industrial_catalog
+        domain_tags: [industrial]
+        user_stated_constraints: ["尺寸标注", "工厂机房安装场景"]
+        output_types_requested: ["外观主图", "规格图", "安装场景图"]
+        confidence: 0.9
+      image_types:
+        - type_id: hero_main
+          type_label: 外观主图
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 白底外观, recommended: true, prompt: "工业水泵外观主图，白底居中" }
+        - type_id: spec_annotated
+          type_label: 规格标注图
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 尺寸标注
+              recommended: true
+              key_elements: { specs_to_show: ["进出口径", "扬程", "功率"] }
+              prompt: "工业水泵规格图，标注进出口径与关键参数"
+        - type_id: installation_scene
+          type_label: 工厂机房安装场景
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 机房工况, recommended: true, prompt: "工业水泵在工厂机房安装场景，工况真实" }

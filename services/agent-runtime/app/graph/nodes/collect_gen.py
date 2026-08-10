@@ -16,7 +16,54 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
-from app.graph.gen_run_state import clear_tier_b_gen_run_state
+from app.graph.gen_run_state import (
+    TIER_B_GEN_RUN_FIELDS,
+    TIER_B_REDUCER_FIELDS,
+    clear_tier_b_gen_run_state,
+)
+
+
+def _url_from_canvas_node(node: dict[str, Any]) -> str | None:
+    if not isinstance(node, dict):
+        return None
+    data = node.get("data")
+    if isinstance(data, dict):
+        url = data.get("url") or data.get("imageUrl")
+        if isinstance(url, str) and url.strip():
+            return url.strip()
+    url = node.get("url")
+    if isinstance(url, str) and url.strip():
+        return url.strip()
+    return None
+
+
+async def _enrich_gen_by_key_urls(
+    nest: Any,
+    by_key: dict[str, dict],
+    completed_keys: set[str],
+) -> dict[str, dict]:
+    """Fill gen_by_key.url from canvas for reconnect / delivery thumbnails."""
+    get_node = getattr(nest, "get_node", None)
+    if get_node is None or not completed_keys:
+        return by_key
+    out = dict(by_key)
+    for key in completed_keys:
+        item = out.get(key)
+        if not isinstance(item, dict):
+            continue
+        if isinstance(item.get("url"), str) and item["url"].strip():
+            continue
+        node_id = item.get("node_id")
+        if not node_id:
+            continue
+        try:
+            node = await get_node(str(node_id))
+            url = _url_from_canvas_node(node)
+            if url:
+                out[key] = {**item, "url": url, "status": item.get("status") or "completed"}
+        except Exception:  # noqa: BLE001 — best-effort enrich
+            continue
+    return out
 from app.graph.task_events import hint_for_error
 
 
@@ -122,12 +169,23 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
             msg = "无可自动生成的图片/视频节点。"
 
         partial = success_n > 0 and (fail_n > 0 or needs_user_n > 0)
+        enriched_by_key = by_key
+        if state.get("flow_mode") == "product_visual" and completed_keys:
+            enriched_by_key = await _enrich_gen_by_key_urls(nest, by_key, completed_keys)
+        if state.get("flow_mode") == "product_visual":
+            # Preserve gen_by_key (with urls) for delivery_summary; clear reducers only.
+            tier_b_clear = {field: None for field in TIER_B_GEN_RUN_FIELDS if field != "gen_by_key"}
+            tier_b_clear.update({field: None for field in TIER_B_REDUCER_FIELDS})
+        else:
+            tier_b_clear = clear_tier_b_gen_run_state()
         result: dict[str, Any] = {
             "phase": "orchestrate_gen",
             "gen_progress_id": gen_progress_id,
             "messages": [AIMessage(content=msg)],
-            **clear_tier_b_gen_run_state(),
+            **tier_b_clear,
         }
+        if state.get("flow_mode") == "product_visual":
+            result["gen_by_key"] = enriched_by_key
         if partial:
             result["force_choice"] = "gen_partial"
         return result

@@ -82,3 +82,12 @@ def test_should_resume_interrupt_long_plan_at_confirm_gate():
 
 def test_should_resume_interrupt_short_confirm_at_confirm_gate():
     assert should_resume_interrupt("确认", ["await_confirm"]) is True
+
+
+def test_should_resume_interrupt_image_qa_retake():
+    assert should_resume_interrupt("我重新拍摄上传", ["await_image_qa"]) is True
+
+
+def test_should_resume_interrupt_image_qa_long_task():
+    msg = "@I1 帮我出主图和场景图，再出一套包装结构图"
+    assert should_resume_interrupt(msg, ["await_image_qa"]) is False

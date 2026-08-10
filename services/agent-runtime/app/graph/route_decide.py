@@ -16,6 +16,7 @@ RouteFlowMode = Literal[
     "atomic_regenerate",
     "single_node",
     "campaign",
+    "product_visual",
     "explore_canvas",
     "chat",
     "clarify_route",

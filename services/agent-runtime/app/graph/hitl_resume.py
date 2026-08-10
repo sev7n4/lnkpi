@@ -42,6 +42,12 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "route_context": None,
     "split_manifest": None,
     "last_error": None,
+    "product_visual_plan": None,
+    "image_qa_result": None,
+    "phase1_asset_keys": None,
+    "image_qa_decision": None,
+    "scheme_revision_count": None,
+    "delivery_selections": None,
 }
 
 
@@ -98,6 +104,39 @@ def should_resume_interrupt(
         if len(text) >= 12 and REF_MENTION_RE.search(text):
             return False
         return len(text) <= 16
+
+    if gate == "await_image_qa":
+        from app.graph.nodes.image_qa_gate import classify_image_qa_decision
+
+        if classify_image_qa_decision(text) != "none":
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 20
+
+    if gate == "await_scheme_select":
+        from app.graph.nodes.scheme_select_gate import classify_scheme_decision
+
+        decision = classify_scheme_decision(text, user_decision=user_decision)
+        if decision.get("action") != "none":
+            return True
+        if text.startswith("__scheme_decision__"):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 24
+
+    if gate == "await_delivery_confirm":
+        from app.graph.nodes.delivery_summary import classify_delivery_decision
+
+        decision = classify_delivery_decision(text, user_decision=user_decision)
+        if decision.get("action") != "none":
+            return True
+        if text.startswith("__delivery_decision__"):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 24
 
     # Unknown gate: only resume short gate-like replies.
     return len(text) <= 16 and not REF_MENTION_RE.search(text)

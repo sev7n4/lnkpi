@@ -34,8 +34,23 @@ import {
   pickAssistantForLatestUserTurn,
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
+import ProductVisualDeliveryCard from '@/components/agent/ProductVisualDeliveryCard.vue'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
-import { chipSetFromInterrupt, interruptPayloadFromThreadState, type AgentInterruptPayload } from '@/components/agent/agentInterruptGate'
+import {
+  chipSetFromInterrupt,
+  IMAGE_QA_OPTIONS,
+  interruptPayloadFromThreadState,
+  buildSchemeConfirmMessage,
+  buildVisualIntentSummary,
+  buildDeliveryConfirmMessage,
+  buildDeliveryRefineMessage,
+  buildDeliverySwitchMessage,
+  defaultDeliverySelections,
+  defaultSchemeSelections,
+  selectableImageTypes,
+  type AgentInterruptPayload,
+  type ProductVisualPlan,
+} from '@/components/agent/agentInterruptGate'
 import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
   buildIdempotencyKey,
@@ -376,6 +391,66 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
+const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
+const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
+const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
+const productVisualPlan = ref<ProductVisualPlan | null>(null)
+const schemeSelections = ref<Record<string, string[]>>({})
+const deliverySelections = ref<Record<string, string>>({})
+const deliveryGenByKey = ref<Record<string, { node_id?: string | null; url?: string | null; title?: string | null }>>({})
+const deliveryRefineDraft = ref<Record<string, string>>({})
+const schemeSelectTypes = computed(() => selectableImageTypes(productVisualPlan.value))
+const visualIntentSummary = computed(() => buildVisualIntentSummary(productVisualPlan.value))
+
+function syncSchemeSelectionsFromPlan(plan: ProductVisualPlan | null | undefined) {
+  productVisualPlan.value = plan ?? null
+  schemeSelections.value = defaultSchemeSelections(plan)
+}
+
+function syncDeliveryCheckpoint(
+  plan: ProductVisualPlan | null | undefined,
+  selections: Record<string, string> | null | undefined,
+  genByKey: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null | undefined,
+) {
+  if (plan) productVisualPlan.value = plan
+  const merged = {
+    ...defaultDeliverySelections(plan ?? productVisualPlan.value, genByKey),
+    ...(selections ?? {}),
+  }
+  deliverySelections.value = merged
+  deliveryGenByKey.value = genByKey ?? deliveryGenByKey.value
+}
+
+function toggleSchemeSelection(typeId: string, schemeId: string, checked: boolean) {
+  const current = new Set(schemeSelections.value[typeId] ?? [])
+  if (checked) current.add(schemeId)
+  else current.delete(schemeId)
+  schemeSelections.value = { ...schemeSelections.value, [typeId]: [...current] }
+}
+
+async function sendSchemeConfirm() {
+  const message = buildSchemeConfirmMessage(schemeSelections.value)
+  await sendMessage(message, 'confirm')
+}
+
+async function sendSchemeRevisePreset() {
+  await sendMessage('需要调整方案', 'revise')
+}
+
+async function sendDeliverySwitch(typeId: string, schemeId: string) {
+  deliverySelections.value = { ...deliverySelections.value, [typeId]: schemeId }
+  await sendMessage(buildDeliverySwitchMessage(typeId, schemeId))
+}
+
+async function sendDeliveryRefine(typeId: string, feedback: string) {
+  const schemeId = deliverySelections.value[typeId]
+  if (!schemeId) return
+  await sendMessage(buildDeliveryRefineMessage(typeId, schemeId, feedback))
+}
+
+async function sendDeliveryConfirmAll() {
+  await sendMessage(buildDeliveryConfirmMessage(deliverySelections.value), 'confirm')
+}
 
 const canSubmitComposer = computed(() =>
   Boolean(input.value.trim() || sidebar.pendingAttachments.value.length),
@@ -694,9 +769,26 @@ async function refreshThreadCheckpoint() {
       { headers: { Authorization: `Bearer ${token}` } },
     )
     const json = (await res.json()) as {
-      data?: { hasAtomicCheckpoint?: boolean; interrupted?: boolean; phase?: string | null }
+      data?: {
+        hasAtomicCheckpoint?: boolean
+        interrupted?: boolean
+        phase?: string | null
+        productVisualPlan?: ProductVisualPlan | null
+        deliverySelections?: Record<string, string> | null
+        deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+      }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualPlan) {
+      syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
+    }
+    if (json.data?.productVisualPlan || json.data?.deliverySelections || json.data?.deliveryGenByKey) {
+      syncDeliveryCheckpoint(
+        json.data?.productVisualPlan,
+        json.data?.deliverySelections,
+        json.data?.deliveryGenByKey,
+      )
+    }
     if (json.data?.interrupted) {
       interruptGate.value = interruptPayloadFromThreadState(json.data)
     }
@@ -953,10 +1045,23 @@ async function reconnectStream() {
         finished?: boolean
         nextNodes?: string[]
         hasAtomicCheckpoint?: boolean
+        productVisualPlan?: ProductVisualPlan | null
+        deliverySelections?: Record<string, string> | null
+        deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
       } | null
     }
     const phase = json.data?.phase ?? null
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualPlan) {
+      syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
+    }
+    if (json.data?.productVisualPlan || json.data?.deliverySelections || json.data?.deliveryGenByKey) {
+      syncDeliveryCheckpoint(
+        json.data?.productVisualPlan,
+        json.data?.deliverySelections,
+        json.data?.deliveryGenByKey,
+      )
+    }
     interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     const hint = phaseHintFromInterrupt(interruptGate.value)
@@ -1175,6 +1280,14 @@ function handleEvent(event: { type: string; data: unknown }) {
         interrupted: data.interrupted ?? true,
         phase: data.phase ?? null,
         node: data.node ?? null,
+      }
+      if (
+        data.phase === 'await_scheme_select' ||
+        data.node === 'await_scheme_select' ||
+        data.phase === 'await_delivery_confirm' ||
+        data.node === 'await_delivery_confirm'
+      ) {
+        void refreshThreadCheckpoint()
       }
       break
     }
@@ -1572,6 +1685,83 @@ defineExpose({
                 取消
               </button>
             </div>
+            <div v-else-if="awaitingImageQa" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                v-for="opt in IMAGE_QA_OPTIONS"
+                :key="opt.id"
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :class="{ 'agent-preset-primary font-medium': opt.id === 'ai_white_bg' }"
+                :disabled="agent.isStreaming"
+                @click="sendPreset(opt.message)"
+              >
+                {{ opt.label }}
+              </button>
+            </div>
+            <div v-else-if="awaitingSchemeSelect && productVisualPlan" class="mb-2 px-0.5">
+              <p v-if="visualIntentSummary" class="mb-2 text-xs text-[var(--neo-muted)]">
+                系统理解：{{ visualIntentSummary }}
+              </p>
+              <div class="space-y-2">
+                <div
+                  v-for="imageType in schemeSelectTypes"
+                  :key="imageType.type_id"
+                  class="rounded-lg border border-[var(--neo-border)] p-2"
+                >
+                  <div class="mb-1.5 text-xs font-medium">{{ imageType.type_label }}</div>
+                  <div class="flex flex-col gap-1.5">
+                    <label
+                      v-for="scheme in imageType.schemes"
+                      :key="scheme.scheme_id"
+                      class="flex cursor-pointer items-start gap-2 text-xs"
+                    >
+                      <input
+                        type="checkbox"
+                        class="mt-0.5"
+                        :checked="(schemeSelections[imageType.type_id] ?? []).includes(scheme.scheme_id)"
+                        :disabled="agent.isStreaming"
+                        @change="toggleSchemeSelection(imageType.type_id, scheme.scheme_id, ($event.target as HTMLInputElement).checked)"
+                      />
+                      <span>
+                        <span class="font-medium">{{ scheme.name || scheme.scheme_id }}</span>
+                        <span v-if="scheme.recommended" class="ml-1 text-[var(--neo-accent)]">推荐</span>
+                        <span class="mt-0.5 block text-[var(--neo-muted)]">{{ scheme.prompt.slice(0, 80) }}{{ scheme.prompt.length > 80 ? '…' : '' }}</span>
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  :disabled="agent.isStreaming"
+                  @click="sendSchemeConfirm()"
+                >
+                  确认所选变体
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendSchemeRevisePreset()"
+                >
+                  需要调整方案
+                </button>
+              </div>
+            </div>
+            <ProductVisualDeliveryCard
+              v-else-if="awaitingDeliveryConfirm && productVisualPlan"
+              class="mb-2 px-0.5"
+              :plan="productVisualPlan"
+              :gen-by-key="deliveryGenByKey"
+              :selections="deliverySelections"
+              :disabled="agent.isStreaming"
+              v-model:refine-draft="deliveryRefineDraft"
+              @switch-scheme="sendDeliverySwitch"
+              @refine-type="sendDeliveryRefine"
+              @confirm-all="sendDeliveryConfirmAll"
+            />
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"

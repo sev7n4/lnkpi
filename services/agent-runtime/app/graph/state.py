@@ -56,6 +56,21 @@ def reset_or_merge(left: dict | None, right: dict | None) -> dict | None:
     return {**(left or {}), **(right or {})}
 
 
+def gen_by_key_reducer(left: dict | None, right: dict | None) -> dict | None:
+    """Reducer for gen_by_key: per-key shallow merge; None resets (Send fan-out safe)."""
+    if right is None:
+        return None
+    if not left:
+        return dict(right)
+    out = dict(left)
+    for k, v in right.items():
+        if isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = {**out[k], **v}
+        else:
+            out[k] = v
+    return out
+
+
 class SplitManifestItem(TypedDict, total=False):
     key: str
     title: str
@@ -92,6 +107,13 @@ class AgentRuntimeState(TypedDict, total=False):
         "clarify",
         "done",
         "error",
+        "image_qa",
+        "await_image_qa",
+        "plan_product_visual",
+        "await_scheme_select",
+        "split_product_visual",
+        "delivery_confirm",
+        "await_delivery_confirm",
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn
@@ -102,7 +124,9 @@ class AgentRuntimeState(TypedDict, total=False):
     session_id: str
     user_id: str
     prompt_version: str | None  # W19: active skill prompt template version
-    flow_mode: Literal["campaign", "single_node", "atomic_create", "atomic_regenerate"] | None  # W28/W29/P4
+    flow_mode: Literal[
+        "campaign", "single_node", "atomic_create", "atomic_regenerate", "product_visual"
+    ] | None  # W28/W29/P4
     focus_node_id: str | None  # W28: canvas node for single-node gen
     atomic_spec: dict | None  # P4: parsed atomic create intent
     atomic_items: list[dict] | None  # P4: multi-item atomic create (spec + node_id)
@@ -163,7 +187,7 @@ class AgentRuntimeState(TypedDict, total=False):
 
     # --- Tier B: gen run transient (start_gen → collect_gen only; see gen_run_state.py) ---
     gen_deps_of: dict[str, list[str]] | None
-    gen_by_key: dict[str, dict] | None
+    gen_by_key: Annotated[dict[str, dict] | None, gen_by_key_reducer]
     gen_completed_keys: Annotated[list[str] | None, reset_or_union]
     gen_failed_keys: Annotated[list[str] | None, reset_or_union]
     gen_needs_user_keys: Annotated[list[str] | None, reset_or_union]
@@ -172,3 +196,11 @@ class AgentRuntimeState(TypedDict, total=False):
     # explore_canvas path (Phase 2)
     explore_summary: dict | None
     canvas_commands: list[dict] | None
+
+    # ecommerce-product-visual (Phase 1 image-only)
+    product_visual_plan: dict | None
+    image_qa_result: Literal["pass", "fail", "remediated"] | None
+    image_qa_decision: Literal["none", "retake", "ai_white_bg"] | None
+    scheme_revision_count: int | None
+    phase1_asset_keys: list[str] | None
+    delivery_selections: dict[str, str] | None  # type_id -> scheme_id

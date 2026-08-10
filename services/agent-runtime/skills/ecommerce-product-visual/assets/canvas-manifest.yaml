@@ -1,0 +1,14 @@
+items:
+  - key: white_bg
+    title: 白底主图
+    target_type: image
+    chain: product
+    role: seed
+    auto_generate: true
+  - key: product_turnaround
+    title: 产品四视图
+    target_type: image
+    chain: product
+    role: turnaround
+    depends_on: [white_bg]
+    gen_mode: i2i
