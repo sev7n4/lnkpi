@@ -39,7 +39,7 @@ def route_after_image_qa_remedy(state: AgentRuntimeState) -> str:
 
 def register_product_visual_gate(graph: StateGraph, *, nest: Any | None = None) -> None:
     """Register image QA segment nodes and edges on the main graph."""
-    graph.add_node("image_qa_check", make_image_qa_check_node())
+    graph.add_node("image_qa_check", make_image_qa_check_node(nest=nest))
     graph.add_node("await_image_qa", make_await_image_qa_node())
     graph.add_node("image_qa_remedy", make_image_qa_remedy_node(nest=nest))
     graph.add_node("plan_product_visual_stub", make_plan_product_visual_stub_node())

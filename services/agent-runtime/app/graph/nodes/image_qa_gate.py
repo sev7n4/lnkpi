@@ -6,14 +6,15 @@ from typing import Any, Callable
 
 from langchain_core.messages import AIMessage
 
+from app.graph.phase1_seed import PHASE1_ASSET_KEYS, ensure_phase1_seed_chain
+
 QA_FAIL_TIP = (
     "当前成图效果可能不够清晰或未在白底上拍摄。"
     "请选择：重新拍摄上传，或生成标准白底图后继续。"
 )
 RETAKE_MSG = "好的，请重新拍摄并上传产品图后再试。"
-REMEDIATE_MSG = "已生成标准白底图，继续策划视觉方案…"
-
-PHASE1_ASSET_KEYS = ["white_bg", "product_turnaround"]
+REMEDIATE_PROGRESS_MSG = "正在生成标准白底图与四视图…"
+REMEDIATE_DONE_MSG = "已生成标准白底图与四视图，继续策划视觉方案…"
 
 _PRODUCT_VISUAL_ABORT_CLEAR: dict[str, Any] = {
     "product_visual_plan": None,
@@ -105,13 +106,17 @@ def _last_role(messages: list[Any]) -> str | None:
     return getattr(last, "type", None) or (last.get("role") if isinstance(last, dict) else None)
 
 
-def make_image_qa_check_node() -> Callable:
+def make_image_qa_check_node(*, nest: Any | None = None) -> Callable:
     async def image_qa_check(state: dict) -> dict:
         metrics = derive_qa_metrics(state)
         result = evaluate_image_qa(metrics)
         out: dict[str, Any] = {"phase": "image_qa", **result}
         if result["image_qa_result"] == "pass":
+            manifest, err = await ensure_phase1_seed_chain(nest, state, run_generation=False)
+            if err:
+                return {**out, **err}
             out["phase1_asset_keys"] = list(PHASE1_ASSET_KEYS)
+            out["split_manifest"] = manifest
         elif result["image_qa_result"] == "fail":
             out["messages"] = [AIMessage(content=QA_FAIL_TIP)]
         return out
@@ -148,13 +153,18 @@ def make_image_qa_remedy_node(*, nest: Any | None = None) -> Callable:
                 "messages": [AIMessage(content=RETAKE_MSG)],
             }
         if decision == "ai_white_bg":
-            # TODO(Task 3+): trigger white_bg seed gen via nest / canvas tools chain.
-            _ = nest
+            progress = [AIMessage(content=REMEDIATE_PROGRESS_MSG)]
+            manifest, err = await ensure_phase1_seed_chain(
+                nest, state, run_generation=True
+            )
+            if err:
+                return {**err, "messages": progress + list(err.get("messages") or [])}
             return {
                 "image_qa_result": "remediated",
                 "phase1_asset_keys": list(PHASE1_ASSET_KEYS),
+                "split_manifest": manifest,
                 "phase": "plan_product_visual",
-                "messages": [AIMessage(content=REMEDIATE_MSG)],
+                "messages": progress + [AIMessage(content=REMEDIATE_DONE_MSG)],
             }
         return {"phase": "await_image_qa", "image_qa_decision": "none"}
 
