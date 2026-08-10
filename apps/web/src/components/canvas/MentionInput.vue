@@ -13,6 +13,8 @@ const props = defineProps<{
   mentions: MentionOption[]
   placeholder?: string
   disabled?: boolean
+  /** 左侧预留内边距（与外部 prefix 控件并排时使用） */
+  leadingInset?: number
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [v: string]; submit: [] }>()
@@ -25,6 +27,12 @@ const selectedIndex = ref(0)
 const mentionStart = ref(-1)
 
 const highlightSegments = computed(() => splitRefMentions(props.modelValue))
+
+const fieldInsetStyle = computed(() =>
+  props.leadingInset && props.leadingInset > 0
+    ? { paddingLeft: `${props.leadingInset}px` }
+    : undefined,
+)
 
 const filteredMentions = computed(() => {
   const q = filterText.value.toLowerCase()
@@ -139,6 +147,7 @@ function onKeydown(e: KeyboardEvent) {
       <div
         ref="backdropRef"
         class="mention-input-backdrop input-field min-h-[96px] w-full whitespace-pre-wrap break-words text-sm leading-[1.5]"
+        :style="fieldInsetStyle"
         aria-hidden="true"
       >
         <template v-for="(segment, idx) in highlightSegments" :key="idx">
@@ -152,6 +161,7 @@ function onKeydown(e: KeyboardEvent) {
         ref="textareaRef"
         :value="modelValue"
         class="mention-input-field input-field min-h-[96px] w-full resize-none text-sm leading-[1.5] !text-transparent caret-[var(--neo-text-primary)]"
+        :style="fieldInsetStyle"
         rows="4"
         :placeholder="placeholder ?? '描述你想要生成的内容，@ 引用节点...'"
         :disabled="disabled"

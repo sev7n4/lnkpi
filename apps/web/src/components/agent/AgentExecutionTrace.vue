@@ -74,7 +74,7 @@ function onStepClick(step: ExecutionStep) {
   <div v-if="stepCount > 0 || streaming" class="agent-trace mt-1.5 border-t border-white/10 pt-1.5">
     <button
       type="button"
-      class="agent-trace-toggle flex w-full items-center gap-1 text-left text-[11px] text-[var(--neo-text-muted)] hover:text-[var(--neo-accent-text)]"
+      class="agent-trace-toggle flex w-full items-center gap-1 text-left text-[11px] text-[var(--neo-text-muted)] hover:text-[var(--neo-text-primary)]"
       @click="toggle"
     >
       <span class="inline-block w-3 shrink-0">{{ expanded ? '▾' : '▸' }}</span>
@@ -87,7 +87,7 @@ function onStepClick(step: ExecutionStep) {
         :key="step.id"
         class="flex items-start gap-1.5 text-[10px] leading-snug"
         :class="[
-          step.meta?.nodeId ? 'cursor-pointer hover:text-[var(--neo-accent-text)]' : '',
+          step.meta?.nodeId ? 'cursor-pointer hover:text-[var(--neo-text-primary)]' : '',
           step.status === 'failed' ? 'text-red-400/90' : 'text-[var(--neo-text-muted)]',
           step.status === 'running' ? 'animate-pulse' : '',
           step.kind === 'thinking' ? 'italic opacity-80' : '',

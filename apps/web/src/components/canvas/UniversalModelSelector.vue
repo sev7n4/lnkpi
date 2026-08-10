@@ -149,7 +149,7 @@ function select(id: string) {
         :key="model.id"
         type="button"
         class="neo-popover-item flex w-full items-center justify-between px-3 py-2 text-xs"
-        :class="model.id === modelValue ? '!text-[var(--neo-accent-text)]' : ''"
+        :class="model.id === modelValue ? '!bg-[var(--neo-hi-bg)] !text-[var(--neo-hi-text)] shadow-[var(--neo-hi-shadow)]' : ''"
         @click="select(model.id)"
       >
         <span class="truncate">{{ model.name }}</span>
