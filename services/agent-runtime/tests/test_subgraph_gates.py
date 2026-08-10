@@ -15,6 +15,7 @@ from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 from app.graph.nodes.start_gen import make_start_gen_node
 from app.graph.nodes.write_copy_node import make_write_copy_node
 from app.graph.state import AgentRuntimeState
+from app.graph.builder import build_agent_graph
 from app.graph.subgraphs.confirm_gate import build_confirm_gate_subgraph
 from app.graph.subgraphs.copy_gate import route_after_copy_confirm, route_after_draft_copy
 from app.graph.subgraphs.topo_gate import route_after_topo
@@ -69,3 +70,14 @@ def test_topo_gate_subgraph_compiles():
     graph.add_edge("gen_node", "gen_scheduler")
     graph.add_edge("collect_gen", END)
     assert graph.compile() is not None
+
+
+def test_full_agent_graph_with_product_visual_gate_compiles():
+    """Full graph compile smoke — product_visual_gate registered on main builder."""
+    graph = build_agent_graph(nest=_FakeNest(), llm=_FakeLLM(), skills_dir=SKILLS)
+    assert graph is not None
+    node_names = set(getattr(graph, "nodes", {}).keys())
+    assert "image_qa_check" in node_names
+    assert "plan_product_visual" in node_names
+    assert "split_product_visual" in node_names
+    assert "delivery_summary" in node_names
