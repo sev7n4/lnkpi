@@ -3024,9 +3024,9 @@ onUnmounted(() => {
 
 :deep(.vue-flow__selection),
 :deep(.vue-flow__nodesselection-rect) {
-  background: color-mix(in srgb, var(--neo-hi-text) 8%, transparent);
-  border: 1.5px dashed color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
-  border-radius: 4px;
+  background: var(--neo-canvas-selection-fill);
+  border: 1.25px dashed var(--neo-canvas-selection-border);
+  border-radius: 6px;
 }
 
 :deep(.vue-flow__node) {

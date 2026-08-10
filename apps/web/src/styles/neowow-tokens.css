@@ -66,6 +66,10 @@
   --neo-edge-hover: rgba(178, 181, 210, 0.55);
   --neo-edge-selected: #8a7dff;
 
+  /* ---- 画布框选 / 多选包围框 ---- */
+  --neo-canvas-selection-fill: rgba(255, 255, 255, 0.05);
+  --neo-canvas-selection-border: rgba(148, 151, 180, 0.48);
+
   /* ---- 毛玻璃 dock：高透明度 + 低模糊（透过卡片能看清画布），
           立体感靠内侧顶部高光 + 内侧底部暗边 + 双层投影 ---- */
   --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(10, 10, 14, 0.42) 45%, rgba(10, 10, 14, 0.58) 100%);
@@ -98,18 +102,16 @@
   --neo-hi-shadow: 0 2px 10px rgba(0, 0, 0, 0.32), 0 0 14px rgba(255, 255, 255, 0.22);
 
   /* ---- Agent 对话气泡（与用户/助手差异化；避免纯白底吞没白图引用） ---- */
-  --agent-user-bg: linear-gradient(145deg, #e4e8f0 0%, #d6dce8 52%, #ccd3e0 100%);
-  --agent-user-text: #1a1d26;
-  --agent-user-border: rgba(255, 255, 255, 0.28);
-  --agent-user-shadow: 0 2px 10px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(255, 255, 255, 0.06);
-  --agent-user-media-bg: #c4cad6;
-  --agent-user-media-checker: rgba(0, 0, 0, 0.07);
+  --agent-user-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.06) 100%);
+  --agent-user-text: rgba(255, 255, 255, 0.9);
+  --agent-user-border: rgba(255, 255, 255, 0.1);
+  --agent-user-shadow: none;
+  --agent-user-media-bg: rgba(255, 255, 255, 0.12);
+  --agent-user-media-checker: rgba(255, 255, 255, 0.07);
 
-  --agent-assistant-bg: linear-gradient(165deg, rgba(40, 40, 52, 0.96) 0%, rgba(28, 28, 38, 0.98) 100%);
   --agent-assistant-text: var(--neo-text-primary);
-  --agent-assistant-border: rgba(255, 255, 255, 0.1);
-  --agent-assistant-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
-  --agent-assistant-accent: rgba(255, 255, 255, 0.22);
+  --agent-assistant-muted: var(--neo-text-secondary);
+  --agent-assistant-divider: rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================================
@@ -149,6 +151,9 @@
   --neo-edge-hover: rgba(23, 25, 35, 0.45);
   --neo-edge-selected: #6d5dfc;
 
+  --neo-canvas-selection-fill: rgba(23, 25, 35, 0.05);
+  --neo-canvas-selection-border: rgba(23, 25, 35, 0.34);
+
   --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.44) 50%, rgba(248, 249, 253, 0.56) 100%);
   --neo-glass-border: rgba(23, 25, 35, 0.12);
   --neo-glass-border-hover: rgba(23, 25, 35, 0.2);
@@ -175,16 +180,14 @@
   --neo-hi-text: #ffffff;
   --neo-hi-shadow: 0 2px 10px rgba(23, 25, 35, 0.28);
 
-  --agent-user-bg: linear-gradient(145deg, #22242e 0%, #17181d 55%, #121318 100%);
-  --agent-user-text: #f4f6fb;
-  --agent-user-border: rgba(255, 255, 255, 0.1);
-  --agent-user-shadow: 0 2px 10px rgba(23, 25, 35, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.04);
-  --agent-user-media-bg: rgba(255, 255, 255, 0.08);
-  --agent-user-media-checker: rgba(255, 255, 255, 0.1);
+  --agent-user-bg: linear-gradient(160deg, rgba(23, 25, 35, 0.07) 0%, rgba(23, 25, 35, 0.045) 100%);
+  --agent-user-text: var(--neo-text-primary);
+  --agent-user-border: rgba(23, 25, 35, 0.08);
+  --agent-user-shadow: none;
+  --agent-user-media-bg: rgba(23, 25, 35, 0.06);
+  --agent-user-media-checker: rgba(23, 25, 35, 0.05);
 
-  --agent-assistant-bg: linear-gradient(165deg, #ffffff 0%, #f6f7fb 100%);
   --agent-assistant-text: var(--neo-text-primary);
-  --agent-assistant-border: rgba(23, 25, 35, 0.1);
-  --agent-assistant-shadow: 0 1px 4px rgba(23, 25, 35, 0.08);
-  --agent-assistant-accent: rgba(23, 25, 35, 0.16);
+  --agent-assistant-muted: var(--neo-text-secondary);
+  --agent-assistant-divider: rgba(23, 25, 35, 0.08);
 }

@@ -15,6 +15,8 @@ const props = defineProps<{
   disabled?: boolean
   /** 左侧预留内边距（与外部 prefix 控件并排时使用） */
   leadingInset?: number
+  /** Enter 发送；Shift+Enter 换行（Agent 侧栏等对话场景） */
+  submitOnEnter?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [v: string]; submit: [] }>()
@@ -120,23 +122,35 @@ function focus() {
 defineExpose({ focus, insertText })
 
 function onKeydown(e: KeyboardEvent) {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+  if (showMenu.value && filteredMentions.value.length) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      selectedIndex.value = (selectedIndex.value + 1) % filteredMentions.value.length
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      selectedIndex.value = (selectedIndex.value - 1 + filteredMentions.value.length) % filteredMentions.value.length
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      insertMention(filteredMentions.value[selectedIndex.value])
+    } else if (e.key === 'Escape') {
+      showMenu.value = false
+    }
+    return
+  }
+
+  if (e.key !== 'Enter') return
+
+  const cmdEnter = e.metaKey || e.ctrlKey
+  if (props.submitOnEnter) {
+    if (e.shiftKey) return
     e.preventDefault()
     emit('submit')
     return
   }
-  if (!showMenu.value || !filteredMentions.value.length) return
-  if (e.key === 'ArrowDown') {
+
+  if (cmdEnter) {
     e.preventDefault()
-    selectedIndex.value = (selectedIndex.value + 1) % filteredMentions.value.length
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    selectedIndex.value = (selectedIndex.value - 1 + filteredMentions.value.length) % filteredMentions.value.length
-  } else if (e.key === 'Enter' || e.key === 'Tab') {
-    e.preventDefault()
-    insertMention(filteredMentions.value[selectedIndex.value])
-  } else if (e.key === 'Escape') {
-    showMenu.value = false
+    emit('submit')
   }
 }
 </script>

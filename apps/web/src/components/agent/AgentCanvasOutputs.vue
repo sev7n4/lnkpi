@@ -100,7 +100,7 @@ function isPulsing(nodeId: string): boolean {
 </script>
 
 <template>
-  <div v-if="outputs.length" class="agent-canvas-outputs mt-1.5 border-t border-[var(--agent-assistant-border)] pt-1.5">
+  <div v-if="outputs.length" class="agent-canvas-outputs mt-1.5 border-t border-[var(--agent-assistant-divider)] pt-1.5">
     <div class="mb-1 flex items-center justify-between gap-2 text-[11px] text-[var(--neo-text-muted)]">
       <span>画布产出 · {{ outputs.length }}</span>
       <CanvasLocateButton
