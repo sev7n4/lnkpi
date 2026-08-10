@@ -98,6 +98,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "await_scheme_select",
         "split_product_visual",
         "delivery_confirm",
+        "await_delivery_confirm",
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn

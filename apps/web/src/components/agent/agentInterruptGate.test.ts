@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   chipSetFromInterrupt,
+  defaultDeliverySelections,
   interruptPayloadFromThreadState,
 } from './agentInterruptGate'
 
@@ -33,6 +34,12 @@ describe('chipSetFromInterrupt', () => {
     )
   })
 
+  it('maps await_delivery_confirm to delivery_confirm chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_delivery_confirm' })).toBe(
+      'delivery_confirm',
+    )
+  })
+
   it('returns null for unknown gate', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'orchestrate_gen' })).toBe(null)
   })
@@ -55,5 +62,26 @@ describe('interruptPayloadFromThreadState', () => {
 
   it('returns null when not interrupted', () => {
     expect(interruptPayloadFromThreadState({ interrupted: false, phase: 'done' })).toBe(null)
+  })
+})
+
+describe('defaultDeliverySelections', () => {
+  it('prefers recommended scheme per type', () => {
+    const plan = {
+      visual_intent: {},
+      image_types: [
+        {
+          type_id: 'hero_main',
+          type_label: '主图',
+          schemes: [
+            { scheme_id: 'c1', recommended: false, prompt: 'a' },
+            { scheme_id: 'c2', recommended: true, prompt: 'b' },
+          ],
+          selected_scheme_ids: ['c1', 'c2'],
+        },
+      ],
+    }
+    const genByKey = { hero_main__c1: { url: 'u1' }, hero_main__c2: { url: 'u2' } }
+    expect(defaultDeliverySelections(plan, genByKey)).toEqual({ hero_main: 'c2' })
   })
 })

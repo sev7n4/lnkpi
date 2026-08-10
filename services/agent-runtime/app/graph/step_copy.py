@@ -26,6 +26,8 @@ NODE_STEP_LABELS: dict[str, str] = {
     "plan_product_visual": "策划视觉方案",
     "await_scheme_select": "等待你选择变体",
     "split_product_visual": "拆解视觉任务",
+    "delivery_summary": "汇总定稿候选",
+    "await_delivery_confirm": "等待你确认定稿",
     "prepare_atomic_regenerate": "准备重新生成",
     "prepare_single_gen": "准备单节点生成",
     "run_single_gen": "单节点生成",
@@ -39,6 +41,7 @@ PHASE_HINT_LABELS: dict[str, str] = {
     "await_atomic_confirm": "等待你确认生成参数",
     "await_image_qa": "等待你确认成图效果",
     "await_scheme_select": "等待你选择变体",
+    "await_delivery_confirm": "等待你确认定稿",
     "atomic_confirm_gate": "等待你确认生成参数",
 }
 

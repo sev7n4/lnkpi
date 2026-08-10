@@ -40,6 +40,7 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_atomic_confirm: 'atomic',
   await_image_qa: 'image_qa',
   await_scheme_select: 'scheme_select',
+  await_delivery_confirm: 'delivery_confirm',
 }
 
 export const IMAGE_QA_OPTIONS = [
@@ -50,6 +51,7 @@ export const IMAGE_QA_OPTIONS = [
 export type ImageQaOptionId = (typeof IMAGE_QA_OPTIONS)[number]['id']
 
 export const SCHEME_DECISION_PREFIX = '__scheme_decision__'
+export const DELIVERY_DECISION_PREFIX = '__delivery_decision__'
 
 /** Default checkbox state: recommended per type, else first scheme. */
 export function defaultSchemeSelections(plan: ProductVisualPlan | null | undefined): Record<string, string[]> {
@@ -89,6 +91,53 @@ export function buildVisualIntentSummary(plan: ProductVisualPlan | null | undefi
 export function buildSchemeConfirmMessage(selections: Record<string, string[]>): string {
   const payload = JSON.stringify({ action: 'confirm_schemes', selections })
   return `${SCHEME_DECISION_PREFIX}${payload}`
+}
+
+/** Default single-scheme delivery pick per type (recommended when available). */
+export function defaultDeliverySelections(
+  plan: ProductVisualPlan | null | undefined,
+  genByKey: Record<string, { url?: string | null }> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const byKey = genByKey ?? {}
+  for (const imageType of plan?.image_types ?? []) {
+    const typeId = imageType.type_id
+    const schemes = imageType.schemes ?? []
+    const selectedIds = imageType.selected_scheme_ids ?? []
+    const candidateIds = selectedIds.filter((sid) => byKey[`${typeId}__${sid}`])
+    const fallbackIds =
+      candidateIds.length > 0
+        ? candidateIds
+        : schemes
+            .map((s) => s.scheme_id)
+            .filter((sid) => byKey[`${typeId}__${sid}`])
+    const pool = fallbackIds.length ? fallbackIds : selectedIds.length ? selectedIds : schemes.map((s) => s.scheme_id)
+    if (!pool.length) continue
+    const recommended = schemes.filter((s) => s.recommended).map((s) => s.scheme_id)
+    const pick = recommended.find((sid) => pool.includes(sid)) ?? pool[0]
+    out[typeId] = pick
+  }
+  return out
+}
+
+export function buildDeliverySwitchMessage(typeId: string, schemeId: string): string {
+  const payload = JSON.stringify({ action: 'switch_scheme', type_id: typeId, scheme_id: schemeId })
+  return `${DELIVERY_DECISION_PREFIX}${payload}`
+}
+
+export function buildDeliveryRefineMessage(typeId: string, schemeId: string, feedback: string): string {
+  const payload = JSON.stringify({
+    action: 'refine_type',
+    type_id: typeId,
+    scheme_id: schemeId,
+    feedback,
+  })
+  return `${DELIVERY_DECISION_PREFIX}${payload}`
+}
+
+export function buildDeliveryConfirmMessage(selections: Record<string, string>): string {
+  const payload = JSON.stringify({ action: 'confirm_delivery', selections })
+  return `${DELIVERY_DECISION_PREFIX}${payload}`
 }
 
 /** Map Runtime SSE ``interrupt`` / thread-state to confirm chip row. */

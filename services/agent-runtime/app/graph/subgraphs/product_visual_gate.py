@@ -16,6 +16,12 @@ from app.graph.nodes.plan_product_visual import (
     resolve_plan_phase,
 )
 from app.graph.nodes.split_product_visual import make_split_product_visual_node
+from app.graph.nodes.delivery_summary import (
+    make_await_delivery_confirm_node,
+    make_delivery_summary_node,
+    route_after_await_delivery_confirm,
+    route_after_delivery_summary,
+)
 from app.graph.nodes.scheme_select_gate import (
     make_await_scheme_select_node,
     route_after_await_scheme_select,
@@ -89,6 +95,8 @@ def register_product_visual_gate(
         "split_product_visual",
         make_split_product_visual_node(nest=nest, skills_dir=resolved_skills),
     )
+    graph.add_node("delivery_summary", make_delivery_summary_node())
+    graph.add_node("await_delivery_confirm", make_await_delivery_confirm_node())
 
     graph.add_conditional_edges(
         "image_qa_check",
@@ -138,6 +146,24 @@ def register_product_visual_gate(
         },
     )
     graph.add_edge("split_product_visual", "await_topo")
+    graph.add_conditional_edges(
+        "delivery_summary",
+        route_after_delivery_summary,
+        {
+            "await_delivery_confirm": "await_delivery_confirm",
+            "done": "done",
+            "end": END,
+        },
+    )
+    graph.add_conditional_edges(
+        "await_delivery_confirm",
+        route_after_await_delivery_confirm,
+        {
+            "start_gen": "start_gen",
+            "done": "done",
+            "end": END,
+        },
+    )
 
 
 def build_product_visual_gate_subgraph(
@@ -156,11 +182,16 @@ def build_product_visual_gate_subgraph(
     graph = StateGraph(AgentRuntimeState)
     graph.add_node("done", make_done_node(nest=nest))
     graph.add_node("await_topo", make_await_topo_node())
+
+    async def _start_gen_stub(_state: dict) -> dict:
+        return {"phase": "orchestrate_gen"}
+
+    graph.add_node("start_gen", _start_gen_stub)
     register_product_visual_gate(graph, llm=llm, skills_dir=skills_dir, nest=nest)
     graph.add_edge(START, "image_qa_check")
     graph.add_edge("await_topo", END)
     graph.add_edge("done", END)
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["await_image_qa", "await_scheme_select"],
+        interrupt_before=["await_image_qa", "await_scheme_select", "await_delivery_confirm"],
     )

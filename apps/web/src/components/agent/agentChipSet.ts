@@ -2,7 +2,15 @@
 
 import { hasModifyIntent } from '@lnkpi/shared'
 
-export type AgentChipSet = 'plan' | 'copy' | 'topo' | 'atomic' | 'image_qa' | 'scheme_select' | null
+export type AgentChipSet =
+  | 'plan'
+  | 'copy'
+  | 'topo'
+  | 'atomic'
+  | 'image_qa'
+  | 'scheme_select'
+  | 'delivery_confirm'
+  | null
 
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"
 const PLAN_SNIPPETS = ['1. 采纳推荐', '1 / A', '确认方案', '请选择：'] as const

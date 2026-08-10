@@ -8,6 +8,7 @@ from langgraph.graph import END, StateGraph
 
 from app.graph.nodes.await_topo import make_await_topo_node
 from app.graph.nodes.collect_gen import make_collect_gen_node
+from app.graph.nodes.delivery_summary import route_after_collect_gen
 from app.graph.nodes.gen_node import make_gen_node
 from app.graph.nodes.gen_scheduler import make_gen_scheduler_node
 from app.graph.nodes.start_gen import make_start_gen_node
@@ -50,7 +51,14 @@ def register_topo_gate(graph: StateGraph, *, nest: Any) -> None:
     graph.add_edge("topo_revise", "await_topo")
     graph.add_edge("start_gen", "gen_scheduler")
     graph.add_edge("gen_node", "gen_scheduler")
-    graph.add_edge("collect_gen", "done")
+    graph.add_conditional_edges(
+        "collect_gen",
+        route_after_collect_gen,
+        {
+            "delivery_summary": "delivery_summary",
+            "done": "done",
+        },
+    )
 
 
 def build_topo_gate_subgraph(*, nest: Any, checkpointer: Any | None = None):

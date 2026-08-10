@@ -273,12 +273,18 @@ def test_product_visual_gate_subgraph_compiles():
 
             return _R()
 
+    async def _start_gen(_state: dict) -> dict:
+        return {"phase": "orchestrate_gen"}
+
     graph = StateGraph(AgentRuntimeState)
     graph.add_node("done", make_done_node())
     graph.add_node("await_topo", make_await_topo_node())
+    graph.add_node("start_gen", _start_gen)
     register_product_visual_gate(graph, llm=_LLM())
     graph.add_edge(START, "image_qa_check")
     graph.add_edge("await_topo", END)
     graph.add_edge("done", END)
-    compiled = graph.compile(interrupt_before=["await_image_qa", "await_scheme_select"])
+    compiled = graph.compile(
+        interrupt_before=["await_image_qa", "await_scheme_select", "await_delivery_confirm"],
+    )
     assert compiled is not None

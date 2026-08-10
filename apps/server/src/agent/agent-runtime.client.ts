@@ -31,6 +31,8 @@ export interface RuntimeThreadState {
   atomicTitle?: string | null
   flowMode?: string | null
   productVisualPlan?: ProductVisualPlan | null
+  deliverySelections?: Record<string, string> | null
+  deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
 }
 
 export interface ProductVisualScheme {

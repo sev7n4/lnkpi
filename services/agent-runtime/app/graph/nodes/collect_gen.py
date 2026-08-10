@@ -16,7 +16,11 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.gen_copy import format_gen_progress_line, format_gen_summary
-from app.graph.gen_run_state import clear_tier_b_gen_run_state
+from app.graph.gen_run_state import (
+    TIER_B_GEN_RUN_FIELDS,
+    TIER_B_REDUCER_FIELDS,
+    clear_tier_b_gen_run_state,
+)
 from app.graph.task_events import hint_for_error
 
 
@@ -122,11 +126,17 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
             msg = "无可自动生成的图片/视频节点。"
 
         partial = success_n > 0 and (fail_n > 0 or needs_user_n > 0)
+        if state.get("flow_mode") == "product_visual":
+            # Preserve gen_by_key for delivery_summary; clear reducers only.
+            tier_b_clear = {field: None for field in TIER_B_GEN_RUN_FIELDS if field != "gen_by_key"}
+            tier_b_clear.update({field: None for field in TIER_B_REDUCER_FIELDS})
+        else:
+            tier_b_clear = clear_tier_b_gen_run_state()
         result: dict[str, Any] = {
             "phase": "orchestrate_gen",
             "gen_progress_id": gen_progress_id,
             "messages": [AIMessage(content=msg)],
-            **clear_tier_b_gen_run_state(),
+            **tier_b_clear,
         }
         if partial:
             result["force_choice"] = "gen_partial"

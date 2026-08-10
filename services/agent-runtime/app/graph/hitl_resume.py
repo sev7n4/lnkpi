@@ -126,6 +126,18 @@ def should_resume_interrupt(
             return False
         return len(text) <= 24
 
+    if gate == "await_delivery_confirm":
+        from app.graph.nodes.delivery_summary import classify_delivery_decision
+
+        decision = classify_delivery_decision(text, user_decision=user_decision)
+        if decision.get("action") != "none":
+            return True
+        if text.startswith("__delivery_decision__"):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 24
+
     # Unknown gate: only resume short gate-like replies.
     return len(text) <= 16 and not REF_MENTION_RE.search(text)
 
