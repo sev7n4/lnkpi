@@ -51,7 +51,7 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useSidebarAttachments, assignRefKeysFor, type FocusNodeLike, type CanvasRefAddResult } from '@/composables/useSidebarAttachments'
-import { parseRefMentions } from '@/composables/useRefMentions'
+import { parseRefMentions, splitRefMentions } from '@/composables/useRefMentions'
 import MentionInput, { type MentionOption } from '@/components/canvas/MentionInput.vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
@@ -140,12 +140,90 @@ function reattachFromHistory(attachment: SidebarAttachment) {
     ElMessage.warning(`最多 ${SIDEBAR_ATTACHMENT_MAX} 个引用`)
     return
   }
+  dismissHistoryReattachCoachmark()
   sidebar.addFromPayload({ ...attachment, id: randomId() })
   const keys = sidebar.assignRefKeys()
   const idx = sidebar.pendingAttachments.value.length - 1
   if (keys[idx]) insertRefMention(keys[idx])
   nextTick(() => composerRef.value?.focus())
 }
+
+const HISTORY_REATTACH_HINT_KEY = 'agent-history-reattach-hint'
+const historyReattachHintSeen = ref(false)
+
+onMounted(() => {
+  try {
+    historyReattachHintSeen.value = localStorage.getItem(HISTORY_REATTACH_HINT_KEY) === '1'
+  } catch {
+    historyReattachHintSeen.value = false
+  }
+})
+
+function dismissHistoryReattachCoachmark() {
+  historyReattachHintSeen.value = true
+  try {
+    localStorage.setItem(HISTORY_REATTACH_HINT_KEY, '1')
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function stripRefMentionsFromText(text: string): string {
+  return splitRefMentions(text)
+    .filter((segment) => segment.kind === 'text')
+    .map((segment) => segment.value)
+    .join('')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+function canReuseTurn(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'user') return false
+  return Boolean(msg.content?.trim()) || (msg.attachments?.length ?? 0) > 0
+}
+
+function reattachTurnFromHistory(msg: AgentStreamMessage) {
+  if (props.readOnly || !canReuseTurn(msg)) return
+
+  dismissHistoryReattachCoachmark()
+  sidebar.clear()
+
+  const items = makeAttachmentItems(msg.attachments, msg.attachmentRefKeys)
+  const plainText = stripRefMentionsFromText(msg.content ?? '')
+  input.value = plainText
+
+  for (const { attachment } of items) {
+    if (sidebar.pendingAttachments.value.length >= SIDEBAR_ATTACHMENT_MAX) {
+      ElMessage.warning(`最多 ${SIDEBAR_ATTACHMENT_MAX} 个引用，已跳过其余项`)
+      break
+    }
+    sidebar.addFromPayload({ ...attachment, id: randomId() })
+  }
+
+  const keys = sidebar.assignRefKeys()
+  for (const key of keys) {
+    insertRefMention(key)
+  }
+
+  nextTick(() => composerRef.value?.focus())
+  ElMessage.success('已复用本轮提示词与引用')
+}
+
+const threadHasReattachableHistory = computed(() =>
+  agent.messages.some((msg) => canReuseTurn(msg)),
+)
+
+const showHistoryReattachCoachmark = computed(
+  () => !props.readOnly && !historyReattachHintSeen.value && threadHasReattachableHistory.value,
+)
+
+const showComposerReattachHint = computed(
+  () =>
+    !props.readOnly
+    && pendingAttachmentItems.value.length === 0
+    && !input.value.trim()
+    && threadHasReattachableHistory.value,
+)
 
 const pendingAttachmentItems = computed(() =>
   makeAttachmentItems(sidebar.pendingAttachments.value, sidebar.assignRefKeys()),
@@ -1330,6 +1408,18 @@ defineExpose({
                   history-interactive
                   @reattach="reattachFromHistory"
                 />
+                <div
+                  v-if="!readOnly && canReuseTurn(msg)"
+                  class="agent-bubble-reuse mt-1.5 flex justify-end"
+                >
+                  <button
+                    type="button"
+                    class="agent-bubble-reuse-btn"
+                    @click="reattachTurnFromHistory(msg)"
+                  >
+                    ↺ 复用本轮（提示词 + 引用）
+                  </button>
+                </div>
                 <AgentCanvasOutputs
                   v-if="msg.role === 'assistant' && (assistantOutputsById.get(msg.id)?.length ?? 0) > 0"
                   :outputs="assistantOutputsById.get(msg.id) ?? []"
@@ -1452,7 +1542,29 @@ defineExpose({
               @drop.prevent="onDrop"
               @pointerdown="onInputDockPointerDown"
             >
+              <div
+                v-if="showHistoryReattachCoachmark"
+                class="agent-history-coachmark mx-0.5 mb-2 flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] leading-snug"
+                role="status"
+              >
+                <span class="min-w-0 flex-1 text-[var(--neo-text-secondary)]">
+                  点击历史消息中的 ↺ 引用可再次加入输入框；也可点「复用本轮」一键带回提示词与全部引用。
+                </span>
+                <button
+                  type="button"
+                  class="agent-history-coachmark__dismiss shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium"
+                  @click="dismissHistoryReattachCoachmark"
+                >
+                  知道了
+                </button>
+              </div>
               <div class="agent-composer">
+                <p
+                  v-if="showComposerReattachHint"
+                  class="agent-composer-reattach-hint mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--neo-text-muted)]"
+                >
+                  点击上方历史消息中的 ↺ 引用，或「复用本轮」，可再次加入本次对话
+                </p>
                 <AgentRefStrip
                   v-if="pendingAttachmentItems.length"
                   class="agent-composer__refs"
@@ -1471,6 +1583,7 @@ defineExpose({
                     :placeholder="inputPlaceholder"
                     :disabled="agent.isStreaming"
                     :leading-inset="readOnly ? 0 : COMPOSER_PICK_INSET"
+                    submit-on-enter
                     @submit="send"
                   />
                   <button
@@ -1866,6 +1979,40 @@ defineExpose({
 .agent-bubble-user :deep(.dock-ref-chip:not(.has-media) .dock-ref-chip__key) {
   color: var(--agent-user-text);
   text-shadow: none;
+}
+
+.agent-bubble-reuse-btn {
+  border: 1px dashed color-mix(in srgb, var(--agent-user-text) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--agent-user-text) 6%, transparent);
+  padding: 2px 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--agent-user-text) 78%, transparent);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.agent-bubble-reuse-btn:hover {
+  border-color: color-mix(in srgb, var(--agent-user-text) 35%, transparent);
+  background: color-mix(in srgb, var(--agent-user-text) 12%, transparent);
+  color: var(--agent-user-text);
+}
+
+.agent-history-coachmark {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 14%, var(--neo-border));
+  background: color-mix(in srgb, var(--neo-hi-bg) 8%, var(--neo-hover-bg));
+}
+
+.agent-history-coachmark__dismiss {
+  border: 1px solid var(--neo-border);
+  background: var(--neo-hi-bg);
+  color: var(--neo-hi-text);
+  box-shadow: var(--neo-hi-shadow);
+}
+
+.agent-composer-reattach-hint {
+  border-left: 2px solid color-mix(in srgb, var(--neo-hi-text) 18%, transparent);
+  padding-left: 8px;
 }
 
 .agent-tools {

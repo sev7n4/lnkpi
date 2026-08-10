@@ -98,6 +98,7 @@ function onChipMention(refKey: string) {
         v-for="refItem in refs"
         :key="refItem.refId"
         :ref-item="refItem"
+        :variant="historyInteractive ? 'history' : 'composer'"
         :clickable="removable !== false || historyInteractive === true"
         :draggable="canReorder"
         :dragging="dragRefId === refItem.refId"

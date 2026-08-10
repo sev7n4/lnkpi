@@ -66,6 +66,10 @@
   --neo-edge-hover: rgba(178, 181, 210, 0.55);
   --neo-edge-selected: #8a7dff;
 
+  /* ---- 画布框选 / 多选包围框 ---- */
+  --neo-canvas-selection-fill: rgba(255, 255, 255, 0.05);
+  --neo-canvas-selection-border: rgba(148, 151, 180, 0.48);
+
   /* ---- 毛玻璃 dock：高透明度 + 低模糊（透过卡片能看清画布），
           立体感靠内侧顶部高光 + 内侧底部暗边 + 双层投影 ---- */
   --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(10, 10, 14, 0.42) 45%, rgba(10, 10, 14, 0.58) 100%);
@@ -148,6 +152,9 @@
   --neo-edge: rgba(23, 25, 35, 0.22);
   --neo-edge-hover: rgba(23, 25, 35, 0.45);
   --neo-edge-selected: #6d5dfc;
+
+  --neo-canvas-selection-fill: rgba(23, 25, 35, 0.05);
+  --neo-canvas-selection-border: rgba(23, 25, 35, 0.34);
 
   --neo-glass-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.62) 0%, rgba(255, 255, 255, 0.44) 50%, rgba(248, 249, 253, 0.56) 100%);
   --neo-glass-border: rgba(23, 25, 35, 0.12);

@@ -13,6 +13,8 @@ const props = defineProps<{
   draggable?: boolean
   dragging?: boolean
   dragOver?: boolean
+  /** composer = 输入区（hover 预览）；history = 历史气泡（仅点击引用） */
+  variant?: 'composer' | 'history'
 }>()
 
 const emit = defineEmits<{
@@ -50,7 +52,15 @@ function clearHoverTimer() {
   }
 }
 
+const isHistory = computed(() => props.variant === 'history')
+
+const chipTitle = computed(() => {
+  if (isHistory.value) return `再次引用 ${props.refItem.refKey}`
+  return `${props.refItem.refKey} · ${props.refItem.label}`
+})
+
 function onEnter(event: MouseEvent) {
+  if (isHistory.value) return
   clearHoverTimer()
   const el = event.currentTarget
   if (el instanceof HTMLElement) {
@@ -62,6 +72,7 @@ function onEnter(event: MouseEvent) {
 }
 
 function onLeave() {
+  if (isHistory.value) return
   clearHoverTimer()
   hoverTimer.value = window.setTimeout(() => {
     if (!isHoveringPreview.value) previewOpen.value = false
@@ -93,6 +104,7 @@ function onClick() {
   <div
     class="dock-ref-chip"
     :class="{
+      'dock-ref-chip--history': isHistory,
       'is-stale': refItem.stale,
       'has-media': !!thumbUrl,
       'is-readonly': !clickable,
@@ -100,7 +112,7 @@ function onClick() {
       'is-drag-over': dragOver,
     }"
     :draggable="draggable"
-    :title="`${refItem.refKey} · ${refItem.label}`"
+    :title="chipTitle"
     role="button"
     tabindex="0"
     @mouseenter="onEnter"
@@ -113,6 +125,8 @@ function onClick() {
     @drop="emit('drop', $event)"
     @dragend="emit('dragend')"
   >
+    <span v-if="isHistory" class="dock-ref-chip__reattach-badge" aria-hidden="true">↺</span>
+    <span v-if="isHistory" class="dock-ref-chip__reattach-tip">再次引用</span>
     <span class="dock-ref-chip__key">{{ refItem.refKey }}</span>
 
     <img
@@ -136,6 +150,7 @@ function onClick() {
     </span>
 
     <button
+      v-if="!isHistory"
       type="button"
       class="dock-ref-chip__remove"
       aria-label="移除引用"
@@ -148,7 +163,7 @@ function onClick() {
   </div>
 
   <AgentRefHoverPreview
-    v-if="previewOpen && previewAnchor"
+    v-if="!isHistory && previewOpen && previewAnchor"
     :ref-item="refItem"
     :anchor="previewAnchor"
     @mouseenter="onPreviewEnter"
@@ -175,7 +190,61 @@ function onClick() {
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
-    opacity 0.15s ease;
+    opacity 0.15s ease,
+    transform 0.12s ease;
+}
+
+.dock-ref-chip--history {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--neo-text-primary) 22%, var(--neo-border));
+}
+
+.dock-ref-chip--history:not(.is-stale):hover {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 32%, var(--neo-border));
+  transform: scale(1.05);
+}
+
+.dock-ref-chip__reattach-badge {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  z-index: 2;
+  display: flex;
+  width: 12px;
+  height: 12px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--neo-bg) 72%, transparent);
+  font-size: 8px;
+  line-height: 1;
+  color: var(--neo-text-primary);
+  pointer-events: none;
+}
+
+.dock-ref-chip__reattach-tip {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  z-index: 3;
+  padding: 3px 7px;
+  border: 1px solid var(--neo-border);
+  border-radius: 6px;
+  background: var(--neo-popover-bg);
+  font-size: 9px;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--neo-text-secondary);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%) translateY(2px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  box-shadow: var(--neo-popover-shadow);
+}
+
+.dock-ref-chip--history:hover .dock-ref-chip__reattach-tip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .dock-ref-chip.is-readonly {
