@@ -21,6 +21,9 @@ NODE_STEP_LABELS: dict[str, str] = {
     "create_atomic_node": "创建画布节点",
     "run_atomic_gen": "生成内容",
     "await_atomic_confirm": "等待你确认生成参数",
+    "image_qa_check": "检查成图效果",
+    "await_image_qa": "等待你确认成图效果",
+    "plan_product_visual_stub": "策划视觉方案",
     "prepare_atomic_regenerate": "准备重新生成",
     "prepare_single_gen": "准备单节点生成",
     "run_single_gen": "单节点生成",
@@ -32,6 +35,7 @@ PHASE_HINT_LABELS: dict[str, str] = {
     "await_copy_confirm": "等待你确认主文案",
     "await_topo": "等待你确认节点结构",
     "await_atomic_confirm": "等待你确认生成参数",
+    "await_image_qa": "等待你确认成图效果",
     "atomic_confirm_gate": "等待你确认生成参数",
 }
 

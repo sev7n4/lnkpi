@@ -13,7 +13,7 @@ from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
-from app.graph.nodes.image_qa_check_stub import make_image_qa_check_node
+from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
@@ -65,7 +65,6 @@ def build_agent_graph(
     graph = StateGraph(AgentRuntimeState)
 
     graph.add_node("intake", make_intake_node(skills_path))
-    graph.add_node("image_qa_check", make_image_qa_check_node())
     graph.add_node("clarify_gate", make_clarify_gate_node())
     graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("explore", make_explore_node(llm=llm, nest=nest))
@@ -78,6 +77,7 @@ def build_agent_graph(
     register_topo_gate(graph, nest=nest)
     register_single_node_gate(graph, nest=nest)
     register_atomic_create_gate(graph, nest=nest, llm=llm)
+    register_product_visual_gate(graph, nest=nest)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(
@@ -94,7 +94,6 @@ def build_agent_graph(
             "explore": "explore",
         },
     )
-    graph.add_edge("image_qa_check", END)
     graph.add_edge("chat", END)
     graph.add_edge("explore", END)
     graph.add_edge("clarify_gate", END)
@@ -119,5 +118,6 @@ def build_agent_graph(
             "await_topo",
             "await_copy_confirm",
             "await_atomic_confirm",
+            "await_image_qa",
         ],
     )

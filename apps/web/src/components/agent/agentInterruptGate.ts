@@ -13,7 +13,15 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_copy_confirm: 'copy',
   await_topo: 'topo',
   await_atomic_confirm: 'atomic',
+  await_image_qa: 'image_qa',
 }
+
+export const IMAGE_QA_OPTIONS = [
+  { id: 'retake', label: '重新拍摄', message: '我重新拍摄上传' },
+  { id: 'ai_white_bg', label: '生成白底图', message: '生成标准白底图' },
+] as const
+
+export type ImageQaOptionId = (typeof IMAGE_QA_OPTIONS)[number]['id']
 
 /** Map Runtime SSE ``interrupt`` / thread-state to confirm chip row. */
 export function chipSetFromInterrupt(

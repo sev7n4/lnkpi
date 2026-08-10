@@ -35,7 +35,7 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
-import { chipSetFromInterrupt, interruptPayloadFromThreadState, type AgentInterruptPayload } from '@/components/agent/agentInterruptGate'
+import { chipSetFromInterrupt, IMAGE_QA_OPTIONS, interruptPayloadFromThreadState, type AgentInterruptPayload } from '@/components/agent/agentInterruptGate'
 import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
   buildIdempotencyKey,
@@ -376,6 +376,7 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
+const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
 
 const canSubmitComposer = computed(() =>
   Boolean(input.value.trim() || sidebar.pendingAttachments.value.length),
@@ -1570,6 +1571,19 @@ defineExpose({
                 @click="sendPreset('取消')"
               >
                 取消
+              </button>
+            </div>
+            <div v-else-if="awaitingImageQa" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                v-for="opt in IMAGE_QA_OPTIONS"
+                :key="opt.id"
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :class="{ 'agent-preset-primary font-medium': opt.id === 'ai_white_bg' }"
+                :disabled="agent.isStreaming"
+                @click="sendPreset(opt.message)"
+              >
+                {{ opt.label }}
               </button>
             </div>
             <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">

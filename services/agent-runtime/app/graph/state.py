@@ -183,6 +183,7 @@ class AgentRuntimeState(TypedDict, total=False):
     # ecommerce-product-visual (Phase 1 image-only)
     product_visual_plan: dict | None
     image_qa_result: Literal["pass", "fail", "remediated"] | None
+    image_qa_decision: Literal["none", "retake", "ai_white_bg"] | None
     scheme_revision_count: int | None
     phase1_asset_keys: list[str] | None
     delivery_selections: dict[str, str] | None  # type_id -> scheme_id
