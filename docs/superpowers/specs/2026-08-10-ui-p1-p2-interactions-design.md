@@ -20,7 +20,8 @@
 - [x] Agent 顶栏 active、drop-target、skill icon
 - [x] 左侧 dock active 态
 - [x] 底栏 seg-btn、group 选中
-- [ ] 全站 token  sweep（main.css chips、selection rect 等）
+- [x] 框选矩形、placeholder、ref chip drag、MentionInput、dock-seg-btn
+- [ ] 主页/Studio 独立页、WorkCard 等站外页面
 
 ### 连线样式自定义 ✅
 
@@ -28,5 +29,6 @@
 
 ### Agent 侧栏 Studio 布局
 
-- [ ] 与 dock-studio 进一步统一（P0 已做 hover 参数条）
+- [x] ghost 单层 dock（#210）
+- [ ] dock-studio 模型选择器同样 ghost 化（可选）
 

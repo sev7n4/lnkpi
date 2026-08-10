@@ -236,8 +236,8 @@ function onRefMention(refKey: string) {
       <div class="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/5 p-0.5">
         <button
           type="button"
-          class="rounded-md px-1.5 py-1 transition"
-          :class="videoMode === 'text_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
+          class="dock-seg-btn rounded-md px-1.5 py-1"
+          :class="{ 'is-on': videoMode === 'text_to_video' }"
           :disabled="readonly"
           title="文生视频"
           @click="setVideoMode('text_to_video')"
@@ -246,8 +246,8 @@ function onRefMention(refKey: string) {
         </button>
         <button
           type="button"
-          class="rounded-md px-1.5 py-1 transition"
-          :class="videoMode === 'image_to_video' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
+          class="dock-seg-btn rounded-md px-1.5 py-1"
+          :class="{ 'is-on': videoMode === 'image_to_video' }"
           :disabled="readonly"
           title="图生视频"
           @click="setVideoMode('image_to_video')"
@@ -257,8 +257,8 @@ function onRefMention(refKey: string) {
         <button
           v-if="canUseFirstLastFrame"
           type="button"
-          class="rounded-md px-1.5 py-1 text-[10px] transition"
-          :class="videoMode === 'first_last_frame' ? 'bg-[#6366f1]/30 text-[#818cf8]' : 'text-white/45'"
+          class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
+          :class="{ 'is-on': videoMode === 'first_last_frame' }"
           :disabled="readonly"
           title="首尾帧"
           @click="setVideoMode('first_last_frame')"

@@ -74,8 +74,8 @@
   }
 
   .input-field:focus {
-    border-color: var(--neo-accent-border);
-    box-shadow: 0 0 0 2px var(--neo-accent-soft);
+    border-color: var(--neo-border-strong);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 12%, transparent);
   }
 
   /* 画布浮动 chrome：左上返回/标题、右上主题/积分/头像、左侧工具轨 */
@@ -175,7 +175,29 @@
   }
 
   .neo-chip.is-on {
-    background: var(--neo-accent-soft);
-    color: var(--neo-accent-text);
+    background: var(--neo-hi-bg);
+    color: var(--neo-hi-text);
+    box-shadow: var(--neo-hi-shadow);
+  }
+
+  /* dock-studio 内分段切换（模式/effort 等） */
+  .dock-seg-btn {
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 10px;
+    line-height: 1.2;
+    color: var(--neo-text-muted);
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .dock-seg-btn:hover:not(:disabled) {
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-secondary);
+  }
+
+  .dock-seg-btn.is-on {
+    background: var(--neo-hi-bg);
+    color: var(--neo-hi-text);
+    box-shadow: var(--neo-hi-shadow);
   }
 }

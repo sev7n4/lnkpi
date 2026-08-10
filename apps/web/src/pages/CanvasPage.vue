@@ -2938,8 +2938,8 @@ onMounted(() => {
 
 :deep(.vue-flow__selection),
 :deep(.vue-flow__nodesselection-rect) {
-  background: var(--neo-accent-soft);
-  border: 1.5px dashed var(--neo-accent-border);
+  background: color-mix(in srgb, var(--neo-hi-text) 8%, transparent);
+  border: 1.5px dashed color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
   border-radius: 4px;
 }
 

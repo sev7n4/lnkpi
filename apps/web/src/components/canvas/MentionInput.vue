@@ -170,7 +170,7 @@ function onKeydown(e: KeyboardEvent) {
         v-for="(item, idx) in filteredMentions"
         :key="item.id"
         class="neo-popover-item cursor-pointer px-3 py-2 text-sm"
-        :class="idx === selectedIndex ? '!bg-[var(--neo-accent-soft)] !text-[var(--neo-accent-text)]' : ''"
+        :class="idx === selectedIndex ? '!bg-[var(--neo-hi-bg)] !text-[var(--neo-hi-text)]' : ''"
         @mousedown.prevent="insertMention(item)"
       >
         <span class="opacity-50">@</span>{{ item.label }}
