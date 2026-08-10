@@ -160,7 +160,7 @@ class FakeLLM:
 
 def test_eval_cvs_set_schema(cvs_doc: dict):
     assert cvs_doc.get("schema_version") == 1
-    assert len(cvs_doc.get("cases") or []) == 3
+    assert len(cvs_doc.get("cases") or []) == 4
 
 
 def test_eval_cvs_set_minimum_cases(cvs_cases: list[dict]):
@@ -169,8 +169,9 @@ def test_eval_cvs_set_minimum_cases(cvs_cases: list[dict]):
         "CVS-01-ecommerce-listing",
         "CVS-02-product-packaging-crab",
         "CVS-03-interior-design",
+        "CVS-04-industrial-pump",
     }
-    assert len(cvs_cases) >= 9, f"expected 3 cases + 6 model subcases, got {len(cvs_cases)}"
+    assert len(cvs_cases) >= 10, f"expected 4 cases + model subcases, got {len(cvs_cases)}"
 
 
 def test_eval_cvs_set_route_gold(cvs_cases: list[dict]):

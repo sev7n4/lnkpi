@@ -60,6 +60,21 @@ class FakeLLM:
         return Resp(self.content)
 
 
+async def _verify_case_route(case: dict) -> bool:
+    state = {
+        "messages": [HumanMessage(content=case["utterance"])],
+        "requested_skill_id": case.get("requested_skill_id"),
+        "sidebar_attachments": list(case.get("attachments") or case.get("sidebar_attachments") or []),
+    }
+    ctx = assemble_route_context(state)
+    decision = decide_route(ctx, valid_skill_ids=VALID_SKILLS)
+    expected = case.get("assert_flow_mode", "product_visual")
+    ok = decision.get("flow_mode") == expected
+    label = case["id"].split("-")[0] + "-" + case["id"].split("-")[1] if "-" in case["id"] else case["id"]
+    record(f"{label} route", ok, f"flow_mode={decision.get('flow_mode')}")
+    return ok
+
+
 async def _run_cvs01_dry_run() -> bool:
     doc = yaml.safe_load(EVAL_PATH.read_text(encoding="utf-8"))
     case = next(c for c in doc["cases"] if c["id"] == "CVS-01-ecommerce-listing")
@@ -68,12 +83,8 @@ async def _run_cvs01_dry_run() -> bool:
         "requested_skill_id": case.get("requested_skill_id"),
         "sidebar_attachments": list(case.get("attachments") or []),
     }
-    ctx = assemble_route_context(state)
-    decision = decide_route(ctx, valid_skill_ids=VALID_SKILLS)
-    if decision.get("flow_mode") != "product_visual":
-        record("CVS-01 route", False, f"flow_mode={decision.get('flow_mode')}")
+    if not await _verify_case_route(case):
         return False
-    record("CVS-01 route", True, "flow_mode=product_visual")
 
     fixture = case["plan_fixture"]
     raw = json.dumps(fixture, ensure_ascii=False)
@@ -97,11 +108,32 @@ async def _run_cvs01_dry_run() -> bool:
     return ok
 
 
+async def _run_dry_run() -> bool:
+    doc = yaml.safe_load(EVAL_PATH.read_text(encoding="utf-8"))
+    ok = await _run_cvs01_dry_run()
+    case4 = next(c for c in doc["cases"] if c["id"] == "CVS-04-industrial-pump")
+    ok = await _verify_case_route(case4) and ok
+    fixture = case4.get("plan_fixture")
+    if fixture:
+        raw = json.dumps(fixture, ensure_ascii=False)
+        try:
+            plan = parse_product_visual_plan(raw)
+            type_ids = {t.type_id for t in plan.image_types}
+            required = set(case4.get("assert_plan_types_include") or [])
+            types_ok = required.issubset(type_ids)
+            record("CVS-04 plan types", types_ok, f"types={sorted(type_ids)}")
+            ok = types_ok and ok
+        except Exception as exc:  # noqa: BLE001
+            record("CVS-04 plan fixture parse", False, str(exc))
+            ok = False
+    return ok
+
+
 def main() -> int:
     print("=== product_visual CVS verify (dry-run) ===\n")
     import asyncio
 
-    asyncio.run(_run_cvs01_dry_run())
+    asyncio.run(_run_dry_run())
     print(f"\n=== Summary PASS={PASS} FAIL={FAIL} ===")
     return 0 if FAIL == 0 else 1
 

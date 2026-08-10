@@ -273,3 +273,43 @@ cases:
                   recommended: true
                   key_elements: { human_presence: true, model_source: user_ref }
                   prompt: "用户参考人物在客厅使用沙发"
+
+  - id: CVS-04-industrial-pump
+    utterance: "这是实物拍的照片，帮我出外观主图、一张带尺寸标注的规格图，再加一张工厂机房安装场景图。"
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs04-industrial-pump.jpg }
+    assert_flow_mode: product_visual
+    assert_plan_types_include: [hero_main, spec_annotated, installation_scene]
+    assert_plan_types_exclude: [selling_point, promo_poster, packaging_hero]
+    assert_all_target_type: image
+    plan_fixture:
+      visual_intent:
+        industry_context: industrial
+        primary_goal: industrial_catalog
+        domain_tags: [industrial]
+        user_stated_constraints: ["尺寸标注", "工厂机房安装场景"]
+        output_types_requested: ["外观主图", "规格图", "安装场景图"]
+        confidence: 0.9
+      image_types:
+        - type_id: hero_main
+          type_label: 外观主图
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 白底外观, recommended: true, prompt: "工业水泵外观主图，白底居中" }
+        - type_id: spec_annotated
+          type_label: 规格标注图
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - scheme_id: c1
+              name: 尺寸标注
+              recommended: true
+              key_elements: { specs_to_show: ["进出口径", "扬程", "功率"] }
+              prompt: "工业水泵规格图，标注进出口径与关键参数"
+        - type_id: installation_scene
+          type_label: 工厂机房安装场景
+          domain_tags: [industrial]
+          target_type: image
+          schemes:
+            - { scheme_id: c1, name: 机房工况, recommended: true, prompt: "工业水泵在工厂机房安装场景，工况真实" }
