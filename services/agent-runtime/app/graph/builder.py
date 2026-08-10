@@ -13,6 +13,7 @@ from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
+from app.graph.nodes.image_qa_check_stub import make_image_qa_check_node
 from app.graph.nodes.intake import make_intake_node
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
@@ -34,6 +35,8 @@ def route_after_intake(state: AgentRuntimeState) -> str:
         return "prepare_single_gen"
     if state.get("flow_mode") == "atomic_create":
         return "parse_atomic_intent"
+    if state.get("flow_mode") == "product_visual":
+        return "image_qa_check"
     if state.get("skill_id"):
         return "decide_plan_mode"
     if state.get("flow_mode") == "explore_canvas":
@@ -62,6 +65,7 @@ def build_agent_graph(
     graph = StateGraph(AgentRuntimeState)
 
     graph.add_node("intake", make_intake_node(skills_path))
+    graph.add_node("image_qa_check", make_image_qa_check_node())
     graph.add_node("clarify_gate", make_clarify_gate_node())
     graph.add_node("chat", make_chat_node(llm=llm))
     graph.add_node("explore", make_explore_node(llm=llm, nest=nest))
@@ -83,12 +87,14 @@ def build_agent_graph(
             "prepare_atomic_regenerate": "prepare_atomic_regenerate",
             "prepare_single_gen": "prepare_single_gen",
             "parse_atomic_intent": "parse_atomic_intent",
+            "image_qa_check": "image_qa_check",
             "clarify_gate": "clarify_gate",
             "decide_plan_mode": "decide_plan_mode",
             "chat": "chat",
             "explore": "explore",
         },
     )
+    graph.add_edge("image_qa_check", END)
     graph.add_edge("chat", END)
     graph.add_edge("explore", END)
     graph.add_edge("clarify_gate", END)

@@ -108,7 +108,10 @@ def make_intake_node(skills_dir: Path) -> Callable:
         text = str(ctx.get("utterance") or "")
         existing_brief = (ctx.get("checkpoint") or {}).get("user_brief")
 
-        if flow_mode == "campaign" and skill_id and mode == "create":
+        if flow_mode == "product_visual" and not skill_id and "ecommerce-product-visual" in by_id:
+            skill_id = "ecommerce-product-visual"
+
+        if flow_mode in ("campaign", "product_visual") and skill_id and mode == "create":
             if existing_brief and not modify_intent(text):
                 proposed_brief = BRIEF_RESET_PREFIX + text
             else:

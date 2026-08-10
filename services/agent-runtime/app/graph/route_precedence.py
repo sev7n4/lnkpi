@@ -19,6 +19,37 @@ from app.graph.l0_action import TRANSFORM_VERBS, detect_l0_action, has_preserve_
 from app.graph.route_context import RouteContext
 from app.graph.route_features import RouteFeatures, orchestration_campaign_signal
 
+ECOMMERCE_PRODUCT_VISUAL_SKILL = "ecommerce-product-visual"
+
+# Multi-type visual taxonomy — not industry-specific routing (L8 / design §5.5)
+_PRODUCT_VISUAL_TYPE_PHRASES = (
+    "主图",
+    "场景图",
+    "详情图",
+    "模特",
+    "包装",
+    "海报",
+    "卖点",
+    "效果图",
+    "展示图",
+    "推广图",
+    "电商图",
+    "视觉",
+    "定稿",
+)
+_PRODUCT_VISUAL_MULTI_INDICATORS = (
+    "和",
+    "以及",
+    "再加",
+    "同时",
+    "一套",
+    "几张",
+    "多种",
+    "多个",
+    "各一张",
+    "分别",
+)
+
 ROUTE_CLARIFY_ORCHESTRATION = (
     "听起来像多节点编排或 Skill 工作流需求。请确认：\n"
     "1）按引用内容单张出图（保留 @T* / @I*）；\n"
@@ -62,6 +93,35 @@ def _base_decision(
     if features is not None:
         decision["route_features"] = features  # type: ignore[typeddict-unknown-key]
     return decision
+
+
+def _has_product_photo_attachment(ctx: RouteContext) -> bool:
+    if ctx.get("has_product_photo_attachment"):
+        return True
+    attachments = ctx.get("sidebar_attachments") or []
+    for attachment in attachments:
+        role = str(attachment.get("role") or "").lower()
+        media = str(attachment.get("mediaType") or attachment.get("kind") or "").lower()
+        if role == "product" and (not media or media == "image"):
+            return True
+    return False
+
+
+def product_visual_intent_signal(utterance: str, *, has_product_photo: bool) -> bool:
+    """Lightweight multi-type / visual plan signal — no industry keyword routing."""
+    if not has_product_photo:
+        return False
+    text = (utterance or "").strip()
+    if not text:
+        return False
+    type_hits = sum(1 for phrase in _PRODUCT_VISUAL_TYPE_PHRASES if phrase in text)
+    if type_hits >= 2:
+        return True
+    if type_hits >= 1 and any(marker in text for marker in _PRODUCT_VISUAL_MULTI_INDICATORS):
+        return True
+    if any(marker in text for marker in ("出一套", "视觉方案", "visual plan", "推广图")):
+        return True
+    return False
 
 
 def _valid_skill_id(ctx: RouteContext, valid_skill_ids: set[str] | None) -> str | None:
@@ -241,10 +301,47 @@ def _rule_focus_gen(
     return None
 
 
+def _rule_product_visual_explicit(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    requested = _valid_skill_id(ctx, valid_skill_ids)
+    if requested == ECOMMERCE_PRODUCT_VISUAL_SKILL:
+        return _base_decision(
+            ctx,
+            flow_mode="product_visual",
+            reason="explicit_product_visual_skill",
+            confidence=0.91,
+            precedence_rule_id="product_visual_explicit",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_product_visual_intent(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    has_product_photo = _has_product_photo_attachment(ctx)
+    if product_visual_intent_signal(intent.utterance, has_product_photo=has_product_photo):
+        return _base_decision(
+            ctx,
+            flow_mode="product_visual",
+            reason="product_photo_multi_visual_intent",
+            confidence=0.87,
+            precedence_rule_id="product_visual_intent",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
 def _rule_explicit_skill(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if _valid_skill_id(ctx, valid_skill_ids):
+    requested = _valid_skill_id(ctx, valid_skill_ids)
+    if requested and requested != ECOMMERCE_PRODUCT_VISUAL_SKILL:
         return _base_decision(
             ctx,
             flow_mode="campaign",
@@ -358,6 +455,8 @@ PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("checkpoint_regen", _rule_checkpoint_regen),
     ("ref_backed_generate", _rule_ref_backed_generate),
     ("focus_gen", _rule_focus_gen),
+    ("product_visual_explicit", _rule_product_visual_explicit),
+    ("product_visual_intent", _rule_product_visual_intent),
     ("explicit_skill_orch", _rule_explicit_skill),
     ("orch_ambiguous", _rule_orch_ambiguous),
     ("explore", _rule_explore),
