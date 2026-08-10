@@ -11,6 +11,7 @@ from app.graph.hitl_resume import (
     build_interrupt_state_update,
     interrupt_event_payload,
     prepare_interrupt_resume,
+    should_resume_interrupt,
 )
 from app.graph.nodes.await_confirm import make_await_confirm_node
 from langgraph.graph import END, START, StateGraph
@@ -63,3 +64,21 @@ async def test_prepare_interrupt_resume_continues_gate():
 def test_gate_decision_clear_keys():
     assert GATE_DECISION_CLEAR["user_decision"] == "none"
     assert GATE_DECISION_CLEAR["force_choice"] is None
+
+
+def test_should_resume_interrupt_img2img_at_topo_gate():
+    msg = "@I1 这个是模特， @I2 这个是衣服，请让模特穿上这件衣服出图"
+    assert should_resume_interrupt(msg, ["await_topo"]) is False
+
+
+def test_should_resume_interrupt_confirm_at_topo_gate():
+    assert should_resume_interrupt("确认出图", ["await_topo"]) is True
+
+
+def test_should_resume_interrupt_long_plan_at_confirm_gate():
+    msg = "@I1 这个是模特， @I2 这个是衣服，请让模特穿上这件衣服出图"
+    assert should_resume_interrupt(msg, ["await_confirm"]) is False
+
+
+def test_should_resume_interrupt_short_confirm_at_confirm_gate():
+    assert should_resume_interrupt("确认", ["await_confirm"]) is True

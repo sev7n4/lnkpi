@@ -354,8 +354,8 @@ def _rule_default_chat(
 PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("modify_existing_plan", _rule_modify_existing_plan),
     ("regen_no_checkpoint", _rule_regen_no_checkpoint),
-    ("checkpoint_regen", _rule_checkpoint_regen),
     ("sidebar_img2img", _rule_sidebar_img2img),
+    ("checkpoint_regen", _rule_checkpoint_regen),
     ("ref_backed_generate", _rule_ref_backed_generate),
     ("focus_gen", _rule_focus_gen),
     ("explicit_skill_orch", _rule_explicit_skill),
