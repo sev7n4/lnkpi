@@ -6,6 +6,7 @@ import { worksApi } from '@/services/works-api'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
+import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -214,14 +215,10 @@ async function handlePublish() {
                 >
                   预览
                 </button>
-                <button
-                  type="button"
-                  class="rounded-md px-2 py-1 text-[11px] text-white/55 transition hover:bg-white/10 hover:text-white"
+                <CanvasLocateButton
                   title="定位到画布"
-                  @click="locateNode(node, $event)"
-                >
-                  定位
-                </button>
+                  @click="(e) => locateNode(node, e)"
+                />
               </div>
             </div>
           </el-radio>

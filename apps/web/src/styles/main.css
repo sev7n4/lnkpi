@@ -125,6 +125,71 @@
     color: var(--neo-text-primary);
   }
 
+  /* 左侧 dock 二级面板：卡片行（添加节点、连线选类型等） */
+  .neo-popover-card-item {
+    border: 1px solid transparent;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.1s ease,
+      color 0.15s ease;
+  }
+
+  .neo-popover-card-item:hover {
+    background: var(--neo-hover-bg);
+    border-color: var(--neo-border);
+    color: var(--neo-text-primary);
+  }
+
+  .neo-popover-card-item:active {
+    transform: scale(0.99);
+    background: color-mix(in srgb, var(--neo-hi-bg) 28%, var(--neo-hover-bg));
+    border-color: color-mix(in srgb, var(--neo-hi-text) 14%, var(--neo-border));
+  }
+
+  /* 左侧 dock 二级面板：顶栏 tab（资产库 / 任务生命周期） */
+  .neo-dock-panel-tab {
+    border-radius: 0.5rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--neo-text-muted);
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .neo-dock-panel-tab:hover {
+    background: var(--neo-hover-bg);
+    color: var(--neo-text-secondary);
+  }
+
+  .neo-dock-panel-tab.is-active {
+    background: var(--neo-hi-bg);
+    color: var(--neo-hi-text);
+    box-shadow: var(--neo-hi-shadow);
+  }
+
+  /* 左侧 dock 二级面板：筛选 chip */
+  .neo-dock-panel-chip {
+    border-radius: 9999px;
+    padding: 0.25rem 0.625rem;
+    font-size: 10px;
+    color: var(--neo-text-muted);
+    background: var(--neo-hover-bg);
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+
+  .neo-dock-panel-chip:hover {
+    background: var(--neo-active-bg);
+    color: var(--neo-text-secondary);
+  }
+
+  .neo-dock-panel-chip.is-active {
+    background: var(--neo-active-bg);
+    color: var(--neo-text-primary);
+    border: 1px solid color-mix(in srgb, var(--neo-hi-text) 12%, var(--neo-border));
+  }
+
   /* dock / 工具条上的小控件按钮（模型选择、参数选择等触发器） */
   .neo-ctl {
     border: 1px solid var(--neo-border);
@@ -143,7 +208,7 @@
     border: 1px solid transparent;
     background: transparent;
     color: var(--neo-text-secondary);
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   }
 
   .dock-ghost-ctl:hover,
@@ -161,6 +226,14 @@
   .dock-ghost-ctl.is-open {
     border-color: var(--neo-border);
     background: var(--neo-hover-bg);
+  }
+
+  .dock-ghost-ctl:active:not(:disabled) {
+    transform: scale(0.96);
+  }
+
+  .neo-ctl:active:not(:disabled) {
+    transform: scale(0.97);
   }
 
   /* 选项 chip：is-on 时品牌色高亮 */
@@ -200,4 +273,13 @@
     color: var(--neo-hi-text);
     box-shadow: var(--neo-hi-shadow);
   }
+}
+
+/* Agent 画布引用 Pick 模式：自定义光标（靶心十字） */
+.canvas-ref-pick-mode .canvas-flow,
+.canvas-ref-pick-mode .canvas-flow .vue-flow__pane {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='7' stroke='%23fff' stroke-width='1.5' opacity='0.9'/%3E%3Ccircle cx='12' cy='12' r='2' fill='%23fff'/%3E%3Cpath stroke='%23fff' stroke-width='1.5' d='M12 3v4M12 17v4M3 12h4M17 12h4'/%3E%3C/svg%3E")
+      12 12,
+    crosshair !important;
 }

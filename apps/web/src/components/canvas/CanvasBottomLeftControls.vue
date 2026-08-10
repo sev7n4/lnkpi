@@ -4,6 +4,7 @@ import { MiniMap } from '@vue-flow/minimap'
 import { useVueFlow } from '@vue-flow/core'
 import { useClickOutside } from '@/composables/useClickOutside'
 import type { CanvasViewportSettings } from '@/composables/useCanvasViewportSettings'
+import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 
 const props = defineProps<{
   settings: CanvasViewportSettings
@@ -250,10 +251,11 @@ watch(
             v-for="node in items"
             :key="node.id"
             type="button"
-            class="neo-popover-item mb-0.5 flex w-full rounded-lg px-2 py-1 text-left text-[11px]"
+            class="neo-popover-item mb-0.5 flex w-full items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11px]"
             @click="focusNode(node.id)"
           >
-            {{ nodeLabel(node) }}
+            <CanvasLocatePinIcon :size="12" class="shrink-0 opacity-70" />
+            <span class="min-w-0 truncate">{{ nodeLabel(node) }}</span>
           </button>
         </div>
       </div>
@@ -491,11 +493,16 @@ watch(
 .bar-btn {
   @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm leading-none transition;
   color: var(--neo-text-muted);
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
 }
 
 .bar-btn:hover {
   background: var(--neo-hover-bg);
   color: var(--neo-text-primary);
+}
+
+.bar-btn:active {
+  transform: scale(0.94);
 }
 
 .bar-btn.is-accent {

@@ -320,6 +320,40 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.neo-node-wrapper.is-ref-pick-active .neo-node {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.neo-node-wrapper.is-ref-pick-active:hover .neo-node {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-bg) 55%, transparent);
+}
+
+.neo-node-wrapper.is-ref-pick-marked .neo-node {
+  box-shadow: 0 0 0 2px var(--neo-hi-bg);
+}
+
+.neo-node-wrapper.is-ref-pick-active:not(.is-ref-pick-marked):hover .neo-node-agent-add--title {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@keyframes neo-ref-pick-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+}
+
+.neo-node-wrapper.is-ref-pick-reject .neo-node {
+  animation: neo-ref-pick-shake 0.35s ease;
+}
+
 .neo-node-agent-add {
   display: flex;
   flex-shrink: 0;
@@ -329,7 +363,7 @@
   cursor: pointer;
   background: transparent;
   color: var(--neo-text-muted);
-  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
 .neo-node-agent-add--title {
@@ -337,6 +371,18 @@
   height: 24px;
   margin-left: auto;
   border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.92);
+}
+
+.neo-node-wrapper:hover .neo-node-agent-add--title,
+.neo-node-wrapper.is-hovered .neo-node-agent-add--title,
+.neo-node-wrapper.is-active .neo-node-agent-add--title,
+.neo-node-agent-add--title:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
 }
 
 .neo-node-external-title:hover .neo-node-agent-add--title,

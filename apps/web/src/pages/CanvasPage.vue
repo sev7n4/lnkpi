@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
@@ -62,6 +62,7 @@ import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
 import ClickRippleLayer from '@/components/canvas/ClickRippleLayer.vue'
+import CanvasRefPickOverlay from '@/components/canvas/CanvasRefPickOverlay.vue'
 import ConnectNodePicker from '@/components/canvas/ConnectNodePicker.vue'
 import ConnectPickerLine from '@/components/canvas/ConnectPickerLine.vue'
 import { CONNECT_OUT_TARGET_TYPES } from '@/components/canvas/canvasDockMenu'
@@ -102,7 +103,11 @@ import {
   CANVAS_NODE_PATCH_KEY,
   CANVAS_NODE_RENAME_KEY,
   CANVAS_NODE_RETRY_KEY,
+  CANVAS_REF_PICK_ACTIVE_KEY,
+  CANVAS_REF_PICK_NODE_IDS_KEY,
+  CANVAS_REF_PICK_REJECT_KEY,
 } from '@/composables/canvasNodeActions'
+import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
@@ -1286,6 +1291,28 @@ function onNodeDragStop(event: NodeDragEvent) {
 }
 
 function onNodeClick(event: NodeMouseEvent) {
+  if (pickMode.active.value) {
+    const nodeId = event.node.id
+    const node = findNodeById(nodeId)
+    if (!node) return
+    const result = agentRailRef.value?.addFromCanvasNodes([{
+      id: node.id,
+      type: node.type,
+      data: (node.data ?? {}) as Record<string, unknown>,
+    }]) ?? { added: 0, empty: 0, duplicate: 0, addedNodeIds: [] }
+    if (result.added > 0) {
+      for (const id of result.addedNodeIds) pickMode.markPicked(id)
+    } else if (result.empty) {
+      pickRejectNodeId.value = nodeId
+      window.setTimeout(() => {
+        if (pickRejectNodeId.value === nodeId) pickRejectNodeId.value = null
+      }, 400)
+    } else if (result.duplicate) {
+      ElMessage.info('该节点已在引用中')
+    }
+    return
+  }
+
   const mouse = event.event as MouseEvent
   const multi = mouse.shiftKey || mouse.metaKey || mouse.ctrlKey
   if (!multi) {
@@ -2211,8 +2238,38 @@ function handleAddToAgentRefs(sourceIds?: string[]) {
       type: node.type,
       data: (node.data ?? {}) as Record<string, unknown>,
     }))
-  agentRailRef.value?.addFromCanvasNodes(focusNodes)
+  const result = agentRailRef.value?.addFromCanvasNodes(focusNodes)
   agentRailRef.value?.openPanel()
+  if (pickMode.active.value && result?.addedNodeIds?.length) {
+    for (const id of result.addedNodeIds) pickMode.markPicked(id)
+  }
+}
+
+function handleCanvasRefPickToggle() {
+  if (pickMode.active.value) {
+    pickMode.deactivate()
+    return
+  }
+  agentRailRef.value?.openPanel()
+  pickMode.activate()
+  const ids = multiSelectedIds.value.length
+    ? [...multiSelectedIds.value]
+    : selectedNodeId.value
+      ? [selectedNodeId.value]
+      : []
+  if (!ids.length) return
+  const focusNodes = ids
+    .map((id) => findNodeById(id))
+    .filter((node): node is EditableFlowNode => node != null)
+    .map((node) => ({
+      id: node.id,
+      type: node.type,
+      data: (node.data ?? {}) as Record<string, unknown>,
+    }))
+  const result = agentRailRef.value?.addFromCanvasNodes(focusNodes)
+  if (result?.addedNodeIds?.length) {
+    for (const id of result.addedNodeIds) pickMode.markPicked(id)
+  }
 }
 
 function handleContextAction(action: string) {
@@ -2604,6 +2661,13 @@ async function loadSessions() {
 const vueFlowRef = ref<InstanceType<typeof VueFlow> | null>(null)
 const canvasAreaRef = ref<HTMLElement | null>(null)
 const agentRailRef = ref<InstanceType<typeof AgentSideRail> | null>(null)
+const pickMode = useCanvasRefPickMode()
+const pickRejectNodeId = ref<string | null>(null)
+let pickModeKeydownHandler: ((event: KeyboardEvent) => void) | null = null
+
+provide(CANVAS_REF_PICK_ACTIVE_KEY, pickMode.active)
+provide(CANVAS_REF_PICK_NODE_IDS_KEY, pickMode.pickedNodeIds)
+provide(CANVAS_REF_PICK_REJECT_KEY, pickRejectNodeId)
 
 onMounted(() => {
   void loadProviderBootstrap().catch(() => {
@@ -2667,14 +2731,36 @@ onMounted(() => {
     })
   }
   window.addEventListener('paste', mediaHandlers.onPaste)
+
+  pickModeKeydownHandler = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && pickMode.active.value) {
+      pickMode.deactivate()
+    }
+  }
+  window.addEventListener('keydown', pickModeKeydownHandler)
+})
+
+onUnmounted(() => {
+  if (pickModeKeydownHandler) {
+    window.removeEventListener('keydown', pickModeKeydownHandler)
+  }
 })
 </script>
 
 <template>
   <div class="relative h-screen w-full overflow-hidden bg-[var(--neo-bg)]" @click="closeContextMenu">
     <div class="flex h-full min-w-0 overflow-hidden">
-      <div ref="canvasAreaRef" class="relative min-h-0 min-w-0 flex-1">
-        <ClickRippleLayer :container="canvasAreaRef" />
+      <div
+        ref="canvasAreaRef"
+        class="relative min-h-0 min-w-0 flex-1"
+        :class="{ 'canvas-ref-pick-mode': pickMode.active.value }"
+      >
+        <ClickRippleLayer :container="canvasAreaRef" :theme="canvasTheme" />
+        <CanvasRefPickOverlay
+          v-if="pickMode.active.value"
+          :picked-count="pickMode.pickedCount.value"
+          @done="pickMode.deactivate()"
+        />
         <CanvasFloatingChrome
           :title="sessionTitle"
           :saving="saving"
@@ -2885,7 +2971,7 @@ onMounted(() => {
         @undo="handleAgentUndo"
         @redo="handleAgentRedo"
         @open-image-editor="handleAgentOpenImageEditor"
-        @request-canvas-refs="handleAddToAgentRefs()"
+        @canvas-ref-pick-toggle="handleCanvasRefPickToggle"
       />
     </div>
 

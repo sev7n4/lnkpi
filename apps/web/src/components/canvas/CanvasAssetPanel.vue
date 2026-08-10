@@ -6,6 +6,7 @@ import { assetLibraryVersion, bumpAssetLibrary, saveAssetToLibrary } from '@/com
 import { fileToPersistedPayload } from '@/composables/useMediaUpload'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
 
 export interface CanvasAssetItem {
   id: string
@@ -274,8 +275,8 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
     <div class="flex items-center gap-1 border-b border-[var(--neo-border)] px-3 pt-2.5 pb-2">
       <button
         type="button"
-        class="rounded-lg px-2.5 py-1 text-[11px] font-medium transition"
-        :class="tab === 'user' ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'text-[var(--neo-text-muted)] hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-secondary)]'"
+        class="neo-dock-panel-tab"
+        :class="tab === 'user' ? 'is-active' : ''"
         @click="switchTab('user')"
       >
         我的资产
@@ -283,8 +284,8 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
       </button>
       <button
         type="button"
-        class="rounded-lg px-2.5 py-1 text-[11px] font-medium transition"
-        :class="tab === 'public' ? 'bg-[var(--neo-accent-soft)] text-[var(--neo-accent-text)]' : 'text-[var(--neo-text-muted)] hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-secondary)]'"
+        class="neo-dock-panel-tab"
+        :class="tab === 'public' ? 'is-active' : ''"
         @click="switchTab('public')"
       >
         公共资产
@@ -293,7 +294,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
       <button
         v-if="tab === 'user'"
         type="button"
-        class="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-[var(--neo-accent-text)] hover:bg-[var(--neo-hover-bg)]"
+        class="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-[var(--neo-text-secondary)] transition hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-primary)]"
         :disabled="uploading"
         title="上传素材到资产库"
         @click="openUploadPicker"
@@ -330,7 +331,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
     <div class="px-3 pt-2">
       <input
         v-model="search"
-        class="w-full rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--neo-accent-border)]"
+        class="w-full rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2 py-1.5 text-[11px] outline-none focus:border-[var(--neo-border-strong)]"
         placeholder="搜索资产..."
       >
     </div>
@@ -349,7 +350,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
 
       <div v-for="group in timeline" :key="group.label" class="mb-3 last:mb-1">
         <p class="mb-1.5 flex items-center gap-1.5 text-[10px] text-[var(--neo-text-muted)]">
-          <span class="h-1 w-1 rounded-full bg-[var(--neo-accent)]" />
+          <span class="h-1 w-1 rounded-full bg-[var(--neo-text-muted)]" />
           {{ group.label }}
         </p>
         <div class="grid grid-cols-3 gap-1.5">
@@ -359,7 +360,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
             role="button"
             tabindex="0"
             draggable="true"
-            class="group relative aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] transition hover:border-[var(--neo-accent-border)]"
+            class="group relative aspect-square cursor-zoom-in overflow-hidden rounded-lg border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] transition hover:border-[var(--neo-border-strong)]"
             :title="`${asset.label}（点击预览 · 可拖到画布新建节点 / 拖到底部工具条作引用）`"
             @dragstart="onDragStart($event, asset)"
             @click="preview(asset)"
@@ -394,7 +395,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
             </span>
             <span
               v-if="asset.source === 'public'"
-              class="absolute right-1 top-1 rounded bg-[var(--neo-accent)] px-1 py-px text-[8px] text-white"
+              class="absolute right-1 top-1 rounded bg-[var(--neo-hi-bg)] px-1 py-px text-[8px] text-[var(--neo-hi-text)]"
             >
               公共
             </span>
@@ -410,10 +411,7 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
                 aria-label="加入 Agent 引用"
                 @click.stop="addToAgent(asset)"
               >
-                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z" />
-                  <path d="M5 19h14M12 15v4" stroke-linecap="round" />
-                </svg>
+                <CanvasRefTargetIcon :size="12" />
               </button>
               <button
                 type="button"

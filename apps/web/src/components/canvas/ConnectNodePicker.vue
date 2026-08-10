@@ -57,7 +57,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
           v-for="item in items"
           :key="item.type"
           type="button"
-          class="neo-popover-item flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left"
+          class="neo-popover-item neo-popover-card-item flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left"
           @click="emit('select', item.type)"
         >
           <span
@@ -69,7 +69,7 @@ onUnmounted(() => document.removeEventListener('keydown', onDocumentKeydown))
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2">
               <span class="text-[13px] text-[var(--neo-text-primary)]">{{ item.label }}</span>
-              <span v-if="item.badge" class="rounded bg-[var(--neo-accent-soft)] px-1.5 py-0.5 text-[9px] text-[var(--neo-accent-text)]">
+              <span v-if="item.badge" class="rounded bg-[var(--neo-active-bg)] px-1.5 py-0.5 text-[9px] text-[var(--neo-text-muted)]">
                 {{ item.badge }}
               </span>
             </div>
