@@ -16,6 +16,8 @@ from app.graph.state import AgentRuntimeState
 
 
 def route_after_image_qa_check(state: AgentRuntimeState) -> str:
+    if state.get("phase") == "error":
+        return "done"
     result = state.get("image_qa_result")
     if result in ("pass", "remediated"):
         return "plan_product_visual_stub"
@@ -32,6 +34,8 @@ def route_after_await_image_qa(state: AgentRuntimeState) -> str:
 
 
 def route_after_image_qa_remedy(state: AgentRuntimeState) -> str:
+    if state.get("phase") == "error":
+        return "done"
     if state.get("image_qa_decision") == "ai_white_bg":
         return "plan_product_visual_stub"
     return "end"
@@ -50,6 +54,7 @@ def register_product_visual_gate(graph: StateGraph, *, nest: Any | None = None) 
         {
             "plan_product_visual_stub": "plan_product_visual_stub",
             "await_image_qa": "await_image_qa",
+            "done": "done",
             "end": END,
         },
     )
@@ -66,6 +71,7 @@ def register_product_visual_gate(graph: StateGraph, *, nest: Any | None = None) 
         route_after_image_qa_remedy,
         {
             "plan_product_visual_stub": "plan_product_visual_stub",
+            "done": "done",
             "end": END,
         },
     )
@@ -76,9 +82,13 @@ def build_product_visual_gate_subgraph(*, nest: Any | None = None, checkpointer:
     """Standalone compiled subgraph for isolated pytest."""
     from langgraph.graph import START
 
+    from app.graph.nodes.done import make_done_node
+
     graph = StateGraph(AgentRuntimeState)
+    graph.add_node("done", make_done_node(nest=nest))
     register_product_visual_gate(graph, nest=nest)
     graph.add_edge(START, "image_qa_check")
+    graph.add_edge("done", END)
     return graph.compile(
         checkpointer=checkpointer,
         interrupt_before=["await_image_qa"],

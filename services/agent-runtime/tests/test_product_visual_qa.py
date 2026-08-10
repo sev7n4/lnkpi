@@ -20,7 +20,11 @@ from app.graph.nodes.image_qa_gate import (
     make_plan_product_visual_stub_node,
 )
 from app.graph.state import AgentRuntimeState
-from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
+from app.graph.subgraphs.product_visual_gate import (
+    register_product_visual_gate,
+    route_after_image_qa_check,
+    route_after_image_qa_remedy,
+)
 
 
 class FakeNest:
@@ -196,9 +200,53 @@ async def test_plan_product_visual_stub():
     assert out["phase"] == "plan_product_visual"
 
 
+def test_route_after_image_qa_check_seed_error_goes_done():
+    assert route_after_image_qa_check({"phase": "error", "image_qa_result": "pass"}) == "done"
+    assert route_after_image_qa_check({"phase": "error", "image_qa_result": "remediated"}) == "done"
+
+
+def test_route_after_image_qa_remedy_seed_error_goes_done():
+    assert (
+        route_after_image_qa_remedy({"phase": "error", "image_qa_decision": "ai_white_bg"})
+        == "done"
+    )
+
+
+@pytest.mark.asyncio
+async def test_image_qa_check_seed_failure_routes_done_not_plan_stub():
+    node = make_image_qa_check_node(nest=None)
+    out = await node(
+        {
+            "sidebar_attachments": [
+                {"mediaType": "image", "role": "product", "sharpness": 0.9, "has_white_bg": True}
+            ],
+        }
+    )
+    assert out["phase"] == "error"
+    assert out["image_qa_result"] == "pass"
+    assert route_after_image_qa_check(out) == "done"
+
+
+@pytest.mark.asyncio
+async def test_image_qa_remedy_seed_failure_routes_done_not_plan_stub():
+    remedy = make_image_qa_remedy_node(nest=object())
+    out = await remedy(
+        {
+            "image_qa_decision": "ai_white_bg",
+            "sidebar_attachments": [{"mediaType": "image", "role": "product", "url": "u1"}],
+        }
+    )
+    assert out["phase"] == "error"
+    assert route_after_image_qa_remedy(out) == "done"
+
+
 def test_product_visual_gate_subgraph_compiles():
+    from app.graph.nodes.done import make_done_node
+
     graph = StateGraph(AgentRuntimeState)
+    graph.add_node("done", make_done_node())
     register_product_visual_gate(graph)
     graph.add_edge(START, "image_qa_check")
+    graph.add_edge("done", END)
     compiled = graph.compile(interrupt_before=["await_image_qa"])
     assert compiled is not None
