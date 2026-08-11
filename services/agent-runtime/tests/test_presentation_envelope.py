@@ -93,3 +93,44 @@ def test_interrupt_event_payload_includes_presentation():
         presentation=presentation,
     )
     assert ev["data"]["presentation"] == presentation
+
+
+def test_shot_confirm_primary_action_label():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    env = build_presentation_envelope(
+        kind="shot_table",
+        phase="await_shot_confirm",
+        state={
+            "visual_intent": {"primary_goal": "巨峰葡萄礼盒"},
+            "shot_manifest": [{"shot_id": "a"}, {"shot_id": "b"}, {"shot_id": "c"}],
+        },
+        copy=copy,
+    )
+    assert env["primary_action"]["label"] == "确认构图，生成预览"
+    assert env["primary_action"]["message"] == "确认出图"
+    assert "3" in env["body"]["text"]
+
+
+def test_topo_primary_action_label_distinct_from_shot():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    shot_env = build_presentation_envelope(
+        kind="shot_table",
+        phase="await_shot_confirm",
+        state={"shot_manifest": [{"shot_id": "a"}]},
+        copy=copy,
+    )
+    topo_env = build_presentation_envelope(
+        kind="topo_card_list",
+        phase="await_topo",
+        state={
+            "split_manifest": [
+                {"key": "hero__1", "role": "downstream"},
+                {"key": "scene__1", "role": "downstream"},
+            ],
+        },
+        copy=copy,
+    )
+    assert shot_env["primary_action"]["label"] == "确认构图，生成预览"
+    assert topo_env["primary_action"]["label"] != shot_env["primary_action"]["label"]
+    assert "分钟" in topo_env["primary_action"]["label"]
+    assert "2" in topo_env["body"]["text"]

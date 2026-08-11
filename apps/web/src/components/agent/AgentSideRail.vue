@@ -35,6 +35,7 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import ProductVisualDeliveryCard from '@/components/agent/ProductVisualDeliveryCard.vue'
+import AgentPresentationHost from '@/components/agent/presentation/AgentPresentationHost.vue'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
@@ -408,6 +409,12 @@ const awaitingShotConfirm = computed(
     interruptGate.value?.phase === 'await_shot_confirm' ||
     interruptGate.value?.node === 'await_shot_confirm',
 )
+const gatePresentation = computed(() => interruptGate.value?.presentation ?? null)
+const showGatePresentation = computed(
+  () =>
+    Boolean(gatePresentation.value?.primary_action) &&
+    (awaitingShotConfirm.value || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)),
+)
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const productVisualPlan = ref<ProductVisualPlan | null>(null)
 const macroSchemes = ref<ProductVisualMacroScheme[]>([])
@@ -456,7 +463,12 @@ async function sendMacroSchemeRevise() {
 }
 
 async function sendShotConfirm() {
-  await sendPreset('确认出图')
+  const msg = gatePresentation.value?.primary_action?.message ?? '确认出图'
+  await sendPreset(msg)
+}
+
+async function onGatePrimaryAction(message: string) {
+  await sendPreset(message)
 }
 
 async function sendShotRevise() {
@@ -1390,6 +1402,7 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason?: string | null
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
+        presentation?: AgentInterruptPayload['presentation']
       }
       interruptGate.value = {
         interrupted: data.interrupted ?? true,
@@ -1398,6 +1411,7 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason: data.imageQaReason ?? null,
         imageQaMetrics: data.imageQaMetrics ?? null,
         visionUsed: data.visionUsed ?? null,
+        presentation: data.presentation ?? null,
       }
       if (data.imageQaReason) imageQaReason.value = data.imageQaReason
       if (data.imageQaMetrics) imageQaMetrics.value = data.imageQaMetrics
@@ -1992,6 +2006,50 @@ defineExpose({
               >
                 确认全部定稿
               </button>
+            </div>
+            <div v-else-if="showGatePresentation && gatePresentation" class="mb-2">
+              <AgentPresentationHost
+                :presentation="gatePresentation"
+                :disabled="agent.isStreaming"
+                @primary-action="onGatePrimaryAction"
+              />
+              <div v-if="awaitingShotConfirm" class="mt-2 flex flex-wrap gap-2 px-0.5">
+                <div v-if="shotManifest.length" class="mb-1 w-full space-y-1 text-xs text-[var(--neo-muted)]">
+                  <div v-for="shot in shotManifest" :key="shot.shot_id">
+                    · {{ shot.label || shot.shot_id }}
+                    <span v-if="shot.macro_scheme_id">（方案{{ shot.macro_scheme_id }}）</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendShotRevise()"
+                >
+                  调整构图
+                </button>
+              </div>
+              <div
+                v-else-if="awaitingTopoConfirm && !awaitingShotConfirm"
+                class="mt-2 flex flex-wrap gap-2 px-0.5"
+              >
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendPreset('写入主文案')"
+                >
+                  写入主文案
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendPreset('要改拓扑：')"
+                >
+                  要改拓扑
+                </button>
+              </div>
             </div>
             <div v-else-if="awaitingShotConfirm" class="mb-2 px-0.5">
               <div v-if="shotManifest.length" class="mb-2 space-y-1 text-xs text-[var(--neo-muted)]">

@@ -82,7 +82,24 @@ describe('interruptPayloadFromThreadState', () => {
       interrupted: true,
       phase: 'await_topo',
       node: 'await_topo',
+      presentation: null,
     })
+  })
+
+  it('includes presentation from thread state', () => {
+    const presentation = {
+      kind: 'shot_table',
+      stepper: { current: 'shot_plan', completed: [] },
+      primary_action: { label: '确认构图，生成预览', message: '确认出图' },
+    }
+    expect(
+      interruptPayloadFromThreadState({
+        interrupted: true,
+        phase: 'await_shot_confirm',
+        nextNodes: ['await_shot_confirm'],
+        presentation,
+      }),
+    ).toMatchObject({ presentation })
   })
 
   it('returns null when not interrupted', () => {

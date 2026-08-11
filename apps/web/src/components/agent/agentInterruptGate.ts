@@ -1,6 +1,7 @@
 /** @vitest-environment node */
 
 import type { AgentChipSet } from './agentChipSet'
+import type { AgentPresentationEnvelope } from './presentation/types'
 
 export interface AgentInterruptPayload {
   node?: string | null
@@ -9,6 +10,7 @@ export interface AgentInterruptPayload {
   imageQaReason?: string | null
   imageQaMetrics?: ImageQaMetrics | null
   visionUsed?: boolean | null
+  presentation?: AgentPresentationEnvelope | null
 }
 
 export interface ProductVisualScheme {
@@ -268,6 +270,7 @@ export function interruptPayloadFromThreadState(
         phase?: string | null
         interrupted?: boolean
         nextNodes?: string[]
+        presentation?: AgentPresentationEnvelope | null
       }
     | null
     | undefined,
@@ -277,5 +280,6 @@ export function interruptPayloadFromThreadState(
     interrupted: true,
     phase: data.phase ?? null,
     node: data.nextNodes?.[0] ?? null,
+    presentation: data.presentation ?? null,
   }
 }

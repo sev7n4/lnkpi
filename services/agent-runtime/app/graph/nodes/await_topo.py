@@ -5,12 +5,31 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.intent import classify_copy_decision, classify_topo_decision
+from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.presentation import build_context_recap, build_presentation_envelope
 
 # await_topo 拓扑门路由：
 # - topo_revise: 删/增/改/查节点（即时画布 + Mermaid）
 # - node_revise: 方案级修订（更偏/强调等）→ plan modify 模式
 
 _NONE_TIP = "请确认出图，或说明如何调整（例如「删掉 Banner」或「把模特定妆改为双人模特」）；主文案可用「写入主文案」。"
+
+
+def _build_topo_gate_output(state: dict, *, extra_tip: str = "") -> dict[str, Any]:
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    presentation = build_presentation_envelope(
+        kind="topo_card_list",
+        phase="await_topo",
+        state=state,
+        copy=copy,
+    )
+    recap = build_context_recap(state)
+    hint = str((presentation.get("body") or {}).get("text") or "")
+    msg_parts = [p for p in (recap, hint, extra_tip) if p]
+    return {
+        "presentation": presentation,
+        "messages": [AIMessage(content="\n".join(msg_parts))],
+    }
 
 # node_revise 时的上下文衔接提示（修复 P1-2：修改失败后无上下文衔接）
 _NODE_REVISE_ACK = (
@@ -39,10 +58,11 @@ def make_await_topo_node() -> Callable:
             }
         decision = classify_topo_decision(text)
         if decision == "none":
+            out = _build_topo_gate_output(state, extra_tip=_NONE_TIP)
             return {
                 "user_decision": "none",
                 "phase": "await_topo",
-                "messages": [AIMessage(content=_NONE_TIP)],
+                **out,
             }
         if decision == "topo_revise":
             return {

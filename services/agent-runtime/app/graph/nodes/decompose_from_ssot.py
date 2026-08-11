@@ -10,8 +10,10 @@ from langchain_core.messages import AIMessage
 
 from app.graph.atomic_parse_llm import extract_json_object
 from app.graph.nodes.plan._shared import latest_user_text
+from app.graph.product_visual_copy import ProductVisualCopy
 from app.graph.product_visual_v2.limits import validate_downstream_limit, validate_shots_per_macro
 from app.graph.product_visual_v2.models import ShotManifestItem
+from app.graph.product_visual_v2.presentation import build_context_recap, build_presentation_envelope
 from app.graph.product_visual_v2_prompt import (
     build_decompose_messages,
     build_decompose_user_content,
@@ -100,18 +102,26 @@ def make_decompose_from_ssot_node(*, llm: Any, skills_dir: Path, nest: Any) -> C
             result = await upsert(prompt=title, content=prose)
             shot["node_id"] = str(result.get("nodeId") or "").strip() or None
 
+        copy = ProductVisualCopy.load_from_skill(
+            "ecommerce-product-visual", "1.0.0", skills_dir=skills_dir
+        )
+        pres_state = {**state, "shot_manifest": shots}
+        presentation = build_presentation_envelope(
+            kind="shot_table",
+            phase="await_shot_confirm",
+            state=pres_state,
+            copy=copy,
+        )
+        recap = build_context_recap(pres_state)
+        hint = copy.get("shot_confirm.hint", n=str(len(shots)))
+        msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
+
         return {
             "shot_manifest": shots,
             "prompt_version": prompt_version,
             "phase": "await_shot_confirm",
-            "messages": [
-                AIMessage(
-                    content=(
-                        f"已拆解 {len(shots)} 个构图任务。请确认 shot 清单与拓扑，"
-                        "准备好后回复「确认出图」。"
-                    )
-                )
-            ],
+            "presentation": presentation,
+            "messages": [AIMessage(content="\n".join(msg_parts))],
         }
 
     return decompose_from_ssot
