@@ -36,6 +36,9 @@ import {
 } from '@/components/agent/assistantReconcile'
 import ProductVisualDeliveryCard from '@/components/agent/ProductVisualDeliveryCard.vue'
 import AgentPresentationHost from '@/components/agent/presentation/AgentPresentationHost.vue'
+import AgentProseBlock from '@/components/agent/presentation/AgentProseBlock.vue'
+import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSchemeCards.vue'
+import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
@@ -193,6 +196,12 @@ function dismissHistoryReattachCoachmark() {
   } catch {
     /* ignore quota / private mode */
   }
+}
+
+function shouldRenderSchemeDraftProse(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'assistant' || msg.streaming) return false
+  const { prose } = splitAssistantDraftMessage(msg.content ?? '')
+  return productVisualSchemeV2.value && hasSchemeDraftSections(prose)
 }
 
 function canReuseTurn(msg: AgentStreamMessage): boolean {
@@ -1688,7 +1697,11 @@ defineExpose({
                 class="agent-bubble text-[13px] leading-relaxed"
                 :class="msg.role === 'user' ? 'agent-bubble-user' : 'agent-bubble-assistant'"
               >
-                <p class="whitespace-pre-wrap">
+                <AgentProseBlock
+                  v-if="shouldRenderSchemeDraftProse(msg)"
+                  :content="msg.content"
+                />
+                <p v-else class="whitespace-pre-wrap">
                   {{ msg.content }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
                   <span
                     v-if="msg.role === 'assistant' && msg.executionTrace?.totalMs != null && !msg.streaming"
@@ -1866,28 +1879,18 @@ defineExpose({
               </div>
             </div>
             <div v-else-if="awaitingMacroSchemeSelect && macroSchemes.length" class="mb-2 px-0.5">
-              <div class="space-y-2">
-                <div
-                  v-for="scheme in macroSchemes"
-                  :key="scheme.id"
-                  class="rounded-lg border border-[var(--neo-border)] p-2"
-                >
-                  <label class="flex cursor-pointer items-start gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      class="mt-0.5"
-                      :checked="macroSelections.includes(scheme.id)"
-                      :disabled="agent.isStreaming"
-                      @change="toggleMacroSelection(scheme.id, ($event.target as HTMLInputElement).checked)"
-                    />
-                    <span>
-                      <span class="font-medium">{{ scheme.label || scheme.id }}</span>
-                      <span v-if="scheme.recommended" class="ml-1 text-[var(--neo-accent)]">推荐</span>
-                      <span v-if="scheme.summary" class="mt-0.5 block text-[var(--neo-muted)]">{{ scheme.summary }}</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
+              <p
+                v-if="gatePresentation?.body?.callout"
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+              >
+                {{ gatePresentation.body.callout }}
+              </p>
+              <AgentMacroSchemeCards
+                :schemes="macroSchemes"
+                :selected-ids="macroSelections"
+                :disabled="agent.isStreaming"
+                @toggle="toggleMacroSelection"
+              />
               <p
                 v-if="macroFooterHint"
                 class="mt-2 text-xs text-[var(--neo-muted)]"

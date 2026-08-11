@@ -42,6 +42,7 @@ export interface ProductVisualMacroScheme {
   id: string
   label?: string | null
   summary?: string | null
+  tags?: string[] | null
   recommended?: boolean
   recommend_reason?: string | null
 }

@@ -43,14 +43,30 @@ class FakeNest:
         return {"nodeId": f"node-{self._seq}"}
 
 
+_CRAB_BODY = (
+    "中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。"
+    * 8
+)
+
 CRAB_DRAFT = {
-    "draft_prose": "中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。"
-    * 8,
+    "draft_prose": (
+        "## 我理解您的需求\n"
+        "用户需要中秋大闸蟹礼盒电商包装推广视觉。\n\n"
+        "## 设计方向摘要\n"
+        "- 红金配色营造节日氛围\n"
+        "- EPE 缓冲与冷链冰袋\n"
+        "- 外箱抗压结构\n\n"
+        "## 完整方案说明\n"
+        f"{_CRAB_BODY}\n\n"
+        "## 接下来请您\n"
+        "请在下方卡片中选择宏观风格方向。"
+    ),
     "macro_schemes": [
         {
             "id": "A",
             "label": "红金礼盒",
             "summary": "中秋红金",
+            "tags": ["红金", "节日"],
             "recommended": True,
             "recommend_reason": "契合节日氛围",
         },
@@ -58,6 +74,7 @@ CRAB_DRAFT = {
             "id": "B",
             "label": "极简牛皮",
             "summary": "环保简约",
+            "tags": ["牛皮纸"],
             "recommended": False,
             "recommend_reason": "",
         },

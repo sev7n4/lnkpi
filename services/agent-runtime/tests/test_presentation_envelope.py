@@ -180,7 +180,17 @@ def test_topo_primary_action_label_distinct_from_shot():
 def test_macro_select_envelope_includes_ab_expectation():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     state = {
-        "macro_schemes": [{"id": "A"}, {"id": "B"}],
+        "macro_schemes": [
+            {
+                "id": "A",
+                "label": "红金",
+                "summary": "x" * 100,
+                "tags": ["#轻奢"],
+                "recommended": True,
+                "recommend_reason": "节日氛围",
+            },
+            {"id": "B", "label": "牛皮", "summary": "环保"},
+        ],
         "selected_macro_scheme_ids": ["A", "B"],
         "shot_manifest": [
             {"shot_id": "packaging_hero__1", "macro_scheme_id": "A"},
@@ -199,6 +209,11 @@ def test_macro_select_envelope_includes_ab_expectation():
     footer = env["body"]["footer_hint"]
     assert "2 套" in footer or "两套" in footer
     assert env["body"]["expected_delivery_count"] >= 1
+    schemes = env["body"]["schemes"]
+    assert len(schemes) == 2
+    assert len(schemes[0]["summary"]) <= 80
+    assert schemes[0]["tags"] == ["轻奢"]
+    assert schemes[0]["recommend_reason"] == "节日氛围"
 
 
 def test_compute_expected_delivery_mixed_mode():

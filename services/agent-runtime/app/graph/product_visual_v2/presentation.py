@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.scheme_draft import normalize_macro_schemes
 from app.graph.product_visual_v2.utterance import (
     collect_superseded_style_keywords,
     has_conflicting_style_utterance,
@@ -191,7 +192,10 @@ def build_presentation_envelope(
             state.get("shot_manifest") or [],
             copy=copy,
         )
-        body: dict[str, Any] = {}
+        body: dict[str, Any] = {
+            "schemes": normalize_macro_schemes(state.get("macro_schemes") or []),
+            "max_select": 2,
+        }
         if len(selected) >= 2 and delivery["allocation_note"]:
             body["footer_hint"] = delivery["allocation_note"]
             body["expected_delivery_count"] = delivery["total_finalize"]

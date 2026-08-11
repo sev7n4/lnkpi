@@ -1,15 +1,27 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import AgentStepper from './AgentStepper.vue'
+import AgentProseBlock from './AgentProseBlock.vue'
+import AgentMacroSchemeCards from './AgentMacroSchemeCards.vue'
 import type { AgentPresentationEnvelope } from './types'
 
-defineProps<{
+const props = defineProps<{
   presentation: AgentPresentationEnvelope
   disabled?: boolean
+  macroSelectedIds?: string[]
 }>()
 
 const emit = defineEmits<{
   primaryAction: [message: string]
+  macroToggle: [schemeId: string, checked: boolean]
 }>()
+
+const macroSelections = ref<string[]>(props.macroSelectedIds ?? [])
+
+const isProseBlock = computed(() => props.presentation.kind === 'prose_block')
+const isMacroCards = computed(() => props.presentation.kind === 'macro_scheme_cards')
+const proseContent = computed(() => String(props.presentation.body?.prose ?? ''))
+const macroSchemes = computed(() => props.presentation.body?.schemes ?? [])
 </script>
 
 <template>
@@ -26,11 +38,36 @@ const emit = defineEmits<{
       {{ presentation.context_recap }}
     </p>
     <p
+      v-if="presentation.body?.callout"
+      class="rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+      data-testid="presentation-callout"
+    >
+      {{ presentation.body.callout }}
+    </p>
+    <AgentProseBlock
+      v-if="isProseBlock && proseContent"
+      :content="proseContent"
+    />
+    <AgentMacroSchemeCards
+      v-if="isMacroCards && macroSchemes.length"
+      :schemes="macroSchemes"
+      :selected-ids="macroSelections"
+      :disabled="disabled"
+      @toggle="(id, checked) => emit('macroToggle', id, checked)"
+    />
+    <p
       v-if="presentation.body?.text"
       class="text-xs leading-relaxed text-[var(--neo-muted)]"
       data-testid="presentation-hint"
     >
       {{ presentation.body.text }}
+    </p>
+    <p
+      v-if="presentation.body?.footer_hint"
+      class="text-xs text-[var(--neo-muted)]"
+      data-testid="presentation-footer-hint"
+    >
+      {{ presentation.body.footer_hint }}
     </p>
     <div v-if="presentation.primary_action" class="flex flex-wrap gap-2">
       <button

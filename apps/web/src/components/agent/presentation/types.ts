@@ -10,11 +10,24 @@ export interface AgentPresentationPrimaryAction {
   message: string
 }
 
+export interface MacroSchemeCardBody {
+  id: string
+  label?: string
+  summary?: string
+  tags?: string[]
+  recommended?: boolean
+  recommend_reason?: string | null
+}
+
 export interface AgentPresentationBody {
   text?: string
   footer_hint?: string
   expected_delivery_count?: number
   checks?: Array<{ label: string; ok: boolean }>
+  callout?: string
+  prose?: string
+  schemes?: MacroSchemeCardBody[]
+  max_select?: number
 }
 
 export interface AgentPresentationEnvelope {
