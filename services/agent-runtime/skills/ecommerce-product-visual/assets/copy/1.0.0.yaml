@@ -1,0 +1,15 @@
+qa:
+  service_unavailable_title: "自动识图暂时不可用"
+  service_unavailable_body: "图片本身看起来可用，您可确认继续。"
+  quality_fail_title: "产品图需要处理"
+  confirm_use_image: "就用这张图，继续"
+shot_confirm:
+  primary_label: "确认构图，生成预览"
+  hint: "共 {n} 个构图任务；确认后将编排出图顺序，尚未开始生成。"
+topo:
+  primary_label: "开始出图（约 {eta_min} 分钟）"
+  hint: "方案已写入画布；确认后将生成白底、四视图及 {scene_count} 张场景图。"
+macro:
+  ab_hint_mixed: "已选 {k} 套风格 → 预计场景图 {p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。"
+context:
+  latest_utterance_note: "已按您最新描述执行；风格请在下方卡片选择，无需在话术里指定。"

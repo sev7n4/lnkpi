@@ -33,6 +33,15 @@ export interface AgentContext {
   history: AgentMessage[]
 }
 
+export interface PresentationEnvelope {
+  kind: string
+  stepper?: { current: string; completed?: string[] }
+  context_recap?: string
+  body?: Record<string, unknown>
+  primary_action?: { label: string; message: string }
+  secondary_actions?: Array<{ label: string; message: string }>
+}
+
 export interface AgentStreamEvent {
   type:
     | 'text_delta'

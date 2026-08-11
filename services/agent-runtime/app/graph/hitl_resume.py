@@ -254,6 +254,7 @@ def interrupt_event_payload(
     *,
     next_nodes: list[str],
     phase: str | None,
+    presentation: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """SSE payload when the graph pauses at an interrupt gate."""
@@ -261,6 +262,8 @@ def interrupt_event_payload(
     data: dict[str, Any] = {"node": node, "interrupted": True}
     if phase:
         data["phase"] = phase
+    if presentation:
+        data["presentation"] = presentation
     if extra:
         data.update(extra)
     return {"type": "interrupt", "data": data}

@@ -582,6 +582,7 @@ async def get_thread_state(
         if isinstance(vals.get("image_qa_metrics"), dict)
         else None,
         "visionUsed": vals.get("vision_used") if vals.get("vision_used") is not None else None,
+        "presentation": vals.get("presentation") if isinstance(vals.get("presentation"), dict) else None,
         **diag,
     }
 
