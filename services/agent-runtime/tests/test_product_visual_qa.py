@@ -15,6 +15,7 @@ from app.graph.nodes.image_qa_gate import (
     REMEDIATE_PROGRESS_MSG_V2,
     classify_image_qa_decision,
     clear_product_visual_abort_state,
+    clear_product_visual_retake_state,
     evaluate_image_qa,
     make_await_image_qa_node,
     make_image_qa_check_node,
@@ -138,6 +139,56 @@ async def test_image_qa_check_fail_emits_tip():
     assert out.get("messages")
 
 
+def test_retake_clear_preserves_effective_utterance_and_visual_intent():
+    dirty = {
+        "product_visual_plan": {"image_types": []},
+        "macro_schemes": [{"id": "a"}],
+        "shot_manifest": [{"shot_id": "s1"}],
+        "effective_utterance": "巨峰葡萄礼盒，快递防压",
+        "visual_intent": {"primary_goal": "礼盒主视觉"},
+    }
+    clean = clear_product_visual_retake_state(dirty)
+    assert clean.get("product_visual_plan") is None
+    assert clean.get("macro_schemes") is None
+    assert clean.get("shot_manifest") is None
+    assert clean.get("effective_utterance") == "巨峰葡萄礼盒，快递防压"
+    assert clean.get("visual_intent") == {"primary_goal": "礼盒主视觉"}
+
+
+@pytest.mark.asyncio
+async def test_await_image_qa_remedy_retake_preserves_utterance_and_presentation():
+    await_node = make_await_image_qa_node()
+    remedy = make_image_qa_remedy_node()
+    pending = await await_node({"messages": []})
+    assert pending["image_qa_decision"] == "none"
+
+    decided = await await_node({"messages": [HumanMessage(content="我重新拍摄上传")]})
+    assert decided["image_qa_decision"] == "retake"
+
+    remedied = await remedy(
+        {
+            **decided,
+            "product_visual_plan": {"image_types": []},
+            "macro_schemes": [{"id": "a"}],
+            "shot_manifest": [{"shot_id": "s1"}],
+            "effective_utterance": "巨峰葡萄礼盒，快递防压",
+            "visual_intent": {"primary_goal": "礼盒主视觉"},
+        }
+    )
+    assert remedied["phase"] == "await_retake_upload"
+    assert remedied["retake_pending"] is True
+    assert remedied.get("product_visual_plan") is None
+    assert remedied.get("macro_schemes") is None
+    assert remedied.get("shot_manifest") is None
+    assert remedied.get("effective_utterance") == "巨峰葡萄礼盒，快递防压"
+    assert remedied.get("visual_intent") == {"primary_goal": "礼盒主视觉"}
+    pres = remedied.get("presentation") or {}
+    assert pres.get("kind") == "callout_info"
+    secondary = pres.get("secondary_actions") or []
+    assert secondary and secondary[0]["message"] == "巨峰葡萄礼盒，快递防压"
+    assert secondary[0]["label"] == "继续"
+
+
 @pytest.mark.asyncio
 async def test_await_image_qa_remedy_retake_aborts():
     await_node = make_await_image_qa_node()
@@ -149,7 +200,7 @@ async def test_await_image_qa_remedy_retake_aborts():
     assert decided["image_qa_decision"] == "retake"
 
     remedied = await remedy({**decided, "product_visual_plan": {"image_types": []}})
-    assert remedied["phase"] == "done"
+    assert remedied["phase"] == "await_retake_upload"
     assert remedied.get("product_visual_plan") is None
 
 

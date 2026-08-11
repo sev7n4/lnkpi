@@ -64,6 +64,7 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_scheme_select: 'scheme_select',
   await_macro_scheme_select: 'macro_scheme_select',
   await_shot_confirm: 'topo',
+  await_shot_topo_confirm: 'topo',
   await_delivery_confirm: 'delivery_confirm',
 }
 
@@ -85,6 +86,23 @@ export type ImageQaOptionId = (typeof IMAGE_QA_OPTIONS)[number]['id']
 export const SCHEME_DECISION_PREFIX = '__scheme_decision__'
 export const MACRO_SCHEME_DECISION_PREFIX = '__macro_scheme_decision__'
 export const DELIVERY_DECISION_PREFIX = '__delivery_decision__'
+
+const MACHINE_PAYLOAD_PREFIXES = [
+  MACRO_SCHEME_DECISION_PREFIX,
+  DELIVERY_DECISION_PREFIX,
+] as const
+
+/** Strip machine-only resume payloads from assistant visible text (spec §2.3). */
+export function filterAssistantVisibleText(content: string): string {
+  return content
+    .split('\n')
+    .filter(
+      (line) =>
+        !MACHINE_PAYLOAD_PREFIXES.some((prefix) => line.trimStart().startsWith(prefix)),
+    )
+    .join('\n')
+    .trim()
+}
 
 /** Default checkbox state: recommended per type, else first scheme. */
 export function defaultSchemeSelections(plan: ProductVisualPlan | null | undefined): Record<string, string[]> {

@@ -589,6 +589,12 @@ async def get_thread_state(
         "userRequestLabels": vals.get("user_request_labels")
         if isinstance(vals.get("user_request_labels"), list)
         else None,
+        "effectiveUtterance": vals.get("effective_utterance")
+        if isinstance(vals.get("effective_utterance"), str)
+        else None,
+        "retakePending": bool(vals.get("retake_pending"))
+        if vals.get("retake_pending") is not None
+        else None,
         "presentation": vals.get("presentation") if isinstance(vals.get("presentation"), dict) else None,
         **diag,
     }
@@ -714,6 +720,9 @@ async def stream_run_events(
             labels = extract_user_request_labels(effective)
             if labels:
                 turn_update["user_request_labels"] = labels
+        if pre_vals.get("retake_pending"):
+            turn_update["retake_pending"] = False
+            turn_update["presentation"] = None
 
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False
@@ -901,7 +910,11 @@ async def stream_run_events(
                         },
                     )
                 )
-            await emit({"type": "done", "data": {}})
+            await emit({"type": "done", "data": {
+                **({"retakePending": True} if post_vals.get("retake_pending") else {}),
+                **({"effectiveUtterance": post_vals.get("effective_utterance")} if post_vals.get("retake_pending") and post_vals.get("effective_utterance") else {}),
+                **({"presentation": post_vals.get("presentation")} if post_vals.get("retake_pending") and isinstance(post_vals.get("presentation"), dict) else {}),
+            }})
         except AgentToolError as exc:
             record_stream_error(exc.error["error_type"])
             await emit({"type": "error", "data": error_to_sse_payload(exc.error)})

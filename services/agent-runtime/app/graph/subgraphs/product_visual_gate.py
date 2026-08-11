@@ -99,7 +99,7 @@ def register_product_visual_gate(
         nest=nest, skills_dir=resolved_skills, vision_creds=vision_creds,
     ))
     graph.add_node("await_image_qa", make_await_image_qa_node())
-    graph.add_node("image_qa_remedy", make_image_qa_remedy_node(nest=nest))
+    graph.add_node("image_qa_remedy", make_image_qa_remedy_node(nest=nest, skills_dir=resolved_skills))
     graph.add_node(
         "plan_product_visual",
         make_plan_product_visual_node(llm=llm, skills_dir=resolved_skills, nest=nest),

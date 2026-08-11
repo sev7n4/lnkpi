@@ -60,6 +60,7 @@ import {
   defaultSchemeSelections,
   defaultShotDeliverySelections,
   selectableImageTypes,
+  filterAssistantVisibleText,
   type AgentInterruptPayload,
   type ImageQaMetrics,
   type ProductVisualMacroScheme,

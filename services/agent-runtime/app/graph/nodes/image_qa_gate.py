@@ -47,10 +47,78 @@ _PRODUCT_VISUAL_ABORT_CLEAR: dict[str, Any] = {
     "vision_used": None,
 }
 
+# UX-PV-12: retake clears SSOT/shot checkpoint but keeps demand context.
+_PRODUCT_VISUAL_RETAKE_CLEAR: dict[str, Any] = {
+    "product_visual_plan": None,
+    "image_qa_result": None,
+    "phase1_asset_keys": None,
+    "scheme_revision_count": None,
+    "delivery_selections": None,
+    "image_qa_decision": None,
+    "plan_node_id": None,
+    "macro_scheme_draft": None,
+    "macro_schemes": None,
+    "selected_macro_scheme_ids": None,
+    "macro_scheme_decision": None,
+    "shot_manifest": None,
+    "requires_standard_product_assets": None,
+    "image_qa_reason": None,
+    "image_qa_metrics": None,
+    "vision_used": None,
+    "split_manifest": None,
+    "expected_delivery_count": None,
+    "presentation": None,
+}
+
 
 def clear_product_visual_abort_state(state: dict) -> dict:
     """Clear product_visual checkpoint fields on retake/abort (AC-2)."""
     return {**state, **_PRODUCT_VISUAL_ABORT_CLEAR}
+
+
+def clear_product_visual_retake_state(state: dict) -> dict:
+    """Clear SSOT/shot fields on retake; preserve effective_utterance + visual_intent (UX-PV-12)."""
+    preserved = {
+        k: state.get(k)
+        for k in ("effective_utterance", "visual_intent", "user_request_labels", "flow_mode")
+        if state.get(k) is not None
+    }
+    return {**state, **_PRODUCT_VISUAL_RETAKE_CLEAR, **preserved}
+
+
+def _build_retake_resume_output(
+    state: dict,
+    *,
+    skills_dir: Path | None,
+) -> dict[str, Any]:
+    """Presentation + state for retake: upload new photo then continue with stored utterance."""
+    copy = _load_product_visual_copy(skills_dir)
+    effective = str(state.get("effective_utterance") or "").strip()
+    recap = build_context_recap(state)
+    presentation = build_presentation_envelope(
+        kind="callout_info",
+        phase="await_retake_upload",
+        state=state,
+        copy=copy,
+    )
+    presentation["title"] = copy.get("qa.retake_title")
+    presentation["body"] = {"text": copy.get("qa.retake_body")}
+    if effective:
+        presentation["secondary_actions"] = [
+            {
+                "label": copy.get("qa.retake_continue_label"),
+                "message": effective,
+            }
+        ]
+
+    msg_parts = [p for p in (recap, copy.get("qa.retake_body")) if p]
+    return {
+        **_PRODUCT_VISUAL_RETAKE_CLEAR,
+        "retake_pending": True,
+        "phase": "await_retake_upload",
+        "presentation": presentation,
+        "messages": [AIMessage(content="\n".join(msg_parts))],
+    }
 
 
 def derive_qa_metrics(state: dict) -> dict[str, Any]:
@@ -311,15 +379,16 @@ def make_await_image_qa_node() -> Callable:
     return await_image_qa
 
 
-def make_image_qa_remedy_node(*, nest: Any | None = None) -> Callable:
+def make_image_qa_remedy_node(*, nest: Any | None = None, skills_dir: Path | None = None) -> Callable:
+    resolved_skills = skills_dir
+
     async def image_qa_remedy(state: dict) -> dict:
         decision = state.get("image_qa_decision") or "none"
         if decision == "retake":
-            cleared = clear_product_visual_abort_state(state)
+            cleared = clear_product_visual_retake_state(state)
             return {
-                **{k: cleared[k] for k in _PRODUCT_VISUAL_ABORT_CLEAR},
-                "phase": "done",
-                "messages": [AIMessage(content="好的，请重新拍摄并上传产品图后再试。")],
+                **cleared,
+                **_build_retake_resume_output(cleared, skills_dir=resolved_skills),
             }
         if decision == "confirm_pass":
             v2 = is_v2_enabled(state)

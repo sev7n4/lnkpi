@@ -6,6 +6,7 @@ import {
   buildMacroSchemeConfirmMessage,
   buildMacroAbFooterHint,
   defaultShotDeliverySelections,
+  filterAssistantVisibleText,
   IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
   toggleMacroSchemeSelection,
@@ -58,6 +59,12 @@ describe('chipSetFromInterrupt', () => {
 
   it('maps await_shot_confirm to topo chips', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_shot_confirm' })).toBe('topo')
+  })
+
+  it('maps await_shot_topo_confirm to topo chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_shot_topo_confirm' })).toBe(
+      'topo',
+    )
   })
 
   it('maps await_delivery_confirm to delivery_confirm chips', () => {
@@ -162,6 +169,24 @@ describe('buildMacroAbFooterHint', () => {
 
   it('uses 若干 when delivery count unknown', () => {
     expect(buildMacroAbFooterHint(2, 0)).toContain('若干')
+  })
+})
+
+describe('filterAssistantVisibleText', () => {
+  it('strips macro and delivery machine payload lines', () => {
+    const raw = [
+      '请确认宏观方案',
+      '__macro_scheme_decision__{"action":"confirm","selected_ids":["A"]}',
+      '__delivery_decision__{"action":"confirm_delivery","selections":{}}',
+      '底部说明',
+    ].join('\n')
+    expect(filterAssistantVisibleText(raw)).toBe('请确认宏观方案\n底部说明')
+  })
+
+  it('returns empty string when only machine payloads present', () => {
+    expect(
+      filterAssistantVisibleText('__macro_scheme_decision__{"action":"confirm"}'),
+    ).toBe('')
   })
 })
 
