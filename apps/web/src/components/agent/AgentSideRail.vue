@@ -35,13 +35,24 @@ import {
   shouldApplyReconciledAssistant,
 } from '@/components/agent/assistantReconcile'
 import ProductVisualDeliveryCard from '@/components/agent/ProductVisualDeliveryCard.vue'
+import AgentPresentationHost from '@/components/agent/presentation/AgentPresentationHost.vue'
+import AgentProseBlock from '@/components/agent/presentation/AgentProseBlock.vue'
+import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSchemeCards.vue'
+import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
+import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
-  IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
+  buildRetakeContinueMessage,
+  isRetakePendingPhase,
+  resolveImageQaBodyText,
+  resolveImageQaChecks,
+  resolveImageQaOptions,
+  resolveImageQaTitle,
   buildSchemeConfirmMessage,
   buildMacroSchemeConfirmMessage,
+  buildMacroAbFooterHint,
   buildVisualIntentSummary,
   buildDeliveryConfirmMessage,
   buildDeliveryRefineMessage,
@@ -54,6 +65,7 @@ import {
   defaultSchemeSelections,
   defaultShotDeliverySelections,
   selectableImageTypes,
+  filterAssistantVisibleText,
   type AgentInterruptPayload,
   type ImageQaMetrics,
   type ProductVisualMacroScheme,
@@ -85,6 +97,7 @@ import {
   agentInputPlaceholder,
   getAgentSkill,
 } from '@/constants/agentSkillMap'
+import { PRODUCT_VISUAL_GUIDANCE } from '@/constants/productVisualCopy'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
@@ -193,6 +206,17 @@ function dismissHistoryReattachCoachmark() {
   }
 }
 
+function visibleAssistantContent(msg: AgentStreamMessage): string {
+  if (msg.role !== 'assistant') return msg.content ?? ''
+  return filterAssistantVisibleText(msg.content ?? '')
+}
+
+function shouldRenderSchemeDraftProse(msg: AgentStreamMessage): boolean {
+  if (msg.role !== 'assistant' || msg.streaming) return false
+  const { prose } = splitAssistantDraftMessage(msg.content ?? '')
+  return productVisualSchemeV2.value && hasSchemeDraftSections(prose)
+}
+
 function canReuseTurn(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'user') return false
   return Boolean(msg.content?.trim()) || (msg.attachments?.length ?? 0) > 0
@@ -237,7 +261,7 @@ function canShowMessageActions(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'assistant' || msg.streaming) return false
   if (isLiveTurnMessage(msg) && (agent.isStreaming || showTaskCard.value)) return false
   return Boolean(
-    msg.content.trim()
+    visibleAssistantContent(msg).trim()
     || (assistantOutputsById.value.get(msg.id)?.length ?? 0) > 0
     || msg.executionTrace,
   )
@@ -254,7 +278,7 @@ function toggleMessageFeedback(msgId: string, vote: 'up' | 'down') {
 }
 
 async function copyAssistantMessage(msg: AgentStreamMessage) {
-  const text = msg.content.trim()
+  const text = visibleAssistantContent(msg).trim()
   if (!text) return
   try {
     await copyTextToClipboard(text)
@@ -400,15 +424,63 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
-const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
+const awaitingImageQa = computed(() => chipSet.value === 'image_qa' && !isRetakePending.value)
+const isRetakePending = computed(() =>
+  isRetakePendingPhase({
+    phase: interruptGate.value?.phase,
+    retakePending: retakePending.value,
+  }),
+)
+const imageQaTitle = computed(() => resolveImageQaTitle(gatePresentation.value))
+const imageQaBodyText = computed(() => resolveImageQaBodyText(gatePresentation.value))
+const imageQaChecks = computed(() => resolveImageQaChecks(gatePresentation.value))
+const imageQaOptions = computed(() => resolveImageQaOptions(gatePresentation.value))
+const showRetakeContinueChip = computed(
+  () => isRetakePending.value && pendingAttachmentItems.value.length > 0,
+)
+const retakeCalloutText = computed(() => {
+  const pres = gatePresentation.value
+  const body = String(pres?.body?.text ?? '').trim()
+  if (body) return body
+  const title = String(pres?.title ?? '').trim()
+  if (title) return title
+  return '请上传新照片，上传完成后点继续'
+})
+const retakeContinueLabel = computed(
+  () => gatePresentation.value?.secondary_actions?.[0]?.label ?? '继续',
+)
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
 const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme_select')
 const awaitingShotConfirm = computed(
   () =>
     interruptGate.value?.phase === 'await_shot_confirm' ||
-    interruptGate.value?.node === 'await_shot_confirm',
+    interruptGate.value?.node === 'await_shot_confirm' ||
+    interruptGate.value?.phase === 'await_shot_topo_confirm' ||
+    interruptGate.value?.node === 'await_shot_topo_confirm',
+)
+const gatePresentation = computed(() => interruptGate.value?.presentation ?? null)
+const completionPresentation = ref<AgentPresentationEnvelope | null>(null)
+const showCompletionPresentation = computed(
+  () => completionPresentation.value?.kind === 'delivery_summary_table',
+)
+const macroFooterHint = computed(() => {
+  if (!awaitingMacroSchemeSelect.value || macroSelections.value.length < 2) return ''
+  const expectedCount = gatePresentation.value?.body?.expected_delivery_count ?? null
+  return buildMacroAbFooterHint(macroSelections.value.length, expectedCount)
+})
+const showGatePresentation = computed(
+  () =>
+    Boolean(gatePresentation.value?.primary_action) &&
+    (awaitingShotConfirm.value || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)),
+)
+const showDeliveryPresentation = computed(
+  () =>
+    awaitingDeliveryConfirm.value &&
+    gatePresentation.value?.kind === 'delivery_cards' &&
+    Boolean(gatePresentation.value?.body?.groups?.length),
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
+const userRequestLabels = ref<string[]>([])
 const productVisualPlan = ref<ProductVisualPlan | null>(null)
 const macroSchemes = ref<ProductVisualMacroScheme[]>([])
 const macroSelections = ref<string[]>([])
@@ -416,6 +488,8 @@ const shotManifest = ref<ProductVisualShot[]>([])
 const productVisualSchemeV2 = ref(false)
 const imageQaReason = ref<string | null>(null)
 const imageQaMetrics = ref<ImageQaMetrics | null>(null)
+const retakePending = ref(false)
+const effectiveUtterance = ref<string | null>(null)
 const schemeSelections = ref<Record<string, string[]>>({})
 const deliverySelections = ref<Record<string, string>>({})
 const deliveryGenByKey = ref<Record<string, { node_id?: string | null; url?: string | null; title?: string | null }>>({})
@@ -456,7 +530,56 @@ async function sendMacroSchemeRevise() {
 }
 
 async function sendShotConfirm() {
-  await sendPreset('确认出图')
+  const msg = gatePresentation.value?.primary_action?.message ?? '确认出图'
+  await sendPreset(msg)
+}
+
+async function onGatePrimaryAction(message: string) {
+  await sendPreset(message)
+}
+
+function syncCompletionPresentation(
+  phase: string | null | undefined,
+  presentation: AgentPresentationEnvelope | null | undefined,
+) {
+  if (phase === 'done' && presentation?.kind === 'delivery_summary_table') {
+    completionPresentation.value = presentation
+    return
+  }
+  if (phase !== 'done') {
+    completionPresentation.value = null
+  }
+}
+
+function syncRetakeFromPayload(data: {
+  retakePending?: boolean | null
+  effectiveUtterance?: string | null
+  phase?: string | null
+  presentation?: AgentPresentationEnvelope | null
+} | null | undefined) {
+  if (!data) return
+  const wasRetake = retakePending.value
+  if (data.retakePending != null) {
+    retakePending.value = Boolean(data.retakePending)
+  } else if (isRetakePendingPhase({ phase: data.phase })) {
+    retakePending.value = true
+  } else if (data.phase != null && !isRetakePendingPhase({ phase: data.phase })) {
+    retakePending.value = false
+  }
+  if (data.effectiveUtterance != null) {
+    effectiveUtterance.value = data.effectiveUtterance
+  }
+  if (retakePending.value && !wasRetake) {
+    ElMessage.info(PRODUCT_VISUAL_GUIDANCE.retakeToast)
+  }
+}
+
+async function sendRetakeContinue() {
+  const utterance =
+    effectiveUtterance.value?.trim()
+    || gatePresentation.value?.secondary_actions?.[0]?.message?.trim()
+  if (!utterance) return
+  await sendMessage(buildRetakeContinueMessage(utterance))
 }
 
 async function sendShotRevise() {
@@ -511,6 +634,19 @@ async function sendDeliveryRefine(typeId: string, feedback: string) {
 
 async function sendDeliveryConfirmAll() {
   await sendMessage(buildDeliveryConfirmMessage(deliverySelections.value), 'confirm')
+}
+
+async function onDeliveryPrimaryAction(_message: string) {
+  if (productVisualSchemeV2.value) {
+    await sendMessage(buildShotDeliveryConfirmMessage(deliverySelections.value), 'confirm')
+  } else {
+    await sendDeliveryConfirmAll()
+  }
+}
+
+async function sendDeliveryVariantSwitch(shotId: string, variantKey: string) {
+  deliverySelections.value = { ...deliverySelections.value, [shotId]: variantKey }
+  await sendMessage(buildShotDeliverySwitchMessage(shotId, variantKey))
 }
 
 const canSubmitComposer = computed(() =>
@@ -638,8 +774,15 @@ const planningModel = ref(preferences.value?.defaultTextModel ?? '')
 /* ---- 技能选择（显式 Skill；默认自动 / 平台路由） ---- */
 const activeSkillId = ref<string | null>(null)
 const activeSkill = computed(() => getAgentSkill(activeSkillId.value))
+const isProductVisualSkill = computed(() => activeSkillId.value === 'product-visual')
 const skillButtonLabel = computed(() => activeSkill.value?.label ?? '技能')
 const inputPlaceholder = computed(() => agentInputPlaceholder(activeSkill.value))
+const showProductVisualEmptyState = computed(
+  () => isProductVisualSkill.value && !agent.messages.length && !props.readOnly,
+)
+const showProductVisualAttachmentHint = computed(
+  () => isProductVisualSkill.value && !props.readOnly,
+)
 const skillMenuOpen = ref(false)
 const skillMenuRef = ref<HTMLElement | null>(null)
 useClickOutside(skillMenuRef, () => {
@@ -687,6 +830,8 @@ async function selectThread(threadId: string) {
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
   hasAtomicCheckpoint.value = false
+  retakePending.value = false
+  effectiveUtterance.value = null
   recoveredPhaseHint.value = null
   await loadHistory()
   void refreshThreadCheckpoint()
@@ -736,6 +881,8 @@ watch(
     taskProgress.value = emptyTaskProgress()
     interruptGate.value = null
     hasAtomicCheckpoint.value = false
+    retakePending.value = false
+    effectiveUtterance.value = null
     recoveredPhaseHint.value = null
     void bootstrapThread()
   },
@@ -816,6 +963,8 @@ function newAgentSession() {
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
   hasAtomicCheckpoint.value = false
+  retakePending.value = false
+  effectiveUtterance.value = null
   recoveredPhaseHint.value = null
   agentThreadId.value = createAgentThreadId(props.sessionId)
   persistActiveThreadId(props.sessionId, agentThreadId.value)
@@ -844,11 +993,17 @@ async function refreshThreadCheckpoint() {
         imageQaReason?: string | null
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
+        userRequestLabels?: string[] | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
+        presentation?: AgentPresentationEnvelope | null
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     imageQaReason.value = json.data?.imageQaReason ?? null
     imageQaMetrics.value = json.data?.imageQaMetrics ?? null
+    syncRetakeFromPayload(json.data)
+    syncCompletionPresentation(json.data?.phase, json.data?.presentation)
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
     }
@@ -857,6 +1012,9 @@ async function refreshThreadCheckpoint() {
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
+    }
+    if (json.data?.userRequestLabels) {
+      userRequestLabels.value = json.data.userRequestLabels
     }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
@@ -868,8 +1026,9 @@ async function refreshThreadCheckpoint() {
         json.data?.deliveryGenByKey,
       )
     }
-    if (json.data?.interrupted) {
-      interruptGate.value = interruptPayloadFromThreadState(json.data)
+    const gatePayload = interruptPayloadFromThreadState(json.data)
+    if (gatePayload) {
+      interruptGate.value = gatePayload
     }
   } catch {
     // ignore — checkpoint hint is best-effort
@@ -925,6 +1084,12 @@ async function send() {
 
 async function onForceChoiceAction(message: string) {
   await sendMessage(message, mapPresetToDecision(message))
+}
+
+function fillExampleUtterance(text: string) {
+  if (props.readOnly || agent.isStreaming) return
+  input.value = text
+  nextTick(() => composerRef.value?.focus())
 }
 
 async function sendPreset(text: string) {
@@ -1032,6 +1197,9 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   let streamEndedNormally = false
   recoveredPhaseHint.value = null
   interruptGate.value = null
+  retakePending.value = false
+  effectiveUtterance.value = null
+  completionPresentation.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1150,9 +1318,12 @@ async function reconnectStream() {
         productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+        userRequestLabels?: string[] | null
+        presentation?: AgentPresentationEnvelope | null
       } | null
     }
     const phase = json.data?.phase ?? null
+    syncCompletionPresentation(phase, json.data?.presentation)
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
@@ -1162,6 +1333,9 @@ async function reconnectStream() {
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
+    }
+    if (json.data?.userRequestLabels) {
+      userRequestLabels.value = json.data.userRequestLabels
     }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
@@ -1390,6 +1564,9 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason?: string | null
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
+        presentation?: AgentInterruptPayload['presentation']
       }
       interruptGate.value = {
         interrupted: data.interrupted ?? true,
@@ -1398,22 +1575,48 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason: data.imageQaReason ?? null,
         imageQaMetrics: data.imageQaMetrics ?? null,
         visionUsed: data.visionUsed ?? null,
+        retakePending: data.retakePending ?? null,
+        effectiveUtterance: data.effectiveUtterance ?? null,
+        presentation: data.presentation ?? null,
       }
       if (data.imageQaReason) imageQaReason.value = data.imageQaReason
       if (data.imageQaMetrics) imageQaMetrics.value = data.imageQaMetrics
+      syncRetakeFromPayload(data)
       if (
         data.phase === 'await_image_qa' ||
         data.node === 'await_image_qa' ||
+        data.phase === 'await_retake_upload' ||
+        data.retakePending ||
         data.phase === 'await_scheme_select' ||
         data.node === 'await_scheme_select' ||
         data.phase === 'await_macro_scheme_select' ||
         data.node === 'await_macro_scheme_select' ||
         data.phase === 'await_shot_confirm' ||
         data.node === 'await_shot_confirm' ||
+        data.phase === 'await_shot_topo_confirm' ||
+        data.node === 'await_shot_topo_confirm' ||
         data.phase === 'await_delivery_confirm' ||
         data.node === 'await_delivery_confirm'
       ) {
         void refreshThreadCheckpoint()
+      }
+      break
+    }
+    case 'done': {
+      const data = event.data as {
+        retakePending?: boolean
+        effectiveUtterance?: string | null
+        presentation?: AgentPresentationEnvelope | null
+      }
+      syncRetakeFromPayload(data)
+      if (data.retakePending && data.presentation) {
+        interruptGate.value = {
+          interrupted: true,
+          phase: 'await_retake_upload',
+          retakePending: true,
+          effectiveUtterance: data.effectiveUtterance ?? null,
+          presentation: data.presentation,
+        }
       }
       break
     }
@@ -1654,7 +1857,24 @@ defineExpose({
 
           <!-- 消息列表 -->
           <div ref="chatContainer" class="agent-chat-scroll min-h-0 flex-1 overflow-y-auto py-3">
-            <div v-if="!agent.messages.length" class="agent-empty px-3 py-10 text-center">
+            <div v-if="showProductVisualEmptyState" class="agent-empty agent-pv-empty px-3 py-10 text-center">
+              <p class="text-sm">描述你的产品视觉需求</p>
+              <p class="mt-1 text-[11px] opacity-70">上传产品图后说明用途；风格在方案卡片中选择</p>
+              <div class="mt-4 flex flex-col gap-2">
+                <button
+                  v-for="example in PRODUCT_VISUAL_GUIDANCE.exampleUtterances"
+                  :key="example.id"
+                  type="button"
+                  class="agent-pv-example-btn rounded-lg border px-3 py-2 text-left text-[12px] leading-snug"
+                  data-testid="pv-example-utterance"
+                  @click="fillExampleUtterance(example.text)"
+                >
+                  <span class="font-medium">{{ example.label }}</span>
+                  <span class="mt-0.5 block text-[11px] opacity-70 line-clamp-2">{{ example.text }}</span>
+                </button>
+              </div>
+            </div>
+            <div v-else-if="!agent.messages.length" class="agent-empty px-3 py-10 text-center">
               <p class="text-sm">描述你的创意</p>
               <p class="mt-1 text-[11px] opacity-70">我会驱动画布创建节点、连线与生成任务</p>
             </div>
@@ -1668,8 +1888,12 @@ defineExpose({
                 class="agent-bubble text-[13px] leading-relaxed"
                 :class="msg.role === 'user' ? 'agent-bubble-user' : 'agent-bubble-assistant'"
               >
-                <p class="whitespace-pre-wrap">
-                  {{ msg.content }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
+                <AgentProseBlock
+                  v-if="shouldRenderSchemeDraftProse(msg)"
+                  :content="msg.content"
+                />
+                <p v-else class="whitespace-pre-wrap">
+                  {{ visibleAssistantContent(msg) }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
                   <span
                     v-if="msg.role === 'assistant' && msg.executionTrace?.totalMs != null && !msg.streaming"
                     class="ml-1 text-[11px] opacity-60"
@@ -1811,29 +2035,43 @@ defineExpose({
                 取消
               </button>
             </div>
-            <div v-else-if="awaitingImageQa" class="mb-2 px-0.5">
+            <div v-else-if="isRetakePending" class="mb-2 px-0.5" data-testid="retake-pending-callout">
+              <p
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs leading-relaxed text-[var(--neo-text-secondary)]"
+              >
+                {{ retakeCalloutText }}
+              </p>
+              <button
+                v-if="showRetakeContinueChip"
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="retake-continue-chip"
+                :disabled="agent.isStreaming"
+                @click="sendRetakeContinue()"
+              >
+                {{ retakeContinueLabel }}
+              </button>
+            </div>
+            <div v-else-if="awaitingImageQa" class="mb-2 px-0.5" data-testid="image-qa-gate">
               <div
-                v-if="imageQaReason || imageQaMetrics"
+                v-if="imageQaTitle || imageQaBodyText || imageQaChecks.length"
                 class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-surface)] p-2 text-xs text-[var(--neo-text-secondary)]"
               >
-                <p v-if="imageQaReason" class="mb-1.5 leading-relaxed">
-                  {{ imageQaReason }}
+                <p v-if="imageQaTitle" class="mb-1 font-medium leading-relaxed">
+                  {{ imageQaTitle }}
                 </p>
-                <ul v-if="imageQaMetrics" class="space-y-0.5 text-[var(--neo-muted)]">
-                  <li v-if="imageQaMetrics.is_sharp_enough != null">
-                    清晰度：{{ imageQaMetrics.is_sharp_enough ? '✓ 足够' : '✗ 不足' }}
-                  </li>
-                  <li v-if="imageQaMetrics.is_white_bg != null">
-                    白底背景：{{ imageQaMetrics.is_white_bg ? '✓ 符合' : '✗ 非白底或杂底' }}
-                  </li>
-                  <li v-if="imageQaMetrics.product_identifiable != null">
-                    产品可辨：{{ imageQaMetrics.product_identifiable ? '✓ 可识别' : '✗ 难以识别' }}
+                <p v-if="imageQaBodyText" class="mb-1.5 leading-relaxed">
+                  {{ imageQaBodyText }}
+                </p>
+                <ul v-if="imageQaChecks.length" class="space-y-0.5 text-[var(--neo-muted)]">
+                  <li v-for="(check, idx) in imageQaChecks" :key="idx">
+                    {{ check.label }}：{{ check.ok ? '✓ 通过' : '✗ 需处理' }}
                   </li>
                 </ul>
               </div>
               <div class="flex flex-wrap gap-2">
               <button
-                v-for="opt in IMAGE_QA_OPTIONS"
+                v-for="opt in imageQaOptions"
                 :key="opt.id"
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
@@ -1846,28 +2084,33 @@ defineExpose({
               </div>
             </div>
             <div v-else-if="awaitingMacroSchemeSelect && macroSchemes.length" class="mb-2 px-0.5">
-              <div class="space-y-2">
-                <div
-                  v-for="scheme in macroSchemes"
-                  :key="scheme.id"
-                  class="rounded-lg border border-[var(--neo-border)] p-2"
-                >
-                  <label class="flex cursor-pointer items-start gap-2 text-xs">
-                    <input
-                      type="checkbox"
-                      class="mt-0.5"
-                      :checked="macroSelections.includes(scheme.id)"
-                      :disabled="agent.isStreaming"
-                      @change="toggleMacroSelection(scheme.id, ($event.target as HTMLInputElement).checked)"
-                    />
-                    <span>
-                      <span class="font-medium">{{ scheme.label || scheme.id }}</span>
-                      <span v-if="scheme.recommended" class="ml-1 text-[var(--neo-accent)]">推荐</span>
-                      <span v-if="scheme.summary" class="mt-0.5 block text-[var(--neo-muted)]">{{ scheme.summary }}</span>
-                    </span>
-                  </label>
-                </div>
-              </div>
+              <p
+                v-if="gatePresentation?.body?.callout"
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-style-callout"
+              >
+                {{ gatePresentation.body.callout }}
+              </p>
+              <p
+                v-if="gatePresentation?.body?.callout_conflict"
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-conflict-callout"
+              >
+                {{ gatePresentation.body.callout_conflict }}
+              </p>
+              <AgentMacroSchemeCards
+                :schemes="macroSchemes"
+                :selected-ids="macroSelections"
+                :disabled="agent.isStreaming"
+                @toggle="toggleMacroSelection"
+              />
+              <p
+                v-if="macroFooterHint"
+                class="mt-2 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-footer-hint"
+              >
+                {{ macroFooterHint }}
+              </p>
               <div class="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -1945,6 +2188,7 @@ defineExpose({
               :plan="productVisualPlan"
               :gen-by-key="deliveryGenByKey"
               :selections="deliverySelections"
+              :request-labels="userRequestLabels"
               :disabled="agent.isStreaming"
               v-model:refine-draft="deliveryRefineDraft"
               @switch-scheme="sendDeliverySwitch"
@@ -1952,7 +2196,21 @@ defineExpose({
               @confirm-all="sendDeliveryConfirmAll"
             />
             <div
-              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length"
+              v-else-if="showDeliveryPresentation && gatePresentation"
+              class="mb-2"
+            >
+              <AgentPresentationHost
+                :presentation="gatePresentation"
+                :delivery-selections="deliverySelections"
+                :disabled="agent.isStreaming"
+                @primary-action="onDeliveryPrimaryAction"
+                @delivery-switch="sendDeliveryVariantSwitch"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+            </div>
+            <div
+              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length && !showDeliveryPresentation"
               class="mb-2 space-y-2 px-0.5"
             >
               <div
@@ -1992,6 +2250,60 @@ defineExpose({
               >
                 确认全部定稿
               </button>
+            </div>
+            <div v-else-if="showCompletionPresentation && completionPresentation" class="mb-2">
+              <AgentPresentationHost
+                :presentation="completionPresentation"
+                :disabled="agent.isStreaming"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+            </div>
+            <div v-else-if="showGatePresentation && gatePresentation" class="mb-2">
+              <AgentPresentationHost
+                :presentation="gatePresentation"
+                :disabled="agent.isStreaming"
+                @primary-action="onGatePrimaryAction"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+              <div v-if="awaitingShotConfirm" class="mt-2 flex flex-wrap gap-2 px-0.5">
+                <div v-if="shotManifest.length" class="mb-1 w-full space-y-1 text-xs text-[var(--neo-muted)]">
+                  <div v-for="shot in shotManifest" :key="shot.shot_id">
+                    · {{ shot.label || shot.shot_id }}
+                    <span v-if="shot.macro_scheme_id">（方案{{ shot.macro_scheme_id }}）</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendShotRevise()"
+                >
+                  调整构图
+                </button>
+              </div>
+              <div
+                v-else-if="awaitingTopoConfirm && !awaitingShotConfirm"
+                class="mt-2 flex flex-wrap gap-2 px-0.5"
+              >
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendPreset('写入主文案')"
+                >
+                  写入主文案
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendPreset('要改拓扑：')"
+                >
+                  要改拓扑
+                </button>
+              </div>
             </div>
             <div v-else-if="awaitingShotConfirm" class="mb-2 px-0.5">
               <div v-if="shotManifest.length" class="mb-2 space-y-1 text-xs text-[var(--neo-muted)]">
@@ -2065,7 +2377,10 @@ defineExpose({
             </div>
             <div
               class="agent-input-dock"
-              :class="{ 'is-drop-target': isDragOver }"
+              :class="{
+                'is-drop-target': isDragOver,
+                'is-retake-highlight': isRetakePending,
+              }"
               @dragover.prevent="onDragOver"
               @dragleave.prevent="onDragLeave"
               @drop.prevent="onDrop"
@@ -2093,6 +2408,13 @@ defineExpose({
                   class="agent-composer-reattach-hint mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--neo-text-muted)]"
                 >
                   点击上方历史消息中的 ↺ 引用，或「复用本轮」，可再次加入本次对话
+                </p>
+                <p
+                  v-if="showProductVisualAttachmentHint && !pendingAttachmentItems.length"
+                  class="agent-composer-attachment-hint mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--neo-text-muted)]"
+                  data-testid="pv-attachment-hint"
+                >
+                  {{ PRODUCT_VISUAL_GUIDANCE.attachmentHint }}
                 </p>
                 <AgentRefStrip
                   v-if="pendingAttachmentItems.length"
@@ -2452,6 +2774,23 @@ defineExpose({
   color: var(--neo-text-muted);
 }
 
+.agent-pv-example-btn {
+  border-color: var(--neo-border);
+  background: var(--neo-panel);
+  color: var(--neo-text-secondary);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.agent-pv-example-btn:hover {
+  border-color: var(--neo-accent, var(--neo-border));
+  background: color-mix(in srgb, var(--neo-panel) 92%, var(--neo-accent, #888) 8%);
+}
+
+.agent-composer-attachment-hint {
+  border-left: 2px solid var(--neo-border);
+  padding-left: 8px;
+}
+
 .agent-bubble-user {
   max-width: 88%;
   border: 1px solid var(--agent-user-border);
@@ -2635,6 +2974,13 @@ defineExpose({
   border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
   background: var(--neo-hover-bg);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 18%, transparent);
+}
+
+.agent-input-dock.is-retake-highlight {
+  border-color: color-mix(in srgb, var(--neo-accent, #888) 55%, var(--neo-glass-border));
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.42),
+    0 0 0 2px color-mix(in srgb, var(--neo-accent, #888) 28%, transparent);
 }
 
 .agent-prompt-field {

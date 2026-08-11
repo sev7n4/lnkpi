@@ -27,33 +27,65 @@ def vision_qa_metrics_from_result(vision: VisionQAResult) -> dict[str, Any]:
     }
 
 
+def build_qa_checks(
+    vision: VisionQAResult | None,
+    metrics: dict[str, Any] | None = None,
+) -> list[str]:
+    """Human-readable QA check lines for presentation.body.checks[]."""
+    metrics = metrics or {}
+    checks: list[str] = []
+
+    sharp = vision.is_sharp_enough if vision and vision.is_sharp_enough is not None else None
+    if sharp is None and metrics.get("sharpness") is not None:
+        sharp = float(metrics["sharpness"]) >= 0.5
+    if sharp is not None:
+        checks.append(f"清晰度：{'✓ 足够' if sharp else '✗ 不足'}")
+
+    white = vision.is_white_bg if vision and vision.is_white_bg is not None else None
+    if white is None and metrics.get("has_white_bg"):
+        white = True
+    if white is not None:
+        checks.append(f"白底背景：{'✓ 符合' if white else '✗ 非白底或杂底'}")
+
+    identifiable = (
+        vision.product_identifiable if vision and vision.product_identifiable is not None else None
+    )
+    if identifiable is not None:
+        checks.append(f"产品可辨：{'✓ 可识别' if identifiable else '✗ 难以识别'}")
+
+    if not checks and not metrics.get("has_white_bg") and metrics.get("sharpness", 0) >= 0.5:
+        checks.append("清晰度尚可；白底背景未确认")
+    return checks
+
+
 def build_qa_fail_message(
     vision: VisionQAResult | None,
     metrics: dict[str, Any] | None = None,
+    *,
+    copy: Any | None = None,
+    context_recap: str = "",
 ) -> str:
-    """User-facing fail tip with specific vision/heuristic reasons."""
+    """User-facing fail tip — friendly title + optional context recap (no technical reason)."""
+    from app.graph.product_visual_copy import ProductVisualCopy
+
     metrics = metrics or {}
-    lines: list[str] = []
-
-    if vision and vision.vision_used and vision.reason:
-        lines.append(f"识图结论：{vision.reason}")
-    elif vision and not vision.vision_used:
-        lines.append("未能完成识图审核，请检查是否已选择支持视觉的文本模型（如 Gemini）。")
-
-    checks: list[str] = []
-    if vision and vision.is_sharp_enough is not None:
-        checks.append(f"清晰度：{'✓ 足够' if vision.is_sharp_enough else '✗ 不足'}")
-    if vision and vision.is_white_bg is not None:
-        checks.append(f"白底背景：{'✓ 符合' if vision.is_white_bg else '✗ 非白底或杂底'}")
-    if vision and vision.product_identifiable is not None:
-        checks.append(f"产品可辨：{'✓ 可识别' if vision.product_identifiable else '✗ 难以识别'}")
+    pv_copy = copy or ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    mapped = pv_copy.map_qa_failure(
+        reason=str(getattr(vision, "reason", None) or ""),
+        vision_used=bool(getattr(vision, "vision_used", False)) if vision else False,
+        metrics={**metrics, **vision_qa_metrics_from_result(vision)} if vision else metrics,
+    )
+    parts: list[str] = []
+    if context_recap:
+        parts.append(context_recap)
+    parts.append(str(mapped.get("title") or ""))
+    body = str(mapped.get("body") or "").strip()
+    if body:
+        parts.append(body)
+    checks = build_qa_checks(vision, metrics)
     if checks:
-        lines.append("检查项：" + "；".join(checks))
-    elif not metrics.get("has_white_bg") and metrics.get("sharpness", 0) >= 0.5:
-        lines.append("检查项：清晰度尚可；白底背景未确认（需识图或用户确认）。")
-
-    lines.append("请选择：确认当前图可用并继续、重新拍摄上传，或生成标准白底图后继续。")
-    return "\n".join(lines)
+        parts.append("检查项：" + "；".join(checks))
+    return "\n".join(p for p in parts if p)
 
 
 def evaluate_vision_qa_v2(

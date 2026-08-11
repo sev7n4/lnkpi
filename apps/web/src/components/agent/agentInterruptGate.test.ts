@@ -4,10 +4,28 @@ import {
   defaultDeliverySelections,
   defaultMacroSchemeSelection,
   buildMacroSchemeConfirmMessage,
+  buildMacroAbFooterHint,
+  buildRetakeContinueMessage,
   defaultShotDeliverySelections,
+  filterAssistantVisibleText,
+  IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
+  isRetakePendingPhase,
+  resolveImageQaChecks,
+  resolveImageQaOptions,
+  resolveImageQaTitle,
   toggleMacroSchemeSelection,
 } from './agentInterruptGate'
+
+describe('IMAGE_QA_OPTIONS', () => {
+  it('uses friendly confirm_pass label aligned with copy YAML', () => {
+    expect(IMAGE_QA_OPTIONS[0]).toEqual({
+      id: 'confirm_pass',
+      label: '就用这张图，继续',
+      message: '就用这张图，继续',
+    })
+  })
+})
 
 describe('chipSetFromInterrupt', () => {
   it('maps await_confirm phase to plan chips', () => {
@@ -48,6 +66,12 @@ describe('chipSetFromInterrupt', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_shot_confirm' })).toBe('topo')
   })
 
+  it('maps await_shot_topo_confirm to topo chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_shot_topo_confirm' })).toBe(
+      'topo',
+    )
+  })
+
   it('maps await_delivery_confirm to delivery_confirm chips', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_delivery_confirm' })).toBe(
       'delivery_confirm',
@@ -71,7 +95,44 @@ describe('interruptPayloadFromThreadState', () => {
       interrupted: true,
       phase: 'await_topo',
       node: 'await_topo',
+      presentation: null,
+      retakePending: null,
+      effectiveUtterance: null,
+      imageQaReason: null,
+      imageQaMetrics: null,
     })
+  })
+
+  it('builds payload when retake pending without interrupted flag', () => {
+    expect(
+      interruptPayloadFromThreadState({
+        interrupted: false,
+        phase: 'await_retake_upload',
+        retakePending: true,
+        effectiveUtterance: '巨峰葡萄礼盒',
+      }),
+    ).toMatchObject({
+      interrupted: true,
+      phase: 'await_retake_upload',
+      retakePending: true,
+      effectiveUtterance: '巨峰葡萄礼盒',
+    })
+  })
+
+  it('includes presentation from thread state', () => {
+    const presentation = {
+      kind: 'shot_table',
+      stepper: { current: 'shot_plan', completed: [] },
+      primary_action: { label: '确认构图，生成预览', message: '确认出图' },
+    }
+    expect(
+      interruptPayloadFromThreadState({
+        interrupted: true,
+        phase: 'await_shot_confirm',
+        nextNodes: ['await_shot_confirm'],
+        presentation,
+      }),
+    ).toMatchObject({ presentation })
   })
 
   it('returns null when not interrupted', () => {
@@ -119,6 +180,42 @@ describe('buildMacroSchemeConfirmMessage', () => {
   })
 })
 
+describe('buildMacroAbFooterHint', () => {
+  it('returns empty for single selection', () => {
+    expect(buildMacroAbFooterHint(1, 3)).toBe('')
+  })
+
+  it('includes k and p for dual selection', () => {
+    const hint = buildMacroAbFooterHint(2, 3)
+    expect(hint).toContain('2 套')
+    expect(hint).toContain('3 张')
+    expect(hint).toContain('A/B')
+  })
+
+  it('uses 若干 when delivery count unknown', () => {
+    expect(buildMacroAbFooterHint(2, 0)).toContain('若干')
+  })
+})
+
+describe('filterAssistantVisibleText', () => {
+  it('strips macro, scheme, and delivery machine payload lines', () => {
+    const raw = [
+      '请确认宏观方案',
+      '__scheme_decision__{"action":"confirm_schemes","selections":{}}',
+      '__macro_scheme_decision__{"action":"confirm","selected_ids":["A"]}',
+      '__delivery_decision__{"action":"confirm_delivery","selections":{}}',
+      '底部说明',
+    ].join('\n')
+    expect(filterAssistantVisibleText(raw)).toBe('请确认宏观方案\n底部说明')
+  })
+
+  it('returns empty string when only machine payloads present', () => {
+    expect(
+      filterAssistantVisibleText('__macro_scheme_decision__{"action":"confirm"}'),
+    ).toBe('')
+  })
+})
+
 describe('defaultShotDeliverySelections', () => {
   it('picks first ready variant per shot', () => {
     const shots = [
@@ -154,5 +251,54 @@ describe('defaultDeliverySelections', () => {
     }
     const genByKey = { hero_main__c1: { url: 'u1' }, hero_main__c2: { url: 'u2' } }
     expect(defaultDeliverySelections(plan, genByKey)).toEqual({ hero_main: 'c2' })
+  })
+})
+
+describe('isRetakePendingPhase', () => {
+  it('detects retakePending flag', () => {
+    expect(isRetakePendingPhase({ retakePending: true })).toBe(true)
+  })
+
+  it('detects await_retake_upload phase', () => {
+    expect(isRetakePendingPhase({ phase: 'await_retake_upload' })).toBe(true)
+  })
+
+  it('returns false when idle', () => {
+    expect(isRetakePendingPhase({ phase: 'await_image_qa', retakePending: false })).toBe(false)
+  })
+})
+
+describe('buildRetakeContinueMessage', () => {
+  it('returns trimmed effective utterance', () => {
+    expect(buildRetakeContinueMessage('  巨峰葡萄礼盒  ')).toBe('巨峰葡萄礼盒')
+  })
+})
+
+describe('resolveImageQaPresentation', () => {
+  const presentation = {
+    kind: 'callout_info',
+    stepper: { current: 'image_qa', completed: [] },
+    title: '自动识图暂时不可用',
+    body: {
+      text: '图片本身看起来可用',
+      checks: [
+        { label: '清晰度', ok: true },
+        { label: '白底背景', ok: false },
+      ],
+    },
+    options: [
+      { id: 'confirm_pass', label: '就用这张图，继续', message: '就用这张图，继续' },
+      { id: 'retake', label: '重新拍摄', message: '我重新拍摄上传' },
+    ],
+  }
+
+  it('uses presentation title and checks, not raw reason', () => {
+    expect(resolveImageQaTitle(presentation)).toBe('自动识图暂时不可用')
+    expect(resolveImageQaChecks(presentation)).toHaveLength(2)
+    expect(resolveImageQaOptions(presentation)[0].label).toBe('就用这张图，继续')
+  })
+
+  it('falls back to IMAGE_QA_OPTIONS when presentation has no options', () => {
+    expect(resolveImageQaOptions({ ...presentation, options: undefined })).toEqual(IMAGE_QA_OPTIONS)
   })
 })

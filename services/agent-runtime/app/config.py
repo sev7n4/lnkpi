@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Product visual scheme v2: prose SSOT + macro/shot decomposition (spec 2026-08-11)
     # Env: LNKPI_PRODUCT_VISUAL_SCHEME_V2 (no validation_alias — prefix applies correctly)
     product_visual_scheme_v2: bool = False
+    # UX-PV-10: merge await_shot_confirm + await_topo into one gate
+    pv_merged_shot_topo_gate: bool = False
+    # UX-PV-10 optional: secondary「少确认，直接出图」on merged gate when eligible
+    pv_fast_mode_gate: bool = False
 
     class Config:
         env_prefix = "LNKPI_"

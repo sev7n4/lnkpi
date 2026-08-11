@@ -17,13 +17,25 @@ cases:
     assert_prose_min_chars: 180
     dialog_fixture:
       draft_prose: >-
+        ## 我理解您的需求
+        用户需要中秋大闸蟹礼盒电商包装推广图，含主视觉、结构图与送礼场景。
+
+        ## 设计方向摘要
+        - 红金配色营造喜庆高级氛围
+        - 结构图展示冷链缓冲与冰袋
+        - 模特场景呈现节日赠礼情境
+
+        ## 完整方案说明
         中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。包装主视觉突出礼盒质感与喜庆氛围，
         结构图展示分层缓冲与冰袋布局，模特送礼场景呈现节日赠礼情境。整体视觉要求喜庆高级，强调冷链保鲜与礼盒质感，
         适合中秋电商主图与详情推广。主视觉需突出礼盒材质与烫金工艺，结构图需清晰展示缓冲层与冰袋位置，
         模特场景需呈现赠礼动作与节日氛围，三者风格统一、色调一致。
+
+        ## 接下来请您
+        若下方有多套宏观风格卡片，请选择您偏好的方向后继续。
       macro_schemes:
-        - { id: A, label: 礼盒质感路线, summary: 红金礼盒 + 结构拆解, recommended: true }
-        - { id: B, label: 节日赠礼路线, summary: 模特送礼 + 场景氛围, recommended: false }
+        - { id: A, label: 礼盒质感路线, summary: 红金礼盒 + 结构拆解, tags: [红金, 礼盒], recommended: true, recommend_reason: 突出礼盒质感 }
+        - { id: B, label: 节日赠礼路线, summary: 模特送礼 + 场景氛围, tags: [赠礼, 场景], recommended: false }
       visual_intent:
         primary_goal: packaging_design
         industry_context: food_gift
@@ -68,11 +80,23 @@ cases:
     assert_shot_types_exclude: [packaging_hero, packaging_structure]
     dialog_fixture:
       draft_prose: >-
+        ## 我理解您的需求
+        用户需要保温杯电商推广图，强调316不锈钢与12小时保温。
+
+        ## 设计方向摘要
+        - 简约高级电商主图与详情
+        - 模特展示与手持使用场景
+        - 卖点图与推广海报
+
+        ## 完整方案说明
         保温杯电商视觉方案，简约高级风格，突出316不锈钢与12小时保温。包含主图、详情、模特展示与手持使用、卖点与海报。
         主图白底居中，详情分区展示材质与保温时长，模特展示办公场景，手持使用真实饮用，卖点突出316不锈钢，
         海报简约高级。整体色调克制，适合天猫与京东上架推广，强调品质感与功能卖点。
+
+        ## 接下来请您
+        请在下方卡片中确认宏观风格方向。
       macro_schemes:
-        - { id: A, label: 简约电商, summary: 六类标准电商图, recommended: true }
+        - { id: A, label: 简约电商, summary: 六类标准电商图, tags: [简约, 高级], recommended: true }
       visual_intent:
         primary_goal: mixed_ecommerce
         industry_context: consumer_electronics

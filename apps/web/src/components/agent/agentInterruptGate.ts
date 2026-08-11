@@ -1,6 +1,7 @@
 /** @vitest-environment node */
 
 import type { AgentChipSet } from './agentChipSet'
+import type { AgentPresentationEnvelope } from './presentation/types'
 
 export interface AgentInterruptPayload {
   node?: string | null
@@ -9,6 +10,14 @@ export interface AgentInterruptPayload {
   imageQaReason?: string | null
   imageQaMetrics?: ImageQaMetrics | null
   visionUsed?: boolean | null
+  retakePending?: boolean | null
+  effectiveUtterance?: string | null
+  presentation?: AgentPresentationEnvelope | null
+}
+
+export interface RetakePhaseInput {
+  phase?: string | null
+  retakePending?: boolean | null
 }
 
 export interface ProductVisualScheme {
@@ -40,6 +49,7 @@ export interface ProductVisualMacroScheme {
   id: string
   label?: string | null
   summary?: string | null
+  tags?: string[] | null
   recommended?: boolean
   recommend_reason?: string | null
 }
@@ -61,6 +71,7 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_scheme_select: 'scheme_select',
   await_macro_scheme_select: 'macro_scheme_select',
   await_shot_confirm: 'topo',
+  await_shot_topo_confirm: 'topo',
   await_delivery_confirm: 'delivery_confirm',
 }
 
@@ -72,7 +83,7 @@ export interface ImageQaMetrics {
 }
 
 export const IMAGE_QA_OPTIONS = [
-  { id: 'confirm_pass', label: '确认可用，继续', message: '已是白底图，继续使用' },
+  { id: 'confirm_pass', label: '就用这张图，继续', message: '就用这张图，继续' },
   { id: 'retake', label: '重新拍摄', message: '我重新拍摄上传' },
   { id: 'ai_white_bg', label: '生成白底图', message: '生成标准白底图' },
 ] as const
@@ -82,6 +93,24 @@ export type ImageQaOptionId = (typeof IMAGE_QA_OPTIONS)[number]['id']
 export const SCHEME_DECISION_PREFIX = '__scheme_decision__'
 export const MACRO_SCHEME_DECISION_PREFIX = '__macro_scheme_decision__'
 export const DELIVERY_DECISION_PREFIX = '__delivery_decision__'
+
+const MACHINE_PAYLOAD_PREFIXES = [
+  SCHEME_DECISION_PREFIX,
+  MACRO_SCHEME_DECISION_PREFIX,
+  DELIVERY_DECISION_PREFIX,
+] as const
+
+/** Strip machine-only resume payloads from assistant visible text (spec §2.3). */
+export function filterAssistantVisibleText(content: string): string {
+  return content
+    .split('\n')
+    .filter(
+      (line) =>
+        !MACHINE_PAYLOAD_PREFIXES.some((prefix) => line.trimStart().startsWith(prefix)),
+    )
+    .join('\n')
+    .trim()
+}
 
 /** Default checkbox state: recommended per type, else first scheme. */
 export function defaultSchemeSelections(plan: ProductVisualPlan | null | undefined): Record<string, string[]> {
@@ -163,6 +192,20 @@ export function toggleMacroSchemeSelection(
 export function buildMacroSchemeConfirmMessage(selectedIds: string[]): string {
   const payload = JSON.stringify({ action: 'confirm', selected_ids: selectedIds })
   return `${MACRO_SCHEME_DECISION_PREFIX}${payload}`
+}
+
+/** A+B macro footer hint — mirrors runtime copy macro.ab_hint_mixed. */
+export function buildMacroAbFooterHint(
+  selectedCount: number,
+  expectedDeliveryCount?: number | null,
+): string {
+  if (selectedCount < 2) return ''
+  const k = String(selectedCount)
+  const p =
+    expectedDeliveryCount != null && expectedDeliveryCount > 0
+      ? String(expectedDeliveryCount)
+      : '若干'
+  return `已选 ${k} 套风格 → 预计场景图 ${p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。`
 }
 
 /** Default variant key per shot (first ready gen key). */
@@ -262,20 +305,83 @@ export function chipSetFromInterrupt(
   return null
 }
 
+/** UX-PV-12: retake flow awaiting new upload + continue with stored utterance. */
+export function isRetakePendingPhase(data: RetakePhaseInput | null | undefined): boolean {
+  if (!data) return false
+  if (data.retakePending === true) return true
+  return data.phase === 'await_retake_upload'
+}
+
+/** Resend stored demand after retake upload (message body = effective_utterance). */
+export function buildRetakeContinueMessage(effectiveUtterance: string): string {
+  return effectiveUtterance.trim()
+}
+
+export interface ImageQaOption {
+  id: string
+  label: string
+  message: string
+}
+
+/** User-facing QA title from presentation envelope (never raw imageQaReason). */
+export function resolveImageQaTitle(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): string {
+  return String(presentation?.title ?? '').trim()
+}
+
+export function resolveImageQaBodyText(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): string {
+  return String(presentation?.body?.text ?? '').trim()
+}
+
+export function resolveImageQaChecks(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): Array<{ label: string; ok: boolean }> {
+  return presentation?.body?.checks ?? []
+}
+
+/** Option chips from presentation.options, else IMAGE_QA_OPTIONS labels. */
+export function resolveImageQaOptions(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): ReadonlyArray<ImageQaOption> {
+  const fromPres = presentation?.options
+  if (fromPres?.length) {
+    return fromPres.map((o) => ({
+      id: o.id,
+      label: o.label,
+      message: o.message,
+    }))
+  }
+  return IMAGE_QA_OPTIONS
+}
+
 export function interruptPayloadFromThreadState(
   data:
     | {
         phase?: string | null
         interrupted?: boolean
         nextNodes?: string[]
+        presentation?: AgentPresentationEnvelope | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
+        imageQaReason?: string | null
+        imageQaMetrics?: ImageQaMetrics | null
       }
     | null
     | undefined,
 ): AgentInterruptPayload | null {
-  if (!data?.interrupted) return null
+  if (!data) return null
+  if (!data.interrupted && !isRetakePendingPhase(data)) return null
   return {
     interrupted: true,
     phase: data.phase ?? null,
     node: data.nextNodes?.[0] ?? null,
+    presentation: data.presentation ?? null,
+    retakePending: data.retakePending ?? null,
+    effectiveUtterance: data.effectiveUtterance ?? null,
+    imageQaReason: data.imageQaReason ?? null,
+    imageQaMetrics: data.imageQaMetrics ?? null,
   }
 }

@@ -9,10 +9,15 @@ from typing import Any, Callable, Literal
 from langchain_core.messages import AIMessage
 
 from app.graph.limits import MAX_SCHEME_REVISE
+from app.graph.product_visual_copy import ProductVisualCopy
 from app.graph.product_visual_v2.macro_select import (
     apply_macro_selection,
     default_macro_selection,
     validate_macro_selection,
+)
+from app.graph.product_visual_v2.presentation import (
+    build_presentation_envelope,
+    compute_expected_delivery,
 )
 
 MacroAction = Literal["none", "confirm", "revise"]
@@ -22,6 +27,56 @@ _NONE_TIP = "请勾选宏观方案（最多 2 套）后点「确认方案」，�
 _REVISE_ACK = "好的，正在根据你的反馈调整视觉方案…"
 _CONFIRM_ACK = "已确认宏观方案，即将写入画布方案节点…"
 _FORCE_SSOT_NOTE = f"修订次数已超限（{MAX_SCHEME_REVISE} 次），将按推荐方案继续。"
+
+
+def build_macro_select_presentation_patch(
+    state: dict,
+    *,
+    preview_selected_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build presentation envelope + expected_delivery_count for macro HITL."""
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    schemes = state.get("macro_schemes") or []
+    selected = (
+        [str(s).strip() for s in preview_selected_ids if str(s).strip()]
+        if preview_selected_ids is not None
+        else [
+            str(s).strip()
+            for s in (state.get("selected_macro_scheme_ids") or default_macro_selection(schemes))
+            if str(s).strip()
+        ]
+    )
+    pres_state = {**state, "selected_macro_scheme_ids": selected}
+    delivery = compute_expected_delivery(
+        selected,
+        state.get("shot_manifest") or [],
+        copy=copy,
+    )
+    presentation = build_presentation_envelope(
+        kind="macro_scheme_cards",
+        phase="await_macro_scheme_select",
+        state=pres_state,
+        copy=copy,
+    )
+    return {
+        "presentation": presentation,
+        "expected_delivery_count": delivery["total_finalize"],
+    }
+
+
+def _await_macro_select_response(
+    state: dict,
+    *,
+    preview_selected_ids: list[str] | None = None,
+    messages: list[Any] | None = None,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "phase": "await_macro_scheme_select",
+        **build_macro_select_presentation_patch(state, preview_selected_ids=preview_selected_ids),
+    }
+    if messages is not None:
+        out["messages"] = messages
+    return out
 
 
 def classify_macro_scheme_decision(
@@ -63,14 +118,30 @@ def apply_macro_scheme_decision(state: dict, decision: dict[str, Any]) -> dict[s
             selected = default_macro_selection(schemes)
         err = validate_macro_selection([str(s) for s in selected])
         if err:
-            return {"phase": "await_macro_scheme_select", "messages": [AIMessage(content=err)]}
+            preview = [str(s) for s in selected] if isinstance(selected, list) else None
+            return _await_macro_select_response(
+                state,
+                preview_selected_ids=preview,
+                messages=[AIMessage(content=err)],
+            )
         try:
             applied = apply_macro_selection(schemes, [str(s) for s in selected])
         except ValueError as exc:
-            return {"phase": "await_macro_scheme_select", "messages": [AIMessage(content=str(exc))]}
+            preview = [str(s) for s in selected] if isinstance(selected, list) else None
+            return _await_macro_select_response(
+                state,
+                preview_selected_ids=preview,
+                messages=[AIMessage(content=str(exc))],
+            )
+        delivery = compute_expected_delivery(
+            [str(s) for s in selected],
+            state.get("shot_manifest") or [],
+            copy=ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0"),
+        )
         return {
             **applied,
             "macro_scheme_decision": "confirm",
+            "expected_delivery_count": delivery["total_finalize"],
             "messages": [AIMessage(content=_CONFIRM_ACK)],
         }
 
@@ -96,7 +167,7 @@ def apply_macro_scheme_decision(state: dict, decision: dict[str, Any]) -> dict[s
             out["macro_scheme_revision_feedback"] = feedback
         return out
 
-    return {"phase": "await_macro_scheme_select", "messages": [AIMessage(content=_NONE_TIP)]}
+    return _await_macro_select_response(state, messages=[AIMessage(content=_NONE_TIP)])
 
 
 def route_after_await_macro_scheme_select(state: dict) -> str:
@@ -129,7 +200,7 @@ def _last_role(messages: list[Any]) -> str | None:
 def make_await_macro_scheme_select_node() -> Callable:
     async def await_macro_scheme_select(state: dict) -> dict:
         if _last_role(state.get("messages") or []) not in ("human", "user"):
-            return {"phase": "await_macro_scheme_select"}
+            return _await_macro_select_response(state)
 
         text = _latest_user_text(state.get("messages") or [])
         decision = classify_macro_scheme_decision(text, user_decision=state.get("user_decision"))

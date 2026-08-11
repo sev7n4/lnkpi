@@ -119,6 +119,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "canvas_ssot_commit",
         "decompose_from_ssot",
         "await_shot_confirm",
+        "await_shot_topo_confirm",
         "synthesize_gen_prompt",
         "orchestrate_shots",
         "phase1_seed_lazy",
@@ -220,6 +221,10 @@ class AgentRuntimeState(TypedDict, total=False):
     selected_macro_scheme_ids: list[str] | None
     macro_scheme_decision: Literal["none", "confirm", "revise", "auto"] | None
     shot_manifest: list[dict] | None
+    expected_delivery_count: int | None
+    effective_utterance: str | None  # UX-PV-04: current-turn user demand (non-machine)
+    retake_pending: bool | None  # UX-PV-12: awaiting new upload + continue with stored utterance
+    user_request_labels: list[str] | None  # UX-PV-08: utterance scene phrases for delivery groups
     visual_intent: dict | None
     requires_standard_product_assets: bool | None
     image_qa_reason: str | None

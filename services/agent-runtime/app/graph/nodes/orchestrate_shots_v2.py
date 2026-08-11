@@ -8,13 +8,14 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.chain_refs import build_chain_ref_order
-from app.graph.mermaid_topo import manifest_to_mermaid
 from app.graph.nodes.split_product_visual import _gen_order_fields, _merge_phase1_items
 from app.graph.phase1_seed import PHASE1_ASSET_KEYS, ensure_phase1_seed_chain
+from app.graph.product_visual_copy import ProductVisualCopy
 from app.graph.product_visual_v2.manifest import (
     build_gen_items_from_shots,
     required_phase1_keys,
 )
+from app.graph.product_visual_v2.presentation import build_context_recap, build_presentation_envelope
 from app.graph.product_visual_v2.synthesize import synthesize_gen_prompt_hint
 from app.graph.state import SplitManifestItem
 
@@ -170,20 +171,30 @@ def make_orchestrate_shots_v2_node(*, nest: Any, skills_dir: Path) -> Callable:
             if ref_order:
                 await nest.attach_refs(nid, ref_order)
 
-        mermaid = manifest_to_mermaid(list(manifest))
         phase1_note = f"（Phase1: {', '.join(needed_phase1)}）" if needed_phase1 else ""
+        copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0", skills_dir=skills_dir)
+        pres_state = {**state, "split_manifest": manifest, "shot_manifest": shots}
+        presentation = build_presentation_envelope(
+            kind="topo_card_list",
+            phase="await_topo",
+            state=pres_state,
+            copy=copy,
+        )
+        recap = build_context_recap(pres_state)
+        hint = str((presentation.get("body") or {}).get("text") or "")
         split_msg = (
             f"已编排 {len(downstream_items)} 个视觉出图任务{phase1_note}。"
-            "\n先预览拓扑，确认出图前不会自动生成。\n\n"
-            f"当前资产拓扑：\n{mermaid}\n\n"
-            "准备好后回复「确认出图」。"
+            "\n先预览下方出图计划，确认出图前不会自动生成。\n\n"
+            f"{hint}"
         )
+        msg_parts = [p for p in (recap, split_msg) if p]
 
         out: dict[str, Any] = {
             "phase": "await_topo",
             "split_manifest": manifest,
             "phase1_asset_keys": needed_phase1 or None,
-            "messages": [AIMessage(content=split_msg)],
+            "presentation": presentation,
+            "messages": [AIMessage(content="\n".join(msg_parts))],
         }
         order_fields = _gen_order_fields(list(manifest))
         if order_fields.get("phase") == "error":

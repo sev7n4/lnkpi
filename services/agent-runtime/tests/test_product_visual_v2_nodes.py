@@ -15,6 +15,7 @@ from app.graph.nodes.macro_scheme_select_gate import (
     classify_macro_scheme_decision,
 )
 from app.graph.product_visual_v2.models import MacroScheme
+from app.graph.product_visual_v2.ssot import ssot_section_keys
 
 
 class FakeLLM:
@@ -42,14 +43,30 @@ class FakeNest:
         return {"nodeId": f"node-{self._seq}"}
 
 
+_CRAB_BODY = (
+    "中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。"
+    * 8
+)
+
 CRAB_DRAFT = {
-    "draft_prose": "中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。"
-    * 8,
+    "draft_prose": (
+        "## 我理解您的需求\n"
+        "用户需要中秋大闸蟹礼盒电商包装推广视觉。\n\n"
+        "## 设计方向摘要\n"
+        "- 红金配色营造节日氛围\n"
+        "- EPE 缓冲与冷链冰袋\n"
+        "- 外箱抗压结构\n\n"
+        "## 完整方案说明\n"
+        f"{_CRAB_BODY}\n\n"
+        "## 接下来请您\n"
+        "请在下方卡片中选择宏观风格方向。"
+    ),
     "macro_schemes": [
         {
             "id": "A",
             "label": "红金礼盒",
             "summary": "中秋红金",
+            "tags": ["红金", "节日"],
             "recommended": True,
             "recommend_reason": "契合节日氛围",
         },
@@ -57,6 +74,7 @@ CRAB_DRAFT = {
             "id": "B",
             "label": "极简牛皮",
             "summary": "环保简约",
+            "tags": ["牛皮纸"],
             "recommended": False,
             "recommend_reason": "",
         },
@@ -152,3 +170,23 @@ def test_build_ssot_ab_sections():
     )
     assert "## 方案 A" in content
     assert "## 方案 B" in content
+    assert ssot_section_keys(content) == ["A", "B"]
+
+
+def test_build_ssot_ab_sections_from_marked_draft():
+    body_a = "红金礼盒方案正文。" * 8
+    body_b = "极简牛皮方案正文。" * 8
+    draft = f"## 方案 A\n\n{body_a}\n\n## 方案 B\n\n{body_b}"
+    content = build_ssot_content_from_state(
+        {
+            "macro_scheme_draft": draft,
+            "selected_macro_scheme_ids": ["A", "B"],
+            "macro_schemes": [
+                {"id": "A", "label": "A"},
+                {"id": "B", "label": "B"},
+            ],
+        }
+    )
+    assert ssot_section_keys(content) == ["A", "B"]
+    assert body_a.strip() in content
+    assert body_b.strip() in content

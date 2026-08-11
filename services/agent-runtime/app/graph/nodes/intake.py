@@ -11,6 +11,7 @@ from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route
 from app.graph.route_trace import serialize_route_decision
 from app.graph.context_packet import should_include_prior_task
+from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
 
@@ -171,6 +172,13 @@ def make_intake_node(skills_dir: Path) -> Callable:
             out["focus_node_id"] = focus_node_id
         if proposed_brief is not None:
             out["user_brief"] = proposed_brief
+        if resolved_flow == "product_visual":
+            effective = resolve_effective_utterance(text)
+            if effective:
+                out["effective_utterance"] = effective
+                labels = extract_user_request_labels(effective)
+                if labels:
+                    out["user_request_labels"] = labels
         prior_spec = state.get("atomic_spec") if isinstance(state.get("atomic_spec"), dict) else None
         if (
             resolved_flow == "atomic_create"

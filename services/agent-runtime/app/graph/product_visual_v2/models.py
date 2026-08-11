@@ -9,12 +9,18 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.graph.atomic_parse_llm import extract_json_object
 from app.graph.product_visual_v2.limits import is_valid_shot_id
+from app.graph.product_visual_v2.scheme_draft import (
+    SCHEME_DRAFT_HEADINGS,
+    normalize_macro_scheme_card,
+    scheme_draft_has_four_sections,
+)
 
 
 class MacroScheme(BaseModel):
     id: str
     label: str
     summary: str = ""
+    tags: list[str] = Field(default_factory=list)
     recommended: bool = False
     recommend_reason: str | None = None
 
@@ -45,6 +51,9 @@ class DialogDraftOutput(BaseModel):
                 raise ValueError("draft_prose must not be JSON-only")
             except json.JSONDecodeError:
                 pass
+        if not scheme_draft_has_four_sections(cleaned):
+            missing = [h for h in SCHEME_DRAFT_HEADINGS if h not in cleaned]
+            raise ValueError(f"draft_prose missing sections: {missing}")
         return cleaned
 
     @model_validator(mode="after")
@@ -57,6 +66,8 @@ class DialogDraftOutput(BaseModel):
         recommended = [m for m in self.macro_schemes if m.recommended]
         if len(recommended) > 1:
             raise ValueError("at most one macro scheme may be recommended")
+        normalized = [normalize_macro_scheme_card(m.model_dump(mode="json")) for m in self.macro_schemes]
+        self.macro_schemes = [MacroScheme.model_validate(item) for item in normalized]
         return self
 
 

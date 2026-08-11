@@ -29,6 +29,7 @@ from app.graph.hitl_resume import (
     prepare_interrupt_resume,
     should_resume_interrupt,
 )
+from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
 from app.history_trim import trim_history
@@ -393,8 +394,11 @@ class NestEventProxy:
         if text:
             await self._emit({"type": "text_delta", "data": {"text": str(text)}})
 
-    async def emit_task_list(self, items: list[dict[str, Any]]) -> None:
-        await self._emit({"type": "task_list", "data": {"items": items}})
+    async def emit_task_list(self, items: list[dict[str, Any]], **meta: Any) -> None:
+        data: dict[str, Any] = {"items": items}
+        if meta:
+            data.update(meta)
+        await self._emit({"type": "task_list", "data": data})
 
     async def emit_task_update(self, **payload: Any) -> None:
         await self._emit({"type": "task_update", "data": payload})
@@ -582,6 +586,16 @@ async def get_thread_state(
         if isinstance(vals.get("image_qa_metrics"), dict)
         else None,
         "visionUsed": vals.get("vision_used") if vals.get("vision_used") is not None else None,
+        "userRequestLabels": vals.get("user_request_labels")
+        if isinstance(vals.get("user_request_labels"), list)
+        else None,
+        "effectiveUtterance": vals.get("effective_utterance")
+        if isinstance(vals.get("effective_utterance"), str)
+        else None,
+        "retakePending": bool(vals.get("retake_pending"))
+        if vals.get("retake_pending") is not None
+        else None,
+        "presentation": vals.get("presentation") if isinstance(vals.get("presentation"), dict) else None,
         **diag,
     }
 
@@ -691,14 +705,29 @@ async def stream_run_events(
         "sidebar_mentioned_keys": normalized_mentioned_keys,
     }
 
+    is_gate_resume = bool(
+        next_nodes
+        and should_resume_interrupt(
+            req.message,
+            list(next_nodes),
+            user_decision=req.user_decision,
+        )
+    )
+    if pre_vals.get("flow_mode") == "product_visual" and not is_gate_resume:
+        effective = resolve_effective_utterance(req.message)
+        if effective:
+            turn_update["effective_utterance"] = effective
+            labels = extract_user_request_labels(effective)
+            if labels:
+                turn_update["user_request_labels"] = labels
+        if pre_vals.get("retake_pending"):
+            turn_update["retake_pending"] = False
+            turn_update["presentation"] = None
+
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False
 
-    if next_nodes and should_resume_interrupt(
-        req.message,
-        list(next_nodes),
-        user_decision=req.user_decision,
-    ):
+    if next_nodes and is_gate_resume:
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         resume_attempt = True
@@ -867,6 +896,9 @@ async def stream_run_events(
                     interrupt_event_payload(
                         next_nodes=post_next,
                         phase=phase_str,
+                        presentation=post_vals.get("presentation")
+                        if isinstance(post_vals.get("presentation"), dict)
+                        else None,
                         extra={
                             k: v
                             for k, v in {
@@ -878,7 +910,11 @@ async def stream_run_events(
                         },
                     )
                 )
-            await emit({"type": "done", "data": {}})
+            await emit({"type": "done", "data": {
+                **({"retakePending": True} if post_vals.get("retake_pending") else {}),
+                **({"effectiveUtterance": post_vals.get("effective_utterance")} if post_vals.get("retake_pending") and post_vals.get("effective_utterance") else {}),
+                **({"presentation": post_vals.get("presentation")} if post_vals.get("retake_pending") and isinstance(post_vals.get("presentation"), dict) else {}),
+            }})
         except AgentToolError as exc:
             record_stream_error(exc.error["error_type"])
             await emit({"type": "error", "data": error_to_sse_payload(exc.error)})

@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { AgentTaskProgressState } from './agentTaskProgress'
+import { formatTaskProgressLine } from './agentTaskProgress'
 import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 
-defineProps<{
+const props = defineProps<{
   progress: AgentTaskProgressState
 }>()
 
@@ -19,12 +21,35 @@ const statusLabel: Record<string, string> = {
   needs_user: '需你处理',
   skipped: '已跳过',
 }
+
+const cardTitle = computed(() => {
+  if (props.progress.finished) return '本轮执行结果'
+  return props.progress.banner ? '出图中' : '正在按方案拆解并出图'
+})
+
+const progressLine = computed(() => formatTaskProgressLine(props.progress.items))
+
+const showBanner = computed(
+  () => Boolean(props.progress.banner) && !props.progress.finished,
+)
 </script>
 
 <template>
   <div class="agent-task-card rounded-xl border border-[var(--neo-border)] bg-[var(--neo-panel)] p-3 text-xs">
-    <div class="mb-2 font-medium text-[var(--neo-fg)]">
-      {{ progress.finished ? '本轮执行结果' : '正在按方案拆解并出图' }}
+    <div
+      v-if="showBanner"
+      class="mb-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-sky-200"
+    >
+      {{ progress.banner }}
+    </div>
+    <div class="mb-1 font-medium text-[var(--neo-fg)]">
+      {{ cardTitle }}
+    </div>
+    <div
+      v-if="progressLine && !progress.finished"
+      class="mb-2 text-[11px] text-[var(--neo-text-secondary)]"
+    >
+      {{ progressLine }}
     </div>
     <ul class="space-y-1.5">
       <li
@@ -37,7 +62,7 @@ const statusLabel: Record<string, string> = {
         <span class="min-w-0 flex-1">
           <span class="font-medium">{{ item.title }}</span>
           <span v-if="item.status === 'retrying' && item.attempt" class="ml-1 opacity-60">
-            {{ item.attempt }}/{{ item.maxAttempts || 2 }}
+            重试 {{ item.attempt }}/{{ item.maxAttempts || 2 }}
           </span>
           <div v-if="item.errorHint" class="mt-0.5 opacity-60">{{ item.errorHint }}</div>
           <div v-if="item.errorCode && !item.errorHint" class="mt-0.5 opacity-50">{{ item.errorCode }}</div>

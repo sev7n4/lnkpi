@@ -18,6 +18,15 @@ from app.graph.nodes.shot_confirm_gate import (
     make_await_shot_confirm_node,
     route_after_await_shot_confirm,
 )
+from app.graph.nodes.await_shot_topo_confirm import (
+    make_await_shot_topo_confirm_node,
+    route_after_await_shot_topo_confirm,
+)
+from app.graph.product_visual_v2.routing import (
+    is_merged_shot_topo_gate_enabled,
+    route_after_orchestrate_shots,
+    shot_confirm_gate_name,
+)
 from app.graph.product_visual_v2.routing import route_after_dialog_draft
 from app.graph.state import AgentRuntimeState
 
@@ -45,6 +54,8 @@ def register_product_visual_v2_nodes(
     from app.config import settings
 
     resolved_skills = Path(skills_dir or settings.skills_dir)
+    merged = is_merged_shot_topo_gate_enabled()
+    shot_gate = shot_confirm_gate_name()
 
     graph.add_node("dialog_draft", make_dialog_draft_node(llm=llm, skills_dir=resolved_skills))
     graph.add_node("await_macro_scheme_select", make_await_macro_scheme_select_node())
@@ -53,7 +64,13 @@ def register_product_visual_v2_nodes(
         "decompose_from_ssot",
         make_decompose_from_ssot_node(llm=llm, skills_dir=resolved_skills, nest=nest),
     )
-    graph.add_node("await_shot_confirm", make_await_shot_confirm_node())
+    if merged:
+        graph.add_node(
+            "await_shot_topo_confirm",
+            make_await_shot_topo_confirm_node(skills_dir=resolved_skills),
+        )
+    else:
+        graph.add_node("await_shot_confirm", make_await_shot_confirm_node())
     graph.add_node(
         "orchestrate_shots",
         make_orchestrate_shots_v2_node(nest=nest, skills_dir=resolved_skills),
@@ -80,15 +97,35 @@ def register_product_visual_v2_nodes(
         },
     )
     graph.add_edge("canvas_ssot_commit", "decompose_from_ssot")
-    graph.add_edge("decompose_from_ssot", "await_shot_confirm")
+    graph.add_edge("decompose_from_ssot", shot_gate)
+    if merged:
+        graph.add_conditional_edges(
+            "await_shot_topo_confirm",
+            route_after_await_shot_topo_confirm,
+            {
+                "orchestrate_shots": "orchestrate_shots",
+                "decompose_from_ssot": "decompose_from_ssot",
+                "done": "done",
+                "end": END,
+            },
+        )
+    else:
+        graph.add_conditional_edges(
+            "await_shot_confirm",
+            route_after_await_shot_confirm,
+            {
+                "orchestrate_shots": "orchestrate_shots",
+                "decompose_from_ssot": "decompose_from_ssot",
+                "done": "done",
+                "end": END,
+            },
+        )
     graph.add_conditional_edges(
-        "await_shot_confirm",
-        route_after_await_shot_confirm,
+        "orchestrate_shots",
+        route_after_orchestrate_shots,
         {
-            "orchestrate_shots": "orchestrate_shots",
-            "decompose_from_ssot": "decompose_from_ssot",
+            "start_gen": "start_gen",
+            "await_topo": "await_topo",
             "done": "done",
-            "end": END,
         },
     )
-    graph.add_edge("orchestrate_shots", "await_topo")

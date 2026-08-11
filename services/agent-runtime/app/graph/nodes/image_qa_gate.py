@@ -9,10 +9,16 @@ from langchain_core.messages import AIMessage
 
 from app.graph.phase1_seed import PHASE1_ASSET_KEYS, ensure_phase1_seed_chain
 from app.graph.product_visual_v2.routing import is_v2_enabled
+from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.presentation import (
+    build_context_recap,
+    build_presentation_envelope,
+)
 from app.graph.product_visual_v2.vision_qa import (
     VisionQAResult,
-    build_qa_fail_message,
+    build_qa_checks,
     evaluate_vision_qa_v2,
+    vision_qa_metrics_from_result,
 )
 from app.graph.product_visual_v2.vision_qa_client import image_urls_from_state, run_vision_qa
 
@@ -41,10 +47,78 @@ _PRODUCT_VISUAL_ABORT_CLEAR: dict[str, Any] = {
     "vision_used": None,
 }
 
+# UX-PV-12: retake clears SSOT/shot checkpoint but keeps demand context.
+_PRODUCT_VISUAL_RETAKE_CLEAR: dict[str, Any] = {
+    "product_visual_plan": None,
+    "image_qa_result": None,
+    "phase1_asset_keys": None,
+    "scheme_revision_count": None,
+    "delivery_selections": None,
+    "image_qa_decision": None,
+    "plan_node_id": None,
+    "macro_scheme_draft": None,
+    "macro_schemes": None,
+    "selected_macro_scheme_ids": None,
+    "macro_scheme_decision": None,
+    "shot_manifest": None,
+    "requires_standard_product_assets": None,
+    "image_qa_reason": None,
+    "image_qa_metrics": None,
+    "vision_used": None,
+    "split_manifest": None,
+    "expected_delivery_count": None,
+    "presentation": None,
+}
+
 
 def clear_product_visual_abort_state(state: dict) -> dict:
     """Clear product_visual checkpoint fields on retake/abort (AC-2)."""
     return {**state, **_PRODUCT_VISUAL_ABORT_CLEAR}
+
+
+def clear_product_visual_retake_state(state: dict) -> dict:
+    """Clear SSOT/shot fields on retake; preserve effective_utterance + visual_intent (UX-PV-12)."""
+    preserved = {
+        k: state.get(k)
+        for k in ("effective_utterance", "visual_intent", "user_request_labels", "flow_mode")
+        if state.get(k) is not None
+    }
+    return {**state, **_PRODUCT_VISUAL_RETAKE_CLEAR, **preserved}
+
+
+def _build_retake_resume_output(
+    state: dict,
+    *,
+    skills_dir: Path | None,
+) -> dict[str, Any]:
+    """Presentation + state for retake: upload new photo then continue with stored utterance."""
+    copy = _load_product_visual_copy(skills_dir)
+    effective = str(state.get("effective_utterance") or "").strip()
+    recap = build_context_recap(state)
+    presentation = build_presentation_envelope(
+        kind="callout_info",
+        phase="await_retake_upload",
+        state=state,
+        copy=copy,
+    )
+    presentation["title"] = copy.get("qa.retake_title")
+    presentation["body"] = {"text": copy.get("qa.retake_body")}
+    if effective:
+        presentation["secondary_actions"] = [
+            {
+                "label": copy.get("qa.retake_continue_label"),
+                "message": effective,
+            }
+        ]
+
+    msg_parts = [p for p in (recap, copy.get("qa.retake_body")) if p]
+    return {
+        **_PRODUCT_VISUAL_RETAKE_CLEAR,
+        "retake_pending": True,
+        "phase": "await_retake_upload",
+        "presentation": presentation,
+        "messages": [AIMessage(content="\n".join(msg_parts))],
+    }
 
 
 def derive_qa_metrics(state: dict) -> dict[str, Any]:
@@ -95,7 +169,7 @@ def classify_image_qa_decision(text: str) -> str:
     t = (text or "").strip().lower()
     if not t:
         return "none"
-    if any(k in t for k in ("已是白底", "继续使用", "确认可用", "继续策划", "confirm_pass")):
+    if any(k in t for k in ("已是白底", "继续使用", "确认可用", "继续策划", "就用这张图", "confirm_pass")):
         return "confirm_pass"
     if any(k in t for k in ("重新拍", "重拍", "retake", "我重新拍", "重新拍摄")):
         return "retake"
@@ -124,6 +198,50 @@ def _last_role(messages: list[Any]) -> str | None:
         return None
     last = messages[-1]
     return getattr(last, "type", None) or (last.get("role") if isinstance(last, dict) else None)
+
+
+def _load_product_visual_copy(skills_dir: Path | None) -> ProductVisualCopy:
+    if skills_dir is not None:
+        return ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0", skills_dir=skills_dir)
+    return ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+
+
+def _build_qa_fail_output(
+    state: dict,
+    *,
+    vision: VisionQAResult | None,
+    metrics: dict[str, Any],
+    result: dict[str, Any],
+    skills_dir: Path | None,
+) -> dict[str, Any]:
+    """Build presentation envelope + friendly AIMessage for QA fail."""
+    copy = _load_product_visual_copy(skills_dir)
+    reason = str(result.get("image_qa_reason") or getattr(vision, "reason", None) or "")
+    vision_used = bool(result.get("vision_used")) if result.get("vision_used") is not None else bool(
+        getattr(vision, "vision_used", False)
+    )
+    merged_metrics: dict[str, Any] = {**metrics, **(result.get("image_qa_metrics") or {})}
+    if vision:
+        merged_metrics = {**merged_metrics, **vision_qa_metrics_from_result(vision)}
+
+    mapped = copy.map_qa_failure(reason=reason, vision_used=vision_used, metrics=merged_metrics)
+    checks = build_qa_checks(vision, merged_metrics)
+    recap = build_context_recap(state)
+    presentation = build_presentation_envelope(
+        kind=str(mapped["kind"]),
+        phase="await_image_qa",
+        state=state,
+        copy=copy,
+    )
+    presentation["title"] = mapped["title"]
+    presentation["body"] = {"text": mapped["body"], "checks": checks}
+    presentation["options"] = mapped["options"]
+
+    msg_parts = [p for p in (recap, str(mapped.get("title") or "")) if p]
+    return {
+        "presentation": presentation,
+        "messages": [AIMessage(content="\n".join(msg_parts))],
+    }
 
 
 async def _run_qa_check(
@@ -208,8 +326,15 @@ def make_image_qa_check_node(
                 is_sharp_enough=m.get("is_sharp_enough"),
                 product_identifiable=m.get("product_identifiable"),
             )
-            fail_tip = build_qa_fail_message(vision_stub, metrics)
-            out["messages"] = [AIMessage(content=fail_tip)]
+            out.update(
+                _build_qa_fail_output(
+                    state,
+                    vision=vision_stub,
+                    metrics=metrics,
+                    result=result,
+                    skills_dir=resolved_skills,
+                )
+            )
         return out
 
     return image_qa_check
@@ -228,24 +353,42 @@ def make_await_image_qa_node() -> Callable:
         }
         if decision == "none":
             metrics = derive_qa_metrics(state)
-            fail_tip = build_qa_fail_message(None, metrics)
-            if state.get("image_qa_reason"):
-                fail_tip = f"识图结论：{state['image_qa_reason']}\n{fail_tip}"
-            out["messages"] = [AIMessage(content=fail_tip)]
+            m = state.get("image_qa_metrics") or {}
+            vision_stub = VisionQAResult(
+                pass_=False,
+                reason=str(state.get("image_qa_reason") or ""),
+                vision_used=bool(state.get("vision_used")),
+                is_white_bg=m.get("is_white_bg") if isinstance(m, dict) else None,
+                is_sharp_enough=m.get("is_sharp_enough") if isinstance(m, dict) else None,
+                product_identifiable=m.get("product_identifiable") if isinstance(m, dict) else None,
+            )
+            fail_bits = _build_qa_fail_output(
+                state,
+                vision=vision_stub,
+                metrics=metrics,
+                result={
+                    "image_qa_reason": state.get("image_qa_reason"),
+                    "vision_used": state.get("vision_used"),
+                    "image_qa_metrics": m,
+                },
+                skills_dir=None,
+            )
+            out.update(fail_bits)
         return out
 
     return await_image_qa
 
 
-def make_image_qa_remedy_node(*, nest: Any | None = None) -> Callable:
+def make_image_qa_remedy_node(*, nest: Any | None = None, skills_dir: Path | None = None) -> Callable:
+    resolved_skills = skills_dir
+
     async def image_qa_remedy(state: dict) -> dict:
         decision = state.get("image_qa_decision") or "none"
         if decision == "retake":
-            cleared = clear_product_visual_abort_state(state)
+            cleared = clear_product_visual_retake_state(state)
             return {
-                **{k: cleared[k] for k in _PRODUCT_VISUAL_ABORT_CLEAR},
-                "phase": "done",
-                "messages": [AIMessage(content="好的，请重新拍摄并上传产品图后再试。")],
+                **cleared,
+                **_build_retake_resume_output(cleared, skills_dir=resolved_skills),
             }
         if decision == "confirm_pass":
             v2 = is_v2_enabled(state)

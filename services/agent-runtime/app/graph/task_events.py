@@ -66,3 +66,30 @@ def hint_for_error(code_or_status: str | None) -> str:
 def max_auto_retries() -> int:
     """Spec: auto-retry at most 2 times (3 total attempts)."""
     return 2
+
+
+def build_task_list_items(
+    manifest: list[dict],
+    ordered_keys: list[str] | None = None,
+) -> list[dict[str, str]]:
+    """Build ``task_list`` SSE items with human-readable (Chinese) titles."""
+    by_key = {
+        str(it["key"]): it
+        for it in manifest
+        if isinstance(it, dict) and it.get("key")
+    }
+    keys = ordered_keys if ordered_keys else list(by_key.keys())
+    items: list[dict[str, str]] = []
+    for key in keys:
+        item = by_key.get(key)
+        if not item:
+            continue
+        items.append(
+            {
+                "id": key,
+                "title": str(item.get("title") or key),
+                "nodeId": str(item.get("node_id") or ""),
+                "kind": str(item.get("target_type") or "image"),
+            }
+        )
+    return items

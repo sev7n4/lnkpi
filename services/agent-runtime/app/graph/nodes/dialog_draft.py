@@ -12,6 +12,8 @@ from app.graph.nodes.plan._shared import latest_user_text
 from app.graph.product_visual_v2.models import DialogDraftOutput, parse_dialog_draft_output
 from app.graph.product_visual_v2.macro_select import default_macro_selection, should_skip_macro_hitl
 from app.graph.product_visual_v2.routing import route_after_dialog_draft
+from app.graph.nodes.macro_scheme_select_gate import build_macro_select_presentation_patch
+from app.graph.product_visual_v2.utterance import extract_user_request_labels
 from app.graph.product_visual_v2_prompt import (
     build_dialog_draft_messages,
     build_dialog_draft_user_content,
@@ -30,7 +32,9 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
 
         system_prompt, prompt_version = load_dialog_draft_prompt(skills_dir)
         user_brief = await resolve_brief_for_llm(state, None)
-        user_text = latest_user_text(state.get("messages") or [])
+        user_text = str(state.get("effective_utterance") or "").strip() or latest_user_text(
+            state.get("messages") or []
+        )
         revision_feedback = None
         if state.get("scheme_revision_count") and state.get("macro_scheme_revision_feedback"):
             revision_feedback = state.get("macro_scheme_revision_feedback")
@@ -73,9 +77,14 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
             "messages": [AIMessage(content=f"{draft.draft_prose}\n\n---\n{msg}")],
             "product_visual_scheme_v2": True,
         }
+        labels = extract_user_request_labels(user_text)
+        if labels:
+            out["user_request_labels"] = labels
         if should_skip_macro_hitl(macro_schemes):
             out["selected_macro_scheme_ids"] = default_macro_selection(macro_schemes)
             out["macro_scheme_decision"] = "auto"
+        elif next_phase == "await_macro_scheme_select":
+            out.update(build_macro_select_presentation_patch(out))
         return out
 
     return dialog_draft
