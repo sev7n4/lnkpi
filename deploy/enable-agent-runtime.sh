@@ -155,6 +155,11 @@ elif [[ -z "$RT_MODEL" ]]; then
   log "WARN: LNKPI_OPENAI_CHAT_MODEL empty — Runtime defaults to gpt-4o"
 fi
 
+# Product visual scheme v2 — prose SSOT + macro/shot (required for UX-PV UAT)
+[[ -n "$(get_env LNKPI_PRODUCT_VISUAL_SCHEME_V2)" ]] || upsert_env LNKPI_PRODUCT_VISUAL_SCHEME_V2 "true"
+upsert_env LNKPI_PV_MERGED_SHOT_TOPO_GATE "true"
+log "LNKPI_PRODUCT_VISUAL_SCHEME_V2 + LNKPI_PV_MERGED_SHOT_TOPO_GATE enabled for UX-PV UAT"
+
 # Optional tunables if missing
 [[ -n "$(get_env LNKPI_IMAGE_GEN_CONCURRENCY)" ]] || upsert_env LNKPI_IMAGE_GEN_CONCURRENCY "3"
 [[ -n "$(get_env LNKPI_IMAGE_GEN_TIMEOUT_SEC)" ]] || upsert_env LNKPI_IMAGE_GEN_TIMEOUT_SEC "180"

@@ -289,6 +289,19 @@ def test_compute_expected_delivery_mixed_mode():
     assert "2 套" in delivery["allocation_note"] or "两套" in delivery["allocation_note"]
 
 
+def test_compute_expected_delivery_estimates_from_labels_before_shots():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    state = {
+        "user_request_labels": ["礼盒长什么样", "快递怎么防压", "送人场景"],
+        "shot_manifest": [],
+    }
+    delivery = compute_expected_delivery(["A", "B"], [], copy=copy, state=state)
+    assert delivery["scene_count"] == 3
+    assert delivery["total_finalize"] == 3
+    assert delivery["allocation_note"]
+    assert "3" in delivery["allocation_note"]
+
+
 def test_delivery_envelope_user_request_labels():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     state = {

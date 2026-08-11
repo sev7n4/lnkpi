@@ -1,7 +1,7 @@
 /** @vitest-environment node */
 
 import type { AgentChipSet } from './agentChipSet'
-import type { AgentPresentationEnvelope } from './presentation/types'
+import type { AgentPresentationEnvelope, DeliveryCardGroup } from './presentation/types'
 
 export interface AgentInterruptPayload {
   node?: string | null
@@ -247,6 +247,48 @@ export function buildMacroAbFooterHint(
       ? String(expectedDeliveryCount)
       : '若干'
   return `已选 ${k} 套风格 → 预计场景图 ${p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。`
+}
+
+/** Client-side delivery_cards groups when runtime presentation.groups missing (UX-PV-08). */
+export function buildClientDeliveryGroups(
+  shots: ProductVisualShot[] | null | undefined,
+  genByKey: Record<string, { url?: string | null; title?: string | null }> | null | undefined,
+  userLabels: string[] | null | undefined,
+  selections: Record<string, string>,
+): DeliveryCardGroup[] {
+  const groups: DeliveryCardGroup[] = []
+  const labels = userLabels ?? []
+  const byKey = genByKey ?? {}
+  for (let index = 0; index < (shots ?? []).length; index++) {
+    const shot = shots![index]
+    const shotId = shot.shot_id?.trim()
+    if (!shotId) continue
+    const variants = Math.max(1, Math.min(3, shot.variant_count ?? 1))
+    const keys =
+      variants === 1
+        ? [shotId]
+        : Array.from({ length: variants }, (_, i) => `${shotId}__v${i + 1}`)
+    const ready = keys.filter((k) => Boolean(byKey[k]?.url))
+    if (!ready.length) continue
+    const selected = selections[shotId] || ready[0]
+    const macro = shot.macro_scheme_id?.trim()
+    const shotLabel = shot.label?.trim() || shotId
+    const subtitle = macro ? `[方案${macro}] ${shotLabel}` : shotLabel
+    groups.push({
+      label: labels[index]?.trim() || shotLabel,
+      subtitle,
+      shot_id: shotId,
+      recommended: selected === ready[0],
+      selected_variant_key: selected,
+      candidates: ready.map((variantKey, i) => ({
+        variant_key: variantKey,
+        url: byKey[variantKey]?.url ?? null,
+        title: byKey[variantKey]?.title ?? null,
+        recommended: i === 0,
+      })),
+    })
+  }
+  return groups
 }
 
 /** Default variant key per shot (first ready gen key). */

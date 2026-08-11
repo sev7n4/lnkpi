@@ -68,6 +68,7 @@ import {
   filterAssistantVisibleText,
   filterUserVisibleText,
   isMachineOnlyVisibleText,
+  buildClientDeliveryGroups,
   resolveGatePrimaryActionLabel,
   type AgentInterruptPayload,
   type ImageQaMetrics,
@@ -479,9 +480,50 @@ const showCompletionPresentation = computed(
   () => completionPresentation.value?.kind === 'delivery_summary_table',
 )
 const macroFooterHint = computed(() => {
+  const fromPres = String(gatePresentation.value?.body?.footer_hint ?? '').trim()
+  if (fromPres) return fromPres
   if (!awaitingMacroSchemeSelect.value || macroSelections.value.length < 2) return ''
   const expectedCount = gatePresentation.value?.body?.expected_delivery_count ?? null
   return buildMacroAbFooterHint(macroSelections.value.length, expectedCount)
+})
+const deliveryGroupsForUi = computed(() => {
+  const fromPres = gatePresentation.value?.body?.groups
+  if (fromPres?.length) return fromPres
+  if (!awaitingDeliveryConfirm.value || !productVisualSchemeV2.value) return []
+  return buildClientDeliveryGroups(
+    shotManifest.value,
+    deliveryGenByKey.value,
+    userRequestLabels.value,
+    deliverySelections.value,
+  )
+})
+const deliveryPresentationForUi = computed((): AgentPresentationEnvelope | null => {
+  if (!awaitingDeliveryConfirm.value) return null
+  if (gatePresentation.value?.kind === 'delivery_cards' && deliveryGroupsForUi.value.length) {
+    return {
+      ...gatePresentation.value,
+      body: {
+        ...gatePresentation.value.body,
+        groups: deliveryGroupsForUi.value,
+        footer_hint:
+          gatePresentation.value.body?.footer_hint
+          ?? (deliveryGroupsForUi.value.length
+            ? `确认后将交付 ${deliveryGroupsForUi.value.length} 张定稿图`
+            : undefined),
+      },
+    }
+  }
+  if (!productVisualSchemeV2.value || !deliveryGroupsForUi.value.length) return null
+  return {
+    kind: 'delivery_cards',
+    stepper: { current: 'delivery', completed: ['image_qa', 'scheme_draft', 'macro_select', 'generating'] },
+    body: {
+      hint: '按场景切换定稿图；切换候选不会重新生成。',
+      groups: deliveryGroupsForUi.value,
+      footer_hint: `确认后将交付 ${deliveryGroupsForUi.value.length} 张定稿图`,
+    },
+    primary_action: { label: '确认全部定稿', message: '确认全部定稿' },
+  }
 })
 const gatePrimaryActionLabel = computed(() =>
   resolveGatePrimaryActionLabel(gatePresentation.value, interruptGate.value?.phase ?? null),
@@ -492,10 +534,7 @@ const showGatePresentation = computed(
     (awaitingShotConfirm.value || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)),
 )
 const showDeliveryPresentation = computed(
-  () =>
-    awaitingDeliveryConfirm.value &&
-    gatePresentation.value?.kind === 'delivery_cards' &&
-    Boolean(gatePresentation.value?.body?.groups?.length),
+  () => awaitingDeliveryConfirm.value && Boolean(deliveryPresentationForUi.value),
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
@@ -796,7 +835,10 @@ const isProductVisualSkill = computed(() => activeSkillId.value === 'product-vis
 const skillButtonLabel = computed(() => activeSkill.value?.label ?? '技能')
 const inputPlaceholder = computed(() => agentInputPlaceholder(activeSkill.value))
 const showProductVisualEmptyState = computed(
-  () => isProductVisualSkill.value && !agent.messages.length && !props.readOnly,
+  () =>
+    isProductVisualSkill.value
+    && !props.readOnly
+    && !agent.messages.some((m) => m.role === 'user'),
 )
 const showProductVisualAttachmentHint = computed(
   () => isProductVisualSkill.value && !props.readOnly,
@@ -2231,11 +2273,11 @@ defineExpose({
               @confirm-all="sendDeliveryConfirmAll"
             />
             <div
-              v-else-if="showDeliveryPresentation && gatePresentation"
+              v-else-if="showDeliveryPresentation && deliveryPresentationForUi"
               class="mb-2"
             >
               <AgentPresentationHost
-                :presentation="gatePresentation"
+                :presentation="deliveryPresentationForUi"
                 :delivery-selections="deliverySelections"
                 :disabled="agent.isStreaming"
                 @primary-action="onDeliveryPrimaryAction"
@@ -2243,48 +2285,6 @@ defineExpose({
                 @focus-node="emit('focusNode', $event)"
                 @focus-all="emit('focusAll', $event)"
               />
-            </div>
-            <div
-              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length && !showDeliveryPresentation"
-              class="mb-2 space-y-2 px-0.5"
-            >
-              <div
-                v-for="shot in shotManifest"
-                :key="shot.shot_id"
-                class="rounded-lg border border-[var(--neo-border)] p-2 text-xs"
-              >
-                <div class="mb-1 font-medium">
-                  {{ shot.label || shot.shot_id }}
-                  <span v-if="shot.macro_scheme_id" class="ml-1 text-[var(--neo-muted)]">
-                    方案{{ shot.macro_scheme_id }}
-                  </span>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <button
-                    v-for="variantKey in (
-                      (shot.variant_count ?? 1) === 1
-                        ? [shot.shot_id]
-                        : Array.from({ length: Math.min(3, shot.variant_count ?? 1) }, (_, i) => `${shot.shot_id}__v${i + 1}`)
-                    )"
-                    :key="variantKey"
-                    type="button"
-                    class="neo-ctl rounded px-2 py-1"
-                    :class="{ 'agent-preset-primary font-medium': deliverySelections[shot.shot_id] === variantKey }"
-                    :disabled="agent.isStreaming || !deliveryGenByKey[variantKey]?.url"
-                    @click="sendMessage(buildShotDeliverySwitchMessage(shot.shot_id, variantKey))"
-                  >
-                    {{ variantKey.includes('__v') ? variantKey.split('__v').pop() : '默认' }}
-                  </button>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
-                :disabled="agent.isStreaming"
-                @click="sendMessage(buildShotDeliveryConfirmMessage(deliverySelections), 'confirm')"
-              >
-                确认全部定稿
-              </button>
             </div>
             <div v-else-if="showCompletionPresentation && completionPresentation" class="mb-2">
               <AgentPresentationHost
