@@ -7,6 +7,7 @@ from app.graph.product_visual_copy import ProductVisualCopy
 from app.graph.product_visual_v2.presentation import (
     build_context_recap,
     build_presentation_envelope,
+    compute_expected_delivery,
     phase_to_stepper,
 )
 
@@ -134,3 +135,43 @@ def test_topo_primary_action_label_distinct_from_shot():
     assert topo_env["primary_action"]["label"] != shot_env["primary_action"]["label"]
     assert "分钟" in topo_env["primary_action"]["label"]
     assert "2" in topo_env["body"]["text"]
+
+
+def test_macro_select_envelope_includes_ab_expectation():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    state = {
+        "macro_schemes": [{"id": "A"}, {"id": "B"}],
+        "selected_macro_scheme_ids": ["A", "B"],
+        "shot_manifest": [
+            {"shot_id": "packaging_hero__1", "macro_scheme_id": "A"},
+            {"shot_id": "unboxing__1", "macro_scheme_id": "B"},
+            {"shot_id": "gift_scene__1", "macro_scheme_id": "A"},
+        ],
+        "visual_intent": {"primary_goal": "礼盒"},
+        "route_context": {},
+    }
+    env = build_presentation_envelope(
+        kind="macro_scheme_cards",
+        phase="await_macro_scheme_select",
+        state=state,
+        copy=copy,
+    )
+    footer = env["body"]["footer_hint"]
+    assert "2 套" in footer or "两套" in footer
+    assert env["body"]["expected_delivery_count"] >= 1
+
+
+def test_compute_expected_delivery_mixed_mode():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    delivery = compute_expected_delivery(
+        ["A", "B"],
+        [
+            {"shot_id": "packaging_hero__1"},
+            {"shot_id": "unboxing__1"},
+            {"shot_id": "gift_scene__1"},
+        ],
+        copy=copy,
+    )
+    assert delivery["total_finalize"] == 3
+    assert delivery["scene_count"] == 3
+    assert "2 套" in delivery["allocation_note"] or "两套" in delivery["allocation_note"]

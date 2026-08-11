@@ -4,6 +4,7 @@ import {
   defaultDeliverySelections,
   defaultMacroSchemeSelection,
   buildMacroSchemeConfirmMessage,
+  buildMacroAbFooterHint,
   defaultShotDeliverySelections,
   IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
@@ -144,6 +145,23 @@ describe('buildMacroSchemeConfirmMessage', () => {
     const msg = buildMacroSchemeConfirmMessage(['A', 'B'])
     expect(msg).toContain('__macro_scheme_decision__')
     expect(msg).toContain('"selected_ids":["A","B"]')
+  })
+})
+
+describe('buildMacroAbFooterHint', () => {
+  it('returns empty for single selection', () => {
+    expect(buildMacroAbFooterHint(1, 3)).toBe('')
+  })
+
+  it('includes k and p for dual selection', () => {
+    const hint = buildMacroAbFooterHint(2, 3)
+    expect(hint).toContain('2 套')
+    expect(hint).toContain('3 张')
+    expect(hint).toContain('A/B')
+  })
+
+  it('uses 若干 when delivery count unknown', () => {
+    expect(buildMacroAbFooterHint(2, 0)).toContain('若干')
   })
 })
 

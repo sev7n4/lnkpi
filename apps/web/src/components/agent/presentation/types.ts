@@ -12,6 +12,8 @@ export interface AgentPresentationPrimaryAction {
 
 export interface AgentPresentationBody {
   text?: string
+  footer_hint?: string
+  expected_delivery_count?: number
   checks?: Array<{ label: string; ok: boolean }>
 }
 

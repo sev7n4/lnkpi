@@ -101,6 +101,35 @@ def _eta_min(scene_count: int) -> int:
     return max(3, 2 + scene_count)
 
 
+def compute_expected_delivery(
+    selected_macro_ids: list[str],
+    shots: list[dict[str, Any]],
+    *,
+    allocation_mode: str = "mixed",
+    copy: ProductVisualCopy | None = None,
+) -> dict[str, Any]:
+    """Compute finalize count and A+B allocation note for macro selection UX."""
+    selected = [str(s).strip() for s in selected_macro_ids if str(s).strip()]
+    k = len(selected)
+    scene_count = len([s for s in shots if isinstance(s, dict)]) if isinstance(shots, list) else 0
+
+    if allocation_mode == "full_matrix":
+        total_finalize = scene_count * k if scene_count > 0 else 0
+    else:
+        total_finalize = scene_count
+
+    allocation_note = ""
+    if copy and k >= 2:
+        p_str = str(total_finalize) if total_finalize > 0 else "若干"
+        allocation_note = copy.get("macro.ab_hint_mixed", k=str(k), p=p_str)
+
+    return {
+        "scene_count": scene_count,
+        "total_finalize": total_finalize,
+        "allocation_note": allocation_note,
+    }
+
+
 def build_presentation_envelope(
     *,
     kind: str,
@@ -132,5 +161,23 @@ def build_presentation_envelope(
         label = copy.get("topo.primary_label", eta_min=str(eta_min))
         envelope["primary_action"] = {"label": label, "message": "确认出图"}
         envelope["body"] = {"text": hint}
+    elif phase == "await_macro_scheme_select":
+        from app.graph.product_visual_v2.macro_select import default_macro_selection
+
+        selected = [
+            str(s).strip()
+            for s in (state.get("selected_macro_scheme_ids") or default_macro_selection(state.get("macro_schemes") or []))
+            if str(s).strip()
+        ]
+        delivery = compute_expected_delivery(
+            selected,
+            state.get("shot_manifest") or [],
+            copy=copy,
+        )
+        body: dict[str, Any] = {}
+        if len(selected) >= 2 and delivery["allocation_note"]:
+            body["footer_hint"] = delivery["allocation_note"]
+            body["expected_delivery_count"] = delivery["total_finalize"]
+        envelope["body"] = body
 
     return envelope

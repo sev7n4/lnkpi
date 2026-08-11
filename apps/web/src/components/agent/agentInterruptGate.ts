@@ -167,6 +167,20 @@ export function buildMacroSchemeConfirmMessage(selectedIds: string[]): string {
   return `${MACRO_SCHEME_DECISION_PREFIX}${payload}`
 }
 
+/** A+B macro footer hint — mirrors runtime copy macro.ab_hint_mixed. */
+export function buildMacroAbFooterHint(
+  selectedCount: number,
+  expectedDeliveryCount?: number | null,
+): string {
+  if (selectedCount < 2) return ''
+  const k = String(selectedCount)
+  const p =
+    expectedDeliveryCount != null && expectedDeliveryCount > 0
+      ? String(expectedDeliveryCount)
+      : '若干'
+  return `已选 ${k} 套风格 → 预计场景图 ${p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。`
+}
+
 /** Default variant key per shot (first ready gen key). */
 export function defaultShotDeliverySelections(
   shots: ProductVisualShot[] | null | undefined,

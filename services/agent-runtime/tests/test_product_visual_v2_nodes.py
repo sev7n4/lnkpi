@@ -15,6 +15,7 @@ from app.graph.nodes.macro_scheme_select_gate import (
     classify_macro_scheme_decision,
 )
 from app.graph.product_visual_v2.models import MacroScheme
+from app.graph.product_visual_v2.ssot import ssot_section_keys
 
 
 class FakeLLM:
@@ -152,3 +153,23 @@ def test_build_ssot_ab_sections():
     )
     assert "## 方案 A" in content
     assert "## 方案 B" in content
+    assert ssot_section_keys(content) == ["A", "B"]
+
+
+def test_build_ssot_ab_sections_from_marked_draft():
+    body_a = "红金礼盒方案正文。" * 8
+    body_b = "极简牛皮方案正文。" * 8
+    draft = f"## 方案 A\n\n{body_a}\n\n## 方案 B\n\n{body_b}"
+    content = build_ssot_content_from_state(
+        {
+            "macro_scheme_draft": draft,
+            "selected_macro_scheme_ids": ["A", "B"],
+            "macro_schemes": [
+                {"id": "A", "label": "A"},
+                {"id": "B", "label": "B"},
+            ],
+        }
+    )
+    assert ssot_section_keys(content) == ["A", "B"]
+    assert body_a.strip() in content
+    assert body_b.strip() in content

@@ -43,6 +43,7 @@ import {
   interruptPayloadFromThreadState,
   buildSchemeConfirmMessage,
   buildMacroSchemeConfirmMessage,
+  buildMacroAbFooterHint,
   buildVisualIntentSummary,
   buildDeliveryConfirmMessage,
   buildDeliveryRefineMessage,
@@ -410,6 +411,11 @@ const awaitingShotConfirm = computed(
     interruptGate.value?.node === 'await_shot_confirm',
 )
 const gatePresentation = computed(() => interruptGate.value?.presentation ?? null)
+const macroFooterHint = computed(() => {
+  if (!awaitingMacroSchemeSelect.value || macroSelections.value.length < 2) return ''
+  const expectedCount = gatePresentation.value?.body?.expected_delivery_count ?? null
+  return buildMacroAbFooterHint(macroSelections.value.length, expectedCount)
+})
 const showGatePresentation = computed(
   () =>
     Boolean(gatePresentation.value?.primary_action) &&
@@ -1882,6 +1888,13 @@ defineExpose({
                   </label>
                 </div>
               </div>
+              <p
+                v-if="macroFooterHint"
+                class="mt-2 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-footer-hint"
+              >
+                {{ macroFooterHint }}
+              </p>
               <div class="mt-2 flex flex-wrap gap-2">
                 <button
                   type="button"

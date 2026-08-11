@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 from app.graph.nodes.plan._shared import latest_user_text
 from app.graph.product_visual_v2.models import DialogDraftOutput, parse_dialog_draft_output
 from app.graph.product_visual_v2.macro_select import default_macro_selection, should_skip_macro_hitl
+from app.graph.nodes.macro_scheme_select_gate import build_macro_select_presentation_patch
 from app.graph.product_visual_v2.routing import route_after_dialog_draft
 from app.graph.product_visual_v2_prompt import (
     build_dialog_draft_messages,
@@ -76,6 +77,8 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
         if should_skip_macro_hitl(macro_schemes):
             out["selected_macro_scheme_ids"] = default_macro_selection(macro_schemes)
             out["macro_scheme_decision"] = "auto"
+        elif next_phase == "await_macro_scheme_select":
+            out.update(build_macro_select_presentation_patch(out))
         return out
 
     return dialog_draft

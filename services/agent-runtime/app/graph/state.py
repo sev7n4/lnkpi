@@ -220,6 +220,7 @@ class AgentRuntimeState(TypedDict, total=False):
     selected_macro_scheme_ids: list[str] | None
     macro_scheme_decision: Literal["none", "confirm", "revise", "auto"] | None
     shot_manifest: list[dict] | None
+    expected_delivery_count: int | None
     visual_intent: dict | None
     requires_standard_product_assets: bool | None
     image_qa_reason: str | None
