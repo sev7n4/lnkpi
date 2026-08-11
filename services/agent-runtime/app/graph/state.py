@@ -230,3 +230,5 @@ class AgentRuntimeState(TypedDict, total=False):
     image_qa_reason: str | None
     image_qa_metrics: dict | None
     vision_used: bool | None
+    # UX-PV: structured sidebar envelope (shot/topo/delivery/done gates)
+    presentation: dict | None

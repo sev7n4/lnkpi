@@ -100,16 +100,57 @@ const MACHINE_PAYLOAD_PREFIXES = [
   DELIVERY_DECISION_PREFIX,
 ] as const
 
-/** Strip machine-only resume payloads from assistant visible text (spec §2.3). */
-export function filterAssistantVisibleText(content: string): string {
+const INTERNAL_QA_ERROR_SNIPPETS = [
+  '识图模型返回格式异常',
+  'vision_format_error',
+  'format_error',
+] as const
+
+function lineHasMachinePayload(line: string): boolean {
+  const trimmed = line.trimStart().replace(/^["']+|["']+$/g, '')
+  return MACHINE_PAYLOAD_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+}
+
+function filterMachinePayloadLines(content: string): string {
   return content
     .split('\n')
-    .filter(
-      (line) =>
-        !MACHINE_PAYLOAD_PREFIXES.some((prefix) => line.trimStart().startsWith(prefix)),
-    )
+    .filter((line) => !lineHasMachinePayload(line))
     .join('\n')
     .trim()
+}
+
+/** Strip machine-only resume payloads from visible text (spec §2.3). */
+export function filterUserVisibleText(content: string): string {
+  return filterMachinePayloadLines(content)
+}
+
+/** True when bubble content is only machine resume JSON (hide user/assistant bubble). */
+export function isMachineOnlyVisibleText(content: string): boolean {
+  return !filterMachinePayloadLines(content).trim()
+}
+
+/** Strip machine payloads and internal QA error strings from assistant visible text. */
+export function filterAssistantVisibleText(content: string): string {
+  return filterMachinePayloadLines(content)
+    .split('\n')
+    .filter((line) => !INTERNAL_QA_ERROR_SNIPPETS.some((snippet) => line.includes(snippet)))
+    .join('\n')
+    .trim()
+}
+
+export function resolveGatePrimaryActionLabel(
+  presentation: AgentPresentationEnvelope | null | undefined,
+  phase: string | null | undefined,
+): string {
+  const fromPres = String(presentation?.primary_action?.label ?? '').trim()
+  if (fromPres) return fromPres
+  if (phase === 'await_shot_confirm') return '确认构图，生成预览'
+  if (phase === 'await_shot_topo_confirm' || phase === 'await_topo') {
+    const eta = presentation?.body?.eta_min
+    if (typeof eta === 'number' && eta > 0) return `开始出图（约 ${eta} 分钟）`
+    return '开始出图'
+  }
+  return '确认出图'
 }
 
 /** Default checkbox state: recommended per type, else first scheme. */
