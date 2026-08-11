@@ -217,7 +217,7 @@ def gate_message(ts: dict[str, Any], case: dict[str, Any]) -> str | None:
     active = gate or phase
 
     if active == "await_image_qa" and interrupted:
-        return "生成标准白底图"
+        return "就用这张图，继续"
 
     if active == "await_macro_scheme_select" and (interrupted or ts.get("macroSchemes")):
         schemes = ts.get("macroSchemes") or []
@@ -226,6 +226,9 @@ def gate_message(ts: dict[str, Any], case: dict[str, Any]) -> str | None:
         selected = default_macro_selection(schemes, case)
         payload = json.dumps({"action": "confirm", "selected_ids": selected}, ensure_ascii=False)
         return f"{MACRO_PREFIX}{payload}"
+
+    if active == "await_shot_topo_confirm" and (interrupted or ts.get("shotManifest")):
+        return "确认构图并开始出图"
 
     if active == "await_shot_confirm" and (interrupted or ts.get("shotManifest")):
         return "确认出图"
@@ -365,13 +368,17 @@ def run_case(tok: str, case: dict[str, Any]) -> bool:
             saw_macro = True
         if ts.get("shotManifest"):
             saw_shots = True
-        if gate == "await_topo" or phase == "await_topo":
+        if gate == "await_topo" or phase == "await_topo" or gate == "await_shot_topo_confirm":
             saw_topo = True
 
         assert_v2_checkpoint(case_id, ts)
 
-        if GATE_ONLY and saw_topo and gate == "await_topo" and interrupted:
-            record(f"{case_id} GATE_ONLY reached await_topo", True, f"macros={saw_macro} shots={saw_shots}")
+        if GATE_ONLY and saw_topo and gate in ("await_topo", "await_shot_topo_confirm") and interrupted:
+            record(
+                f"{case_id} GATE_ONLY reached topo gate",
+                True,
+                f"gate={gate} macros={saw_macro} shots={saw_shots}",
+            )
             record(f"{case_id} v2 macro gate seen", saw_macro or len(ts.get("macroSchemes") or []) > 0, "")
             record(f"{case_id} v2 shot manifest seen", saw_shots or bool(ts.get("shotManifest")), "")
             return saw_shots or bool(ts.get("shotManifest"))
