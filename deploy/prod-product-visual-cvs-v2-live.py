@@ -217,7 +217,7 @@ def gate_message(ts: dict[str, Any], case: dict[str, Any]) -> str | None:
     active = gate or phase
 
     if active == "await_image_qa" and interrupted:
-        return "生成标准白底图"
+        return "就用这张图，继续"
 
     if active == "await_macro_scheme_select" and (interrupted or ts.get("macroSchemes")):
         schemes = ts.get("macroSchemes") or []
@@ -226,6 +226,9 @@ def gate_message(ts: dict[str, Any], case: dict[str, Any]) -> str | None:
         selected = default_macro_selection(schemes, case)
         payload = json.dumps({"action": "confirm", "selected_ids": selected}, ensure_ascii=False)
         return f"{MACRO_PREFIX}{payload}"
+
+    if active == "await_shot_topo_confirm" and (interrupted or ts.get("shotManifest")):
+        return "确认构图并开始出图"
 
     if active == "await_shot_confirm" and (interrupted or ts.get("shotManifest")):
         return "确认出图"
