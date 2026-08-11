@@ -388,7 +388,10 @@ export class StudioService {
         throw new Error('missing api key')
       }
       const opts = providerOpts(resolved)
-      const { text, visionUsed } = await generateTextForRefs(mergedText, referenceImages, {
+      const providerRefs = referenceImages.length
+        ? await inlineUpstreamReferenceImages(referenceImages)
+        : referenceImages
+      const { text, visionUsed } = await generateTextForRefs(mergedText, providerRefs, {
         model: gatewayModelId,
         apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
         baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
@@ -1289,7 +1292,8 @@ export class StudioService {
           text = content
           promptMeta = { mode, content }
         } else if (referenceImages.length > 0) {
-          const result = await generateTextForRefs(record.prompt, referenceImages, {
+          const providerRefs = await inlineUpstreamReferenceImages(referenceImages)
+          const result = await generateTextForRefs(record.prompt, providerRefs, {
             model: gatewayModelId,
             apiKey: process.env.OPENAI_API_KEY,
             baseUrl: process.env.OPENAI_BASE_URL,
