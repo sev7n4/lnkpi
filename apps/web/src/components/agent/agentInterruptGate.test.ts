@@ -8,6 +8,8 @@ import {
   buildRetakeContinueMessage,
   defaultShotDeliverySelections,
   filterAssistantVisibleText,
+  filterUserVisibleText,
+  resolveGatePrimaryActionLabel,
   IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
   isRetakePendingPhase,
@@ -213,6 +215,40 @@ describe('filterAssistantVisibleText', () => {
     expect(
       filterAssistantVisibleText('__macro_scheme_decision__{"action":"confirm"}'),
     ).toBe('')
+  })
+
+  it('strips quoted machine payload lines (user confirm bubbles)', () => {
+    expect(
+      filterUserVisibleText(
+        '"__macro_scheme_decision__{\\"action\\":\\"confirm\\",\\"selected_ids\\":[\\"A\\",\\"B\\"]}"',
+      ),
+    ).toBe('')
+  })
+
+  it('filters internal QA error strings from assistant text', () => {
+    expect(
+      filterAssistantVisibleText('识图模型返回格式异常，请重试\n自动识图暂时不可用'),
+    ).toBe('自动识图暂时不可用')
+  })
+})
+
+describe('resolveGatePrimaryActionLabel', () => {
+  it('prefers presentation primary_action label', () => {
+    expect(
+      resolveGatePrimaryActionLabel(
+        {
+          kind: 'shot_table',
+          stepper: { current: 'shot_plan', completed: [] },
+          primary_action: { label: '确认构图，生成预览', message: '确认出图' },
+        },
+        'await_shot_confirm',
+      ),
+    ).toBe('确认构图，生成预览')
+  })
+
+  it('falls back to phase defaults when presentation missing', () => {
+    expect(resolveGatePrimaryActionLabel(null, 'await_shot_confirm')).toBe('确认构图，生成预览')
+    expect(resolveGatePrimaryActionLabel(null, 'await_topo')).toBe('开始出图')
   })
 })
 

@@ -66,6 +66,9 @@ import {
   defaultShotDeliverySelections,
   selectableImageTypes,
   filterAssistantVisibleText,
+  filterUserVisibleText,
+  isMachineOnlyVisibleText,
+  resolveGatePrimaryActionLabel,
   type AgentInterruptPayload,
   type ImageQaMetrics,
   type ProductVisualMacroScheme,
@@ -209,6 +212,18 @@ function dismissHistoryReattachCoachmark() {
 function visibleAssistantContent(msg: AgentStreamMessage): string {
   if (msg.role !== 'assistant') return msg.content ?? ''
   return filterAssistantVisibleText(msg.content ?? '')
+}
+
+function visibleUserContent(msg: AgentStreamMessage): string {
+  if (msg.role !== 'user') return msg.content ?? ''
+  return filterUserVisibleText(msg.content ?? '')
+}
+
+function shouldShowMessageBubbleText(msg: AgentStreamMessage): boolean {
+  if (msg.streaming) return true
+  if (msg.role === 'assistant') return Boolean(visibleAssistantContent(msg).trim())
+  if (msg.role === 'user') return !isMachineOnlyVisibleText(msg.content ?? '')
+  return Boolean((msg.content ?? '').trim())
 }
 
 function shouldRenderSchemeDraftProse(msg: AgentStreamMessage): boolean {
@@ -468,6 +483,9 @@ const macroFooterHint = computed(() => {
   const expectedCount = gatePresentation.value?.body?.expected_delivery_count ?? null
   return buildMacroAbFooterHint(macroSelections.value.length, expectedCount)
 })
+const gatePrimaryActionLabel = computed(() =>
+  resolveGatePrimaryActionLabel(gatePresentation.value, interruptGate.value?.phase ?? null),
+)
 const showGatePresentation = computed(
   () =>
     Boolean(gatePresentation.value?.primary_action) &&
@@ -1027,9 +1045,7 @@ async function refreshThreadCheckpoint() {
       )
     }
     const gatePayload = interruptPayloadFromThreadState(json.data)
-    if (gatePayload) {
-      interruptGate.value = gatePayload
-    }
+    interruptGate.value = gatePayload
   } catch {
     // ignore — checkpoint hint is best-effort
   }
@@ -1619,9 +1635,11 @@ function handleEvent(event: { type: string; data: unknown }) {
       const data = event.data as {
         retakePending?: boolean
         effectiveUtterance?: string | null
+        phase?: string | null
         presentation?: AgentPresentationEnvelope | null
       }
       syncRetakeFromPayload(data)
+      syncCompletionPresentation(data.phase ?? null, data.presentation)
       if (data.retakePending && data.presentation) {
         interruptGate.value = {
           interrupted: true,
@@ -1905,8 +1923,12 @@ defineExpose({
                   v-if="shouldRenderSchemeDraftProse(msg)"
                   :content="msg.content"
                 />
-                <p v-else class="whitespace-pre-wrap">
-                  {{ visibleAssistantContent(msg) }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
+                <p v-else-if="shouldShowMessageBubbleText(msg)" class="whitespace-pre-wrap">
+                  {{
+                    msg.role === 'user'
+                      ? visibleUserContent(msg)
+                      : visibleAssistantContent(msg)
+                  }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
                   <span
                     v-if="msg.role === 'assistant' && msg.executionTrace?.totalMs != null && !msg.streaming"
                     class="ml-1 text-[11px] opacity-60"
@@ -2332,7 +2354,7 @@ defineExpose({
                   :disabled="agent.isStreaming"
                   @click="sendShotConfirm()"
                 >
-                  确认出图
+                  {{ gatePrimaryActionLabel }}
                 </button>
                 <button
                   type="button"
@@ -2349,9 +2371,9 @@ defineExpose({
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('确认出图')"
+                @click="sendPreset(gatePresentation?.primary_action?.message ?? '确认出图')"
               >
-                确认出图
+                {{ gatePrimaryActionLabel }}
               </button>
               <button
                 type="button"

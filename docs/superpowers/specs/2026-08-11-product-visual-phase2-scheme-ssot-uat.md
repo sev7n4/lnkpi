@@ -379,8 +379,26 @@
 | `shot_table` 表格 UI | ✅ 已补 | `AgentShotTable.vue` + envelope `body.shots[]` |
 | 画布产出默认 5 项折叠 | ✅ 已有 | `COLLAPSE_THRESHOLD=5`（`agentCanvasOutputs.ts`） |
 | 合并门控生产开关 | 📋 待运维 | 代码已就绪；生产设 `LNKPI_PV_MERGED_SHOT_TOPO_GATE=true` 后跑 UAT-UX-PV-10 |
-| §十 正式 Sign-off | ⏳ 待跑 | 合并/deploy 后在生产浏览器复跑 §10.1~10.3 |
+| §十 正式 Sign-off | ⏳ 待复测 | 2026-08-12 生产浏览器跑通后半段；P0 Fail 见 §10.6，#226 修复 `presentation` checkpoint + machine 文本过滤 |
 | 出图中途后端 cancel | ⏳ 规格化 | 见 [2026-08-12-agent-mid-run-interrupt-design.md](./2026-08-12-agent-mid-run-interrupt-design.md) |
+
+### 10.6 生产浏览器 UAT 记录（2026-08-12，#225 部署后）
+
+**环境：** `http://119.29.173.89:8888` · 画布 `cmsome3or004as601j0tkzh1u` · CVS-02-AB 口语 · A+B 双选
+
+| UAT-ID | 结果 | 备注 |
+|--------|------|------|
+| UX-PV-01 | ⚠️ | 友好按钮 +「自动识图暂时不可用」；历史气泡仍见内部 reason（#226 前端过滤） |
+| UX-PV-02 | ❌→修 | 两阶段均「确认出图」；根因 `presentation` 未入 checkpoint（#226） |
+| UX-PV-03 | ⚠️ | A+B 可双选；footer 预计张数/分配策略未稳定可见 |
+| UX-PV-04~05 | ✅ | 口语未污染；需求摘要结构正确 |
+| UX-PV-06 | ⚠️ | topo 门控出现；未目视卡片 vs mermaid（presentation 丢失时走 legacy 钮） |
+| UX-PV-07 | ⚠️ | 节点级进度 + 任务列表；非严格 a/b 计数 |
+| UX-PV-08 | ⚠️ | 「确认全部定稿」可用；分组标题多为 shot label /「默认」，缺用户原话 + `[方案A/B]` |
+| UX-PV-09 | ❌→修 | 结束仅「✅ 您的packaging_design视觉稿已就绪」；交付清单表未渲染（#226） |
+| UX-PV-11 | ❌→修 | 用户气泡可见 `__macro_scheme_decision__` / `__delivery_decision__`（#226 隐藏） |
+| §10.5 取消钮 | ✅ | streaming →「取消生成」 |
+| §10.5 画布折叠 | ✅ | 「展开全部 5/23 项」 |
 
 ---
 
@@ -399,6 +417,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-12 | v1.3 | §10.6 生产 UAT 记录 + #226 修复项追踪 |
 | 2026-08-12 | v1.2 | §10.5 闭环补项追踪；链至中断改意图规格 |
 | 2026-08-11 | v1.1 | 新增 §十 UX-PV-01~13；CVS-02-AB 口语路径；§七 G8~G10 |
 | 2026-08-11 | v1.0 | 初稿：Phase 2 方案层功能 UAT |

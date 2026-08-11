@@ -910,11 +910,18 @@ async def stream_run_events(
                         },
                     )
                 )
-            await emit({"type": "done", "data": {
-                **({"retakePending": True} if post_vals.get("retake_pending") else {}),
-                **({"effectiveUtterance": post_vals.get("effective_utterance")} if post_vals.get("retake_pending") and post_vals.get("effective_utterance") else {}),
-                **({"presentation": post_vals.get("presentation")} if post_vals.get("retake_pending") and isinstance(post_vals.get("presentation"), dict) else {}),
-            }})
+            done_payload: dict[str, Any] = {}
+            if post_vals.get("retake_pending"):
+                done_payload["retakePending"] = True
+                if post_vals.get("effective_utterance"):
+                    done_payload["effectiveUtterance"] = post_vals.get("effective_utterance")
+            post_phase = post_vals.get("phase")
+            if post_phase is not None:
+                done_payload["phase"] = str(post_phase)
+            post_presentation = post_vals.get("presentation")
+            if isinstance(post_presentation, dict):
+                done_payload["presentation"] = post_presentation
+            await emit({"type": "done", "data": done_payload})
         except AgentToolError as exc:
             record_stream_error(exc.error["error_type"])
             await emit({"type": "error", "data": error_to_sse_payload(exc.error)})
