@@ -128,6 +128,18 @@ emit `task_update`：`running` → `done` / `failed`
 - plan 摘要避免 manifest 机器列表裸露
 - busy tip / 出图汇总保持短句 + 任务卡
 
+### 5.1 product_visual v2（2026-08-11 延伸）
+
+实物产品视觉出图（`flow_mode: product_visual` + scheme v2）的 **门控呈现、卡片/表格选型、13 类 UAT 问题清单** 见：
+
+**[2026-08-11-agent-conversation-ux-product-visual-design.md](./2026-08-11-agent-conversation-ux-product-visual-design.md)**
+
+要点：
+
+- 门控消息使用 **presentation envelope**（`presentation_kind` + 槽位），非侧栏硬编码
+- 延续本文 §0 原则；冲突时 product_visual 专用章节以延伸规格为准
+- machine payload（`__macro_scheme_decision__` 等）禁止出现在 assistant 可见正文
+
 ---
 
 ## 6. 验收

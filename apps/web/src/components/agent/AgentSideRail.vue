@@ -1318,6 +1318,7 @@ async function reconnectStream() {
         productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+        userRequestLabels?: string[] | null
         presentation?: AgentPresentationEnvelope | null
       } | null
     }

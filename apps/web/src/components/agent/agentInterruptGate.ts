@@ -372,7 +372,8 @@ export function interruptPayloadFromThreadState(
     | null
     | undefined,
 ): AgentInterruptPayload | null {
-  if (!data?.interrupted && !isRetakePendingPhase(data)) return null
+  if (!data) return null
+  if (!data.interrupted && !isRetakePendingPhase(data)) return null
   return {
     interrupted: true,
     phase: data.phase ?? null,
