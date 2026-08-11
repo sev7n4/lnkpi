@@ -457,7 +457,7 @@ async function sendMacroSchemeRevise() {
 }
 
 async function sendShotConfirm() {
-  await sendMessage('确认出图', 'confirm_gen')
+  await sendPreset('确认出图')
 }
 
 async function sendShotRevise() {
