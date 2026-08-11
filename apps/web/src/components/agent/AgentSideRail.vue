@@ -201,6 +201,11 @@ function dismissHistoryReattachCoachmark() {
   }
 }
 
+function visibleAssistantContent(msg: AgentStreamMessage): string {
+  if (msg.role !== 'assistant') return msg.content ?? ''
+  return filterAssistantVisibleText(msg.content ?? '')
+}
+
 function shouldRenderSchemeDraftProse(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'assistant' || msg.streaming) return false
   const { prose } = splitAssistantDraftMessage(msg.content ?? '')
@@ -251,7 +256,7 @@ function canShowMessageActions(msg: AgentStreamMessage): boolean {
   if (msg.role !== 'assistant' || msg.streaming) return false
   if (isLiveTurnMessage(msg) && (agent.isStreaming || showTaskCard.value)) return false
   return Boolean(
-    msg.content.trim()
+    visibleAssistantContent(msg).trim()
     || (assistantOutputsById.value.get(msg.id)?.length ?? 0) > 0
     || msg.executionTrace,
   )
@@ -268,7 +273,7 @@ function toggleMessageFeedback(msgId: string, vote: 'up' | 'down') {
 }
 
 async function copyAssistantMessage(msg: AgentStreamMessage) {
-  const text = msg.content.trim()
+  const text = visibleAssistantContent(msg).trim()
   if (!text) return
   try {
     await copyTextToClipboard(text)
@@ -420,7 +425,9 @@ const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme
 const awaitingShotConfirm = computed(
   () =>
     interruptGate.value?.phase === 'await_shot_confirm' ||
-    interruptGate.value?.node === 'await_shot_confirm',
+    interruptGate.value?.node === 'await_shot_confirm' ||
+    interruptGate.value?.phase === 'await_shot_topo_confirm' ||
+    interruptGate.value?.node === 'await_shot_topo_confirm',
 )
 const gatePresentation = computed(() => interruptGate.value?.presentation ?? null)
 const completionPresentation = ref<AgentPresentationEnvelope | null>(null)
@@ -1504,6 +1511,8 @@ function handleEvent(event: { type: string; data: unknown }) {
         data.node === 'await_macro_scheme_select' ||
         data.phase === 'await_shot_confirm' ||
         data.node === 'await_shot_confirm' ||
+        data.phase === 'await_shot_topo_confirm' ||
+        data.node === 'await_shot_topo_confirm' ||
         data.phase === 'await_delivery_confirm' ||
         data.node === 'await_delivery_confirm'
       ) {
@@ -1784,7 +1793,7 @@ defineExpose({
                   :content="msg.content"
                 />
                 <p v-else class="whitespace-pre-wrap">
-                  {{ msg.content }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
+                  {{ visibleAssistantContent(msg) }}<span v-if="msg.streaming" class="animate-pulse">▊</span>
                   <span
                     v-if="msg.role === 'assistant' && msg.executionTrace?.totalMs != null && !msg.streaming"
                     class="ml-1 text-[11px] opacity-60"

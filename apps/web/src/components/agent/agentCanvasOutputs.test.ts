@@ -48,14 +48,14 @@ describe('buildCanvasOutputs', () => {
 })
 
 describe('shouldCollapseOutputs', () => {
-  it('collapse threshold is 4', () => {
-    expect(shouldCollapseOutputs(4)).toBe(false)
-    expect(shouldCollapseOutputs(5)).toBe(true)
+  it('collapse threshold is 5', () => {
+    expect(shouldCollapseOutputs(5)).toBe(false)
+    expect(shouldCollapseOutputs(6)).toBe(true)
   })
 
-  it('shows 3 items when collapsed', () => {
-    expect(visibleOutputCount(5, false)).toBe(3)
-    expect(visibleOutputCount(5, true)).toBe(5)
+  it('shows 5 items when collapsed', () => {
+    expect(visibleOutputCount(6, false)).toBe(5)
+    expect(visibleOutputCount(6, true)).toBe(6)
   })
 })
 

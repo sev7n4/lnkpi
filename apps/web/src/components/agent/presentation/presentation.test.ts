@@ -92,4 +92,30 @@ describe('AgentPresentationHost', () => {
     await wrapper.find('[data-testid="primary-action"]').trigger('click')
     expect(wrapper.emitted('focusAll')?.[0]?.[0]).toEqual(['node-hero', 'node-gift', 'node-seed'])
   })
+
+  it('renders shot_topo_merged with topo cards and merged primary label', () => {
+    const mergedEnvelope: AgentPresentationEnvelope = {
+      kind: 'shot_topo_merged',
+      stepper: {
+        current: 'topo_preview',
+        completed: ['image_qa', 'scheme_draft', 'macro_select', 'ssot_persist', 'shot_plan'],
+      },
+      context_recap: '巨峰葡萄礼盒',
+      body: {
+        text: '共 3 个构图；确认后将生成白底及 2 张场景图。',
+        nodes: topoEnvelope.body!.nodes,
+        eta_min: 4,
+        scene_count: 2,
+        credits_hint: '约 20 积分',
+      },
+      primary_action: { label: '确认构图并开始出图', message: '确认出图' },
+    }
+    const wrapper = mount(AgentPresentationHost, {
+      props: { presentation: mergedEnvelope },
+    })
+    expect(wrapper.find('[data-testid="topo-card-list"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="primary-action"]').text()).toBe('确认构图并开始出图')
+    expect(wrapper.classes()).toContain('agent-presentation-host--gate')
+    expect(wrapper.find('.agent-presentation-host__actions').exists()).toBe(true)
+  })
 })

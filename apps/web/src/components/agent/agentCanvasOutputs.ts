@@ -2,8 +2,8 @@ import type { CanvasAction, LinkedCanvasOutput } from '@lnkpi/shared'
 import type { AgentTaskItem } from './agentTaskProgress'
 import type { ExecutionStep } from './executionTraceReducer'
 
-export const COLLAPSE_THRESHOLD = 4
-export const COLLAPSE_VISIBLE_COUNT = 3
+export const COLLAPSE_THRESHOLD = 5
+export const COLLAPSE_VISIBLE_COUNT = 5
 export const TITLE_MAX_LEN = 20
 
 export interface BuildCanvasOutputsOpts {
