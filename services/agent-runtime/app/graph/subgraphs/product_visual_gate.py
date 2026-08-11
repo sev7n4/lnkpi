@@ -27,11 +27,18 @@ from app.graph.nodes.scheme_select_gate import (
     route_after_await_scheme_select,
 )
 from app.graph.state import AgentRuntimeState
+from app.graph.product_visual_v2.routing import is_v2_enabled, route_after_image_qa_check_v2
+from app.graph.subgraphs.product_visual_v2_gate import register_product_visual_v2_nodes
 
 
 def route_after_image_qa_check(state: AgentRuntimeState) -> str:
     if state.get("phase") == "error":
         return "done"
+    if is_v2_enabled(state):
+        target = route_after_image_qa_check_v2(state)
+        if target in ("done", "end"):
+            return "end" if target == "end" else "done"
+        return target
     result = state.get("image_qa_result")
     if result in ("pass", "remediated"):
         return "plan_product_visual"
@@ -51,6 +58,8 @@ def route_after_image_qa_remedy(state: AgentRuntimeState) -> str:
     if state.get("phase") == "error":
         return "done"
     if state.get("image_qa_decision") == "ai_white_bg":
+        if is_v2_enabled(state):
+            return "dialog_draft"
         return "plan_product_visual"
     return "end"
 
@@ -97,12 +106,15 @@ def register_product_visual_gate(
     )
     graph.add_node("delivery_summary", make_delivery_summary_node())
     graph.add_node("await_delivery_confirm", make_await_delivery_confirm_node())
+    register_product_visual_v2_nodes(graph, llm=llm, skills_dir=resolved_skills, nest=nest)
 
     graph.add_conditional_edges(
         "image_qa_check",
         route_after_image_qa_check,
         {
             "plan_product_visual": "plan_product_visual",
+            "dialog_draft": "dialog_draft",
+            "phase1_seed_eager": "dialog_draft",
             "await_image_qa": "await_image_qa",
             "done": "done",
             "end": END,
@@ -121,6 +133,7 @@ def register_product_visual_gate(
         route_after_image_qa_remedy,
         {
             "plan_product_visual": "plan_product_visual",
+            "dialog_draft": "dialog_draft",
             "done": "done",
             "end": END,
         },
@@ -193,5 +206,11 @@ def build_product_visual_gate_subgraph(
     graph.add_edge("done", END)
     return graph.compile(
         checkpointer=checkpointer,
-        interrupt_before=["await_image_qa", "await_scheme_select", "await_delivery_confirm"],
+        interrupt_before=[
+            "await_image_qa",
+            "await_scheme_select",
+            "await_macro_scheme_select",
+            "await_shot_confirm",
+            "await_delivery_confirm",
+        ],
     )

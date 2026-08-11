@@ -555,6 +555,12 @@ async def get_thread_state(
         "interrupted": bool(next_nodes),
         "finished": phase_str == "done" or (not next_nodes and bool(vals)),
         "productVisualPlan": plan if isinstance(plan, dict) else None,
+        "macroSchemes": vals.get("macro_schemes") if isinstance(vals.get("macro_schemes"), list) else None,
+        "shotManifest": vals.get("shot_manifest") if isinstance(vals.get("shot_manifest"), list) else None,
+        "visualIntent": vals.get("visual_intent") if isinstance(vals.get("visual_intent"), dict) else None,
+        "productVisualSchemeV2": bool(vals.get("product_visual_scheme_v2"))
+        if vals.get("product_visual_scheme_v2") is not None
+        else None,
         "deliverySelections": delivery_selections if isinstance(delivery_selections, dict) else None,
         "deliveryGenByKey": gen_by_key if isinstance(gen_by_key, dict) else None,
         **diag,

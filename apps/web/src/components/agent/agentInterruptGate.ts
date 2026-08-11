@@ -33,6 +33,22 @@ export interface ProductVisualPlan {
   image_types: ProductVisualImageType[]
 }
 
+export interface ProductVisualMacroScheme {
+  id: string
+  label?: string | null
+  summary?: string | null
+  recommended?: boolean
+  recommend_reason?: string | null
+}
+
+export interface ProductVisualShot {
+  shot_id: string
+  type_id: string
+  label?: string | null
+  macro_scheme_id?: string | null
+  variant_count?: number
+}
+
 const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_confirm: 'plan',
   await_copy_confirm: 'copy',
@@ -40,6 +56,8 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_atomic_confirm: 'atomic',
   await_image_qa: 'image_qa',
   await_scheme_select: 'scheme_select',
+  await_macro_scheme_select: 'macro_scheme_select',
+  await_shot_confirm: 'topo',
   await_delivery_confirm: 'delivery_confirm',
 }
 
@@ -51,6 +69,7 @@ export const IMAGE_QA_OPTIONS = [
 export type ImageQaOptionId = (typeof IMAGE_QA_OPTIONS)[number]['id']
 
 export const SCHEME_DECISION_PREFIX = '__scheme_decision__'
+export const MACRO_SCHEME_DECISION_PREFIX = '__macro_scheme_decision__'
 export const DELIVERY_DECISION_PREFIX = '__delivery_decision__'
 
 /** Default checkbox state: recommended per type, else first scheme. */
@@ -91,6 +110,58 @@ export function buildVisualIntentSummary(plan: ProductVisualPlan | null | undefi
 export function buildSchemeConfirmMessage(selections: Record<string, string[]>): string {
   const payload = JSON.stringify({ action: 'confirm_schemes', selections })
   return `${SCHEME_DECISION_PREFIX}${payload}`
+}
+
+/** Default macro selection: recommended ids, else first (max 2 enforced server-side). */
+export function defaultMacroSchemeSelection(
+  schemes: ProductVisualMacroScheme[] | null | undefined,
+): string[] {
+  const list = schemes ?? []
+  if (!list.length) return []
+  if (list.length === 1) return [list[0].id]
+  const recommended = list.filter((s) => s.recommended).map((s) => s.id)
+  if (recommended.length) return recommended.slice(0, 2)
+  return [list[0].id]
+}
+
+export function buildMacroSchemeConfirmMessage(selectedIds: string[]): string {
+  const payload = JSON.stringify({ action: 'confirm', selected_ids: selectedIds })
+  return `${MACRO_SCHEME_DECISION_PREFIX}${payload}`
+}
+
+/** Default variant key per shot (first ready gen key). */
+export function defaultShotDeliverySelections(
+  shots: ProductVisualShot[] | null | undefined,
+  genByKey: Record<string, { url?: string | null }> | null | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const byKey = genByKey ?? {}
+  for (const shot of shots ?? []) {
+    const shotId = shot.shot_id
+    if (!shotId) continue
+    const variants = Math.max(1, Math.min(3, shot.variant_count ?? 1))
+    const keys =
+      variants === 1
+        ? [shotId]
+        : Array.from({ length: variants }, (_, i) => `${shotId}__v${i + 1}`)
+    const ready = keys.find((k) => byKey[k]?.url)
+    if (ready) out[shotId] = ready
+  }
+  return out
+}
+
+export function buildShotDeliverySwitchMessage(shotId: string, variantKey: string): string {
+  const payload = JSON.stringify({
+    action: 'switch_scheme',
+    type_id: shotId,
+    scheme_id: variantKey,
+  })
+  return `${DELIVERY_DECISION_PREFIX}${payload}`
+}
+
+export function buildShotDeliveryConfirmMessage(selections: Record<string, string>): string {
+  const payload = JSON.stringify({ action: 'confirm_delivery', selections })
+  return `${DELIVERY_DECISION_PREFIX}${payload}`
 }
 
 /** Default single-scheme delivery pick per type (recommended when available). */

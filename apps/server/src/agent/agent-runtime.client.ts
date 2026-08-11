@@ -31,6 +31,22 @@ export interface RuntimeThreadState {
   atomicTitle?: string | null
   flowMode?: string | null
   productVisualPlan?: ProductVisualPlan | null
+  macroSchemes?: Array<{
+    id: string
+    label?: string | null
+    summary?: string | null
+    recommended?: boolean
+    recommend_reason?: string | null
+  }> | null
+  shotManifest?: Array<{
+    shot_id: string
+    type_id: string
+    label?: string | null
+    macro_scheme_id?: string | null
+    variant_count?: number
+  }> | null
+  visualIntent?: Record<string, unknown> | null
+  productVisualSchemeV2?: boolean | null
   deliverySelections?: Record<string, string> | null
   deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
 }

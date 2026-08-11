@@ -1,0 +1,86 @@
+# CVS v2 validation set (spec 2026-08-11 §8)
+# Run: uv run pytest tests/test_eval_cvs_set_v2.py -v
+schema_version: 1
+meta:
+  spec: docs/superpowers/specs/2026-08-11-product-visual-phase2-scheme-ssot-design.md
+
+cases:
+  - id: CVS-02-v2
+    utterance: "这是我们的大闸蟹礼盒，帮我做一套电商包装推广图：包装主视觉、包装结构图、模特送礼场景图。风格喜庆高级，突出冷链保鲜和礼盒质感。"
+    requested_skill_id: ecommerce-product-visual
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs02-crab.jpg }
+    assert_flow_mode: product_visual
+    assert_v2: true
+    assert_shot_types_include: [packaging_hero, packaging_structure, model_holding_pack]
+    assert_macro_schemes_min: 1
+    assert_prose_min_chars: 180
+    dialog_fixture:
+      draft_prose: >-
+        中秋大闸蟹礼盒采用红金配色，内衬 EPE 缓冲与冷链冰袋，外箱抗压设计。包装主视觉突出礼盒质感与喜庆氛围，
+        结构图展示分层缓冲与冰袋布局，模特送礼场景呈现节日赠礼情境。整体视觉要求喜庆高级，强调冷链保鲜与礼盒质感，
+        适合中秋电商主图与详情推广。主视觉需突出礼盒材质与烫金工艺，结构图需清晰展示缓冲层与冰袋位置，
+        模特场景需呈现赠礼动作与节日氛围，三者风格统一、色调一致。
+      macro_schemes:
+        - { id: A, label: 礼盒质感路线, summary: 红金礼盒 + 结构拆解, recommended: true }
+        - { id: B, label: 节日赠礼路线, summary: 模特送礼 + 场景氛围, recommended: false }
+      visual_intent:
+        primary_goal: packaging_design
+        industry_context: food_gift
+        output_types_requested: [包装主视觉, 结构图, 模特送礼]
+    decompose_fixture:
+      shots:
+        - shot_id: packaging_hero__1
+          type_id: packaging_hero
+          label: 包装主视觉
+          macro_scheme_id: A
+          shot_prose: 红金大闸蟹礼盒主视觉，喜庆高级
+          variant_count: 1
+          refs_policy: { requires: [white_bg] }
+        - shot_id: packaging_structure__1
+          type_id: packaging_structure
+          label: 包装结构图
+          macro_scheme_id: A
+          shot_prose: 展示 EPE 缓冲与冰袋分层结构
+          variant_count: 1
+          refs_policy: { requires: [white_bg] }
+        - shot_id: model_holding_pack__1
+          type_id: model_holding_pack
+          label: 模特送礼
+          macro_scheme_id: B
+          shot_prose: 模特手持大闸蟹礼盒赠礼场景
+          variant_count: 1
+          refs_policy: { requires: [white_bg, product_turnaround] }
+
+  - id: CVS-02-AB-v2
+    parent_id: CVS-02-v2
+    assert_selected_macros: [A, B]
+    assert_macro_scheme_ids_on_shots: [A, B]
+    assert_max_downstream: 12
+
+  - id: CVS-01-v2
+    utterance: "这是我们要上架的保温杯，帮我出一套电商推广图：天猫主图、详情图、模特展示图、模特手持使用的效果图、卖点图、推广海报。风格简约高级，强调316不锈钢和12小时保温。"
+    requested_skill_id: ecommerce-product-visual
+    attachments:
+      - { kind: image, role: product, url: fixture/cvs01-thermos.jpg }
+    assert_v2: true
+    assert_shot_types_include: [hero_main, model_display]
+    assert_shot_types_exclude: [packaging_hero, packaging_structure]
+    dialog_fixture:
+      draft_prose: >-
+        保温杯电商视觉方案，简约高级风格，突出316不锈钢与12小时保温。包含主图、详情、模特展示与手持使用、卖点与海报。
+        主图白底居中，详情分区展示材质与保温时长，模特展示办公场景，手持使用真实饮用，卖点突出316不锈钢，
+        海报简约高级。整体色调克制，适合天猫与京东上架推广，强调品质感与功能卖点。
+      macro_schemes:
+        - { id: A, label: 简约电商, summary: 六类标准电商图, recommended: true }
+      visual_intent:
+        primary_goal: mixed_ecommerce
+        industry_context: consumer_electronics
+    decompose_fixture:
+      shots:
+        - { shot_id: hero_main__1, type_id: hero_main, label: 主图, macro_scheme_id: A, shot_prose: 白底主图, variant_count: 1 }
+        - { shot_id: detail_page__1, type_id: detail_page, label: 详情, macro_scheme_id: A, shot_prose: 详情分区, variant_count: 1 }
+        - { shot_id: model_display__1, type_id: model_display, label: 模特展示, macro_scheme_id: A, shot_prose: 模特手持, variant_count: 1 }
+        - { shot_id: model_holding_product__1, type_id: model_holding_product, label: 手持使用, macro_scheme_id: A, shot_prose: 饮用场景, variant_count: 1 }
+        - { shot_id: selling_point__1, type_id: selling_point, label: 卖点, macro_scheme_id: A, shot_prose: 316不锈钢, variant_count: 1 }
+        - { shot_id: promo_poster__1, type_id: promo_poster, label: 海报, macro_scheme_id: A, shot_prose: 推广海报, variant_count: 1 }

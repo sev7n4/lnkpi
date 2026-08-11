@@ -9,6 +9,11 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.gen_run_state import clear_tier_b_gen_run_state, reset_tier_b_reducers_for_new_run
+from app.graph.product_visual_v2.delivery import (
+    apply_delivery_decision_v2,
+    build_delivery_summary_state,
+)
+from app.graph.product_visual_v2.routing import is_v2_enabled
 
 _DELIVERY_DECISION_PREFIX = "__delivery_decision__"
 _NONE_TIP = "请切换各类型定稿图，或点「确认全部定稿」完成交付。"
@@ -177,6 +182,9 @@ def _manifest_item_for_key(state: dict, key: str) -> dict[str, Any] | None:
 
 
 def apply_delivery_decision(state: dict, decision: dict[str, Any]) -> dict[str, Any]:
+    if is_v2_enabled(state) and state.get("shot_manifest"):
+        return apply_delivery_decision_v2(state, decision)
+
     action = decision.get("action") or "none"
     plan = state.get("product_visual_plan")
     if not isinstance(plan, dict):
@@ -289,6 +297,9 @@ def route_after_await_delivery_confirm(state: dict) -> str:
 
 def make_delivery_summary_node() -> Callable:
     async def delivery_summary(state: dict) -> dict:
+        if is_v2_enabled(state) and state.get("shot_manifest"):
+            return build_delivery_summary_state(state)
+
         plan = state.get("product_visual_plan")
         if not isinstance(plan, dict):
             return {
