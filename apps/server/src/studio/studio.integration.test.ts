@@ -9,9 +9,14 @@ import {
   generateTextForRefs,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
+import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { createStudioService } from './studio.test-utils'
 import type { StudioService } from './studio.service'
+
+vi.mock('../media/upstream-ref-inline', () => ({
+  inlineUpstreamReferenceImages: vi.fn(async (urls: string[]) => urls),
+}))
 
 const imageGenerate = vi.fn(async () => ({
   url: 'https://example.com/a.png',
@@ -324,6 +329,7 @@ describe('StudioService integration (provider params)', () => {
       { refKey: 'i1', mediaType: 'image', url: refUrl },
     ])
 
+    expect(inlineUpstreamReferenceImages).toHaveBeenCalledWith([refUrl])
     expect(generateTextForRefs).toHaveBeenCalledWith(
       'describe dress',
       [refUrl],
@@ -332,6 +338,23 @@ describe('StudioService integration (provider params)', () => {
         apiKey: process.env.OPENAI_API_KEY,
         baseUrl: process.env.OPENAI_BASE_URL,
       }),
+    )
+  })
+
+  it('inlines non-fetchable ref URLs before text vision upstream call', async () => {
+    const refUrl = 'http://119.29.173.89:8888/api/uploads/u1/ref.png'
+    const inlined = 'data:image/png;base64,abc'
+    vi.mocked(inlineUpstreamReferenceImages).mockResolvedValueOnce([inlined])
+
+    await svc.generateText('u1', 'describe packaging', 'gemini-3.1-flash', [
+      { refKey: 'I1', mediaType: 'image', url: refUrl },
+    ])
+
+    expect(inlineUpstreamReferenceImages).toHaveBeenCalledWith([refUrl])
+    expect(generateTextForRefs).toHaveBeenCalledWith(
+      'describe packaging',
+      [inlined],
+      expect.objectContaining({ model: 'gemini-3.1-flash' }),
     )
   })
 })
