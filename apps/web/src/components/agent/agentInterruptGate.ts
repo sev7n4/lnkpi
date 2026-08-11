@@ -10,7 +10,14 @@ export interface AgentInterruptPayload {
   imageQaReason?: string | null
   imageQaMetrics?: ImageQaMetrics | null
   visionUsed?: boolean | null
+  retakePending?: boolean | null
+  effectiveUtterance?: string | null
   presentation?: AgentPresentationEnvelope | null
+}
+
+export interface RetakePhaseInput {
+  phase?: string | null
+  retakePending?: boolean | null
 }
 
 export interface ProductVisualScheme {
@@ -88,6 +95,7 @@ export const MACRO_SCHEME_DECISION_PREFIX = '__macro_scheme_decision__'
 export const DELIVERY_DECISION_PREFIX = '__delivery_decision__'
 
 const MACHINE_PAYLOAD_PREFIXES = [
+  SCHEME_DECISION_PREFIX,
   MACRO_SCHEME_DECISION_PREFIX,
   DELIVERY_DECISION_PREFIX,
 ] as const
@@ -297,6 +305,58 @@ export function chipSetFromInterrupt(
   return null
 }
 
+/** UX-PV-12: retake flow awaiting new upload + continue with stored utterance. */
+export function isRetakePendingPhase(data: RetakePhaseInput | null | undefined): boolean {
+  if (!data) return false
+  if (data.retakePending === true) return true
+  return data.phase === 'await_retake_upload'
+}
+
+/** Resend stored demand after retake upload (message body = effective_utterance). */
+export function buildRetakeContinueMessage(effectiveUtterance: string): string {
+  return effectiveUtterance.trim()
+}
+
+export interface ImageQaOption {
+  id: string
+  label: string
+  message: string
+}
+
+/** User-facing QA title from presentation envelope (never raw imageQaReason). */
+export function resolveImageQaTitle(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): string {
+  return String(presentation?.title ?? '').trim()
+}
+
+export function resolveImageQaBodyText(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): string {
+  return String(presentation?.body?.text ?? '').trim()
+}
+
+export function resolveImageQaChecks(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): Array<{ label: string; ok: boolean }> {
+  return presentation?.body?.checks ?? []
+}
+
+/** Option chips from presentation.options, else IMAGE_QA_OPTIONS labels. */
+export function resolveImageQaOptions(
+  presentation: AgentPresentationEnvelope | null | undefined,
+): ReadonlyArray<ImageQaOption> {
+  const fromPres = presentation?.options
+  if (fromPres?.length) {
+    return fromPres.map((o) => ({
+      id: o.id,
+      label: o.label,
+      message: o.message,
+    }))
+  }
+  return IMAGE_QA_OPTIONS
+}
+
 export function interruptPayloadFromThreadState(
   data:
     | {
@@ -304,15 +364,23 @@ export function interruptPayloadFromThreadState(
         interrupted?: boolean
         nextNodes?: string[]
         presentation?: AgentPresentationEnvelope | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
+        imageQaReason?: string | null
+        imageQaMetrics?: ImageQaMetrics | null
       }
     | null
     | undefined,
 ): AgentInterruptPayload | null {
-  if (!data?.interrupted) return null
+  if (!data?.interrupted && !isRetakePendingPhase(data)) return null
   return {
     interrupted: true,
     phase: data.phase ?? null,
     node: data.nextNodes?.[0] ?? null,
     presentation: data.presentation ?? null,
+    retakePending: data.retakePending ?? null,
+    effectiveUtterance: data.effectiveUtterance ?? null,
+    imageQaReason: data.imageQaReason ?? null,
+    imageQaMetrics: data.imageQaMetrics ?? null,
   }
 }

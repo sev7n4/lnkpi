@@ -43,8 +43,13 @@ import type { AgentPresentationEnvelope } from '@/components/agent/presentation/
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
-  IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
+  buildRetakeContinueMessage,
+  isRetakePendingPhase,
+  resolveImageQaBodyText,
+  resolveImageQaChecks,
+  resolveImageQaOptions,
+  resolveImageQaTitle,
   buildSchemeConfirmMessage,
   buildMacroSchemeConfirmMessage,
   buildMacroAbFooterHint,
@@ -419,7 +424,31 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
-const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
+const awaitingImageQa = computed(() => chipSet.value === 'image_qa' && !isRetakePending.value)
+const isRetakePending = computed(() =>
+  isRetakePendingPhase({
+    phase: interruptGate.value?.phase,
+    retakePending: retakePending.value,
+  }),
+)
+const imageQaTitle = computed(() => resolveImageQaTitle(gatePresentation.value))
+const imageQaBodyText = computed(() => resolveImageQaBodyText(gatePresentation.value))
+const imageQaChecks = computed(() => resolveImageQaChecks(gatePresentation.value))
+const imageQaOptions = computed(() => resolveImageQaOptions(gatePresentation.value))
+const showRetakeContinueChip = computed(
+  () => isRetakePending.value && pendingAttachmentItems.value.length > 0,
+)
+const retakeCalloutText = computed(() => {
+  const pres = gatePresentation.value
+  const body = String(pres?.body?.text ?? '').trim()
+  if (body) return body
+  const title = String(pres?.title ?? '').trim()
+  if (title) return title
+  return '请上传新照片，上传完成后点继续'
+})
+const retakeContinueLabel = computed(
+  () => gatePresentation.value?.secondary_actions?.[0]?.label ?? '继续',
+)
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
 const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme_select')
 const awaitingShotConfirm = computed(
@@ -459,6 +488,8 @@ const shotManifest = ref<ProductVisualShot[]>([])
 const productVisualSchemeV2 = ref(false)
 const imageQaReason = ref<string | null>(null)
 const imageQaMetrics = ref<ImageQaMetrics | null>(null)
+const retakePending = ref(false)
+const effectiveUtterance = ref<string | null>(null)
 const schemeSelections = ref<Record<string, string[]>>({})
 const deliverySelections = ref<Record<string, string>>({})
 const deliveryGenByKey = ref<Record<string, { node_id?: string | null; url?: string | null; title?: string | null }>>({})
@@ -518,6 +549,37 @@ function syncCompletionPresentation(
   if (phase !== 'done') {
     completionPresentation.value = null
   }
+}
+
+function syncRetakeFromPayload(data: {
+  retakePending?: boolean | null
+  effectiveUtterance?: string | null
+  phase?: string | null
+  presentation?: AgentPresentationEnvelope | null
+} | null | undefined) {
+  if (!data) return
+  const wasRetake = retakePending.value
+  if (data.retakePending != null) {
+    retakePending.value = Boolean(data.retakePending)
+  } else if (isRetakePendingPhase({ phase: data.phase })) {
+    retakePending.value = true
+  } else if (data.phase != null && !isRetakePendingPhase({ phase: data.phase })) {
+    retakePending.value = false
+  }
+  if (data.effectiveUtterance != null) {
+    effectiveUtterance.value = data.effectiveUtterance
+  }
+  if (retakePending.value && !wasRetake) {
+    ElMessage.info(PRODUCT_VISUAL_GUIDANCE.retakeToast)
+  }
+}
+
+async function sendRetakeContinue() {
+  const utterance =
+    effectiveUtterance.value?.trim()
+    || gatePresentation.value?.secondary_actions?.[0]?.message?.trim()
+  if (!utterance) return
+  await sendMessage(buildRetakeContinueMessage(utterance))
 }
 
 async function sendShotRevise() {
@@ -768,6 +830,8 @@ async function selectThread(threadId: string) {
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
   hasAtomicCheckpoint.value = false
+  retakePending.value = false
+  effectiveUtterance.value = null
   recoveredPhaseHint.value = null
   await loadHistory()
   void refreshThreadCheckpoint()
@@ -817,6 +881,8 @@ watch(
     taskProgress.value = emptyTaskProgress()
     interruptGate.value = null
     hasAtomicCheckpoint.value = false
+    retakePending.value = false
+    effectiveUtterance.value = null
     recoveredPhaseHint.value = null
     void bootstrapThread()
   },
@@ -897,6 +963,8 @@ function newAgentSession() {
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
   hasAtomicCheckpoint.value = false
+  retakePending.value = false
+  effectiveUtterance.value = null
   recoveredPhaseHint.value = null
   agentThreadId.value = createAgentThreadId(props.sessionId)
   persistActiveThreadId(props.sessionId, agentThreadId.value)
@@ -926,12 +994,15 @@ async function refreshThreadCheckpoint() {
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
         userRequestLabels?: string[] | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
         presentation?: AgentPresentationEnvelope | null
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     imageQaReason.value = json.data?.imageQaReason ?? null
     imageQaMetrics.value = json.data?.imageQaMetrics ?? null
+    syncRetakeFromPayload(json.data)
     syncCompletionPresentation(json.data?.phase, json.data?.presentation)
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
@@ -955,8 +1026,9 @@ async function refreshThreadCheckpoint() {
         json.data?.deliveryGenByKey,
       )
     }
-    if (json.data?.interrupted) {
-      interruptGate.value = interruptPayloadFromThreadState(json.data)
+    const gatePayload = interruptPayloadFromThreadState(json.data)
+    if (gatePayload) {
+      interruptGate.value = gatePayload
     }
   } catch {
     // ignore — checkpoint hint is best-effort
@@ -1125,6 +1197,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   let streamEndedNormally = false
   recoveredPhaseHint.value = null
   interruptGate.value = null
+  retakePending.value = false
+  effectiveUtterance.value = null
   completionPresentation.value = null
   streamAbortController = new AbortController()
   agentStream.start()
@@ -1489,6 +1563,8 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason?: string | null
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
+        retakePending?: boolean | null
+        effectiveUtterance?: string | null
         presentation?: AgentInterruptPayload['presentation']
       }
       interruptGate.value = {
@@ -1498,13 +1574,18 @@ function handleEvent(event: { type: string; data: unknown }) {
         imageQaReason: data.imageQaReason ?? null,
         imageQaMetrics: data.imageQaMetrics ?? null,
         visionUsed: data.visionUsed ?? null,
+        retakePending: data.retakePending ?? null,
+        effectiveUtterance: data.effectiveUtterance ?? null,
         presentation: data.presentation ?? null,
       }
       if (data.imageQaReason) imageQaReason.value = data.imageQaReason
       if (data.imageQaMetrics) imageQaMetrics.value = data.imageQaMetrics
+      syncRetakeFromPayload(data)
       if (
         data.phase === 'await_image_qa' ||
         data.node === 'await_image_qa' ||
+        data.phase === 'await_retake_upload' ||
+        data.retakePending ||
         data.phase === 'await_scheme_select' ||
         data.node === 'await_scheme_select' ||
         data.phase === 'await_macro_scheme_select' ||
@@ -1517,6 +1598,24 @@ function handleEvent(event: { type: string; data: unknown }) {
         data.node === 'await_delivery_confirm'
       ) {
         void refreshThreadCheckpoint()
+      }
+      break
+    }
+    case 'done': {
+      const data = event.data as {
+        retakePending?: boolean
+        effectiveUtterance?: string | null
+        presentation?: AgentPresentationEnvelope | null
+      }
+      syncRetakeFromPayload(data)
+      if (data.retakePending && data.presentation) {
+        interruptGate.value = {
+          interrupted: true,
+          phase: 'await_retake_upload',
+          retakePending: true,
+          effectiveUtterance: data.effectiveUtterance ?? null,
+          presentation: data.presentation,
+        }
       }
       break
     }
@@ -1935,29 +2034,43 @@ defineExpose({
                 取消
               </button>
             </div>
-            <div v-else-if="awaitingImageQa" class="mb-2 px-0.5">
+            <div v-else-if="isRetakePending" class="mb-2 px-0.5" data-testid="retake-pending-callout">
+              <p
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs leading-relaxed text-[var(--neo-text-secondary)]"
+              >
+                {{ retakeCalloutText }}
+              </p>
+              <button
+                v-if="showRetakeContinueChip"
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="retake-continue-chip"
+                :disabled="agent.isStreaming"
+                @click="sendRetakeContinue()"
+              >
+                {{ retakeContinueLabel }}
+              </button>
+            </div>
+            <div v-else-if="awaitingImageQa" class="mb-2 px-0.5" data-testid="image-qa-gate">
               <div
-                v-if="imageQaReason || imageQaMetrics"
+                v-if="imageQaTitle || imageQaBodyText || imageQaChecks.length"
                 class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-surface)] p-2 text-xs text-[var(--neo-text-secondary)]"
               >
-                <p v-if="imageQaReason" class="mb-1.5 leading-relaxed">
-                  {{ imageQaReason }}
+                <p v-if="imageQaTitle" class="mb-1 font-medium leading-relaxed">
+                  {{ imageQaTitle }}
                 </p>
-                <ul v-if="imageQaMetrics" class="space-y-0.5 text-[var(--neo-muted)]">
-                  <li v-if="imageQaMetrics.is_sharp_enough != null">
-                    清晰度：{{ imageQaMetrics.is_sharp_enough ? '✓ 足够' : '✗ 不足' }}
-                  </li>
-                  <li v-if="imageQaMetrics.is_white_bg != null">
-                    白底背景：{{ imageQaMetrics.is_white_bg ? '✓ 符合' : '✗ 非白底或杂底' }}
-                  </li>
-                  <li v-if="imageQaMetrics.product_identifiable != null">
-                    产品可辨：{{ imageQaMetrics.product_identifiable ? '✓ 可识别' : '✗ 难以识别' }}
+                <p v-if="imageQaBodyText" class="mb-1.5 leading-relaxed">
+                  {{ imageQaBodyText }}
+                </p>
+                <ul v-if="imageQaChecks.length" class="space-y-0.5 text-[var(--neo-muted)]">
+                  <li v-for="(check, idx) in imageQaChecks" :key="idx">
+                    {{ check.label }}：{{ check.ok ? '✓ 通过' : '✗ 需处理' }}
                   </li>
                 </ul>
               </div>
               <div class="flex flex-wrap gap-2">
               <button
-                v-for="opt in IMAGE_QA_OPTIONS"
+                v-for="opt in imageQaOptions"
                 :key="opt.id"
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
@@ -2263,7 +2376,10 @@ defineExpose({
             </div>
             <div
               class="agent-input-dock"
-              :class="{ 'is-drop-target': isDragOver }"
+              :class="{
+                'is-drop-target': isDragOver,
+                'is-retake-highlight': isRetakePending,
+              }"
               @dragover.prevent="onDragOver"
               @dragleave.prevent="onDragLeave"
               @drop.prevent="onDrop"
@@ -2857,6 +2973,13 @@ defineExpose({
   border-color: color-mix(in srgb, var(--neo-hi-text) 35%, var(--neo-border));
   background: var(--neo-hover-bg);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--neo-hi-text) 18%, transparent);
+}
+
+.agent-input-dock.is-retake-highlight {
+  border-color: color-mix(in srgb, var(--neo-accent, #888) 55%, var(--neo-glass-border));
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.42),
+    0 0 0 2px color-mix(in srgb, var(--neo-accent, #888) 28%, transparent);
 }
 
 .agent-prompt-field {

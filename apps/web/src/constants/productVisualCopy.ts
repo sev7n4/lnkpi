@@ -12,6 +12,7 @@ export interface ProductVisualExampleUtterance {
 export const PRODUCT_VISUAL_GUIDANCE = {
   macroStyleInCards: '风格在这里选；需求用口语描述即可。',
   attachmentHint: '建议清晰 product 图；白底更佳，非白底也可继续。',
+  retakeToast: '已重置视觉方案，保留您的需求描述',
   exampleUtterances: [
     {
       id: 'gift_box',
