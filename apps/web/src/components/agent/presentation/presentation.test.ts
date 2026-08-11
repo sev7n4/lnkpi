@@ -8,7 +8,13 @@ const shotEnvelope: AgentPresentationEnvelope = {
   kind: 'shot_table',
   stepper: { current: 'shot_plan', completed: ['image_qa', 'scheme_draft', 'macro_select', 'ssot_persist'] },
   context_recap: '巨峰葡萄礼盒',
-  body: { text: '共 3 个构图任务；确认后将编排出图顺序，尚未开始生成。' },
+  body: {
+    text: '共 3 个构图任务；确认后将编排出图顺序，尚未开始生成。',
+    shots: [
+      { shot_id: 'packaging_hero__1', label: '礼盒主视觉', type: '包装主视觉', summary: '红金礼盒正面', node_id: 'n1' },
+      { shot_id: 'gift_scene__1', label: '送礼场景', type: '送礼场景', summary: '模特手持礼盒', node_id: 'n2' },
+    ],
+  },
   primary_action: { label: '确认构图，生成预览', message: '确认出图' },
 }
 
@@ -63,11 +69,12 @@ describe('AgentStepper', () => {
 })
 
 describe('AgentPresentationHost', () => {
-  it('renders stepper, recap, and shot primary button label', () => {
+  it('renders stepper, recap, shot table, and primary button label', () => {
     const wrapper = mount(AgentPresentationHost, {
       props: { presentation: shotEnvelope },
     })
     expect(wrapper.find('[data-testid="context-recap"]').text()).toContain('巨峰葡萄礼盒')
+    expect(wrapper.find('[data-testid="shot-table"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="primary-action"]').text()).toBe('确认构图，生成预览')
     expect(wrapper.find('[data-testid="presentation-hint"]').text()).toContain('3 个构图任务')
   })

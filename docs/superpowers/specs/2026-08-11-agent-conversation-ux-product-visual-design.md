@@ -483,6 +483,8 @@ presentation:
 
 **Implementation Plan:** [2026-08-11-agent-conversation-ux-product-visual.md](../plans/2026-08-11-agent-conversation-ux-product-visual.md)
 
+**运行中中断与改意图（后续）：** [2026-08-12-agent-mid-run-interrupt-design.md](./2026-08-12-agent-mid-run-interrupt-design.md) — v2.1 已补前端 SSE cancel；后端 cancel + 改意图协议待 Phase 1。
+
 **研发分工（建议）：**
 
 | 层 | 职责 |

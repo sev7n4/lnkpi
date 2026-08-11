@@ -28,6 +28,14 @@ export interface TopoCardNode {
   node_id?: string
 }
 
+export interface ShotTableRow {
+  shot_id: string
+  label: string
+  type: string
+  summary?: string
+  node_id?: string | null
+}
+
 export interface DeliverySummaryFinalizedRow {
   title: string
   macro?: string
@@ -74,6 +82,7 @@ export interface AgentPresentationBody {
   scene_count?: number
   credits_hint?: string
   mermaid?: string
+  shots?: ShotTableRow[]
   headline?: string
   finalized?: DeliverySummaryFinalizedRow[]
   basics?: DeliverySummaryBasicsRow[]

@@ -371,6 +371,17 @@
 - 定稿卡片标题为 `packaging_hero__1` 等内部 ID  
 - 流程结束仅「成功 N 失败 M」，无交付清单  
 
+### 10.5 v2.1 闭环补项（2026-08-12）
+
+| 项 | 状态 | 说明 |
+|----|------|------|
+| 生成钮 streaming 取消 | ✅ 已补 | 侧栏 `DockGenerateButton` 点击 → abort SSE + toast；**后端 run 仍可能继续**（见 [中断改意图规格](./2026-08-12-agent-mid-run-interrupt-design.md)） |
+| `shot_table` 表格 UI | ✅ 已补 | `AgentShotTable.vue` + envelope `body.shots[]` |
+| 画布产出默认 5 项折叠 | ✅ 已有 | `COLLAPSE_THRESHOLD=5`（`agentCanvasOutputs.ts`） |
+| 合并门控生产开关 | 📋 待运维 | 代码已就绪；生产设 `LNKPI_PV_MERGED_SHOT_TOPO_GATE=true` 后跑 UAT-UX-PV-10 |
+| §十 正式 Sign-off | ⏳ 待跑 | 合并/deploy 后在生产浏览器复跑 §10.1~10.3 |
+| 出图中途后端 cancel | ⏳ 规格化 | 见 [2026-08-12-agent-mid-run-interrupt-design.md](./2026-08-12-agent-mid-run-interrupt-design.md) |
+
 ---
 
 ## 十一、文档维护
@@ -388,5 +399,6 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-12 | v1.2 | §10.5 闭环补项追踪；链至中断改意图规格 |
 | 2026-08-11 | v1.1 | 新增 §十 UX-PV-01~13；CVS-02-AB 口语路径；§七 G8~G10 |
 | 2026-08-11 | v1.0 | 初稿：Phase 2 方案层功能 UAT |

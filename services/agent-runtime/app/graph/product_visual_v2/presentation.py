@@ -188,6 +188,42 @@ def mermaid_for_presentation(manifest: list[Any]) -> str:
     return "\n".join(lines)
 
 
+_SHOT_TYPE_LABELS: dict[str, str] = {
+    "packaging_hero": "包装主视觉",
+    "packaging_structure": "包装结构",
+    "lifestyle_gifting": "送礼场景",
+    "product_hero": "产品主图",
+    "white_bg": "白底图",
+    "scene": "场景图",
+}
+
+
+def build_shot_table_rows(shots: list[Any]) -> list[dict[str, Any]]:
+    """Structured rows for shot_table presentation (UX-PV-05)."""
+    rows: list[dict[str, Any]] = []
+    for raw in shots:
+        if not isinstance(raw, dict):
+            continue
+        shot_id = str(raw.get("shot_id") or "").strip()
+        if not shot_id:
+            continue
+        type_id = str(raw.get("type") or raw.get("type_id") or raw.get("shot_type") or "").strip()
+        type_label = _SHOT_TYPE_LABELS.get(type_id, type_id or "构图")
+        label = str(raw.get("label") or shot_id).strip()
+        prose = str(raw.get("shot_prose") or "").strip()
+        summary = prose[:80] + ("…" if len(prose) > 80 else "") if prose else ""
+        rows.append(
+            {
+                "shot_id": shot_id,
+                "label": label,
+                "type": type_label,
+                "summary": summary,
+                "node_id": raw.get("node_id"),
+            }
+        )
+    return rows
+
+
 def compute_expected_delivery(
     selected_macro_ids: list[str],
     shots: list[dict[str, Any]],
@@ -236,11 +272,15 @@ def build_presentation_envelope(
     }
 
     if phase == "await_shot_confirm":
+        shots = state.get("shot_manifest") or []
         n = _shot_count(state)
         hint = copy.get("shot_confirm.hint", n=str(n))
         label = copy.get("shot_confirm.primary_label")
         envelope["primary_action"] = {"label": label, "message": "确认出图"}
-        envelope["body"] = {"text": hint}
+        envelope["body"] = {
+            "text": hint,
+            "shots": build_shot_table_rows(shots if isinstance(shots, list) else []),
+        }
     elif phase == "await_shot_topo_confirm":
         n = _shot_count(state)
         manifest = state.get("split_manifest") or []
