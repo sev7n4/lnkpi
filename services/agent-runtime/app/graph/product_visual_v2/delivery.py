@@ -409,7 +409,7 @@ def build_delivery_presentation_patch(state: dict[str, Any]) -> dict[str, Any]:
         for s in (state.get("selected_macro_scheme_ids") or [])
         if str(s).strip()
     ]
-    delivery = compute_expected_delivery(selected, shots, copy=copy)
+    delivery = compute_expected_delivery(selected, shots, copy=copy, state=state)
     expected = state.get("expected_delivery_count")
     if not isinstance(expected, int) or expected <= 0:
         expected = delivery["total_finalize"] or len(build_delivery_groups(state))

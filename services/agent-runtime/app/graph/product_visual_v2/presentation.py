@@ -224,17 +224,41 @@ def build_shot_table_rows(shots: list[Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def estimate_scene_count(state: dict[str, Any]) -> int:
+    """Best-effort scene count before shot_manifest exists (macro A+B footer UX-PV-03)."""
+    shots = state.get("shot_manifest") or []
+    if isinstance(shots, list):
+        n = len([s for s in shots if isinstance(s, dict)])
+        if n > 0:
+            return n
+    labels = state.get("user_request_labels") or []
+    if isinstance(labels, list):
+        label_n = len([x for x in labels if str(x).strip()])
+        if label_n > 0:
+            return label_n
+    intent = state.get("visual_intent") or {}
+    output_types = intent.get("output_types_requested") or []
+    if isinstance(output_types, list):
+        type_n = len([t for t in output_types if str(t).strip()])
+        if type_n > 0:
+            return type_n
+    return 3
+
+
 def compute_expected_delivery(
     selected_macro_ids: list[str],
     shots: list[dict[str, Any]],
     *,
     allocation_mode: str = "mixed",
     copy: ProductVisualCopy | None = None,
+    state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compute finalize count and A+B allocation note for macro selection UX."""
     selected = [str(s).strip() for s in selected_macro_ids if str(s).strip()]
     k = len(selected)
     scene_count = len([s for s in shots if isinstance(s, dict)]) if isinstance(shots, list) else 0
+    if scene_count <= 0 and state is not None:
+        scene_count = estimate_scene_count(state)
 
     if allocation_mode == "full_matrix":
         total_finalize = scene_count * k if scene_count > 0 else 0
@@ -337,6 +361,7 @@ def build_presentation_envelope(
             selected,
             state.get("shot_manifest") or [],
             copy=copy,
+            state=state,
         )
         body: dict[str, Any] = {
             "schemes": normalize_macro_schemes(state.get("macro_schemes") or []),

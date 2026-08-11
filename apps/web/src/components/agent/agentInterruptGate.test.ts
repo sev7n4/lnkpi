@@ -4,6 +4,7 @@ import {
   defaultDeliverySelections,
   defaultMacroSchemeSelection,
   buildMacroSchemeConfirmMessage,
+  buildClientDeliveryGroups,
   buildMacroAbFooterHint,
   buildRetakeContinueMessage,
   defaultShotDeliverySelections,
@@ -179,6 +180,27 @@ describe('buildMacroSchemeConfirmMessage', () => {
     const msg = buildMacroSchemeConfirmMessage(['A', 'B'])
     expect(msg).toContain('__macro_scheme_decision__')
     expect(msg).toContain('"selected_ids":["A","B"]')
+  })
+})
+
+describe('buildClientDeliveryGroups', () => {
+  it('builds user-language labels and macro subtitles', () => {
+    const groups = buildClientDeliveryGroups(
+      [
+        { shot_id: 'hero__1', type_id: 'packaging_hero', label: '礼盒主视觉', macro_scheme_id: 'A', variant_count: 1 },
+        { shot_id: 'scene__1', type_id: 'lifestyle_gifting', label: '送礼场景', macro_scheme_id: 'B', variant_count: 1 },
+      ],
+      {
+        hero__1: { url: 'https://example.com/a.png', title: '候选 A' },
+        scene__1: { url: 'https://example.com/b.png', title: '候选 B' },
+      },
+      ['礼盒长什么样', '送人场景'],
+      { hero__1: 'hero__1', scene__1: 'scene__1' },
+    )
+    expect(groups).toHaveLength(2)
+    expect(groups[0].label).toBe('礼盒长什么样')
+    expect(groups[0].subtitle).toContain('[方案A]')
+    expect(groups[1].label).toBe('送人场景')
   })
 })
 

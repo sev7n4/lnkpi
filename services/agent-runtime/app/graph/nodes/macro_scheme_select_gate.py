@@ -51,6 +51,7 @@ def build_macro_select_presentation_patch(
         selected,
         state.get("shot_manifest") or [],
         copy=copy,
+        state=state,
     )
     presentation = build_presentation_envelope(
         kind="macro_scheme_cards",
@@ -137,6 +138,7 @@ def apply_macro_scheme_decision(state: dict, decision: dict[str, Any]) -> dict[s
             [str(s) for s in selected],
             state.get("shot_manifest") or [],
             copy=ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0"),
+            state=state,
         )
         return {
             **applied,
