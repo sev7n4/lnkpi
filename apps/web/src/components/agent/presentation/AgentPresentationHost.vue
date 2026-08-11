@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import AgentStepper from './AgentStepper.vue'
 import AgentProseBlock from './AgentProseBlock.vue'
 import AgentMacroSchemeCards from './AgentMacroSchemeCards.vue'
+import AgentShotTable from './AgentShotTable.vue'
 import AgentTopoCardList from './AgentTopoCardList.vue'
 import AgentDeliveryCards from './AgentDeliveryCards.vue'
 import AgentDeliverySummaryTable from './AgentDeliverySummaryTable.vue'
@@ -29,6 +30,7 @@ const macroSelections = ref<string[]>(props.macroSelectedIds ?? [])
 
 const isProseBlock = computed(() => props.presentation.kind === 'prose_block')
 const isMacroCards = computed(() => props.presentation.kind === 'macro_scheme_cards')
+const isShotTable = computed(() => props.presentation.kind === 'shot_table')
 const isTopoCards = computed(
   () =>
     props.presentation.kind === 'topo_card_list'
@@ -39,6 +41,7 @@ const isDeliverySummary = computed(() => props.presentation.kind === 'delivery_s
 const hasGateLayout = computed(() => Boolean(props.presentation.primary_action))
 const proseContent = computed(() => String(props.presentation.body?.prose ?? ''))
 const macroSchemes = computed(() => props.presentation.body?.schemes ?? [])
+const shotRows = computed(() => props.presentation.body?.shots ?? [])
 const topoNodes = computed(() => props.presentation.body?.nodes ?? [])
 const deliveryGroups = computed(() => props.presentation.body?.groups ?? [])
 const deliverySelectionsMap = computed(() => props.deliverySelections ?? {})
@@ -108,6 +111,12 @@ function onPrimaryAction() {
         :selected-ids="macroSelections"
         :disabled="disabled"
         @toggle="(id, checked) => emit('macroToggle', id, checked)"
+      />
+      <AgentShotTable
+        v-if="isShotTable && shotRows.length"
+        :shots="shotRows"
+        :disabled="disabled"
+        @focus-node="emit('focusNode', $event)"
       />
       <p
         v-if="presentation.body?.text && isTopoCards && topoNodes.length"

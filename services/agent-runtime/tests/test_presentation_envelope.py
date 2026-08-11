@@ -194,6 +194,8 @@ def test_shot_confirm_primary_action_label():
     assert env["primary_action"]["label"] == "确认构图，生成预览"
     assert env["primary_action"]["message"] == "确认出图"
     assert "3" in env["body"]["text"]
+    assert len(env["body"]["shots"]) == 3
+    assert env["body"]["shots"][0]["type"] == "构图"
 
 
 def test_topo_primary_action_label_distinct_from_shot():

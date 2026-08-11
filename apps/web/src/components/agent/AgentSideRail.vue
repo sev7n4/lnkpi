@@ -1068,8 +1068,21 @@ function toggleVoice() {
   })
 }
 
+function cancelActiveStream() {
+  if (!agent.isStreaming) return
+  streamAbortController?.abort()
+  agentStream.stop()
+  agent.finishStreaming()
+  ElMessage.info('已停止当前回复，您可以发送新需求')
+}
+
 async function send() {
-  if (!canSubmitComposer.value || agent.isStreaming || isUploading.value) return
+  if (isUploading.value) return
+  if (agent.isStreaming) {
+    cancelActiveStream()
+    return
+  }
+  if (!canSubmitComposer.value) return
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
