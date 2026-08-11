@@ -37,7 +37,7 @@ PHASE1_MANIFEST_TEMPLATE: list[dict[str, Any]] = [
             "同一产品锁定材质比例与外观，禁止每格换款；干净背景，商业摄影…"
         ),
         "gen_mode": "i2i",
-        "pipeline": "turnaround_image",
+        "imageAspect": "2:1",
     },
 ]
 
@@ -67,9 +67,10 @@ def _batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         }
         if item.get("pipeline"):
             entry["pipeline"] = item["pipeline"]
-        if item["key"] == "product_turnaround":
-            entry.setdefault("pipeline", "turnaround_image")
-            entry.setdefault("imageAspect", "2:1")
+        if item.get("imageAspect"):
+            entry["imageAspect"] = item["imageAspect"]
+        elif item["key"] == "product_turnaround":
+            entry["imageAspect"] = "2:1"
         batch.append(entry)
     return batch
 

@@ -59,6 +59,7 @@ def build_agent_graph(
     llm: Any,
     skills_dir: str | Path,
     checkpointer: Any | None = None,
+    vision_creds: dict[str, str | None] | None = None,
 ):
     """Compile intake → confirm_gate → split → copy_gate → topo_gate → done."""
     skills_path = Path(skills_dir)
@@ -77,7 +78,7 @@ def build_agent_graph(
     register_topo_gate(graph, nest=nest)
     register_single_node_gate(graph, nest=nest)
     register_atomic_create_gate(graph, nest=nest, llm=llm)
-    register_product_visual_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
+    register_product_visual_gate(graph, nest=nest, llm=llm, skills_dir=skills_path, vision_creds=vision_creds)
 
     graph.add_edge(START, "intake")
     graph.add_conditional_edges(

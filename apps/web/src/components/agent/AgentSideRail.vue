@@ -50,10 +50,12 @@ import {
   buildShotDeliverySwitchMessage,
   defaultDeliverySelections,
   defaultMacroSchemeSelection,
+  toggleMacroSchemeSelection,
   defaultSchemeSelections,
   defaultShotDeliverySelections,
   selectableImageTypes,
   type AgentInterruptPayload,
+  type ImageQaMetrics,
   type ProductVisualMacroScheme,
   type ProductVisualPlan,
   type ProductVisualShot,
@@ -412,6 +414,8 @@ const macroSchemes = ref<ProductVisualMacroScheme[]>([])
 const macroSelections = ref<string[]>([])
 const shotManifest = ref<ProductVisualShot[]>([])
 const productVisualSchemeV2 = ref(false)
+const imageQaReason = ref<string | null>(null)
+const imageQaMetrics = ref<ImageQaMetrics | null>(null)
 const schemeSelections = ref<Record<string, string[]>>({})
 const deliverySelections = ref<Record<string, string>>({})
 const deliveryGenByKey = ref<Record<string, { node_id?: string | null; url?: string | null; title?: string | null }>>({})
@@ -434,17 +438,12 @@ function syncShotManifest(shots: ProductVisualShot[] | null | undefined) {
 }
 
 function toggleMacroSelection(schemeId: string, checked: boolean) {
-  const current = new Set(macroSelections.value)
-  if (checked) {
-    current.add(schemeId)
-    if (current.size > 2) {
-      const first = macroSelections.value[0]
-      if (first) current.delete(first)
-    }
-  } else {
-    current.delete(schemeId)
-  }
-  macroSelections.value = [...current]
+  macroSelections.value = toggleMacroSchemeSelection(
+    macroSelections.value,
+    schemeId,
+    checked,
+    macroSchemes.value,
+  )
 }
 
 async function sendMacroSchemeConfirm() {
@@ -842,9 +841,14 @@ async function refreshThreadCheckpoint() {
         productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+        imageQaReason?: string | null
+        imageQaMetrics?: ImageQaMetrics | null
+        visionUsed?: boolean | null
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    imageQaReason.value = json.data?.imageQaReason ?? null
+    imageQaMetrics.value = json.data?.imageQaMetrics ?? null
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
     }
@@ -1382,13 +1386,24 @@ function handleEvent(event: { type: string; data: unknown }) {
     case 'ping':
       break
     case 'interrupt': {
-      const data = event.data as AgentInterruptPayload
+      const data = event.data as AgentInterruptPayload & {
+        imageQaReason?: string | null
+        imageQaMetrics?: ImageQaMetrics | null
+        visionUsed?: boolean | null
+      }
       interruptGate.value = {
         interrupted: data.interrupted ?? true,
         phase: data.phase ?? null,
         node: data.node ?? null,
+        imageQaReason: data.imageQaReason ?? null,
+        imageQaMetrics: data.imageQaMetrics ?? null,
+        visionUsed: data.visionUsed ?? null,
       }
+      if (data.imageQaReason) imageQaReason.value = data.imageQaReason
+      if (data.imageQaMetrics) imageQaMetrics.value = data.imageQaMetrics
       if (
+        data.phase === 'await_image_qa' ||
+        data.node === 'await_image_qa' ||
         data.phase === 'await_scheme_select' ||
         data.node === 'await_scheme_select' ||
         data.phase === 'await_macro_scheme_select' ||
@@ -1796,18 +1811,39 @@ defineExpose({
                 取消
               </button>
             </div>
-            <div v-else-if="awaitingImageQa" class="mb-2 flex flex-wrap gap-2 px-0.5">
+            <div v-else-if="awaitingImageQa" class="mb-2 px-0.5">
+              <div
+                v-if="imageQaReason || imageQaMetrics"
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-surface)] p-2 text-xs text-[var(--neo-text-secondary)]"
+              >
+                <p v-if="imageQaReason" class="mb-1.5 leading-relaxed">
+                  {{ imageQaReason }}
+                </p>
+                <ul v-if="imageQaMetrics" class="space-y-0.5 text-[var(--neo-muted)]">
+                  <li v-if="imageQaMetrics.is_sharp_enough != null">
+                    清晰度：{{ imageQaMetrics.is_sharp_enough ? '✓ 足够' : '✗ 不足' }}
+                  </li>
+                  <li v-if="imageQaMetrics.is_white_bg != null">
+                    白底背景：{{ imageQaMetrics.is_white_bg ? '✓ 符合' : '✗ 非白底或杂底' }}
+                  </li>
+                  <li v-if="imageQaMetrics.product_identifiable != null">
+                    产品可辨：{{ imageQaMetrics.product_identifiable ? '✓ 可识别' : '✗ 难以识别' }}
+                  </li>
+                </ul>
+              </div>
+              <div class="flex flex-wrap gap-2">
               <button
                 v-for="opt in IMAGE_QA_OPTIONS"
                 :key="opt.id"
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
-                :class="{ 'agent-preset-primary font-medium': opt.id === 'ai_white_bg' }"
+                :class="{ 'agent-preset-primary font-medium': opt.id === 'confirm_pass' }"
                 :disabled="agent.isStreaming"
                 @click="sendPreset(opt.message)"
               >
                 {{ opt.label }}
               </button>
+              </div>
             </div>
             <div v-else-if="awaitingMacroSchemeSelect && macroSchemes.length" class="mb-2 px-0.5">
               <div class="space-y-2">

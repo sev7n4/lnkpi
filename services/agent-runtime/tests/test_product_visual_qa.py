@@ -10,7 +10,9 @@ from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.image_qa_gate import (
     REMEDIATE_DONE_MSG,
+    REMEDIATE_DONE_MSG_V2,
     REMEDIATE_PROGRESS_MSG,
+    REMEDIATE_PROGRESS_MSG_V2,
     classify_image_qa_decision,
     clear_product_visual_abort_state,
     evaluate_image_qa,
@@ -172,6 +174,30 @@ async def test_await_image_qa_remedy_ai_white_bg():
     msgs = [m.content for m in remedied.get("messages") or [] if isinstance(m, AIMessage)]
     assert msgs[0] == REMEDIATE_PROGRESS_MSG
     assert msgs[-1] == REMEDIATE_DONE_MSG
+
+
+@pytest.mark.asyncio
+async def test_await_image_qa_remedy_ai_white_bg_v2_lazy_seed():
+    nest = FakeNest()
+    await_node = make_await_image_qa_node()
+    remedy = make_image_qa_remedy_node(nest=nest)
+    decided = await await_node({"messages": [HumanMessage(content="生成标准白底图")]})
+    remedied = await remedy(
+        {
+            **decided,
+            "product_visual_scheme_v2": True,
+            "sidebar_attachments": [{"mediaType": "image", "role": "product", "url": "u1"}],
+        }
+    )
+    assert remedied["image_qa_result"] == "remediated"
+    assert remedied["phase"] == "dialog_draft"
+    assert remedied["product_visual_scheme_v2"] is True
+    gen_calls = [c for c in nest.calls if c[0] == "run_image_generation"]
+    assert gen_calls == []
+    assert any(c[0] == "add_nodes_batch" for c in nest.calls)
+    msgs = [m.content for m in remedied.get("messages") or [] if isinstance(m, AIMessage)]
+    assert msgs[0] == REMEDIATE_PROGRESS_MSG_V2
+    assert msgs[-1] == REMEDIATE_DONE_MSG_V2
 
 
 @pytest.mark.asyncio

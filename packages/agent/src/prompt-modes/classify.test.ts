@@ -36,4 +36,12 @@ describe('classifyPromptMode without API key', () => {
     const res = await classifyPromptMode('你好')
     expect(res.mode).toBe('generic')
   })
+
+  it('does not classify product SKU turnaround as character', async () => {
+    delete process.env.OPENAI_API_KEY
+    const res = await classifyPromptMode(
+      '单张横排四格拼图：最左近景特写，后接正/侧/背；同一产品锁定材质比例与外观，禁止每格换款；干净背景，商业摄影',
+    )
+    expect(res.mode).toBe('generic')
+  })
 })

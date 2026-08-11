@@ -209,7 +209,7 @@ class AgentRuntimeState(TypedDict, total=False):
     # ecommerce-product-visual (Phase 1 image-only)
     product_visual_plan: dict | None
     image_qa_result: Literal["pass", "fail", "remediated"] | None
-    image_qa_decision: Literal["none", "retake", "ai_white_bg"] | None
+    image_qa_decision: Literal["none", "retake", "ai_white_bg", "confirm_pass"] | None
     scheme_revision_count: int | None
     phase1_asset_keys: list[str] | None
     delivery_selections: dict[str, str] | None  # type_id -> scheme_id; v2: shot_id -> variant_id
@@ -223,4 +223,5 @@ class AgentRuntimeState(TypedDict, total=False):
     visual_intent: dict | None
     requires_standard_product_assets: bool | None
     image_qa_reason: str | None
+    image_qa_metrics: dict | None
     vision_used: bool | None

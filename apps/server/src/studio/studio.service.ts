@@ -339,6 +339,37 @@ export class StudioService {
     return resolveModelKey(modality, requested).entry.gatewayModelId
   }
 
+  /** Internal agent path: vision QA for product_visual — no points charge. */
+  async runVisionQaInternal(
+    userId: string,
+    params: {
+      systemPrompt: string
+      userContent: string
+      imageUrls: string[]
+      model?: string
+    },
+  ): Promise<{ text: string; visionUsed: boolean }> {
+    const resolved = await this.resolver.resolveForGeneration(userId, params.model, 'text')
+    const { entry } = resolveModelKey('text', resolved.modelName)
+    const gatewayModelId =
+      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
+    if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+      throw new Error('missing api key')
+    }
+    const opts = providerOpts(resolved)
+    const urls = params.imageUrls.map((u) => u.trim()).filter(Boolean)
+    if (!urls.length) {
+      throw new BadRequestException('imageUrls 不能为空')
+    }
+    const providerRefs = await inlineUpstreamReferenceImages(urls)
+    const prompt = `${params.systemPrompt.trim()}\n\n${params.userContent.trim()}`
+    return generateTextForRefs(prompt, providerRefs, {
+      model: gatewayModelId,
+      apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+      baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+    })
+  }
+
   async generateText(
     userId: string,
     prompt: string,
