@@ -41,15 +41,22 @@ import {
   IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
   buildSchemeConfirmMessage,
+  buildMacroSchemeConfirmMessage,
   buildVisualIntentSummary,
   buildDeliveryConfirmMessage,
   buildDeliveryRefineMessage,
   buildDeliverySwitchMessage,
+  buildShotDeliveryConfirmMessage,
+  buildShotDeliverySwitchMessage,
   defaultDeliverySelections,
+  defaultMacroSchemeSelection,
   defaultSchemeSelections,
+  defaultShotDeliverySelections,
   selectableImageTypes,
   type AgentInterruptPayload,
+  type ProductVisualMacroScheme,
   type ProductVisualPlan,
+  type ProductVisualShot,
 } from '@/components/agent/agentInterruptGate'
 import { phaseHintFromInterrupt } from '@/components/agent/executionStepLabels'
 import {
@@ -393,8 +400,18 @@ const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingImageQa = computed(() => chipSet.value === 'image_qa')
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
+const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme_select')
+const awaitingShotConfirm = computed(
+  () =>
+    interruptGate.value?.phase === 'await_shot_confirm' ||
+    interruptGate.value?.node === 'await_shot_confirm',
+)
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const productVisualPlan = ref<ProductVisualPlan | null>(null)
+const macroSchemes = ref<ProductVisualMacroScheme[]>([])
+const macroSelections = ref<string[]>([])
+const shotManifest = ref<ProductVisualShot[]>([])
+const productVisualSchemeV2 = ref(false)
 const schemeSelections = ref<Record<string, string[]>>({})
 const deliverySelections = ref<Record<string, string>>({})
 const deliveryGenByKey = ref<Record<string, { node_id?: string | null; url?: string | null; title?: string | null }>>({})
@@ -407,16 +424,61 @@ function syncSchemeSelectionsFromPlan(plan: ProductVisualPlan | null | undefined
   schemeSelections.value = defaultSchemeSelections(plan)
 }
 
+function syncMacroSchemes(schemes: ProductVisualMacroScheme[] | null | undefined) {
+  macroSchemes.value = schemes ?? []
+  macroSelections.value = defaultMacroSchemeSelection(schemes)
+}
+
+function syncShotManifest(shots: ProductVisualShot[] | null | undefined) {
+  shotManifest.value = shots ?? []
+}
+
+function toggleMacroSelection(schemeId: string, checked: boolean) {
+  const current = new Set(macroSelections.value)
+  if (checked) {
+    current.add(schemeId)
+    if (current.size > 2) {
+      const first = macroSelections.value[0]
+      if (first) current.delete(first)
+    }
+  } else {
+    current.delete(schemeId)
+  }
+  macroSelections.value = [...current]
+}
+
+async function sendMacroSchemeConfirm() {
+  const message = buildMacroSchemeConfirmMessage(macroSelections.value)
+  await sendMessage(message, 'confirm')
+}
+
+async function sendMacroSchemeRevise() {
+  await sendMessage('需要调整方案', 'revise')
+}
+
+async function sendShotConfirm() {
+  await sendPreset('确认出图')
+}
+
+async function sendShotRevise() {
+  await sendMessage('调整构图', 'revise')
+}
+
 function syncDeliveryCheckpoint(
   plan: ProductVisualPlan | null | undefined,
   selections: Record<string, string> | null | undefined,
   genByKey: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null | undefined,
 ) {
   if (plan) productVisualPlan.value = plan
-  const merged = {
-    ...defaultDeliverySelections(plan ?? productVisualPlan.value, genByKey),
-    ...(selections ?? {}),
-  }
+  const merged = productVisualSchemeV2.value && shotManifest.value.length
+    ? {
+        ...defaultShotDeliverySelections(shotManifest.value, genByKey),
+        ...(selections ?? {}),
+      }
+    : {
+        ...defaultDeliverySelections(plan ?? productVisualPlan.value, genByKey),
+        ...(selections ?? {}),
+      }
   deliverySelections.value = merged
   deliveryGenByKey.value = genByKey ?? deliveryGenByKey.value
 }
@@ -774,11 +836,24 @@ async function refreshThreadCheckpoint() {
         interrupted?: boolean
         phase?: string | null
         productVisualPlan?: ProductVisualPlan | null
+        macroSchemes?: ProductVisualMacroScheme[] | null
+        shotManifest?: ProductVisualShot[] | null
+        visualIntent?: Record<string, unknown> | null
+        productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualSchemeV2 != null) {
+      productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
+    }
+    if (json.data?.macroSchemes) {
+      syncMacroSchemes(json.data.macroSchemes)
+    }
+    if (json.data?.shotManifest) {
+      syncShotManifest(json.data.shotManifest)
+    }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
     }
@@ -1065,12 +1140,25 @@ async function reconnectStream() {
         nextNodes?: string[]
         hasAtomicCheckpoint?: boolean
         productVisualPlan?: ProductVisualPlan | null
+        macroSchemes?: ProductVisualMacroScheme[] | null
+        shotManifest?: ProductVisualShot[] | null
+        visualIntent?: Record<string, unknown> | null
+        productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
       } | null
     }
     const phase = json.data?.phase ?? null
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    if (json.data?.productVisualSchemeV2 != null) {
+      productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
+    }
+    if (json.data?.macroSchemes) {
+      syncMacroSchemes(json.data.macroSchemes)
+    }
+    if (json.data?.shotManifest) {
+      syncShotManifest(json.data.shotManifest)
+    }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
     }
@@ -1303,6 +1391,10 @@ function handleEvent(event: { type: string; data: unknown }) {
       if (
         data.phase === 'await_scheme_select' ||
         data.node === 'await_scheme_select' ||
+        data.phase === 'await_macro_scheme_select' ||
+        data.node === 'await_macro_scheme_select' ||
+        data.phase === 'await_shot_confirm' ||
+        data.node === 'await_shot_confirm' ||
         data.phase === 'await_delivery_confirm' ||
         data.node === 'await_delivery_confirm'
       ) {
@@ -1717,6 +1809,48 @@ defineExpose({
                 {{ opt.label }}
               </button>
             </div>
+            <div v-else-if="awaitingMacroSchemeSelect && macroSchemes.length" class="mb-2 px-0.5">
+              <div class="space-y-2">
+                <div
+                  v-for="scheme in macroSchemes"
+                  :key="scheme.id"
+                  class="rounded-lg border border-[var(--neo-border)] p-2"
+                >
+                  <label class="flex cursor-pointer items-start gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      class="mt-0.5"
+                      :checked="macroSelections.includes(scheme.id)"
+                      :disabled="agent.isStreaming"
+                      @change="toggleMacroSelection(scheme.id, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span>
+                      <span class="font-medium">{{ scheme.label || scheme.id }}</span>
+                      <span v-if="scheme.recommended" class="ml-1 text-[var(--neo-accent)]">推荐</span>
+                      <span v-if="scheme.summary" class="mt-0.5 block text-[var(--neo-muted)]">{{ scheme.summary }}</span>
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  :disabled="agent.isStreaming || !macroSelections.length"
+                  @click="sendMacroSchemeConfirm()"
+                >
+                  确认宏观方案
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendMacroSchemeRevise()"
+                >
+                  需要调整方案
+                </button>
+              </div>
+            </div>
             <div v-else-if="awaitingSchemeSelect && productVisualPlan" class="mb-2 px-0.5">
               <p v-if="visualIntentSummary" class="mb-2 text-xs text-[var(--neo-muted)]">
                 系统理解：{{ visualIntentSummary }}
@@ -1770,7 +1904,7 @@ defineExpose({
               </div>
             </div>
             <ProductVisualDeliveryCard
-              v-else-if="awaitingDeliveryConfirm && productVisualPlan"
+              v-else-if="awaitingDeliveryConfirm && productVisualPlan && !productVisualSchemeV2"
               class="mb-2 px-0.5"
               :plan="productVisualPlan"
               :gen-by-key="deliveryGenByKey"
@@ -1781,7 +1915,75 @@ defineExpose({
               @refine-type="sendDeliveryRefine"
               @confirm-all="sendDeliveryConfirmAll"
             />
-            <div v-else-if="awaitingTopoConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+            <div
+              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length"
+              class="mb-2 space-y-2 px-0.5"
+            >
+              <div
+                v-for="shot in shotManifest"
+                :key="shot.shot_id"
+                class="rounded-lg border border-[var(--neo-border)] p-2 text-xs"
+              >
+                <div class="mb-1 font-medium">
+                  {{ shot.label || shot.shot_id }}
+                  <span v-if="shot.macro_scheme_id" class="ml-1 text-[var(--neo-muted)]">
+                    方案{{ shot.macro_scheme_id }}
+                  </span>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button
+                    v-for="variantKey in (
+                      (shot.variant_count ?? 1) === 1
+                        ? [shot.shot_id]
+                        : Array.from({ length: Math.min(3, shot.variant_count ?? 1) }, (_, i) => `${shot.shot_id}__v${i + 1}`)
+                    )"
+                    :key="variantKey"
+                    type="button"
+                    class="neo-ctl rounded px-2 py-1"
+                    :class="{ 'agent-preset-primary font-medium': deliverySelections[shot.shot_id] === variantKey }"
+                    :disabled="agent.isStreaming || !deliveryGenByKey[variantKey]?.url"
+                    @click="sendMessage(buildShotDeliverySwitchMessage(shot.shot_id, variantKey))"
+                  >
+                    {{ variantKey.includes('__v') ? variantKey.split('__v').pop() : '默认' }}
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                :disabled="agent.isStreaming"
+                @click="sendMessage(buildShotDeliveryConfirmMessage(deliverySelections), 'confirm')"
+              >
+                确认全部定稿
+              </button>
+            </div>
+            <div v-else-if="awaitingShotConfirm" class="mb-2 px-0.5">
+              <div v-if="shotManifest.length" class="mb-2 space-y-1 text-xs text-[var(--neo-muted)]">
+                <div v-for="shot in shotManifest" :key="shot.shot_id">
+                  · {{ shot.label || shot.shot_id }}
+                  <span v-if="shot.macro_scheme_id">（方案{{ shot.macro_scheme_id }}）</span>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  :disabled="agent.isStreaming"
+                  @click="sendShotConfirm()"
+                >
+                  确认出图
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  :disabled="agent.isStreaming"
+                  @click="sendShotRevise()"
+                >
+                  调整构图
+                </button>
+              </div>
+            </div>
+            <div v-else-if="awaitingTopoConfirm && !awaitingShotConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"

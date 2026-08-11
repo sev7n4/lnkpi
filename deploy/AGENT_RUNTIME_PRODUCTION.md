@@ -45,6 +45,7 @@
 | `LNKPI_SKILLS_DIR` | 否 | `/app/skills`（镜像内默认） | Skill 包目录 |
 | `LNKPI_IMAGE_GEN_CONCURRENCY` | 否 | `3` | 编排出图并发上限 |
 | `LNKPI_IMAGE_GEN_TIMEOUT_SEC` | 否 | `180` | 单图等待上限（秒） |
+| `LNKPI_PRODUCT_VISUAL_SCHEME_V2` | 否 | `false` | **v2** prose SSOT + macro/shot 路径；UAT 前设为 `true` 并重启 Runtime |
 
 ### 1.3 与「大模型 Key」对照（避免混）
 

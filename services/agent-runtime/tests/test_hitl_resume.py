@@ -85,6 +85,23 @@ def test_should_resume_interrupt_short_confirm_at_confirm_gate():
     assert should_resume_interrupt("确认", ["await_confirm"]) is True
 
 
+def test_should_resume_interrupt_macro_scheme_confirm():
+    assert should_resume_interrupt("确认方案", ["await_macro_scheme_select"]) is True
+
+
+def test_should_resume_interrupt_macro_scheme_json():
+    msg = '__macro_scheme_decision__{"action":"confirm","selected_ids":["A","B"]}'
+    assert should_resume_interrupt(msg, ["await_macro_scheme_select"]) is True
+
+
+def test_should_resume_interrupt_shot_confirm():
+    assert should_resume_interrupt("确认出图", ["await_shot_confirm"]) is True
+
+
+def test_should_resume_interrupt_shot_revise():
+    assert should_resume_interrupt("调整构图", ["await_shot_confirm"]) is True
+
+
 def test_should_resume_interrupt_image_qa_retake():
     assert should_resume_interrupt("我重新拍摄上传", ["await_image_qa"]) is True
 

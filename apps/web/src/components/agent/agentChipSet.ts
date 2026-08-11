@@ -9,6 +9,7 @@ export type AgentChipSet =
   | 'atomic'
   | 'image_qa'
   | 'scheme_select'
+  | 'macro_scheme_select'
   | 'delivery_confirm'
   | null
 

@@ -49,6 +49,13 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "image_qa_decision": None,
     "scheme_revision_count": None,
     "delivery_selections": None,
+    "product_visual_scheme_v2": None,
+    "macro_scheme_draft": None,
+    "macro_schemes": None,
+    "selected_macro_scheme_ids": None,
+    "macro_scheme_decision": None,
+    "shot_manifest": None,
+    "visual_intent": None,
 }
 
 
@@ -138,6 +145,31 @@ def should_resume_interrupt(
         if len(text) >= 12 and REF_MENTION_RE.search(text):
             return False
         return len(text) <= 24
+
+    if gate == "await_macro_scheme_select":
+        from app.graph.nodes.macro_scheme_select_gate import classify_macro_scheme_decision
+
+        decision = classify_macro_scheme_decision(text, user_decision=user_decision)
+        if decision.get("action") != "none":
+            return True
+        if text.startswith("__macro_scheme_decision__"):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 24
+
+    if gate == "await_shot_confirm":
+        from app.graph.intent import classify_topo_decision
+
+        if user_decision in ("confirm", "confirm_gen"):
+            return True
+        if classify_topo_decision(text) != "none":
+            return True
+        if any(k in text for k in ("调整构图", "去掉", "删减")):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 20
 
     # Unknown gate: only resume short gate-like replies.
     return len(text) <= 16 and not REF_MENTION_RE.search(text)

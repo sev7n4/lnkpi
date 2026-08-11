@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   chipSetFromInterrupt,
   defaultDeliverySelections,
+  defaultMacroSchemeSelection,
+  buildMacroSchemeConfirmMessage,
+  defaultShotDeliverySelections,
   interruptPayloadFromThreadState,
 } from './agentInterruptGate'
 
@@ -34,6 +37,16 @@ describe('chipSetFromInterrupt', () => {
     )
   })
 
+  it('maps await_macro_scheme_select to macro_scheme_select chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_macro_scheme_select' })).toBe(
+      'macro_scheme_select',
+    )
+  })
+
+  it('maps await_shot_confirm to topo chips', () => {
+    expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_shot_confirm' })).toBe('topo')
+  })
+
   it('maps await_delivery_confirm to delivery_confirm chips', () => {
     expect(chipSetFromInterrupt({ interrupted: true, phase: 'await_delivery_confirm' })).toBe(
       'delivery_confirm',
@@ -62,6 +75,42 @@ describe('interruptPayloadFromThreadState', () => {
 
   it('returns null when not interrupted', () => {
     expect(interruptPayloadFromThreadState({ interrupted: false, phase: 'done' })).toBe(null)
+  })
+})
+
+describe('defaultMacroSchemeSelection', () => {
+  it('prefers recommended macro schemes up to 2', () => {
+    const schemes = [
+      { id: 'A', recommended: false },
+      { id: 'B', recommended: true },
+      { id: 'C', recommended: true },
+    ]
+    expect(defaultMacroSchemeSelection(schemes)).toEqual(['B', 'C'])
+  })
+})
+
+describe('buildMacroSchemeConfirmMessage', () => {
+  it('embeds selected ids', () => {
+    const msg = buildMacroSchemeConfirmMessage(['A', 'B'])
+    expect(msg).toContain('__macro_scheme_decision__')
+    expect(msg).toContain('"selected_ids":["A","B"]')
+  })
+})
+
+describe('defaultShotDeliverySelections', () => {
+  it('picks first ready variant per shot', () => {
+    const shots = [
+      { shot_id: 'hero__1', type_id: 'hero', variant_count: 2 },
+      { shot_id: 'detail__1', type_id: 'detail', variant_count: 1 },
+    ]
+    const genByKey = {
+      hero__1__v2: { url: 'u2' },
+      detail__1: { url: 'u3' },
+    }
+    expect(defaultShotDeliverySelections(shots, genByKey)).toEqual({
+      hero__1: 'hero__1__v2',
+      detail__1: 'detail__1',
+    })
   })
 })
 

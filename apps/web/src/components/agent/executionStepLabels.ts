@@ -86,6 +86,8 @@ const PHASE_HINT_LABELS: Record<string, string> = {
   await_atomic_confirm: '等待你确认生成参数',
   await_image_qa: '等待你确认成图效果',
   await_scheme_select: '等待你选择变体',
+  await_macro_scheme_select: '等待你选择宏观方案',
+  await_shot_confirm: '等待你确认构图清单',
   await_delivery_confirm: '等待你确认定稿',
 }
 

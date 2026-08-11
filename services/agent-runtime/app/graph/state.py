@@ -114,6 +114,15 @@ class AgentRuntimeState(TypedDict, total=False):
         "split_product_visual",
         "delivery_confirm",
         "await_delivery_confirm",
+        "dialog_draft",
+        "await_macro_scheme_select",
+        "canvas_ssot_commit",
+        "decompose_from_ssot",
+        "await_shot_confirm",
+        "synthesize_gen_prompt",
+        "orchestrate_shots",
+        "phase1_seed_lazy",
+        "phase1_seed_eager",
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn
@@ -203,4 +212,15 @@ class AgentRuntimeState(TypedDict, total=False):
     image_qa_decision: Literal["none", "retake", "ai_white_bg"] | None
     scheme_revision_count: int | None
     phase1_asset_keys: list[str] | None
-    delivery_selections: dict[str, str] | None  # type_id -> scheme_id
+    delivery_selections: dict[str, str] | None  # type_id -> scheme_id; v2: shot_id -> variant_id
+    # product_visual scheme v2 (spec 2026-08-11)
+    product_visual_scheme_v2: bool | None
+    macro_scheme_draft: str | None
+    macro_schemes: list[dict] | None
+    selected_macro_scheme_ids: list[str] | None
+    macro_scheme_decision: Literal["none", "confirm", "revise", "auto"] | None
+    shot_manifest: list[dict] | None
+    visual_intent: dict | None
+    requires_standard_product_assets: bool | None
+    image_qa_reason: str | None
+    vision_used: bool | None

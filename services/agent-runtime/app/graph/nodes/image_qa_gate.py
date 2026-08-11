@@ -7,6 +7,7 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.phase1_seed import PHASE1_ASSET_KEYS, ensure_phase1_seed_chain
+from app.graph.product_visual_v2.routing import is_v2_enabled
 
 QA_FAIL_TIP = (
     "当前成图效果可能不够清晰或未在白底上拍摄。"
@@ -23,6 +24,16 @@ _PRODUCT_VISUAL_ABORT_CLEAR: dict[str, Any] = {
     "scheme_revision_count": None,
     "delivery_selections": None,
     "image_qa_decision": None,
+    "plan_node_id": None,
+    "macro_scheme_draft": None,
+    "macro_schemes": None,
+    "selected_macro_scheme_ids": None,
+    "macro_scheme_decision": None,
+    "shot_manifest": None,
+    "visual_intent": None,
+    "requires_standard_product_assets": None,
+    "image_qa_reason": None,
+    "vision_used": None,
 }
 
 
@@ -112,11 +123,15 @@ def make_image_qa_check_node(*, nest: Any | None = None) -> Callable:
         result = evaluate_image_qa(metrics)
         out: dict[str, Any] = {"phase": "image_qa", **result}
         if result["image_qa_result"] == "pass":
-            manifest, err = await ensure_phase1_seed_chain(nest, state, run_generation=False)
-            if err:
-                return {**out, **err}
-            out["phase1_asset_keys"] = list(PHASE1_ASSET_KEYS)
-            out["split_manifest"] = manifest
+            if is_v2_enabled(state):
+                out["product_visual_scheme_v2"] = True
+                out["phase"] = "dialog_draft"
+            else:
+                manifest, err = await ensure_phase1_seed_chain(nest, state, run_generation=False)
+                if err:
+                    return {**out, **err}
+                out["phase1_asset_keys"] = list(PHASE1_ASSET_KEYS)
+                out["split_manifest"] = manifest
         elif result["image_qa_result"] == "fail":
             out["messages"] = [AIMessage(content=QA_FAIL_TIP)]
         return out
@@ -163,7 +178,8 @@ def make_image_qa_remedy_node(*, nest: Any | None = None) -> Callable:
                 "image_qa_result": "remediated",
                 "phase1_asset_keys": list(PHASE1_ASSET_KEYS),
                 "split_manifest": manifest,
-                "phase": "plan_product_visual",
+                "phase": "dialog_draft" if is_v2_enabled(state) else "plan_product_visual",
+                "product_visual_scheme_v2": is_v2_enabled(state) or None,
                 "messages": progress + [AIMessage(content=REMEDIATE_DONE_MSG)],
             }
         return {"phase": "await_image_qa", "image_qa_decision": "none"}
