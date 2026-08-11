@@ -160,21 +160,32 @@ def test_topo_primary_action_label_distinct_from_shot():
         state={"shot_manifest": [{"shot_id": "a"}]},
         copy=copy,
     )
+    manifest = [
+        {"key": "white_bg", "title": "白底主图", "role": "seed", "auto_generate": True},
+        {"key": "product_turnaround", "title": "产品四视图", "role": "turnaround", "depends_on": ["white_bg"], "auto_generate": True},
+        {"key": "hero__1", "title": "礼盒主视觉", "role": "downstream", "depends_on": ["white_bg"], "auto_generate": True},
+        {"key": "scene__1", "title": "送礼场景", "role": "downstream", "depends_on": ["white_bg"], "auto_generate": True},
+    ]
     topo_env = build_presentation_envelope(
         kind="topo_card_list",
         phase="await_topo",
-        state={
-            "split_manifest": [
-                {"key": "hero__1", "role": "downstream"},
-                {"key": "scene__1", "role": "downstream"},
-            ],
-        },
+        state={"split_manifest": manifest},
         copy=copy,
     )
     assert shot_env["primary_action"]["label"] == "确认构图，生成预览"
     assert topo_env["primary_action"]["label"] != shot_env["primary_action"]["label"]
     assert "分钟" in topo_env["primary_action"]["label"]
     assert "2" in topo_env["body"]["text"]
+    body = topo_env["body"]
+    assert len(body["nodes"]) == 4
+    assert body["nodes"][0]["title"] == "白底主图"
+    assert body["nodes"][0]["category"] == "基础"
+    assert body["nodes"][-1]["category"] == "场景"
+    assert body["eta_min"] >= 3
+    assert body["scene_count"] == 2
+    assert "积分" in body["credits_hint"]
+    assert "flowchart LR" in body["mermaid"]
+    assert body["nodes"][2]["depends_on_labels"] == ["白底主图"]
 
 
 def test_macro_select_envelope_includes_ab_expectation():
@@ -230,3 +241,22 @@ def test_compute_expected_delivery_mixed_mode():
     assert delivery["total_finalize"] == 3
     assert delivery["scene_count"] == 3
     assert "2 套" in delivery["allocation_note"] or "两套" in delivery["allocation_note"]
+
+
+def test_generating_envelope_task_progress_card():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    env = build_presentation_envelope(
+        kind="task_progress_card",
+        phase="start_gen",
+        state={
+            "split_manifest": [
+                {"key": "white_bg", "title": "白底主图", "role": "seed"},
+                {"key": "packaging_hero__1", "title": "礼盒主视觉", "role": "downstream"},
+            ],
+        },
+        copy=copy,
+    )
+    assert env["kind"] == "task_progress_card"
+    assert env["stepper"]["current"] == "generating"
+    assert "切换标签" in env["body"]["banner"]
+    assert env["body"]["card_title"] == "出图中"

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import AgentStepper from './AgentStepper.vue'
 import AgentProseBlock from './AgentProseBlock.vue'
 import AgentMacroSchemeCards from './AgentMacroSchemeCards.vue'
+import AgentTopoCardList from './AgentTopoCardList.vue'
 import type { AgentPresentationEnvelope } from './types'
 
 const props = defineProps<{
@@ -14,14 +15,17 @@ const props = defineProps<{
 const emit = defineEmits<{
   primaryAction: [message: string]
   macroToggle: [schemeId: string, checked: boolean]
+  focusNode: [nodeId: string]
 }>()
 
 const macroSelections = ref<string[]>(props.macroSelectedIds ?? [])
 
 const isProseBlock = computed(() => props.presentation.kind === 'prose_block')
 const isMacroCards = computed(() => props.presentation.kind === 'macro_scheme_cards')
+const isTopoCards = computed(() => props.presentation.kind === 'topo_card_list')
 const proseContent = computed(() => String(props.presentation.body?.prose ?? ''))
 const macroSchemes = computed(() => props.presentation.body?.schemes ?? [])
+const topoNodes = computed(() => props.presentation.body?.nodes ?? [])
 </script>
 
 <template>
@@ -56,7 +60,24 @@ const macroSchemes = computed(() => props.presentation.body?.schemes ?? [])
       @toggle="(id, checked) => emit('macroToggle', id, checked)"
     />
     <p
-      v-if="presentation.body?.text"
+      v-if="presentation.body?.text && isTopoCards && topoNodes.length"
+      class="text-xs leading-relaxed text-[var(--neo-muted)]"
+      data-testid="presentation-hint"
+    >
+      {{ presentation.body.text }}
+    </p>
+    <AgentTopoCardList
+      v-if="isTopoCards && topoNodes.length"
+      :nodes="topoNodes"
+      :eta-min="presentation.body?.eta_min"
+      :scene-count="presentation.body?.scene_count"
+      :credits-hint="presentation.body?.credits_hint"
+      :mermaid="presentation.body?.mermaid"
+      :disabled="disabled"
+      @focus-node="emit('focusNode', $event)"
+    />
+    <p
+      v-if="presentation.body?.text && !(isTopoCards && topoNodes.length)"
       class="text-xs leading-relaxed text-[var(--neo-muted)]"
       data-testid="presentation-hint"
     >

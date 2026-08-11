@@ -19,6 +19,14 @@ export interface MacroSchemeCardBody {
   recommend_reason?: string | null
 }
 
+export interface TopoCardNode {
+  key: string
+  title: string
+  category: string
+  depends_on_labels?: string[]
+  node_id?: string
+}
+
 export interface AgentPresentationBody {
   text?: string
   footer_hint?: string
@@ -28,6 +36,11 @@ export interface AgentPresentationBody {
   prose?: string
   schemes?: MacroSchemeCardBody[]
   max_select?: number
+  nodes?: TopoCardNode[]
+  eta_min?: number
+  scene_count?: number
+  credits_hint?: string
+  mermaid?: string
 }
 
 export interface AgentPresentationEnvelope {

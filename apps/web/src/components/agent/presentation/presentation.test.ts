@@ -16,7 +16,17 @@ const topoEnvelope: AgentPresentationEnvelope = {
   kind: 'topo_card_list',
   stepper: { current: 'topo_preview', completed: ['image_qa', 'scheme_draft', 'macro_select', 'ssot_persist', 'shot_plan'] },
   context_recap: '巨峰葡萄礼盒',
-  body: { text: '方案已写入画布；确认后将生成白底、四视图及 2 张场景图。' },
+  body: {
+    text: '方案已写入画布；确认后将生成白底、四视图及 2 张场景图。',
+    nodes: [
+      { key: 'white_bg', title: '白底主图', category: '基础' },
+      { key: 'hero__1', title: '礼盒主视觉', category: '场景', depends_on_labels: ['白底主图'] },
+    ],
+    eta_min: 4,
+    scene_count: 2,
+    credits_hint: '约 20 积分',
+    mermaid: 'flowchart LR\n  white_bg["白底主图"]',
+  },
   primary_action: { label: '开始出图（约 4 分钟）', message: '确认出图' },
 }
 

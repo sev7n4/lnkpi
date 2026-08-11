@@ -8,7 +8,6 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.chain_refs import build_chain_ref_order
-from app.graph.mermaid_topo import manifest_to_mermaid
 from app.graph.nodes.split_product_visual import _gen_order_fields, _merge_phase1_items
 from app.graph.phase1_seed import PHASE1_ASSET_KEYS, ensure_phase1_seed_chain
 from app.graph.product_visual_copy import ProductVisualCopy
@@ -172,7 +171,6 @@ def make_orchestrate_shots_v2_node(*, nest: Any, skills_dir: Path) -> Callable:
             if ref_order:
                 await nest.attach_refs(nid, ref_order)
 
-        mermaid = manifest_to_mermaid(list(manifest))
         phase1_note = f"（Phase1: {', '.join(needed_phase1)}）" if needed_phase1 else ""
         copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0", skills_dir=skills_dir)
         pres_state = {**state, "split_manifest": manifest, "shot_manifest": shots}
@@ -186,8 +184,7 @@ def make_orchestrate_shots_v2_node(*, nest: Any, skills_dir: Path) -> Callable:
         hint = str((presentation.get("body") or {}).get("text") or "")
         split_msg = (
             f"已编排 {len(downstream_items)} 个视觉出图任务{phase1_note}。"
-            "\n先预览拓扑，确认出图前不会自动生成。\n\n"
-            f"当前资产拓扑：\n{mermaid}\n\n"
+            "\n先预览下方出图计划，确认出图前不会自动生成。\n\n"
             f"{hint}"
         )
         msg_parts = [p for p in (recap, split_msg) if p]

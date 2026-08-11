@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AgentTopoCardList > default snapshot hides mermaid flowchart source 1`] = `
+"<div class="agent-topo-card-list space-y-2" data-testid="topo-card-list">
+  <div class="group rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] p-2 text-xs cursor-pointer hover:bg-[var(--neo-hover)]" data-topo-key="white_bg">
+    <!--v-if-->
+    <div class="flex items-start gap-2"><span class="mt-0.5 shrink-0 rounded bg-[var(--neo-surface)] px-1.5 py-0.5 text-[10px] text-[var(--neo-muted)]" data-testid="topo-node-category">基础</span><span class="min-w-0 flex-1 font-medium text-[var(--neo-text)]">白底主图</span><span class="mt-0.5 shrink-0 opacity-0 transition group-hover:opacity-70" data-testid="topo-locate-pin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.5s-6.5-4.74-6.5-11.5a6.5 6.5 0 1 1 13 0c0 6.76-6.5 11.5-6.5 11.5z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" fill="none" opacity="1"></path><circle cx="12" cy="10" r="2.25" fill="currentColor" stroke="none"></circle></svg></span></div>
+  </div>
+  <div class="group rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] p-2 text-xs cursor-pointer hover:bg-[var(--neo-hover)]" data-topo-key="hero__1">
+    <div class="mb-1.5 flex items-center gap-1 text-[10px] text-[var(--neo-muted)]"><span aria-hidden="true">↓</span><span> 依赖 白底主图</span></div>
+    <div class="flex items-start gap-2"><span class="mt-0.5 shrink-0 rounded bg-[var(--neo-surface)] px-1.5 py-0.5 text-[10px] text-[var(--neo-muted)]" data-testid="topo-node-category">场景</span><span class="min-w-0 flex-1 font-medium text-[var(--neo-text)]">礼盒主视觉</span><span class="mt-0.5 shrink-0 opacity-0 transition group-hover:opacity-70" data-testid="topo-locate-pin"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 21.5s-6.5-4.74-6.5-11.5a6.5 6.5 0 1 1 13 0c0 6.76-6.5 11.5-6.5 11.5z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" fill="none" opacity="1"></path><circle cx="12" cy="10" r="2.25" fill="currentColor" stroke="none"></circle></svg></span></div>
+  </div>
+  <p class="rounded-lg border border-[var(--neo-border)] bg-[var(--neo-surface)] px-2 py-1.5 text-xs text-[var(--neo-muted)]" data-testid="topo-footer-callout">预计 2 张场景图<span> · </span> 约 5 分钟 <span> · </span> 约 30 积分</p>
+  <details class="rounded-lg border border-[var(--neo-border)] text-xs" data-testid="topo-mermaid-collapse">
+    <summary class="cursor-pointer px-2 py-1.5 text-[var(--neo-muted)] hover:text-[var(--neo-text)]"> 查看技术拓扑 </summary>
+    <!--v-if-->
+  </details>
+</div>"
+`;

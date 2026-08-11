@@ -35,6 +35,7 @@ PHASE_TO_STEPPER: dict[str, str] = {
     "decompose_from_ssot": "ssot_persist",
     "await_shot_confirm": "shot_plan",
     "await_topo": "topo_preview",
+    "start_gen": "generating",
     "orchestrate_gen": "generating",
     "orchestrate_shots": "generating",
     "collect_gen": "generating",
@@ -119,6 +120,72 @@ def _eta_min(scene_count: int) -> int:
     return max(3, 2 + scene_count)
 
 
+_ROLE_CATEGORY: dict[str, str] = {
+    "seed": "基础",
+    "turnaround": "基础",
+    "downstream": "场景",
+}
+
+_ROLE_ORDER: dict[str, int] = {
+    "seed": 0,
+    "turnaround": 1,
+    "downstream": 2,
+}
+
+
+def _topo_credits_hint(manifest: list[Any]) -> str:
+    count = sum(
+        1
+        for it in manifest
+        if isinstance(it, dict)
+        and it.get("key")
+        and it.get("auto_generate", True) is not False
+    )
+    credits = max(10, count * 10)
+    return f"约 {credits} 积分"
+
+
+def build_topo_card_nodes(manifest: list[Any]) -> list[dict[str, Any]]:
+    """Build user-facing topo card rows from split_manifest."""
+    items = [x for x in (manifest or []) if isinstance(x, dict) and x.get("key")]
+    items.sort(
+        key=lambda it: (
+            _ROLE_ORDER.get(str(it.get("role") or ""), 9),
+            str(it.get("key") or ""),
+        )
+    )
+    key_to_title = {str(it["key"]): str(it.get("title") or it["key"]) for it in items}
+    nodes: list[dict[str, Any]] = []
+    for it in items:
+        key = str(it["key"])
+        deps = [str(d) for d in (it.get("depends_on") or []) if str(d) in key_to_title]
+        entry: dict[str, Any] = {
+            "key": key,
+            "title": str(it.get("title") or key),
+            "category": _ROLE_CATEGORY.get(str(it.get("role") or ""), "场景"),
+        }
+        if deps:
+            entry["depends_on_labels"] = [key_to_title.get(d, d) for d in deps]
+        nid = str(it.get("node_id") or "").strip()
+        if nid:
+            entry["node_id"] = nid
+        nodes.append(entry)
+    return nodes
+
+
+def mermaid_for_presentation(manifest: list[Any]) -> str:
+    """Return mermaid source (no fences) for collapsed topo preview."""
+    from app.graph.mermaid_topo import manifest_to_mermaid
+
+    raw = manifest_to_mermaid(list(manifest)).strip()
+    lines = raw.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines)
+
+
 def compute_expected_delivery(
     selected_macro_ids: list[str],
     shots: list[dict[str, Any]],
@@ -173,12 +240,22 @@ def build_presentation_envelope(
         envelope["primary_action"] = {"label": label, "message": "确认出图"}
         envelope["body"] = {"text": hint}
     elif phase == "await_topo":
+        manifest = state.get("split_manifest") or []
         scene_count = _scene_count(state)
         eta_min = _eta_min(scene_count)
         hint = copy.get("topo.hint", scene_count=str(scene_count))
         label = copy.get("topo.primary_label", eta_min=str(eta_min))
         envelope["primary_action"] = {"label": label, "message": "确认出图"}
-        envelope["body"] = {"text": hint}
+        topo_body: dict[str, Any] = {
+            "text": hint,
+            "nodes": build_topo_card_nodes(manifest),
+            "eta_min": eta_min,
+            "scene_count": scene_count,
+            "credits_hint": _topo_credits_hint(manifest),
+        }
+        if manifest:
+            topo_body["mermaid"] = mermaid_for_presentation(manifest)
+        envelope["body"] = topo_body
     elif phase == "await_macro_scheme_select":
         from app.graph.product_visual_v2.macro_select import default_macro_selection
 
@@ -204,5 +281,15 @@ def build_presentation_envelope(
             if note:
                 body["callout"] = note
         envelope["body"] = body
+    elif phase in ("start_gen", "orchestrate_gen", "collect_gen"):
+        scene_count = _scene_count(state)
+        eta_min = _eta_min(scene_count)
+        envelope["kind"] = "task_progress_card"
+        envelope["body"] = {
+            "banner": copy.get("generating.banner", eta_min=str(eta_min)),
+            "card_title": copy.get("generating.card_title"),
+            "progress_line_template": copy.get("generating.progress_line"),
+            "eta_min": eta_min,
+        }
 
     return envelope

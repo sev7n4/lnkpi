@@ -2028,6 +2028,7 @@ defineExpose({
                 :presentation="gatePresentation"
                 :disabled="agent.isStreaming"
                 @primary-action="onGatePrimaryAction"
+                @focus-node="emit('focusNode', $event)"
               />
               <div v-if="awaitingShotConfirm" class="mt-2 flex flex-wrap gap-2 px-0.5">
                 <div v-if="shotManifest.length" class="mb-1 w-full space-y-1 text-xs text-[var(--neo-muted)]">
