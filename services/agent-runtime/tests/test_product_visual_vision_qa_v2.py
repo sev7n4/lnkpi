@@ -94,9 +94,15 @@ async def test_vision_qa_check_fail_shows_reason():
     )
     assert out["image_qa_result"] == "fail"
     assert out["phase"] == "await_image_qa"
+    assert "模糊" in str(out.get("image_qa_reason") or "")
+    pres = out.get("presentation")
+    assert isinstance(pres, dict)
+    assert pres.get("title") == "产品图需要处理"
+    checks = (pres.get("body") or {}).get("checks") or []
+    assert any("清晰度" in c or "难以识别" in c for c in checks)
     msgs = out.get("messages") or []
     assert msgs
-    assert "模糊" in str(getattr(msgs[0], "content", ""))
+    assert pres.get("title") in str(getattr(msgs[0], "content", ""))
 
 
 def test_heuristic_only_cannot_pass_v2():

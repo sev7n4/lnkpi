@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage
 from app.graph.nodes.plan._shared import latest_user_text
 from app.graph.product_visual_v2.models import DialogDraftOutput, parse_dialog_draft_output
 from app.graph.product_visual_v2.macro_select import default_macro_selection, should_skip_macro_hitl
+from app.graph.product_visual_v2.routing import route_after_dialog_draft
 from app.graph.nodes.macro_scheme_select_gate import build_macro_select_presentation_patch
 from app.graph.product_visual_v2.utterance import extract_user_request_labels
 from app.graph.product_visual_v2_prompt import (
