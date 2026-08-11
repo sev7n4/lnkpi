@@ -7,6 +7,10 @@ qa:
   confirm_use_image: "就用这张图，继续"
   retake_label: "重新拍摄"
   retake_message: "我重新拍摄上传"
+  retake_title: "请上传新照片"
+  retake_body: "请上传新照片，上传完成后点 **继续**"
+  retake_continue_label: "继续"
+  retake_toast: "已重置视觉方案，保留您的需求描述"
   ai_white_bg_label: "生成白底图"
   ai_white_bg_message: "生成标准白底图"
 shot_confirm:
@@ -38,3 +42,16 @@ done:
   primary_label: "在画布中定位全部"
   basics_section_title: "基础资产"
   export_label: "导出打包（二期）"
+guidance:
+  macro_style_in_cards: "风格在这里选；需求用口语描述即可。"
+  attachment_hint: "建议清晰 product 图；白底更佳，非白底也可继续。"
+  example_utterances:
+    - id: gift_box
+      label: 礼盒
+      text: "这是我们的大闸蟹礼盒，帮我做一套电商包装推广图：包装主视觉、包装结构图、模特送礼场景图。风格喜庆高级，突出冷链保鲜和礼盒质感。"
+    - id: listing
+      label: Listing
+      text: "用这张产品实拍图出电商主图和详情页场景图：白底主图、两张生活场景，突出产品卖点和质感。"
+    - id: space
+      label: 空间
+      text: "这是待装修客厅，出有人在里面的现代简约空间效果图、材质软装搭配板，沙发置入效果，最好有一位女性在客厅使用沙发的真实生活感。暖白原木色调。"

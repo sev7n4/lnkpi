@@ -26,6 +26,7 @@ STEPPER_ORDER: list[str] = [
 
 PHASE_TO_STEPPER: dict[str, str] = {
     "await_image_qa": "image_qa",
+    "await_retake_upload": "image_qa",
     "image_qa_check": "image_qa",
     "dialog_draft": "scheme_draft",
     "await_scheme_select": "scheme_draft",
@@ -304,10 +305,13 @@ def build_presentation_envelope(
         if len(selected) >= 2 and delivery["allocation_note"]:
             body["footer_hint"] = delivery["allocation_note"]
             body["expected_delivery_count"] = delivery["total_finalize"]
+        guidance_callout = copy.get("guidance.macro_style_in_cards")
+        if guidance_callout and guidance_callout != "guidance.macro_style_in_cards":
+            body["callout"] = guidance_callout
         if has_conflicting_style_utterance(state):
             note = copy.get("context.latest_utterance_note")
             if note:
-                body["callout"] = note
+                body["callout_conflict"] = note
         envelope["body"] = body
     elif phase in ("start_gen", "orchestrate_gen", "collect_gen"):
         scene_count = _scene_count(state)

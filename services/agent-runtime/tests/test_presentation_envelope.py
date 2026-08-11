@@ -92,6 +92,22 @@ def test_context_recap_uses_effective_utterance_not_style_keywords():
     assert len(recap) <= 120
 
 
+def test_macro_select_envelope_includes_guidance_callout():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    state = {
+        "macro_schemes": [{"id": "A"}, {"id": "B"}],
+        "selected_macro_scheme_ids": ["A"],
+    }
+    env = build_presentation_envelope(
+        kind="macro_scheme_cards",
+        phase="await_macro_scheme_select",
+        state=state,
+        copy=copy,
+    )
+    assert env["body"]["callout"] == copy.get("guidance.macro_style_in_cards")
+    assert "callout_conflict" not in env["body"]
+
+
 def test_macro_select_envelope_includes_conflicting_utterance_callout():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     state = {
@@ -112,7 +128,17 @@ def test_macro_select_envelope_includes_conflicting_utterance_callout():
         state=state,
         copy=copy,
     )
-    assert env["body"]["callout"] == copy.get("context.latest_utterance_note")
+    assert env["body"]["callout"] == copy.get("guidance.macro_style_in_cards")
+    assert env["body"]["callout_conflict"] == copy.get("context.latest_utterance_note")
+
+
+def test_product_visual_copy_guidance_keys():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    assert copy.get("guidance.macro_style_in_cards") == "风格在这里选；需求用口语描述即可。"
+    assert copy.get("guidance.attachment_hint") == "建议清晰 product 图；白底更佳，非白底也可继续。"
+    examples = copy._data.get("guidance", {}).get("example_utterances", [])
+    assert len(examples) == 3
+    assert [e["label"] for e in examples] == ["礼盒", "Listing", "空间"]
 
 
 def test_build_context_recap_from_visual_intent():

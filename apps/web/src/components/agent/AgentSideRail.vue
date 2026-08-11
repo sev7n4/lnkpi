@@ -91,6 +91,7 @@ import {
   agentInputPlaceholder,
   getAgentSkill,
 } from '@/constants/agentSkillMap'
+import { PRODUCT_VISUAL_GUIDANCE } from '@/constants/productVisualCopy'
 import UniversalModelSelector from '@/components/canvas/UniversalModelSelector.vue'
 import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
@@ -703,8 +704,15 @@ const planningModel = ref(preferences.value?.defaultTextModel ?? '')
 /* ---- 技能选择（显式 Skill；默认自动 / 平台路由） ---- */
 const activeSkillId = ref<string | null>(null)
 const activeSkill = computed(() => getAgentSkill(activeSkillId.value))
+const isProductVisualSkill = computed(() => activeSkillId.value === 'product-visual')
 const skillButtonLabel = computed(() => activeSkill.value?.label ?? '技能')
 const inputPlaceholder = computed(() => agentInputPlaceholder(activeSkill.value))
+const showProductVisualEmptyState = computed(
+  () => isProductVisualSkill.value && !agent.messages.length && !props.readOnly,
+)
+const showProductVisualAttachmentHint = computed(
+  () => isProductVisualSkill.value && !props.readOnly,
+)
 const skillMenuOpen = ref(false)
 const skillMenuRef = ref<HTMLElement | null>(null)
 useClickOutside(skillMenuRef, () => {
@@ -996,6 +1004,12 @@ async function send() {
 
 async function onForceChoiceAction(message: string) {
   await sendMessage(message, mapPresetToDecision(message))
+}
+
+function fillExampleUtterance(text: string) {
+  if (props.readOnly || agent.isStreaming) return
+  input.value = text
+  nextTick(() => composerRef.value?.focus())
 }
 
 async function sendPreset(text: string) {
@@ -1733,7 +1747,24 @@ defineExpose({
 
           <!-- 消息列表 -->
           <div ref="chatContainer" class="agent-chat-scroll min-h-0 flex-1 overflow-y-auto py-3">
-            <div v-if="!agent.messages.length" class="agent-empty px-3 py-10 text-center">
+            <div v-if="showProductVisualEmptyState" class="agent-empty agent-pv-empty px-3 py-10 text-center">
+              <p class="text-sm">描述你的产品视觉需求</p>
+              <p class="mt-1 text-[11px] opacity-70">上传产品图后说明用途；风格在方案卡片中选择</p>
+              <div class="mt-4 flex flex-col gap-2">
+                <button
+                  v-for="example in PRODUCT_VISUAL_GUIDANCE.exampleUtterances"
+                  :key="example.id"
+                  type="button"
+                  class="agent-pv-example-btn rounded-lg border px-3 py-2 text-left text-[12px] leading-snug"
+                  data-testid="pv-example-utterance"
+                  @click="fillExampleUtterance(example.text)"
+                >
+                  <span class="font-medium">{{ example.label }}</span>
+                  <span class="mt-0.5 block text-[11px] opacity-70 line-clamp-2">{{ example.text }}</span>
+                </button>
+              </div>
+            </div>
+            <div v-else-if="!agent.messages.length" class="agent-empty px-3 py-10 text-center">
               <p class="text-sm">描述你的创意</p>
               <p class="mt-1 text-[11px] opacity-70">我会驱动画布创建节点、连线与生成任务</p>
             </div>
@@ -1932,8 +1963,16 @@ defineExpose({
               <p
                 v-if="gatePresentation?.body?.callout"
                 class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-style-callout"
               >
                 {{ gatePresentation.body.callout }}
+              </p>
+              <p
+                v-if="gatePresentation?.body?.callout_conflict"
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+                data-testid="macro-conflict-callout"
+              >
+                {{ gatePresentation.body.callout_conflict }}
               </p>
               <AgentMacroSchemeCards
                 :schemes="macroSchemes"
@@ -2242,6 +2281,13 @@ defineExpose({
                   class="agent-composer-reattach-hint mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--neo-text-muted)]"
                 >
                   点击上方历史消息中的 ↺ 引用，或「复用本轮」，可再次加入本次对话
+                </p>
+                <p
+                  v-if="showProductVisualAttachmentHint && !pendingAttachmentItems.length"
+                  class="agent-composer-attachment-hint mb-1.5 px-0.5 text-[10px] leading-snug text-[var(--neo-text-muted)]"
+                  data-testid="pv-attachment-hint"
+                >
+                  {{ PRODUCT_VISUAL_GUIDANCE.attachmentHint }}
                 </p>
                 <AgentRefStrip
                   v-if="pendingAttachmentItems.length"
@@ -2599,6 +2645,23 @@ defineExpose({
 
 .agent-empty {
   color: var(--neo-text-muted);
+}
+
+.agent-pv-example-btn {
+  border-color: var(--neo-border);
+  background: var(--neo-panel);
+  color: var(--neo-text-secondary);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.agent-pv-example-btn:hover {
+  border-color: var(--neo-accent, var(--neo-border));
+  background: color-mix(in srgb, var(--neo-panel) 92%, var(--neo-accent, #888) 8%);
+}
+
+.agent-composer-attachment-hint {
+  border-left: 2px solid var(--neo-border);
+  padding-left: 8px;
 }
 
 .agent-bubble-user {

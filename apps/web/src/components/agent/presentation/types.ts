@@ -65,6 +65,7 @@ export interface AgentPresentationBody {
   groups?: DeliveryCardGroup[]
   checks?: Array<{ label: string; ok: boolean }>
   callout?: string
+  callout_conflict?: string
   prose?: string
   schemes?: MacroSchemeCardBody[]
   max_select?: number
