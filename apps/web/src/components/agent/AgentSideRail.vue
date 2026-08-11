@@ -536,6 +536,19 @@ const showGatePresentation = computed(
 const showDeliveryPresentation = computed(
   () => awaitingDeliveryConfirm.value && Boolean(deliveryPresentationForUi.value),
 )
+/** 底部 dock 含门控/定稿卡片时，需限高以免挤占聊天滚动区 */
+const hasDockPresentation = computed(
+  () =>
+    showDeliveryPresentation.value
+    || showGatePresentation.value
+    || awaitingMacroSchemeSelect.value
+    || awaitingImageQa.value
+    || (awaitingSchemeSelect.value && Boolean(productVisualPlan.value))
+    || (awaitingDeliveryConfirm.value && Boolean(productVisualPlan.value) && !productVisualSchemeV2.value)
+    || awaitingShotConfirm.value
+    || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)
+    || isRetakePending.value,
+)
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
 const productVisualPlan = ref<ProductVisualPlan | null>(null)
@@ -1791,7 +1804,7 @@ defineExpose({
       <Teleport to="body" :disabled="!floating">
         <div
           v-show="open"
-          class="agent-panel-shell flex min-w-0 flex-col"
+          class="agent-panel-shell flex min-h-0 h-full min-w-0 flex-col overflow-hidden"
           :class="[
             floating ? 'agent-panel-floating' : 'agent-panel-inline flex-1',
             { 'is-dragging': dragging },
@@ -2064,10 +2077,25 @@ defineExpose({
               :progress="taskProgress"
               @focus-node="emit('focusNode', $event)"
             />
+            <!-- 完成后交付摘要随聊天历史一起滚动，避免底部 dock 占满侧栏 -->
+            <div
+              v-if="showCompletionPresentation && completionPresentation"
+              class="px-3 pb-2"
+            >
+              <AgentPresentationHost
+                :presentation="completionPresentation"
+                :disabled="agent.isStreaming"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+            </div>
           </div>
 
           <!-- 底部输入 dock：与节点 dock-studio 同款毛玻璃 -->
-          <div class="agent-input-area px-2.5 pb-2.5 pt-1">
+          <div
+            class="agent-input-area shrink-0 px-2.5 pb-2.5 pt-1"
+            :class="{ 'agent-input-area--scrollable': hasDockPresentation }"
+          >
             <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
@@ -2282,14 +2310,6 @@ defineExpose({
                 :disabled="agent.isStreaming"
                 @primary-action="onDeliveryPrimaryAction"
                 @delivery-switch="sendDeliveryVariantSwitch"
-                @focus-node="emit('focusNode', $event)"
-                @focus-all="emit('focusAll', $event)"
-              />
-            </div>
-            <div v-else-if="showCompletionPresentation && completionPresentation" class="mb-2">
-              <AgentPresentationHost
-                :presentation="completionPresentation"
-                :disabled="agent.isStreaming"
                 @focus-node="emit('focusNode', $event)"
                 @focus-all="emit('focusAll', $event)"
               />
@@ -2792,6 +2812,14 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1 1 45%;
+  min-height: min(360px, 52%);
+}
+
+.agent-input-area--scrollable {
+  max-height: min(42vh, 400px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .agent-turn--user {
