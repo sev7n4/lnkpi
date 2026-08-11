@@ -34,6 +34,19 @@ def load_decompose_shots_prompt(skills_dir: Path) -> tuple[str, str]:
     )
 
 
+def load_vision_qa_prompt(skills_dir: Path) -> tuple[str, str]:
+    return _load_prompt_body(skills_dir, "assets/prompts/vision-qa/1.0.0.md", "vision_qa")
+
+
+def build_vision_qa_user_content(*, user_text: str, scene_kind: str, image_count: int) -> str:
+    bits = [f"请审核这 {image_count} 张产品参考图是否适合作为电商视觉策划输入。"]
+    if user_text.strip():
+        bits.append(f"【用户说明】\n{user_text.strip()}")
+    if scene_kind == "interior":
+        bits.append("【场景提示】用户任务含室内/空间设计，白底要求可放宽，但主体须清晰可辨。")
+    return "\n\n".join(bits)
+
+
 def build_dialog_draft_user_content(*, user_brief: str, user_text: str, revision_feedback: str | None) -> str:
     bits = ["输出 dialog draft JSON（含 draft_prose 与 macro_schemes）。"]
     if user_brief.strip():

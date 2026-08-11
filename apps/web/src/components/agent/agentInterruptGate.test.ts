@@ -6,6 +6,7 @@ import {
   buildMacroSchemeConfirmMessage,
   defaultShotDeliverySelections,
   interruptPayloadFromThreadState,
+  toggleMacroSchemeSelection,
 } from './agentInterruptGate'
 
 describe('chipSetFromInterrupt', () => {
@@ -86,6 +87,27 @@ describe('defaultMacroSchemeSelection', () => {
       { id: 'C', recommended: true },
     ]
     expect(defaultMacroSchemeSelection(schemes)).toEqual(['B', 'C'])
+  })
+})
+
+describe('toggleMacroSchemeSelection', () => {
+  const schemes = [
+    { id: 'A', recommended: true },
+    { id: 'B', recommended: false },
+    { id: 'C', recommended: false },
+  ]
+
+  it('keeps recommended A when adding B then C', () => {
+    let sel = defaultMacroSchemeSelection(schemes)
+    expect(sel).toEqual(['A'])
+    sel = toggleMacroSchemeSelection(sel, 'B', true, schemes)
+    expect(sel).toEqual(['A', 'B'])
+    sel = toggleMacroSchemeSelection(sel, 'C', true, schemes)
+    expect(sel).toEqual(['A', 'C'])
+  })
+
+  it('removes unchecked scheme', () => {
+    expect(toggleMacroSchemeSelection(['A', 'B'], 'B', false, schemes)).toEqual(['A'])
   })
 })
 

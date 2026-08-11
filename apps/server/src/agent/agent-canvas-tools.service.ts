@@ -180,6 +180,32 @@ function pickString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
+function parseVisionQaJson(raw: string): {
+  pass: boolean
+  reason: string
+  isWhiteBg?: boolean
+  isSharpEnough?: boolean
+  productIdentifiable?: boolean
+} {
+  const cleaned = raw.replace(/```json|```/g, '').trim()
+  try {
+    const data = JSON.parse(cleaned) as Record<string, unknown>
+    return {
+      pass: Boolean(data.pass),
+      reason: String(data.reason ?? '').trim() || '图源审核完成',
+      isWhiteBg: typeof data.is_white_bg === 'boolean' ? data.is_white_bg : undefined,
+      isSharpEnough: typeof data.is_sharp_enough === 'boolean' ? data.is_sharp_enough : undefined,
+      productIdentifiable:
+        typeof data.product_identifiable === 'boolean' ? data.product_identifiable : undefined,
+    }
+  } catch {
+    return {
+      pass: false,
+      reason: '识图模型返回格式异常，请重试或更换参考图',
+    }
+  }
+}
+
 function parseRecordText(metadata: string | null | undefined, prompt: string): string {
   if (!metadata) return prompt
   try {
@@ -2277,6 +2303,36 @@ export class AgentCanvasToolsService {
       data: { stagedActions: null, stagedAt: null },
     })
     return { cleared: true }
+  }
+
+  async runVisionQa(input: {
+    sessionId: string
+    userId: string
+    imageUrls: string[]
+    userText?: string
+    sceneKind?: string
+    systemPrompt: string
+    userContent: string
+    model?: string
+  }): Promise<{
+    pass: boolean
+    reason: string
+    visionUsed: boolean
+    isWhiteBg?: boolean
+    isSharpEnough?: boolean
+    productIdentifiable?: boolean
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const prefs = await this.loadAccountGenPrefs(input.userId)
+    const textModel = pickString(input.model, prefs.defaultTextModel) || undefined
+    const { text, visionUsed } = await this.studio.runVisionQaInternal(input.userId, {
+      systemPrompt: input.systemPrompt,
+      userContent: input.userContent,
+      imageUrls: input.imageUrls,
+      model: textModel,
+    })
+    const parsed = parseVisionQaJson(text)
+    return { ...parsed, visionUsed }
   }
 
   private async expireStaleStage(sessionId: string): Promise<void> {

@@ -49,6 +49,14 @@ export interface RuntimeThreadState {
   productVisualSchemeV2?: boolean | null
   deliverySelections?: Record<string, string> | null
   deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+  imageQaReason?: string | null
+  imageQaMetrics?: {
+    is_white_bg?: boolean | null
+    is_sharp_enough?: boolean | null
+    product_identifiable?: boolean | null
+    vision_used?: boolean | null
+  } | null
+  visionUsed?: boolean | null
 }
 
 export interface ProductVisualScheme {

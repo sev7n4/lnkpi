@@ -6,6 +6,9 @@ export interface AgentInterruptPayload {
   node?: string | null
   phase?: string | null
   interrupted?: boolean
+  imageQaReason?: string | null
+  imageQaMetrics?: ImageQaMetrics | null
+  visionUsed?: boolean | null
 }
 
 export interface ProductVisualScheme {
@@ -61,7 +64,15 @@ const GATE_TO_CHIP: Record<string, AgentChipSet> = {
   await_delivery_confirm: 'delivery_confirm',
 }
 
+export interface ImageQaMetrics {
+  is_white_bg?: boolean | null
+  is_sharp_enough?: boolean | null
+  product_identifiable?: boolean | null
+  vision_used?: boolean | null
+}
+
 export const IMAGE_QA_OPTIONS = [
+  { id: 'confirm_pass', label: '确认可用，继续', message: '已是白底图，继续使用' },
   { id: 'retake', label: '重新拍摄', message: '我重新拍摄上传' },
   { id: 'ai_white_bg', label: '生成白底图', message: '生成标准白底图' },
 ] as const
@@ -122,6 +133,31 @@ export function defaultMacroSchemeSelection(
   const recommended = list.filter((s) => s.recommended).map((s) => s.id)
   if (recommended.length) return recommended.slice(0, 2)
   return [list[0].id]
+}
+
+/** Toggle macro checkbox; evict non-recommended ids before recommended when over max. */
+export function toggleMacroSchemeSelection(
+  current: string[],
+  schemeId: string,
+  checked: boolean,
+  schemes: ProductVisualMacroScheme[] | null | undefined,
+  max = 2,
+): string[] {
+  if (!checked) return current.filter((id) => id !== schemeId)
+  if (current.includes(schemeId)) return current
+
+  const recommended = new Set(
+    (schemes ?? []).filter((s) => s.recommended).map((s) => s.id),
+  )
+  const next = [...current, schemeId]
+  if (next.length <= max) return next
+
+  for (const id of current) {
+    if (!recommended.has(id)) {
+      return [...current.filter((x) => x !== id), schemeId]
+    }
+  }
+  return [...current.slice(1), schemeId]
 }
 
 export function buildMacroSchemeConfirmMessage(selectedIds: string[]): string {

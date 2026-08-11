@@ -365,6 +365,12 @@ class NestEventProxy:
     async def run_audio_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_audio_generation")
 
+    async def run_vision_qa(self, **kwargs: Any) -> dict[str, Any]:
+        inner = getattr(self._inner, "run_vision_qa", None)
+        if inner is None:
+            raise RuntimeError("run_vision_qa_not_supported")
+        return await inner(**kwargs)
+
     async def _run_studio_generation(self, node_id: str, method: str) -> dict[str, Any]:
         await self._emit(
             {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
@@ -520,6 +526,14 @@ async def _save_new_assistant_messages(
         pass
 
 
+def resolve_vision_creds(req: RunRequest) -> dict[str, str | None]:
+    return {
+        "model": req.llm_model or settings.openai_chat_model,
+        "api_key": req.llm_api_key or settings.openai_api_key or None,
+        "base_url": req.llm_base_url or settings.openai_base_url,
+    }
+
+
 async def get_thread_state(
     thread_id: str,
     *,
@@ -563,6 +577,11 @@ async def get_thread_state(
         else None,
         "deliverySelections": delivery_selections if isinstance(delivery_selections, dict) else None,
         "deliveryGenByKey": gen_by_key if isinstance(gen_by_key, dict) else None,
+        "imageQaReason": vals.get("image_qa_reason"),
+        "imageQaMetrics": vals.get("image_qa_metrics")
+        if isinstance(vals.get("image_qa_metrics"), dict)
+        else None,
+        "visionUsed": vals.get("vision_used") if vals.get("vision_used") is not None else None,
         **diag,
     }
 
@@ -643,6 +662,7 @@ async def stream_run_events(
         llm=graph_llm,
         skills_dir=resolve_skills_dir(skills_dir),
         checkpointer=active_checkpointer,
+        vision_creds=resolve_vision_creds(req),
     )
     config = {"configurable": {"thread_id": thread_id}}
 
@@ -847,6 +867,15 @@ async def stream_run_events(
                     interrupt_event_payload(
                         next_nodes=post_next,
                         phase=phase_str,
+                        extra={
+                            k: v
+                            for k, v in {
+                                "imageQaReason": post_vals.get("image_qa_reason"),
+                                "imageQaMetrics": post_vals.get("image_qa_metrics"),
+                                "visionUsed": post_vals.get("vision_used"),
+                            }.items()
+                            if v is not None
+                        },
                     )
                 )
             await emit({"type": "done", "data": {}})

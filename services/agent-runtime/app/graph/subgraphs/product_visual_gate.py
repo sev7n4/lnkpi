@@ -57,7 +57,8 @@ def route_after_await_image_qa(state: AgentRuntimeState) -> str:
 def route_after_image_qa_remedy(state: AgentRuntimeState) -> str:
     if state.get("phase") == "error":
         return "done"
-    if state.get("image_qa_decision") == "ai_white_bg":
+    decision = state.get("image_qa_decision") or "none"
+    if decision in ("ai_white_bg", "confirm_pass"):
         if is_v2_enabled(state):
             return "dialog_draft"
         return "plan_product_visual"
@@ -84,6 +85,7 @@ def register_product_visual_gate(
     llm: Any | None = None,
     skills_dir: Any | None = None,
     nest: Any | None = None,
+    vision_creds: dict[str, str | None] | None = None,
 ) -> None:
     """Register image QA + plan segment nodes and edges on the main graph."""
     from pathlib import Path
@@ -92,7 +94,9 @@ def register_product_visual_gate(
 
     resolved_skills = Path(skills_dir or settings.skills_dir)
 
-    graph.add_node("image_qa_check", make_image_qa_check_node(nest=nest))
+    graph.add_node("image_qa_check", make_image_qa_check_node(
+        nest=nest, skills_dir=resolved_skills, vision_creds=vision_creds,
+    ))
     graph.add_node("await_image_qa", make_await_image_qa_node())
     graph.add_node("image_qa_remedy", make_image_qa_remedy_node(nest=nest))
     graph.add_node(

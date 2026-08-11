@@ -263,6 +263,36 @@ class RunImageGenerationDto {
   nodeId!: string
 }
 
+class RunVisionQaDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  imageUrls!: string[]
+
+  @IsString()
+  systemPrompt!: string
+
+  @IsString()
+  userContent!: string
+
+  @IsOptional()
+  @IsString()
+  userText?: string
+
+  @IsOptional()
+  @IsString()
+  sceneKind?: string
+
+  @IsOptional()
+  @IsString()
+  model?: string
+}
+
 class WaitImageGenerationDto {
   @IsString()
   sessionId!: string
@@ -754,6 +784,12 @@ export class AgentCanvasToolsController {
   @Post('run-audio-generation')
   async runAudioGeneration(@Body() dto: RunImageGenerationDto) {
     const data = await this.tools.runAudioGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('run-vision-qa')
+  async runVisionQa(@Body() dto: RunVisionQaDto) {
+    const data = await this.tools.runVisionQa(dto)
     return { code: 0, message: 'ok', data }
   }
 

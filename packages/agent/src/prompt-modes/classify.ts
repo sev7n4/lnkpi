@@ -5,9 +5,17 @@ export function tryRuleShortcut(_prompt: string): PromptModeId | null {
   return null
 }
 
+/** Product SKU turnaround — must not use character_turnaround expansion. */
+function isProductTurnaroundPrompt(prompt: string): boolean {
+  return /同一\s*SKU|同一产品|产品四视图|产品三视图|禁止每格换款|白底主图|电商主图|SKU\s*外观|商业摄影.*四格|四格拼图.*产品/.test(
+    prompt,
+  )
+}
+
 /** 仅无 Key / Placeholder 路径使用；不用于跳过有 Key 时的 Call-1 */
 export function heuristicMode(prompt: string): PromptModeId {
   const p = prompt.toLowerCase()
+  if (isProductTurnaroundPrompt(prompt)) return 'generic'
   if (/三视图|多视图|正侧背|turnaround|模特图|角色设定|模特定妆|四视图|q版|q萌|chibi|二头身|洛丽塔|lolita|婚纱|战术|军事|牛仔|皮克斯|绘本|水彩/.test(p)) return 'character_turnaround'
   if (/商业分镜|品牌分镜|品牌广告|营销战役|TVC|问界|AITO|汽车广告|15秒|30秒|60秒|抖音前贴|发布会暖场|品牌形象片|闪电切割|AIDA/.test(p))
     return 'commercial_storyboard'

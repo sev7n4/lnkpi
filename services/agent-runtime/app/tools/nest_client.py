@@ -312,6 +312,35 @@ class NestCanvasClient:
             timeout=timeout_sec,
         )
 
+    async def run_vision_qa(
+        self,
+        *,
+        image_urls: list[str],
+        user_text: str | None = None,
+        scene_kind: str | None = None,
+        system_prompt: str,
+        user_content: str,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "imageUrls": image_urls,
+            "systemPrompt": system_prompt,
+            "userContent": user_content,
+        }
+        if user_text:
+            body["userText"] = user_text
+        if scene_kind:
+            body["sceneKind"] = scene_kind
+        if model:
+            body["model"] = model
+        return await self._post(
+            "/agent/internal/run-vision-qa",
+            body,
+            timeout=60.0,
+        )
+
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:
         timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
         return await self._post(
