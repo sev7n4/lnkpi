@@ -868,6 +868,9 @@ async def stream_run_events(
                     interrupt_event_payload(
                         next_nodes=post_next,
                         phase=phase_str,
+                        presentation=post_vals.get("presentation")
+                        if isinstance(post_vals.get("presentation"), dict)
+                        else None,
                         extra={
                             k: v
                             for k, v in {

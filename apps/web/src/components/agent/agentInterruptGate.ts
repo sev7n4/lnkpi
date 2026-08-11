@@ -72,7 +72,7 @@ export interface ImageQaMetrics {
 }
 
 export const IMAGE_QA_OPTIONS = [
-  { id: 'confirm_pass', label: '确认可用，继续', message: '已是白底图，继续使用' },
+  { id: 'confirm_pass', label: '就用这张图，继续', message: '就用这张图，继续' },
   { id: 'retake', label: '重新拍摄', message: '我重新拍摄上传' },
   { id: 'ai_white_bg', label: '生成白底图', message: '生成标准白底图' },
 ] as const

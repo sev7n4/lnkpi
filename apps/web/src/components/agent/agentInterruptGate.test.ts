@@ -5,9 +5,20 @@ import {
   defaultMacroSchemeSelection,
   buildMacroSchemeConfirmMessage,
   defaultShotDeliverySelections,
+  IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
   toggleMacroSchemeSelection,
 } from './agentInterruptGate'
+
+describe('IMAGE_QA_OPTIONS', () => {
+  it('uses friendly confirm_pass label aligned with copy YAML', () => {
+    expect(IMAGE_QA_OPTIONS[0]).toEqual({
+      id: 'confirm_pass',
+      label: '就用这张图，继续',
+      message: '就用这张图，继续',
+    })
+  })
+})
 
 describe('chipSetFromInterrupt', () => {
   it('maps await_confirm phase to plan chips', () => {

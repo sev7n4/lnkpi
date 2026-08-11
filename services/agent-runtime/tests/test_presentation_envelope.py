@@ -67,8 +67,11 @@ def test_map_qa_failure_returns_dict():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     result = copy.map_qa_failure(reason="format_error", vision_used=False, metrics={})
     assert isinstance(result, dict)
+    assert result["kind"] == "callout_info"
     assert "title" in result
     assert "body" in result
+    assert "options" in result
+    assert result["options"][0]["label"] == "就用这张图，继续"
 
 
 def test_build_context_recap_from_visual_intent():
