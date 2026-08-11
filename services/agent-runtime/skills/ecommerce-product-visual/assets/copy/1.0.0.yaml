@@ -19,3 +19,7 @@ macro:
   ab_hint_mixed: "已选 {k} 套风格 → 预计场景图 {p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。"
 context:
   latest_utterance_note: "已按您最新描述执行；风格请在下方卡片选择，无需在话术里指定。"
+generating:
+  banner: "出图进行中，请勿切换标签页"
+  card_title: "出图中"
+  progress_line: "已完成 {done}/{total} · 正在生成：{current_title}"

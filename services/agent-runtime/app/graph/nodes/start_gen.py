@@ -16,6 +16,9 @@ from app.graph.canvas_sync import reconcile_manifest_from_canvas
 from app.graph.canvas_stage import commit_stage_or_rollback
 from app.graph.gen_run_state import reset_tier_b_reducers_for_new_run
 from app.graph.hitl_resume import GATE_DECISION_CLEAR
+from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.presentation import build_presentation_envelope
+from app.graph.task_events import build_task_list_items
 from app.graph.topo import topo_sort_gen_keys
 
 
@@ -104,7 +107,34 @@ def make_start_gen_node(*, nest: Any = None) -> Callable:
         if sync_note:
             msg = f"{sync_note}\n{msg}"
 
-        return {
+        task_items = build_task_list_items(manifest, ordered_keys)
+        emit_list = getattr(nest, "emit_task_list", None) if nest is not None else None
+        presentation: dict | None = None
+        pv_v2 = bool(state.get("product_visual_scheme_v2"))
+        if pv_v2 or state.get("flow_mode") == "product_visual":
+            try:
+                copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+                presentation = build_presentation_envelope(
+                    kind="task_progress_card",
+                    phase="start_gen",
+                    state={**state, "split_manifest": manifest},
+                    copy=copy,
+                )
+            except Exception:  # noqa: BLE001
+                presentation = None
+
+        if emit_list is not None and task_items:
+            meta: dict[str, str] = {}
+            if presentation:
+                banner = str((presentation.get("body") or {}).get("banner") or "")
+                if banner:
+                    meta["banner"] = banner
+            try:
+                await emit_list(task_items, **meta)
+            except Exception:  # noqa: BLE001
+                pass
+
+        out: dict = {
             "split_manifest": manifest,
             "gen_ordered_keys": ordered_keys,
             "gen_deps_of": deps_of,
@@ -113,5 +143,8 @@ def make_start_gen_node(*, nest: Any = None) -> Callable:
             **GATE_DECISION_CLEAR,
             "messages": [AIMessage(content=msg)],
         }
+        if presentation is not None:
+            out["presentation"] = presentation
+        return out
 
     return start_gen

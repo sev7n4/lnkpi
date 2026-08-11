@@ -394,8 +394,11 @@ class NestEventProxy:
         if text:
             await self._emit({"type": "text_delta", "data": {"text": str(text)}})
 
-    async def emit_task_list(self, items: list[dict[str, Any]]) -> None:
-        await self._emit({"type": "task_list", "data": {"items": items}})
+    async def emit_task_list(self, items: list[dict[str, Any]], **meta: Any) -> None:
+        data: dict[str, Any] = {"items": items}
+        if meta:
+            data.update(meta)
+        await self._emit({"type": "task_list", "data": data})
 
     async def emit_task_update(self, **payload: Any) -> None:
         await self._emit({"type": "task_update", "data": payload})

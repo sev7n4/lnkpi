@@ -30,6 +30,8 @@ export interface AgentTaskProgressState {
     lines?: Array<{ id: string; status: string; title: string; hint?: string }>
   }
   finished: boolean
+  /** UX-PV-07: callout banner from runtime copy (product_visual gen). */
+  banner?: string
 }
 
 export const emptyTaskProgress = (): AgentTaskProgressState => ({
@@ -40,7 +42,7 @@ export const emptyTaskProgress = (): AgentTaskProgressState => ({
 const TERMINAL_STATUSES: TaskItemStatus[] = ['done', 'failed', 'needs_user', 'skipped']
 
 type TaskEvent =
-  | { type: 'task_list'; data: { items: Array<{ id: string; title: string; nodeId?: string; kind?: string }> } }
+  | { type: 'task_list'; data: { items: Array<{ id: string; title: string; nodeId?: string; kind?: string }>; banner?: string } }
   | {
       type: 'task_update'
       data: {
@@ -74,6 +76,20 @@ export function mapRecordStatusToTaskStatus(recordStatus: string): TaskItemStatu
   return 'running'
 }
 
+const TERMINAL_DONE: TaskItemStatus[] = ['done', 'skipped']
+
+/** UX-PV-07: 「已完成 a/b · 正在生成：{title}」 */
+export function formatTaskProgressLine(items: AgentTaskItem[]): string | null {
+  if (!items.length) return null
+  const total = items.length
+  const done = items.filter((it) => TERMINAL_DONE.includes(it.status)).length
+  const current =
+    items.find((it) => it.status === 'running' || it.status === 'retrying') ??
+    items.find((it) => it.status === 'pending')
+  const currentTitle = current?.title ?? '…'
+  return `已完成 ${done}/${total} · 正在生成：${currentTitle}`
+}
+
 export function applyTaskEvent(
   state: AgentTaskProgressState,
   event: TaskEvent,
@@ -88,6 +104,7 @@ export function applyTaskEvent(
         status: 'pending',
       })),
       finished: false,
+      banner: event.data.banner,
     }
   }
   if (event.type === 'task_update') {

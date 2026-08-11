@@ -4,10 +4,40 @@ import {
   applyPollRecordToTask,
   applyTaskEvent,
   emptyTaskProgress,
+  formatTaskProgressLine,
   mapRecordStatusToTaskStatus,
 } from './agentTaskProgress'
 
+describe('formatTaskProgressLine', () => {
+  it('shows done/total and current running title', () => {
+    const line = formatTaskProgressLine([
+      { id: 'a', title: '白底主图', status: 'done' },
+      { id: 'b', title: '礼盒主视觉', status: 'running' },
+      { id: 'c', title: '送礼场景', status: 'pending' },
+    ])
+    expect(line).toBe('已完成 1/3 · 正在生成：礼盒主视觉')
+  })
+
+  it('falls back to first pending when nothing running', () => {
+    const line = formatTaskProgressLine([
+      { id: 'a', title: '白底主图', status: 'done' },
+      { id: 'b', title: '礼盒主视觉', status: 'pending' },
+    ])
+    expect(line).toBe('已完成 1/2 · 正在生成：礼盒主视觉')
+  })
+})
+
 describe('applyTaskEvent', () => {
+  it('stores banner from task_list', () => {
+    const s = applyTaskEvent(emptyTaskProgress(), {
+      type: 'task_list',
+      data: {
+        items: [{ id: 'a', title: '礼盒主视觉', nodeId: 'n1' }],
+        banner: '出图进行中，请勿切换标签页',
+      },
+    })
+    expect(s.banner).toBe('出图进行中，请勿切换标签页')
+  })
   it('applies task_update retrying attempt', () => {
     let s = applyTaskEvent(emptyTaskProgress(), {
       type: 'task_list',
