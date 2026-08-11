@@ -34,6 +34,7 @@ PHASE_TO_STEPPER: dict[str, str] = {
     "canvas_ssot_commit": "ssot_persist",
     "decompose_from_ssot": "ssot_persist",
     "await_shot_confirm": "shot_plan",
+    "await_shot_topo_confirm": "topo_preview",
     "await_topo": "topo_preview",
     "start_gen": "generating",
     "orchestrate_gen": "generating",
@@ -239,6 +240,33 @@ def build_presentation_envelope(
         label = copy.get("shot_confirm.primary_label")
         envelope["primary_action"] = {"label": label, "message": "确认出图"}
         envelope["body"] = {"text": hint}
+    elif phase == "await_shot_topo_confirm":
+        n = _shot_count(state)
+        manifest = state.get("split_manifest") or []
+        scene_count = _scene_count(state)
+        eta_min = _eta_min(scene_count)
+        hint = copy.get(
+            "merged_shot_topo.hint",
+            n=str(n),
+            scene_count=str(scene_count),
+            eta_min=str(eta_min),
+        )
+        label = copy.get("merged_shot_topo.primary_label")
+        envelope["primary_action"] = {
+            "label": label,
+            "message": copy.get("merged_shot_topo.primary_message"),
+        }
+        body: dict[str, Any] = {
+            "text": hint,
+            "shot_count": n,
+            "nodes": build_topo_card_nodes(manifest),
+            "eta_min": eta_min,
+            "scene_count": scene_count,
+            "credits_hint": _topo_credits_hint(manifest),
+        }
+        if manifest:
+            body["mermaid"] = mermaid_for_presentation(manifest)
+        envelope["body"] = body
     elif phase == "await_topo":
         manifest = state.get("split_manifest") or []
         scene_count = _scene_count(state)

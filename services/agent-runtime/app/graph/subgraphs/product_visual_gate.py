@@ -28,6 +28,7 @@ from app.graph.nodes.scheme_select_gate import (
 )
 from app.graph.state import AgentRuntimeState
 from app.graph.product_visual_v2.routing import is_v2_enabled, route_after_image_qa_check_v2
+from app.graph.product_visual_v2.routing import product_visual_v2_interrupt_gates
 from app.graph.subgraphs.product_visual_v2_gate import register_product_visual_v2_nodes
 
 
@@ -213,8 +214,7 @@ def build_product_visual_gate_subgraph(
         interrupt_before=[
             "await_image_qa",
             "await_scheme_select",
-            "await_macro_scheme_select",
-            "await_shot_confirm",
+            *product_visual_v2_interrupt_gates(),
             "await_delivery_confirm",
         ],
     )

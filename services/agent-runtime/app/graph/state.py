@@ -119,6 +119,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "canvas_ssot_commit",
         "decompose_from_ssot",
         "await_shot_confirm",
+        "await_shot_topo_confirm",
         "synthesize_gen_prompt",
         "orchestrate_shots",
         "phase1_seed_lazy",

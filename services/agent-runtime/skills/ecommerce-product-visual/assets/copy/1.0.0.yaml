@@ -12,6 +12,12 @@ qa:
 shot_confirm:
   primary_label: "确认构图，生成预览"
   hint: "共 {n} 个构图任务；确认后将编排出图顺序，尚未开始生成。"
+merged_shot_topo:
+  primary_label: "确认构图并开始出图"
+  primary_message: "确认构图并开始出图"
+  hint: "共 {n} 个构图任务；确认后将写入画布并生成白底、四视图及 {scene_count} 张场景图（约 {eta_min} 分钟）。"
+  fast_label: "少确认，直接出图"
+  fast_message: "少确认，直接出图"
 topo:
   primary_label: "开始出图（约 {eta_min} 分钟）"
   hint: "方案已写入画布；确认后将生成白底、四视图及 {scene_count} 张场景图。"

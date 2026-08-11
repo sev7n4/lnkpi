@@ -171,6 +171,19 @@ def should_resume_interrupt(
             return False
         return len(text) <= 20
 
+    if gate == "await_shot_topo_confirm":
+        from app.graph.intent import classify_topo_decision
+
+        if user_decision in ("confirm", "confirm_gen", "fast_confirm"):
+            return True
+        if classify_topo_decision(text) != "none":
+            return True
+        if any(k in text for k in ("调整构图", "去掉", "删减")):
+            return True
+        if len(text) >= 12 and REF_MENTION_RE.search(text):
+            return False
+        return len(text) <= 20
+
     # Unknown gate: only resume short gate-like replies.
     return len(text) <= 16 and not REF_MENTION_RE.search(text)
 

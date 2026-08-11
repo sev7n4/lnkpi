@@ -13,8 +13,8 @@ from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
-from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
 from app.graph.nodes.intake import make_intake_node
+from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
 from app.graph.subgraphs.atomic_create_gate import register_atomic_create_gate
@@ -22,6 +22,7 @@ from app.graph.subgraphs.confirm_gate import register_confirm_gate
 from app.graph.subgraphs.copy_gate import register_copy_gate
 from app.graph.subgraphs.single_node_gate import register_single_node_gate
 from app.graph.subgraphs.topo_gate import register_topo_gate
+from app.graph.product_visual_v2.routing import shot_confirm_gate_name
 
 
 def route_after_intake(state: AgentRuntimeState) -> str:
@@ -122,7 +123,7 @@ def build_agent_graph(
             "await_image_qa",
             "await_scheme_select",
             "await_macro_scheme_select",
-            "await_shot_confirm",
+            shot_confirm_gate_name(),
             "await_delivery_confirm",
         ],
     )

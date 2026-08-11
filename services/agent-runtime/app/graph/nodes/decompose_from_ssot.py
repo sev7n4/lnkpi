@@ -14,6 +14,7 @@ from app.graph.product_visual_copy import ProductVisualCopy
 from app.graph.product_visual_v2.limits import validate_downstream_limit, validate_shots_per_macro
 from app.graph.product_visual_v2.models import ShotManifestItem
 from app.graph.product_visual_v2.presentation import build_context_recap, build_presentation_envelope
+from app.graph.product_visual_v2.routing import shot_confirm_gate_name
 from app.graph.product_visual_v2_prompt import (
     build_decompose_messages,
     build_decompose_user_content,
@@ -105,21 +106,30 @@ def make_decompose_from_ssot_node(*, llm: Any, skills_dir: Path, nest: Any) -> C
         copy = ProductVisualCopy.load_from_skill(
             "ecommerce-product-visual", "1.0.0", skills_dir=skills_dir
         )
+        gate_phase = shot_confirm_gate_name()
         pres_state = {**state, "shot_manifest": shots}
+        if gate_phase == "await_shot_topo_confirm":
+            from app.graph.nodes.await_shot_topo_confirm import preview_manifest_from_shots
+
+            pres_state = {**pres_state, "split_manifest": preview_manifest_from_shots(pres_state)}
         presentation = build_presentation_envelope(
-            kind="shot_table",
-            phase="await_shot_confirm",
+            kind="shot_topo_merged" if gate_phase == "await_shot_topo_confirm" else "shot_table",
+            phase=gate_phase,
             state=pres_state,
             copy=copy,
         )
         recap = build_context_recap(pres_state)
-        hint = copy.get("shot_confirm.hint", n=str(len(shots)))
-        msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
+        if gate_phase == "await_shot_topo_confirm":
+            hint = str((presentation.get("body") or {}).get("text") or "")
+            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
+        else:
+            hint = copy.get("shot_confirm.hint", n=str(len(shots)))
+            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
 
         return {
             "shot_manifest": shots,
             "prompt_version": prompt_version,
-            "phase": "await_shot_confirm",
+            "phase": gate_phase,
             "presentation": presentation,
             "messages": [AIMessage(content="\n".join(msg_parts))],
         }

@@ -136,6 +136,24 @@ def test_interrupt_event_payload_includes_presentation():
     assert ev["data"]["presentation"] == presentation
 
 
+def test_merged_shot_topo_primary_action_label():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    shots = [{"shot_id": "hero__1", "type_id": "packaging_hero", "label": "主视觉", "variant_count": 1}]
+    manifest = [
+        {"key": "white_bg", "title": "白底主图", "role": "seed", "auto_generate": True},
+        {"key": "hero__1", "title": "主视觉", "role": "downstream", "depends_on": ["white_bg"], "auto_generate": True},
+    ]
+    env = build_presentation_envelope(
+        kind="shot_topo_merged",
+        phase="await_shot_topo_confirm",
+        state={"shot_manifest": shots, "split_manifest": manifest},
+        copy=copy,
+    )
+    assert env["primary_action"]["label"] == "确认构图并开始出图"
+    assert env["body"]["shot_count"] == 1
+    assert len(env["body"]["nodes"]) == 2
+
+
 def test_shot_confirm_primary_action_label():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     env = build_presentation_envelope(
