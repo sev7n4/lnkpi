@@ -39,6 +39,7 @@ import AgentPresentationHost from '@/components/agent/presentation/AgentPresenta
 import AgentProseBlock from '@/components/agent/presentation/AgentProseBlock.vue'
 import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSchemeCards.vue'
 import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
+import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 import { detectAgentChipSet } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
@@ -420,6 +421,10 @@ const awaitingShotConfirm = computed(
     interruptGate.value?.node === 'await_shot_confirm',
 )
 const gatePresentation = computed(() => interruptGate.value?.presentation ?? null)
+const completionPresentation = ref<AgentPresentationEnvelope | null>(null)
+const showCompletionPresentation = computed(
+  () => completionPresentation.value?.kind === 'delivery_summary_table',
+)
 const macroFooterHint = computed(() => {
   if (!awaitingMacroSchemeSelect.value || macroSelections.value.length < 2) return ''
   const expectedCount = gatePresentation.value?.body?.expected_delivery_count ?? null
@@ -430,7 +435,14 @@ const showGatePresentation = computed(
     Boolean(gatePresentation.value?.primary_action) &&
     (awaitingShotConfirm.value || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)),
 )
+const showDeliveryPresentation = computed(
+  () =>
+    awaitingDeliveryConfirm.value &&
+    gatePresentation.value?.kind === 'delivery_cards' &&
+    Boolean(gatePresentation.value?.body?.groups?.length),
+)
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
+const userRequestLabels = ref<string[]>([])
 const productVisualPlan = ref<ProductVisualPlan | null>(null)
 const macroSchemes = ref<ProductVisualMacroScheme[]>([])
 const macroSelections = ref<string[]>([])
@@ -486,6 +498,19 @@ async function onGatePrimaryAction(message: string) {
   await sendPreset(message)
 }
 
+function syncCompletionPresentation(
+  phase: string | null | undefined,
+  presentation: AgentPresentationEnvelope | null | undefined,
+) {
+  if (phase === 'done' && presentation?.kind === 'delivery_summary_table') {
+    completionPresentation.value = presentation
+    return
+  }
+  if (phase !== 'done') {
+    completionPresentation.value = null
+  }
+}
+
 async function sendShotRevise() {
   await sendMessage('调整构图', 'revise')
 }
@@ -538,6 +563,19 @@ async function sendDeliveryRefine(typeId: string, feedback: string) {
 
 async function sendDeliveryConfirmAll() {
   await sendMessage(buildDeliveryConfirmMessage(deliverySelections.value), 'confirm')
+}
+
+async function onDeliveryPrimaryAction(_message: string) {
+  if (productVisualSchemeV2.value) {
+    await sendMessage(buildShotDeliveryConfirmMessage(deliverySelections.value), 'confirm')
+  } else {
+    await sendDeliveryConfirmAll()
+  }
+}
+
+async function sendDeliveryVariantSwitch(shotId: string, variantKey: string) {
+  deliverySelections.value = { ...deliverySelections.value, [shotId]: variantKey }
+  await sendMessage(buildShotDeliverySwitchMessage(shotId, variantKey))
 }
 
 const canSubmitComposer = computed(() =>
@@ -871,11 +909,14 @@ async function refreshThreadCheckpoint() {
         imageQaReason?: string | null
         imageQaMetrics?: ImageQaMetrics | null
         visionUsed?: boolean | null
+        userRequestLabels?: string[] | null
+        presentation?: AgentPresentationEnvelope | null
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     imageQaReason.value = json.data?.imageQaReason ?? null
     imageQaMetrics.value = json.data?.imageQaMetrics ?? null
+    syncCompletionPresentation(json.data?.phase, json.data?.presentation)
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
     }
@@ -884,6 +925,9 @@ async function refreshThreadCheckpoint() {
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
+    }
+    if (json.data?.userRequestLabels) {
+      userRequestLabels.value = json.data.userRequestLabels
     }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
@@ -1059,6 +1103,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   let streamEndedNormally = false
   recoveredPhaseHint.value = null
   interruptGate.value = null
+  completionPresentation.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1177,9 +1222,11 @@ async function reconnectStream() {
         productVisualSchemeV2?: boolean | null
         deliverySelections?: Record<string, string> | null
         deliveryGenByKey?: Record<string, { node_id?: string | null; url?: string | null; title?: string | null }> | null
+        presentation?: AgentPresentationEnvelope | null
       } | null
     }
     const phase = json.data?.phase ?? null
+    syncCompletionPresentation(phase, json.data?.presentation)
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
@@ -1189,6 +1236,9 @@ async function reconnectStream() {
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
+    }
+    if (json.data?.userRequestLabels) {
+      userRequestLabels.value = json.data.userRequestLabels
     }
     if (json.data?.productVisualPlan) {
       syncSchemeSelectionsFromPlan(json.data.productVisualPlan)
@@ -1975,6 +2025,7 @@ defineExpose({
               :plan="productVisualPlan"
               :gen-by-key="deliveryGenByKey"
               :selections="deliverySelections"
+              :request-labels="userRequestLabels"
               :disabled="agent.isStreaming"
               v-model:refine-draft="deliveryRefineDraft"
               @switch-scheme="sendDeliverySwitch"
@@ -1982,7 +2033,21 @@ defineExpose({
               @confirm-all="sendDeliveryConfirmAll"
             />
             <div
-              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length"
+              v-else-if="showDeliveryPresentation && gatePresentation"
+              class="mb-2"
+            >
+              <AgentPresentationHost
+                :presentation="gatePresentation"
+                :delivery-selections="deliverySelections"
+                :disabled="agent.isStreaming"
+                @primary-action="onDeliveryPrimaryAction"
+                @delivery-switch="sendDeliveryVariantSwitch"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+            </div>
+            <div
+              v-else-if="awaitingDeliveryConfirm && productVisualSchemeV2 && shotManifest.length && !showDeliveryPresentation"
               class="mb-2 space-y-2 px-0.5"
             >
               <div
@@ -2023,12 +2088,21 @@ defineExpose({
                 确认全部定稿
               </button>
             </div>
+            <div v-else-if="showCompletionPresentation && completionPresentation" class="mb-2">
+              <AgentPresentationHost
+                :presentation="completionPresentation"
+                :disabled="agent.isStreaming"
+                @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
+              />
+            </div>
             <div v-else-if="showGatePresentation && gatePresentation" class="mb-2">
               <AgentPresentationHost
                 :presentation="gatePresentation"
                 :disabled="agent.isStreaming"
                 @primary-action="onGatePrimaryAction"
                 @focus-node="emit('focusNode', $event)"
+                @focus-all="emit('focusAll', $event)"
               />
               <div v-if="awaitingShotConfirm" class="mt-2 flex flex-wrap gap-2 px-0.5">
                 <div v-if="shotManifest.length" class="mb-1 w-full space-y-1 text-xs text-[var(--neo-muted)]">

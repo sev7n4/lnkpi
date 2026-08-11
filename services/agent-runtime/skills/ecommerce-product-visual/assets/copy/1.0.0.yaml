@@ -23,3 +23,12 @@ generating:
   banner: "出图进行中，请勿切换标签页"
   card_title: "出图中"
   progress_line: "已完成 {done}/{total} · 正在生成：{current_title}"
+delivery:
+  primary_label: "确认全部定稿"
+  footer_hint: "确认后将交付 {n} 张定稿图"
+  hint: "按场景切换定稿图；切换候选不会重新生成。"
+done:
+  headline: "✅ 您的{product}视觉稿已就绪"
+  primary_label: "在画布中定位全部"
+  basics_section_title: "基础资产"
+  export_label: "导出打包（二期）"

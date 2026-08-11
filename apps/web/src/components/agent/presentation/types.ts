@@ -8,6 +8,7 @@ export interface AgentPresentationStepper {
 export interface AgentPresentationPrimaryAction {
   label: string
   message: string
+  disabled?: boolean
 }
 
 export interface MacroSchemeCardBody {
@@ -27,10 +28,41 @@ export interface TopoCardNode {
   node_id?: string
 }
 
+export interface DeliverySummaryFinalizedRow {
+  title: string
+  macro?: string
+  node_id?: string
+  shot_id?: string
+}
+
+export interface DeliverySummaryBasicsRow {
+  title: string
+  node_id?: string
+  optional?: boolean
+}
+
+export interface DeliveryCardCandidate {
+  variant_key: string
+  url?: string | null
+  title?: string | null
+  recommended?: boolean
+}
+
+export interface DeliveryCardGroup {
+  label: string
+  subtitle?: string
+  shot_id: string
+  recommended?: boolean
+  selected_variant_key?: string | null
+  candidates: DeliveryCardCandidate[]
+}
+
 export interface AgentPresentationBody {
   text?: string
   footer_hint?: string
   expected_delivery_count?: number
+  hint?: string
+  groups?: DeliveryCardGroup[]
   checks?: Array<{ label: string; ok: boolean }>
   callout?: string
   prose?: string
@@ -41,6 +73,10 @@ export interface AgentPresentationBody {
   scene_count?: number
   credits_hint?: string
   mermaid?: string
+  headline?: string
+  finalized?: DeliverySummaryFinalizedRow[]
+  basics?: DeliverySummaryBasicsRow[]
+  basics_section_title?: string
 }
 
 export interface AgentPresentationEnvelope {

@@ -6,6 +6,8 @@ from langchain_core.messages import AIMessage
 
 from app.graph.gen_copy import format_gen_summary
 from app.graph.gen_progress_read import load_gen_progress, parse_gen_progress_record
+from app.graph.product_visual_v2.delivery import build_done_presentation
+from app.graph.product_visual_v2.routing import is_v2_enabled
 
 
 def make_done_node(*, nest: Any = None) -> Callable:
@@ -13,6 +15,20 @@ def make_done_node(*, nest: Any = None) -> Callable:
         flow_mode = state.get("flow_mode")
         if flow_mode in ("atomic_create", "atomic_regenerate"):
             return {"phase": "done", "messages": []}
+
+        if (
+            flow_mode == "product_visual"
+            and is_v2_enabled(state)
+            and state.get("shot_manifest")
+            and state.get("delivery_selections")
+        ):
+            presentation = build_done_presentation(state)
+            headline = str((presentation.get("body") or {}).get("headline") or "✅ 视觉稿已就绪")
+            return {
+                "phase": "done",
+                "presentation": presentation,
+                "messages": [AIMessage(content=headline)],
+            }
 
         thread_id = str(state.get("thread_id") or "")
         progress = await load_gen_progress(nest, thread_id) if state.get("gen_progress_id") else None
