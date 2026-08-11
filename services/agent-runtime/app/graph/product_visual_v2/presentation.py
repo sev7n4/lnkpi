@@ -291,5 +291,24 @@ def build_presentation_envelope(
             "progress_line_template": copy.get("generating.progress_line"),
             "eta_min": eta_min,
         }
+    elif phase == "await_delivery_confirm":
+        from app.graph.product_visual_v2.delivery import build_delivery_groups
+
+        expected = state.get("expected_delivery_count")
+        if not isinstance(expected, int) or expected <= 0:
+            shots = state.get("shot_manifest") or []
+            expected = len([s for s in shots if isinstance(s, dict)])
+        groups = build_delivery_groups(state)
+        envelope["kind"] = "delivery_cards"
+        envelope["body"] = {
+            "hint": copy.get("delivery.hint"),
+            "groups": groups,
+            "expected_delivery_count": expected,
+            "footer_hint": copy.get("delivery.footer_hint", n=str(expected)),
+        }
+        envelope["primary_action"] = {
+            "label": copy.get("delivery.primary_label"),
+            "message": "确认全部定稿",
+        }
 
     return envelope

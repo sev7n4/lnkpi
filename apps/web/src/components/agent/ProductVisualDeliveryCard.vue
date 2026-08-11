@@ -12,6 +12,7 @@ const props = defineProps<{
   plan: ProductVisualPlan
   genByKey: Record<string, DeliveryGenItem>
   selections: Record<string, string>
+  requestLabels?: string[]
   disabled?: boolean
 }>()
 
@@ -56,6 +57,18 @@ function onRefine(typeId: string) {
   emit('refineType', typeId, (refineDraft.value[typeId] ?? '').trim())
 }
 
+function groupTitle(imageType: ProductVisualPlan['image_types'][number], index: number) {
+  return props.requestLabels?.[index] ?? imageType.type_label
+}
+
+function groupSubtitle(imageType: ProductVisualPlan['image_types'][number]) {
+  const selectedId = props.selections[imageType.type_id]
+  const scheme = (imageType.schemes ?? []).find((s) => s.scheme_id === selectedId)
+  return scheme?.name || selectedId || ''
+}
+
+const finalizeCount = computed(() => imageTypes.value.length)
+
 function onConfirmAll() {
   if (props.disabled) return
   emit('confirmAll')
@@ -66,11 +79,14 @@ function onConfirmAll() {
   <div class="space-y-2">
     <p class="text-xs text-[var(--neo-muted)]">按类型选择定稿图；切换候选不会重新生成。</p>
     <div
-      v-for="imageType in imageTypes"
+      v-for="(imageType, index) in imageTypes"
       :key="imageType.type_id"
       class="rounded-lg border border-[var(--neo-border)] p-2"
     >
-      <div class="mb-1.5 text-xs font-medium">{{ imageType.type_label }}</div>
+      <div class="mb-0.5 text-xs font-medium">{{ groupTitle(imageType, index) }}</div>
+      <div v-if="groupSubtitle(imageType)" class="mb-1.5 text-[10px] text-[var(--neo-muted)]">
+        {{ groupSubtitle(imageType) }}
+      </div>
       <div class="flex flex-wrap gap-2">
         <button
           v-for="scheme in candidateSchemes(imageType.type_id, imageType.schemes)"
@@ -116,6 +132,9 @@ function onConfirmAll() {
         </button>
       </div>
     </div>
+    <p v-if="finalizeCount > 0" class="text-xs text-[var(--neo-muted)]">
+      确认后将交付 {{ finalizeCount }} 张定稿图
+    </p>
     <div class="flex flex-wrap gap-2">
       <button
         type="button"

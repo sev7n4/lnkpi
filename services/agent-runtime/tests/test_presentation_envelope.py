@@ -243,6 +243,60 @@ def test_compute_expected_delivery_mixed_mode():
     assert "2 套" in delivery["allocation_note"] or "两套" in delivery["allocation_note"]
 
 
+def test_delivery_envelope_user_request_labels():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    state = {
+        "user_request_labels": ["礼盒好看", "快递防压", "有人送人"],
+        "shot_manifest": [
+            {
+                "shot_id": "packaging_hero__1",
+                "type_id": "packaging_hero",
+                "label": "礼盒主视觉",
+                "macro_scheme_id": "A",
+                "variant_count": 2,
+            },
+            {
+                "shot_id": "packaging_structure__1",
+                "type_id": "packaging_structure",
+                "label": "结构图",
+                "macro_scheme_id": "A",
+                "variant_count": 1,
+            },
+        ],
+        "gen_by_key": {
+            "packaging_hero__1__v1": {"url": "u1", "title": "礼盒主视觉 v1"},
+            "packaging_hero__1__v2": {"url": "u2", "title": "礼盒主视觉 v2"},
+            "packaging_structure__1": {"url": "u3", "title": "结构图"},
+        },
+        "gen_completed_keys": [
+            "packaging_hero__1__v1",
+            "packaging_hero__1__v2",
+            "packaging_structure__1",
+        ],
+        "delivery_selections": {
+            "packaging_hero__1": "packaging_hero__1__v1",
+            "packaging_structure__1": "packaging_structure__1",
+        },
+        "expected_delivery_count": 2,
+    }
+    env = build_presentation_envelope(
+        kind="delivery_cards",
+        phase="await_delivery_confirm",
+        state=state,
+        copy=copy,
+    )
+    assert env["kind"] == "delivery_cards"
+    assert env["stepper"]["current"] == "delivery"
+    groups = env["body"]["groups"]
+    assert len(groups) == 2
+    assert groups[0]["label"] == "礼盒好看"
+    assert groups[0]["subtitle"] == "[方案A] 礼盒主视觉"
+    assert groups[0]["shot_id"] == "packaging_hero__1"
+    assert groups[0]["recommended"] is True
+    assert "2" in env["body"]["footer_hint"]
+    assert env["primary_action"]["label"] == "确认全部定稿"
+
+
 def test_generating_envelope_task_progress_card():
     copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
     env = build_presentation_envelope(

@@ -29,7 +29,7 @@ from app.graph.hitl_resume import (
     prepare_interrupt_resume,
     should_resume_interrupt,
 )
-from app.graph.product_visual_v2.utterance import resolve_effective_utterance
+from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
 from app.history_trim import trim_history
@@ -586,6 +586,9 @@ async def get_thread_state(
         if isinstance(vals.get("image_qa_metrics"), dict)
         else None,
         "visionUsed": vals.get("vision_used") if vals.get("vision_used") is not None else None,
+        "userRequestLabels": vals.get("user_request_labels")
+        if isinstance(vals.get("user_request_labels"), list)
+        else None,
         "presentation": vals.get("presentation") if isinstance(vals.get("presentation"), dict) else None,
         **diag,
     }
@@ -708,6 +711,9 @@ async def stream_run_events(
         effective = resolve_effective_utterance(req.message)
         if effective:
             turn_update["effective_utterance"] = effective
+            labels = extract_user_request_labels(effective)
+            if labels:
+                turn_update["user_request_labels"] = labels
 
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False

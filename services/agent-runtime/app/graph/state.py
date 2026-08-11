@@ -222,6 +222,7 @@ class AgentRuntimeState(TypedDict, total=False):
     shot_manifest: list[dict] | None
     expected_delivery_count: int | None
     effective_utterance: str | None  # UX-PV-04: current-turn user demand (non-machine)
+    user_request_labels: list[str] | None  # UX-PV-08: utterance scene phrases for delivery groups
     visual_intent: dict | None
     requires_standard_product_assets: bool | None
     image_qa_reason: str | None

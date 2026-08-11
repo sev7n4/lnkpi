@@ -52,6 +52,48 @@ def resolve_effective_utterance(text: str) -> str | None:
     return stripped or None
 
 
+_REQUEST_KEYWORDS: list[tuple[tuple[str, ...], str]] = [
+    (("礼盒", "包装效果", "包装主视觉", "包装图", "主视觉"), "礼盒"),
+    (("防压", "缓冲", "结构", "快递", "运输", "冷链", "保鲜", "防损"), "防压"),
+    (("送人", "送礼", "赠礼", "模特", "手持"), "送礼"),
+]
+
+_DEFAULT_LABELS: dict[str, str] = {
+    "礼盒": "礼盒长什么样",
+    "防压": "快递怎么防压",
+    "送礼": "送人场景",
+}
+
+
+def _phrase_to_label(phrase: str, category: str) -> str:
+    cleaned = phrase.strip("… \t·")
+    if 2 <= len(cleaned) <= 16:
+        return cleaned
+    return _DEFAULT_LABELS.get(category, cleaned[:16] or category)
+
+
+def extract_user_request_labels(utterance: str) -> list[str]:
+    """Extract user-language scene phrases from utterance for delivery group titles."""
+    text = (utterance or "").strip()
+    if not text:
+        return []
+    labels: list[str] = []
+    seen: set[str] = set()
+    segments = re.split(r"[，。；、\n…]+", text)
+    for seg in segments:
+        seg = seg.strip()
+        if len(seg) < 2:
+            continue
+        for keywords, category in _REQUEST_KEYWORDS:
+            if any(kw in seg for kw in keywords):
+                label = _phrase_to_label(seg, category)
+                if label not in seen:
+                    labels.append(label)
+                    seen.add(label)
+                break
+    return labels[:5]
+
+
 def extract_style_keywords(text: str) -> set[str]:
     found: set[str] = set()
     for term in _STYLE_KEYWORD_TERMS:
