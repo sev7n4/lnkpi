@@ -75,6 +75,46 @@ def test_map_qa_failure_returns_dict():
     assert result["options"][0]["label"] == "就用这张图，继续"
 
 
+def test_context_recap_uses_effective_utterance_not_style_keywords():
+    recap = build_context_recap(
+        {
+            "effective_utterance": "巨峰葡萄礼盒，快递防压，有人送人",
+            "route_context": {"utterance": "红金风牛皮纸两套都要"},
+            "visual_intent": {
+                "primary_goal": "巨峰葡萄礼盒电商视觉",
+                "output_types_requested": ["包装", "结构", "场景"],
+            },
+        }
+    )
+    assert "红金" not in recap
+    assert "牛皮纸" not in recap
+    assert "巨峰" in recap or "礼盒" in recap
+    assert len(recap) <= 120
+
+
+def test_macro_select_envelope_includes_conflicting_utterance_callout():
+    copy = ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0")
+    state = {
+        "effective_utterance": "巨峰葡萄礼盒，快递防压，有人送人",
+        "route_context": {"utterance": "红金风牛皮纸两套都要"},
+        "macro_schemes": [{"id": "A"}, {"id": "B"}],
+        "selected_macro_scheme_ids": ["A", "B"],
+        "shot_manifest": [
+            {"shot_id": "packaging_hero__1"},
+            {"shot_id": "unboxing__1"},
+            {"shot_id": "gift_scene__1"},
+        ],
+        "visual_intent": {"primary_goal": "巨峰葡萄礼盒"},
+    }
+    env = build_presentation_envelope(
+        kind="macro_scheme_cards",
+        phase="await_macro_scheme_select",
+        state=state,
+        copy=copy,
+    )
+    assert env["body"]["callout"] == copy.get("context.latest_utterance_note")
+
+
 def test_build_context_recap_from_visual_intent():
     recap = build_context_recap(
         {

@@ -221,6 +221,7 @@ class AgentRuntimeState(TypedDict, total=False):
     macro_scheme_decision: Literal["none", "confirm", "revise", "auto"] | None
     shot_manifest: list[dict] | None
     expected_delivery_count: int | None
+    effective_utterance: str | None  # UX-PV-04: current-turn user demand (non-machine)
     visual_intent: dict | None
     requires_standard_product_assets: bool | None
     image_qa_reason: str | None

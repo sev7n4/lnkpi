@@ -31,7 +31,9 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
 
         system_prompt, prompt_version = load_dialog_draft_prompt(skills_dir)
         user_brief = await resolve_brief_for_llm(state, None)
-        user_text = latest_user_text(state.get("messages") or [])
+        user_text = str(state.get("effective_utterance") or "").strip() or latest_user_text(
+            state.get("messages") or []
+        )
         revision_feedback = None
         if state.get("scheme_revision_count") and state.get("macro_scheme_revision_feedback"):
             revision_feedback = state.get("macro_scheme_revision_feedback")

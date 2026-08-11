@@ -29,6 +29,7 @@ from app.graph.hitl_resume import (
     prepare_interrupt_resume,
     should_resume_interrupt,
 )
+from app.graph.product_visual_v2.utterance import resolve_effective_utterance
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
 from app.history_trim import trim_history
@@ -692,14 +693,23 @@ async def stream_run_events(
         "sidebar_mentioned_keys": normalized_mentioned_keys,
     }
 
+    is_gate_resume = bool(
+        next_nodes
+        and should_resume_interrupt(
+            req.message,
+            list(next_nodes),
+            user_decision=req.user_decision,
+        )
+    )
+    if pre_vals.get("flow_mode") == "product_visual" and not is_gate_resume:
+        effective = resolve_effective_utterance(req.message)
+        if effective:
+            turn_update["effective_utterance"] = effective
+
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False
 
-    if next_nodes and should_resume_interrupt(
-        req.message,
-        list(next_nodes),
-        user_decision=req.user_decision,
-    ):
+    if next_nodes and is_gate_resume:
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         resume_attempt = True

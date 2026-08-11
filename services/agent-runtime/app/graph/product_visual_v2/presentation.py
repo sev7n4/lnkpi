@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.utterance import (
+    collect_superseded_style_keywords,
+    has_conflicting_style_utterance,
+    strip_superseded_style_keywords,
+)
 
 STEPPER_ORDER: list[str] = [
     "image_qa",
@@ -56,15 +61,27 @@ def _completed_steps(current: str) -> list[str]:
 
 
 def build_context_recap(state: dict[str, Any]) -> str:
-    """Render ≤120 char demand summary from visual_intent / utterance."""
+    """Render ≤120 char demand summary from effective_utterance + visual_intent."""
+    effective = str(state.get("effective_utterance") or "").strip()
     intent = state.get("visual_intent") or {}
     primary = str(intent.get("primary_goal") or "").strip()
-    route = state.get("route_context") or {}
-    utterance = str(route.get("utterance") or "").strip()
+    superseded = collect_superseded_style_keywords(state)
 
-    recap = primary or utterance
+    recap = primary or effective
     if not recap:
-        return ""
+        route = state.get("route_context") or {}
+        recap = str(route.get("utterance") or "").strip()
+
+    recap = strip_superseded_style_keywords(recap, superseded)
+
+    output_types = intent.get("output_types_requested") or []
+    if output_types and isinstance(output_types, list):
+        type_str = "、".join(str(t).strip() for t in output_types[:3] if str(t).strip())
+        if type_str and type_str not in recap:
+            candidate = f"{recap}：{type_str}" if recap else type_str
+            if len(candidate) <= 120:
+                recap = candidate
+
     return recap[:120]
 
 
@@ -178,6 +195,10 @@ def build_presentation_envelope(
         if len(selected) >= 2 and delivery["allocation_note"]:
             body["footer_hint"] = delivery["allocation_note"]
             body["expected_delivery_count"] = delivery["total_finalize"]
+        if has_conflicting_style_utterance(state):
+            note = copy.get("context.latest_utterance_note")
+            if note:
+                body["callout"] = note
         envelope["body"] = body
 
     return envelope
