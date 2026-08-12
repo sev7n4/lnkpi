@@ -57,9 +57,10 @@ def test_macro_ab_parallel_ssot_p2_macro_003():
     assert ssot_section_keys(content) == ["A", "B"]
 
 
-def test_macro_selection_max_two_p2_macro_004():
+def test_macro_selection_max_four_p2_macro_004():
     assert validate_macro_selection(["A", "B"]) is None
-    assert validate_macro_selection(["A", "B", "C"]) is not None
+    assert validate_macro_selection(["A", "B", "C", "D"]) is None
+    assert validate_macro_selection(["A", "B", "C", "D", "E"]) is not None
 
 
 def test_apply_macro_selection():

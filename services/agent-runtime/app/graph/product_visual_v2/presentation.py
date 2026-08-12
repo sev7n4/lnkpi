@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.limits import MAX_MACRO_SCHEMES_SELECTED
 from app.graph.product_visual_v2.scheme_draft import normalize_macro_schemes
 from app.graph.product_visual_v2.utterance import (
     collect_superseded_style_keywords,
@@ -365,7 +366,7 @@ def build_presentation_envelope(
         )
         body: dict[str, Any] = {
             "schemes": normalize_macro_schemes(state.get("macro_schemes") or []),
-            "max_select": 2,
+            "max_select": MAX_MACRO_SCHEMES_SELECTED,
         }
         if len(selected) >= 2 and delivery["allocation_note"]:
             body["footer_hint"] = delivery["allocation_note"]

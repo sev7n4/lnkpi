@@ -193,15 +193,16 @@ export function buildSchemeConfirmMessage(selections: Record<string, string[]>):
   return `${SCHEME_DECISION_PREFIX}${payload}`
 }
 
-/** Default macro selection: recommended ids, else first (max 2 enforced server-side). */
+/** Default macro selection: recommended ids, else first (max enforced server-side). */
 export function defaultMacroSchemeSelection(
   schemes: ProductVisualMacroScheme[] | null | undefined,
+  max = 4,
 ): string[] {
   const list = schemes ?? []
   if (!list.length) return []
   if (list.length === 1) return [list[0].id]
   const recommended = list.filter((s) => s.recommended).map((s) => s.id)
-  if (recommended.length) return recommended.slice(0, 2)
+  if (recommended.length) return recommended.slice(0, max)
   return [list[0].id]
 }
 
@@ -211,7 +212,7 @@ export function toggleMacroSchemeSelection(
   schemeId: string,
   checked: boolean,
   schemes: ProductVisualMacroScheme[] | null | undefined,
-  max = 2,
+  max = 4,
 ): string[] {
   if (!checked) return current.filter((id) => id !== schemeId)
   if (current.includes(schemeId)) return current

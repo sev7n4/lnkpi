@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage
 
 from app.graph.limits import MAX_SCHEME_REVISE
 from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.limits import MAX_MACRO_SCHEMES_SELECTED
 from app.graph.product_visual_v2.macro_select import (
     apply_macro_selection,
     default_macro_selection,
@@ -23,7 +24,7 @@ from app.graph.product_visual_v2.presentation import (
 MacroAction = Literal["none", "confirm", "revise"]
 
 _MACRO_DECISION_PREFIX = "__macro_scheme_decision__"
-_NONE_TIP = "请勾选宏观方案（最多 2 套）后点「确认方案」，或说明要如何调整。"
+_NONE_TIP = f"请勾选宏观方案（最多 {MAX_MACRO_SCHEMES_SELECTED} 套）后点「确认方案」，或说明要如何调整。"
 _REVISE_ACK = "好的，正在根据你的反馈调整视觉方案…"
 _CONFIRM_ACK = "已确认宏观方案，即将写入画布方案节点…"
 _FORCE_SSOT_NOTE = f"修订次数已超限（{MAX_SCHEME_REVISE} 次），将按推荐方案继续。"

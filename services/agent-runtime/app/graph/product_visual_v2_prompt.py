@@ -47,8 +47,23 @@ def build_vision_qa_user_content(*, user_text: str, scene_kind: str, image_count
     return "\n\n".join(bits)
 
 
-def build_dialog_draft_user_content(*, user_brief: str, user_text: str, revision_feedback: str | None) -> str:
+def build_dialog_draft_user_content(
+    *,
+    user_brief: str,
+    user_text: str,
+    revision_feedback: str | None,
+    target_macro_count: int | None = None,
+) -> str:
     bits = ["输出 dialog draft JSON（含 draft_prose 与 macro_schemes）。"]
+    if target_macro_count is not None:
+        bits.append(
+            f"【本轮宏观方案数量】必须恰好输出 {target_macro_count} 个 macro_schemes"
+            f"（id 使用 A{'/B' if target_macro_count >= 2 else ''}"
+            f"{'/C' if target_macro_count >= 3 else ''}"
+            f"{'/D' if target_macro_count >= 4 else ''} 的前 {target_macro_count} 个）。"
+        )
+        if target_macro_count == 1:
+            bits.append("仅 1 套时系统将自动选中，无需用户勾选。")
     if user_brief.strip():
         bits.append(f"【用户需求锚定】\n{user_brief.strip()}")
     if user_text.strip():

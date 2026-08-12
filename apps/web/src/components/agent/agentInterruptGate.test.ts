@@ -144,13 +144,14 @@ describe('interruptPayloadFromThreadState', () => {
 })
 
 describe('defaultMacroSchemeSelection', () => {
-  it('prefers recommended macro schemes up to 2', () => {
+  it('prefers recommended macro schemes up to max', () => {
     const schemes = [
       { id: 'A', recommended: false },
       { id: 'B', recommended: true },
       { id: 'C', recommended: true },
+      { id: 'D', recommended: true },
     ]
-    expect(defaultMacroSchemeSelection(schemes)).toEqual(['B', 'C'])
+    expect(defaultMacroSchemeSelection(schemes, 4)).toEqual(['B', 'C', 'D'])
   })
 })
 
@@ -161,12 +162,20 @@ describe('toggleMacroSchemeSelection', () => {
     { id: 'C', recommended: false },
   ]
 
-  it('keeps recommended A when adding B then C', () => {
+  it('keeps recommended A when adding B then C (max 4)', () => {
     let sel = defaultMacroSchemeSelection(schemes)
     expect(sel).toEqual(['A'])
-    sel = toggleMacroSchemeSelection(sel, 'B', true, schemes)
+    sel = toggleMacroSchemeSelection(sel, 'B', true, schemes, 4)
     expect(sel).toEqual(['A', 'B'])
-    sel = toggleMacroSchemeSelection(sel, 'C', true, schemes)
+    sel = toggleMacroSchemeSelection(sel, 'C', true, schemes, 4)
+    expect(sel).toEqual(['A', 'B', 'C'])
+  })
+
+  it('evicts non-recommended when max 2 exceeded', () => {
+    let sel = defaultMacroSchemeSelection(schemes)
+    sel = toggleMacroSchemeSelection(sel, 'B', true, schemes, 2)
+    expect(sel).toEqual(['A', 'B'])
+    sel = toggleMacroSchemeSelection(sel, 'C', true, schemes, 2)
     expect(sel).toEqual(['A', 'C'])
   })
 

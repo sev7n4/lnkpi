@@ -2,10 +2,42 @@
 
 from __future__ import annotations
 
+import random
 from typing import Any
 
-from app.graph.product_visual_v2.limits import MAX_MACRO_SCHEMES_SELECTED
+from app.graph.product_visual_v2.limits import (
+    MAX_MACRO_SCHEMES_GENERATED,
+    MAX_MACRO_SCHEMES_SELECTED,
+    MIN_MACRO_SCHEMES_GENERATED,
+)
 from app.graph.product_visual_v2.models import MacroScheme
+
+_SCHEME_ID_ORDER = ("A", "B", "C", "D")
+
+
+def _scheme_sort_key(item: dict) -> tuple[int, int]:
+    sid = str(item.get("id") or "")
+    try:
+        return (0, _SCHEME_ID_ORDER.index(sid))
+    except ValueError:
+        return (1, 0)
+
+
+def pick_macro_scheme_target_count(*, rng: random.Random | None = None) -> int:
+    """Random macro scheme count for this dialog_draft turn (1..4)."""
+    r = rng or random
+    return r.randint(MIN_MACRO_SCHEMES_GENERATED, MAX_MACRO_SCHEMES_GENERATED)
+
+
+def trim_macro_schemes_to_count(schemes: list[dict], count: int) -> list[dict]:
+    """Trim scheme list to *count*, keeping recommended entries first."""
+    if count <= 0 or not schemes:
+        return list(schemes)
+    if len(schemes) <= count:
+        return list(schemes)
+    recommended = sorted([s for s in schemes if s.get("recommended")], key=_scheme_sort_key)
+    rest = sorted([s for s in schemes if not s.get("recommended")], key=_scheme_sort_key)
+    return (recommended + rest)[:count]
 
 
 def should_skip_macro_hitl(macro_schemes: list[MacroScheme] | list[dict] | None) -> bool:

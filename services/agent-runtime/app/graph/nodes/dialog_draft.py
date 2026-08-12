@@ -9,8 +9,13 @@ from typing import Any, Callable
 from langchain_core.messages import AIMessage
 
 from app.graph.nodes.plan._shared import latest_user_text
-from app.graph.product_visual_v2.models import DialogDraftOutput, parse_dialog_draft_output
-from app.graph.product_visual_v2.macro_select import default_macro_selection, should_skip_macro_hitl
+from app.graph.product_visual_v2.models import DialogDraftOutput, MacroScheme, parse_dialog_draft_output
+from app.graph.product_visual_v2.macro_select import (
+    default_macro_selection,
+    pick_macro_scheme_target_count,
+    should_skip_macro_hitl,
+    trim_macro_schemes_to_count,
+)
 from app.graph.product_visual_v2.routing import route_after_dialog_draft
 from app.graph.nodes.macro_scheme_select_gate import build_macro_select_presentation_patch
 from app.graph.product_visual_v2.utterance import extract_user_request_labels
@@ -39,10 +44,13 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
         if state.get("scheme_revision_count") and state.get("macro_scheme_revision_feedback"):
             revision_feedback = state.get("macro_scheme_revision_feedback")
 
+        target_macro_count = pick_macro_scheme_target_count()
+
         user_content = build_dialog_draft_user_content(
             user_brief=user_brief,
             user_text=user_text,
             revision_feedback=revision_feedback,
+            target_macro_count=target_macro_count,
         )
         messages = build_dialog_draft_messages(system=system_prompt, user=user_content)
 
@@ -51,7 +59,20 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
             try:
                 ai = await llm.ainvoke(messages)
                 raw = str(getattr(ai, "content", ai) or "")
-                draft = parse_dialog_draft_output(raw)
+                parsed = parse_dialog_draft_output(raw)
+                trimmed = trim_macro_schemes_to_count(
+                    [m.model_dump(mode="json") for m in parsed.macro_schemes],
+                    target_macro_count,
+                )
+                if len(trimmed) < target_macro_count and attempt == 0:
+                    messages = build_dialog_draft_messages(
+                        system=system_prompt,
+                        user=user_content
+                        + f"\n\n【纠正】上一轮 macro_schemes 只有 {len(trimmed)} 个，必须输出恰好 {target_macro_count} 个。",
+                    )
+                    continue
+                parsed.macro_schemes = [MacroScheme.model_validate(s) for s in trimmed]
+                draft = parsed
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.warning("dialog_draft parse failed (attempt %s): %s", attempt + 1, exc)
@@ -76,6 +97,7 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
             "phase": next_phase,
             "messages": [AIMessage(content=f"{draft.draft_prose}\n\n---\n{msg}")],
             "product_visual_scheme_v2": True,
+            "macro_scheme_target_count": target_macro_count,
         }
         labels = extract_user_request_labels(user_text)
         if labels:

@@ -11,6 +11,6 @@ def test_dialog_draft_prompt_macro_count_policy():
         root
         / "skills/ecommerce-product-visual/assets/prompts/dialog-draft/1.0.0.md"
     ).read_text(encoding="utf-8")
-    assert "数量策略" in prompt
-    assert "只输出 1 套" in prompt
-    assert "禁止" in prompt and "微调版" in prompt
+    assert "1~4" in prompt or "1~4 个" in prompt
+    assert "自动选中" in prompt
+    assert "A/B/C/D" in prompt

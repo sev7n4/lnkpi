@@ -581,12 +581,17 @@ function syncShotManifest(shots: ProductVisualShot[] | null | undefined) {
   shotManifest.value = shots ?? []
 }
 
+const macroMaxSelect = computed(
+  () => gatePresentation.value?.body?.max_select ?? 4,
+)
+
 function toggleMacroSelection(schemeId: string, checked: boolean) {
   macroSelections.value = toggleMacroSchemeSelection(
     macroSelections.value,
     schemeId,
     checked,
     macroSchemes.value,
+    macroMaxSelect.value,
   )
 }
 
