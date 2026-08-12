@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, nextTick, watch } from 'vue'
+import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import { useRouter } from 'vue-router'
 import { useAgentStore } from '@/stores/agent'
 import { useAuthStore } from '@/stores/auth'
@@ -142,6 +143,13 @@ const emit = defineEmits<{
 }>()
 
 const pickMode = useCanvasRefPickMode()
+const { isMobileLayout } = useAgentMobileLayout()
+
+const panelTeleported = computed(() => floating.value || isMobileLayout.value)
+const asidePanelWidth = computed(() => {
+  if (!open.value || floating.value || isMobileLayout.value) return '0px'
+  return `${panelWidth.value}px`
+})
 
 const agent = useAgentStore()
 const auth = useAuthStore()
@@ -820,6 +828,17 @@ const open = ref(false)
 /** 浮动窗口模式：面板脱离侧栏，悬浮在画布上，可拖拽 */
 const floating = ref(false)
 
+watch(isMobileLayout, (mobile) => {
+  if (mobile) floating.value = false
+})
+
+watch(
+  () => pickMode.active.value,
+  (active) => {
+    if (active && isMobileLayout.value && open.value) closePanel()
+  },
+)
+
 /* ---- 宽度：默认可容纳 dock 底部参数一排，支持拖拉调宽 ---- */
 const PANEL_MIN_W = 420
 const PANEL_MAX_W = 760
@@ -962,6 +981,7 @@ watch(
 )
 
 function openPanel() {
+  if (isMobileLayout.value) floating.value = false
   open.value = true
   emit('expandedChange', true)
   scrollToBottom()
@@ -972,7 +992,18 @@ function closePanel() {
   emit('expandedChange', false)
 }
 
+function onFocusNode(nodeId: string) {
+  emit('focusNode', nodeId)
+  if (isMobileLayout.value) closePanel()
+}
+
+function onFocusAll(nodeIds: string[]) {
+  emit('focusAll', nodeIds)
+  if (isMobileLayout.value) closePanel()
+}
+
 function toggleFloating() {
+  if (isMobileLayout.value) return
   floating.value = !floating.value
   if (floating.value) {
     // 首次浮出时把面板放到画布右侧默认位置
@@ -986,7 +1017,7 @@ function toggleFloating() {
 
 /* ---- 浮窗拖拽（按住头部空白处移动） ---- */
 function startDrag(event: MouseEvent) {
-  if (!floating.value) return
+  if (!floating.value || isMobileLayout.value) return
   if ((event.target as HTMLElement).closest('button, input, textarea')) return
   event.preventDefault()
   dragging.value = true
@@ -1009,6 +1040,7 @@ function startDrag(event: MouseEvent) {
 
 /* ---- 左边缘拖拉调宽（侧栏 / 浮窗通用） ---- */
 function startResize(event: MouseEvent) {
+  if (isMobileLayout.value) return
   event.preventDefault()
   resizing.value = true
   const floatRight = floatPos.value.x + floatWidth.value
@@ -1588,9 +1620,9 @@ function handleEvent(event: { type: string; data: unknown }) {
         attachments?: SidebarAttachment[]
       }
       if (cmd.type === 'focus_node' && cmd.nodeId) {
-        emit('focusNode', cmd.nodeId)
+        onFocusNode(cmd.nodeId)
       } else if (cmd.type === 'focus_nodes' && cmd.nodeIds?.length) {
-        emit('focusAll', cmd.nodeIds)
+        onFocusAll(cmd.nodeIds)
       } else if (cmd.type === 'undo') {
         emit('undo')
       } else if (cmd.type === 'redo') {
@@ -1783,16 +1815,20 @@ defineExpose({
 <template>
   <aside
     class="agent-side-rail shrink-0 overflow-visible"
-    :class="{ 'is-resizing': resizing, 'is-docked-open': open && !floating }"
-    :style="{ width: open && !floating ? `${panelWidth}px` : '0px' }"
+    :class="{
+      'is-resizing': resizing,
+      'is-docked-open': open && !floating && !isMobileLayout,
+    }"
+    :style="{ width: asidePanelWidth }"
   >
     <div class="flex h-full min-h-0">
       <!-- 收缩态：右下角 agent logo 悬浮按钮 -->
       <Teleport to="body">
         <button
-          v-if="!open"
+          v-if="!open && !pickMode.active"
           type="button"
           class="agent-fab"
+          :class="{ 'agent-fab-mobile': isMobileLayout }"
           title="打开 AI 助手"
           @click="openPanel"
         >
@@ -1800,28 +1836,43 @@ defineExpose({
         </button>
       </Teleport>
 
-      <!-- 面板：侧栏内嵌 or 浮动窗口（Teleport 到 body） -->
-      <Teleport to="body" :disabled="!floating">
+      <!-- 移动端遮罩：点按退回画布 -->
+      <Teleport to="body">
+        <div
+          v-if="open && isMobileLayout"
+          class="agent-mobile-backdrop"
+          aria-hidden="true"
+          @click="closePanel"
+        />
+      </Teleport>
+
+      <!-- 面板：侧栏内嵌 or 浮动窗口 or 移动端全屏 sheet（Teleport 到 body） -->
+      <Teleport to="body" :disabled="!panelTeleported">
         <div
           v-show="open"
           class="agent-panel-shell flex min-h-0 h-full min-w-0 flex-col overflow-hidden"
           :class="[
-            floating ? 'agent-panel-floating' : 'agent-panel-inline flex-1',
+            isMobileLayout ? 'agent-panel-mobile-sheet' : floating ? 'agent-panel-floating' : 'agent-panel-inline flex-1',
             { 'is-dragging': dragging },
           ]"
-          :style="floating ? {
+          :style="floating && !isMobileLayout ? {
             left: `${floatPos.x}px`,
             top: `${floatPos.y}px`,
             width: `${floatWidth}px`,
           } : undefined"
         >
           <!-- 左边缘拖拉调宽 -->
-          <div class="agent-resize-handle" title="拖拉调整宽度" @mousedown="startResize" />
+          <div
+            v-if="!isMobileLayout"
+            class="agent-resize-handle"
+            title="拖拉调整宽度"
+            @mousedown="startResize"
+          />
 
           <!-- 顶栏：logo + 新建 / 历史 / 浮窗切换 / 收起（浮窗模式可按住拖动） -->
           <div
             class="agent-panel-header flex items-center justify-between px-3 py-2"
-            :class="floating ? 'cursor-move' : ''"
+            :class="floating && !isMobileLayout ? 'cursor-move' : ''"
             @mousedown="startDrag"
           >
             <div class="flex min-w-0 items-center gap-2">
@@ -1874,8 +1925,24 @@ defineExpose({
                 </div>
               </div>
 
+              <!-- 移动端：退回画布，露出下方 VueFlow -->
+              <button
+                v-if="isMobileLayout"
+                type="button"
+                class="agent-view-canvas-btn flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium"
+                title="看画布"
+                @click="closePanel"
+              >
+                <svg viewBox="0 0 24 24" class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <path stroke-linecap="round" d="M3 9h18M9 3v18" opacity="0.45" />
+                </svg>
+                看画布
+              </button>
+
               <!-- 浮动窗口切换：面板脱离/停靠侧栏 -->
               <button
+                v-if="!isMobileLayout"
                 type="button"
                 class="agent-head-btn"
                 :class="floating ? 'is-active' : ''"
@@ -2012,14 +2079,14 @@ defineExpose({
                 <AgentCanvasOutputs
                   v-if="msg.role === 'assistant' && (assistantOutputsById.get(msg.id)?.length ?? 0) > 0"
                   :outputs="assistantOutputsById.get(msg.id) ?? []"
-                  @focus-node="emit('focusNode', $event)"
-                  @focus-all="emit('focusAll', $event)"
+                  @focus-node="onFocusNode($event)"
+                  @focus-all="onFocusAll($event)"
                 />
                 <AgentExecutionTrace
                   v-if="msg.role === 'assistant' && msg.executionTrace"
                   :trace="msg.executionTrace"
                   :streaming="Boolean(msg.streaming)"
-                  @focus-node="emit('focusNode', $event)"
+                  @focus-node="onFocusNode($event)"
                 />
                 <div v-if="msg.toolCalls?.length" class="agent-tools mt-1 space-y-0.5 pt-1">
                   <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-text-secondary)]">⚙ {{ tc.name }}</div>
@@ -2075,7 +2142,7 @@ defineExpose({
               v-if="showTaskCard"
               class="mx-3"
               :progress="taskProgress"
-              @focus-node="emit('focusNode', $event)"
+              @focus-node="onFocusNode($event)"
             />
             <!-- 完成后交付摘要随聊天历史一起滚动，避免底部 dock 占满侧栏 -->
             <div
@@ -2085,8 +2152,8 @@ defineExpose({
               <AgentPresentationHost
                 :presentation="completionPresentation"
                 :disabled="agent.isStreaming"
-                @focus-node="emit('focusNode', $event)"
-                @focus-all="emit('focusAll', $event)"
+                @focus-node="onFocusNode($event)"
+                @focus-all="onFocusAll($event)"
               />
             </div>
           </div>
@@ -2310,8 +2377,8 @@ defineExpose({
                 :disabled="agent.isStreaming"
                 @primary-action="onDeliveryPrimaryAction"
                 @delivery-switch="sendDeliveryVariantSwitch"
-                @focus-node="emit('focusNode', $event)"
-                @focus-all="emit('focusAll', $event)"
+                @focus-node="onFocusNode($event)"
+                @focus-all="onFocusAll($event)"
               />
             </div>
             <div v-else-if="showGatePresentation && gatePresentation" class="mb-2">
@@ -2319,8 +2386,8 @@ defineExpose({
                 :presentation="gatePresentation"
                 :disabled="agent.isStreaming"
                 @primary-action="onGatePrimaryAction"
-                @focus-node="emit('focusNode', $event)"
-                @focus-all="emit('focusAll', $event)"
+                @focus-node="onFocusNode($event)"
+                @focus-all="onFocusAll($event)"
               />
               <div v-if="awaitingShotConfirm" class="mt-2 flex flex-wrap gap-2 px-0.5">
                 <div v-if="shotManifest.length" class="mb-1 w-full space-y-1 text-xs text-[var(--neo-muted)]">
@@ -2697,6 +2764,20 @@ defineExpose({
   transform: scale(1.08);
 }
 
+.agent-fab-mobile {
+  right: 16px;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+}
+
+.agent-mobile-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 64;
+  background: rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
 /* ---- 面板外壳 ---- */
 .agent-panel-inline {
   position: relative;
@@ -2719,6 +2800,35 @@ defineExpose({
 
 .agent-panel-floating.is-dragging {
   user-select: none;
+}
+
+.agent-panel-mobile-sheet {
+  position: fixed;
+  z-index: 70;
+  top: max(44px, env(safe-area-inset-top, 0px));
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: auto;
+  max-height: none;
+  border: 1px solid var(--neo-glass-border);
+  border-bottom: none;
+  border-radius: 20px 20px 0 0;
+  background: var(--neo-popover-bg);
+  box-shadow: var(--neo-popover-shadow);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  overflow: hidden;
+}
+
+.agent-view-canvas-btn {
+  color: var(--neo-hi-text);
+  background: color-mix(in srgb, var(--neo-hi-bg) 72%, transparent);
+  transition: background 0.15s ease;
+}
+
+.agent-view-canvas-btn:hover {
+  background: var(--neo-hi-bg);
 }
 
 /* ---- 左边缘拖拉调宽 ---- */
