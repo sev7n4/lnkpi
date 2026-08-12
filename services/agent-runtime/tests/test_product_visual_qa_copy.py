@@ -61,8 +61,9 @@ def test_quality_fail_includes_checks(copy: ProductVisualCopy):
         ),
         metrics,
     )
-    assert any("清晰度" in c for c in checks)
-    assert any("白底" in c for c in checks)
+    labels = [c["label"] for c in checks if isinstance(c, dict)]
+    assert any("清晰度" in label for label in labels)
+    assert any("白底" in label for label in labels)
 
 
 def test_soft_pass_when_sharpness_ok_no_explicit_fail(copy: ProductVisualCopy):
@@ -87,7 +88,8 @@ def test_build_qa_checks_human_readable():
         ),
         {},
     )
-    assert "✗" in checks[0] or "不足" in checks[0]
+    assert checks[0]["ok"] is False
+    assert checks[0]["label"] == "清晰度"
 
 
 @pytest.mark.asyncio

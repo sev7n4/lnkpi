@@ -17,6 +17,7 @@ from app.graph.product_visual_v2.presentation import (
 from app.graph.product_visual_v2.vision_qa import (
     VisionQAResult,
     build_qa_checks,
+    build_qa_understanding_text,
     evaluate_vision_qa_v2,
     vision_qa_metrics_from_result,
 )
@@ -226,6 +227,11 @@ def _build_qa_fail_output(
 
     mapped = copy.map_qa_failure(reason=reason, vision_used=vision_used, metrics=merged_metrics)
     checks = build_qa_checks(vision, merged_metrics)
+    understanding = build_qa_understanding_text(
+        vision,
+        merged_metrics,
+        prefix=copy.get("qa.understanding_prefix"),
+    )
     recap = build_context_recap(state)
     presentation = build_presentation_envelope(
         kind=str(mapped["kind"]),
@@ -234,10 +240,14 @@ def _build_qa_fail_output(
         copy=copy,
     )
     presentation["title"] = mapped["title"]
-    presentation["body"] = {"text": mapped["body"], "checks": checks}
+    presentation["body"] = {
+        "text": mapped["body"],
+        "checks": checks,
+        **({"understanding": understanding} if understanding else {}),
+    }
     presentation["options"] = mapped["options"]
 
-    msg_parts = [p for p in (recap, str(mapped.get("title") or "")) if p]
+    msg_parts = [p for p in (recap, understanding, str(mapped.get("title") or "")) if p]
     return {
         "presentation": presentation,
         "messages": [AIMessage(content="\n".join(msg_parts))],
@@ -287,6 +297,7 @@ async def _run_qa_check(
             "is_white_bg": vision.is_white_bg,
             "is_sharp_enough": vision.is_sharp_enough,
             "product_identifiable": vision.product_identifiable,
+            "product_summary": vision.product_summary,
             "vision_used": True,
         }
     return out
@@ -322,6 +333,7 @@ def make_image_qa_check_node(
                 pass_=False,
                 reason=str(result.get("image_qa_reason") or ""),
                 vision_used=bool(result.get("vision_used")),
+                product_summary=m.get("product_summary"),
                 is_white_bg=m.get("is_white_bg"),
                 is_sharp_enough=m.get("is_sharp_enough"),
                 product_identifiable=m.get("product_identifiable"),
@@ -358,6 +370,7 @@ def make_await_image_qa_node() -> Callable:
                 pass_=False,
                 reason=str(state.get("image_qa_reason") or ""),
                 vision_used=bool(state.get("vision_used")),
+                product_summary=m.get("product_summary") if isinstance(m, dict) else None,
                 is_white_bg=m.get("is_white_bg") if isinstance(m, dict) else None,
                 is_sharp_enough=m.get("is_sharp_enough") if isinstance(m, dict) else None,
                 product_identifiable=m.get("product_identifiable") if isinstance(m, dict) else None,

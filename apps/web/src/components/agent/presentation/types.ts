@@ -72,6 +72,8 @@ export interface AgentPresentationBody {
   hint?: string
   groups?: DeliveryCardGroup[]
   checks?: Array<{ label: string; ok: boolean }>
+  /** Vision QA product understanding (product_summary). */
+  understanding?: string
   callout?: string
   callout_conflict?: string
   prose?: string

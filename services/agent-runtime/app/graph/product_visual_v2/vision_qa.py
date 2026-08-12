@@ -11,6 +11,7 @@ class VisionQAResult(BaseModel):
     pass_: bool = Field(alias="pass")
     reason: str = ""
     vision_used: bool = False
+    product_summary: str | None = None
     is_white_bg: bool | None = None
     is_sharp_enough: bool | None = None
     product_identifiable: bool | None = None
@@ -23,6 +24,7 @@ def vision_qa_metrics_from_result(vision: VisionQAResult) -> dict[str, Any]:
         "is_white_bg": vision.is_white_bg,
         "is_sharp_enough": vision.is_sharp_enough,
         "product_identifiable": vision.product_identifiable,
+        "product_summary": vision.product_summary,
         "vision_used": vision.vision_used,
     }
 
@@ -30,32 +32,48 @@ def vision_qa_metrics_from_result(vision: VisionQAResult) -> dict[str, Any]:
 def build_qa_checks(
     vision: VisionQAResult | None,
     metrics: dict[str, Any] | None = None,
-) -> list[str]:
-    """Human-readable QA check lines for presentation.body.checks[]."""
+) -> list[dict[str, Any]]:
+    """Structured QA checks for presentation.body.checks[]."""
     metrics = metrics or {}
-    checks: list[str] = []
+    checks: list[dict[str, Any]] = []
 
     sharp = vision.is_sharp_enough if vision and vision.is_sharp_enough is not None else None
     if sharp is None and metrics.get("sharpness") is not None:
         sharp = float(metrics["sharpness"]) >= 0.5
     if sharp is not None:
-        checks.append(f"清晰度：{'✓ 足够' if sharp else '✗ 不足'}")
+        checks.append({"label": "清晰度", "ok": bool(sharp)})
 
     white = vision.is_white_bg if vision and vision.is_white_bg is not None else None
     if white is None and metrics.get("has_white_bg"):
         white = True
     if white is not None:
-        checks.append(f"白底背景：{'✓ 符合' if white else '✗ 非白底或杂底'}")
+        checks.append({"label": "白底背景", "ok": bool(white)})
 
     identifiable = (
         vision.product_identifiable if vision and vision.product_identifiable is not None else None
     )
     if identifiable is not None:
-        checks.append(f"产品可辨：{'✓ 可识别' if identifiable else '✗ 难以识别'}")
+        checks.append({"label": "产品可辨", "ok": bool(identifiable)})
 
     if not checks and not metrics.get("has_white_bg") and metrics.get("sharpness", 0) >= 0.5:
-        checks.append("清晰度尚可；白底背景未确认")
+        checks.append({"label": "白底背景", "ok": False})
     return checks
+
+
+def build_qa_understanding_text(
+    vision: VisionQAResult | None,
+    metrics: dict[str, Any] | None = None,
+    *,
+    prefix: str = "识图理解",
+) -> str:
+    summary = None
+    if vision and vision.product_summary:
+        summary = str(vision.product_summary).strip()
+    elif metrics and metrics.get("product_summary"):
+        summary = str(metrics["product_summary"]).strip()
+    if not summary:
+        return ""
+    return f"{prefix}：{summary}"
 
 
 def build_qa_fail_message(
@@ -78,13 +96,24 @@ def build_qa_fail_message(
     parts: list[str] = []
     if context_recap:
         parts.append(context_recap)
+    understanding = build_qa_understanding_text(
+        vision,
+        metrics,
+        prefix=pv_copy.get("qa.understanding_prefix"),
+    )
+    if understanding:
+        parts.append(understanding)
     parts.append(str(mapped.get("title") or ""))
     body = str(mapped.get("body") or "").strip()
     if body:
         parts.append(body)
     checks = build_qa_checks(vision, metrics)
     if checks:
-        parts.append("检查项：" + "；".join(checks))
+        check_line = "；".join(
+            f"{c['label']}：{'✓' if c['ok'] else '✗'}" for c in checks if isinstance(c, dict)
+        )
+        if check_line:
+            parts.append("检查项：" + check_line)
     return "\n".join(p for p in parts if p)
 
 

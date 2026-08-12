@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
-import { applyCanvasActions } from '@lnkpi/agent'
+import { applyCanvasActions, parseVisionQaJson } from '@lnkpi/agent'
 import {
   resolveNodeRefs,
   summarizePromptCompletion,
@@ -180,29 +180,34 @@ function pickString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
-function parseVisionQaJson(raw: string): {
+function pickVisionQaModelFromCanvas(canvas: CanvasData, fallback: string): string | undefined {
+  for (const node of canvas.nodes ?? []) {
+    if (node.type !== 'text' && node.type !== 'prompt') continue
+    const refs = (node.data?.localRefs as LocalRefBinding[] | undefined) ?? []
+    const hasImageRef = refs.some((r) => r.mediaType === 'image')
+    if (!hasImageRef) continue
+    const model = pickString(node.data?.textModel, '')
+    if (model) return model
+  }
+  return fallback || undefined
+}
+
+function parseVisionQaResponse(raw: string): {
   pass: boolean
   reason: string
+  productSummary?: string
   isWhiteBg?: boolean
   isSharpEnough?: boolean
   productIdentifiable?: boolean
 } {
-  const cleaned = raw.replace(/```json|```/g, '').trim()
-  try {
-    const data = JSON.parse(cleaned) as Record<string, unknown>
-    return {
-      pass: Boolean(data.pass),
-      reason: String(data.reason ?? '').trim() || '图源审核完成',
-      isWhiteBg: typeof data.is_white_bg === 'boolean' ? data.is_white_bg : undefined,
-      isSharpEnough: typeof data.is_sharp_enough === 'boolean' ? data.is_sharp_enough : undefined,
-      productIdentifiable:
-        typeof data.product_identifiable === 'boolean' ? data.product_identifiable : undefined,
-    }
-  } catch {
-    return {
-      pass: false,
-      reason: '识图模型返回格式异常，请重试或更换参考图',
-    }
+  const parsed = parseVisionQaJson(raw)
+  return {
+    pass: parsed.pass,
+    reason: parsed.reason,
+    productSummary: parsed.productSummary,
+    isWhiteBg: parsed.isWhiteBg,
+    isSharpEnough: parsed.isSharpEnough,
+    productIdentifiable: parsed.productIdentifiable,
   }
 }
 
@@ -2318,20 +2323,23 @@ export class AgentCanvasToolsService {
     pass: boolean
     reason: string
     visionUsed: boolean
+    productSummary?: string
     isWhiteBg?: boolean
     isSharpEnough?: boolean
     productIdentifiable?: boolean
   }> {
-    await this.loadOwnedSession(input.sessionId, input.userId)
+    const session = await this.loadOwnedSession(input.sessionId, input.userId)
     const prefs = await this.loadAccountGenPrefs(input.userId)
-    const textModel = pickString(input.model, prefs.defaultTextModel) || undefined
+    const canvasTextModel = pickVisionQaModelFromCanvas(session.canvas, prefs.defaultTextModel)
+    const textModel =
+      pickString(input.model, pickString(canvasTextModel, prefs.defaultTextModel)) || undefined
     const { text, visionUsed } = await this.studio.runVisionQaInternal(input.userId, {
       systemPrompt: input.systemPrompt,
       userContent: input.userContent,
       imageUrls: input.imageUrls,
       model: textModel,
     })
-    const parsed = parseVisionQaJson(text)
+    const parsed = parseVisionQaResponse(text)
     return { ...parsed, visionUsed }
   }
 

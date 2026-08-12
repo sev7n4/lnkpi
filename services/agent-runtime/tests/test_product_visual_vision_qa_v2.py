@@ -65,6 +65,41 @@ async def test_vision_qa_check_pass_with_product_ref():
 
 
 @pytest.mark.asyncio
+async def test_vision_qa_check_fail_shows_product_understanding():
+    nest = FakeNestVision(
+        {
+            "pass": False,
+            "reason": "背景杂乱，非白底",
+            "visionUsed": True,
+            "productSummary": "红色礼盒包装，可见品牌 logo，节日风格",
+            "isWhiteBg": False,
+            "isSharpEnough": True,
+            "productIdentifiable": True,
+        }
+    )
+    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS)
+    out = await node(
+        {
+            "product_visual_scheme_v2": True,
+            "sidebar_attachments": [
+                {
+                    "id": "a1",
+                    "mediaType": "image",
+                    "sourceKind": "upload",
+                    "label": "产品图",
+                    "url": "https://cdn.example/gift.jpg",
+                    "role": "product",
+                }
+            ],
+        }
+    )
+    pres = out.get("presentation")
+    assert isinstance(pres, dict)
+    body = pres.get("body") or {}
+    assert "礼盒" in str(body.get("understanding") or "")
+
+
+@pytest.mark.asyncio
 async def test_vision_qa_check_fail_shows_reason():
     nest = FakeNestVision(
         {
@@ -99,7 +134,12 @@ async def test_vision_qa_check_fail_shows_reason():
     assert isinstance(pres, dict)
     assert pres.get("title") == "产品图需要处理"
     checks = (pres.get("body") or {}).get("checks") or []
-    assert any("清晰度" in c or "难以识别" in c for c in checks)
+    assert any(
+        ("清晰度" in c or "难以识别" in c)
+        if isinstance(c, str)
+        else ("清晰度" in c.get("label", "") or c.get("label") == "产品可辨")
+        for c in checks
+    )
     msgs = out.get("messages") or []
     assert msgs
     assert pres.get("title") in str(getattr(msgs[0], "content", ""))
