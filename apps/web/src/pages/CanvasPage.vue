@@ -108,6 +108,7 @@ import {
   CANVAS_REF_PICK_REJECT_KEY,
 } from '@/composables/canvasNodeActions'
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
+import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
@@ -2250,7 +2251,9 @@ function handleCanvasRefPickToggle() {
     pickMode.deactivate()
     return
   }
-  agentRailRef.value?.openPanel()
+  if (!isMobileLayout.value) {
+    agentRailRef.value?.openPanel()
+  }
   pickMode.activate()
   const ids = multiSelectedIds.value.length
     ? [...multiSelectedIds.value]
@@ -2662,6 +2665,21 @@ const vueFlowRef = ref<InstanceType<typeof VueFlow> | null>(null)
 const canvasAreaRef = ref<HTMLElement | null>(null)
 const agentRailRef = ref<InstanceType<typeof AgentSideRail> | null>(null)
 const pickMode = useCanvasRefPickMode()
+const { isMobileLayout } = useAgentMobileLayout()
+const agentPanelExpanded = ref(false)
+function onAgentExpandedChange(expanded: boolean) {
+  agentPanelExpanded.value = expanded
+}
+
+watch(
+  () => pickMode.active.value,
+  (active, prev) => {
+    if (prev && !active && isMobileLayout.value) {
+      nextTick(() => agentRailRef.value?.openPanel())
+    }
+  },
+)
+
 const pickRejectNodeId = ref<string | null>(null)
 let pickModeKeydownHandler: ((event: KeyboardEvent) => void) | null = null
 
@@ -2972,6 +2990,7 @@ onUnmounted(() => {
         @redo="handleAgentRedo"
         @open-image-editor="handleAgentOpenImageEditor"
         @canvas-ref-pick-toggle="handleCanvasRefPickToggle"
+        @expanded-change="onAgentExpandedChange"
       />
     </div>
 
