@@ -1,6 +1,6 @@
 # 实物产品视觉出图 — Phase 2 方案层 v1.1 用户验收测试（UAT）
 
-> **状态**：草案待审  
+> **状态**：**Sign-off 通过**（§10.8，2026-08-12）
 > **日期**：2026-08-11  
 > **读者**：产品、运营、测试、演示验收人员（**非研发单元测试**）  
 > **功能规格**：[2026-08-11-product-visual-phase2-scheme-ssot-design.md](./2026-08-11-product-visual-phase2-scheme-ssot-design.md)  
@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| 文档版本 | v1.1 |
+| 文档版本 | v1.4 |
 | 验收对象 | `flow_mode: product_visual` + `product_visual_scheme_v2=true` |
 | 验收方式 | **真实浏览器** + 真实/预发环境；以 **用户可见行为** 为准 |
 | 体验规格 | [2026-08-11-agent-conversation-ux-product-visual-design.md](./2026-08-11-agent-conversation-ux-product-visual-design.md) |
@@ -379,7 +379,7 @@
 | `shot_table` 表格 UI | ✅ 已补 | `AgentShotTable.vue` + envelope `body.shots[]` |
 | 画布产出默认 5 项折叠 | ✅ 已有 | `COLLAPSE_THRESHOLD=5`（`agentCanvasOutputs.ts`） |
 | 合并门控生产开关 | ✅ 脚本默认开 | `enable-agent-runtime.sh` 写入 `LNKPI_PV_MERGED_SHOT_TOPO_GATE=true` |
-| §十 正式 Sign-off | ⏳ #227 部署后复测 | 见 §10.6 |
+| §十 正式 Sign-off | ✅ GATE_ONLY 10/10 · 浏览器新建对话 Sign-off Pass | #227+#228 已部署；见 §10.8 |
 | 出图中途后端 cancel | ⏳ 规格化 | 见 [2026-08-12-agent-mid-run-interrupt-design.md](./2026-08-12-agent-mid-run-interrupt-design.md) |
 
 ### 10.6 生产浏览器 UAT 记录（2026-08-12，#225 部署后）
@@ -396,9 +396,41 @@
 | UX-PV-07 | ⚠️ | 节点级进度 + 任务列表；非严格 a/b 计数 |
 | UX-PV-08 | ⚠️ | 「确认全部定稿」可用；分组标题多为 shot label /「默认」，缺用户原话 + `[方案A/B]` |
 | UX-PV-09 | ❌→修 | 结束仅「✅ 您的packaging_design视觉稿已就绪」；交付清单表未渲染（#226） |
-| UX-PV-11 | ❌→修 | 用户气泡可见 `__macro_scheme_decision__` / `__delivery_decision__`（#226 隐藏） |
-| §10.5 取消钮 | ✅ | streaming →「取消生成」 |
-| §10.5 画布折叠 | ✅ | 「展开全部 5/23 项」 |
+| UX-PV-11 | ❌→修 (#226) | machine payload 已过滤 |
+
+### 10.7 部署后复测（2026-08-12，#227+#228）
+
+| 项 | 结果 |
+|----|------|
+| CI #227 / #228 | ✅ 全绿 squash merge |
+| Deploy main | ✅ API + agent-runtime CVM |
+| GATE_ONLY 脚本 | ✅ **10/10 PASS**（`await_shot_topo_confirm` 合并门控） |
+| 浏览器新建对话 UAT | ✅ 完整 Sign-off Pass（见 §10.8） |
+
+### 10.8 浏览器完整 Sign-off（2026-08-12，#227+#228 部署后）
+
+**环境：** 生产 `http://119.29.173.89:8888` · 画布 `cmsome3or004as601j0tkzh1u` · **新建对话**（非历史 thread）  
+**路径：** 技能「实物产品视觉出图」→ 资产库 I1 巨峰葡萄实拍 → CVS-02-AB 口语（不含风格名）→ A+B 双选 → 出图 → 定稿 → 完成  
+**耗时：** QA ~35s · 宏观 ~45s · 出图 ~2m20s · 定稿 ~20s
+
+| UAT-ID | 结果 | 观察 |
+|--------|------|------|
+| UX-PV-01 | ✅ Pass | 「就用这张图，继续 / 重新拍摄 / 生成白底图」；callout「自动识图暂时不可用」；**无**「格式异常」assistant 气泡 |
+| UX-PV-02 | ✅ Pass | 合并门控主按钮 **「确认构图并开始出图」**（非「确认出图」）；步骤条 1~9 可见 |
+| UX-PV-03 | ✅ Pass | 宏观 A+B 双选；footer「已选 2 套风格 → 预计场景图…」；定稿 footer「确认后将交付 4 张」 |
+| UX-PV-04 | ✅ Pass | 口语未提风格名；方案摘要为「我理解您的需求 / 设计方向摘要」 |
+| UX-PV-05 | ✅ Pass | 默认见需求摘要 + 设计方向；宏观卡片含推荐理由 + 推荐标签 |
+| UX-PV-06 | ✅ Pass | topo 门控为卡片列表 +「查看技术拓扑」折叠；无 flowchart 源码外露 |
+| UX-PV-07 | ⚠️ Partial | 节点级进度 + 任务列表 + 2m20s 总耗时；**非**严格 a/b 计数格式 |
+| UX-PV-08 | ✅ Pass | 定稿分组「巨峰葡萄礼盒主视觉 / 真人手持礼盒送礼场景」+ 推荐；底栏交付张数 |
+| UX-PV-09 | ✅ Pass | **交付清单表**（交付项/方案/画布定位）+ **基础资产**小节（白底主图、产品四视图 + 定位） |
+| UX-PV-10 | ✅ Pass | 硬停 3 次（QA → 宏观 → 合并 topo）；合并门控按钮文案正确 |
+| UX-PV-11 | ✅ Pass | 全程 **无** `__macro_*__` / `__delivery_*__` machine 气泡 |
+| UX-PV-13 | ✅ Pass | 新建对话选技能后见 3 条可点击示例（礼盒 / Listing / 空间） |
+
+**P0（G8）综合：4/4 Pass · P1（G9）综合：4/5 Pass（UX-PV-07 partial）· P2（G10）综合：3/3 Pass（UX-PV-12 未在本轮复测）**
+
+**Sign-off 结论：** G8 ✅ · G9 ✅（UX-PV-07 非阻塞）· G10 ✅ — **v2.1~v2.3 浏览器 Sign-off 通过**
 
 ---
 
@@ -417,6 +449,7 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-12 | v1.4 | §10.8 浏览器完整 Sign-off（#227+#228 部署后新建对话） |
 | 2026-08-12 | v1.3 | §10.6 生产 UAT 记录 + #226 修复项追踪 |
 | 2026-08-12 | v1.2 | §10.5 闭环补项追踪；链至中断改意图规格 |
 | 2026-08-11 | v1.1 | 新增 §十 UX-PV-01~13；CVS-02-AB 口语路径；§七 G8~G10 |
