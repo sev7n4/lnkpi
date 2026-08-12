@@ -368,6 +368,15 @@ def build_presentation_envelope(
             "schemes": normalize_macro_schemes(state.get("macro_schemes") or []),
             "max_select": MAX_MACRO_SCHEMES_SELECTED,
         }
+        target_count = state.get("macro_scheme_target_count")
+        if isinstance(target_count, int) and target_count >= 1:
+            body["macro_scheme_target_count"] = target_count
+            shown = len(body["schemes"])
+            body["hint"] = (
+                f"本轮提供 {shown} 套宏观方案"
+                + (f"（目标 {target_count} 套）" if shown != target_count else "")
+                + "，请勾选后点「确认方案」。"
+            )
         if len(selected) >= 2 and delivery["allocation_note"]:
             body["footer_hint"] = delivery["allocation_note"]
             body["expected_delivery_count"] = delivery["total_finalize"]

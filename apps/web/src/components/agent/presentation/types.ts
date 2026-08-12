@@ -77,6 +77,8 @@ export interface AgentPresentationBody {
   prose?: string
   schemes?: MacroSchemeCardBody[]
   max_select?: number
+  /** Server-picked macro scheme count for this dialog_draft turn (1..4). */
+  macro_scheme_target_count?: number
   nodes?: TopoCardNode[]
   eta_min?: number
   scene_count?: number

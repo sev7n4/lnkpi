@@ -27,9 +27,6 @@ from app.graph.product_visual_v2_prompt import (
 
 logger = logging.getLogger(__name__)
 
-DRAFT_READY_MSG = "已生成视觉方案正文，请选择宏观方案后继续。"
-DRAFT_SILENT_MSG = "已生成视觉方案，仅一套宏观方向，即将写入画布方案节点…"
-
 
 def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
     async def dialog_draft(state: dict) -> dict:
@@ -86,7 +83,11 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
 
         macro_schemes = [m.model_dump(mode="json") for m in draft.macro_schemes]
         next_phase = route_after_dialog_draft({"macro_schemes": macro_schemes, "phase": None})
-        msg = DRAFT_SILENT_MSG if should_skip_macro_hitl(macro_schemes) else DRAFT_READY_MSG
+        skip_macro = should_skip_macro_hitl(macro_schemes)
+        if skip_macro:
+            msg = f"已生成视觉方案（本轮 {target_macro_count} 套），即将写入画布方案节点…"
+        else:
+            msg = f"已生成视觉方案正文，本轮 {target_macro_count} 套宏观方案，请选择后继续。"
 
         out: dict[str, Any] = {
             "macro_scheme_draft": draft.draft_prose,
@@ -102,7 +103,7 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
         labels = extract_user_request_labels(user_text)
         if labels:
             out["user_request_labels"] = labels
-        if should_skip_macro_hitl(macro_schemes):
+        if skip_macro:
             out["selected_macro_scheme_ids"] = default_macro_selection(macro_schemes)
             out["macro_scheme_decision"] = "auto"
         elif next_phase == "await_macro_scheme_select":

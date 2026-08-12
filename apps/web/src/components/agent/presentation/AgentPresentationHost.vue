@@ -41,6 +41,17 @@ const isDeliverySummary = computed(() => props.presentation.kind === 'delivery_s
 const hasGateLayout = computed(() => Boolean(props.presentation.primary_action))
 const proseContent = computed(() => String(props.presentation.body?.prose ?? ''))
 const macroSchemes = computed(() => props.presentation.body?.schemes ?? [])
+const macroSchemeTargetCount = computed(
+  () => props.presentation.body?.macro_scheme_target_count ?? null,
+)
+const macroSchemeHint = computed(() => {
+  const explicit = String(props.presentation.body?.hint ?? '').trim()
+  if (explicit) return explicit
+  const target = macroSchemeTargetCount.value
+  if (target == null || target < 2) return ''
+  const shown = macroSchemes.value.length
+  return `本轮提供 ${shown || target} 套宏观方案，请勾选后点「确认方案」。`
+})
 const shotRows = computed(() => props.presentation.body?.shots ?? [])
 const topoNodes = computed(() => props.presentation.body?.nodes ?? [])
 const deliveryGroups = computed(() => props.presentation.body?.groups ?? [])
@@ -105,6 +116,13 @@ function onPrimaryAction() {
         v-if="isProseBlock && proseContent"
         :content="proseContent"
       />
+      <p
+        v-if="isMacroCards && macroSchemeHint"
+        class="text-xs leading-relaxed text-[var(--neo-muted)]"
+        data-testid="macro-scheme-count-hint"
+      >
+        {{ macroSchemeHint }}
+      </p>
       <AgentMacroSchemeCards
         v-if="isMacroCards && macroSchemes.length"
         :schemes="macroSchemes"

@@ -97,6 +97,7 @@ def test_macro_select_envelope_includes_guidance_callout():
     state = {
         "macro_schemes": [{"id": "A"}, {"id": "B"}],
         "selected_macro_scheme_ids": ["A"],
+        "macro_scheme_target_count": 2,
     }
     env = build_presentation_envelope(
         kind="macro_scheme_cards",
@@ -104,6 +105,8 @@ def test_macro_select_envelope_includes_guidance_callout():
         state=state,
         copy=copy,
     )
+    assert env["body"]["macro_scheme_target_count"] == 2
+    assert "2 套宏观方案" in env["body"]["hint"]
     assert env["body"]["callout"] == copy.get("guidance.macro_style_in_cards")
     assert "callout_conflict" not in env["body"]
 
