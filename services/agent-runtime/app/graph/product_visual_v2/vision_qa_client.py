@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import json
+import asyncio
 import logging
 import re
 from pathlib import Path
@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.graph.atomic_parse_llm import extract_json_object
 from app.graph.product_visual_v2.vision_qa import VisionQAResult
 from app.graph.product_visual_v2_prompt import build_vision_qa_user_content, load_vision_qa_prompt
 
@@ -24,6 +25,8 @@ _NON_VISION = re.compile(
     r"(?:^|[/:])(?:deepseek|o[134](?:-|$|-mini|-pro)|text-embedding|whisper|tts|dall-e)(?:[-./]|$)",
     re.I,
 )
+
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 
 
 def supports_vision_model(model: str | None) -> bool:
@@ -51,22 +54,19 @@ def image_urls_from_state(state: dict) -> list[str]:
 
 
 def _parse_vision_json(raw: str) -> VisionQAResult:
-    text = (raw or "").strip()
-    text = re.sub(r"^```(?:json)?|```$", "", text, flags=re.MULTILINE).strip()
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
+    data = extract_json_object(raw)
+    if not data:
         return VisionQAResult(
             pass_=False,
             reason="识图模型返回格式异常，请重试或换一张更清晰的产品图",
             vision_used=True,
         )
-    if not isinstance(data, dict):
-        return VisionQAResult(pass_=False, reason="识图审核结果无效", vision_used=True)
+    product_summary = str(data.get("product_summary") or data.get("productSummary") or "").strip() or None
     return VisionQAResult(
         pass_=bool(data.get("pass")),
         reason=str(data.get("reason") or "").strip() or "图源审核完成",
         vision_used=True,
+        product_summary=product_summary,
         is_white_bg=data.get("is_white_bg") if "is_white_bg" in data else None,
         is_sharp_enough=data.get("is_sharp_enough") if "is_sharp_enough" in data else None,
         product_identifiable=data.get("product_identifiable")
@@ -83,6 +83,7 @@ async def _call_vision_http(
     model: str,
     api_key: str,
     base_url: str,
+    max_retries: int = 2,
 ) -> VisionQAResult:
     if not api_key:
         return VisionQAResult(
@@ -97,7 +98,7 @@ async def _call_vision_http(
             vision_used=False,
         )
     url = base_url.rstrip("/") + "/chat/completions"
-    body = {
+    base_body: dict[str, Any] = {
         "model": model,
         "stream": False,
         "temperature": 0,
@@ -112,16 +113,52 @@ async def _call_vision_http(
             },
         ],
     }
+
+    last_exc: Exception | None = None
     async with httpx.AsyncClient(timeout=60.0) as client:
-        resp = await client.post(
-            url,
-            json=body,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    raw = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
-    return _parse_vision_json(str(raw or ""))
+        for attempt in range(max_retries + 1):
+            if attempt > 0:
+                await asyncio.sleep(0.4 * attempt)
+            bodies = [
+                {**base_body, "response_format": {"type": "json_object"}},
+                base_body,
+            ]
+            for body in bodies:
+                try:
+                    resp = await client.post(
+                        url,
+                        json=body,
+                        headers={
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json",
+                        },
+                    )
+                    if resp.status_code in _RETRYABLE_STATUS:
+                        last_exc = httpx.HTTPStatusError(
+                            f"upstream {resp.status_code}",
+                            request=resp.request,
+                            response=resp,
+                        )
+                        break
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    raw = payload.get("choices", [{}])[0].get("message", {}).get("content", "")
+                    return _parse_vision_json(str(raw or ""))
+                except httpx.HTTPStatusError as exc:
+                    last_exc = exc
+                    if exc.response.status_code not in _RETRYABLE_STATUS:
+                        raise
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    last_exc = exc
+                    break
+
+    logger.warning("direct vision QA failed after retries: %s", last_exc)
+    return VisionQAResult(
+        pass_=False,
+        reason=f"识图审核调用失败：{last_exc}",
+        vision_used=False,
+    )
 
 
 async def run_vision_qa(
@@ -158,6 +195,9 @@ async def run_vision_qa(
         image_count=len(image_urls),
     )
 
+    creds = vision_creds or {}
+    cred_model = str(creds.get("model") or "").strip() or None
+
     run_fn = getattr(nest, "run_vision_qa", None) if nest is not None else None
     if run_fn is not None:
         try:
@@ -167,12 +207,17 @@ async def run_vision_qa(
                 scene_kind=scene_kind,
                 system_prompt=system_prompt,
                 user_content=user_content,
+                model=cred_model,
             )
             if isinstance(data, dict):
+                product_summary = str(
+                    data.get("productSummary") or data.get("product_summary") or ""
+                ).strip() or None
                 return VisionQAResult(
                     pass_=bool(data.get("pass")),
                     reason=str(data.get("reason") or "").strip() or "图源审核完成",
                     vision_used=bool(data.get("visionUsed", data.get("vision_used", True))),
+                    product_summary=product_summary,
                     is_white_bg=data.get("isWhiteBg", data.get("is_white_bg")),
                     is_sharp_enough=data.get("isSharpEnough", data.get("is_sharp_enough")),
                     product_identifiable=data.get(
@@ -182,23 +227,14 @@ async def run_vision_qa(
         except Exception as exc:  # noqa: BLE001
             logger.warning("nest run_vision_qa failed: %s", exc)
 
-    creds = vision_creds or {}
     model = str(creds.get("model") or settings.openai_chat_model or "gpt-4o")
     api_key = str(creds.get("api_key") or settings.openai_api_key or "")
     base_url = str(creds.get("base_url") or settings.openai_base_url or "https://api.openai.com/v1")
-    try:
-        return await _call_vision_http(
-            system_prompt=system_prompt,
-            user_content=user_content,
-            image_urls=image_urls,
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("direct vision QA failed: %s", exc)
-        return VisionQAResult(
-            pass_=False,
-            reason=f"识图审核调用失败：{exc}",
-            vision_used=False,
-        )
+    return await _call_vision_http(
+        system_prompt=system_prompt,
+        user_content=user_content,
+        image_urls=image_urls,
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )

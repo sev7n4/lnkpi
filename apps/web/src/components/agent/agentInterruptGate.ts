@@ -416,7 +416,10 @@ export function resolveImageQaTitle(
 export function resolveImageQaBodyText(
   presentation: AgentPresentationEnvelope | null | undefined,
 ): string {
-  return String(presentation?.body?.text ?? '').trim()
+  const understanding = String(presentation?.body?.understanding ?? '').trim()
+  const text = String(presentation?.body?.text ?? '').trim()
+  if (understanding && text) return `${understanding}\n${text}`
+  return understanding || text
 }
 
 export function resolveImageQaChecks(

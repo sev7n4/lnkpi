@@ -15,6 +15,7 @@ import {
   interruptPayloadFromThreadState,
   isRetakePendingPhase,
   resolveImageQaChecks,
+  resolveImageQaBodyText,
   resolveImageQaOptions,
   resolveImageQaTitle,
   toggleMacroSchemeSelection,
@@ -354,6 +355,19 @@ describe('resolveImageQaPresentation', () => {
     expect(resolveImageQaTitle(presentation)).toBe('自动识图暂时不可用')
     expect(resolveImageQaChecks(presentation)).toHaveLength(2)
     expect(resolveImageQaOptions(presentation)[0].label).toBe('就用这张图，继续')
+  })
+
+  it('includes understanding in body text when present', () => {
+    const withUnderstanding = {
+      ...presentation,
+      body: {
+        ...presentation.body,
+        understanding: '识图理解：不锈钢保温杯，圆柱形',
+        text: '请核对识图理解',
+      },
+    }
+    expect(resolveImageQaBodyText(withUnderstanding)).toContain('保温杯')
+    expect(resolveImageQaBodyText(withUnderstanding)).toContain('请核对识图理解')
   })
 
   it('falls back to IMAGE_QA_OPTIONS when presentation has no options', () => {

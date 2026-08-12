@@ -14,6 +14,7 @@ import {
   createVideoProvider,
   generatePromptFromUserInput,
   generateTextForRefs,
+  generateVisionQaJson,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
   Seedance1xUnsupportedError,
@@ -362,11 +363,11 @@ export class StudioService {
       throw new BadRequestException('imageUrls 不能为空')
     }
     const providerRefs = await inlineUpstreamReferenceImages(urls)
-    const prompt = `${params.systemPrompt.trim()}\n\n${params.userContent.trim()}`
-    return generateTextForRefs(prompt, providerRefs, {
+    return generateVisionQaJson(params.systemPrompt, params.userContent, providerRefs, {
       model: gatewayModelId,
       apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
       baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+      maxRetries: 2,
     })
   }
 
