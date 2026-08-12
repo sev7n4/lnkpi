@@ -120,13 +120,13 @@ function saveToLibrary() {
         <img :src="displayUrl" alt="" draggable="false">
         <button
           type="button"
-          class="neo-gen-image-preview-btn nodrag"
+          class="neo-node-preview-btn nodrag"
           title="预览大图"
           @pointerdown.stop
           @mousedown.stop
           @click.stop="openPreview"
         >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
