@@ -143,6 +143,7 @@ const emit = defineEmits<{
 }>()
 
 const pickMode = useCanvasRefPickMode()
+const pickModeActive = pickMode.active
 const { isMobileLayout } = useAgentMobileLayout()
 
 const panelTeleported = computed(() => floating.value || isMobileLayout.value)
@@ -1825,7 +1826,7 @@ defineExpose({
       <!-- 收缩态：右下角 agent logo 悬浮按钮 -->
       <Teleport to="body">
         <button
-          v-if="!open && !pickMode.active"
+          v-if="!open && !pickModeActive"
           type="button"
           class="agent-fab"
           :class="{ 'agent-fab-mobile': isMobileLayout }"
