@@ -383,3 +383,77 @@ export function finalizeExecutionTrace(trace: ExecutionTraceState) {
 export function visibleStepCount(trace: ExecutionTraceState): number {
   return trace.steps.length
 }
+
+export const EXECUTION_TRACE_PERSIST_EVENT_TYPES = new Set([
+  'step',
+  'text_replace',
+  'phase_hint',
+  'tool_call',
+  'tool_result',
+  'canvas_action',
+  'node_status',
+  'task_update',
+  'thinking',
+  'explore',
+  'error',
+])
+
+/** Rebuild execution trace from persisted SSE events (history load). */
+export function replayExecutionTraceEvents(
+  events: Array<{ type: string; data: unknown }>,
+): ExecutionTraceState {
+  const trace = createExecutionTrace()
+  for (const event of events) {
+    switch (event.type) {
+      case 'text_replace':
+        applyTextReplaceStage(trace, String((event.data as { text?: string })?.text ?? ''))
+        break
+      case 'tool_call':
+        applyToolCall(trace, String((event.data as { name?: string })?.name ?? 'tool'))
+        break
+      case 'tool_result':
+        applyToolCall(
+          trace,
+          String((event.data as { name?: string })?.name ?? 'tool'),
+          (event.data as { result?: unknown })?.result,
+        )
+        break
+      case 'canvas_action':
+        applyCanvasAction(trace, event.data as CanvasAction)
+        break
+      case 'node_status':
+        applyNodeStatus(trace, event.data as { nodeId: string; status: string; url?: string })
+        break
+      case 'step':
+        applyStep(trace, event.data as Parameters<typeof applyStep>[1])
+        break
+      case 'phase_hint':
+        applyPhaseHint(trace, event.data as { phase?: string; label: string })
+        break
+      case 'thinking':
+        applyThinking(trace, event.data as { status: string; summary?: string })
+        break
+      case 'explore':
+        applyExplore(trace, event.data as Parameters<typeof applyExplore>[1])
+        break
+      case 'task_update':
+        applyTaskUpdate(trace, event.data as Parameters<typeof applyTaskUpdate>[1])
+        break
+      case 'error':
+        applyStructuredError(
+          trace,
+          event.data as {
+            message?: string
+            error_type?: string
+            retry_hint?: string
+            tool_name?: string
+          },
+        )
+        break
+      default:
+        break
+    }
+  }
+  finalizeExecutionTrace(trace)
+  return trace
+}

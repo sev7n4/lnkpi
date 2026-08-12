@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import {
   type AgentChatMessage,
+  type AgentMessageMetadata,
   type CanvasAction,
   LinkedCanvasOutputSchema,
   type LinkedCanvasOutput,
@@ -22,8 +23,10 @@ import {
   applyToolCall,
   createExecutionTrace,
   finalizeExecutionTrace,
+  replayExecutionTraceEvents,
   type ExecutionTraceState,
 } from '@/components/agent/executionTraceReducer'
+import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 
 export interface AgentStreamMessage {
   id: string
@@ -33,13 +36,14 @@ export interface AgentStreamMessage {
   streaming?: boolean
   textReplaceHistory?: string[]
   executionTrace?: ExecutionTraceState
+  presentation?: AgentPresentationEnvelope
   attachments?: SidebarAttachment[]
   attachmentRefKeys?: string[]
   linkedOutputs?: LinkedCanvasOutput[]
   canvasActions?: CanvasAction[]
 }
 
-type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null }
+type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null; metadata?: string | null }
 
 export const useAgentStore = defineStore('agent', () => {
   const messages = ref<AgentStreamMessage[]>([])
@@ -221,9 +225,33 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function parseMetadata(raw?: string | null): {
+    presentation?: AgentPresentationEnvelope
+    executionTrace?: ExecutionTraceState
+  } {
+    if (!raw?.trim()) return {}
+    try {
+      const parsed = JSON.parse(raw) as AgentMessageMetadata
+      const out: {
+        presentation?: AgentPresentationEnvelope
+        executionTrace?: ExecutionTraceState
+      } = {}
+      if (parsed.presentation && typeof parsed.presentation === 'object') {
+        out.presentation = parsed.presentation as unknown as AgentPresentationEnvelope
+      }
+      if (parsed.executionEvents?.length) {
+        out.executionTrace = replayExecutionTraceEvents(parsed.executionEvents)
+      }
+      return out
+    } catch {
+      return {}
+    }
+  }
+
   function loadHistory(history: AgentChatMessage[]) {
     messages.value = history.map((m) => {
       const persisted = m as PersistedAgentMessage
+      const extras = parseMetadata(persisted.metadata)
       return {
         id: persisted.id,
         role: persisted.role as 'user' | 'assistant',
@@ -231,6 +259,8 @@ export const useAgentStore = defineStore('agent', () => {
         attachments: parseAttachments(persisted.attachments),
         linkedOutputs: parseLinkedOutputs(persisted.linkedOutputs),
         canvasActions: parsePersistedToolCalls(persisted.toolCalls),
+        presentation: extras.presentation,
+        executionTrace: extras.executionTrace,
       }
     })
   }

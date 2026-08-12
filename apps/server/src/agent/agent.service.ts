@@ -1,6 +1,6 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
-import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment } from '@lnkpi/shared'
+import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment, AgentMessageMetadata } from '@lnkpi/shared'
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -14,6 +14,30 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
+
+const TRACE_PERSIST_EVENT_TYPES = new Set([
+  'step',
+  'text_replace',
+  'phase_hint',
+  'tool_call',
+  'tool_result',
+  'canvas_action',
+  'node_status',
+  'task_update',
+  'thinking',
+  'explore',
+  'error',
+])
+
+export function buildTurnMetadata(input: {
+  presentation?: Record<string, unknown>
+  executionEvents: Array<{ type: string; data: unknown }>
+}): string | null {
+  const metadata: AgentMessageMetadata = {}
+  if (input.presentation) metadata.presentation = input.presentation
+  if (input.executionEvents.length) metadata.executionEvents = input.executionEvents
+  return Object.keys(metadata).length ? JSON.stringify(metadata) : null
+}
 
 export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput[] {
   return actions
@@ -310,6 +334,8 @@ export class AgentService {
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
+    const executionEvents: Array<{ type: string; data: unknown }> = []
+    let turnPresentation: Record<string, unknown> | undefined
 
     const runtimeSkillId = mapUiSkillId(skillId)
     let llmModel: string | undefined
@@ -340,6 +366,15 @@ export class AgentService {
       refOrder,
       mentionedKeys,
     })) {
+      if (TRACE_PERSIST_EVENT_TYPES.has(event.type)) {
+        executionEvents.push({ type: event.type, data: event.data })
+      }
+      if (event.type === 'interrupt' || event.type === 'done') {
+        const pres = (event.data as { presentation?: unknown })?.presentation
+        if (pres && typeof pres === 'object' && !Array.isArray(pres)) {
+          turnPresentation = pres as Record<string, unknown>
+        }
+      }
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text
       }
@@ -357,6 +392,7 @@ export class AgentService {
       // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
       rewriteCanvasData: false,
       linkedOutputs: deriveLinkedOutputs(canvasActions),
+      metadata: buildTurnMetadata({ presentation: turnPresentation, executionEvents }),
     })
   }
 
@@ -366,7 +402,11 @@ export class AgentService {
     userId: string | undefined,
     assistantText: string,
     canvasActions: CanvasAction[],
-    opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[] },
+    opts: {
+      rewriteCanvasData: boolean
+      linkedOutputs?: LinkedCanvasOutput[]
+      metadata?: string | null
+    },
   ) {
     if (assistantText) {
       await this.prisma.agentMessage.create({
@@ -377,6 +417,7 @@ export class AgentService {
           content: assistantText,
           toolCalls: canvasActions.length ? JSON.stringify(canvasActions) : null,
           linkedOutputs: opts.linkedOutputs?.length ? JSON.stringify(opts.linkedOutputs) : null,
+          metadata: opts.metadata ?? null,
         },
       })
       await this.prisma.agentThread.update({

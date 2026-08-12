@@ -8,6 +8,7 @@ import {
   applyToolCall,
   createExecutionTrace,
   finalizeExecutionTrace,
+  replayExecutionTraceEvents,
 } from '@/components/agent/executionTraceReducer'
 import { labelFromTextReplace } from '@/components/agent/executionStepLabels'
 
@@ -72,5 +73,14 @@ describe('executionTraceReducer', () => {
     const trace = createExecutionTrace()
     applyPhaseHint(trace, { phase: 'await_confirm', label: '等待你确认方案' })
     expect(trace.steps[0]?.status).toBe('waiting_user')
+  })
+
+  it('replays persisted execution events', () => {
+    const trace = replayExecutionTraceEvents([
+      { type: 'text_replace', data: { text: '好的，我来生成图片「模特」' } },
+      { type: 'step', data: { id: 'n1', label: '理解需求', status: 'done', ms: 12 } },
+    ])
+    expect(trace.steps.some((s) => s.label === '理解需求')).toBe(true)
+    expect(trace.totalMs).toBeGreaterThanOrEqual(0)
   })
 })

@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CanvasAction } from '@lnkpi/shared'
-import { AgentService, deriveLinkedOutputs } from './agent.service'
+import { AgentService, deriveLinkedOutputs, buildTurnMetadata } from './agent.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 
 describe('deriveLinkedOutputs', () => {
@@ -59,6 +59,23 @@ describe('deriveLinkedOutputs', () => {
     ]
 
     expect(deriveLinkedOutputs(actions)).toEqual([])
+  })
+})
+
+describe('buildTurnMetadata', () => {
+  it('serializes presentation and execution events', () => {
+    const raw = buildTurnMetadata({
+      presentation: { kind: 'macro_scheme_cards', body: { schemes: [] } },
+      executionEvents: [{ type: 'step', data: { id: 's1', label: 'x', status: 'done' } }],
+    })
+    expect(raw).toBeTruthy()
+    const parsed = JSON.parse(raw!)
+    expect(parsed.presentation.kind).toBe('macro_scheme_cards')
+    expect(parsed.executionEvents).toHaveLength(1)
+  })
+
+  it('returns null when empty', () => {
+    expect(buildTurnMetadata({ executionEvents: [] })).toBeNull()
   })
 })
 
@@ -163,7 +180,13 @@ describe('AgentService streamConversation', () => {
           },
         },
       }
-      yield { type: 'done', data: {} }
+      yield { type: 'step', data: { id: 'dialog_draft', label: '出方案', status: 'done', ms: 10 } }
+      yield {
+        type: 'done',
+        data: {
+          presentation: { kind: 'macro_scheme_cards', stepper: { current: 'macro_select', completed: [] } },
+        },
+      }
     })
 
     vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
@@ -191,6 +214,7 @@ describe('AgentService streamConversation', () => {
     expect(events.map((e) => e.type)).toEqual([
       'text_delta',
       'canvas_action',
+      'step',
       'done',
     ])
     // Runtime path skips canvasData rewrite (Nest tools already wrote)
@@ -206,6 +230,7 @@ describe('AgentService streamConversation', () => {
             status: 'done',
           },
         ]),
+        metadata: expect.stringContaining('macro_scheme_cards'),
       }),
     })
   })

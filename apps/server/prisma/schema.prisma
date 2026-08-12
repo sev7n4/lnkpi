@@ -211,6 +211,8 @@ model AgentMessage {
   attachments   String?
   /** JSON: LinkedCanvasOutput[] — 本轮 assistant 产出的可定位节点 */
   linkedOutputs String?
+  /** JSON: presentation + executionEvents for history replay */
+  metadata      String?
   createdAt     DateTime    @default(now())
 
   @@index([threadId, createdAt])

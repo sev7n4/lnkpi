@@ -267,7 +267,15 @@ export interface AgentChatMessage {
   attachments?: string
   /** JSON: LinkedCanvasOutput[] — assistant turn canvas outputs for relocation */
   linkedOutputs?: string
+  /** JSON: AgentMessageMetadata — presentation + execution trace replay events */
+  metadata?: string
   createdAt: string
+}
+
+/** Persisted assistant turn extras (see 2026-08-12-agent-ux-followup-batch-design). */
+export interface AgentMessageMetadata {
+  presentation?: Record<string, unknown>
+  executionEvents?: Array<{ type: string; data: unknown }>
 }
 
 export interface CapabilityItem {

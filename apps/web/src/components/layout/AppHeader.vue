@@ -39,8 +39,8 @@ function navigate(path: string) {
     class="sticky top-0 z-50 border-b border-white/5 bg-[#141414]/95 backdrop-blur-xl"
     style="height: var(--neo-header-height)"
   >
-    <div class="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
-      <div class="flex items-center gap-8">
+    <div class="mx-auto flex h-full max-w-7xl items-center justify-between px-4 sm:px-6">
+      <div class="flex min-w-0 items-center gap-4 sm:gap-8">
         <button class="flex items-center gap-2" @click="navigate('/workflow')">
           <BrandLogo size="sm" show-name />
         </button>
@@ -58,28 +58,28 @@ function navigate(path: string) {
         </nav>
       </div>
 
-      <div class="flex items-center gap-3">
+      <div class="flex shrink-0 items-center gap-2 sm:gap-3">
         <template v-if="auth.isLoggedIn">
           <button
-            class="rounded-xl bg-[#6366f1]/20 px-3 py-1.5 text-xs text-[#818cf8] transition hover:bg-[#6366f1]/30"
+            class="rounded-xl bg-[#6366f1]/20 px-2.5 py-1.5 text-xs text-[#818cf8] transition hover:bg-[#6366f1]/30 sm:px-3"
             @click="showMembership = true"
           >
             {{ auth.user?.points ?? 0 }} 积分
           </button>
           <button
-            class="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-1.5 transition hover:bg-white/10"
+            class="flex max-w-[9rem] items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 transition hover:bg-white/10 sm:max-w-none sm:px-3"
             @click="navigate('/profile')"
           >
             <div
-              class="flex h-7 w-7 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
+              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
             >
               {{ auth.user?.nickname?.[0] ?? 'U' }}
             </div>
-            <span class="text-sm text-white/80">{{ auth.user?.nickname }}</span>
+            <span class="hidden truncate text-sm text-white/80 sm:inline">{{ auth.user?.nickname }}</span>
           </button>
-          <button class="btn-ghost text-xs" @click="auth.logout()">退出</button>
+          <button class="btn-ghost hidden text-xs sm:inline" @click="auth.logout()">退出</button>
         </template>
-        <button v-else class="btn-ghost" @click="auth.openLogin()">登录</button>
+        <button v-else class="btn-ghost text-sm" @click="auth.openLogin()">登录</button>
       </div>
     </div>
   </header>

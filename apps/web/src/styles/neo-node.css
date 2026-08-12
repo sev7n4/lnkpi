@@ -478,6 +478,36 @@
   transform: translate(-50%, -50%) scale(1.05);
 }
 
+.neo-gen-preview .neo-gen-image-preview-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+.neo-gen-preview:hover .neo-gen-image-preview-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.neo-gen-preview .neo-gen-image-preview-btn:hover {
+  background: rgba(0, 0, 0, 0.72);
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
 .neo-gen-video-exit-btn {
   position: absolute;
   bottom: 8px;

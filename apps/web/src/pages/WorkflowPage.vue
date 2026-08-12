@@ -316,12 +316,12 @@ watch(() => auth.isLoggedIn, () => {
 </script>
 
 <template>
-  <div class="mx-auto max-w-7xl px-6 pb-20 pt-8">
-    <section class="mb-12 text-center">
+  <div class="mx-auto max-w-7xl px-4 pb-20 pt-6 sm:px-6 sm:pt-8">
+    <section class="mb-10 text-center sm:mb-12">
       <div class="mb-4 flex justify-center">
         <BrandLogo size="xl" />
       </div>
-      <h1 class="font-display text-3xl font-semibold md:text-4xl">
+      <h1 class="font-display text-2xl font-semibold sm:text-3xl md:text-4xl">
         {{ greeting }}，今天要做点什么呢？
       </h1>
 

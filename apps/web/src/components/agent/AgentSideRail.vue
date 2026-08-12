@@ -279,7 +279,8 @@ function canShowMessageActions(msg: AgentStreamMessage): boolean {
   return Boolean(
     visibleAssistantContent(msg).trim()
     || (assistantOutputsById.value.get(msg.id)?.length ?? 0) > 0
-    || msg.executionTrace,
+    || msg.executionTrace
+    || msg.presentation,
   )
 }
 
@@ -619,6 +620,19 @@ function syncCompletionPresentation(
   if (phase !== 'done') {
     completionPresentation.value = null
   }
+}
+
+function historyPresentation(msg: AgentStreamMessage): AgentPresentationEnvelope | null {
+  if (msg.role !== 'assistant' || msg.streaming || !msg.presentation) return null
+  return msg.presentation
+}
+
+function historyMacroSelectedIds(presentation: AgentPresentationEnvelope): string[] {
+  const schemes = presentation.body?.schemes ?? []
+  const recommended = schemes.filter((s) => s.recommended).map((s) => String(s.id))
+  if (recommended.length) return recommended
+  const maxSelect = presentation.body?.max_select ?? 2
+  return schemes.slice(0, maxSelect).map((s) => String(s.id))
 }
 
 function syncRetakeFromPayload(data: {
@@ -1977,6 +1991,12 @@ defineExpose({
                 <AgentProseBlock
                   v-if="shouldRenderSchemeDraftProse(msg)"
                   :content="msg.content"
+                />
+                <AgentPresentationHost
+                  v-if="historyPresentation(msg)"
+                  :presentation="historyPresentation(msg)!"
+                  disabled
+                  :macro-selected-ids="historyMacroSelectedIds(historyPresentation(msg)!)"
                 />
                 <p v-else-if="shouldShowMessageBubbleText(msg)" class="whitespace-pre-wrap">
                   {{
