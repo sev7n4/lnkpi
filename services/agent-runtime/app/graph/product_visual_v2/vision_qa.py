@@ -6,6 +6,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.graph.product_visual_v2.vision_qa_diagnostics import (
+    VISION_QA_CODE_PASS,
+    classify_vision_qa_failure_code,
+)
+
 
 class VisionQAResult(BaseModel):
     pass_: bool = Field(alias="pass")
@@ -98,10 +103,16 @@ def evaluate_vision_qa_v2(
     """
     metrics = metrics or {}
     if not vision.vision_used:
+        reason = vision.reason or "识图模型未调用，无法完成准入审核"
         return {
             "image_qa_result": "fail",
             "phase": "await_image_qa",
-            "image_qa_reason": vision.reason or "识图模型未调用，无法完成准入审核",
+            "image_qa_reason": reason,
+            "image_qa_code": classify_vision_qa_failure_code(
+                reason=reason,
+                vision_used=False,
+                metrics=metrics,
+            ),
             "image_qa_metrics": vision_qa_metrics_from_result(vision),
         }
 
@@ -122,16 +133,24 @@ def evaluate_vision_qa_v2(
             if not metrics.get("requires_standard_product_assets")
             else "phase1_seed_eager",
             "image_qa_reason": reason,
+            "image_qa_code": VISION_QA_CODE_PASS,
             "vision_used": True,
             "scene_kind": metrics.get("scene_kind"),
             "interior_relaxed": interior_ok and not vision.pass_,
             "image_qa_metrics": vision_qa_metrics_from_result(vision),
         }
 
+    fail_reason = vision.reason or "图源未通过识图审核"
+    fail_metrics = vision_qa_metrics_from_result(vision)
     return {
         "image_qa_result": "fail",
         "phase": "await_image_qa",
-        "image_qa_reason": vision.reason or "图源未通过识图审核",
+        "image_qa_reason": fail_reason,
+        "image_qa_code": classify_vision_qa_failure_code(
+            reason=fail_reason,
+            vision_used=True,
+            metrics={**metrics, **fail_metrics},
+        ),
         "vision_used": True,
-        "image_qa_metrics": vision_qa_metrics_from_result(vision),
+        "image_qa_metrics": fail_metrics,
     }

@@ -8,6 +8,7 @@ export interface AgentInterruptPayload {
   phase?: string | null
   interrupted?: boolean
   imageQaReason?: string | null
+  imageQaCode?: string | null
   imageQaMetrics?: ImageQaMetrics | null
   visionUsed?: boolean | null
   retakePending?: boolean | null
