@@ -53,19 +53,19 @@ async def emit_journey_update(emit: EmitFn, state: dict[str, Any]) -> None:
 
 
 def _resolve_journey_trace(vals: dict[str, Any]) -> dict[str, Any] | None:
-    """Return journey_trace from checkpoint or synthesize for product_visual reconnect."""
+    """Return journey_trace merged with current phase (never return a stale checkpoint snap)."""
     snap = vals.get("journey_trace")
-    if isinstance(snap, dict) and snap.get("flowMode") == "product_visual":
-        return snap
-    if vals.get("flow_mode") != "product_visual":
+    is_pv_snap = isinstance(snap, dict) and snap.get("flowMode") == "product_visual"
+    is_pv_flow = vals.get("flow_mode") == "product_visual"
+    if not is_pv_snap and not is_pv_flow:
         return None
     phase = vals.get("phase")
     if phase is None:
-        return None
+        return snap if is_pv_snap else None
     from app.graph.product_visual_v2.journey_trace import merge_journey_trace
 
     return merge_journey_trace(
-        snap if isinstance(snap, dict) else None,
+        snap if is_pv_snap else None,
         vals,
         phase=str(phase),
     )
@@ -92,16 +92,16 @@ async def _emit_journey_trace_for_presentation(
     for key, value in delta.items():
         if key != "messages":
             stream_vals[key] = value
-    if not isinstance(stream_vals.get("journey_trace"), dict):
-        phase = stream_vals.get("phase")
-        if phase is not None:
-            from app.graph.product_visual_v2.journey_trace import merge_journey_trace
+    phase = stream_vals.get("phase")
+    if phase is not None:
+        from app.graph.product_visual_v2.journey_trace import merge_journey_trace
 
-            stream_vals["journey_trace"] = merge_journey_trace(
-                stream_vals.get("journey_trace"),
-                stream_vals,
-                phase=str(phase),
-            )
+        prev = stream_vals.get("journey_trace")
+        stream_vals["journey_trace"] = merge_journey_trace(
+            prev if isinstance(prev, dict) else None,
+            stream_vals,
+            phase=str(phase),
+        )
     await emit_journey_update(emit, stream_vals)
 
 logger = logging.getLogger(__name__)
