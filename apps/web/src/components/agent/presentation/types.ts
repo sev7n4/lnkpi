@@ -76,6 +76,7 @@ export interface AgentPresentationBody {
   understanding?: string
   callout?: string
   callout_conflict?: string
+  callout_shot_limit?: string
   prose?: string
   schemes?: MacroSchemeCardBody[]
   max_select?: number

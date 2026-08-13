@@ -92,6 +92,13 @@ function onPrimaryAction() {
         {{ presentation.context_recap }}
       </p>
       <p
+        v-if="presentation.body?.callout_shot_limit"
+        class="rounded-lg border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-xs text-[var(--neo-muted)]"
+        data-testid="presentation-shot-limit-callout"
+      >
+        {{ presentation.body.callout_shot_limit }}
+      </p>
+      <p
         v-if="presentation.body?.callout"
         class="rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs text-[var(--neo-muted)]"
         data-testid="presentation-callout"
