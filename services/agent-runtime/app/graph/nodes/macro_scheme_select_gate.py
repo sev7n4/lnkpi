@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage
 
 from app.graph.limits import MAX_SCHEME_REVISE
 from app.graph.product_visual_copy import ProductVisualCopy
+from app.graph.product_visual_v2.journey_trace import patch_macro_select_step
 from app.graph.product_visual_v2.macro_select import (
     apply_macro_selection,
     default_macro_selection,
@@ -140,24 +141,36 @@ def apply_macro_scheme_decision(state: dict, decision: dict[str, Any]) -> dict[s
             copy=ProductVisualCopy.load_from_skill("ecommerce-product-visual", "1.0.0"),
             state=state,
         )
-        return {
+        result = {
             **applied,
             "macro_scheme_decision": "confirm",
             "expected_delivery_count": delivery["total_finalize"],
             "messages": [AIMessage(content=_CONFIRM_ACK)],
         }
+        result["journey_trace"] = patch_macro_select_step(
+            state.get("journey_trace"),
+            schemes=schemes,
+            selected_ids=result.get("selected_macro_scheme_ids") or [],
+        )
+        return result
 
     if action == "revise":
         count = int(state.get("scheme_revision_count") or 0)
         if count >= MAX_SCHEME_REVISE:
             selected = default_macro_selection(schemes)
             applied = apply_macro_selection(schemes, selected)
-            return {
+            result = {
                 **applied,
                 "macro_scheme_decision": "auto",
                 "assistant_note": _FORCE_SSOT_NOTE,
                 "messages": [AIMessage(content=_FORCE_SSOT_NOTE)],
             }
+            result["journey_trace"] = patch_macro_select_step(
+                state.get("journey_trace"),
+                schemes=schemes,
+                selected_ids=result.get("selected_macro_scheme_ids") or [],
+            )
+            return result
         feedback = str(decision.get("feedback") or "").strip()
         out: dict[str, Any] = {
             "scheme_revision_count": count + 1,

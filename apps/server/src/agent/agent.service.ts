@@ -1,6 +1,13 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common'
 import { applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
-import type { CanvasAction, CanvasData, LinkedCanvasOutput, SidebarAttachment } from '@lnkpi/shared'
+import type {
+  AgentMessageMetadata,
+  CanvasAction,
+  CanvasData,
+  JourneyTraceSnapshot,
+  LinkedCanvasOutput,
+  SidebarAttachment,
+} from '@lnkpi/shared'
 import {
   IMAGE_MODELS,
   TEXT_MODELS,
@@ -314,6 +321,8 @@ export class AgentService {
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
+    let journeyTrace: JourneyTraceSnapshot | undefined
+    let executionTrace: Record<string, unknown> | undefined
 
     const runtimeSkillId = mapUiSkillId(skillId)
     let llmModel: string | undefined
@@ -353,14 +362,26 @@ export class AgentService {
       if (event.type === 'canvas_action') {
         canvasActions.push(event.data as CanvasAction)
       }
+      if (event.type === 'journey_update') {
+        const snap = (event.data as { snapshot?: JourneyTraceSnapshot }).snapshot
+        if (snap) {
+          journeyTrace = snap
+        }
+      }
       yield event
     }
+
+    const metadata: AgentMessageMetadata | undefined =
+      journeyTrace || executionTrace
+        ? { ...(journeyTrace ? { journeyTrace } : {}), ...(executionTrace ? { executionTrace } : {}) }
+        : undefined
 
     const effectiveThreadId = threadId?.trim() || sessionId
     await this.finalizeTurn(sessionId, effectiveThreadId, userId, assistantText, canvasActions, {
       // Nest internal tools already wrote Session.canvasData; skip re-apply to avoid duplicate add_node
       rewriteCanvasData: false,
       linkedOutputs: deriveLinkedOutputs(canvasActions),
+      metadata,
     })
   }
 
@@ -370,17 +391,19 @@ export class AgentService {
     userId: string | undefined,
     assistantText: string,
     canvasActions: CanvasAction[],
-    opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[] },
+    opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[]; metadata?: AgentMessageMetadata },
   ) {
-    if (assistantText) {
+    const shouldPersistAssistant = Boolean(assistantText || opts.metadata?.journeyTrace)
+    if (shouldPersistAssistant) {
       await this.prisma.agentMessage.create({
         data: {
           sessionId,
           threadId,
           role: 'assistant',
-          content: assistantText,
+          content: assistantText || ' ',
           toolCalls: canvasActions.length ? JSON.stringify(canvasActions) : null,
           linkedOutputs: opts.linkedOutputs?.length ? JSON.stringify(opts.linkedOutputs) : null,
+          metadata: opts.metadata ? JSON.stringify(opts.metadata) : null,
         },
       })
       await this.prisma.agentThread.update({

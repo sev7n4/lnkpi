@@ -232,3 +232,5 @@ class AgentRuntimeState(TypedDict, total=False):
     vision_used: bool | None
     # UX-PV: structured sidebar envelope (shot/topo/delivery/done gates)
     presentation: dict | None
+    # UX-PV: journey trace snapshot (synced with presentation stepper)
+    journey_trace: dict | None

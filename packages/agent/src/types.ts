@@ -58,6 +58,7 @@ export interface AgentStreamEvent {
     | 'thinking'
     | 'explore'
     | 'interrupt'
+    | 'journey_update'
     | 'force_choice'
     | 'ping'
     | 'done'

@@ -5,6 +5,7 @@ import {
   labelFromTextReplace,
   nodeStatusLabel,
 } from '@/components/agent/executionStepLabels'
+import type { JourneyStepId, JourneyTraceSnapshot } from '@/components/agent/journeyTraceTypes'
 
 export type ExecutionStepStatus =
   | 'pending'
@@ -23,6 +24,7 @@ export type ExecutionStepKind =
   | 'task'
   | 'thinking'
   | 'explore'
+  | 'workflow_step'
 
 export interface ExecutionStep {
   id: string
@@ -33,6 +35,8 @@ export interface ExecutionStep {
   startedAt?: number
   endedAt?: number
   ms?: number
+  parentStepId?: string
+  journeyStepId?: JourneyStepId
   meta?: {
     nodeId?: string
     taskId?: string
@@ -71,6 +75,91 @@ function completeStep(step: ExecutionStep, status: ExecutionStepStatus = 'done')
   if (step.startedAt) step.ms = now - step.startedAt
 }
 
+function journeyStepId(stepId: JourneyStepId): string {
+  return `journey:${stepId}`
+}
+
+function parseIsoMs(iso?: string): number | undefined {
+  if (!iso) return undefined
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? undefined : ms
+}
+
+function runningWorkflowStepId(trace: ExecutionTraceState): string | undefined {
+  return trace.steps.find((s) => s.kind === 'workflow_step' && s.status === 'running')?.id
+}
+
+function attachParentStep(trace: ExecutionTraceState, step: ExecutionStep) {
+  if (step.kind !== 'text_stage' && step.kind !== 'canvas' && step.kind !== 'task') return
+  const parentId = runningWorkflowStepId(trace)
+  if (parentId) step.parentStepId = parentId
+}
+
+function rebindOrphanChildSteps(trace: ExecutionTraceState) {
+  const parentId = runningWorkflowStepId(trace)
+  if (!parentId) return
+  for (const step of trace.steps) {
+    if (
+      (step.kind === 'text_stage' || step.kind === 'canvas' || step.kind === 'task') &&
+      !step.parentStepId
+    ) {
+      step.parentStepId = parentId
+    }
+  }
+}
+
+export function workflowStepsFromSnapshot(snapshot: JourneyTraceSnapshot): ExecutionStep[] {
+  return snapshot.steps.map((record) => {
+    const startedAt = parseIsoMs(record.enteredAt)
+    const endedAt = parseIsoMs(record.completedAt)
+    return {
+      id: journeyStepId(record.id),
+      kind: 'workflow_step',
+      label: record.label,
+      detail: record.summary,
+      status: record.status,
+      journeyStepId: record.id,
+      startedAt,
+      endedAt,
+      ms: record.ms,
+    }
+  })
+}
+
+export function applyJourneyUpdate(trace: ExecutionTraceState, snapshot: JourneyTraceSnapshot) {
+  for (const record of snapshot.steps) {
+    const id = journeyStepId(record.id)
+    let step = trace.steps.find((s) => s.id === id || s.journeyStepId === record.id)
+    const startedAt = parseIsoMs(record.enteredAt)
+    const endedAt = parseIsoMs(record.completedAt)
+    if (!step) {
+      step = {
+        id,
+        kind: 'workflow_step',
+        label: record.label,
+        status: record.status,
+        journeyStepId: record.id,
+        startedAt,
+        endedAt,
+        ms: record.ms,
+        detail: record.summary,
+      }
+      trace.steps.push(step)
+    } else {
+      step.id = id
+      step.kind = 'workflow_step'
+      step.label = record.label
+      step.status = record.status
+      step.journeyStepId = record.id
+      step.detail = record.summary
+      if (startedAt !== undefined) step.startedAt = startedAt
+      if (endedAt !== undefined) step.endedAt = endedAt
+      if (record.ms !== undefined) step.ms = record.ms
+    }
+  }
+  rebindOrphanChildSteps(trace)
+}
+
 function upsertTextStage(trace: ExecutionTraceState, label: string, detail?: string) {
   const last = trace.steps[trace.steps.length - 1]
   if (last?.kind === 'text_stage' && last.label === label && last.status === 'running') {
@@ -82,7 +171,7 @@ function upsertTextStage(trace: ExecutionTraceState, label: string, detail?: str
     return
   }
   const now = Date.now()
-  trace.steps.push({
+  const step: ExecutionStep = {
     id: nextStepId('text'),
     kind: 'text_stage',
     label,
@@ -91,7 +180,9 @@ function upsertTextStage(trace: ExecutionTraceState, label: string, detail?: str
     startedAt: now,
     endedAt: now,
     ms: 0,
-  })
+  }
+  attachParentStep(trace, step)
+  trace.steps.push(step)
 }
 
 function removeDuplicateTextStage(trace: ExecutionTraceState, label: string) {
@@ -247,7 +338,7 @@ export function applyCanvasAction(trace: ExecutionTraceState, action: CanvasActi
   const label = canvasActionLabel(action)
   const nodeId = action.payload?.id
   const now = Date.now()
-  trace.steps.push({
+  const step: ExecutionStep = {
     id: nextStepId('canvas'),
     kind: 'canvas',
     label,
@@ -256,7 +347,9 @@ export function applyCanvasAction(trace: ExecutionTraceState, action: CanvasActi
     endedAt: now,
     ms: 0,
     meta: nodeId ? { nodeId } : undefined,
-  })
+  }
+  attachParentStep(trace, step)
+  trace.steps.push(step)
 }
 
 export function applyNodeStatus(
@@ -349,6 +442,7 @@ export function applyTaskUpdate(
       startedAt: now,
       meta: { taskId: data.id, nodeId: data.nodeId },
     }
+    attachParentStep(trace, step)
     trace.steps.push(step)
   }
   if (data.status === 'running' || data.status === 'retrying') {

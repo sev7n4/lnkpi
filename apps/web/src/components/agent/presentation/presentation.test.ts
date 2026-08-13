@@ -3,6 +3,8 @@ import { mount } from '@vue/test-utils'
 import AgentPresentationHost from './AgentPresentationHost.vue'
 import AgentStepper from './AgentStepper.vue'
 import type { AgentPresentationEnvelope } from './types'
+import type { JourneyTraceSnapshot } from '@/components/agent/journeyTraceTypes'
+import { JOURNEY_STEP_LABELS } from '@/components/agent/journeyTraceTypes'
 
 const shotEnvelope: AgentPresentationEnvelope = {
   kind: 'shot_table',
@@ -124,5 +126,33 @@ describe('AgentPresentationHost', () => {
     expect(wrapper.find('[data-testid="primary-action"]').text()).toBe('确认构图并开始出图')
     expect(wrapper.classes()).toContain('agent-presentation-host--gate')
     expect(wrapper.find('.agent-presentation-host__actions').exists()).toBe(true)
+  })
+
+  it('prefers journeySnapshot over presentation stepper when provided', () => {
+    const journeySnapshot: JourneyTraceSnapshot = {
+      version: 1,
+      flowMode: 'product_visual',
+      current: 'macro_select',
+      startedAt: '2026-08-13T04:00:00Z',
+      updatedAt: '2026-08-13T04:00:00Z',
+      steps: [
+        { id: 'image_qa', label: JOURNEY_STEP_LABELS.image_qa, status: 'done' },
+        { id: 'scheme_draft', label: JOURNEY_STEP_LABELS.scheme_draft, status: 'done' },
+        { id: 'macro_select', label: JOURNEY_STEP_LABELS.macro_select, status: 'running' },
+      ],
+    }
+    const wrapper = mount(AgentPresentationHost, {
+      props: {
+        presentation: {
+          ...shotEnvelope,
+          stepper: { current: 'shot_plan', completed: ['image_qa'] },
+        },
+        journeySnapshot,
+      },
+    })
+
+    expect(wrapper.find('[data-step-id="macro_select"]').attributes('data-step-state')).toBe('current')
+    expect(wrapper.find('[data-step-id="scheme_draft"]').attributes('data-step-state')).toBe('done')
+    expect(wrapper.find('[data-step-id="ssot_persist"]').attributes('data-step-state')).toBe('pending')
   })
 })
