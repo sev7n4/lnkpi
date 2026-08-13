@@ -24,6 +24,8 @@ from app.graph.nodes.await_shot_topo_confirm import (
 )
 from app.graph.product_visual_v2.routing import (
     is_merged_shot_topo_gate_enabled,
+    route_after_canvas_ssot_commit,
+    route_after_decompose_from_ssot,
     route_after_orchestrate_shots,
     shot_confirm_gate_name,
 )
@@ -96,8 +98,22 @@ def register_product_visual_v2_nodes(
             "end": END,
         },
     )
-    graph.add_edge("canvas_ssot_commit", "decompose_from_ssot")
-    graph.add_edge("decompose_from_ssot", shot_gate)
+    graph.add_conditional_edges(
+        "canvas_ssot_commit",
+        route_after_canvas_ssot_commit,
+        {
+            "decompose_from_ssot": "decompose_from_ssot",
+            "done": "done",
+        },
+    )
+    graph.add_conditional_edges(
+        "decompose_from_ssot",
+        route_after_decompose_from_ssot,
+        {
+            shot_gate: shot_gate,
+            "done": "done",
+        },
+    )
     if merged:
         graph.add_conditional_edges(
             "await_shot_topo_confirm",

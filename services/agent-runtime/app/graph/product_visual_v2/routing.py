@@ -105,3 +105,15 @@ def route_after_macro_scheme_select(state: dict) -> str:
     if decision in ("confirm", "auto"):
         return "canvas_ssot_commit"
     return "end"
+
+
+def route_after_canvas_ssot_commit(state: dict) -> str:
+    if state.get("phase") == "error":
+        return "done"
+    return "decompose_from_ssot"
+
+
+def route_after_decompose_from_ssot(state: dict) -> str:
+    if state.get("phase") == "error":
+        return "done"
+    return shot_confirm_gate_name()

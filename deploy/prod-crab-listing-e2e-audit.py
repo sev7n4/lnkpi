@@ -226,6 +226,27 @@ def assert_journey_trace(audit_doc: dict[str, Any]) -> None:
     assert macro.get("summary")
 
 
+def assert_business_success(audit_doc: dict[str, Any]) -> None:
+    final = audit_doc.get("final_thread_state") or audit_doc.get("finalThreadState") or {}
+    pres = final.get("presentation") or {}
+    if isinstance(pres, dict) and pres.get("kind") == "callout_error":
+        body = pres.get("body") or {}
+        raise AssertionError(f"business failed: {(body.get('text') or pres.get('title') or 'callout_error')}")
+
+    for step in audit_doc.get("steps") or []:
+        if step.get("phase") == "error":
+            raise AssertionError(f"step {step.get('step')} ended with phase=error")
+        gate = (step.get("nextNodes") or [None])[0] or step.get("phase")
+        if gate == "await_shot_topo_confirm" and int(step.get("shotManifest_count") or 0) <= 0:
+            raise AssertionError(
+                f"step {step.get('step')} at topo gate with empty shotManifest"
+            )
+
+    shots = final.get("shotManifest") or []
+    if audit_doc.get("status") == "done" and not shots:
+        raise AssertionError("final shotManifest empty on successful done")
+
+
 def record_step(step: int, msg: str, sse: dict[str, Any], ts: dict[str, Any]) -> None:
     pres_events = [
         e.get("data") for e in sse.get("events", [])
@@ -299,6 +320,11 @@ def main() -> int:
         ts = thread_state(tok, tid)
         record_step(step, msg, sse, ts)
 
+        if ts.get("phase") == "error":
+            audit["status"] = "business_error"
+            audit["issues"].append(f"step {step}: phase=error")
+            break
+
         if sse.get("exit") == "error":
             audit["status"] = "error"
             break
@@ -339,6 +365,7 @@ def main() -> int:
         audit["journeyTraceSource"] = journey_source
 
     journey_ok = False
+    business_ok = False
     if audit.get("status") == "done":
         try:
             assert_journey_trace(audit)
@@ -354,13 +381,22 @@ def main() -> int:
             audit["journeyTraceOk"] = False
             audit["issues"].append(f"journeyTrace: {exc}")
             print(f"journeyTrace assertion failed: {exc}", flush=True)
+        try:
+            assert_business_success(audit)
+            business_ok = True
+            audit["businessOk"] = True
+            print("business success checks passed", flush=True)
+        except AssertionError as exc:
+            audit["businessOk"] = False
+            audit["issues"].append(f"business: {exc}")
+            print(f"business assertion failed: {exc}", flush=True)
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nAudit saved: {OUT_PATH}", flush=True)
     print(f"status={audit.get('status')} gates={audit.get('gates_seen')}", flush=True)
     if audit.get("status") == "done":
-        return 0 if journey_ok else 1
+        return 0 if (journey_ok and business_ok) else 1
     return 1
 
 

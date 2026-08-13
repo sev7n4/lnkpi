@@ -49,6 +49,17 @@ def make_await_shot_confirm_node() -> Callable:
             decision = classify_topo_decision(text)
 
         if decision == "confirm_gen":
+            if not (state.get("shot_manifest") or []):
+                from app.graph.product_visual_v2.errors import format_flow_end_message
+
+                return {
+                    "phase": "error",
+                    "last_error": "shot_manifest_missing",
+                    "user_decision": "none",
+                    "messages": [
+                        AIMessage(content=format_flow_end_message("shot_manifest_missing", state))
+                    ],
+                }
             return {
                 "phase": "orchestrate_shots",
                 "user_decision": "none",

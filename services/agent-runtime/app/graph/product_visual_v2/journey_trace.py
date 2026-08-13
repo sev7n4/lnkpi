@@ -35,6 +35,17 @@ JOURNEY_STEP_LABELS: dict[str, str] = {
 _COMPLETED_STATUSES = frozenset({"done", "skipped", "failed"})
 _PRESERVE_FIELDS = ("enteredAt", "completedAt", "ms", "summary", "snapshot")
 
+_ERROR_TO_FAILED_STEP: dict[str, str] = {
+    "decompose_shots_parse_failed": "shot_plan",
+    "plan_node_id_missing": "shot_plan",
+    "upsert_unavailable": "shot_plan",
+    "shot_manifest_missing": "shot_plan",
+    "orchestrate_empty": "generating",
+    "product_visual_plan_missing": "scheme_draft",
+    "dialog_draft_parse_failed": "scheme_draft",
+    "macro_schemes_missing": "macro_select",
+}
+
 
 def _utc_now(now: datetime | None) -> datetime:
     if now is not None:
@@ -97,7 +108,37 @@ def _enrich_macro_select(step: dict[str, Any], state: dict[str, Any]) -> None:
         step["snapshot"] = _macro_select_snapshot(state)
 
 
-def _step_status(step_id: str, *, current: str, completed: list[str], phase: str) -> str:
+def _failed_step_for_state(state: dict[str, Any], *, phase: str, current: str) -> str | None:
+    last_error = str(state.get("last_error") or "").strip()
+    if last_error:
+        mapped = _ERROR_TO_FAILED_STEP.get(last_error)
+        if mapped:
+            return mapped
+    if phase == "error":
+        return current if current in JOURNEY_STEP_ORDER else "scheme_draft"
+    if phase == "done" and last_error:
+        return "shot_plan"
+    return None
+
+
+def _step_status(
+    step_id: str,
+    *,
+    current: str,
+    completed: list[str],
+    phase: str,
+    state: dict[str, Any],
+) -> str:
+    failed_at = _failed_step_for_state(state, phase=phase, current=current)
+    if failed_at and failed_at in JOURNEY_STEP_ORDER:
+        failed_idx = JOURNEY_STEP_ORDER.index(failed_at)
+        step_idx = JOURNEY_STEP_ORDER.index(step_id)
+        if step_idx < failed_idx:
+            return "done"
+        if step_idx == failed_idx:
+            return "failed"
+        return "pending"
+
     if phase == "done":
         return "done"
     if step_id in completed:
@@ -119,11 +160,18 @@ def build_journey_trace_snapshot(
     ts = _utc_now(now)
     current = phase_to_stepper(phase)
     completed = _completed_step_ids(current)
+    failed_at = _failed_step_for_state(state, phase=phase, current=current)
     started_at = _iso(ts)
 
     steps: list[dict[str, Any]] = []
     for step_id in JOURNEY_STEP_ORDER:
-        status = _step_status(step_id, current=current, completed=completed, phase=phase)
+        status = _step_status(
+            step_id,
+            current=current,
+            completed=completed,
+            phase=phase,
+            state=state,
+        )
         step: dict[str, Any] = {
             "id": step_id,
             "label": JOURNEY_STEP_LABELS[step_id],
@@ -135,8 +183,10 @@ def build_journey_trace_snapshot(
             step["enteredAt"] = _iso(ts)
             step["completedAt"] = _iso(ts)
             step["ms"] = 0
-        if step_id == "macro_select" and step_id in completed:
-            if phase == "done":
+        if step_id == "macro_select" and (
+            step_id in completed or (failed_at and step_id in JOURNEY_STEP_ORDER[: JOURNEY_STEP_ORDER.index(failed_at)])
+        ):
+            if phase == "done" and not state.get("last_error"):
                 if should_skip_macro_hitl(state.get("macro_schemes")):
                     step["summary"] = "仅一套方案，已自动选定"
                 else:

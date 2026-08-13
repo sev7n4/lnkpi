@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.graph.nodes.await_shot_topo_confirm import make_await_shot_topo_confirm_node
 from app.graph.nodes.done import make_done_node
 from app.graph.product_visual_v2.dialog_draft_fallback import build_fallback_dialog_draft
 from app.graph.product_visual_v2.errors import build_error_presentation, format_flow_end_message
@@ -87,3 +88,18 @@ async def test_done_v2_error_uses_friendly_message():
     assert out["phase"] == "done"
     assert "dialog_draft_parse_failed" not in out["messages"][0].content
     assert out.get("presentation", {}).get("stepper", {}).get("current") == "done"
+
+
+@pytest.mark.asyncio
+async def test_topo_gate_confirm_without_manifest_returns_error():
+    from langchain_core.messages import HumanMessage
+
+    gate = make_await_shot_topo_confirm_node()
+    out = await gate(
+        {
+            "messages": [HumanMessage(content="确认构图并开始出图")],
+            "shot_manifest": [],
+        }
+    )
+    assert out["phase"] == "error"
+    assert out["last_error"] == "shot_manifest_missing"

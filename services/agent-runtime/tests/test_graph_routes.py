@@ -5,6 +5,8 @@ from __future__ import annotations
 from app.graph.builder import route_after_intake, route_after_split
 from app.graph.product_visual_v2.routing import (
     count_hard_stops,
+    route_after_canvas_ssot_commit,
+    route_after_decompose_from_ssot,
     route_after_orchestrate_shots,
     shot_confirm_gate_name,
 )
@@ -70,3 +72,14 @@ def test_v2_gate_count_with_merged_topo():
 
 def test_v2_gate_count_without_merged_topo():
     assert count_hard_stops("CVS-02", merged=False) == 4
+
+
+def test_route_after_canvas_ssot_commit_error_goes_done():
+    assert route_after_canvas_ssot_commit({"phase": "error"}) == "done"
+    assert route_after_canvas_ssot_commit({"phase": "decompose_from_ssot"}) == "decompose_from_ssot"
+
+
+def test_route_after_decompose_error_goes_done():
+    assert route_after_decompose_from_ssot({"phase": "error"}) == "done"
+    gate = shot_confirm_gate_name()
+    assert route_after_decompose_from_ssot({"phase": gate}) == gate
