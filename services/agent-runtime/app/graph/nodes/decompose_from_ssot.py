@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage
 from app.graph.atomic_parse_llm import extract_json_object
 from app.graph.nodes.plan._shared import latest_user_text
 from app.graph.product_visual_copy import ProductVisualCopy
-from app.graph.product_visual_v2.limits import validate_downstream_limit, validate_shots_per_macro
+from app.graph.product_visual_v2.limits import enforce_shot_limits
 from app.graph.product_visual_v2.models import ShotManifestItem
 from app.graph.product_visual_v2.presentation import build_context_recap, build_presentation_envelope
 from app.graph.product_visual_v2.routing import shot_confirm_gate_name
@@ -84,14 +84,13 @@ def make_decompose_from_ssot_node(*, llm: Any, skills_dir: Path, nest: Any) -> C
                 "messages": [AIMessage(content="构图拆解失败，请调整方案后重试。")],
             }
 
-        for macro_id in selected:
-            err = validate_shots_per_macro(shots, macro_id)
-            if err:
-                return {"phase": "error", "last_error": err, "messages": [AIMessage(content=err)]}
-
-        err = validate_downstream_limit(phase1_seed_count=0, shots=shots)
-        if err:
-            return {"phase": "error", "last_error": err, "messages": [AIMessage(content=err)]}
+        shots, limit_notes = enforce_shot_limits(shots, selected or None)
+        if not shots:
+            return {
+                "phase": "error",
+                "last_error": "decompose_shots_parse_failed",
+                "messages": [AIMessage(content="构图拆解结果为空，请调整方案后重试。")],
+            }
 
         upsert = getattr(nest, "upsert_prompt_node", None)
         if upsert is None:
@@ -121,10 +120,10 @@ def make_decompose_from_ssot_node(*, llm: Any, skills_dir: Path, nest: Any) -> C
         recap = build_context_recap(pres_state)
         if gate_phase == "await_shot_topo_confirm":
             hint = str((presentation.get("body") or {}).get("text") or "")
-            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
+            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", *limit_notes, hint) if p]
         else:
             hint = copy.get("shot_confirm.hint", n=str(len(shots)))
-            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", hint) if p]
+            msg_parts = [p for p in (recap, f"已拆解 {len(shots)} 个构图任务。", *limit_notes, hint) if p]
 
         return {
             "shot_manifest": shots,

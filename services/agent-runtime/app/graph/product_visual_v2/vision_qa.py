@@ -151,6 +151,7 @@ def evaluate_vision_qa_v2(
             if not metrics.get("requires_standard_product_assets")
             else "phase1_seed_eager",
             "image_qa_reason": reason,
+            "product_summary": str(vision.product_summary or "").strip() or None,
             "vision_used": True,
             "scene_kind": metrics.get("scene_kind"),
             "interior_relaxed": interior_ok and not vision.pass_,

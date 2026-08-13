@@ -28,6 +28,9 @@ topo:
   hint: "方案已写入画布；确认后将生成白底、四视图及 {scene_count} 张场景图。"
 macro:
   ab_hint_mixed: "已选 {k} 套风格 → 预计场景图 {p} 张。不同构图将分别采用 A/B 风格，并非每个场景各出 2 张。"
+  shot_limit_hint: "您描述了 {n} 类用图，单套宏观方案最多拆解 {max} 个构图；系统将自动合并相近场景。"
+error:
+  flow_end_title: "未能完成出图"
 context:
   latest_utterance_note: "已按您最新描述执行；风格请在下方卡片选择，无需在话术里指定。"
 generating:

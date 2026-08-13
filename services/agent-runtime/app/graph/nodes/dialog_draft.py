@@ -13,7 +13,9 @@ from app.graph.product_visual_v2.models import DialogDraftOutput, parse_dialog_d
 from app.graph.product_visual_v2.macro_select import default_macro_selection, should_skip_macro_hitl
 from app.graph.product_visual_v2.routing import route_after_dialog_draft
 from app.graph.nodes.macro_scheme_select_gate import build_macro_select_presentation_patch
+from app.graph.product_visual_v2.dialog_draft_fallback import build_fallback_dialog_draft
 from app.graph.product_visual_v2.utterance import extract_user_request_labels
+from app.graph.product_visual_v2.visual_intent import normalize_visual_intent
 from app.graph.product_visual_v2_prompt import (
     build_dialog_draft_messages,
     build_dialog_draft_user_content,
@@ -56,16 +58,19 @@ def make_dialog_draft_node(*, llm: Any, skills_dir: Path) -> Callable:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("dialog_draft parse failed (attempt %s): %s", attempt + 1, exc)
 
+        used_fallback = False
         if draft is None:
-            return {
-                "phase": "error",
-                "last_error": "dialog_draft_parse_failed",
-                "messages": [AIMessage(content="视觉方案生成失败，请重试或补充需求。")],
-            }
+            logger.warning("dialog_draft using fallback after parse failure")
+            draft = build_fallback_dialog_draft(user_text)
+            used_fallback = True
+
+        draft.visual_intent = normalize_visual_intent(draft.visual_intent, user_text)
 
         macro_schemes = [m.model_dump(mode="json") for m in draft.macro_schemes]
         next_phase = route_after_dialog_draft({"macro_schemes": macro_schemes, "phase": None})
         msg = DRAFT_SILENT_MSG if should_skip_macro_hitl(macro_schemes) else DRAFT_READY_MSG
+        if used_fallback:
+            msg = "已生成简化视觉方案（模型输出异常已降级），请选择宏观方案后继续。"
 
         out: dict[str, Any] = {
             "macro_scheme_draft": draft.draft_prose,

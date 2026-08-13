@@ -14,6 +14,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service'
 import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { MaterialService } from '../canvas/material.service'
+import { sanitizeAgentMessageContent } from './agentMessageSanitize'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
 import {
   applyLayoutOps,
@@ -1964,12 +1965,17 @@ export class AgentCanvasToolsService {
     // Verify session ownership
     await this.loadOwnedSession(input.sessionId, input.userId)
 
+    const content = sanitizeAgentMessageContent(input.role, input.content)
+    if (!content) {
+      return { id: '' }
+    }
+
     const message = await this.prisma.agentMessage.create({
       data: {
         sessionId: input.sessionId,
         threadId: input.threadId,
         role: input.role,
-        content: input.content,
+        content,
         toolCalls: input.toolCalls,
       },
     })

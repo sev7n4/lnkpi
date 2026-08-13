@@ -14,6 +14,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
+import { sanitizeAgentMessageContent } from './agentMessageSanitize'
 
 export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput[] {
   return actions
@@ -124,15 +125,18 @@ export class AgentService {
       })
     }
 
-    await this.prisma.agentMessage.create({
-      data: {
-        sessionId,
-        threadId: effectiveThreadId,
-        role: 'user',
-        content: userMessage,
-        ...(validatedAttachments ? { attachments: JSON.stringify(validatedAttachments) } : {}),
-      },
-    })
+    const persistedUserContent = sanitizeAgentMessageContent('user', userMessage)
+    if (persistedUserContent) {
+      await this.prisma.agentMessage.create({
+        data: {
+          sessionId,
+          threadId: effectiveThreadId,
+          role: 'user',
+          content: persistedUserContent,
+          ...(validatedAttachments ? { attachments: JSON.stringify(validatedAttachments) } : {}),
+        },
+      })
+    }
 
     let assistantText = ''
 
