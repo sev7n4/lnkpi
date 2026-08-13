@@ -642,6 +642,7 @@ async def get_thread_state(
         "deliverySelections": delivery_selections if isinstance(delivery_selections, dict) else None,
         "deliveryGenByKey": gen_by_key if isinstance(gen_by_key, dict) else None,
         "imageQaReason": vals.get("image_qa_reason"),
+        "imageQaCode": vals.get("image_qa_code"),
         "imageQaMetrics": vals.get("image_qa_metrics")
         if isinstance(vals.get("image_qa_metrics"), dict)
         else None,
@@ -969,6 +970,7 @@ async def stream_run_events(
                             k: v
                             for k, v in {
                                 "imageQaReason": post_vals.get("image_qa_reason"),
+                                "imageQaCode": post_vals.get("image_qa_code"),
                                 "imageQaMetrics": post_vals.get("image_qa_metrics"),
                                 "visionUsed": post_vals.get("vision_used"),
                             }.items()

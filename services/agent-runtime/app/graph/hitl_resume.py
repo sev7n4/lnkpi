@@ -158,7 +158,8 @@ def should_resume_interrupt(
             return True
         if len(text) >= 12 and REF_MENTION_RE.search(text):
             return False
-        return len(text) <= 24
+        # Long free-text at macro gate is scheme feedback, not a fresh task.
+        return True
 
     if gate == "await_shot_confirm":
         from app.graph.intent import classify_topo_decision

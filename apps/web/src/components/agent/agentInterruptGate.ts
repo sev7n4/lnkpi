@@ -8,6 +8,7 @@ export interface AgentInterruptPayload {
   phase?: string | null
   interrupted?: boolean
   imageQaReason?: string | null
+  imageQaCode?: string | null
   imageQaMetrics?: ImageQaMetrics | null
   visionUsed?: boolean | null
   retakePending?: boolean | null
@@ -477,6 +478,7 @@ export function interruptPayloadFromThreadState(
         retakePending?: boolean | null
         effectiveUtterance?: string | null
         imageQaReason?: string | null
+        imageQaCode?: string | null
         imageQaMetrics?: ImageQaMetrics | null
       }
     | null
@@ -492,6 +494,7 @@ export function interruptPayloadFromThreadState(
     retakePending: data.retakePending ?? null,
     effectiveUtterance: data.effectiveUtterance ?? null,
     imageQaReason: data.imageQaReason ?? null,
+    imageQaCode: data.imageQaCode ?? null,
     imageQaMetrics: data.imageQaMetrics ?? null,
   }
 }

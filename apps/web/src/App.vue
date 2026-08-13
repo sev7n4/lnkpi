@@ -18,7 +18,7 @@ onMounted(() => {
   <div class="min-h-screen bg-surface">
     <div v-if="!isImmersiveCanvas" class="pointer-events-none fixed inset-0 bg-hero-gradient" />
     <AppHeader v-if="!isImmersiveCanvas" />
-    <main class="relative" :class="isImmersiveCanvas ? 'h-screen overflow-hidden' : ''">
+    <main class="relative z-10" :class="isImmersiveCanvas ? 'h-screen overflow-hidden' : ''">
       <RouterView />
     </main>
     <LoginDialog />

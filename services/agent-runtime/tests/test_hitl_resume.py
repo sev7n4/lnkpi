@@ -94,6 +94,16 @@ def test_should_resume_interrupt_macro_scheme_json():
     assert should_resume_interrupt(msg, ["await_macro_scheme_select"]) is True
 
 
+def test_should_resume_interrupt_macro_scheme_free_text_revise():
+    msg = "商业特写，但是需要增加更多模特展示图和包装的各类视角细节"
+    assert should_resume_interrupt(msg, ["await_macro_scheme_select"]) is True
+
+
+def test_should_resume_interrupt_macro_scheme_long_ref_still_fresh_turn():
+    msg = "@I1 这个是模特， @I2 这个是衣服，请让模特穿上这件衣服出图"
+    assert should_resume_interrupt(msg, ["await_macro_scheme_select"]) is False
+
+
 def test_should_resume_interrupt_shot_confirm():
     assert should_resume_interrupt("确认出图", ["await_shot_confirm"]) is True
 

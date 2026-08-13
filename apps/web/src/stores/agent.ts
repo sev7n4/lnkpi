@@ -23,9 +23,11 @@ import {
   applyToolCall,
   createExecutionTrace,
   finalizeExecutionTrace,
+  replayExecutionTraceEvents,
   type ExecutionTraceState,
 } from '@/components/agent/executionTraceReducer'
 import type { AgentMessageMetadata, JourneyTraceSnapshot } from '@/components/agent/journeyTraceTypes'
+import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 
 export interface AgentStreamMessage {
   id: string
@@ -36,13 +38,14 @@ export interface AgentStreamMessage {
   textReplaceHistory?: string[]
   executionTrace?: ExecutionTraceState
   journeyTrace?: JourneyTraceSnapshot
+  presentation?: AgentPresentationEnvelope
   attachments?: SidebarAttachment[]
   attachmentRefKeys?: string[]
   linkedOutputs?: LinkedCanvasOutput[]
   canvasActions?: CanvasAction[]
 }
 
-type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null }
+type PersistedAgentMessage = AgentChatMessage & { linkedOutputs?: string | null; metadata?: string | null }
 
 export const useAgentStore = defineStore('agent', () => {
   const messages = ref<AgentStreamMessage[]>([])
@@ -260,6 +263,9 @@ export const useAgentStore = defineStore('agent', () => {
       const persisted = m as PersistedAgentMessage
       const meta = parseMessageMetadata(persisted.metadata)
       let executionTrace = restoreExecutionTrace(meta)
+      if (!executionTrace && meta?.executionEvents?.length) {
+        executionTrace = replayExecutionTraceEvents(meta.executionEvents)
+      }
       const journeyTrace = meta?.journeyTrace
       if (journeyTrace) {
         if (!executionTrace) {
@@ -267,6 +273,10 @@ export const useAgentStore = defineStore('agent', () => {
         }
         applyJourneyUpdate(executionTrace, journeyTrace)
       }
+      const presentation =
+        meta?.presentation && typeof meta.presentation === 'object'
+          ? (meta.presentation as unknown as AgentPresentationEnvelope)
+          : undefined
       return {
         id: persisted.id,
         role: persisted.role as 'user' | 'assistant',
@@ -276,6 +286,7 @@ export const useAgentStore = defineStore('agent', () => {
         canvasActions: parsePersistedToolCalls(persisted.toolCalls),
         executionTrace,
         journeyTrace,
+        presentation,
       }
     })
   }

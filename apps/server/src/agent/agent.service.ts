@@ -23,6 +23,32 @@ import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
 import { sanitizeAgentMessageContent } from './agentMessageSanitize'
 
+const TRACE_PERSIST_EVENT_TYPES = new Set([
+  'step',
+  'text_replace',
+  'phase_hint',
+  'tool_call',
+  'tool_result',
+  'canvas_action',
+  'node_status',
+  'task_update',
+  'thinking',
+  'explore',
+  'error',
+])
+
+export function buildTurnMetadata(input: {
+  journeyTrace?: JourneyTraceSnapshot
+  presentation?: Record<string, unknown>
+  executionEvents?: Array<{ type: string; data: unknown }>
+}): AgentMessageMetadata | undefined {
+  const metadata: AgentMessageMetadata = {}
+  if (input.journeyTrace) metadata.journeyTrace = input.journeyTrace
+  if (input.presentation) metadata.presentation = input.presentation
+  if (input.executionEvents?.length) metadata.executionEvents = input.executionEvents
+  return Object.keys(metadata).length ? metadata : undefined
+}
+
 export function deriveLinkedOutputs(actions: CanvasAction[]): LinkedCanvasOutput[] {
   return actions
     .filter((a) => a.type === 'add_node' && a.payload?.id)
@@ -322,7 +348,8 @@ export class AgentService {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
     let journeyTrace: JourneyTraceSnapshot | undefined
-    let executionTrace: Record<string, unknown> | undefined
+    const executionEvents: Array<{ type: string; data: unknown }> = []
+    let turnPresentation: Record<string, unknown> | undefined
 
     const runtimeSkillId = mapUiSkillId(skillId)
     let llmModel: string | undefined
@@ -353,6 +380,15 @@ export class AgentService {
       refOrder,
       mentionedKeys,
     })) {
+      if (TRACE_PERSIST_EVENT_TYPES.has(event.type)) {
+        executionEvents.push({ type: event.type, data: event.data })
+      }
+      if (event.type === 'interrupt' || event.type === 'done') {
+        const pres = (event.data as { presentation?: unknown })?.presentation
+        if (pres && typeof pres === 'object' && !Array.isArray(pres)) {
+          turnPresentation = pres as Record<string, unknown>
+        }
+      }
       if (event.type === 'text_delta') {
         assistantText += (event.data as { text: string }).text
       }
@@ -371,10 +407,11 @@ export class AgentService {
       yield event
     }
 
-    const metadata: AgentMessageMetadata | undefined =
-      journeyTrace || executionTrace
-        ? { ...(journeyTrace ? { journeyTrace } : {}), ...(executionTrace ? { executionTrace } : {}) }
-        : undefined
+    const metadata = buildTurnMetadata({
+      journeyTrace,
+      presentation: turnPresentation,
+      executionEvents,
+    })
 
     const effectiveThreadId = threadId?.trim() || sessionId
     await this.finalizeTurn(sessionId, effectiveThreadId, userId, assistantText, canvasActions, {
@@ -393,7 +430,9 @@ export class AgentService {
     canvasActions: CanvasAction[],
     opts: { rewriteCanvasData: boolean; linkedOutputs?: LinkedCanvasOutput[]; metadata?: AgentMessageMetadata },
   ) {
-    const shouldPersistAssistant = Boolean(assistantText || opts.metadata?.journeyTrace)
+    const shouldPersistAssistant = Boolean(
+      assistantText || opts.metadata?.journeyTrace || opts.metadata?.presentation || opts.metadata?.executionEvents?.length,
+    )
     if (shouldPersistAssistant) {
       await this.prisma.agentMessage.create({
         data: {

@@ -1,7 +1,7 @@
 import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CanvasAction } from '@lnkpi/shared'
-import { AgentService, deriveLinkedOutputs } from './agent.service'
+import { AgentService, deriveLinkedOutputs, buildTurnMetadata } from './agent.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 
 describe('deriveLinkedOutputs', () => {
@@ -59,6 +59,30 @@ describe('deriveLinkedOutputs', () => {
     ]
 
     expect(deriveLinkedOutputs(actions)).toEqual([])
+  })
+})
+
+describe('buildTurnMetadata', () => {
+  it('merges journeyTrace, presentation and execution events', () => {
+    const meta = buildTurnMetadata({
+      journeyTrace: {
+        version: 1,
+        flowMode: 'product_visual',
+        current: 'macro_select',
+        startedAt: '2026-08-13T00:00:00Z',
+        updatedAt: '2026-08-13T00:00:00Z',
+        steps: [],
+      },
+      presentation: { kind: 'macro_scheme_cards', body: { schemes: [] } },
+      executionEvents: [{ type: 'step', data: { id: 's1', label: 'x', status: 'done' } }],
+    })
+    expect(meta?.journeyTrace?.current).toBe('macro_select')
+    expect(meta?.presentation?.kind).toBe('macro_scheme_cards')
+    expect(meta?.executionEvents).toHaveLength(1)
+  })
+
+  it('returns undefined when empty', () => {
+    expect(buildTurnMetadata({})).toBeUndefined()
   })
 })
 
@@ -163,7 +187,26 @@ describe('AgentService streamConversation', () => {
           },
         },
       }
-      yield { type: 'done', data: {} }
+      yield { type: 'step', data: { id: 'dialog_draft', label: '出方案', status: 'done', ms: 10 } }
+      yield {
+        type: 'journey_update',
+        data: {
+          snapshot: {
+            version: 1,
+            flowMode: 'product_visual',
+            current: 'macro_select',
+            startedAt: '2026-08-13T00:00:00Z',
+            updatedAt: '2026-08-13T00:00:00Z',
+            steps: [],
+          },
+        },
+      }
+      yield {
+        type: 'done',
+        data: {
+          presentation: { kind: 'macro_scheme_cards', stepper: { current: 'macro_select', completed: [] } },
+        },
+      }
     })
 
     vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
@@ -191,6 +234,8 @@ describe('AgentService streamConversation', () => {
     expect(events.map((e) => e.type)).toEqual([
       'text_delta',
       'canvas_action',
+      'step',
+      'journey_update',
       'done',
     ])
     // Runtime path skips canvasData rewrite (Nest tools already wrote)
@@ -206,6 +251,7 @@ describe('AgentService streamConversation', () => {
             status: 'done',
           },
         ]),
+        metadata: expect.stringContaining('macro_scheme_cards'),
       }),
     })
   })

@@ -29,6 +29,8 @@ export interface JourneyTraceSnapshot {
 export interface AgentMessageMetadata {
   journeyTrace?: JourneyTraceSnapshot
   executionTrace?: Record<string, unknown>
+  presentation?: Record<string, unknown>
+  executionEvents?: Array<{ type: string; data: unknown }>
 }
 
 export const JOURNEY_STEP_LABELS: Record<JourneyStepId, string> = {

@@ -138,6 +138,13 @@ def test_macro_confirm_p2_nocanvas_before_ssot():
     assert out["phase"] == "canvas_ssot_commit"
 
 
+def test_macro_free_text_revise_classifies_as_revise():
+    msg = "商业特写，但是需要增加更多模特展示图和包装的各类视角细节"
+    decision = classify_macro_scheme_decision(msg)
+    assert decision["action"] == "revise"
+    assert "模特" in decision.get("feedback", "")
+
+
 @pytest.mark.asyncio
 async def test_canvas_ssot_commit_upsert():
     nest = FakeNest()

@@ -103,6 +103,7 @@ describe('interruptPayloadFromThreadState', () => {
       retakePending: null,
       effectiveUtterance: null,
       imageQaReason: null,
+      imageQaCode: null,
       imageQaMetrics: null,
     })
   })
