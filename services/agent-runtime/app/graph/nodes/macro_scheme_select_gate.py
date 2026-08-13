@@ -24,6 +24,22 @@ from app.graph.product_visual_v2.presentation import (
 MacroAction = Literal["none", "confirm", "revise"]
 
 _MACRO_DECISION_PREFIX = "__macro_scheme_decision__"
+_MACRO_REVISE_HINTS = (
+    "但是",
+    "需要",
+    "增加",
+    "改成",
+    "改为",
+    "希望",
+    "补充",
+    "更多",
+    "调整",
+    "修改",
+    "不要",
+    "换成",
+    "减少",
+    "去掉",
+)
 _NONE_TIP = "请勾选宏观方案（最多 2 套）后点「确认方案」，或说明要如何调整。"
 _REVISE_ACK = "好的，正在根据你的反馈调整视觉方案…"
 _CONFIRM_ACK = "已确认宏观方案，即将写入画布方案节点…"
@@ -101,6 +117,10 @@ def classify_macro_scheme_decision(
     if user_decision == "revise" or any(k in raw for k in ("调整方案", "修改方案", "revise")):
         feedback = re.sub(r"^(需要调整方案[：:]?|调整方案[：:]?)", "", raw).strip()
         return {"action": "revise", "feedback": feedback or raw}
+    # Free-text revision at macro gate (e.g. "商业特写，但是需要增加更多模特展示图")
+    if len(raw) > 12 and not any(k in raw for k in ("确认方案", "确认宏观", "confirm_macro")):
+        if any(h in raw for h in _MACRO_REVISE_HINTS):
+            return {"action": "revise", "feedback": raw}
     return {"action": "none"}
 
 

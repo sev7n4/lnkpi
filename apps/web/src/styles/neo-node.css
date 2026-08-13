@@ -450,21 +450,6 @@
   object-fit: cover;
 }
 
-.neo-gen-preview::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: rgba(0, 0, 0, 0.06);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-  pointer-events: none;
-}
-
-.neo-node-upload-target:hover .neo-gen-preview::after {
-  opacity: 1;
-}
-
 .neo-gen-video-poster {
   pointer-events: none;
 }
@@ -489,6 +474,36 @@
 }
 
 .neo-gen-video-play-btn:hover {
+  background: rgba(0, 0, 0, 0.72);
+  transform: translate(-50%, -50%) scale(1.05);
+}
+
+.neo-gen-preview .neo-gen-image-preview-btn {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+
+.neo-gen-preview:hover .neo-gen-image-preview-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.neo-gen-preview .neo-gen-image-preview-btn:hover {
   background: rgba(0, 0, 0, 0.72);
   transform: translate(-50%, -50%) scale(1.05);
 }
@@ -592,34 +607,15 @@
   color: rgba(255, 255, 255, 0.85);
 }
 
-/* 预览按钮：排在存库按钮左侧，与右上工具条同款规格 */
-.neo-node-preview-btn {
-  position: absolute;
-  top: 6px;
-  right: 90px;
-  z-index: 2;
-  display: none;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.55);
-  color: rgba(255, 255, 255, 0.85);
-}
-
 .neo-node-upload-target:hover .neo-node-replace-btn,
 .neo-node-upload-target:hover .neo-node-download-btn,
-.neo-node-upload-target:hover .neo-node-save-btn,
-.neo-node-upload-target:hover .neo-node-preview-btn {
+.neo-node-upload-target:hover .neo-node-save-btn {
   display: inline-flex;
 }
 
 .neo-node-replace-btn:hover,
 .neo-node-download-btn:hover,
-.neo-node-save-btn:hover,
-.neo-node-preview-btn:hover {
+.neo-node-save-btn:hover {
   background: rgba(0, 0, 0, 0.8);
   color: #fff;
 }

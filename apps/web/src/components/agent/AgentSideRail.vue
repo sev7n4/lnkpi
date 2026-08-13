@@ -290,7 +290,8 @@ function canShowMessageActions(msg: AgentStreamMessage): boolean {
   return Boolean(
     visibleAssistantContent(msg).trim()
     || (assistantOutputsById.value.get(msg.id)?.length ?? 0) > 0
-    || msg.executionTrace,
+    || msg.executionTrace
+    || msg.presentation,
   )
 }
 
@@ -632,6 +633,19 @@ function syncCompletionPresentation(
   if (phase !== 'done') {
     completionPresentation.value = null
   }
+}
+
+function historyPresentation(msg: AgentStreamMessage): AgentPresentationEnvelope | null {
+  if (msg.role !== 'assistant' || msg.streaming || !msg.presentation) return null
+  return msg.presentation
+}
+
+function historyMacroSelectedIds(presentation: AgentPresentationEnvelope): string[] {
+  const schemes = presentation.body?.schemes ?? []
+  const recommended = schemes.filter((s) => s.recommended).map((s) => String(s.id))
+  if (recommended.length) return recommended
+  const maxSelect = presentation.body?.max_select ?? 2
+  return schemes.slice(0, maxSelect).map((s) => String(s.id))
 }
 
 function syncRetakeFromPayload(data: {
@@ -2123,6 +2137,15 @@ defineExpose({
                   :streaming="Boolean(msg.streaming)"
                   :journey-snapshot="msg.journeyTrace ?? threadJourneyTrace"
                   @focus-node="onFocusNode($event)"
+                />
+                <AgentPresentationHost
+                  v-if="historyPresentation(msg)"
+                  :presentation="historyPresentation(msg)!"
+                  disabled
+                  :macro-selected-ids="historyMacroSelectedIds(historyPresentation(msg)!)"
+                  :journey-snapshot="msg.journeyTrace ?? threadJourneyTrace"
+                  @focus-node="onFocusNode($event)"
+                  @focus-all="onFocusAll($event)"
                 />
                 <div v-if="msg.toolCalls?.length" class="agent-tools mt-1 space-y-0.5 pt-1">
                   <div v-for="(tc, i) in msg.toolCalls" :key="i" class="text-[10px] text-[var(--neo-text-secondary)]">⚙ {{ tc.name }}</div>
