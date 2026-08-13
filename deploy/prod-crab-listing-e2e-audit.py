@@ -7,8 +7,10 @@ import json
 import os
 import time
 import uuid
+from http.client import IncompleteRead
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
@@ -17,6 +19,10 @@ API = f"{BASE}/api"
 PHONE = os.environ.get("PHONE", "17279698608")
 CODE = os.environ.get("CODE", "123456")
 SSE_TIMEOUT = float(os.environ.get("PV_SSE_TIMEOUT_SEC", "900"))
+SSE_MAX_RETRIES = int(os.environ.get("PV_SSE_MAX_RETRIES", "3"))
+SSE_RETRY_SEC = float(os.environ.get("PV_SSE_RETRY_SEC", "5"))
+SSE_RECOVER_POLL_SEC = float(os.environ.get("PV_SSE_RECOVER_POLL_SEC", "3"))
+SSE_RECOVER_WAIT_SEC = float(os.environ.get("PV_SSE_RECOVER_WAIT_SEC", "45"))
 GEN_POLL_SEC = float(os.environ.get("PV_GEN_POLL_SEC", "20"))
 OVERALL_TIMEOUT = float(os.environ.get("PV_OVERALL_TIMEOUT_SEC", "7200"))
 OUT_PATH = Path(os.environ.get("AUDIT_OUT", "deploy/prod-crab-listing-audit.json"))
@@ -52,7 +58,65 @@ def find_crab_asset(tok: str) -> dict[str, Any]:
     raise RuntimeError("资产库未找到大闸蟹图片")
 
 
-def sse_turn(
+def _thread_state_signature(ts: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        ts.get("phase"),
+        tuple(ts.get("nextNodes") or []),
+        bool(ts.get("interrupted")),
+        bool(ts.get("finished")),
+        len(ts.get("shotManifest") or []),
+        len(ts.get("deliveryGenByKey") or {}),
+    )
+
+
+def _thread_state_advanced(before: dict[str, Any], after: dict[str, Any]) -> bool:
+    return _thread_state_signature(before) != _thread_state_signature(after)
+
+
+def _parse_sse_stream(
+    resp: Any,
+    *,
+    end: float,
+    events: list[dict[str, Any]],
+    text_parts: list[str],
+) -> str:
+    exit_reason = "timeout"
+    buf = ""
+    while time.time() < end:
+        try:
+            chunk = resp.read(4096)
+        except IncompleteRead as exc:
+            partial = exc.partial
+            if partial:
+                buf += partial.decode(errors="replace")
+            if any(ev.get("type") in ("done", "error") for ev in events):
+                return "done" if any(ev.get("type") == "done" for ev in events) else "error"
+            raise
+        if not chunk:
+            exit_reason = "eof"
+            break
+        buf += chunk.decode(errors="replace")
+        while "\n\n" in buf:
+            block, buf = buf.split("\n\n", 1)
+            for line in block.splitlines():
+                if not line.startswith("data:"):
+                    continue
+                pl = line[5:].strip()
+                if pl == "[DONE]":
+                    return "done_marker"
+                try:
+                    ev = json.loads(pl)
+                except json.JSONDecodeError:
+                    continue
+                events.append(ev)
+                if ev.get("type") == "text_delta":
+                    text_parts.append(str((ev.get("data") or {}).get("text") or ""))
+                if ev.get("type") in ("done", "error"):
+                    return str(ev.get("type"))
+    return exit_reason
+
+
+def _sse_turn_once(
     tok: str,
     sid: str,
     tid: str,
@@ -77,44 +141,104 @@ def sse_turn(
     events: list[dict[str, Any]] = []
     text_parts: list[str] = []
     end = time.time() + timeout
-    exit_reason = "timeout"
     with urlopen(req, timeout=timeout + 60) as resp:
-        buf = ""
-        while time.time() < end:
-            chunk = resp.read(4096)
-            if not chunk:
-                exit_reason = "eof"
-                break
-            buf += chunk.decode(errors="replace")
-            while "\n\n" in buf:
-                block, buf = buf.split("\n\n", 1)
-                for line in block.splitlines():
-                    if not line.startswith("data:"):
-                        continue
-                    pl = line[5:].strip()
-                    if pl == "[DONE]":
-                        exit_reason = "done_marker"
-                        break
-                    try:
-                        ev = json.loads(pl)
-                    except json.JSONDecodeError:
-                        continue
-                    events.append(ev)
-                    if ev.get("type") == "text_delta":
-                        text_parts.append(str((ev.get("data") or {}).get("text") or ""))
-                    if ev.get("type") in ("done", "error"):
-                        exit_reason = ev.get("type")
-                        break
-                if exit_reason in ("done_marker", "done", "error"):
-                    break
-            if exit_reason in ("done_marker", "done", "error"):
-                break
+        exit_reason = _parse_sse_stream(resp, end=end, events=events, text_parts=text_parts)
     return {
         "exit": exit_reason,
         "text": "".join(text_parts),
         "events": events,
         "event_types": sorted({str(e.get("type")) for e in events}),
     }
+
+
+def _wait_for_thread_advance(
+    tok: str,
+    tid: str,
+    before: dict[str, Any],
+    *,
+    wait_sec: float = SSE_RECOVER_WAIT_SEC,
+    poll_sec: float = SSE_RECOVER_POLL_SEC,
+) -> dict[str, Any] | None:
+    deadline = time.time() + wait_sec
+    latest = before
+    while time.time() < deadline:
+        latest = thread_state(tok, tid)
+        if _thread_state_advanced(before, latest):
+            return latest
+        time.sleep(poll_sec)
+    return None
+
+
+def sse_turn(
+    tok: str,
+    sid: str,
+    tid: str,
+    msg: str,
+    *,
+    attachments: list[dict] | None = None,
+    skill_id: str | None = None,
+    timeout: float = SSE_TIMEOUT,
+    ts_before: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    before = ts_before or thread_state(tok, tid)
+    last_error: str | None = None
+    last_result: dict[str, Any] | None = None
+
+    for attempt in range(1, max(1, SSE_MAX_RETRIES) + 1):
+        try:
+            result = _sse_turn_once(
+                tok,
+                sid,
+                tid,
+                msg,
+                attachments=attachments,
+                skill_id=skill_id,
+                timeout=timeout,
+            )
+            result["sse_attempt"] = attempt
+            last_result = result
+            if result["exit"] in ("done", "error", "done_marker"):
+                return result
+            last_error = f"sse_exit={result['exit']}"
+        except (IncompleteRead, TimeoutError, URLError, OSError) as exc:
+            last_error = str(exc)
+            recovered = _wait_for_thread_advance(tok, tid, before)
+            if recovered is not None:
+                return {
+                    "exit": "recovered",
+                    "text": "",
+                    "events": last_result.get("events", []) if last_result else [],
+                    "event_types": sorted(
+                        {str(e.get("type")) for e in ((last_result or {}).get("events") or [])}
+                    ),
+                    "sse_attempt": attempt,
+                    "transport_error": last_error,
+                }
+            if attempt >= SSE_MAX_RETRIES:
+                raise RuntimeError(f"SSE turn failed after {attempt} attempts: {last_error}") from exc
+            print(
+                f"[sse_turn] attempt {attempt}/{SSE_MAX_RETRIES} failed ({last_error}); "
+                f"retry in {SSE_RETRY_SEC * attempt:.0f}s",
+                flush=True,
+            )
+            time.sleep(SSE_RETRY_SEC * attempt)
+            continue
+
+        recovered = _wait_for_thread_advance(tok, tid, before)
+        if recovered is not None:
+            result["exit"] = "recovered"
+            result["transport_error"] = last_error
+            return result
+        if attempt >= SSE_MAX_RETRIES:
+            return result
+        print(
+            f"[sse_turn] attempt {attempt}/{SSE_MAX_RETRIES} ended with {result['exit']}; "
+            f"retry in {SSE_RETRY_SEC * attempt:.0f}s",
+            flush=True,
+        )
+        time.sleep(SSE_RETRY_SEC * attempt)
+
+    raise RuntimeError(f"SSE turn failed: {last_error or 'unknown'}")
 
 
 def thread_state(tok: str, tid: str) -> dict[str, Any]:
@@ -257,6 +381,8 @@ def record_step(step: int, msg: str, sse: dict[str, Any], ts: dict[str, Any]) ->
         "step": step,
         "user_message": msg[:200],
         "sse_exit": sse.get("exit"),
+        "sse_attempt": sse.get("sse_attempt"),
+        "transport_error": sse.get("transport_error"),
         "sse_text": sse.get("text", "")[:4000],
         "event_types": sse.get("event_types"),
         "phase": ts.get("phase"),
@@ -313,7 +439,16 @@ def main() -> int:
 
     while time.time() < deadline:
         step += 1
-        sse = sse_turn(tok, sid, tid, msg, attachments=attachments, skill_id=skill_id)
+        ts_before = thread_state(tok, tid)
+        sse = sse_turn(
+            tok,
+            sid,
+            tid,
+            msg,
+            attachments=attachments,
+            skill_id=skill_id,
+            ts_before=ts_before,
+        )
         absorb_journey_updates(sse.get("events") or [])
         attachments = None
         skill_id = None
