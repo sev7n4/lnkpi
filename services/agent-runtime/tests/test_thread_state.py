@@ -7,8 +7,16 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.builder import build_agent_graph
-from app.graph.product_visual_v2.journey_trace import build_journey_trace_snapshot
-from app.runs import emit_journey_update, get_thread_state
+from app.graph.product_visual_v2.journey_trace import (
+    build_journey_trace_snapshot,
+    patch_macro_select_step,
+)
+from app.runs import (
+    _emit_journey_trace_for_presentation,
+    _resolve_journey_trace,
+    emit_journey_update,
+    get_thread_state,
+)
 
 
 @pytest.mark.asyncio
@@ -53,6 +61,74 @@ async def test_get_thread_state_includes_atomic_checkpoint(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_resolve_journey_trace_merges_stale_checkpoint_with_current_phase():
+    stale = build_journey_trace_snapshot(
+        {
+            "macro_schemes": [
+                {"id": "A", "label": "湖鲜原境风"},
+                {"id": "B", "label": "礼盒臻享风"},
+            ],
+            "selected_macro_scheme_ids": ["A"],
+        },
+        phase="canvas_ssot_commit",
+    )
+    patched = patch_macro_select_step(
+        stale,
+        schemes=[
+            {"id": "A", "label": "湖鲜原境风"},
+            {"id": "B", "label": "礼盒臻享风"},
+        ],
+        selected_ids=["A"],
+    )
+    assert patched["current"] == "ssot_persist"
+
+    resolved = _resolve_journey_trace(
+        {
+            "flow_mode": "chat",
+            "phase": "done",
+            "journey_trace": patched,
+            "selected_macro_scheme_ids": ["A"],
+            "macro_schemes": [
+                {"id": "A", "label": "湖鲜原境风"},
+                {"id": "B", "label": "礼盒臻享风"},
+            ],
+        }
+    )
+    assert isinstance(resolved, dict)
+    assert resolved["current"] == "done"
+    assert all(s["status"] == "done" for s in resolved["steps"])
+    macro = next(s for s in resolved["steps"] if s["id"] == "macro_select")
+    assert macro["summary"] == "已选：湖鲜原境风"
+
+
+@pytest.mark.asyncio
+async def test_emit_journey_trace_for_presentation_advances_existing_trace():
+    events: list[dict] = []
+
+    async def emit(event: dict) -> None:
+        events.append(event)
+
+    stale = build_journey_trace_snapshot(
+        {"macro_schemes": [{"id": "A", "label": "湖鲜原境风"}]},
+        phase="await_macro_scheme_select",
+    )
+    stream_vals = {
+        "phase": "await_shot_topo_confirm",
+        "journey_trace": stale,
+        "macro_schemes": [{"id": "A", "label": "湖鲜原境风"}],
+        "selected_macro_scheme_ids": ["A"],
+    }
+    delta = {"presentation": {"kind": "shot_topo_merged", "stepper": {"current": "topo_preview"}}}
+
+    await _emit_journey_trace_for_presentation(emit, stream_vals, delta)
+
+    assert len(events) == 1
+    snap = events[0]["data"]["snapshot"]
+    assert snap["current"] == "topo_preview"
+    assert stream_vals["journey_trace"]["current"] == "topo_preview"
+
+
+@pytest.mark.asyncio
 async def test_get_thread_state_includes_journey_trace():
     cp = MemorySaver()
     graph = build_agent_graph(
@@ -62,11 +138,17 @@ async def test_get_thread_state_includes_journey_trace():
         checkpointer=cp,
     )
     trace = build_journey_trace_snapshot(
-        {"macro_schemes": [{"id": "A", "label": "湖鲜原境风"}]},
+        {
+            "macro_schemes": [
+                {"id": "A", "label": "湖鲜原境风"},
+                {"id": "B", "label": "礼盒臻享风"},
+            ],
+        },
         phase="await_macro_scheme_select",
     )
     config = {"configurable": {"thread_id": "t-journey"}}
-    await graph.ainvoke(
+    await graph.aupdate_state(
+        config,
         {
             "messages": [HumanMessage(content="帮我做礼盒主视觉")],
             "flow_mode": "product_visual",
@@ -77,7 +159,6 @@ async def test_get_thread_state_includes_journey_trace():
             "session_id": "s1",
             "user_id": "u1",
         },
-        config,
     )
     state = await get_thread_state("t-journey", checkpointer=cp)
     assert state["selectedMacroSchemeIds"] == ["A"]
