@@ -123,6 +123,17 @@ def test_done_phase_all_steps_complete():
     assert snap["totalMs"] >= 0
 
 
+def test_error_done_marks_failed_step_not_all_complete():
+    snap = build_journey_trace_snapshot(
+        {"last_error": "decompose_shots_parse_failed"},
+        phase="done",
+    )
+    shot_plan = next(s for s in snap["steps"] if s["id"] == "shot_plan")
+    assert shot_plan["status"] == "failed"
+    assert next(s for s in snap["steps"] if s["id"] == "topo_preview")["status"] == "pending"
+    assert next(s for s in snap["steps"] if s["id"] == "done")["status"] == "pending"
+
+
 def test_merge_preserves_completed_step_timestamps():
     prev_time = datetime(2026, 8, 13, 4, 0, 0, tzinfo=timezone.utc)
     later = datetime(2026, 8, 13, 4, 5, 0, tzinfo=timezone.utc)
