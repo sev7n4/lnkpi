@@ -253,6 +253,18 @@ describe('filterAssistantVisibleText', () => {
       filterAssistantVisibleText('识图模型返回格式异常，请重试\n自动识图暂时不可用'),
     ).toBe('自动识图暂时不可用')
   })
+
+  it('strips bare flow-end error codes and toolCalls JSON', () => {
+    expect(filterAssistantVisibleText('流程结束。dialog_draft_parse_failed')).toBe(
+      '流程未能完成，请补充说明后重试。',
+    )
+    expect(
+      filterAssistantVisibleText('macro \'A\' has 11 shots (max 8)'),
+    ).toBe('')
+    expect(
+      filterAssistantVisibleText('{"toolCalls":[{"toolName":"foo"}]}'),
+    ).toBe('')
+  })
 })
 
 describe('resolveGatePrimaryActionLabel', () => {

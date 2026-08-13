@@ -49,6 +49,7 @@ async def test_done_without_progress_uses_last_error():
     done = make_done_node()
     out = await done({"phase": "done", "last_error": "出图编排失败：cycle"})
     assert "出图编排失败" in out["messages"][0].content
+    assert "流程结束。" not in out["messages"][0].content
 
 
 @pytest.mark.asyncio

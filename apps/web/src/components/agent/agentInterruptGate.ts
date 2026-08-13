@@ -129,11 +129,35 @@ export function isMachineOnlyVisibleText(content: string): boolean {
   return !filterMachinePayloadLines(content).trim()
 }
 
+const INTERNAL_ASSISTANT_SNIPPETS = [
+  ...INTERNAL_QA_ERROR_SNIPPETS,
+  'dialog_draft_parse_failed',
+  'shot_manifest_missing',
+  'decompose_shots_parse_failed',
+  'macro_schemes_missing',
+  'vision_format_error',
+  '"toolCalls"',
+  '"toolName"',
+  'has 11 shots',
+  "macro '",
+] as const
+
+function stripBareFlowEndCode(line: string): string {
+  const m = line.match(/^流程结束[。.]\s*([a-z_][a-z0-9_.]*)\s*$/i)
+  if (m) return '流程未能完成，请补充说明后重试。'
+  return line.replace(/^流程结束[。.]\s*/, '').trim() || line
+}
+
 /** Strip machine payloads and internal QA error strings from assistant visible text. */
 export function filterAssistantVisibleText(content: string): string {
   return filterMachinePayloadLines(content)
     .split('\n')
-    .filter((line) => !INTERNAL_QA_ERROR_SNIPPETS.some((snippet) => line.includes(snippet)))
+    .map(stripBareFlowEndCode)
+    .filter((line) => {
+      const trimmed = line.trim()
+      if (!trimmed) return false
+      return !INTERNAL_ASSISTANT_SNIPPETS.some((snippet) => trimmed.includes(snippet))
+    })
     .join('\n')
     .trim()
 }

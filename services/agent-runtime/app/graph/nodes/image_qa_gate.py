@@ -321,6 +321,19 @@ def make_image_qa_check_node(
             if is_v2_enabled(state):
                 out["product_visual_scheme_v2"] = True
                 out["phase"] = "dialog_draft"
+                summary = str(result.get("product_summary") or "").strip()
+                if summary:
+                    understanding = build_qa_understanding_text(
+                        VisionQAResult(
+                            pass_=True,
+                            reason=str(result.get("image_qa_reason") or ""),
+                            vision_used=True,
+                            product_summary=summary,
+                        )
+                    )
+                    if understanding:
+                        out["image_qa_understanding"] = understanding
+                        out["messages"] = [AIMessage(content=understanding)]
             else:
                 manifest, err = await ensure_phase1_seed_chain(nest, state, run_generation=False)
                 if err:
