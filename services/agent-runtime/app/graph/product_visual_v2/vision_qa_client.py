@@ -72,7 +72,6 @@ def _parse_vision_json(raw: str) -> VisionQAResult:
         product_identifiable=data.get("product_identifiable")
         if "product_identifiable" in data
         else None,
-        product_summary=str(data.get("product_summary") or "").strip() or None,
     )
 
 
