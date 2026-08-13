@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.graph.product_visual_v2.limits import MAX_SHOTS_PER_MACRO_SCHEME
+
 _MACHINE_PREFIXES = (
     "__macro_scheme_decision__",
     "__scheme_decision__",
@@ -24,6 +26,10 @@ _STYLE_KEYWORD_TERMS = (
     "性冷淡",
     "新中式",
 )
+
+_LISTING_INTRO = re.compile(r"(?:至少)?包括[：:]")
+_ENUM_SPLIT = re.compile(r"[、,，/]")
+_LABEL_PREFIX = re.compile(r"^(?:需要)?至少包括[：:]?")
 
 
 def is_machine_payload(text: str) -> bool:
@@ -58,7 +64,7 @@ _REQUEST_KEYWORDS: list[tuple[tuple[str, ...], str]] = [
     (("模特", "模特展示", "手持", "真人"), "模特展示"),
     (("海报", "营销海报", "banner"), "营销海报"),
     (("细节", "特写", "微距"), "产品细节"),
-    (("物流", "包装图", "快递包装"), "物流包装"),
+    (("物流", "包装图", "快递包装", "物流包装"), "物流包装"),
     (("礼盒", "包装效果", "包装主视觉", "包装图", "主视觉"), "礼盒"),
     (("防压", "缓冲", "结构", "快递", "运输", "冷链", "保鲜", "防损"), "防压"),
     (("送人", "送礼", "赠礼"), "送礼"),
@@ -78,10 +84,17 @@ _DEFAULT_LABELS: dict[str, str] = {
 
 
 def _phrase_to_label(phrase: str, category: str) -> str:
-    cleaned = phrase.strip("… \t·")
+    cleaned = _LABEL_PREFIX.sub("", phrase.strip("… \t·"))
     if 2 <= len(cleaned) <= 16:
         return cleaned
     return _DEFAULT_LABELS.get(category, cleaned[:16] or category)
+
+
+def _match_category(text: str) -> tuple[tuple[str, ...], str] | None:
+    for keywords, category in _REQUEST_KEYWORDS:
+        if any(kw in text for kw in keywords):
+            return keywords, category
+    return None
 
 
 def extract_user_request_labels(utterance: str) -> list[str]:
@@ -91,19 +104,36 @@ def extract_user_request_labels(utterance: str) -> list[str]:
         return []
     labels: list[str] = []
     seen: set[str] = set()
-    segments = re.split(r"[，。；、\n…]+", text)
-    for seg in segments:
+
+    def add_label(raw: str, category: str) -> None:
+        label = _phrase_to_label(raw, category)
+        if label and label not in seen:
+            labels.append(label)
+            seen.add(label)
+
+    intro = _LISTING_INTRO.search(text)
+    if intro:
+        tail = text[intro.end() :]
+        chunk = re.split(r"[；。!！?？\n]", tail, maxsplit=1)[0]
+        for part in _ENUM_SPLIT.split(chunk):
+            part = part.strip()
+            if len(part) < 2:
+                continue
+            matched = _match_category(part)
+            if matched:
+                _, category = matched
+                add_label(part, category)
+
+    for seg in re.split(r"[，。；、\n…]+", text):
         seg = seg.strip()
         if len(seg) < 2:
             continue
-        for keywords, category in _REQUEST_KEYWORDS:
-            if any(kw in seg for kw in keywords):
-                label = _phrase_to_label(seg, category)
-                if label not in seen:
-                    labels.append(label)
-                    seen.add(label)
-                break
-    return labels[:5]
+        matched = _match_category(seg)
+        if matched:
+            _, category = matched
+            add_label(seg, category)
+
+    return labels[:MAX_SHOTS_PER_MACRO_SCHEME]
 
 
 def extract_style_keywords(text: str) -> set[str]:

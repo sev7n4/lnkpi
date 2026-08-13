@@ -2,7 +2,7 @@
 
 Reads the W3 Send-API accumulators (``gen_completed_keys`` / ``gen_failed_keys``
 / ``gen_needs_user_keys`` / ``gen_fail_details``) and:
-  - emits a task_summary + per-line progress to the chat/canvas stream,
+  - emits task_summary to the chat/canvas stream (per-line progress is streamed by gen_node),
   - persists progress to the GenProgress table (W15),
   - clears all W3 transient fields so the next generation run starts clean.
 """
@@ -73,12 +73,6 @@ async def _emit_task_summary(nest: Any, **payload: Any) -> None:
         await fn(**payload)
 
 
-async def _emit_text(nest: Any, text: str) -> None:
-    fn = getattr(nest, "emit_text", None)
-    if fn is not None:
-        await fn(text if text.endswith("\n") else text + "\n")
-
-
 def make_collect_gen_node(*, nest: Any) -> Callable:
     async def collect_gen(state: dict) -> dict:
         completed_keys: set[str] = set(state.get("gen_completed_keys") or [])
@@ -109,7 +103,6 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
                 success_n += 1
                 line = format_gen_progress_line(title=title, status="completed")
                 progress_lines.append(line)
-                await _emit_text(nest, line)
             elif key in needs_user_keys:
                 if reason == "dependency_skipped":
                     skipped_n += 1
@@ -122,16 +115,12 @@ def make_collect_gen_node(*, nest: Any) -> Callable:
                 )
                 line = format_gen_progress_line(title=title, status=reason)
                 progress_lines.append(line)
-                # P1-5: fallback_pending 不向聊天流 emit 单行（走画布确认弹窗）
-                if reason_lower != "fallback_pending":
-                    await _emit_text(nest, line)
             elif key in failed_keys:
                 summary_lines.append(
                     {"id": key, "status": "failed", "title": title, "hint": hint_for_error(reason)}
                 )
                 line = format_gen_progress_line(title=title, status=reason or "failed")
                 progress_lines.append(line)
-                await _emit_text(nest, line)
 
         # Real failures = all in failed_keys (dependency_failed + node-exhausted)
         fail_n = len(failed_keys)

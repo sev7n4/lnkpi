@@ -50,9 +50,40 @@ async def test_collect_gen_product_visual_returns_enriched_gen_by_key():
         "gen_failed_keys": [],
         "gen_needs_user_keys": [],
         "gen_fail_details": {},
+        "gen_ordered_keys": ["k"],
         "thread_id": "t1",
         "session_id": "s1",
     }
     out = await node(state)
     assert out["gen_by_key"]["k"]["url"] == "https://cdn/k.png"
     assert out.get("gen_deps_of") is None
+
+
+class _NestWithEmitText(_NestWithGetNode):
+    def __init__(self) -> None:
+        super().__init__()
+        self.text_emits: list[str] = []
+
+    async def emit_text(self, text: str) -> None:
+        self.text_emits.append(text)
+
+
+@pytest.mark.asyncio
+async def test_collect_gen_does_not_reemit_progress_lines():
+    nest = _NestWithEmitText()
+    node = make_collect_gen_node(nest=nest)
+    state = {
+        "gen_by_key": {
+            "a": {"node_id": "n-a", "title": "主图"},
+            "b": {"node_id": "n-b", "title": "详情"},
+        },
+        "gen_completed_keys": ["a", "b"],
+        "gen_failed_keys": [],
+        "gen_needs_user_keys": [],
+        "gen_fail_details": {},
+        "gen_ordered_keys": ["a", "b"],
+        "thread_id": "t1",
+        "session_id": "s1",
+    }
+    await node(state)
+    assert nest.text_emits == []

@@ -12,7 +12,10 @@ from app.graph.product_visual_v2.utterance import (
     strip_superseded_style_keywords,
 )
 from app.graph.product_visual_v2.visual_intent import humanize_primary_goal
-from app.graph.product_visual_v2.limits import MAX_SHOTS_PER_MACRO_SCHEME
+from app.graph.product_visual_v2.limits import (
+    MACRO_SHOT_LIMIT_CALLOUT_MIN,
+    MAX_SHOTS_PER_MACRO_SCHEME,
+)
 
 STEPPER_ORDER: list[str] = [
     "image_qa",
@@ -384,7 +387,10 @@ def build_presentation_envelope(
         )
         if label_count <= 0:
             label_count = estimate_scene_count(state)
-        if label_count > MAX_SHOTS_PER_MACRO_SCHEME:
+        if (
+            label_count >= MACRO_SHOT_LIMIT_CALLOUT_MIN
+            or label_count > MAX_SHOTS_PER_MACRO_SCHEME
+        ):
             body["callout_shot_limit"] = copy.get(
                 "macro.shot_limit_hint",
                 n=str(label_count),
