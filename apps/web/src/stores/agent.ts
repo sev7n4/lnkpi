@@ -12,6 +12,7 @@ import { parsePersistedToolCalls } from '@/components/agent/agentCanvasOutputs'
 import {
   applyCanvasAction,
   applyExplore,
+  applyJourneyUpdate,
   applyNodeStatus,
   applyPhaseHint,
   applyStep,
@@ -24,6 +25,7 @@ import {
   finalizeExecutionTrace,
   type ExecutionTraceState,
 } from '@/components/agent/executionTraceReducer'
+import type { AgentMessageMetadata, JourneyTraceSnapshot } from '@/components/agent/journeyTraceTypes'
 
 export interface AgentStreamMessage {
   id: string
@@ -33,6 +35,7 @@ export interface AgentStreamMessage {
   streaming?: boolean
   textReplaceHistory?: string[]
   executionTrace?: ExecutionTraceState
+  journeyTrace?: JourneyTraceSnapshot
   attachments?: SidebarAttachment[]
   attachmentRefKeys?: string[]
   linkedOutputs?: LinkedCanvasOutput[]
@@ -175,6 +178,16 @@ export const useAgentStore = defineStore('agent', () => {
     if (last?.executionTrace) applyExplore(last.executionTrace, data)
   }
 
+  function trackJourneyUpdate(snapshot: JourneyTraceSnapshot) {
+    ensureExecutionTrace()
+    const last = lastAssistant()
+    if (!last) return
+    last.journeyTrace = snapshot
+    if (last.executionTrace) {
+      applyJourneyUpdate(last.executionTrace, snapshot)
+    }
+  }
+
   function addCanvasAction(action: CanvasAction) {
     trackCanvasAction(action)
     pendingActions.value.push(action)
@@ -221,9 +234,39 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function parseMessageMetadata(raw: string | undefined): AgentMessageMetadata | undefined {
+    if (!raw) return undefined
+    try {
+      return JSON.parse(raw) as AgentMessageMetadata
+    } catch {
+      return undefined
+    }
+  }
+
+  function restoreExecutionTrace(meta: AgentMessageMetadata | undefined): ExecutionTraceState | undefined {
+    const raw = meta?.executionTrace as ExecutionTraceState | undefined
+    if (!raw?.steps?.length) return undefined
+    return {
+      steps: raw.steps,
+      collapsed: raw.collapsed ?? true,
+      turnStartedAt: raw.turnStartedAt ?? Date.now(),
+      turnEndedAt: raw.turnEndedAt,
+      totalMs: raw.totalMs,
+    }
+  }
+
   function loadHistory(history: AgentChatMessage[]) {
     messages.value = history.map((m) => {
       const persisted = m as PersistedAgentMessage
+      const meta = parseMessageMetadata(persisted.metadata)
+      let executionTrace = restoreExecutionTrace(meta)
+      const journeyTrace = meta?.journeyTrace
+      if (journeyTrace) {
+        if (!executionTrace) {
+          executionTrace = createExecutionTrace()
+        }
+        applyJourneyUpdate(executionTrace, journeyTrace)
+      }
       return {
         id: persisted.id,
         role: persisted.role as 'user' | 'assistant',
@@ -231,6 +274,8 @@ export const useAgentStore = defineStore('agent', () => {
         attachments: parseAttachments(persisted.attachments),
         linkedOutputs: parseLinkedOutputs(persisted.linkedOutputs),
         canvasActions: parsePersistedToolCalls(persisted.toolCalls),
+        executionTrace,
+        journeyTrace,
       }
     })
   }
@@ -256,6 +301,7 @@ export const useAgentStore = defineStore('agent', () => {
     trackStructuredError,
     trackThinking,
     trackExplore,
+    trackJourneyUpdate,
     addCanvasAction,
     flushActions,
     finishStreaming,

@@ -44,6 +44,66 @@ from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
 
+
+async def emit_journey_update(emit: EmitFn, state: dict[str, Any]) -> None:
+    """Emit journey_update SSE when product_visual journey_trace is present."""
+    snap = state.get("journey_trace")
+    if isinstance(snap, dict) and snap.get("flowMode") == "product_visual":
+        await emit({"type": "journey_update", "data": {"snapshot": snap}})
+
+
+def _resolve_journey_trace(vals: dict[str, Any]) -> dict[str, Any] | None:
+    """Return journey_trace from checkpoint or synthesize for product_visual reconnect."""
+    snap = vals.get("journey_trace")
+    if isinstance(snap, dict) and snap.get("flowMode") == "product_visual":
+        return snap
+    if vals.get("flow_mode") != "product_visual":
+        return None
+    phase = vals.get("phase")
+    if phase is None:
+        return None
+    from app.graph.product_visual_v2.journey_trace import merge_journey_trace
+
+    return merge_journey_trace(
+        snap if isinstance(snap, dict) else None,
+        vals,
+        phase=str(phase),
+    )
+
+
+def _sync_journey_trace(vals: dict[str, Any]) -> dict[str, Any]:
+    """Ensure vals carries journey_trace when product_visual checkpoint lacks persisted trace."""
+    trace = _resolve_journey_trace(vals)
+    if trace is None:
+        return vals
+    if vals.get("journey_trace") is trace:
+        return vals
+    return {**vals, "journey_trace": trace}
+
+
+async def _emit_journey_trace_for_presentation(
+    emit: EmitFn,
+    stream_vals: dict[str, Any],
+    delta: dict[str, Any],
+) -> None:
+    """After a node delta with presentation, merge trace and emit journey_update."""
+    if not isinstance(delta.get("presentation"), dict):
+        return
+    for key, value in delta.items():
+        if key != "messages":
+            stream_vals[key] = value
+    if not isinstance(stream_vals.get("journey_trace"), dict):
+        phase = stream_vals.get("phase")
+        if phase is not None:
+            from app.graph.product_visual_v2.journey_trace import merge_journey_trace
+
+            stream_vals["journey_trace"] = merge_journey_trace(
+                stream_vals.get("journey_trace"),
+                stream_vals,
+                phase=str(phase),
+            )
+    await emit_journey_update(emit, stream_vals)
+
 logger = logging.getLogger(__name__)
 
 
@@ -596,6 +656,8 @@ async def get_thread_state(
         if vals.get("retake_pending") is not None
         else None,
         "presentation": vals.get("presentation") if isinstance(vals.get("presentation"), dict) else None,
+        "selectedMacroSchemeIds": vals.get("selected_macro_scheme_ids"),
+        "journeyTrace": _resolve_journey_trace(vals),
         **diag,
     }
 
@@ -761,6 +823,7 @@ async def stream_run_events(
         last_text_delta: str | None = None
         executed_nodes: set[str] = set()
         stream_input: Any = input_state
+        stream_vals: dict[str, Any] = dict(pre_vals)
         try:
             for pass_idx in range(2):
                 async for update in graph.astream(stream_input, config, stream_mode="updates"):
@@ -809,6 +872,7 @@ async def stream_run_events(
                                             continue
                                         last_text_delta = text
                                         await emit({"type": "text_replace", "data": {"text": text}})
+                            await _emit_journey_trace_for_presentation(emit, stream_vals, delta)
                             explore = delta.get("explore_summary")
                             if isinstance(explore, dict):
                                 await emit({"type": "explore", "data": explore})
@@ -892,6 +956,8 @@ async def stream_run_events(
                 hint = phase_hint_event(phase=phase_str, gate_node=gate)
                 if hint:
                     await emit(hint)
+                emit_vals = _sync_journey_trace(post_vals)
+                await emit_journey_update(emit, emit_vals)
                 await emit(
                     interrupt_event_payload(
                         next_nodes=post_next,
@@ -921,6 +987,8 @@ async def stream_run_events(
             post_presentation = post_vals.get("presentation")
             if isinstance(post_presentation, dict):
                 done_payload["presentation"] = post_presentation
+            emit_vals = _sync_journey_trace(post_vals)
+            await emit_journey_update(emit, emit_vals)
             await emit({"type": "done", "data": done_payload})
         except AgentToolError as exc:
             record_stream_error(exc.error["error_type"])

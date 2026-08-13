@@ -427,4 +427,11 @@ def build_presentation_envelope(
             "message": "确认全部定稿",
         }
 
+    from app.graph.product_visual_v2.journey_trace import merge_journey_trace
+
+    state["journey_trace"] = merge_journey_trace(
+        state.get("journey_trace"),
+        state,
+        phase=phase,
+    )
     return envelope

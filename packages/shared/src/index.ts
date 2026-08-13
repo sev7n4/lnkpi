@@ -18,6 +18,7 @@ export * from './agentContract'
 export * from './sidebarAttachments'
 export * from './agentIntent'
 export * from './promptContent'
+export * from './journeyTrace'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
@@ -267,6 +268,8 @@ export interface AgentChatMessage {
   attachments?: string
   /** JSON: LinkedCanvasOutput[] — assistant turn canvas outputs for relocation */
   linkedOutputs?: string
+  /** JSON: AgentMessageMetadata */
+  metadata?: string
   createdAt: string
 }
 

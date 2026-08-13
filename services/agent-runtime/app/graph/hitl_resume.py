@@ -56,6 +56,8 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "macro_scheme_decision": None,
     "shot_manifest": None,
     "visual_intent": None,
+    "presentation": None,
+    "journey_trace": None,
 }
 
 

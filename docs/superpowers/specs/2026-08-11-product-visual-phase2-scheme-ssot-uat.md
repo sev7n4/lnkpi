@@ -8,7 +8,7 @@
 
 | 字段 | 值 |
 |------|-----|
-| 文档版本 | v1.4 |
+| 文档版本 | v1.6 |
 | 验收对象 | `flow_mode: product_visual` + `product_visual_scheme_v2=true` |
 | 验收方式 | **真实浏览器** + 真实/预发环境；以 **用户可见行为** 为准 |
 | 体验规格 | [2026-08-11-agent-conversation-ux-product-visual-design.md](./2026-08-11-agent-conversation-ux-product-visual-design.md) |
@@ -432,6 +432,51 @@
 
 **Sign-off 结论：** G8 ✅ · G9 ✅（UX-PV-07 非阻塞）· G10 ✅ — **v2.1~v2.3 浏览器 Sign-off 通过**
 
+### 10.9 大闸蟹 Listing 全流程 E2E（2026-08-13，#236 部署后）
+
+**环境：** 生产 `http://119.29.173.89:8888` · 资产库「大闸蟹实拍」· 脚本 `deploy/prod-crab-listing-e2e-audit.py`  
+**话术：** 6 类电商用图（主图/详情/模特/海报/细节/物流）+ 价格产地卖点 · **单选方案 A**  
+**审计：** `deploy/prod-crab-listing-audit-v4.json` · **status=done** · 约 2m48s · 门控 macro → topo → delivery → done
+
+| 修复项 | 结果 | 观察 |
+|--------|------|------|
+| P0 shot>8 硬失败 | ✅ | 拆解 **6** 构图（非 11）；合并 topo 正常，无 `macro 'A' has 11 shots` |
+| P0 dialog_draft 解析失败 | ✅ | 宏观方案 A/B/C 正常生成，未出现 `dialog_draft_parse_failed` |
+| P0 裸 `流程结束.{code}` | ✅ | 完成态 headline 人话化，无 error code 外露 |
+| P1 `__macro_*__` 泄漏 | ✅ | 服务端入库前过滤 machine payload（脚本 step2/4 仍发 machine，UI 应不可见） |
+| P1 QA pass 识图理解 | ✅ | `imageQaMetrics.product_summary` 含大闸蟹白底描述 |
+| P1 6 类图 shot 上限提示 | ⚠️ | 提取 5 个 label（≤8），未触发 `callout_shot_limit`；6 构图在上限内 |
+| P2 context_recap 人话化 | ✅ | `电商 Listing 出图`（非 `packaging_design`） |
+| P2 Listing 路由 | ✅ | `visualIntent.primary_goal=mixed_ecommerce` |
+| P2 done stepper | ✅ | presentation stepper `current=done`，交付清单表 + 基础资产 |
+
+| UAT-ID | 结果 | 备注 |
+|--------|------|------|
+| UX-PV-01 | ✅ Pass | 识图 pass + product_summary；无「格式异常」 |
+| UX-PV-02 | ✅ Pass | 合并门控「确认构图并开始出图」 |
+| UX-PV-03 | ⚠️ Partial | 单选 A 无 A+B footer；6 场景 topo 提示正确 |
+| UX-PV-04~06 | ✅ Pass | context_recap 人话；topo 卡片 6 场景 |
+| UX-PV-07 | ⚠️ Partial | 出图成功；SSE 进度有重复行 |
+| UX-PV-08 | ✅ Pass | 定稿分组为用户原话 + `[方案A]` |
+| UX-PV-09 | ✅ Pass | headline「✅ 您的电商 Listing 出图视觉稿已就绪」+ 清单表 |
+| UX-PV-10~11 | ✅ Pass | 3 硬停 + 无 machine 气泡（#236 服务端过滤） |
+
+**对比 v2（#235 前）：** v2 在 QA 后 `dialog_draft_parse_failed` 中断；v3（#236 部署前）首步即 `done` 无门控；**v4 全流程 Pass**。
+
+### 10.10 九步旅程 Trace（Journey Trace UAT）
+
+> 来源：[2026-08-13-product-visual-journey-trace-design.md](./2026-08-13-product-visual-journey-trace-design.md)  
+> **验收方式：** 侧栏 **「执行过程」** 折叠块展开后可见九步旅程骨架；Live 与历史 thread **同源数据**。
+
+| UAT-ID | 场景 | Pass 标准（用户可见 / 脚本断言） |
+|--------|------|----------------------------------|
+| UAT-JT-01 | Live 全流程 | 展开 Trace 见 **九步骨架**；当前步 **高亮**（`running`），已完成步 **划线** |
+| UAT-JT-02 | 宏观确认 A+B | 第 3 步（宏观选择）含 **人话 summary** + **只读卡片** snapshot（已选 A/B 方案名） |
+| UAT-JT-03 | 刷新/切 thread | 刷新页面或切换 thread 再进入：九步旅程 **完整可回放**，无需重跑 graph |
+| UAT-JT-04 | E2E v5 audit | `deploy/prod-crab-listing-e2e-audit.py` v5 输出：`journeyTrace.steps.length === 9` |
+
+**推荐路径：** CVS-02-AB 口语 · A+B 双选（与 §10.8 同环境）；E2E 见 `deploy/prod-crab-listing-audit-v5.json`。
+
 ---
 
 ## 十一、文档维护
@@ -449,6 +494,8 @@
 
 | 日期 | 版本 | 说明 |
 |------|------|------|
+| 2026-08-13 | v1.6 | §10.10 九步旅程 Trace UAT（UAT-JT-01~04） |
+| 2026-08-13 | v1.5 | §10.9 大闸蟹 Listing E2E（#236 P0-P2 UX 修复 + v4 审计） |
 | 2026-08-12 | v1.4 | §10.8 浏览器完整 Sign-off（#227+#228 部署后新建对话） |
 | 2026-08-12 | v1.3 | §10.6 生产 UAT 记录 + #226 修复项追踪 |
 | 2026-08-12 | v1.2 | §10.5 闭环补项追踪；链至中断改意图规格 |

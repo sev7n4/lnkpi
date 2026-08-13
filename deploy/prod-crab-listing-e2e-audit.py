@@ -31,6 +31,7 @@ MACRO_PREFIX = "__macro_scheme_decision__"
 DELIVERY_PREFIX = "__delivery_decision__"
 
 audit: dict[str, Any] = {"steps": [], "gates_seen": [], "issues": []}
+last_journey_snapshot: dict[str, Any] | None = None
 
 
 def http(m: str, p: str, b: dict | None = None, t: str | None = None) -> Any:
@@ -182,6 +183,49 @@ def gate_reply(ts: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_last_journey_snapshot(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    snap: dict[str, Any] | None = None
+    for ev in events:
+        if ev.get("type") != "journey_update":
+            continue
+        data = ev.get("data")
+        if not isinstance(data, dict):
+            continue
+        candidate = data.get("snapshot")
+        if isinstance(candidate, dict):
+            snap = candidate
+    return snap
+
+
+def absorb_journey_updates(events: list[dict[str, Any]]) -> None:
+    global last_journey_snapshot
+    snap = extract_last_journey_snapshot(events)
+    if snap is not None:
+        last_journey_snapshot = snap
+
+
+def resolve_journey_trace(final_thread_state: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    if last_journey_snapshot is not None:
+        return last_journey_snapshot, "sse"
+    ts_snap = final_thread_state.get("journeyTrace")
+    if isinstance(ts_snap, dict):
+        return ts_snap, "thread_state"
+    return None, None
+
+
+def assert_journey_trace(audit_doc: dict[str, Any]) -> None:
+    jt = audit_doc.get("journeyTrace")
+    if not jt:
+        final = audit_doc.get("finalThreadState") or audit_doc.get("final_thread_state") or {}
+        jt = final.get("journeyTrace")
+    assert jt, "missing journeyTrace"
+    assert len(jt.get("steps", [])) == 9
+    assert jt.get("current") == "done"
+    macro = next(s for s in jt["steps"] if s["id"] == "macro_select")
+    assert macro.get("status") in ("done", "skipped")
+    assert macro.get("summary")
+
+
 def record_step(step: int, msg: str, sse: dict[str, Any], ts: dict[str, Any]) -> None:
     pres_events = [
         e.get("data") for e in sse.get("events", [])
@@ -249,6 +293,7 @@ def main() -> int:
     while time.time() < deadline:
         step += 1
         sse = sse_turn(tok, sid, tid, msg, attachments=attachments, skill_id=skill_id)
+        absorb_journey_updates(sse.get("events") or [])
         attachments = None
         skill_id = None
         ts = thread_state(tok, tid)
@@ -287,12 +332,59 @@ def main() -> int:
     audit["final_thread_state"] = thread_state(tok, tid)
     audit["messages"] = agent_messages(tok, sid, tid)
 
+    journey_trace, journey_source = resolve_journey_trace(audit["final_thread_state"])
+    if journey_trace is not None:
+        audit["journeyTrace"] = journey_trace
+    if journey_source:
+        audit["journeyTraceSource"] = journey_source
+
+    journey_ok = False
+    if audit.get("status") == "done":
+        try:
+            assert_journey_trace(audit)
+            journey_ok = True
+            audit["journeyTraceOk"] = True
+            jt = audit.get("journeyTrace") or {}
+            print(
+                f"journeyTrace ok: steps={len(jt.get('steps', []))} "
+                f"current={jt.get('current')} source={journey_source}",
+                flush=True,
+            )
+        except AssertionError as exc:
+            audit["journeyTraceOk"] = False
+            audit["issues"].append(f"journeyTrace: {exc}")
+            print(f"journeyTrace assertion failed: {exc}", flush=True)
+
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUT_PATH.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\nAudit saved: {OUT_PATH}", flush=True)
     print(f"status={audit.get('status')} gates={audit.get('gates_seen')}", flush=True)
-    return 0 if audit.get("status") == "done" else 1
+    if audit.get("status") == "done":
+        return 0 if journey_ok else 1
+    return 1
+
+
+def _self_test_assert_journey_trace() -> None:
+    step_ids = [
+        "image_qa",
+        "scheme_draft",
+        "macro_select",
+        "ssot_persist",
+        "shot_plan",
+        "topo_preview",
+        "generating",
+        "delivery",
+        "done",
+    ]
+    steps = [{"id": sid, "status": "done"} for sid in step_ids]
+    steps[2]["summary"] = "已选：湖鲜原境风"
+    mock = {"journeyTrace": {"current": "done", "steps": steps}}
+    assert_journey_trace(mock)
 
 
 if __name__ == "__main__":
+    if os.environ.get("AUDIT_SELF_TEST") == "1":
+        _self_test_assert_journey_trace()
+        print("assert_journey_trace self-test passed", flush=True)
+        raise SystemExit(0)
     raise SystemExit(main())
