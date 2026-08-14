@@ -12,6 +12,23 @@ describe('mergeCanvasNodesFromServer', () => {
     expect(merged[0].data?.status).toBe('completed')
   })
 
+  it('preserves generationStartedAt while server node is generating', () => {
+    const merged = mergeCanvasNodesFromServer(
+      [{ id: 'v1', data: { status: 'draft' } }],
+      [{
+        id: 'v1',
+        data: {
+          status: 'generating',
+          generationRecordId: 'rec-1',
+          generationStartedAt: '2026-08-14T12:00:00.000Z',
+        },
+      }],
+    )
+    expect(merged[0].data?.status).toBe('generating')
+    expect(merged[0].data?.generationRecordId).toBe('rec-1')
+    expect(merged[0].data?.generationStartedAt).toBe('2026-08-14T12:00:00.000Z')
+  })
+
   it('appends server-only nodes', () => {
     const merged = mergeCanvasNodesFromServer(
       [{ id: 'a', data: {} }],

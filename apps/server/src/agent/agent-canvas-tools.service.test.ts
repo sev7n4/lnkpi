@@ -5,6 +5,7 @@ import { Test } from '@nestjs/testing'
 import type { CanvasData } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService } from '../studio/studio.service'
+import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 
@@ -184,6 +185,7 @@ describe('AgentCanvasToolsService', () => {
             listGenerations,
           },
         },
+        VideoGenerationOrchestrator,
         {
           provide: MaterialService,
           useValue: {
@@ -452,11 +454,12 @@ describe('AgentCanvasToolsService', () => {
       'center',
       undefined,
       { sessionId: 's1', nodeId: 'vid-1' },
-      undefined,
+      'text_to_video',
       undefined,
     )
     expect(result.status).toBe('completed')
     expect(result.url).toBe('https://cdn.example/vid.mp4')
+    expect(result.generationRecordId).toBe('gen-v1')
     expect(canvas.nodes[0].data.url).toBe('https://cdn.example/vid.mp4')
   })
 
@@ -498,7 +501,7 @@ describe('AgentCanvasToolsService', () => {
       'center',
       'https://example.com/node-ref.png',
       { sessionId: 's1', nodeId: 'vid-1' },
-      undefined,
+      'text_to_video',
       undefined,
     )
   })

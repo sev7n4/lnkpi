@@ -417,6 +417,27 @@ class NestEventProxy:
     async def run_video_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_video_generation")
 
+    async def start_video_generation(self, node_id: str) -> dict[str, Any]:
+        await self._emit(
+            {"type": "node_status", "data": {"nodeId": node_id, "status": "generating"}}
+        )
+        return await self._forward_actions(await self._inner.start_video_generation(node_id))
+
+    async def wait_video_generation(
+        self, node_id: str, generation_record_id: str
+    ) -> dict[str, Any]:
+        result = await self._forward_actions(
+            await self._inner.wait_video_generation(node_id, generation_record_id)
+        )
+        status = str(result.get("status") or "completed")
+        payload: dict[str, Any] = {"nodeId": node_id, "status": status}
+        if result.get("url"):
+            payload["url"] = result["url"]
+        if result.get("generationRecordId"):
+            payload["generationRecordId"] = result["generationRecordId"]
+        await self._emit({"type": "node_status", "data": payload})
+        return result
+
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:
         return await self._run_studio_generation(node_id, "run_text_generation")
 

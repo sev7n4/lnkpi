@@ -19,6 +19,8 @@ export * from './sidebarAttachments'
 export * from './agentIntent'
 export * from './promptContent'
 export * from './journeyTrace'
+export * from './videoGeneration/types'
+export { resolveCanonicalVideoRequest } from './videoGeneration/resolveCanonicalVideoRequest'
 
 export type GenerationType = 'text' | 'image' | 'video'
 

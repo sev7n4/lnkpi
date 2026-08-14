@@ -22,6 +22,7 @@ vi.mock('@/services/studio-api', () => ({
   studioApi: {
     generateImage: vi.fn(),
     generateVideo: vi.fn(),
+    startVideoGeneration: vi.fn(),
     generateAudio: vi.fn(),
     generateText: vi.fn(),
     generatePrompt: vi.fn(),

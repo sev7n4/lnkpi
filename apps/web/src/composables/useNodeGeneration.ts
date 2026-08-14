@@ -739,7 +739,7 @@ async function cancelRemoteGeneration(nodeId: string) {
 
     const settings = data.videoSettings as VideoSettings | undefined
     const videoMode = data.videoMode as string | undefined
-    const { data: res } = await studioApi.generateVideo(
+    const { data: res } = await studioApi.startVideoGeneration(
       prompt,
       resolveGenerationModel('video', data.videoModel as string | undefined),
       settings?.duration,
@@ -755,9 +755,14 @@ async function cancelRemoteGeneration(nodeId: string) {
       settings?.generateAudio,
     )
     if (signal?.aborted) return
+    const startedAt =
+      typeof res.data.generationStartedAt === 'string'
+        ? res.data.generationStartedAt
+        : startedAtPatch().generationStartedAt
     deps.patchNodeData(node.id, {
       referenceImageUrl: refImage || undefined,
       generationRecordId: res.data.id,
+      generationStartedAt: startedAt,
     })
     await resolveStudioRecord(node.id, res.data)
   }
