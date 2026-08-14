@@ -113,11 +113,11 @@ function saveToLibrary() {
     >
       <div
         v-if="data.url"
-        class="neo-gen-preview nodrag"
+        class="neo-gen-preview"
         title="双击预览大图"
         @dblclick.stop="openPreview"
       >
-        <img :src="displayUrl" alt="" draggable="false">
+        <img :src="displayUrl" alt="" class="pointer-events-none" draggable="false">
         <button
           type="button"
           class="neo-gen-image-preview-btn nodrag"
@@ -173,7 +173,9 @@ function saveToLibrary() {
         </button>
         <button
           type="button"
-          class="absolute bottom-1.5 right-1.5 rounded-xl border-none bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-black/85"
+          class="absolute bottom-1.5 right-1.5 rounded-xl border-none bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-black/85 nodrag"
+          @pointerdown.stop
+          @mousedown.stop
           @click.stop="openEdit"
         >
           编辑
