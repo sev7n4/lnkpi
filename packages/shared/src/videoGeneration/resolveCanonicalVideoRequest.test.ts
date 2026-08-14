@@ -1,5 +1,6 @@
 /** @vitest-environment node */
 import { describe, expect, it } from 'vitest'
+import type { CanvasData } from '../index'
 import { resolveCanonicalVideoRequest } from './resolveCanonicalVideoRequest'
 
 const IMG = 'https://cdn.example/ref.png'
@@ -77,6 +78,73 @@ describe('resolveCanonicalVideoRequest', () => {
     })
     expect(req.refs[0].url).toBe(IMG)
     expect(req.mentionedKeys).toEqual(['I1'])
+  })
+
+  it('path3b: campaign mediaInput edge → same canonical url as localRefs', () => {
+    const localReq = resolveCanonicalVideoRequest({
+      node: {
+        ...baseVideoNode,
+        data: {
+          ...baseVideoNode.data,
+          localRefs: [
+            { id: 'a1', mediaType: 'image', sourceKind: 'upload', label: '图', url: IMG },
+          ],
+        },
+      },
+      canvas: { nodes: [baseVideoNode], edges: [] },
+    })
+    const edgeReq = resolveCanonicalVideoRequest({
+      node: baseVideoNode,
+      canvas: {
+        nodes: [
+          baseVideoNode,
+          {
+            id: 'm1',
+            type: 'mediaInput',
+            position: { x: 0, y: 0 },
+            data: { url: IMG, mediaKind: 'image' },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'm1', target: 'v1' }],
+      } as CanvasData,
+    })
+    expect(edgeReq.refs[0].url).toBe(IMG)
+    expect(edgeReq.refs.map((r) => r.url)).toEqual(localReq.refs.map((r) => r.url))
+    expect(edgeReq.videoMode).toBe(localReq.videoMode)
+  })
+
+  it('path3c: seed image localRefs (campaign target) → same I1 url', () => {
+    const imageSeed = {
+      id: 'seed-1',
+      type: 'image' as const,
+      position: { x: 0, y: 0 },
+      data: {
+        localRefs: [
+          { id: 'brand', mediaType: 'image', sourceKind: 'upload', label: 'brand.jpg', url: IMG },
+        ],
+      },
+    }
+    const req = resolveCanonicalVideoRequest({
+      node: {
+        id: 'v1',
+        type: 'video',
+        position: { x: 280, y: 0 },
+        data: { prompt: '产品展示', videoSettings: { duration: 15 } },
+      },
+      canvas: {
+        nodes: [
+          imageSeed,
+          {
+            id: 'v1',
+            type: 'video',
+            position: { x: 280, y: 0 },
+            data: { prompt: '产品展示', videoSettings: { duration: 15 } },
+          },
+        ],
+        edges: [{ id: 'e1', source: 'seed-1', target: 'v1' }],
+      },
+    })
+    expect(req.refs[0].url).toBe(IMG)
   })
 
   it('falls back to account defaults for missing videoSettings', () => {

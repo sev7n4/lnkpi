@@ -1,4 +1,4 @@
-"""Campaign sidebar attachments are materialized as visible canvas references."""
+"""Campaign sidebar attachments use localRefs on seed nodes (U-I2V Wave 2b)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class FakeNest:
                 },
             )
         )
-        return {"sourceNodeIds": ["media-brand"]}
+        return {"sourceNodeIds": []}
 
     async def attach_refs(self, node_id: str, ref_order: list[str]) -> dict[str, Any]:
         self.calls.append(("attach_refs", {"node_id": node_id, "ref_order": ref_order}))
@@ -40,7 +40,7 @@ class FakeNest:
 
 
 @pytest.mark.asyncio
-async def test_campaign_apply_attaches_sidebar_sources_to_seed_node():
+async def test_campaign_apply_writes_local_refs_on_seed_node():
     nest = FakeNest()
     apply_sidebar_refs = make_apply_sidebar_refs_node(nest=nest)
     attachments = [
@@ -77,10 +77,9 @@ async def test_campaign_apply_attaches_sidebar_sources_to_seed_node():
                 "node_ids": ["image-seed"],
                 "attachments": attachments,
                 "ref_order": ["brand"],
-                "mode": "attach_edges",
+                "mode": "localRefs",
             },
         ),
-        ("attach_refs", {"node_id": "image-seed", "ref_order": ["media-brand"]}),
     ]
 
 

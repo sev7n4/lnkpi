@@ -67,6 +67,21 @@ function resolveUrlPayload(data: Record<string, unknown>): string {
   return trimString(data.url)
 }
 
+function resolveImageUrlFromNode(data: Record<string, unknown>): string {
+  const direct = resolveUrlPayload(data)
+  if (direct) return direct
+  const localRefs = data.localRefs
+  if (!Array.isArray(localRefs)) return ''
+  for (const item of localRefs) {
+    if (!item || typeof item !== 'object') continue
+    const binding = item as LocalRefBinding
+    if (binding.mediaType !== 'image') continue
+    const url = trimString(binding.url)
+    if (url) return url
+  }
+  return ''
+}
+
 function resolveEdgeRef(
   edge: { id: string; source: string; target: string },
   sourceNode: { id: string; type?: string; data?: Record<string, unknown> },
@@ -91,7 +106,7 @@ function resolveEdgeRef(
   }
 
   if (type === 'image' || type === 'mediaInput') {
-    const url = resolveUrlPayload(data)
+    const url = resolveImageUrlFromNode(data)
     return {
       refId,
       mediaType: 'image',

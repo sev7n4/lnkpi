@@ -86,12 +86,8 @@ async def _apply_sidebar_to_seed(nest: Any, state: dict, seed_node_id: str) -> N
         node_ids=[seed_node_id],
         attachments=attachments,
         ref_order=state.get("sidebar_ref_order"),
-        mode="attach_edges",
+        mode="localRefs",
     )
-    source_ids = result.get("sourceNodeIds") or []
-    attach_fn = getattr(nest, "attach_refs", None)
-    if source_ids and attach_fn is not None:
-        await attach_fn(seed_node_id, [str(node_id) for node_id in source_ids])
 
 
 def _is_gen_success(result: Any) -> bool:

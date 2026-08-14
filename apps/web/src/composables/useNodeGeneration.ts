@@ -748,7 +748,7 @@ async function cancelRemoteGeneration(nodeId: string) {
       mentionedKeys,
       settings?.resolution,
       settings?.crop,
-      refImage || undefined,
+      undefined,
       signal,
       canvasScope(node.id),
       videoMode,
@@ -760,7 +760,6 @@ async function cancelRemoteGeneration(nodeId: string) {
         ? res.data.generationStartedAt
         : startedAtPatch().generationStartedAt
     deps.patchNodeData(node.id, {
-      referenceImageUrl: refImage || undefined,
       generationRecordId: res.data.id,
       generationStartedAt: startedAt,
     })

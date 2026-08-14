@@ -84,12 +84,8 @@ watch(() => props.node, syncFromNode, { immediate: true, deep: true })
 watch(
   () => props.upstream,
   (ctx) => {
-    if (!referenceImageUrl.value.trim() && ctx.referenceImageUrl) {
-      referenceImageUrl.value = ctx.referenceImageUrl
-      emit('patch', { referenceImageUrl: ctx.referenceImageUrl })
-    }
-    if (!props.node.data?.videoMode) {
-      videoMode.value = ctx.referenceImageUrl ? 'image_to_video' : videoMode.value
+    if (!props.node.data?.videoMode && ctx.referenceImageUrl) {
+      videoMode.value = 'image_to_video'
     }
   },
   { immediate: true, deep: true },
@@ -115,8 +111,6 @@ function onGenerate() {
     videoModel: videoModel.value,
     videoSettings: { ...videoSettings.value },
     videoMode: videoMode.value,
-    referenceImageUrl:
-      videoMode.value === 'image_to_video' ? (effectiveRefUrl.value || undefined) : undefined,
   })
   emit('generate')
 }
@@ -126,7 +120,15 @@ function continueFromLastFrame() {
   if (!url) return
   referenceImageUrl.value = url
   videoMode.value = 'image_to_video'
-  emit('patch', { referenceImageUrl: url, videoMode: 'image_to_video' })
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('last-frame'),
+    mediaType: 'image',
+    sourceKind: 'upload',
+    label: '上一镜末帧',
+    url,
+  }
+  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+  emit('patch', { localRefs: [...prev, binding], videoMode: 'image_to_video' })
 }
 
 function toggleVoice() {
@@ -182,7 +184,6 @@ async function onRefFileChange(event: Event) {
     const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
     emit('patch', {
       localRefs: [...prev, binding],
-      referenceImageUrl: url,
       videoMode: 'image_to_video',
     })
   } catch (err) {
@@ -198,7 +199,11 @@ async function onRefFileChange(event: Event) {
 function clearReferenceImage() {
   referenceImageUrl.value = ''
   videoMode.value = 'text_to_video'
-  emit('patch', { referenceImageUrl: '', videoMode: 'text_to_video' })
+  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
+  emit('patch', {
+    localRefs: prev.filter((r) => r.mediaType !== 'image'),
+    videoMode: 'text_to_video',
+  })
 }
 
 function onRefReorder(refIds: string[]) {
