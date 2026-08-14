@@ -1,3 +1,5 @@
+"""Campaign sidebar attachments — seed nodes use localRefs (U-I2V Wave 2b)."""
+
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -49,16 +51,12 @@ def make_apply_sidebar_refs_node(*, nest: Any) -> Callable:
                 )
             return {}
 
-        result = await apply_fn(
+        await apply_fn(
             node_ids=[target_id],
             attachments=attachments,
             ref_order=state.get("sidebar_ref_order"),
-            mode="attach_edges",
+            mode="localRefs",
         )
-        source_ids = result.get("sourceNodeIds") or []
-        attach_fn = getattr(nest, "attach_refs", None)
-        if source_ids and attach_fn is not None:
-            await attach_fn(target_id, [str(node_id) for node_id in source_ids])
         return {}
 
     return apply_sidebar_refs

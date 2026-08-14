@@ -383,20 +383,22 @@ def verify_campaign_attach_edges(tok: str) -> None:
 
     canvas = canvas_data(tok, sid)
     nodes = canvas.get("nodes") or []
-    media_inputs = [n for n in nodes if n.get("type") == "mediaInput"]
-    seed_node, media_sources = _seed_image_with_media_edges(canvas)
-    ref_url_ok = any(
-        str((n.get("data") or {}).get("url") or "") == MOCK_REF_URL for n in media_inputs
+    seed_node = next(
+        (
+            n
+            for n in nodes
+            if n.get("type") == "image"
+            and any(str((r or {}).get("url") or "") == MOCK_REF_URL for r in ((n.get("data") or {}).get("localRefs") or []) if isinstance(r, dict))
+        ),
+        None,
     )
+    seed_data = (seed_node or {}).get("data") or {}
+    local_refs = seed_data.get("localRefs") or []
+    ref_url_ok = any(str(r.get("url") or "") == MOCK_REF_URL for r in local_refs if isinstance(r, dict))
     record(
-        "campaign mediaInput materialized",
-        len(media_inputs) >= 1 and ref_url_ok,
-        f"mediaInput={len(media_inputs)} exit1={exit1}",
-    )
-    record(
-        "campaign seed image has ref edges",
-        seed_node is not None and len(media_sources) >= 1,
-        f"seed={seed_node.get('id') if seed_node else None} sources={media_sources[:3]}",
+        "campaign seed image localRefs",
+        seed_node is not None and len(local_refs) >= 1 and ref_url_ok,
+        f"seed={seed_node.get('id') if seed_node else None} refs={len(local_refs)} exit1={exit1}",
     )
 
 

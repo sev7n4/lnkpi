@@ -701,6 +701,36 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('canvas video start does not patch referenceImageUrl', async () => {
+    const node = createNode('video', {
+      prompt: 'motion',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+      localRefs: [
+        { id: 'r1', mediaType: 'image', sourceKind: 'upload', label: 'ref', url: 'https://example.com/ref.png' },
+      ],
+    })
+    const { api, deps } = createDeps([node])
+    vi.mocked(studioApi.startVideoGeneration).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'video',
+          id: 'rec-video-1',
+          status: 'generating',
+          generationStartedAt: '2026-08-14T12:00:00.000Z',
+        },
+      }),
+    )
+
+    await api.generateForNode(node)
+
+    expect(studioApi.startVideoGeneration).toHaveBeenCalled()
+    const patchCalls = vi.mocked(deps.patchNodeData).mock.calls
+    const finalPatch = patchCalls[patchCalls.length - 1]?.[1] as Record<string, unknown> | undefined
+    expect(finalPatch?.referenceImageUrl).toBeUndefined()
+    expect(finalPatch?.generationRecordId).toBe('rec-video-1')
+  })
+
   it('passes shot-linked video child params to canvasApi.generateVideo', async () => {
     const shot = createNode('shot', { title: 'Shot', prompt: 'motion' }, 'shot-1')
     const video = createNode('video', {

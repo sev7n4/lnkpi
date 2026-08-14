@@ -1559,7 +1559,7 @@ function previewPatchForLocalRef(
   url: string,
 ): Record<string, unknown> {
   if (mediaType === 'image' && nodeType === 'image') return { url, status: 'completed' }
-  if (mediaType === 'image' && nodeType === 'video') return { referenceImageUrl: url }
+  if (mediaType === 'image' && nodeType === 'video') return { videoMode: 'image_to_video' }
   if (mediaType === 'video' && nodeType === 'video') return { url, status: 'completed' }
   if (mediaType === 'audio' && nodeType === 'audio') return { url, status: 'completed' }
   // audio → video：仅作引用芯片，不覆盖成片 url

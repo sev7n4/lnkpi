@@ -10,7 +10,8 @@
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r --if-present test",
-    "verify-contract": "npx tsx scripts/verify-contract.ts"
+    "verify-contract": "npx tsx scripts/verify-contract.ts",
+    "verify-u-i2v-phase3": "npx tsx scripts/verify-u-i2v-phase3.ts"
   },
   "devDependencies": {
     "tsx": "^4.7.0",

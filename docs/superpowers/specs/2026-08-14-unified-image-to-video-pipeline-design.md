@@ -1,7 +1,7 @@
 # 统一图生视频管线（Unified I2V Pipeline）产品与技术规格
 
-> 状态：**规格已定 / 待开发**  
-> 日期：2026-08-14  
+> 状态：**P0–P2 已上线（PR #246）· P3/Wave 1–2 进行中**  
+> 日期：2026-08-14 · 更新：2026-08-14  
 > 范围：将画布三种图生视频入口（节点内引图、上游连线、Agent 侧栏芯片）收敛为 **同一套语义模型 + 同一套 async 生成编排**；新增显式中间层 `RefBinding → CanonicalRefs → VideoGenerationOrchestrator`  
 > 前置：`2026-07-18-node-data-flow-refs-design.md`（refs SSOT）、`2026-08-08-seedance-agnes-video-adapter-design.md`（provider adapter）、`fix/agent-video-generation-polling` 分支热修（start/wait 拆分 + 660s 轮询）  
 > 后续：Campaign `attach_edges` 收敛（Phase 2）、`referenceImageUrl` 字段退役（Phase 3）
@@ -339,7 +339,7 @@ Internal 与 Studio 公开 API **共用** 同一 Orchestrator 实例。
 | 阶段 | atomic-create | campaign |
 |---|---|---|
 | Phase 1 | `localRefs` | 保持 `attach_edges` |
-| Phase 2 | — | 评估迁移至 `localRefs` 或统一 `attach_edges` + 文档化 |
+| Phase 2 | — | ✅ 迁移至 `localRefs`（Wave 2b） |
 
 ---
 
@@ -409,10 +409,11 @@ Internal 与 Studio 公开 API **共用** 同一 Orchestrator 实例。
 
 | Phase | 内容 | 产出 |
 |---|---|---|
-| **P0 热修** | start/wait split、660s poll、recordId、startedAt merge | ✅ 分支 `fix/agent-video-generation-polling` |
-| **P1 Orchestrator** | 抽出 `VideoGenerationOrchestrator` + `resolveCanonicalVideoRequest` | ✅ 本分支 |
-| **P2 画布接入** | `studio/video/start` + web 改 async | ✅ 本分支 |
-| **P3 清理** | 停写 `referenceImageUrl`；deprecated 一站式 generateVideo | 文档 + lint 规则 |
+| **P0 热修** | start/wait split、660s poll、recordId、startedAt merge | ✅ PR #246 |
+| **P1 Orchestrator** | 抽出 `VideoGenerationOrchestrator` + `resolveCanonicalVideoRequest` | ✅ PR #246 |
+| **P2 画布接入** | `studio/video/start` + web 改 async | ✅ PR #246 |
+| **P3 清理** | 停写 `referenceImageUrl`；deprecated 一站式 generateVideo | 🚧 Wave 1 |
+| **Phase 2 Campaign** | `attach_edges` → `localRefs` 收敛 | 🚧 Wave 2 |
 
 ---
 
