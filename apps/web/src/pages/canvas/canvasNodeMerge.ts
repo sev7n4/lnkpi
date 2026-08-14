@@ -32,6 +32,9 @@ export function mergeCanvasNodesFromServer<T extends MergeNode>(
     if (!sUrl && sd.status === 'generating') {
       ld.status = 'generating'
       if (sd.generationRecordId != null) ld.generationRecordId = sd.generationRecordId
+      if (typeof sd.generationStartedAt === 'string' && sd.generationStartedAt) {
+        ld.generationStartedAt = sd.generationStartedAt
+      }
     }
     return { ...ln, data: ld }
   })

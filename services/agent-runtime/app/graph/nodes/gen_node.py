@@ -126,16 +126,37 @@ def make_gen_node(*, nest: Any) -> Callable:
                     await attach(str(node_id), ref_order)
 
                 if kind == "video":
-                    run = getattr(nest, "run_video_generation", None)
-                    if run is None:
-                        await _emit_task_update(
-                            nest, id=key, status="failed", errorCode="video_not_supported"
-                        )
-                        return {
-                            "gen_failed_keys": [key],
-                            "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": "video_not_supported"}},
-                        }
-                    result = await run(str(node_id))
+                    start_fn = getattr(nest, "start_video_generation", None)
+                    wait_fn = getattr(nest, "wait_video_generation", None)
+                    if start_fn is not None and wait_fn is not None:
+                        started = await start_fn(str(node_id))
+                        record_id = _result_record_id(started)
+                        if record_id:
+                            last_record_id = record_id
+                            await _emit_task_update(
+                                nest,
+                                id=key,
+                                status="running",
+                                recordId=record_id,
+                                attempt=attempt,
+                                maxAttempts=retries,
+                            )
+                            result = await wait_fn(str(node_id), record_id)
+                            if not _result_record_id(result):
+                                result = {**result, "generationRecordId": record_id}
+                        else:
+                            result = started
+                    else:
+                        run = getattr(nest, "run_video_generation", None)
+                        if run is None:
+                            await _emit_task_update(
+                                nest, id=key, status="failed", errorCode="video_not_supported"
+                            )
+                            return {
+                                "gen_failed_keys": [key],
+                                "gen_fail_details": {key: {"node_id": node_id, "title": title, "reason": "video_not_supported"}},
+                            }
+                        result = await run(str(node_id))
                 else:
                     start_fn = getattr(nest, "start_image_generation", None)
                     if start_fn is not None:

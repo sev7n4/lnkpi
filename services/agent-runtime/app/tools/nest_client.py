@@ -29,9 +29,15 @@ _LONG_GEN_PATHS = frozenset({
     "/agent/internal/run-image-generation",
     "/agent/internal/wait-image-generation",
     "/agent/internal/run-video-generation",
+    "/agent/internal/wait-video-generation",
     "/agent/internal/run-text-generation",
     "/agent/internal/run-prompt-generation",
     "/agent/internal/run-audio-generation",
+})
+
+_VIDEO_GEN_PATHS = frozenset({
+    "/agent/internal/run-video-generation",
+    "/agent/internal/wait-video-generation",
 })
 
 
@@ -46,6 +52,8 @@ def _tool_name_from_path(path: str) -> str:
 def _default_timeout_sec(path: str) -> float:
     if path in _LOCK_PATHS:
         return float(settings.thread_lock_timeout_sec)
+    if path in _VIDEO_GEN_PATHS:
+        return float(settings.video_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
     if path in _LONG_GEN_PATHS:
         return float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
     return float(settings.canvas_tool_timeout_sec)
@@ -304,8 +312,27 @@ class NestCanvasClient:
             timeout=timeout_sec,
         )
 
+    async def start_video_generation(self, node_id: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/start-video-generation",
+            {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},
+        )
+
+    async def wait_video_generation(self, node_id: str, generation_record_id: str) -> dict[str, Any]:
+        timeout_sec = float(settings.video_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        return await self._post(
+            "/agent/internal/wait-video-generation",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeId": node_id,
+                "generationRecordId": generation_record_id,
+            },
+            timeout=timeout_sec,
+        )
+
     async def run_video_generation(self, node_id: str) -> dict[str, Any]:
-        timeout_sec = float(settings.image_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
+        timeout_sec = float(settings.video_gen_timeout_sec) + IMAGE_GEN_TIMEOUT_BUFFER_SEC
         return await self._post(
             "/agent/internal/run-video-generation",
             {"sessionId": self._session_id, "userId": self._user_id, "nodeId": node_id},

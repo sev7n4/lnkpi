@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o"
     image_gen_concurrency: int = 3
     image_gen_timeout_sec: int = 180
+    # Video upstream (Agnes) can poll up to ~600s; Nest wait must outlive server poll.
+    video_gen_timeout_sec: int = 660
     # W21: per-tool HTTP timeouts (seconds)
     canvas_tool_timeout_sec: float = 10.0
     thread_lock_timeout_sec: float = 5.0

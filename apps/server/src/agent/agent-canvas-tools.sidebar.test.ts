@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing'
 import type { CanvasData, SidebarAttachment } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { StudioService } from '../studio/studio.service'
+import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 
@@ -71,6 +72,7 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
             cancelPlatformFallback: vi.fn(),
           },
         },
+        VideoGenerationOrchestrator,
       ],
     }).compile()
     svc = moduleRef.get(AgentCanvasToolsService)

@@ -1,9 +1,13 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { createCancelFlag } from '../points/charge-session'
+import { PrismaService } from '../prisma/prisma.service'
 import { StudioService } from './studio.service'
+import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
+import { resolveVideoStartRequest, type VideoStartBody } from './video-generation-request.util'
+import type { CanvasData } from '@lnkpi/shared'
 
 class StudioRefDto {
   @IsString()
@@ -211,7 +215,20 @@ class ImageVariationDto extends CanvasScopeFields {
 
 @Controller('studio')
 export class StudioController {
-  constructor(@Inject(StudioService) private readonly studioService: StudioService) {}
+  constructor(
+    @Inject(StudioService) private readonly studioService: StudioService,
+    @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+  ) {}
+
+  private parseCanvas(raw: string | null | undefined): CanvasData {
+    if (!raw) return { nodes: [], edges: [] }
+    try {
+      return JSON.parse(raw) as CanvasData
+    } catch {
+      return { nodes: [], edges: [] }
+    }
+  }
 
   @Get('generations')
   @UseGuards(AuthGuard)
@@ -311,6 +328,49 @@ export class StudioController {
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
     )
     return { code: 0, message: 'ok', data }
+  }
+
+  @Post('video/start')
+  @UseGuards(AuthGuard)
+  async startVideoGeneration(@Req() req: { user: { sub: string } }, @Body() dto: GenerateVideoDto) {
+    let canvas: CanvasData | undefined
+    if (dto.sessionId?.trim()) {
+      const session = await this.prisma.session.findUnique({ where: { id: dto.sessionId } })
+      if (!session) throw new NotFoundException('会话不存在')
+      if (session.userId !== req.user.sub) throw new ForbiddenException()
+      canvas = this.parseCanvas(session.canvasData)
+    }
+
+    const { request, legacyReferenceImageUrl } = resolveVideoStartRequest({
+      body: dto as VideoStartBody,
+      canvas,
+      sessionId: dto.sessionId,
+      nodeId: dto.nodeId,
+    })
+
+    const started = await this.videoOrchestrator.start(
+      req.user.sub,
+      request,
+      async () => {},
+      legacyReferenceImageUrl,
+    )
+
+    return {
+      code: 0,
+      message: 'ok',
+      data: {
+        id: started.generationRecordId,
+        type: 'video',
+        prompt: request.prompt,
+        model: request.model ?? null,
+        status: started.status,
+        url: null,
+        generationStartedAt: started.generationStartedAt,
+        sessionId: request.scope.sessionId || null,
+        nodeId: request.scope.nodeId || null,
+        createdAt: started.generationStartedAt,
+      },
+    }
   }
 
   @Post('video/generate')

@@ -92,7 +92,31 @@ def make_run_atomic_gen_node(*, nest: Any) -> Callable:
                 )
 
             try:
-                result = await run(node_id)
+                if target_type == "video":
+                    start_fn = getattr(nest, "start_video_generation", None)
+                    wait_fn = getattr(nest, "wait_video_generation", None)
+                    if start_fn is not None and wait_fn is not None:
+                        started = await start_fn(node_id)
+                        record_id = _result_record_id(started)
+                        if record_id:
+                            last_record_id = record_id
+                            if task_id:
+                                await _emit_task_update(
+                                    nest,
+                                    id=task_id,
+                                    status="running",
+                                    nodeId=node_id,
+                                    recordId=record_id,
+                                )
+                            result = await wait_fn(node_id, record_id)
+                            if not _result_record_id(result):
+                                result = {**result, "generationRecordId": record_id}
+                        else:
+                            result = started
+                    else:
+                        result = await run(node_id)
+                else:
+                    result = await run(node_id)
             except Exception as exc:  # noqa: BLE001
                 failed.append(title)
                 last_error = str(exc)

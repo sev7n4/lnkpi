@@ -769,6 +769,18 @@ export class AgentCanvasToolsController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Post('start-video-generation')
+  async startVideoGeneration(@Body() dto: RunImageGenerationDto) {
+    const data = await this.tools.startVideoGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('wait-video-generation')
+  async waitVideoGeneration(@Body() dto: WaitImageGenerationDto) {
+    const data = await this.tools.waitVideoGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('run-text-generation')
   async runTextGeneration(@Body() dto: RunImageGenerationDto) {
     const data = await this.tools.runTextGeneration(dto)
