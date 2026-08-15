@@ -637,31 +637,21 @@ export class StudioService {
     }
   }
 
-  private async attachMediaInfoToRecord(
-    recordId: string,
+  private async buildMediaInfo(
     outputUrl: string | null,
     referenceUrls: string[],
-  ): Promise<void> {
+  ): Promise<MediaInfo> {
     const output = outputUrl ? await this.mediaProbe.probeUrl(outputUrl) : undefined
     const references = await Promise.all(
       referenceUrls
         .filter((url) => typeof url === 'string' && url.trim())
         .map(async (url) => this.mediaProbe.probeUrl(url.trim())),
     )
-    const mediaInfo: MediaInfo = {
+    return {
       ...(output ? { output } : {}),
       ...(references.length ? { references } : {}),
       probedAt: new Date().toISOString(),
     }
-    const existing = await this.prisma.generationRecord.findFirst({ where: { id: recordId } })
-    if (!existing) return
-    const meta = parseMeta(existing.metadata)
-    await this.prisma.generationRecord.update({
-      where: { id: recordId },
-      data: {
-        metadata: JSON.stringify({ ...meta, mediaInfo }),
-      },
-    })
   }
 
   async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {
@@ -844,19 +834,19 @@ export class StudioService {
       if (!existing || existing.status !== 'generating') return null
       const meta = parseMeta(existing.metadata)
       if (isCancelledMeta(meta) || alreadyRefunded(meta)) return null
+      const referenceUrls = Array.isArray(meta.referenceImages)
+        ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
+        : []
+      const mediaInfo = await this.buildMediaInfo(imageUrls[0] ?? null, referenceUrls)
       const updated = await this.prisma.generationRecord.updateMany({
         where: { id, status: 'generating' },
         data: {
           url: imageUrls[0],
           status: 'completed',
-          metadata: JSON.stringify({ ...meta, urls: imageUrls }),
+          metadata: JSON.stringify({ ...meta, urls: imageUrls, mediaInfo }),
         },
       })
       if (updated.count === 0) return null
-      const referenceUrls = Array.isArray(meta.referenceImages)
-        ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
-        : []
-      await this.attachMediaInfoToRecord(id, imageUrls[0] ?? null, referenceUrls)
       return this.prisma.generationRecord.findFirst({ where: { id } })
     } catch (err) {
       console.error('Image generation failed:', err)
@@ -1616,23 +1606,25 @@ export class StudioService {
       if (!existing || existing.status !== 'generating') return
       const meta = parseMeta(existing.metadata)
       if (isCancelledMeta(meta) || alreadyRefunded(meta)) return
-      const updated = await this.prisma.generationRecord.updateMany({
-        where: { id, status: 'generating' },
-        data: {
-          url,
-          status: 'completed',
-          ...(lastFrameUrl
-            ? { metadata: JSON.stringify({ ...meta, lastFrameUrl }) }
-            : {}),
-        },
-      })
-      if (updated.count === 0) return
       const referenceUrls = [
         ...(Array.isArray(meta.referenceImages) ? (meta.referenceImages as string[]) : []),
         ...(Array.isArray(meta.referenceVideos) ? (meta.referenceVideos as string[]) : []),
         ...(Array.isArray(meta.referenceAudios) ? (meta.referenceAudios as string[]) : []),
       ].filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
-      await this.attachMediaInfoToRecord(id, url, referenceUrls)
+      const mediaInfo = await this.buildMediaInfo(url, referenceUrls)
+      const updated = await this.prisma.generationRecord.updateMany({
+        where: { id, status: 'generating' },
+        data: {
+          url,
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            ...(lastFrameUrl ? { lastFrameUrl } : {}),
+            mediaInfo,
+          }),
+        },
+      })
+      if (updated.count === 0) return
     } catch (err) {
       console.error('Video generation failed:', err)
       const existing = await this.prisma.generationRecord.findFirst({ where: { id } })
