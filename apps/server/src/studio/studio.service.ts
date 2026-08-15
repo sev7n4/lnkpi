@@ -1631,7 +1631,7 @@ export class StudioService {
         ...(Array.isArray(meta.referenceImages) ? (meta.referenceImages as string[]) : []),
         ...(Array.isArray(meta.referenceVideos) ? (meta.referenceVideos as string[]) : []),
         ...(Array.isArray(meta.referenceAudios) ? (meta.referenceAudios as string[]) : []),
-      ].filter((u): u is string => typeof u === 'string' && u.trim())
+      ].filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
       await this.attachMediaInfoToRecord(id, url, referenceUrls)
     } catch (err) {
       console.error('Video generation failed:', err)

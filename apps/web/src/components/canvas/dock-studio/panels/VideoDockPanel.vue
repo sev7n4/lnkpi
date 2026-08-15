@@ -258,10 +258,11 @@ watch(
     if (!pendingPreflightToast.value) return
     if (status !== NODE_GENERATION_STATUS.error || !msg) return
     pendingPreflightToast.value = false
+    const message = typeof msg === 'string' ? msg : String(msg)
     const isPreflight =
       code === 'invalid_input' ||
-      (msg.includes('参考图') && (msg.includes('过大') || msg.includes('偏大')))
-    if (isPreflight) ElMessage.error(msg)
+      (message.includes('参考图') && (message.includes('过大') || message.includes('偏大')))
+    if (isPreflight) ElMessage.error(message)
   },
 )
 
