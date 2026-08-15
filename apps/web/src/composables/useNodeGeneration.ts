@@ -139,6 +139,20 @@ function blobReferenceError(refs: StudioRefPayload[], data: Record<string, unkno
   return null
 }
 
+const AUDIO_ONLY_VIDEO_REF_ERROR = '需要 Seedance 且至少一张参考图'
+
+/** S7：仅音频 ref、无 image/video（含 legacy referenceImageUrl）时返回错误文案 */
+function audioOnlyVideoRefError(refs: StudioRefPayload[], refImage: string): string | null {
+  let hasAudio = false
+  let hasImageOrVideo = Boolean(refImage.trim())
+  for (const ref of refs) {
+    if (ref.mediaType === 'audio') hasAudio = true
+    if (ref.mediaType === 'image' || ref.mediaType === 'video') hasImageOrVideo = true
+  }
+  if (hasAudio && !hasImageOrVideo) return AUDIO_ONLY_VIDEO_REF_ERROR
+  return null
+}
+
 function findNodeById(nodes: EditableFlowNode[], id: string) {
   for (const node of nodes) {
     if (node.id === id) return node
@@ -669,6 +683,17 @@ async function cancelRemoteGeneration(nodeId: string) {
     const shotId = linkedShotEdge?.source
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
     const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
+
+    if (nodeType === 'video') {
+      const audioOnlyError = audioOnlyVideoRefError(refs, refImage)
+      if (audioOnlyError) {
+        deps.patchNodeData(node.id, {
+          status: NODE_GENERATION_STATUS.error,
+          errorMessage: audioOnlyError,
+        })
+        return
+      }
+    }
 
     if (shotNode?.type === 'shot' && shotId) {
       deps.patchNodeData(node.id, {

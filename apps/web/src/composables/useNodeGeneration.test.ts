@@ -701,6 +701,25 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('blocks audio-only video refs before startVideoGeneration', async () => {
+    const node = createNode('video', {
+      prompt: 'motion with audio ref',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+      localRefs: [
+        { id: 'r1', mediaType: 'audio', sourceKind: 'upload', label: 'bgm', url: 'https://example.com/ref.mp3' },
+      ],
+    })
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith('video-1', expect.objectContaining({
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '需要 Seedance 且至少一张参考图',
+    }))
+  })
+
   it('canvas video start does not patch referenceImageUrl', async () => {
     const node = createNode('video', {
       prompt: 'motion',
