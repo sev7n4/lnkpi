@@ -24,6 +24,8 @@ import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
+import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
+import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -54,6 +56,7 @@ const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const { capabilities } = useVideoModelCapabilities(videoModel)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateVideoCredits(videoSettings.value.duration))
 
@@ -89,6 +92,16 @@ watch(
     }
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  capabilities,
+  (caps) => {
+    if (!caps.supportsFirstLastFrame && videoMode.value === 'first_last_frame') {
+      setVideoMode('image_to_video')
+    }
+  },
+  { immediate: true },
 )
 
 function syncField(field: string, value: unknown) {
@@ -260,15 +273,15 @@ function onRefMention(refKey: string) {
           <DockTypeIcon icon="image" :size="12" />
         </button>
         <button
-          v-if="canUseFirstLastFrame"
+          v-if="capabilities.supportsFirstLastFrame && canUseFirstLastFrame"
           type="button"
           class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
           :class="{ 'is-on': videoMode === 'first_last_frame' }"
           :disabled="readonly"
-          title="首尾帧"
+          :title="capabilities.firstLastFrameLabel"
           @click="setVideoMode('first_last_frame')"
         >
-          首尾帧
+          {{ capabilities.firstLastFrameLabel }}
         </button>
       </div>
 
@@ -283,11 +296,14 @@ function onRefMention(refKey: string) {
         延续上一镜
       </button>
 
-      <UniversalModelSelector
-        v-model="videoModel"
-        type="video"
-        @update:model-value="syncField('videoModel', $event)"
-      />
+      <div class="flex flex-col gap-1">
+        <UniversalModelSelector
+          v-model="videoModel"
+          type="video"
+          @update:model-value="syncField('videoModel', $event)"
+        />
+        <VideoCapabilityBadges :capabilities="capabilities" />
+      </div>
       <VideoSettingsSelector
         v-model="videoSettings"
         @update:model-value="syncField('videoSettings', $event)"
