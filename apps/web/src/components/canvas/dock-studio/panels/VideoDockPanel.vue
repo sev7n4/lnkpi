@@ -26,6 +26,10 @@ import { estimateVideoCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
 import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
+import {
+  countValidImageRefs,
+  hasUnsupportedMediaRefs,
+} from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -60,10 +64,34 @@ const { capabilities } = useVideoModelCapabilities(videoModel)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateVideoCredits(videoSettings.value.duration))
 
-const imageRefCount = computed(() =>
-  (props.refs ?? []).filter((r) => r.mediaType === 'image' && !r.stale && r.payload.url).length,
-)
+const imageRefCount = computed(() => countValidImageRefs(props.refs ?? []))
 const canUseFirstLastFrame = computed(() => imageRefCount.value >= 2)
+const firstLastFrameInvalid = computed(
+  () => videoMode.value === 'first_last_frame' && imageRefCount.value !== 2,
+)
+
+const unsupportedMediaRefs = computed(() =>
+  hasUnsupportedMediaRefs(
+    props.refs ?? [],
+    capabilities.value.supportsVideoRef,
+    capabilities.value.supportsAudioRef,
+  ),
+)
+
+const generateDisabled = computed(() => {
+  if (props.generating) return false
+  if (!prompt.value.trim()) return true
+  if (videoMode.value === 'image_to_video' && !effectiveRefUrl.value) return true
+  if (firstLastFrameInvalid.value) return true
+  return false
+})
+
+const generateButtonTitle = computed(() => {
+  if (firstLastFrameInvalid.value) {
+    return '严格首尾帧模式需要恰好 2 张参考图'
+  }
+  return undefined
+})
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -236,10 +264,19 @@ function onRefMention(refKey: string) {
   <DockToolbarShell type="video" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
+      :video-mode="videoMode"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
     />
+
+    <p
+      v-if="unsupportedMediaRefs.showWarning"
+      class="dock-ref-warning"
+      role="status"
+    >
+      当前模型不支持视频/音频参考，请换 Seedance
+    </p>
 
     <DockPromptSection
       ref="promptSectionRef"
@@ -354,14 +391,24 @@ function onRefMention(refKey: string) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!generating && (
-            !prompt.trim()
-            || (videoMode === 'image_to_video' && !effectiveRefUrl)
-            || (videoMode === 'first_last_frame' && !canUseFirstLastFrame)
-          )"
+          :disabled="generateDisabled"
+          :title="generateButtonTitle"
           @generate="onGenerate"
         />
       </div>
     </div>
   </DockToolbarShell>
 </template>
+
+<style scoped>
+.dock-ref-warning {
+  margin: 0 2px 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgba(253, 224, 71, 0.95);
+}
+</style>

@@ -14,6 +14,8 @@ const props = defineProps<{
   dragOver?: boolean
   /** When true, click inserts @refKey into prompt (agent-aligned). */
   mentionable?: boolean
+  /** Role badge e.g. 首帧 / 末帧 / 参考 / 运镜 / 音频 */
+  roleLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -102,7 +104,7 @@ function onClick() {
       'has-media': !!thumbUrl,
     }"
     :draggable="draggable"
-    :title="`${refItem.refKey} · ${refItem.label}`"
+    :title="roleLabel ? `${refItem.refKey} · ${roleLabel}` : `${refItem.refKey} · ${refItem.label}`"
     role="button"
     tabindex="0"
     @mouseenter="onEnter"
@@ -116,6 +118,7 @@ function onClick() {
     @dragend="emit('dragend')"
   >
     <span class="dock-ref-chip__key">{{ refItem.refKey }}</span>
+    <span v-if="roleLabel" class="dock-ref-chip__role">{{ roleLabel }}</span>
 
     <img
       v-if="thumbUrl && refItem.mediaType === 'image'"
@@ -212,6 +215,22 @@ function onClick() {
   line-height: 1;
   letter-spacing: 0.02em;
   color: var(--neo-text-primary);
+  pointer-events: none;
+}
+
+.dock-ref-chip__role {
+  position: absolute;
+  bottom: 1px;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  padding: 0 1px;
+  font-size: 7px;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
 }
 
