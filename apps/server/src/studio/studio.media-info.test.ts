@@ -58,16 +58,8 @@ describe('StudioService mediaInfo on generation complete', () => {
       return stored
     })
     prisma.generationRecord.update = generationUpdate
-    prisma.generationRecord.updateMany = vi.fn(async () => {
-      stored = {
-        ...stored,
-        url: 'https://example.com/output.png',
-        status: 'completed',
-        metadata: JSON.stringify({
-          ...JSON.parse(String(stored.metadata ?? '{}')),
-          urls: ['https://example.com/output.png'],
-        }),
-      }
+    prisma.generationRecord.updateMany = vi.fn(async (args: { where: { id: string; status?: string }; data: Record<string, unknown> }) => {
+      stored = { ...stored, ...args.data, id: args.where.id }
       return { count: 1 }
     })
     prisma.generationRecord.findFirst = generationFindFirst
@@ -95,8 +87,8 @@ describe('StudioService mediaInfo on generation complete', () => {
     svc = moduleRef.get(StudioService)
   })
 
-  it('persists mediaInfo.output.width after image generation completes', async () => {
-    await svc.generateImage(
+  it('persists mediaInfo in the same write as status=completed', async () => {
+    const record = await svc.generateImage(
       'u1',
       'a prompt',
       'gpt-image-1',
@@ -104,12 +96,12 @@ describe('StudioService mediaInfo on generation complete', () => {
       [{ refKey: 'I1', mediaType: 'image', url: 'https://example.com/ref.png' }],
     )
 
-    await vi.waitFor(() => expect(probeUrl).toHaveBeenCalled())
-
+    expect(record?.status).toBe('completed')
     const meta = JSON.parse(String(stored.metadata))
     expect(meta.mediaInfo?.output?.width).toBe(1920)
     expect(meta.mediaInfo?.references?.[0]?.width).toBe(1024)
     expect(meta.mediaInfo?.probedAt).toBeTruthy()
+    expect(generationUpdate).not.toHaveBeenCalled()
   })
 
   it('getGeneration returns parsed mediaInfo from metadata', async () => {
