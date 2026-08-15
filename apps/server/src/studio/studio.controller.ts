@@ -1,9 +1,12 @@
-import { Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
 import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
+import { MediaProbeService } from '../media/media-probe.service'
 import { createCancelFlag } from '../points/charge-session'
 import { PrismaService } from '../prisma/prisma.service'
+import { checkMediaProbeRateLimit } from './media-probe-rate-limit'
+import { isAllowedMediaProbeUrl } from './media-probe-url.util'
 import { StudioService } from './studio.service'
 import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
 import { resolveVideoStartRequest, type VideoStartBody } from './video-generation-request.util'
@@ -227,6 +230,7 @@ export class StudioController {
     @Inject(StudioService) private readonly studioService: StudioService,
     @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MediaProbeService) private readonly mediaProbeService: MediaProbeService,
   ) {}
 
   private parseCanvas(raw: string | null | undefined): CanvasData {
@@ -316,6 +320,21 @@ export class StudioController {
   @UseGuards(AuthGuard)
   async getGeneration(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
     const data = await this.studioService.getGeneration(req.user.sub, id)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Get('media-probe')
+  @UseGuards(AuthGuard)
+  async mediaProbe(@Req() req: { user: { sub: string } }, @Query('url') url?: string) {
+    const trimmed = url?.trim()
+    if (!trimmed) {
+      throw new BadRequestException('缺少 url')
+    }
+    if (!isAllowedMediaProbeUrl(trimmed)) {
+      throw new BadRequestException('URL 不在允许范围内')
+    }
+    checkMediaProbeRateLimit(req.user.sub)
+    const data = await this.mediaProbeService.probeUrl(trimmed)
     return { code: 0, message: 'ok', data }
   }
 
