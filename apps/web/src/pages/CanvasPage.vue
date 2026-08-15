@@ -112,6 +112,7 @@ import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
+import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
@@ -3076,6 +3077,7 @@ onUnmounted(() => {
     />
     <AIImageEditor @apply="handleImageEditorApply" />
     <MediaPreviewOverlay />
+    <MediaInspectorDrawer />
     <CanvasContextMenu
       v-if="contextMenu"
       :x="contextMenu.x"

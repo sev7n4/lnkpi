@@ -1,5 +1,11 @@
 import { api } from './api'
-import type { GenerationDiagnostic, GenerationRefPayload } from '@lnkpi/shared'
+import type {
+  GenerationDiagnostic,
+  GenerationRefPayload,
+  MediaInfo,
+  MediaRefPreflight,
+  ProbedMediaFile,
+} from '@lnkpi/shared'
 
 export type StudioRefPayload = GenerationRefPayload
 
@@ -19,6 +25,8 @@ export interface GenerationRecord {
   sessionId?: string | null
   nodeId?: string | null
   createdAt: string
+  mediaInfo?: MediaInfo
+  refPreflight?: MediaRefPreflight
 }
 
 export interface AudioGenerateOptions {
@@ -203,4 +211,10 @@ export const studioApi = {
     api
       .get<{ data: GenerationDiagnostic }>(`/studio/generations/${id}/diagnostic`)
       .then((r) => r.data.data),
+  probeMedia: async (url: string): Promise<ProbedMediaFile> => {
+    const { data: res } = await api.get<{ data: ProbedMediaFile }>('/studio/media-probe', {
+      params: { url },
+    })
+    return res.data
+  },
 }
