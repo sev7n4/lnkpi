@@ -76,6 +76,8 @@ describe('VideoGenerationOrchestrator', () => {
       { sessionId: 's1', nodeId: 'v1' },
       'image_to_video',
       undefined,
+      undefined,
+      undefined,
     )
   })
 

@@ -456,6 +456,8 @@ describe('AgentCanvasToolsService', () => {
       { sessionId: 's1', nodeId: 'vid-1' },
       'text_to_video',
       undefined,
+      undefined,
+      undefined,
     )
     expect(result.status).toBe('completed')
     expect(result.url).toBe('https://cdn.example/vid.mp4')
@@ -502,6 +504,8 @@ describe('AgentCanvasToolsService', () => {
       'https://example.com/node-ref.png',
       { sessionId: 's1', nodeId: 'vid-1' },
       'text_to_video',
+      undefined,
+      undefined,
       undefined,
     )
   })
@@ -553,6 +557,8 @@ describe('AgentCanvasToolsService', () => {
       { sessionId: 's1', nodeId: 'vid-1' },
       'image_to_video',
       false,
+      undefined,
+      undefined,
     )
   })
 

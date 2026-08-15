@@ -30,6 +30,8 @@ describe('video generate controllers', () => {
       { sessionId: undefined, nodeId: undefined },
       undefined,
       undefined,
+      undefined,
+      undefined,
     )
   })
 
