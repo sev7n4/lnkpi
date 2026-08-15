@@ -30,6 +30,7 @@ import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasAct
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
+import { buildNodeMediaInfoSummary } from '@/composables/useMediaInspector'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
@@ -604,6 +605,8 @@ const generationPolling = useGenerationPolling((results) => {
         const lastFrameUrl = parseRecordLastFrameUrl(record)
         if (lastFrameUrl) patch.lastFrameUrl = lastFrameUrl
       }
+      const mediaSummary = buildNodeMediaInfoSummary(record)
+      if (mediaSummary) patch.mediaInfo = mediaSummary
       patchNodeData(task.nodeId, patch)
     } else if (record.status === NODE_GENERATION_STATUS.failed || record.status === NODE_GENERATION_STATUS.error) {
       patchNodeData(
