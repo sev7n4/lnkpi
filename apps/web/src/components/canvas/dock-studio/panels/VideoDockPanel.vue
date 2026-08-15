@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import {
   resolveVideoMode,
@@ -139,6 +140,7 @@ watch(
   capabilities,
   (caps) => {
     if (!caps.supportsFirstLastFrame && videoMode.value === 'first_last_frame') {
+      ElMessage.warning('当前模型不支持严格首尾帧，已切换为图生视频')
       setVideoMode('image_to_video')
     }
   },

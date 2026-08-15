@@ -1,6 +1,6 @@
 # 图生视频上游能力审计与产品化规格（I2V Capability Audit）
 
-> 状态：**P0–P2 已实施**（`feature/i2v-capability-productization`，Tasks 0–9）  
+> 状态：**P0–P2 已实施 · 已 merge main**（PR #248，`3039f0e`；follow-up 文档/Minor/smoke 进行中）  
 > 日期：2026-08-15  
 > 代号：**I2V-AUDIT**  
 > 范围：基于 Agnes Video V2.0 与 Seedance 2.0/2.5 公开 API，审计本项目图生视频链路在 **单图 / 多图 / 多模态 / 关键帧 / 连续分镜** 等能力上的实现完整度；定义后续产品化方向  
@@ -18,15 +18,15 @@
 
 | 项 | 结论 |
 |---|---|
-| 文档性质 | **现状审计 + 缺口清单 + 后续产品化方向**；非本轮直接实施 plan |
-| 审计结论 | **引擎层（adapter/scenario/refWire）对 Seedance 多模态 + Agnes 单图/keyframes 已基本打通**；缺口集中在 **UI 能力边界、Provider 语义不等价、上游高级参数未产品化** |
-| 单图 I2V | ✅ **完整**（三入口 + 生产验证 PASS） |
-| 多图 / 关键帧 / 首尾帧 | ⚠️ **adapter 有、UX 弱、Agnes/Seedance 语义不等价** |
-| 多模态（V*/A* ref） | ⚠️ **Seedance 完整；Agnes 不支持；UI 无引导** |
-| 连续分镜 S8 | ⚠️ **半自动**（Seedance `return_last_frame` + 手动「延续上一镜」） |
-| 参数暴露 | ⚠️ **核心参数有；crop/4K/adaptive/seed/negative 缺失或 dropped** |
-| 明确不做（本轮产品化） | 新 provider 接入；Seedance 2.5 全量；Material/shot 旁路统一；Playwright E2E |
-| 后续规格 | 见 §9；实施 plan 另起 `2026-08-15-i2v-capability-productization.md` |
+| 文档性质 | **现状审计 + 缺口清单**；P0–P2 产品化已由 PR #248 落地 |
+| 审计结论 | **引擎层 adapter/scenario/refWire 已打通**；PR #248 补齐 **UI 能力边界、参数产品化、Ref 引导**；Agnes/Seedance **语义仍不等价**（设计选择） |
+| 单图 I2V | ✅ **完整**（三入口 + 生产 7/7 + 12/12 PASS） |
+| 多图 / 关键帧 / 首尾帧 | ✅ **UX 已增强**（徽章、RefStrip 角色、videoMode 校验）；⚠️ Agnes/Seedance 语义不等价 |
+| 多模态（V*/A* ref） | ⚠️ **Seedance 完整**；Agnes 不支持；**V/A 警告 banner** 已有，连接引导仍弱 |
+| 连续分镜 S8 | ⚠️ **半自动**（`lastFrameUrl` 写回 +「延续上一镜 / 接下一段」；无自动 S8 推断） |
+| 参数暴露 | ✅ **核心 + 4K/adaptive/seed/negative 已暴露**；⚠️ crop 仍 metadataOnly；`return_last_frame` 用户不可显式控 |
+| 明确不做（本轮及 follow-up 前） | 新 provider；Seedance 2.5 全量；Material/shot 旁路统一（G-10/G-11）；Playwright E2E；S3 独立场景（G-07） |
+| 实施 plan | ✅ `2026-08-15-i2v-capability-productization.md`（Tasks 0–9 已完成） |
 
 ---
 
@@ -167,6 +167,7 @@ L5  Provider：AgnesVideoProvider / ApimartVideoProvider
 | Campaign localRefs | ✅ PR #247 | `apply_sidebar_refs.py` |
 | 生产 path1/2 | ✅ 7/7 | `prod-canvas-i2v-video-verify.py` |
 | 生产 path3 | ✅ 12/12 | `prod-agent-i2v-video-verify.py` |
+| 生产 Seedance 首尾帧 + continue-shot | 🆕 | `prod-canvas-i2v-seedance-verify.py` |
 | Material/shot 旁路 | ⚠️ 未统一 | `canvasApi.generateVideo` |
 | VideoStudioPage | ⚠️ legacy | `POST /studio/video/generate` 一站式 |
 
@@ -383,40 +384,49 @@ flowchart TB
 | 节奏/配乐参考 | 连 upstream **audio** 节点 | **Seedance** |
 | 连续镜头 | 上一镜 Seedance 生成 → 点「延续上一镜」 | **Seedance** |
 
-### 7.4 无法灵活调用的能力（现状）
+### 7.4 仍无法灵活调用的能力（post-#248）
 
-- seed / negative_prompt 复现与排除
-- Seedance standard **4K** / **adaptive** 画幅
-- crop 实际生效
-- Agnes 下 generateAudio
-- 自动 S8 分镜链（无手动「延续上一镜」）
-- API 文档化的高级 refs 组合（无 OpenAPI 示例）
+- **crop** 实际上游不传（catalog metadataOnly，UI 已隐藏）
+- **Agnes** 下 generateAudio（UI 已隐藏）
+- **return_last_frame** 显式开关（adapter 按 scenario 隐式设置，S5 首尾帧路径默认不请求末帧）
+- **自动 S8 分镜链**（需手动「延续上一镜 / 接下一段」）
+- **ref 数量上限** Dock 提示（profile 有上限，UI 未提示）
+- **V/A 节点连接**专门引导（仅有不支持警告 banner）
+
+### 7.5 已由 PR #248 产品化的能力
+
+- seed / negative_prompt（Dock 高级折叠面板）
+- Seedance standard **4K** / **adaptive** 等 profile 允许画幅与分辨率
+- 能力徽章 + 按模型 videoMode 文案 / 禁用
+- RefStrip 首帧/末帧/参考/运镜/音频角色标注
+- `lastFrameUrl` 写回 +「接下一段」
+- API 附录 §A refs × videoMode 矩阵 + 集成测试
 
 ---
 
 ## 8. 缺口清单（Gap Register）
 
-| ID | 类别 | 描述 | 严重度 | 依赖 |
+| ID | 类别 | 描述 | 严重度 | 状态 |
 |---|---|---|---|---|
-| G-01 | UX | 同 UI「首尾帧」在 Agnes/Seedance 语义不等价，无提示 | P0 | — |
-| G-02 | UX | generateAudio 对 Agnes 无效但 UI 仍显示 | P1 | G-01 能力矩阵 |
-| G-03 | UX | crop 有控件但不传 upstream | P1 | catalog native 标记 |
-| G-04 | 参数 | aspectRatio 缺 4:3/3:4/21:9/adaptive | P1 | profile 已有 |
-| G-05 | 参数 | Seedance standard 4K UI 不可选 | P1 | variant 识别 |
-| G-06 | 参数 | seed / negative_prompt 未暴露 | P2 | 高级面板 |
-| G-07 | 场景 | S3 未独立推断，与 S4 合并 | P2 | metadata 用途 |
-| G-08 | 场景 | S8 不自动推断；末帧写回不完整 | P2 | Seedance only |
-| G-09 | 引导 | V*/A* 多模态 ref 无 Dock 引导 | P1 | — |
-| G-10 | 旁路 | Material/shot 未走 Orchestrator | P2 | C2 Epic |
-| G-11 | 旁路 | VideoStudioPage legacy API | P2 | — |
-| G-12 | 文档 | API 缺 refs+videoMode 组合说明 | P2 | — |
-| G-13 | 时长 | UI 4s 对 Agnes 实际 min 5s，无提示 | P2 | profile minDuration |
+| G-01 | UX | 同 UI「首尾帧」在 Agnes/Seedance 语义不等价，无提示 | P0 | ✅ PR #248 |
+| G-02 | UX | generateAudio 对 Agnes 无效但 UI 仍显示 | P1 | ✅ PR #248 |
+| G-03 | UX | crop 有控件但不传 upstream | P1 | ✅ PR #248（隐藏） |
+| G-04 | 参数 | aspectRatio 缺 4:3/3:4/21:9/adaptive | P1 | ✅ PR #248 |
+| G-05 | 参数 | Seedance standard 4K UI 不可选 | P1 | ✅ PR #248 |
+| G-06 | 参数 | seed / negative_prompt 未暴露 | P2 | ✅ PR #248 |
+| G-07 | 场景 | S3 未独立推断，与 S4 合并 | P2 | ⏭️ 刻意不做 |
+| G-08 | 场景 | S8 不自动推断；末帧写回不完整 | P2 | ✅ PR #248（半自动） |
+| G-09 | 引导 | V*/A* 多模态 ref 无 Dock 引导 | P1 | ✅ PR #248（警告 banner） |
+| G-10 | 旁路 | Material/shot 未走 Orchestrator | P2 | ⏭️ Epic 待定 |
+| G-11 | 旁路 | VideoStudioPage legacy API | P2 | ⏭️ Epic 待定 |
+| G-12 | 文档 | API 缺 refs+videoMode 组合说明 | P2 | ✅ PR #248 §A |
+| G-13 | 时长 | UI 4s 对 Agnes 实际 min 5s，无提示 | P2 | ✅ PR #248 |
 
 ---
 
-## 9. 后续产品化方向（目标态，非本轮实施）
+## 9. 产品化方向（PR #248 已实施）
 
-> 由 §8 缺口导出；详细 task 另写 implementation plan。
+> 下列 P0–P2 项已由 `2026-08-15-i2v-capability-productization.md` 落地；本节保留为决策记录。
 
 ### 9.1 P0 — 能力可见性
 
@@ -508,16 +518,18 @@ flowchart TB
 |---|---|
 | `2026-08-08-seedance-agnes-video-adapter-design.md` | C3 adapter 实施规格；本审计在其上评估 **产品化完整度** |
 | `2026-08-14-unified-image-to-video-pipeline-design.md` | U-I2V 编排；本审计假设 Orchestrator **已上线** |
-| 待写 `2026-08-15-i2v-capability-productization.md` | 由 §9 缺口导出的 **implementation plan** |
+| `2026-08-15-i2v-capability-productization.md` | 由 §9 缺口导出的 **implementation plan**（✅ 已实施，PR #248） |
 
 ---
 
-## 12. 开放问题
+## 12. 开放问题（决议记录）
 
-1. **S3 是否 worth 独立 scenario？** 若 metadata 无消费者，可继续合并 S4。
-2. **Agnes 首尾帧 UI：** 改文案「关键帧过渡」还是隐藏 mode？
-3. **4K / adaptive：** 仅 Seedance standard BYOK 开放，还是平台默认也开放？
-4. **S8 自动链：** 是否产品化为「分镜序列」独立 Epic，而非 Dock 小按钮？
+| # | 问题 | 决议 |
+|---|------|------|
+| 1 | S3 是否 worth 独立 scenario？ | **否** — 继续与 S4 合并（G-07 刻意不做） |
+| 2 | Agnes 首尾帧 UI | **隐藏**严格首尾帧按钮；两图走 `image_to_video` + adapter keyframes；选 Agnes 时若残留 `first_last_frame` 自动降级并 toast |
+| 3 | 4K / adaptive | **按 profile 动态暴露** — Seedance standard 等平台模型在 UI 可选 |
+| 4 | S8 自动链 | **延后独立 Epic** — 当前仅 Dock「延续上一镜 / 接下一段」半自动工作流 |
 
 ---
 
