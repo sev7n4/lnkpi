@@ -30,6 +30,10 @@ export interface CanonicalVideoGenerationRequest {
   videoSettings: CanonicalVideoSettings
   videoMode: VideoGenerationMode
   model?: string
+  /** Optional RNG seed for weak reproducibility when provider supports it. */
+  seed?: number
+  /** Optional negative prompt / exclusion hints when provider supports it. */
+  negativePrompt?: string
   scope: { sessionId: string; nodeId: string }
 }
 

@@ -19,11 +19,17 @@ import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vu
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveGenerationModel } from '@/constants/studioModels'
+import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/studioModels'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
+import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
+import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
+import {
+  countValidImageRefs,
+  hasUnsupportedMediaRefs,
+} from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -40,6 +46,7 @@ const emit = defineEmits<{
   generate: []
   close: []
   removeRef: [ref: NodeRef]
+  continueShot: []
 }>()
 
 const prompt = ref('')
@@ -47,6 +54,8 @@ const videoModel = ref(getConfig('video').model)
 const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
+const seed = ref<number | undefined>(undefined)
+const negativePrompt = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
 const refUploading = ref(false)
 const refUploadProgress = ref(0)
@@ -54,13 +63,44 @@ const refUploadError = ref('')
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const { capabilities } = useVideoModelCapabilities(videoModel)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateVideoCredits(videoSettings.value.duration))
 
-const imageRefCount = computed(() =>
-  (props.refs ?? []).filter((r) => r.mediaType === 'image' && !r.stale && r.payload.url).length,
-)
+const imageRefCount = computed(() => countValidImageRefs(props.refs ?? []))
 const canUseFirstLastFrame = computed(() => imageRefCount.value >= 2)
+const firstLastFrameInvalid = computed(
+  () => videoMode.value === 'first_last_frame' && imageRefCount.value !== 2,
+)
+
+const unsupportedMediaRefs = computed(() =>
+  hasUnsupportedMediaRefs(
+    props.refs ?? [],
+    capabilities.value.supportsVideoRef,
+    capabilities.value.supportsAudioRef,
+  ),
+)
+
+const generateDisabled = computed(() => {
+  if (props.generating) return false
+  if (!prompt.value.trim()) return true
+  if (videoMode.value === 'image_to_video' && !effectiveRefUrl.value) return true
+  if (firstLastFrameInvalid.value) return true
+  return false
+})
+
+const generateButtonTitle = computed(() => {
+  if (firstLastFrameInvalid.value) {
+    return '严格首尾帧模式需要恰好 2 张参考图'
+  }
+  return undefined
+})
+
+const ownLastFrameUrl = computed(() => String(props.node.data?.lastFrameUrl ?? '').trim())
+
+const showContinueShotButton = computed(
+  () => !!ownLastFrameUrl.value && capabilities.value.supportsReturnLastFrame,
+)
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -77,6 +117,10 @@ function syncFromNode() {
   }
   referenceImageUrl.value = String(data.referenceImageUrl ?? '')
   videoMode.value = resolveVideoMode(data, props.upstream)
+  const seedRaw = data.seed
+  seed.value =
+    typeof seedRaw === 'number' && Number.isFinite(seedRaw) ? Math.trunc(seedRaw) : undefined
+  negativePrompt.value = String(data.negativePrompt ?? '')
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
@@ -89,6 +133,16 @@ watch(
     }
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  capabilities,
+  (caps) => {
+    if (!caps.supportsFirstLastFrame && videoMode.value === 'first_last_frame') {
+      setVideoMode('image_to_video')
+    }
+  },
+  { immediate: true },
 )
 
 function syncField(field: string, value: unknown) {
@@ -105,12 +159,32 @@ function setVideoMode(mode: VideoGenerationMode) {
   syncField('videoMode', mode)
 }
 
+function onNegativePromptInput(value: string) {
+  negativePrompt.value = value
+  syncField('negativePrompt', value.trim() || undefined)
+}
+
+function onSeedInput(raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    seed.value = undefined
+    syncField('seed', undefined)
+    return
+  }
+  const n = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(n)) return
+  seed.value = n
+  syncField('seed', n)
+}
+
 function onGenerate() {
   emit('patch', {
     prompt: prompt.value,
     videoModel: videoModel.value,
     videoSettings: { ...videoSettings.value },
     videoMode: videoMode.value,
+    seed: seed.value,
+    negativePrompt: negativePrompt.value.trim() || undefined,
   })
   emit('generate')
 }
@@ -129,6 +203,11 @@ function continueFromLastFrame() {
   }
   const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
   emit('patch', { localRefs: [...prev, binding], videoMode: 'image_to_video' })
+}
+
+function continueNextShot() {
+  if (!showContinueShotButton.value) return
+  emit('continueShot')
 }
 
 function toggleVoice() {
@@ -223,10 +302,19 @@ function onRefMention(refKey: string) {
   <DockToolbarShell type="video" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
+      :video-mode="videoMode"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
     />
+
+    <p
+      v-if="unsupportedMediaRefs.showWarning"
+      class="dock-ref-warning"
+      role="status"
+    >
+      当前模型不支持视频/音频参考，请换 Seedance
+    </p>
 
     <DockPromptSection
       ref="promptSectionRef"
@@ -236,6 +324,35 @@ function onRefMention(refKey: string) {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
+
+    <details class="dock-advanced">
+      <summary class="dock-advanced-summary">高级</summary>
+      <div class="dock-advanced-body">
+        <label class="dock-advanced-field">
+          <span class="dock-advanced-label">Seed</span>
+          <input
+            type="number"
+            class="dock-advanced-input"
+            :value="seed ?? ''"
+            :disabled="readonly"
+            placeholder="随机"
+            step="1"
+            @input="onSeedInput(($event.target as HTMLInputElement).value)"
+          >
+        </label>
+        <label class="dock-advanced-field dock-advanced-field-grow">
+          <span class="dock-advanced-label">Negative prompt</span>
+          <input
+            type="text"
+            class="dock-advanced-input"
+            :value="negativePrompt"
+            :disabled="readonly"
+            placeholder="排除内容，如 watermark, blur"
+            @input="onNegativePromptInput(($event.target as HTMLInputElement).value)"
+          >
+        </label>
+      </div>
+    </details>
 
     <div class="bottom-toolbar-actions flex-wrap">
       <div class="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/5 p-0.5">
@@ -260,15 +377,15 @@ function onRefMention(refKey: string) {
           <DockTypeIcon icon="image" :size="12" />
         </button>
         <button
-          v-if="canUseFirstLastFrame"
+          v-if="capabilities.supportsFirstLastFrame && canUseFirstLastFrame"
           type="button"
           class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
           :class="{ 'is-on': videoMode === 'first_last_frame' }"
           :disabled="readonly"
-          title="首尾帧"
+          :title="capabilities.firstLastFrameLabel"
           @click="setVideoMode('first_last_frame')"
         >
-          首尾帧
+          {{ capabilities.firstLastFrameLabel }}
         </button>
       </div>
 
@@ -283,13 +400,29 @@ function onRefMention(refKey: string) {
         延续上一镜
       </button>
 
-      <UniversalModelSelector
-        v-model="videoModel"
-        type="video"
-        @update:model-value="syncField('videoModel', $event)"
-      />
+      <button
+        v-if="showContinueShotButton"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :disabled="readonly"
+        title="以上一镜末帧为参考，创建下一段视频"
+        @click="continueNextShot"
+      >
+        接下一段
+      </button>
+
+      <div class="flex flex-col gap-1">
+        <UniversalModelSelector
+          v-model="videoModel"
+          type="video"
+          @update:model-value="syncField('videoModel', $event)"
+        />
+        <VideoCapabilityBadges :capabilities="capabilities" />
+      </div>
       <VideoSettingsSelector
         v-model="videoSettings"
+        :capabilities="capabilities"
+        :model-key="catalogModelKeyFromValue(videoModel)"
         @update:model-value="syncField('videoSettings', $event)"
       />
 
@@ -336,14 +469,82 @@ function onRefMention(refKey: string) {
         <DockCreditBadge :credits="credits" />
         <DockGenerateButton
           :generating="generating"
-          :disabled="!generating && (
-            !prompt.trim()
-            || (videoMode === 'image_to_video' && !effectiveRefUrl)
-            || (videoMode === 'first_last_frame' && !canUseFirstLastFrame)
-          )"
+          :disabled="generateDisabled"
+          :title="generateButtonTitle"
           @generate="onGenerate"
         />
       </div>
     </div>
   </DockToolbarShell>
 </template>
+
+<style scoped>
+.dock-ref-warning {
+  margin: 0 2px 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.1);
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgba(253, 224, 71, 0.95);
+}
+
+.dock-advanced {
+  margin: 0 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dock-advanced-summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  user-select: none;
+  list-style: none;
+}
+
+.dock-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dock-advanced-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.dock-advanced-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 88px;
+}
+
+.dock-advanced-field-grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.dock-advanced-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.dock-advanced-input {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dock-advanced-input:disabled {
+  opacity: 0.5;
+}
+</style>

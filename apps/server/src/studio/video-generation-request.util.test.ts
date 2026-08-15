@@ -61,4 +61,14 @@ describe('buildCanonicalVideoRequestFromBody', () => {
     })
     expect(req.videoMode).toBe('image_to_video')
   })
+
+  it('passes seed and negativePrompt from body', () => {
+    const req = buildCanonicalVideoRequestFromBody({
+      prompt: 'x',
+      seed: 42.7,
+      negativePrompt: ' watermark ',
+    })
+    expect(req.seed).toBe(42)
+    expect(req.negativePrompt).toBe('watermark')
+  })
 })

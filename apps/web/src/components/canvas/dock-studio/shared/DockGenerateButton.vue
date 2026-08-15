@@ -2,6 +2,7 @@
 defineProps<{
   generating?: boolean
   disabled?: boolean
+  title?: string
 }>()
 
 const emit = defineEmits<{
@@ -15,7 +16,7 @@ const emit = defineEmits<{
     class="dock-generate-btn"
     :class="{ 'is-generating': generating }"
     :disabled="disabled"
-    :title="generating ? '点击取消生成' : '生成'"
+    :title="title ?? (generating ? '点击取消生成' : '生成')"
     :aria-label="generating ? '取消生成' : '生成'"
     @click.stop="emit('generate')"
   >

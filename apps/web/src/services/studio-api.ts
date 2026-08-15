@@ -155,6 +155,8 @@ export const studioApi = {
     scope?: CanvasGenerationScope,
     videoMode?: string,
     generateAudio?: boolean,
+    seed?: number,
+    negativePrompt?: string,
   ) =>
     api.post<{ data: GenerationRecord & { generationStartedAt?: string } }>(
       '/studio/video/start',
@@ -170,6 +172,8 @@ export const studioApi = {
         referenceImageUrl,
         videoMode,
         generateAudio,
+        seed,
+        negativePrompt,
         ...scopeBody(scope),
       },
       { timeout: 60_000, signal },

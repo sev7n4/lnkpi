@@ -1,19 +1,76 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import {
   clampVideoDuration,
   DEFAULT_VIDEO_SETTINGS,
+  resolveModelKey,
   VIDEO_ASPECT_RATIO_OPTIONS,
   VIDEO_CROP_OPTIONS,
   VIDEO_DURATION_MARKS,
   VIDEO_RESOLUTION_OPTIONS,
+  videoAspectRatioOptionsForCapabilities,
+  videoResolutionOptionsForCapabilities,
+  type VideoAspectRatio,
+  type VideoModelCapabilities,
+  type VideoResolution,
   type VideoSettings,
 } from '@lnkpi/shared'
 
 const props = defineProps<{
   modelValue: VideoSettings
+  capabilities?: VideoModelCapabilities
+  modelKey?: string
 }>()
+
+const showGenerateAudio = computed(() => {
+  if (!props.capabilities) return true
+  return props.capabilities.supportsGenerateAudio
+})
+
+const showCrop = computed(() => {
+  if (!props.modelKey) return true
+  const { entry } = resolveModelKey('video', props.modelKey)
+  return entry.params.crop === 'native'
+})
+
+const durationBelowMinHint = computed(() => {
+  const min = props.capabilities?.minDuration
+  if (min == null || props.modelValue.duration >= min) return null
+  return `该模型最短 ${min} 秒`
+})
+
+const aspectRatioOptions = computed(() => {
+  if (!props.capabilities) return VIDEO_ASPECT_RATIO_OPTIONS
+  return videoAspectRatioOptionsForCapabilities(props.capabilities)
+})
+
+const resolutionOptions = computed(() => {
+  if (!props.capabilities) return VIDEO_RESOLUTION_OPTIONS
+  return videoResolutionOptionsForCapabilities(props.capabilities)
+})
+
+function ensureAllowedAspectAndResolution() {
+  if (!props.capabilities) return
+  const partial: Partial<VideoSettings> = {}
+  const arOpts = aspectRatioOptions.value
+  if (
+    arOpts.length > 0
+    && !arOpts.some((o) => o.value === props.modelValue.aspectRatio)
+  ) {
+    partial.aspectRatio = arOpts[0].value as VideoAspectRatio
+  }
+  const resOpts = resolutionOptions.value
+  if (
+    resOpts.length > 0
+    && !resOpts.some((o) => o.value === props.modelValue.resolution)
+  ) {
+    partial.resolution = resOpts[0].value as VideoResolution
+  }
+  if (Object.keys(partial).length > 0) {
+    patch(partial)
+  }
+}
 
 const emit = defineEmits<{
   'update:modelValue': [value: VideoSettings]
@@ -35,11 +92,19 @@ function patch(partial: Partial<VideoSettings>) {
 
 watch(open, (isOpen) => {
   if (!isOpen) return
+  ensureAllowedAspectAndResolution()
   const clamped = clampVideoDuration(props.modelValue.duration)
   if (clamped !== props.modelValue.duration) {
     patch({ duration: clamped })
   }
 })
+
+watch(
+  () => [props.capabilities, props.modelValue.aspectRatio, props.modelValue.resolution] as const,
+  () => {
+    ensureAllowedAspectAndResolution()
+  },
+)
 </script>
 
 <template>
@@ -71,7 +136,7 @@ watch(open, (isOpen) => {
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">画面比例</p>
         <div class="flex flex-wrap gap-1">
           <button
-            v-for="opt in VIDEO_ASPECT_RATIO_OPTIONS"
+            v-for="opt in aspectRatioOptions"
             :key="opt.value"
             type="button"
             class="neo-chip rounded-md px-2 py-1 text-[10px]"
@@ -89,7 +154,7 @@ watch(open, (isOpen) => {
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">分辨率</p>
         <div class="flex gap-1">
           <button
-            v-for="opt in VIDEO_RESOLUTION_OPTIONS"
+            v-for="opt in resolutionOptions"
             :key="opt.value"
             type="button"
             class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
@@ -129,9 +194,15 @@ watch(open, (isOpen) => {
             {{ mark }}
           </button>
         </div>
+        <p
+          v-if="durationBelowMinHint"
+          class="mt-1 text-[10px] text-amber-400/90"
+        >
+          {{ durationBelowMinHint }}
+        </p>
       </div>
 
-      <div class="mb-3">
+      <div v-if="showGenerateAudio" class="mb-3">
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">生成音频</p>
         <button
           type="button"
@@ -143,7 +214,7 @@ watch(open, (isOpen) => {
         </button>
       </div>
 
-      <div>
+      <div v-if="showCrop">
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">裁剪</p>
         <div class="flex flex-wrap gap-1">
           <button

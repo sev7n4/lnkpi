@@ -188,6 +188,33 @@ describe('StudioService integration (provider params)', () => {
     })
   })
 
+  it('forwards seed and negativePrompt to Agnes video provider', async () => {
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'agnes-video-v2.0',
+      5,
+      '16:9',
+      [],
+      [],
+      '720p',
+      'none',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      42,
+      'watermark, blur',
+    )
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls.at(-1)?.[1]).toMatchObject({
+      model: 'agnes-video-v2.0',
+      seed: 42,
+      negativePrompt: 'watermark, blur',
+    })
+  })
+
   it('keeps seedance standard 1080p in provider options and metadata variantTag', async () => {
     const prisma = (
       svc as unknown as {

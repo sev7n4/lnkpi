@@ -965,6 +965,8 @@ export class StudioService {
     scope?: CanvasGenerationScope,
     videoMode?: string,
     generateAudio?: boolean,
+    seed?: number,
+    negativePrompt?: string,
   ) {
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
@@ -1013,6 +1015,8 @@ export class StudioService {
           gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
           channelBaseUrl: resolved.credentials.baseUrl,
           generateAudio,
+          seed,
+          negativePrompt,
         })
       } catch (err) {
         if (err instanceof Seedance1xUnsupportedError) {

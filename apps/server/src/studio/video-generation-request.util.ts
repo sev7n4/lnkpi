@@ -15,6 +15,8 @@ export type VideoStartBody = {
   crop?: string
   videoMode?: string
   generateAudio?: boolean
+  seed?: number
+  negativePrompt?: string
   referenceImageUrl?: string
   refs?: GenerationRefPayload[]
   mentionedKeys?: string[]
@@ -51,6 +53,11 @@ export function buildCanonicalVideoRequestFromBody(body: VideoStartBody): Canoni
     },
     videoMode: inferVideoMode(body.videoMode, refs),
     model: body.model?.trim() || undefined,
+    seed:
+      typeof body.seed === 'number' && Number.isFinite(body.seed)
+        ? Math.trunc(body.seed)
+        : undefined,
+    negativePrompt: body.negativePrompt?.trim() || undefined,
     scope: {
       sessionId: body.sessionId?.trim() || '',
       nodeId: body.nodeId?.trim() || '',

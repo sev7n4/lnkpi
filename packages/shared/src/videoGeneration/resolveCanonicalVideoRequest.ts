@@ -82,6 +82,10 @@ export function resolveCanonicalVideoRequest(input: {
 
   const videoSettings = resolveVideoSettings(data, input.accountDefaults)
   const videoMode = inferVideoMode(data.videoMode, refs)
+  const seedRaw = data.seed
+  const seed =
+    typeof seedRaw === 'number' && Number.isFinite(seedRaw) ? Math.trunc(seedRaw) : undefined
+  const negativePrompt = pickString(data.negativePrompt) || undefined
 
   return {
     prompt: String(data.prompt ?? data.content ?? '').trim(),
@@ -90,6 +94,8 @@ export function resolveCanonicalVideoRequest(input: {
     videoSettings,
     videoMode,
     model: pickString(data.videoModel, input.accountDefaults?.model) || undefined,
+    seed,
+    negativePrompt,
     scope: {
       sessionId: input.sessionId ?? '',
       nodeId: input.node.id,

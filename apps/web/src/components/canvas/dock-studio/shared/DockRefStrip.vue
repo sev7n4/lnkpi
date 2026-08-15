@@ -1,11 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { NodeRef } from '@/composables/useNodeRefs'
+import type { VideoGenerationMode } from '@/composables/useUpstreamNodeContext'
 import DockRefChip from '@/components/canvas/dock-studio/shared/DockRefChip.vue'
+import { resolveRefRoleLabel } from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
 
 const props = defineProps<{
   refs: NodeRef[]
+  videoMode?: VideoGenerationMode
 }>()
+
+const roleLabels = computed(() => {
+  const mode = props.videoMode ?? 'text_to_video'
+  const map = new Map<string, string>()
+  for (const refItem of props.refs) {
+    const label = resolveRefRoleLabel(refItem, props.refs, mode)
+    if (label) map.set(refItem.refId, label)
+  }
+  return map
+})
 
 const emit = defineEmits<{
   reorder: [refIds: string[]]
@@ -68,6 +81,7 @@ function onDragEnd() {
         v-for="refItem in refs"
         :key="refItem.refId"
         :ref-item="refItem"
+        :role-label="roleLabels.get(refItem.refId)"
         draggable
         :dragging="dragRefId === refItem.refId"
         :drag-over="dragOverRefId === refItem.refId"

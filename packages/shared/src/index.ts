@@ -8,6 +8,8 @@ export * from './nodeRefs'
 export * from './imageParams'
 export * from './imageModelProfiles'
 export * from './videoModelProfiles'
+export * from './videoModelCapabilities'
+export * from './videoSettingsOptions'
 export * from './platformCredentials'
 export * from './studioModelCatalog'
 export * from './providerChannels'
@@ -156,9 +158,9 @@ export const VIDEO_MODELS: AIModel[] = [
   { id: 'pika-v2', name: 'Pika V2', provider: 'Pika', type: 'video' },
 ]
 
-export type VideoAspectRatio = '16:9' | '9:16' | '1:1'
+export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
 export type VideoCropMode = 'none' | 'center' | 'fill'
-export type VideoResolution = '480p' | '720p' | '1080p'
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
 
 export interface VideoSettings {
   aspectRatio: VideoAspectRatio

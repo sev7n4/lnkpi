@@ -37,6 +37,7 @@ const emit = defineEmits<{
   expand: []
   batchGenerate: []
   export: []
+  continueShot: []
 }>()
 
 const nodeType = computed(() => String(props.node?.type ?? ''))
@@ -106,6 +107,7 @@ const panelBindings = {
     @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
+    @continue-shot="emit('continueShot')"
   />
   <AudioDockPanel
     v-else-if="node && nodeType === 'audio'"

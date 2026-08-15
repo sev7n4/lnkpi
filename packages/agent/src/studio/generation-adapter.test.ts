@@ -306,6 +306,37 @@ describe('buildVideoProviderOptions', () => {
     expect(prompt).not.toContain('@Audio1')
     expect(built.meta.scenario).toBe('S5')
   })
+
+  it('passes seed to seedance provider options when native', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      seed: 42,
+    })
+    expect(r.providerOptions.seed).toBe(42)
+    expect(r.meta.nativeParams.seed).toBe(42)
+  })
+
+  it('passes seed and negativePrompt for agnes when native', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'agnes-video-v2.0',
+      seed: 7,
+      negativePrompt: 'watermark',
+    })
+    expect(r.providerOptions.seed).toBe(7)
+    expect(r.providerOptions.negativePrompt).toBe('watermark')
+    expect(r.meta.nativeParams.negative_prompt).toBe('watermark')
+  })
+
+  it('drops negativePrompt for seedance with droppedFields', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'seedance-2.0-min',
+      negativePrompt: 'watermark',
+    })
+    expect(r.providerOptions.negativePrompt).toBeUndefined()
+    expect(r.meta.droppedFields).toContainEqual(
+      expect.objectContaining({ field: 'negativePrompt' }),
+    )
+  })
 })
 
 describe('buildImageProviderOptions', () => {

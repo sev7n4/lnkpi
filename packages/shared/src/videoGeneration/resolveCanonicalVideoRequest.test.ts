@@ -167,4 +167,20 @@ describe('resolveCanonicalVideoRequest', () => {
     expect(req.model).toBe('platform::default-video')
     expect(req.videoMode).toBe('text_to_video')
   })
+
+  it('reads seed and negativePrompt from node data', () => {
+    const req = resolveCanonicalVideoRequest({
+      node: {
+        ...baseVideoNode,
+        data: {
+          prompt: '展示',
+          seed: 123,
+          negativePrompt: 'blur, watermark',
+        },
+      },
+      canvas: { nodes: [baseVideoNode], edges: [] },
+    })
+    expect(req.seed).toBe(123)
+    expect(req.negativePrompt).toBe('blur, watermark')
+  })
 })
