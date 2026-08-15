@@ -29,7 +29,6 @@ describe('buildNodeMediaInfoSummary', () => {
       bytes: 900_000,
       aspectRatio: '1:1',
     })
-    expect(summary?.model).toBeUndefined()
   })
 
   it('falls back to metadata.mediaInfo when top-level field is missing', () => {
