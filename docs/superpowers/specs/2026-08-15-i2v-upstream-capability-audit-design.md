@@ -520,5 +520,101 @@ flowchart TB
 
 ---
 
+## 附录 A — `POST /studio/video/start` refs × videoMode 示例矩阵
+
+> **G-12 文档化：** 下列组合经 `buildVideoReferenceBundle` → `inferVideoScenario` → `buildVideoProviderOptions` 验证；集成测试见 `apps/server/src/studio/video-generation.integration.test.ts`。
+
+### A.1 场景矩阵
+
+| videoMode | refs | 预期 scenario | 推荐模型 |
+|---|---|---|---|
+| `image_to_video` | 1×I | **S2** 单图 I2V | 任意 |
+| `first_last_frame` | 2×I | **S5** 严格首尾帧 | **Seedance** |
+| `image_to_video` | 2×I | **S4** 多图参考 | 任意（Agnes→keyframes；Seedance→image_urls） |
+| `text_to_video` | 1×V | **S6** 视频运镜参考 | **Seedance** |
+
+### A.2 请求示例
+
+**S2 — 单图 I2V**
+
+```json
+POST /studio/video/start
+{
+  "prompt": "产品缓慢旋转展示",
+  "model": "seedance-2.0-min",
+  "videoMode": "image_to_video",
+  "duration": 5,
+  "refs": [
+    { "refKey": "I1", "mediaType": "image", "url": "https://cdn.example/product.png" }
+  ],
+  "sessionId": "sess_abc",
+  "nodeId": "node_video_1"
+}
+```
+
+**S5 — 严格首尾帧（Seedance）**
+
+```json
+POST /studio/video/start
+{
+  "prompt": "从首帧平滑过渡到末帧",
+  "model": "seedance-2.0-min",
+  "videoMode": "first_last_frame",
+  "duration": 5,
+  "refs": [
+    { "refKey": "I1", "mediaType": "image", "url": "https://cdn.example/first.png" },
+    { "refKey": "I2", "mediaType": "image", "url": "https://cdn.example/last.png" }
+  ],
+  "sessionId": "sess_abc",
+  "nodeId": "node_video_2"
+}
+```
+
+**S4 — 多图参考**
+
+```json
+POST /studio/video/start
+{
+  "prompt": "保持 @Image1 与 @Image2 角色一致",
+  "model": "seedance-2.0-min",
+  "videoMode": "image_to_video",
+  "duration": 5,
+  "refs": [
+    { "refKey": "I1", "mediaType": "image", "url": "https://cdn.example/a.png" },
+    { "refKey": "I2", "mediaType": "image", "url": "https://cdn.example/b.png" }
+  ],
+  "sessionId": "sess_abc",
+  "nodeId": "node_video_3"
+}
+```
+
+**S6 — 视频运镜参考**
+
+```json
+POST /studio/video/start
+{
+  "prompt": "模仿 @Video1 运镜节奏",
+  "model": "seedance-2.0-min",
+  "videoMode": "text_to_video",
+  "duration": 5,
+  "refs": [
+    { "refKey": "V1", "mediaType": "video", "url": "https://cdn.example/camera.mp4" }
+  ],
+  "sessionId": "sess_abc",
+  "nodeId": "node_video_4"
+}
+```
+
+### A.3 refWire 路由（adapter 出站）
+
+| scenario | Seedance refWire | Agnes refWire |
+|---|---|---|
+| S2 | `apimart_multimodal` + `return_last_frame` | `agnes_single_image` |
+| S4 | `apimart_multimodal` | `agnes_keyframes` |
+| S5 | `apimart_first_last` | `agnes_keyframes`（降级，非严格首尾） |
+| S6 | `apimart_multimodal` | V ref 被 dropped |
+
+---
+
 **Spec 路径：** `docs/superpowers/specs/2026-08-15-i2v-upstream-capability-audit-design.md`  
 **Implementation Plan：** `docs/superpowers/plans/2026-08-15-i2v-capability-productization.md`
