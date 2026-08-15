@@ -21,6 +21,7 @@ export * from './sidebarAttachments'
 export * from './agentIntent'
 export * from './promptContent'
 export * from './journeyTrace'
+export * from './mediaInfo'
 export * from './videoGeneration/types'
 export { resolveCanonicalVideoRequest } from './videoGeneration/resolveCanonicalVideoRequest'
 
