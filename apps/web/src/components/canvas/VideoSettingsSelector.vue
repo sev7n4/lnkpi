@@ -9,7 +9,11 @@ import {
   VIDEO_CROP_OPTIONS,
   VIDEO_DURATION_MARKS,
   VIDEO_RESOLUTION_OPTIONS,
+  videoAspectRatioOptionsForCapabilities,
+  videoResolutionOptionsForCapabilities,
+  type VideoAspectRatio,
   type VideoModelCapabilities,
+  type VideoResolution,
   type VideoSettings,
 } from '@lnkpi/shared'
 
@@ -36,6 +40,38 @@ const durationBelowMinHint = computed(() => {
   return `该模型最短 ${min} 秒`
 })
 
+const aspectRatioOptions = computed(() => {
+  if (!props.capabilities) return VIDEO_ASPECT_RATIO_OPTIONS
+  return videoAspectRatioOptionsForCapabilities(props.capabilities)
+})
+
+const resolutionOptions = computed(() => {
+  if (!props.capabilities) return VIDEO_RESOLUTION_OPTIONS
+  return videoResolutionOptionsForCapabilities(props.capabilities)
+})
+
+function ensureAllowedAspectAndResolution() {
+  if (!props.capabilities) return
+  const partial: Partial<VideoSettings> = {}
+  const arOpts = aspectRatioOptions.value
+  if (
+    arOpts.length > 0
+    && !arOpts.some((o) => o.value === props.modelValue.aspectRatio)
+  ) {
+    partial.aspectRatio = arOpts[0].value as VideoAspectRatio
+  }
+  const resOpts = resolutionOptions.value
+  if (
+    resOpts.length > 0
+    && !resOpts.some((o) => o.value === props.modelValue.resolution)
+  ) {
+    partial.resolution = resOpts[0].value as VideoResolution
+  }
+  if (Object.keys(partial).length > 0) {
+    patch(partial)
+  }
+}
+
 const emit = defineEmits<{
   'update:modelValue': [value: VideoSettings]
 }>()
@@ -56,11 +92,19 @@ function patch(partial: Partial<VideoSettings>) {
 
 watch(open, (isOpen) => {
   if (!isOpen) return
+  ensureAllowedAspectAndResolution()
   const clamped = clampVideoDuration(props.modelValue.duration)
   if (clamped !== props.modelValue.duration) {
     patch({ duration: clamped })
   }
 })
+
+watch(
+  () => [props.capabilities, props.modelValue.aspectRatio, props.modelValue.resolution] as const,
+  () => {
+    ensureAllowedAspectAndResolution()
+  },
+)
 </script>
 
 <template>
@@ -92,7 +136,7 @@ watch(open, (isOpen) => {
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">画面比例</p>
         <div class="flex flex-wrap gap-1">
           <button
-            v-for="opt in VIDEO_ASPECT_RATIO_OPTIONS"
+            v-for="opt in aspectRatioOptions"
             :key="opt.value"
             type="button"
             class="neo-chip rounded-md px-2 py-1 text-[10px]"
@@ -110,7 +154,7 @@ watch(open, (isOpen) => {
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">分辨率</p>
         <div class="flex gap-1">
           <button
-            v-for="opt in VIDEO_RESOLUTION_OPTIONS"
+            v-for="opt in resolutionOptions"
             :key="opt.value"
             type="button"
             class="neo-chip flex-1 rounded-md px-2 py-1 text-[10px]"
