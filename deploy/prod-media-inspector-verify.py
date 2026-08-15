@@ -93,14 +93,33 @@ def http_json_status(
         return payload, exc.code
 
 
-def row_has_media_info(row: dict[str, Any]) -> bool:
-    if row.get("mediaInfo"):
-        return True
+def row_media_info(row: dict[str, Any]) -> dict[str, Any] | None:
+    if isinstance(row.get("mediaInfo"), dict):
+        return row["mediaInfo"]
     try:
         meta = json.loads(str(row.get("metadata") or "{}"))
     except json.JSONDecodeError:
-        return False
-    return isinstance(meta.get("mediaInfo"), dict) and bool(meta.get("mediaInfo"))
+        return None
+    mi = meta.get("mediaInfo")
+    return mi if isinstance(mi, dict) else None
+
+
+def row_has_media_info(row: dict[str, Any]) -> bool:
+    return bool(row_media_info(row))
+
+
+def image_probe_dims(row: dict[str, Any]) -> tuple[int, int] | None:
+    media_info = row_media_info(row)
+    if not media_info:
+        return None
+    output = media_info.get("output")
+    if not isinstance(output, dict):
+        return None
+    width = output.get("width")
+    height = output.get("height")
+    if isinstance(width, int) and width > 0 and isinstance(height, int) and height > 0:
+        return width, height
+    return None
 
 
 def pick_completed_record(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -112,28 +131,58 @@ def pick_completed_record(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     ]
     if not candidates:
         return None
+    image_with_dims = [
+        row for row in candidates if str(row.get("type") or "") == "image" and image_probe_dims(row)
+    ]
+    if image_with_dims:
+        return image_with_dims[0]
+    image_with_media = [
+        row for row in candidates if str(row.get("type") or "") == "image" and row_has_media_info(row)
+    ]
+    if image_with_media:
+        return image_with_media[0]
     with_media = [row for row in candidates if row_has_media_info(row)]
     return with_media[0] if with_media else candidates[0]
 
 
-def pick_probe_url(record: dict[str, Any], explicit: str) -> str | None:
+def pick_probe_url(record: dict[str, Any], detail: dict[str, Any], explicit: str) -> str | None:
     if explicit:
         return explicit
-    url = str(record.get("url") or "").strip()
-    if url.startswith("http"):
-        return url
-    try:
-        meta = json.loads(str(record.get("metadata") or "{}"))
-    except json.JSONDecodeError:
-        meta = {}
-    media_info = meta.get("mediaInfo") if isinstance(meta, dict) else None
+    media_info = detail.get("mediaInfo") if isinstance(detail.get("mediaInfo"), dict) else row_media_info(record)
     if isinstance(media_info, dict):
         output = media_info.get("output")
         if isinstance(output, dict):
+            width = output.get("width")
+            height = output.get("height")
             out_url = str(output.get("url") or "").strip()
-            if out_url.startswith("http"):
+            if (
+                out_url.startswith("http")
+                and isinstance(width, int)
+                and width > 0
+                and isinstance(height, int)
+                and height > 0
+            ):
                 return out_url
-    return None
+        refs = media_info.get("references")
+        if isinstance(refs, list):
+            for ref in refs:
+                if not isinstance(ref, dict):
+                    continue
+                ref_url = str(ref.get("url") or "").strip()
+                width = ref.get("width")
+                height = ref.get("height")
+                if (
+                    ref_url.startswith("http")
+                    and isinstance(width, int)
+                    and width > 0
+                    and isinstance(height, int)
+                    and height > 0
+                ):
+                    return ref_url
+    url = str(record.get("url") or detail.get("url") or "").strip()
+    if url.startswith("http") and url.lower().endswith((".png", ".jpg", ".jpeg", ".webp", ".gif")):
+        return url
+    return SMALL_REF_URL or None
 
 
 def main() -> int:
@@ -225,7 +274,7 @@ def main() -> int:
             warn=True,
         )
 
-    probe_url = pick_probe_url(detail, PROBE_URL)
+    probe_url = pick_probe_url(target, detail, PROBE_URL)
     if not probe_url:
         record("Resolve probe URL", False, "no http output url; set PROBE_URL")
         print(f"\nRESULT: PASS={PASS} FAIL={FAIL} WARN={WARN}")
