@@ -1,6 +1,6 @@
 # 图生视频上游能力审计与产品化规格（I2V Capability Audit）
 
-> 状态：**现状审计已定 · Plan 已写（待实施）**  
+> 状态：**P0–P2 已实施**（`feature/i2v-capability-productization`，Tasks 0–9）  
 > 日期：2026-08-15  
 > 代号：**I2V-AUDIT**  
 > 范围：基于 Agnes Video V2.0 与 Seedance 2.0/2.5 公开 API，审计本项目图生视频链路在 **单图 / 多图 / 多模态 / 关键帧 / 连续分镜** 等能力上的实现完整度；定义后续产品化方向  
@@ -326,8 +326,9 @@ S1: default t2v
 |---|---|
 | Seedance S2/S3/S8 → return_last_frame | ✅ adapter |
 | Provider 返回 lastFrameUrl | ✅ ApimartVideoProvider |
-| 写回节点 lastFrameUrl 字段 | ⚠️ 不完整 / 非自动 |
+| 写回节点 lastFrameUrl 字段 | ✅ Task 6 |
 | UI「延续上一镜」| ✅ 读 upstream.lastFrameUrl → localRefs |
+| UI「接下一段」（Seedance S8）| ✅ Task 6 |
 | 一键「接下一段」工作流 | ❌ |
 | Agnes 链接 | ❌ 不支持 |
 
