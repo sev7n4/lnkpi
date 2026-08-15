@@ -10,6 +10,7 @@ import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
 import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import MediaRefList from '@/components/media/MediaRefList.vue'
+import { buildNodeMediaInfoSummary } from '@/composables/useMediaInspector'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
@@ -155,14 +156,7 @@ function recordMediaInfo(record: GenerationRecord): MediaInfo | undefined {
 }
 
 function recordMediaSummaryProps(record: GenerationRecord) {
-  const info = recordMediaInfo(record)
-  const output = info?.output
-  return {
-    width: output?.width,
-    height: output?.height,
-    bytes: output?.bytes,
-    model: record.model ?? undefined,
-  }
+  return buildNodeMediaInfoSummary(record) ?? {}
 }
 
 function recordMediaRefItems(record: GenerationRecord) {

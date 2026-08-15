@@ -27,10 +27,13 @@ const props = defineProps<{
     generationRecordId?: string
     materialId?: string
     mediaInfo?: {
+      kind?: 'image' | 'video'
       width?: number
       height?: number
       bytes?: number
-      model?: string
+      aspectRatio?: string
+      duration?: number
+      resolution?: string
       refWarning?: MediaRefWarningLevel
     }
   }

@@ -4,20 +4,33 @@ import type { MediaRefWarningLevel } from '@lnkpi/shared'
 import { formatMediaBytes, formatMediaDimensions } from '@/utils/mediaInfoFormat'
 
 const props = defineProps<{
+  kind?: 'image' | 'video'
   width?: number
   height?: number
   bytes?: number
-  model?: string
+  aspectRatio?: string
+  duration?: number
+  resolution?: string
   refWarning?: MediaRefWarningLevel
 }>()
 
 const parts = computed(() => {
   const line: string[] = []
+  if (props.kind === 'video') {
+    if (typeof props.duration === 'number' && props.duration > 0) {
+      line.push(`${props.duration}s`)
+    }
+    if (props.aspectRatio?.trim()) line.push(props.aspectRatio.trim())
+    if (props.resolution?.trim()) line.push(props.resolution.trim())
+    const size = formatMediaBytes(props.bytes)
+    if (size) line.push(size)
+    return line
+  }
   const dims = formatMediaDimensions(props.width, props.height)
   if (dims) line.push(dims)
   const size = formatMediaBytes(props.bytes)
   if (size) line.push(size)
-  if (props.model?.trim()) line.push(props.model.trim())
+  if (props.aspectRatio?.trim()) line.push(props.aspectRatio.trim())
   return line
 })
 
