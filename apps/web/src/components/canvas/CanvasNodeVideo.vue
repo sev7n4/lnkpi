@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
+import { useMediaInspector } from '@/composables/useMediaInspector'
 import { downloadMediaFile, isUpstreamMediaUrl, mediaDownloadName, UPSTREAM_MEDIA_DOWNLOAD_HINT } from '@/composables/useCanvasMedia'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import type { MediaRefWarningLevel } from '@lnkpi/shared'
 
 const props = defineProps<{
   id: string
@@ -22,10 +26,18 @@ const props = defineProps<{
     generationStartedAt?: string
     generationRecordId?: string
     materialId?: string
+    mediaInfo?: {
+      width?: number
+      height?: number
+      bytes?: number
+      model?: string
+      refWarning?: MediaRefWarningLevel
+    }
   }
 }>()
 
 const route = useRoute()
+const { openInspector } = useMediaInspector()
 const sessionId = computed(() => route.params.sessionId as string | undefined)
 const taskId = computed(
   () =>
@@ -46,6 +58,11 @@ const downloadTitle = computed(() =>
     ? UPSTREAM_MEDIA_DOWNLOAD_HINT
     : '下载视频',
 )
+const showMediaSummary = computed(
+  () => props.data.status === NODE_GENERATION_STATUS.completed && Boolean(props.data.mediaInfo),
+)
+const showInspectorBtn = computed(() => Boolean(props.data.generationRecordId))
+const isCompleted = computed(() => props.data.status === NODE_GENERATION_STATUS.completed)
 const {
   accept,
   dragOver,
@@ -71,6 +88,20 @@ function saveToLibrary() {
   const url = String(props.data.url ?? '').trim()
   if (!url) return
   void saveAssetToLibrary({ kind: 'video', url, label: props.data.label ?? '', sourceNodeId: props.id })
+}
+
+function openMediaInspector(e: Event) {
+  e.stopPropagation()
+  e.preventDefault()
+  const recordId = props.data.generationRecordId
+  if (!recordId) return
+  void openInspector({
+    generationRecordId: recordId,
+    nodeId: props.id,
+    nodeLabel: props.data.label,
+    url: props.data.url,
+    kind: 'video',
+  })
 }
 
 const mode = ref<'drag' | 'play'>('drag')
@@ -196,6 +227,24 @@ onUnmounted(() => {
           <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
+        </button>
+        <MediaInfoSummary
+          v-if="showMediaSummary && data.mediaInfo"
+          v-bind="data.mediaInfo"
+          class="neo-media-info-summary--overlay"
+        />
+        <button
+          v-if="showInspectorBtn"
+          type="button"
+          class="neo-media-inspector-btn nodrag"
+          :class="{ 'is-completed': isCompleted }"
+          aria-label="媒体属性"
+          title="媒体属性"
+          @pointerdown.stop
+          @mousedown.stop
+          @click.stop="openMediaInspector"
+        >
+          ⓘ
         </button>
       </div>
       <div

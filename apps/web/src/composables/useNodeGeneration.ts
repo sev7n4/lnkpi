@@ -20,6 +20,7 @@ import {
 } from '@/composables/useGenerationPolling'
 import { parseRefMentions } from '@/composables/useRefMentions'
 import { notifyGenerationSaveLocalHint } from '@/composables/useCanvasMedia'
+import { buildNodeMediaInfoSummary } from '@/composables/useMediaInspector'
 import { canvasApi } from '@/services/canvas-api'
 import { studioApi, type CanvasGenerationScope, type GenerationRecord, type StudioRefPayload } from '@/services/studio-api'
 import {
@@ -469,6 +470,8 @@ async function cancelRemoteGeneration(nodeId: string) {
           if (lastFrameUrl) patch.lastFrameUrl = lastFrameUrl
         }
       }
+      const mediaSummary = buildNodeMediaInfoSummary(record)
+      if (mediaSummary) patch.mediaInfo = mediaSummary
       deps.patchNodeData(nodeId, patch)
       if (
         wasGenerating &&

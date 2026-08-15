@@ -450,6 +450,77 @@
   object-fit: cover;
 }
 
+.neo-media-info-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  line-height: 1.25;
+  backdrop-filter: blur(6px);
+}
+
+.neo-media-info-summary--overlay {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  z-index: 2;
+}
+
+.neo-media-info-summary-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.neo-media-info-summary-warn {
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.neo-media-info-summary-warn.is-warn {
+  color: #fde047;
+}
+
+.neo-media-info-summary-warn.is-error {
+  color: #fca5a5;
+}
+
+.neo-media-inspector-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 4;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.neo-media-inspector-btn.is-completed {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.neo-media-inspector-btn:hover {
+  color: #c4b5fd;
+  background: rgba(0, 0, 0, 0.72);
+}
+
 .neo-gen-video-poster {
   pointer-events: none;
 }

@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
+import { useMediaInspector } from '@/composables/useMediaInspector'
 import { downloadMediaFile, isUpstreamMediaUrl, mediaDownloadName, UPSTREAM_MEDIA_DOWNLOAD_HINT } from '@/composables/useCanvasMedia'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
+import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
+import type { MediaRefWarningLevel } from '@lnkpi/shared'
 
 const props = defineProps<{
   id: string
@@ -23,11 +27,19 @@ const props = defineProps<{
     generationStartedAt?: string
     generationRecordId?: string
     materialId?: string
+    mediaInfo?: {
+      width?: number
+      height?: number
+      bytes?: number
+      model?: string
+      refWarning?: MediaRefWarningLevel
+    }
   }
 }>()
 
 const editor = useCanvasEditorStore()
 const route = useRoute()
+const { openInspector } = useMediaInspector()
 const sessionId = computed(() => route.params.sessionId as string | undefined)
 const taskId = computed(
   () =>
@@ -48,6 +60,11 @@ const downloadTitle = computed(() =>
     ? UPSTREAM_MEDIA_DOWNLOAD_HINT
     : '下载图片',
 )
+const showMediaSummary = computed(
+  () => props.data.status === NODE_GENERATION_STATUS.completed && Boolean(props.data.mediaInfo),
+)
+const showInspectorBtn = computed(() => Boolean(props.data.generationRecordId))
+const isCompleted = computed(() => props.data.status === NODE_GENERATION_STATUS.completed)
 const {
   accept,
   dragOver,
@@ -95,6 +112,20 @@ function saveToLibrary() {
     url,
     label: props.data.label ?? props.data.prompt ?? '',
     sourceNodeId: props.id,
+  })
+}
+
+function openMediaInspector(e: Event) {
+  e.stopPropagation()
+  e.preventDefault()
+  const recordId = props.data.generationRecordId
+  if (!recordId) return
+  void openInspector({
+    generationRecordId: recordId,
+    nodeId: props.id,
+    nodeLabel: props.data.label ?? props.data.prompt,
+    url: props.data.url,
+    kind: 'image',
   })
 }
 </script>
@@ -179,6 +210,24 @@ function saveToLibrary() {
           @click.stop="openEdit"
         >
           编辑
+        </button>
+        <MediaInfoSummary
+          v-if="showMediaSummary && data.mediaInfo"
+          v-bind="data.mediaInfo"
+          class="neo-media-info-summary--overlay"
+        />
+        <button
+          v-if="showInspectorBtn"
+          type="button"
+          class="neo-media-inspector-btn nodrag"
+          :class="{ 'is-completed': isCompleted }"
+          aria-label="媒体属性"
+          title="媒体属性"
+          @pointerdown.stop
+          @mousedown.stop
+          @click.stop="openMediaInspector"
+        >
+          ⓘ
         </button>
       </div>
       <div
