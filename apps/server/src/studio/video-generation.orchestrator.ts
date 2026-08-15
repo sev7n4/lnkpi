@@ -70,6 +70,8 @@ export class VideoGenerationOrchestrator {
       { sessionId, nodeId },
       request.videoMode,
       videoSettings.generateAudio,
+      request.seed,
+      request.negativePrompt,
     )
 
     const recordId = record.id

@@ -548,6 +548,8 @@ export interface VideoProviderGenerateOptions {
   crop?: string
   image?: string
   generateAudio?: boolean
+  seed?: number
+  negativePrompt?: string
   referenceImages?: string[]
   referenceVideos?: string[]
   referenceAudios?: string[]
@@ -619,6 +621,8 @@ export function buildVideoProviderOptions(input: {
   gatewayModelHint?: string
   channelBaseUrl?: string
   generateAudio?: boolean
+  seed?: number
+  negativePrompt?: string
 }): BuiltVideoProviderOptions {
   const {
     modelKey,
@@ -630,6 +634,8 @@ export function buildVideoProviderOptions(input: {
     gatewayModelHint,
     channelBaseUrl,
     generateAudio,
+    seed,
+    negativePrompt,
   } = input
   if (gatewayModelHint && isSeedance1x(gatewayModelHint)) {
     throw new Seedance1xUnsupportedError(gatewayModelHint)
@@ -716,6 +722,28 @@ export function buildVideoProviderOptions(input: {
       droppedFields.push({
         field: 'generateAudio',
         reason: `generateAudio not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
+  }
+  if (seed !== undefined) {
+    if (catalog.entry.params.seed === 'native') {
+      providerOptions.seed = seed
+      nativeParams.seed = seed
+    } else {
+      droppedFields.push({
+        field: 'seed',
+        reason: `seed not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
+  }
+  if (negativePrompt !== undefined && negativePrompt.trim()) {
+    if (catalog.entry.params.negativePrompt === 'native') {
+      providerOptions.negativePrompt = negativePrompt.trim()
+      nativeParams.negative_prompt = negativePrompt.trim()
+    } else {
+      droppedFields.push({
+        field: 'negativePrompt',
+        reason: `negativePrompt not supported natively by ${catalog.entry.modelKey}`,
       })
     }
   }

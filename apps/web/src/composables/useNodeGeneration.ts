@@ -764,6 +764,10 @@ async function cancelRemoteGeneration(nodeId: string) {
 
     const settings = data.videoSettings as VideoSettings | undefined
     const videoMode = data.videoMode as string | undefined
+    const seedRaw = data.seed
+    const seed =
+      typeof seedRaw === 'number' && Number.isFinite(seedRaw) ? Math.trunc(seedRaw) : undefined
+    const negativePrompt = String(data.negativePrompt ?? '').trim() || undefined
     const { data: res } = await studioApi.startVideoGeneration(
       prompt,
       resolveGenerationModel('video', data.videoModel as string | undefined),
@@ -778,6 +782,8 @@ async function cancelRemoteGeneration(nodeId: string) {
       canvasScope(node.id),
       videoMode,
       settings?.generateAudio,
+      seed,
+      negativePrompt,
     )
     if (signal?.aborted) return
     const startedAt =

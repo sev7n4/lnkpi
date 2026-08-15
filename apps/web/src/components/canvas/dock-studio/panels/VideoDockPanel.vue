@@ -54,6 +54,8 @@ const videoModel = ref(getConfig('video').model)
 const videoSettings = ref<VideoSettings>({ ...DEFAULT_VIDEO_SETTINGS })
 const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
+const seed = ref<number | undefined>(undefined)
+const negativePrompt = ref('')
 const refInput = ref<HTMLInputElement | null>(null)
 const refUploading = ref(false)
 const refUploadProgress = ref(0)
@@ -115,6 +117,10 @@ function syncFromNode() {
   }
   referenceImageUrl.value = String(data.referenceImageUrl ?? '')
   videoMode.value = resolveVideoMode(data, props.upstream)
+  const seedRaw = data.seed
+  seed.value =
+    typeof seedRaw === 'number' && Number.isFinite(seedRaw) ? Math.trunc(seedRaw) : undefined
+  negativePrompt.value = String(data.negativePrompt ?? '')
 }
 
 watch(() => props.node, syncFromNode, { immediate: true, deep: true })
@@ -153,12 +159,32 @@ function setVideoMode(mode: VideoGenerationMode) {
   syncField('videoMode', mode)
 }
 
+function onNegativePromptInput(value: string) {
+  negativePrompt.value = value
+  syncField('negativePrompt', value.trim() || undefined)
+}
+
+function onSeedInput(raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    seed.value = undefined
+    syncField('seed', undefined)
+    return
+  }
+  const n = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(n)) return
+  seed.value = n
+  syncField('seed', n)
+}
+
 function onGenerate() {
   emit('patch', {
     prompt: prompt.value,
     videoModel: videoModel.value,
     videoSettings: { ...videoSettings.value },
     videoMode: videoMode.value,
+    seed: seed.value,
+    negativePrompt: negativePrompt.value.trim() || undefined,
   })
   emit('generate')
 }
@@ -299,6 +325,35 @@ function onRefMention(refKey: string) {
       @submit="onGenerate"
     />
 
+    <details class="dock-advanced">
+      <summary class="dock-advanced-summary">高级</summary>
+      <div class="dock-advanced-body">
+        <label class="dock-advanced-field">
+          <span class="dock-advanced-label">Seed</span>
+          <input
+            type="number"
+            class="dock-advanced-input"
+            :value="seed ?? ''"
+            :disabled="readonly"
+            placeholder="随机"
+            step="1"
+            @input="onSeedInput(($event.target as HTMLInputElement).value)"
+          >
+        </label>
+        <label class="dock-advanced-field dock-advanced-field-grow">
+          <span class="dock-advanced-label">Negative prompt</span>
+          <input
+            type="text"
+            class="dock-advanced-input"
+            :value="negativePrompt"
+            :disabled="readonly"
+            placeholder="排除内容，如 watermark, blur"
+            @input="onNegativePromptInput(($event.target as HTMLInputElement).value)"
+          >
+        </label>
+      </div>
+    </details>
+
     <div class="bottom-toolbar-actions flex-wrap">
       <div class="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/5 p-0.5">
         <button
@@ -433,5 +488,63 @@ function onRefMention(refKey: string) {
   font-size: 10px;
   line-height: 1.4;
   color: rgba(253, 224, 71, 0.95);
+}
+
+.dock-advanced {
+  margin: 0 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dock-advanced-summary {
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.65);
+  user-select: none;
+  list-style: none;
+}
+
+.dock-advanced-summary::-webkit-details-marker {
+  display: none;
+}
+
+.dock-advanced-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
+
+.dock-advanced-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 88px;
+}
+
+.dock-advanced-field-grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.dock-advanced-label {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.dock-advanced-input {
+  width: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.dock-advanced-input:disabled {
+  opacity: 0.5;
 }
 </style>

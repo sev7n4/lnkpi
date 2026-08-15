@@ -159,7 +159,11 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
     gatewayModelId: 'agnes-video-v2.0',
     modality: 'video',
     providerBinding: 'gateway-openai-compat',
-    params: VIDEO_PARAMS,
+    params: {
+      ...VIDEO_PARAMS,
+      seed: 'native',
+      negativePrompt: 'native',
+    },
   },
   {
     modelKey: 'seedance-2.0-min',

@@ -108,6 +108,14 @@ class GenerateVideoDto extends CanvasScopeFields {
   generateAudio?: boolean
 
   @IsOptional()
+  @IsNumber()
+  seed?: number
+
+  @IsOptional()
+  @IsString()
+  negativePrompt?: string
+
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => StudioRefDto)
@@ -390,6 +398,8 @@ export class StudioController {
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
       dto.videoMode,
       dto.generateAudio,
+      dto.seed,
+      dto.negativePrompt,
     )
     return { code: 0, message: 'ok', data }
   }
