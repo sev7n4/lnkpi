@@ -19,7 +19,7 @@ import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vu
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveGenerationModel } from '@/constants/studioModels'
+import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/studioModels'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
@@ -306,6 +306,8 @@ function onRefMention(refKey: string) {
       </div>
       <VideoSettingsSelector
         v-model="videoSettings"
+        :capabilities="capabilities"
+        :model-key="catalogModelKeyFromValue(videoModel)"
         @update:model-value="syncField('videoSettings', $event)"
       />
 

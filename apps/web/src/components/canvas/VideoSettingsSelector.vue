@@ -1,19 +1,40 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useClickOutside } from '@/composables/useClickOutside'
 import {
   clampVideoDuration,
   DEFAULT_VIDEO_SETTINGS,
+  resolveModelKey,
   VIDEO_ASPECT_RATIO_OPTIONS,
   VIDEO_CROP_OPTIONS,
   VIDEO_DURATION_MARKS,
   VIDEO_RESOLUTION_OPTIONS,
+  type VideoModelCapabilities,
   type VideoSettings,
 } from '@lnkpi/shared'
 
 const props = defineProps<{
   modelValue: VideoSettings
+  capabilities?: VideoModelCapabilities
+  modelKey?: string
 }>()
+
+const showGenerateAudio = computed(() => {
+  if (!props.capabilities) return true
+  return props.capabilities.supportsGenerateAudio
+})
+
+const showCrop = computed(() => {
+  if (!props.modelKey) return true
+  const { entry } = resolveModelKey('video', props.modelKey)
+  return entry.params.crop === 'native'
+})
+
+const durationBelowMinHint = computed(() => {
+  const min = props.capabilities?.minDuration
+  if (min == null || props.modelValue.duration >= min) return null
+  return `该模型最短 ${min} 秒`
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: VideoSettings]
@@ -129,9 +150,15 @@ watch(open, (isOpen) => {
             {{ mark }}
           </button>
         </div>
+        <p
+          v-if="durationBelowMinHint"
+          class="mt-1 text-[10px] text-amber-400/90"
+        >
+          {{ durationBelowMinHint }}
+        </p>
       </div>
 
-      <div class="mb-3">
+      <div v-if="showGenerateAudio" class="mb-3">
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">生成音频</p>
         <button
           type="button"
@@ -143,7 +170,7 @@ watch(open, (isOpen) => {
         </button>
       </div>
 
-      <div>
+      <div v-if="showCrop">
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">裁剪</p>
         <div class="flex flex-wrap gap-1">
           <button
