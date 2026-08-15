@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElAlert, ElMessage } from 'element-plus'
+import {
+  evaluateMediaRefPreflight,
+  type MediaRefPreflight,
+  type ProbedMediaFile,
+} from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import {
   resolveVideoMode,
@@ -22,7 +27,7 @@ import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/studioModels'
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
-import { isNodeGenerating } from '@/constants/dockStudio'
+import { isNodeGenerating, NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
@@ -30,7 +35,9 @@ import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoC
 import {
   countValidImageRefs,
   hasUnsupportedMediaRefs,
+  isValidImageRef,
 } from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
+import { studioApi } from '@/services/studio-api'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -61,6 +68,10 @@ const refInput = ref<HTMLInputElement | null>(null)
 const refUploading = ref(false)
 const refUploadProgress = ref(0)
 const refUploadError = ref('')
+const refPreflight = ref<MediaRefPreflight | null>(null)
+const refPreflightLoading = ref(false)
+const pendingPreflightToast = ref(false)
+let preflightSeq = 0
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
@@ -109,6 +120,87 @@ const effectiveRefUrl = computed(() => {
   return props.upstream.referenceImageUrl.trim()
 })
 
+function isProbeableUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url.trim())
+}
+
+const imageRefSources = computed(() => {
+  const items: Array<{ url: string; refKey?: string }> = []
+  const seen = new Set<string>()
+  for (const ref of props.refs ?? []) {
+    if (!isValidImageRef(ref)) continue
+    const url = ref.payload.url?.trim()
+    if (!url || seen.has(url)) continue
+    seen.add(url)
+    items.push({ url, refKey: ref.refKey })
+  }
+  const localUrl = effectiveRefUrl.value.trim()
+  if (localUrl && !seen.has(localUrl)) {
+    items.push({ url: localUrl })
+  }
+  return items
+})
+
+const probeableRefSources = computed(() =>
+  imageRefSources.value.filter((src) => isProbeableUrl(src.url)),
+)
+
+const showRefPreflightAlert = computed(
+  () => refPreflight.value != null && refPreflight.value.level !== 'none',
+)
+
+async function loadCachedRefPreflight(): Promise<MediaRefPreflight | null> {
+  const recordId = props.node.data?.generationRecordId
+  if (typeof recordId !== 'string' || !recordId.trim()) return null
+  try {
+    const { data: res } = await studioApi.getGeneration(recordId.trim())
+    const pf = res.data.refPreflight
+    if (pf && pf.level !== 'none') return pf
+  } catch {
+    // ignore — fall back to client-side probe
+  }
+  return null
+}
+
+async function refreshRefPreflight() {
+  const seq = ++preflightSeq
+  if (!imageRefSources.value.length) {
+    refPreflight.value = null
+    return
+  }
+
+  const cached = await loadCachedRefPreflight()
+  if (seq !== preflightSeq) return
+  if (cached) refPreflight.value = cached
+
+  if (!probeableRefSources.value.length) {
+    if (!cached) refPreflight.value = null
+    return
+  }
+
+  refPreflightLoading.value = true
+  try {
+    const probed: Array<ProbedMediaFile & { refKey?: string }> = []
+    for (const src of probeableRefSources.value) {
+      if (seq !== preflightSeq) return
+      try {
+        const file = await studioApi.probeMedia(src.url)
+        probed.push({ ...file, refKey: src.refKey })
+      } catch {
+        probed.push({
+          url: src.url,
+          refKey: src.refKey,
+          probeStatus: 'failed',
+        })
+      }
+    }
+    if (seq !== preflightSeq) return
+    refPreflight.value = evaluateMediaRefPreflight(probed)
+  } finally {
+    if (seq === preflightSeq) refPreflightLoading.value = false
+  }
+}
+
 function syncFromNode() {
   const data = props.node.data ?? {}
   prompt.value = String(data.prompt ?? data.content ?? '')
@@ -134,6 +226,43 @@ watch(
     }
   },
   { immediate: true, deep: true },
+)
+
+watch(
+  () =>
+    [props.node.id, imageRefSources.value.map((src) => `${src.refKey ?? ''}:${src.url}`).join('|')] as const,
+  () => {
+    void refreshRefPreflight()
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [props.node.data?.status, props.generating] as const,
+  ([status, generating]) => {
+    if (generating) return
+    if (status === NODE_GENERATION_STATUS.completed) {
+      pendingPreflightToast.value = false
+    }
+  },
+)
+
+watch(
+  () =>
+    [
+      props.node.data?.status,
+      props.node.data?.errorMessage,
+      props.node.data?.errorCode,
+    ] as const,
+  ([status, msg, code]) => {
+    if (!pendingPreflightToast.value) return
+    if (status !== NODE_GENERATION_STATUS.error || !msg) return
+    pendingPreflightToast.value = false
+    const isPreflight =
+      code === 'invalid_input' ||
+      (msg.includes('参考图') && (msg.includes('过大') || msg.includes('偏大')))
+    if (isPreflight) ElMessage.error(msg)
+  },
 )
 
 watch(
@@ -180,6 +309,7 @@ function onSeedInput(raw: string) {
 }
 
 function onGenerate() {
+  pendingPreflightToast.value = true
   emit('patch', {
     prompt: prompt.value,
     videoModel: videoModel.value,
@@ -462,6 +592,15 @@ function onRefMention(refKey: string) {
         </div>
       </template>
 
+      <ElAlert
+        v-if="showRefPreflightAlert"
+        :type="refPreflight!.level === 'error' ? 'error' : 'warning'"
+        :closable="false"
+        show-icon
+        class="dock-ref-preflight-alert w-full basis-full"
+        :title="refPreflightLoading ? `${refPreflight!.message}（检测中…）` : refPreflight!.message"
+      />
+
       <div class="ml-auto flex items-center gap-2">
         <DockMicButton
           :listening="speech.listening.value"
@@ -481,6 +620,15 @@ function onRefMention(refKey: string) {
 </template>
 
 <style scoped>
+.dock-ref-preflight-alert {
+  margin: 0 2px 4px;
+}
+
+.dock-ref-preflight-alert :deep(.el-alert__title) {
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .dock-ref-warning {
   margin: 0 2px 4px;
   padding: 4px 8px;
