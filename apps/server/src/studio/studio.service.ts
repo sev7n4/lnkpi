@@ -34,6 +34,7 @@ import {
   type GenerationDiagnostic,
   type ImageRefWire,
   type ImageResolutionTier,
+  type MediaInfo,
   type StudioModality,
 } from '@lnkpi/shared'
 import {
@@ -53,6 +54,7 @@ import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
 } from '../provider/provider-resolver.service'
+import { MediaProbeService } from '../media/media-probe.service'
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -233,6 +235,7 @@ export class StudioService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PointsService) private readonly points: PointsService,
     @Inject(ProviderResolverService) private readonly resolver: ProviderResolverService,
+    @Inject(MediaProbeService) private readonly mediaProbe: MediaProbeService,
   ) {}
 
   async listGenerations(userId: string, type?: string, sessionId?: string) {
@@ -622,7 +625,39 @@ export class StudioService {
     if (!record) {
       throw new BadRequestException('生成记录不存在')
     }
-    return record
+    const meta = parseMeta(record.metadata)
+    const mediaInfo = meta.mediaInfo as MediaInfo | undefined
+    return {
+      ...record,
+      ...(mediaInfo ? { mediaInfo } : {}),
+    }
+  }
+
+  private async attachMediaInfoToRecord(
+    recordId: string,
+    outputUrl: string | null,
+    referenceUrls: string[],
+  ): Promise<void> {
+    const output = outputUrl ? await this.mediaProbe.probeUrl(outputUrl) : undefined
+    const references = await Promise.all(
+      referenceUrls
+        .filter((url) => typeof url === 'string' && url.trim())
+        .map(async (url) => this.mediaProbe.probeUrl(url.trim())),
+    )
+    const mediaInfo: MediaInfo = {
+      ...(output ? { output } : {}),
+      ...(references.length ? { references } : {}),
+      probedAt: new Date().toISOString(),
+    }
+    const existing = await this.prisma.generationRecord.findFirst({ where: { id: recordId } })
+    if (!existing) return
+    const meta = parseMeta(existing.metadata)
+    await this.prisma.generationRecord.update({
+      where: { id: recordId },
+      data: {
+        metadata: JSON.stringify({ ...meta, mediaInfo }),
+      },
+    })
   }
 
   async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {
@@ -814,6 +849,10 @@ export class StudioService {
         },
       })
       if (updated.count === 0) return null
+      const referenceUrls = Array.isArray(meta.referenceImages)
+        ? (meta.referenceImages as string[]).filter((url) => typeof url === 'string' && url.trim())
+        : []
+      await this.attachMediaInfoToRecord(id, imageUrls[0] ?? null, referenceUrls)
       return this.prisma.generationRecord.findFirst({ where: { id } })
     } catch (err) {
       console.error('Image generation failed:', err)
@@ -1567,6 +1606,12 @@ export class StudioService {
         },
       })
       if (updated.count === 0) return
+      const referenceUrls = [
+        ...(Array.isArray(meta.referenceImages) ? (meta.referenceImages as string[]) : []),
+        ...(Array.isArray(meta.referenceVideos) ? (meta.referenceVideos as string[]) : []),
+        ...(Array.isArray(meta.referenceAudios) ? (meta.referenceAudios as string[]) : []),
+      ].filter((u): u is string => typeof u === 'string' && u.trim())
+      await this.attachMediaInfoToRecord(id, url, referenceUrls)
     } catch (err) {
       console.error('Video generation failed:', err)
       const existing = await this.prisma.generationRecord.findFirst({ where: { id } })

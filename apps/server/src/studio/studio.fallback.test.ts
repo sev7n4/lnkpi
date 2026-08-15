@@ -15,6 +15,7 @@ import { createCancelFlag } from '../points/charge-session'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
+import { MediaProbeService } from '../media/media-probe.service'
 import { StudioService } from './studio.service'
 
 const imageGenerate = vi.fn()
@@ -119,6 +120,10 @@ describe('StudioService BYOK fallback_pending', () => {
         {
           provide: ProviderResolverService,
           useValue: { resolveForGeneration },
+        },
+        {
+          provide: MediaProbeService,
+          useValue: { probeUrl: vi.fn(async (url: string) => ({ url, probeStatus: 'ok' as const })) },
         },
       ],
     }).compile()
