@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import type { ErrorCode, GenerationDiagnostic } from '@lnkpi/shared'
+import type { ErrorCode, GenerationDiagnostic, MediaInfo } from '@lnkpi/shared'
 import { modelOptionName } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import NodeDiagnosticPopover from '@/components/canvas/NodeDiagnosticPopover.vue'
 import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
 import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
+import MediaRefList from '@/components/media/MediaRefList.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
@@ -137,6 +139,41 @@ function parseRecordMeta(record: GenerationRecord): RecordMeta {
   } catch {
     return {}
   }
+}
+
+function recordMediaInfo(record: GenerationRecord): MediaInfo | undefined {
+  if (record.mediaInfo?.output || record.mediaInfo?.references?.length) {
+    return record.mediaInfo
+  }
+  try {
+    const meta = JSON.parse(record.metadata ?? '{}') as { mediaInfo?: MediaInfo }
+    if (meta.mediaInfo?.output || meta.mediaInfo?.references?.length) return meta.mediaInfo
+  } catch {
+    // ignore
+  }
+  return undefined
+}
+
+function recordMediaSummaryProps(record: GenerationRecord) {
+  const info = recordMediaInfo(record)
+  const output = info?.output
+  return {
+    width: output?.width,
+    height: output?.height,
+    bytes: output?.bytes,
+    model: record.model ?? undefined,
+  }
+}
+
+function recordMediaRefItems(record: GenerationRecord) {
+  const info = recordMediaInfo(record)
+  if (info?.references?.length) return info.references
+  return record.refPreflight?.refs ?? []
+}
+
+function hasRecordMediaInfo(record: GenerationRecord): boolean {
+  const info = recordMediaInfo(record)
+  return Boolean(info?.output || info?.references?.length || record.refPreflight?.refs?.length)
 }
 
 function recordModelName(record: GenerationRecord): string {
@@ -658,6 +695,18 @@ onUnmounted(stopPolling)
                     <p class="text-[var(--neo-text-secondary)]">{{ row.value }}</p>
                   </div>
                 </div>
+              </div>
+
+              <div v-if="hasRecordMediaInfo(attempt)">
+                <p class="mb-1 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">媒体属性</p>
+                <MediaInfoSummary
+                  v-bind="recordMediaSummaryProps(attempt)"
+                  class="mb-2"
+                />
+                <MediaRefList
+                  v-if="recordMediaRefItems(attempt).length"
+                  :refs="recordMediaRefItems(attempt)"
+                />
               </div>
 
               <div v-if="recordFailureMessage(attempt)">
