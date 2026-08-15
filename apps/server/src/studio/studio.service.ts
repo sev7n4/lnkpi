@@ -23,6 +23,7 @@ import {
 } from '@lnkpi/agent'
 import {
   BYOK_FALLBACK_CONFIRM_MESSAGE,
+  evaluateMediaRefPreflight,
   mapMessageToErrorCode,
   redactProviderSnippet,
   resolveImageSize,
@@ -35,6 +36,7 @@ import {
   type ImageRefWire,
   type ImageResolutionTier,
   type MediaInfo,
+  type MediaRefPreflight,
   type StudioModality,
 } from '@lnkpi/shared'
 import {
@@ -627,9 +629,11 @@ export class StudioService {
     }
     const meta = parseMeta(record.metadata)
     const mediaInfo = meta.mediaInfo as MediaInfo | undefined
+    const refPreflight = meta.refPreflight as MediaRefPreflight | undefined
     return {
       ...record,
       ...(mediaInfo ? { mediaInfo } : {}),
+      ...(refPreflight ? { refPreflight } : {}),
     }
   }
 
@@ -1072,6 +1076,22 @@ export class StudioService {
       providerOptions.model = resolved.modelName
     }
     const effectiveBundle = built.effectiveReferenceBundle
+    let refPreflight: MediaRefPreflight | undefined
+    if (effectiveBundle.images.length > 0) {
+      const probedRefs = await Promise.all(
+        effectiveBundle.images.map(async (ref) => ({
+          ...(await this.mediaProbe.probeUrl(ref.url)),
+          refKey: ref.refKey,
+        })),
+      )
+      refPreflight = evaluateMediaRefPreflight(probedRefs, {
+        blockWire: built.meta.refWire === 'agnes_keyframes' ? 'agnes_keyframes' : undefined,
+      })
+      if (refPreflight.level === 'error' && built.meta.refWire === 'agnes_keyframes') {
+        await this.points.refund(userId, durationCredits, `${chargeReason}-预检拒绝退款`)
+        throw new BadRequestException(refPreflight.message)
+      }
+    }
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
@@ -1095,6 +1115,7 @@ export class StudioService {
               channelId: resolved.channelId,
               originalModel: model,
               providerSource: resolved.source,
+              ...(refPreflight && refPreflight.level === 'warn' ? { refPreflight } : {}),
             },
             durationCredits,
           ),
