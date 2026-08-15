@@ -1,12 +1,13 @@
 import type { VideoModelCapabilities } from './videoModelCapabilities'
+import type { VideoAspectRatio, VideoResolution } from './index'
 
 export interface VideoAspectRatioOption {
-  value: string
+  value: VideoAspectRatio
   label: string
 }
 
 export interface VideoResolutionOption {
-  value: string
+  value: VideoResolution
   label: string
 }
 
@@ -35,13 +36,13 @@ const EXTRA_RESOLUTION_OPTIONS: VideoResolutionOption[] = [
   { value: '4k', label: '4K' },
 ]
 
-function aspectRatioLabel(value: string): string {
+function aspectRatioLabel(value: VideoAspectRatio): string {
   const base = BASE_ASPECT_RATIO_OPTIONS.find((o) => o.value === value)
   if (base) return base.label
   return EXTRA_ASPECT_RATIO_LABELS[value] ?? value
 }
 
-function resolutionLabel(value: string): string {
+function resolutionLabel(value: VideoResolution): string {
   const base = BASE_RESOLUTION_OPTIONS.find((o) => o.value === value)
   if (base) return base.label
   const extra = EXTRA_RESOLUTION_OPTIONS.find((o) => o.value === value)
@@ -56,7 +57,7 @@ export function videoAspectRatioOptionsForCapabilities(
   const fromBase = BASE_ASPECT_RATIO_OPTIONS.filter((o) => allowed.has(o.value))
   const extras = c.allowedAspectRatios
     .filter((ratio) => !BASE_ASPECT_RATIO_OPTIONS.some((o) => o.value === ratio))
-    .map((value) => ({ value, label: aspectRatioLabel(value) }))
+    .map((value) => ({ value: value as VideoAspectRatio, label: aspectRatioLabel(value as VideoAspectRatio) }))
   return [...fromBase, ...extras]
 }
 
@@ -67,6 +68,6 @@ export function videoResolutionOptionsForCapabilities(
   const fromBase = BASE_RESOLUTION_OPTIONS.filter((o) => allowed.has(o.value))
   const extras = c.allowedResolutions
     .filter((res) => !BASE_RESOLUTION_OPTIONS.some((o) => o.value === res))
-    .map((value) => ({ value, label: resolutionLabel(value) }))
+    .map((value) => ({ value: value as VideoResolution, label: resolutionLabel(value as VideoResolution) }))
   return [...fromBase, ...extras]
 }
