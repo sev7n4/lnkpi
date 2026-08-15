@@ -46,6 +46,7 @@ const emit = defineEmits<{
   generate: []
   close: []
   removeRef: [ref: NodeRef]
+  continueShot: []
 }>()
 
 const prompt = ref('')
@@ -92,6 +93,12 @@ const generateButtonTitle = computed(() => {
   }
   return undefined
 })
+
+const ownLastFrameUrl = computed(() => String(props.node.data?.lastFrameUrl ?? '').trim())
+
+const showContinueShotButton = computed(
+  () => !!ownLastFrameUrl.value && capabilities.value.supportsReturnLastFrame,
+)
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -170,6 +177,11 @@ function continueFromLastFrame() {
   }
   const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
   emit('patch', { localRefs: [...prev, binding], videoMode: 'image_to_video' })
+}
+
+function continueNextShot() {
+  if (!showContinueShotButton.value) return
+  emit('continueShot')
 }
 
 function toggleVoice() {
@@ -331,6 +343,17 @@ function onRefMention(refKey: string) {
         @click="continueFromLastFrame"
       >
         延续上一镜
+      </button>
+
+      <button
+        v-if="showContinueShotButton"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :disabled="readonly"
+        title="以上一镜末帧为参考，创建下一段视频"
+        @click="continueNextShot"
+      >
+        接下一段
       </button>
 
       <div class="flex flex-col gap-1">

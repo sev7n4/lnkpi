@@ -701,6 +701,39 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('applyStudioRecord persists lastFrameUrl from completed video record metadata', async () => {
+    const node = createNode('video', {
+      prompt: 'motion scene',
+      videoSettings: { duration: 5, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+    })
+    vi.mocked(studioApi.startVideoGeneration).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          id: 'rec-video-lf',
+          type: 'video',
+          prompt: 'motion scene',
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/video.mp4',
+          metadata: JSON.stringify({ lastFrameUrl: 'https://example.com/last-frame.png' }),
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      }),
+    )
+    const { api, deps } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'video-1',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.completed,
+        url: 'https://example.com/video.mp4',
+        lastFrameUrl: 'https://example.com/last-frame.png',
+        generationRecordId: 'rec-video-lf',
+      }),
+    )
+  })
+
   it('blocks audio-only video refs before startVideoGeneration', async () => {
     const node = createNode('video', {
       prompt: 'motion with audio ref',

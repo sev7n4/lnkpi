@@ -1957,6 +1957,64 @@ async function handleMediaInputConvert(targetType: 'image' | 'video' | 'audio') 
   await focusNodeById(childId)
 }
 
+async function handleContinueShot() {
+  const node = editorNode.value
+  if (!node || node.type !== 'video') return
+  const data = node.data ?? {}
+  const lastFrameUrl = String(data.lastFrameUrl ?? '').trim()
+  if (!lastFrameUrl) return
+
+  const prompt = String(data.prompt ?? data.content ?? '').trim()
+  const videoModel = String(data.videoModel ?? getProviderConfig('video').model)
+  const videoSettings =
+    data.videoSettings && typeof data.videoSettings === 'object'
+      ? { ...(data.videoSettings as Record<string, unknown>) }
+      : {
+          aspectRatio: preferences.value?.defaultVideoAspect || '16:9',
+          duration: preferences.value?.defaultVideoDuration || 5,
+          resolution: preferences.value?.defaultVideoResolution || '720p',
+          crop: preferences.value?.defaultVideoCrop || 'none',
+        }
+
+  const { w } = getNodeSize(node as FlowNode)
+  const position = {
+    x: node.position.x + w + 36,
+    y: node.position.y,
+  }
+
+  const binding: LocalRefBinding = {
+    id: createLocalRefId('last-frame'),
+    mediaType: 'image',
+    sourceKind: 'upload',
+    label: '上一镜末帧',
+    url: lastFrameUrl,
+  }
+
+  const childId = addNode(
+    'video',
+    {
+      url: '',
+      status: 'idle',
+      prompt,
+      videoModel,
+      videoSettings,
+      videoMode: 'image_to_video',
+      localRefs: [binding],
+      refOrder: [binding.id],
+    },
+    { position },
+  )
+
+  addEdge({
+    id: `e-${node.id}-${childId}`,
+    source: node.id,
+    target: childId,
+  })
+  selectOnlyNode(childId)
+  persistUserEdit()
+  await focusNodeById(childId)
+}
+
 /** 历史记录「定位」：优先 nodeId，再按 generationRecordId / materialId 反查 */
 async function handleHistoryLocate(payload: string | { recordId: string; nodeId?: string | null }) {
   const recordId = typeof payload === 'string' ? payload : payload.recordId
@@ -2908,6 +2966,7 @@ onUnmounted(() => {
           @export="handleVideoCompositionExport"
           @upload="handleMediaInputUpload"
           @convert="handleMediaInputConvert"
+          @continue-shot="handleContinueShot"
           @close="onPaneClick"
         />
 
