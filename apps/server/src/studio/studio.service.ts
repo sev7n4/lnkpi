@@ -654,6 +654,31 @@ export class StudioService {
     }
   }
 
+  private async enrichVideoMediaInfoDimensions(
+    mediaInfo: MediaInfo,
+    lastFrameUrl?: string | null,
+  ): Promise<MediaInfo> {
+    if (mediaInfo.output?.width && mediaInfo.output?.height) {
+      return mediaInfo
+    }
+    const frameUrl = String(lastFrameUrl ?? '').trim()
+    if (!frameUrl) {
+      return mediaInfo
+    }
+    const lastFrame = await this.mediaProbe.probeUrl(frameUrl)
+    if (!lastFrame.width || !lastFrame.height) {
+      return mediaInfo
+    }
+    return {
+      ...mediaInfo,
+      output: {
+        ...(mediaInfo.output ?? { url: frameUrl, probeStatus: 'ok' as const }),
+        width: lastFrame.width,
+        height: lastFrame.height,
+      },
+    }
+  }
+
   async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {
     const record = await this.getGeneration(userId, id)
     if (
@@ -1611,7 +1636,10 @@ export class StudioService {
         ...(Array.isArray(meta.referenceVideos) ? (meta.referenceVideos as string[]) : []),
         ...(Array.isArray(meta.referenceAudios) ? (meta.referenceAudios as string[]) : []),
       ].filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
-      const mediaInfo = await this.buildMediaInfo(url, referenceUrls)
+      const mediaInfo = await this.enrichVideoMediaInfoDimensions(
+        await this.buildMediaInfo(url, referenceUrls),
+        lastFrameUrl,
+      )
       const updated = await this.prisma.generationRecord.updateMany({
         where: { id, status: 'generating' },
         data: {

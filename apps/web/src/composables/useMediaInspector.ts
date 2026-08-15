@@ -8,7 +8,6 @@ export interface NodeMediaInfoSummary {
   height?: number
   bytes?: number
   aspectRatio?: string
-  duration?: number
   resolution?: string
   refWarning?: 'warn' | 'error'
 }
@@ -60,17 +59,13 @@ export function buildNodeMediaInfoSummary(rec: GenerationRecord): NodeMediaInfoS
   const summary: NodeMediaInfoSummary = { kind }
 
   if (kind === 'video') {
-    const duration = meta.duration
-    if (typeof duration === 'number' && Number.isFinite(duration) && duration > 0) {
-      summary.duration = duration
+    const resolution = meta.resolution
+    if (typeof resolution === 'string' && resolution.trim()) {
+      summary.resolution = resolution.trim()
     }
     const aspectRatio = meta.aspectRatio
     if (typeof aspectRatio === 'string' && aspectRatio.trim()) {
       summary.aspectRatio = aspectRatio.trim()
-    }
-    const resolution = meta.resolution
-    if (typeof resolution === 'string' && resolution.trim()) {
-      summary.resolution = resolution.trim()
     }
     if (output?.bytes != null) summary.bytes = output.bytes
   } else {

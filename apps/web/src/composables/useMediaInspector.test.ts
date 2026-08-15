@@ -53,7 +53,7 @@ describe('buildNodeMediaInfoSummary', () => {
     expect(summary?.aspectRatio).toBe('16:9')
   })
 
-  it('builds video summary from duration, aspect ratio, and bytes', () => {
+  it('builds video summary from resolution, aspect ratio, and bytes', () => {
     const summary = buildNodeMediaInfoSummary(
       rec({
         id: 'g3',
@@ -62,7 +62,11 @@ describe('buildNodeMediaInfoSummary', () => {
         prompt: 'p',
         createdAt: '2026-08-15T00:00:00.000Z',
         mediaInfo: {
-          output: { url: 'https://x/v.mp4', bytes: 12_000_000, probeStatus: 'ok' },
+          output: {
+            url: 'https://x/v.mp4',
+            bytes: 12_000_000,
+            probeStatus: 'ok',
+          },
           probedAt: '2026-08-15T00:00:00.000Z',
         },
         metadata: JSON.stringify({ duration: 5, aspectRatio: '16:9', resolution: '720p' }),
@@ -70,9 +74,8 @@ describe('buildNodeMediaInfoSummary', () => {
     )
     expect(summary).toMatchObject({
       kind: 'video',
-      duration: 5,
-      aspectRatio: '16:9',
       resolution: '720p',
+      aspectRatio: '16:9',
       bytes: 12_000_000,
     })
     expect(summary?.width).toBeUndefined()
