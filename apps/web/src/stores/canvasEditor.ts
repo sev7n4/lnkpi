@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { MediaInfo } from '@lnkpi/shared'
 
 export interface ImageEditTarget {
   nodeId: string
@@ -11,6 +12,9 @@ export interface MediaPreviewTarget {
   url: string
   kind: 'image' | 'video' | 'audio'
   label?: string
+  generationRecordId?: string
+  assetMediaInfo?: MediaInfo
+  assetMeta?: Record<string, unknown>
 }
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {

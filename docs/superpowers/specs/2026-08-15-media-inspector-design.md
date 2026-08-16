@@ -19,7 +19,7 @@
 
 | Topic | Choice |
 |-------|--------|
-| 信息分层 | **L0** hover/角标摘要；**L1** Inspector 默认 Tab；**L2** 高级（prompt/seed/nativeParams）；**L3** 失败诊断（复用现有 diagnostic） |
+| 信息分层 | **L0** 常驻摘要（completed + mediaInfo）；**L1** Inspector 默认 Tab；**L2** 高级（prompt/seed/nativeParams）；**L3** 失败诊断（复用现有 diagnostic） |
 | 入口统一 | 画布节点、资产库、任务历史、预览浮层 → **同一 `MediaInspector` 组件** |
 | Dock 职责 | Dock = **编辑/再生成**；Inspector = **只读属性**（Figma Design vs Inspect） |
 | 数据 SSOT | `GenerationRecord.metadata.mediaInfo` + `Material.metadata.mediaInfo`；节点 `data.mediaInfo` 为 L0 缓存 |
@@ -56,7 +56,7 @@
 
 ### L0 — 零点击摘要
 
-- **Image/Video 节点** completed：节点底部细条（或 hover tooltip）：`1024×1024 · 0.9MB · seedream`
+- **Image/Video 节点** completed：节点底部细条（常驻）：`1024×1024 · 16:9 · 0.9MB`
 - **Video 节点** 参考图有风险：细条追加 `⚠ ref 偏大`
 - **资产库** grid hover：同样格式的一行摘要
 
@@ -165,10 +165,12 @@ export const VIDEO_REF_ERROR_MAX_EDGE = 4096
 
 ```ts
 mediaInfo?: {
+  kind?: 'image' | 'video'
   width?: number
   height?: number
   bytes?: number
-  model?: string
+  aspectRatio?: string
+  resolution?: string
   refWarning?: MediaRefWarningLevel
 }
 ```
@@ -294,9 +296,9 @@ model UserAsset {
 
 | 阶段 | 交付 | 验收 |
 |------|------|------|
-| **P0** | shared 类型 + probe service + video preflight block + Inspector L1 + 节点/历史入口 | 单测 + 生产脚本 + UAT §1–3 |
-| **P1** | UserAsset.metadata + 资产库 Inspector + 自动 downscale inline | 存库可追溯 + 视频重试成功 |
-| **P2** | L2 高级 Tab + 批量列表视图 + Material 路径 | power user |
+| **P0** | shared 类型 + probe service + video preflight block + Inspector L1/L2/L3 + 节点/历史入口 | ✅ 已交付 (#250–#256) |
+| **P1** | UserAsset.metadata + 资产库 Inspector + 自动 downscale inline | ✅ 本 PR |
+| **P2** | 批量列表视图 + Material 路径深化 | 部分完成（#254 material mediaInfo） |
 
 本 plan 文件 **仅覆盖 P0**；P1/P2 另开 plan 或在本 plan 末尾 Extension 节跟踪。
 

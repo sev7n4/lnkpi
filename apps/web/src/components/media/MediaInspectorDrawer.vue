@@ -46,6 +46,9 @@ const activeTab = ref<'info' | 'diagnostic'>('info')
 const diagnostic = ref<GenerationDiagnostic | null>(null)
 const diagnosticLoading = ref(false)
 const diagnosticCopyLabel = ref('复制诊断')
+const drawerSize = computed(() =>
+  typeof window !== 'undefined' && window.innerWidth < 640 ? '100%' : '320px',
+)
 
 watch(
   () => open.value,
@@ -60,16 +63,27 @@ watch(
 )
 
 watch(
-  () => [open.value, record.value?.id, record.value?.mediaInfo?.output] as const,
-  async ([isOpen, , output]) => {
+  () =>
+    [
+      open.value,
+      record.value?.id,
+      record.value?.mediaInfo?.output,
+      target.value?.assetMediaInfo?.output,
+      target.value?.url,
+    ] as const,
+  async ([isOpen, , output, assetOutput]) => {
     lazyOutput.value = undefined
-    if (!isOpen || !record.value) return
+    if (!isOpen) return
     if (output?.probeStatus === 'ok') {
       lazyOutput.value = output
       return
     }
-    const url = record.value.url || target.value?.url
-    if (!url) return
+    if (assetOutput?.probeStatus === 'ok') {
+      lazyOutput.value = assetOutput
+      return
+    }
+    const url = record.value?.url || target.value?.url
+    if (!url || url.startsWith('data:')) return
     lazyLoading.value = true
     try {
       lazyOutput.value = await probeMedia(url)
@@ -88,21 +102,25 @@ watch(
 
 const parsedMeta = computed(() => {
   const raw = record.value?.metadata
-  if (!raw) return {} as Record<string, unknown>
-  try {
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch {
-    return {}
+  if (raw) {
+    try {
+      return JSON.parse(raw) as Record<string, unknown>
+    } catch {
+      return {} as Record<string, unknown>
+    }
   }
+  return { ...(target.value?.assetMeta ?? {}) }
 })
 
 const mediaInfo = computed<MediaInfo | undefined>(() => {
   const fromRecord = record.value?.mediaInfo
   if (fromRecord?.output || fromRecord?.references?.length) return fromRecord
+  const fromAsset = target.value?.assetMediaInfo
+  if (fromAsset?.output || fromAsset?.references?.length) return fromAsset
   if (lazyOutput.value) {
     return { output: lazyOutput.value, probedAt: new Date().toISOString() }
   }
-  return fromRecord
+  return fromRecord ?? fromAsset
 })
 
 const previewUrl = computed(() => {
@@ -118,6 +136,8 @@ const previewKind = computed(() => {
 const title = computed(() => {
   if (target.value?.nodeLabel?.trim()) return target.value.nodeLabel.trim()
   if (record.value?.prompt?.trim()) return record.value.prompt.trim()
+  const promptPreview = parsedMeta.value.promptPreview
+  if (typeof promptPreview === 'string' && promptPreview.trim()) return promptPreview.trim()
   return target.value?.nodeId ? `节点 ${target.value.nodeId}` : '媒体属性'
 })
 
@@ -148,7 +168,9 @@ const diagnosticHint = computed(() => {
 })
 
 const modelLabel = computed(() => {
-  const model = record.value?.model || String(parsedMeta.value.originalModel ?? '')
+  const model =
+    record.value?.model ||
+    String(parsedMeta.value.originalModel ?? parsedMeta.value.model ?? '')
   if (!model) return null
   return modelOptionName(model) || model
 })
@@ -234,7 +256,7 @@ const l2Rows = computed(() => {
     const value = formatMetaValue(raw)
     if (value) rows.push({ label, value, multiline })
   }
-  add('Prompt', record.value?.prompt || meta.prompt, true)
+  add('Prompt', record.value?.prompt || parsedMeta.value.prompt || parsedMeta.value.promptPreview, true)
   add('Seed', meta.seed)
   add('Negative', meta.negativePrompt, true)
   add('Generate audio', meta.generateAudio)
@@ -351,7 +373,7 @@ async function copyValue(text: string) {
   <ElDrawer
     :model-value="open"
     direction="rtl"
-    size="320px"
+    :size="drawerSize"
     :with-header="false"
     append-to-body
     class="media-inspector-drawer"
@@ -476,7 +498,16 @@ async function copyValue(text: string) {
             <dl v-if="l2Rows.length" class="media-inspector-dl media-inspector-l2-dl">
               <template v-for="row in l2Rows" :key="row.label">
                 <dt>{{ row.label }}</dt>
-                <dd :class="{ 'is-multiline': row.multiline }">{{ row.value }}</dd>
+                <dd :class="{ 'is-multiline': row.multiline }">
+                  <span>{{ row.value }}</span>
+                  <button
+                    type="button"
+                    class="media-inspector-copy-inline"
+                    @click="copyValue(row.value)"
+                  >
+                    复制
+                  </button>
+                </dd>
               </template>
             </dl>
             <details v-if="nativeParamsJson" class="media-inspector-native">

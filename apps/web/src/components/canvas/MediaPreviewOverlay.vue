@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { useMediaInspector } from '@/composables/useMediaInspector'
 import {
   downloadMediaFile,
   isUpstreamMediaUrl,
@@ -10,9 +11,18 @@ import {
 } from '@/composables/useCanvasMedia'
 
 const editor = useCanvasEditorStore()
+const { openInspector } = useMediaInspector()
 const route = useRoute()
 const sessionId = computed(() => route.params.sessionId as string | undefined)
 const target = computed(() => editor.previewTarget)
+const canOpenInspector = computed(() => {
+  if (!target.value) return false
+  return Boolean(
+    target.value.generationRecordId ||
+    target.value.assetMediaInfo?.output ||
+    target.value.url,
+  )
+})
 const downloadTitle = computed(() => {
   if (!target.value) return '下载'
   return isUpstreamMediaUrl(target.value.url) ? UPSTREAM_MEDIA_DOWNLOAD_HINT : '下载'
@@ -38,6 +48,19 @@ async function download() {
   )
 }
 
+function openInspectorFromPreview() {
+  const t = target.value
+  if (!t) return
+  void openInspector({
+    generationRecordId: t.generationRecordId,
+    nodeLabel: t.label,
+    url: t.url,
+    kind: t.kind === 'video' ? 'video' : 'image',
+    assetMediaInfo: t.assetMediaInfo,
+    assetMeta: t.assetMeta,
+  })
+}
+
 onMounted(() => window.addEventListener('keydown', onKeydown, true))
 onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
 </script>
@@ -52,6 +75,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
       >
         <!-- 顶部操作栏 -->
         <div class="absolute right-4 top-4 z-10 flex items-center gap-2">
+          <button
+            v-if="canOpenInspector"
+            type="button"
+            class="preview-ctl preview-ctl-text"
+            title="更多信息"
+            @click.stop="openInspectorFromPreview"
+          >
+            更多信息
+          </button>
           <button
             type="button"
             class="preview-ctl"
@@ -150,6 +182,12 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
 .preview-ctl:hover {
   background: rgba(45, 45, 55, 0.9);
   color: #fff;
+}
+
+.preview-ctl-text {
+  width: auto;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 .preview-fade-enter-active,

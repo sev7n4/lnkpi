@@ -31,11 +31,13 @@ export function resolveRecordMediaInfo(rec: GenerationRecord): MediaInfo | undef
 }
 
 export interface MediaInspectorTarget {
-  generationRecordId: string
+  generationRecordId?: string
   nodeId?: string
   nodeLabel?: string
   url?: string
   kind?: 'image' | 'video'
+  assetMediaInfo?: MediaInfo
+  assetMeta?: Record<string, unknown>
 }
 
 interface CachedRecord {
@@ -147,11 +149,65 @@ export function buildMaterialMediaInfoSummary(
   return hasPayload ? summary : undefined
 }
 
+export interface AssetMediaSource {
+  kind?: 'image' | 'video' | 'audio' | 'other'
+  metadata?: string | null
+}
+
+export function parseAssetMetadata(raw?: string | null): Record<string, unknown> {
+  if (!raw) return {}
+  try {
+    return JSON.parse(raw) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+export function buildAssetMediaInfoSummary(asset: AssetMediaSource): NodeMediaInfoSummary | undefined {
+  if (asset.kind !== 'image' && asset.kind !== 'video') return undefined
+  const meta = parseAssetMetadata(asset.metadata)
+  const fromMeta = meta.mediaInfo
+  const mediaInfo =
+    fromMeta && typeof fromMeta === 'object' ? (fromMeta as MediaInfo) : undefined
+  const output = mediaInfo?.output
+  const kind: NodeMediaInfoSummary['kind'] = asset.kind
+  const summary: NodeMediaInfoSummary = { kind }
+
+  if (kind === 'video') {
+    const resolution = meta.resolution
+    if (typeof resolution === 'string' && resolution.trim()) {
+      summary.resolution = resolution.trim()
+    }
+    const aspectRatio = meta.aspectRatio
+    if (typeof aspectRatio === 'string' && aspectRatio.trim()) {
+      summary.aspectRatio = aspectRatio.trim()
+    }
+    if (output?.bytes != null) summary.bytes = output.bytes
+  } else {
+    if (output?.width != null) summary.width = output.width
+    if (output?.height != null) summary.height = output.height
+    if (output?.bytes != null) summary.bytes = output.bytes
+    const aspectRatio = meta.aspectRatio
+    if (typeof aspectRatio === 'string' && aspectRatio.trim()) {
+      summary.aspectRatio = aspectRatio.trim()
+    }
+  }
+
+  const { kind: _kind, ...rest } = summary
+  const hasPayload = Object.values(rest).some((v) => v != null && v !== '')
+  return hasPayload ? summary : undefined
+}
+
 export function useMediaInspector() {
   async function openInspector(next: MediaInspectorTarget) {
     target.value = next
     open.value = true
     error.value = null
+    if (!next.generationRecordId) {
+      record.value = null
+      loading.value = false
+      return
+    }
     loading.value = true
     try {
       const cached = recordCache.get(next.generationRecordId)

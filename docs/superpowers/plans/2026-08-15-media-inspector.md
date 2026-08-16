@@ -406,13 +406,24 @@ git commit -m "feat(deploy): prod media inspector verify script"
 
 ---
 
-## P1 extension（不在本 plan 执行，仅跟踪入口）
+## P1 extension（已完成 #256）
 
 | 项 | Spec 节 | 状态 |
 |----|---------|------|
-| UserAsset.metadata 迁移 | §Data model | `[ ]` |
-| 资产库 Inspector 入口 | §UX | `[ ]` |
-| 超大 ref 自动 downscale inline | §Server P1 | `[ ]` |
+| UserAsset.metadata 迁移 | §Data model | `[x]` |
+| 资产库 Inspector 入口 + L0 hover | §UX | `[x]` |
+| POST /assets generationRecordId | §API | `[x]` |
+| 超大 ref 自动 downscale inline | §Server P1 | `[x]` agnes_keyframes 预检前 downscale |
+
+## P0 polish（已完成 #256）
+
+| 项 | 状态 |
+|----|------|
+| 预览浮层「更多信息」 | `[x]` |
+| 失败占位节点 ⓘ | `[x]` |
+| L2 字段复制 | `[x]` |
+| 任务历史 UI 去重 | `[x]` |
+| 移动端 Drawer 全宽 | `[x]` |
 
 ---
 
