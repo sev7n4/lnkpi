@@ -52,6 +52,15 @@ const error = ref<string | null>(null)
 const target = ref<MediaInspectorTarget | null>(null)
 const record = ref<GenerationRecord | null>(null)
 
+export interface LocateCanvasNodePayload {
+  recordId: string
+  nodeId?: string | null
+}
+
+type LocateCanvasNodeHandler = (payload: LocateCanvasNodePayload) => void | Promise<void>
+
+const locateNodeHandler = ref<LocateCanvasNodeHandler | null>(null)
+
 export function buildNodeMediaInfoSummary(rec: GenerationRecord): NodeMediaInfoSummary | undefined {
   const output = resolveRecordMediaInfo(rec)?.output
   const meta = parseRecordMeta(rec)
@@ -177,15 +186,30 @@ export function useMediaInspector() {
     recordCache.delete(generationRecordId)
   }
 
+  function registerLocateNodeHandler(handler: LocateCanvasNodeHandler | null) {
+    locateNodeHandler.value = handler
+  }
+
+  async function locateCanvasNode() {
+    const recordId = record.value?.id || target.value?.generationRecordId
+    if (!recordId || !locateNodeHandler.value) return
+    const nodeId = target.value?.nodeId ?? record.value?.nodeId
+    await locateNodeHandler.value({ recordId, nodeId })
+    closeInspector()
+  }
+
   return {
     open,
     loading,
     error,
     target,
     record,
+    locateNodeHandler,
     openInspector,
     closeInspector,
     probeMedia,
     invalidateRecordCache,
+    registerLocateNodeHandler,
+    locateCanvasNode,
   }
 }
