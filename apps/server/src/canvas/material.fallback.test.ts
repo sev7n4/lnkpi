@@ -9,6 +9,7 @@ import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
+import { MediaProbeService } from '../media/media-probe.service'
 
 const imageGenerate = vi.fn()
 const videoGenerate = vi.fn()
@@ -106,6 +107,18 @@ describe('MaterialService BYOK fallback_pending', () => {
         {
           provide: ProviderResolverService,
           useValue: { resolveForGeneration },
+        },
+        {
+          provide: MediaProbeService,
+          useValue: {
+            probeUrl: vi.fn(async (url: string) => ({
+              url,
+              width: 1024,
+              height: 768,
+              bytes: 500_000,
+              probeStatus: 'ok' as const,
+            })),
+          },
         },
       ],
     }).compile()

@@ -88,6 +88,56 @@ export function buildNodeMediaInfoSummary(rec: GenerationRecord): NodeMediaInfoS
   return hasPayload || summary.refWarning ? summary : undefined
 }
 
+function parseMaterialMeta(metadata?: string | null): Record<string, unknown> {
+  if (!metadata) return {}
+  try {
+    return JSON.parse(metadata) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+export interface MaterialMediaSource {
+  type?: string | null
+  metadata?: string | null
+}
+
+export function buildMaterialMediaInfoSummary(
+  material: MaterialMediaSource,
+): NodeMediaInfoSummary | undefined {
+  const kind: NodeMediaInfoSummary['kind'] = material.type === 'video' ? 'video' : 'image'
+  const meta = parseMaterialMeta(material.metadata)
+  const fromMeta = meta.mediaInfo
+  const mediaInfo =
+    fromMeta && typeof fromMeta === 'object' ? (fromMeta as MediaInfo) : undefined
+  const output = mediaInfo?.output
+  const summary: NodeMediaInfoSummary = { kind }
+
+  if (kind === 'video') {
+    const resolution = meta.resolution
+    if (typeof resolution === 'string' && resolution.trim()) {
+      summary.resolution = resolution.trim()
+    }
+    const aspectRatio = meta.aspectRatio
+    if (typeof aspectRatio === 'string' && aspectRatio.trim()) {
+      summary.aspectRatio = aspectRatio.trim()
+    }
+    if (output?.bytes != null) summary.bytes = output.bytes
+  } else {
+    if (output?.width != null) summary.width = output.width
+    if (output?.height != null) summary.height = output.height
+    if (output?.bytes != null) summary.bytes = output.bytes
+    const aspectRatio = meta.aspectRatio
+    if (typeof aspectRatio === 'string' && aspectRatio.trim()) {
+      summary.aspectRatio = aspectRatio.trim()
+    }
+  }
+
+  const { kind: _kind, ...rest } = summary
+  const hasPayload = Object.values(rest).some((v) => v != null && v !== '')
+  return hasPayload ? summary : undefined
+}
+
 export function useMediaInspector() {
   async function openInspector(next: MediaInspectorTarget) {
     target.value = next

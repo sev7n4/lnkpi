@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildNodeMediaInfoSummary } from './useMediaInspector'
+import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary } from './useMediaInspector'
 import type { GenerationRecord } from '@/services/studio-api'
 
 function rec(partial: Partial<GenerationRecord> & Pick<GenerationRecord, 'id' | 'type' | 'status' | 'prompt' | 'createdAt'>): GenerationRecord {
@@ -78,5 +78,31 @@ describe('buildNodeMediaInfoSummary', () => {
       bytes: 12_000_000,
     })
     expect(summary?.width).toBeUndefined()
+  })
+
+  it('builds material summary from metadata.mediaInfo', () => {
+    const summary = buildMaterialMediaInfoSummary({
+      type: 'image',
+      metadata: JSON.stringify({
+        aspectRatio: '16:9',
+        mediaInfo: {
+          output: {
+            url: 'https://x/c.png',
+            width: 800,
+            height: 600,
+            bytes: 300_000,
+            probeStatus: 'ok',
+          },
+          probedAt: '2026-08-15T00:00:00.000Z',
+        },
+      }),
+    })
+    expect(summary).toMatchObject({
+      kind: 'image',
+      width: 800,
+      height: 600,
+      bytes: 300_000,
+      aspectRatio: '16:9',
+    })
   })
 })

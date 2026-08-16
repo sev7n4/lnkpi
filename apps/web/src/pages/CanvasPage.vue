@@ -30,7 +30,8 @@ import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasAct
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
-import { buildNodeMediaInfoSummary } from '@/composables/useMediaInspector'
+import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary } from '@/composables/useMediaInspector'
+import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
@@ -551,6 +552,12 @@ const shotPolling = useShotPolling((shots) => {
           const lastFrameUrl = parseRecordLastFrameUrl(material as { metadata?: string | null })
           if (lastFrameUrl) nodePatch.lastFrameUrl = lastFrameUrl
         }
+        const mediaSummary = buildMaterialMediaInfoSummary({
+          type: n.type === 'video' ? 'video' : material.type ?? 'image',
+          metadata: (material as { metadata?: string | null }).metadata,
+        })
+        if (mediaSummary) nodePatch.mediaInfo = mediaSummary
+        nodePatch.materialId = material.id
         patchNodeData(n.id, nodePatch)
       }
     }
@@ -2636,29 +2643,36 @@ async function loadSession() {
 }
 
 /**
- * Walk media nodes (image/video/text/prompt/audio) that lack
- * `generationRecordId` and re-attach the matching Studio record by nodeId.
- * Tolerates empty / partial Studio responses.
+ * Reconcile studio generation records with canvas nodes:
+ * - attach missing generationRecordId by nodeId
+ * - backfill mediaInfo on completed image/video nodes
  */
 async function reconcileMissingGenerationRecords() {
   if (!sessionId.value) return
   const mediaTypes = new Set(['image', 'video', 'text', 'prompt', 'audio'])
-  const missing = nodes.value.filter((n) => {
+  const missingRecordId = nodes.value.filter((n) => {
     if (!mediaTypes.has(String(n.type))) return false
     const data = n.data as Record<string, unknown>
     return !data?.generationRecordId
   })
-  if (!missing.length) return
+  const missingMediaInfo = nodes.value.filter((n) => {
+    if (n.type !== 'image' && n.type !== 'video') return false
+    const data = n.data as Record<string, unknown>
+    return data?.status === NODE_GENERATION_STATUS.completed && !data?.mediaInfo
+  })
+  if (!missingRecordId.length && !missingMediaInfo.length) return
   try {
     const { data } = await studioApi.listGenerations({ sessionId: sessionId.value })
     const records = data.data ?? []
     if (!records.length) return
-    const byNodeId = new Map<string, typeof records[number]>()
+    const byNodeId = new Map<string, GenerationRecord>()
+    const byRecordId = new Map<string, GenerationRecord>()
     for (const r of records) {
       if (r.nodeId) byNodeId.set(r.nodeId, r)
+      byRecordId.set(r.id, r)
     }
     let patched = 0
-    for (const node of missing) {
+    for (const node of missingRecordId) {
       const rec = byNodeId.get(node.id)
       if (!rec) continue
       const patch = buildStudioRecordPatch(node, rec)
@@ -2666,8 +2680,17 @@ async function reconcileMissingGenerationRecords() {
       patchNodeData(node.id, patch)
       patched += 1
     }
+    for (const node of missingMediaInfo) {
+      const data = node.data as Record<string, unknown>
+      const recordId = typeof data.generationRecordId === 'string' ? data.generationRecordId : ''
+      const rec = (recordId && byRecordId.get(recordId)) || byNodeId.get(node.id)
+      if (!rec || rec.status !== 'completed') continue
+      const mediaSummary = buildNodeMediaInfoSummary(rec)
+      if (!mediaSummary) continue
+      patchNodeData(node.id, { mediaInfo: mediaSummary })
+      patched += 1
+    }
     if (patched > 0) {
-      // Persist the recovered state so a reload does not regress.
       void saveCanvas()
     }
   } catch {
@@ -2677,7 +2700,7 @@ async function reconcileMissingGenerationRecords() {
 
 function buildStudioRecordPatch(
   _node: EditableFlowNode,
-  record: { id: string; status: string; type: string; url?: string | null; metadata?: string | null; prompt: string },
+  record: GenerationRecord,
 ): Record<string, unknown> | null {
   // Skip non-terminal records — polling will catch them.
   if (record.status !== 'completed' && record.status !== 'failed' && record.status !== 'error') {
@@ -2696,19 +2719,27 @@ function buildStudioRecordPatch(
   }
   if (record.type === 'text' || record.type === 'prompt') {
     if (record.type === 'prompt') {
-      const parsed = parseRecordPromptContent(record as { metadata?: string | null; prompt: string })
+      const parsed = parseRecordPromptContent(record)
       patch.content = parsed.content
       patch.promptMode = parsed.mode
     } else {
-      patch.content = parseRecordText(record as { metadata?: string | null; prompt: string })
+      patch.content = parseRecordText(record)
     }
   } else {
-    const urls = parseRecordUrls(record as { url?: string | null; metadata?: string | null })
+    const urls = parseRecordUrls(record)
     if (urls.length) {
       patch.url = urls[0]
       patch.images = urls
     } else if (record.url) {
       patch.url = record.url
+    }
+    if (record.type === 'video') {
+      const lastFrameUrl = parseRecordLastFrameUrl(record)
+      if (lastFrameUrl) patch.lastFrameUrl = lastFrameUrl
+    }
+    if (status === NODE_GENERATION_STATUS.completed && (record.type === 'image' || record.type === 'video')) {
+      const mediaSummary = buildNodeMediaInfoSummary(record)
+      if (mediaSummary) patch.mediaInfo = mediaSummary
     }
   }
   return patch

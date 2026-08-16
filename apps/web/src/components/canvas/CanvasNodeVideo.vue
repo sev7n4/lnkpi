@@ -32,7 +32,6 @@ const props = defineProps<{
       height?: number
       bytes?: number
       aspectRatio?: string
-      duration?: number
       resolution?: string
       refWarning?: MediaRefWarningLevel
     }
