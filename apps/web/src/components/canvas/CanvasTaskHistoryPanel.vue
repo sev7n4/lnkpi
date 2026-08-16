@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import type { ErrorCode, GenerationDiagnostic, MediaInfo } from '@lnkpi/shared'
+import type { GenerationDiagnostic, MediaInfo } from '@lnkpi/shared'
 import { modelOptionName } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
@@ -10,13 +10,15 @@ import CanvasLocateButton from '@/components/shared/CanvasLocateButton.vue'
 import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import MediaRefList from '@/components/media/MediaRefList.vue'
-import { buildNodeMediaInfoSummary } from '@/composables/useMediaInspector'
+import { buildNodeMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import {
   buildCopyForNode,
-  parseErrorCodeFromMetadata,
+  buildFallbackDiagnostic,
+  getRecordFailureMessage,
+  isFailedGenerationStatus,
   sharedDiagnosticCache,
 } from '@/utils/generationDiagnostic'
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
@@ -38,6 +40,7 @@ const emit = defineEmits<{
 const route = useRoute()
 const editor = useCanvasEditorStore()
 const { allChannels } = useProviderBootstrap()
+const { openInspector } = useMediaInspector()
 
 const sessionId = computed(() => route.params.sessionId as string | undefined)
 
@@ -208,29 +211,22 @@ function recordParamRows(record: GenerationRecord): Array<{ label: string; value
 }
 
 function recordFailureMessage(record: GenerationRecord): string | null {
-  if (
-    record.status !== 'failed' &&
-    record.status !== 'error' &&
-    record.status !== NODE_GENERATION_STATUS.fallback_pending
-  ) {
-    return null
-  }
-  const meta = parseRecordMeta(record)
-  if (meta.userMessage) return meta.userMessage
-  const byok = meta.byokErrorRaw || meta.errorRaw
-  if (record.status === NODE_GENERATION_STATUS.fallback_pending) {
-    return byok ? `平台回退待确认：${byok.slice(0, 240)}` : '平台回退待确认'
-  }
-  if (byok) return byok.slice(0, 240)
-  return '生成失败'
+  return getRecordFailureMessage(record)
 }
 
 function isFailedStatus(status: string) {
-  return (
-    status === 'failed' ||
-    status === 'error' ||
-    status === NODE_GENERATION_STATUS.fallback_pending
-  )
+  return isFailedGenerationStatus(status)
+}
+
+function openFullInspector(record: GenerationRecord, e?: Event) {
+  e?.stopPropagation()
+  void openInspector({
+    generationRecordId: record.id,
+    nodeId: record.nodeId ?? undefined,
+    nodeLabel: record.prompt || undefined,
+    url: record.url ?? undefined,
+    kind: record.type === 'video' ? 'video' : 'image',
+  })
 }
 
 function recordTextSnippet(record: GenerationRecord): string {
@@ -389,25 +385,6 @@ function emitRetry(nodeId: string | null | undefined, e?: Event) {
   e?.stopPropagation()
   if (!nodeId) return
   emit('retry', nodeId)
-}
-
-function buildFallbackDiagnostic(record: GenerationRecord): GenerationDiagnostic {
-  const meta = parseRecordMeta(record)
-  const isFallback = record.status === NODE_GENERATION_STATUS.fallback_pending
-  const byok = meta.byokErrorRaw || meta.errorRaw || ''
-  return {
-    userMessage: meta.userMessage || recordFailureMessage(record) || '生成失败',
-    code: isFallback
-      ? 'fallback_pending'
-      : ((parseErrorCodeFromMetadata(record.metadata) as ErrorCode | undefined) || 'unknown'),
-    taskKind: 'generation',
-    taskId: record.id,
-    occurredAt: record.createdAt,
-    channelId: meta.channelId ?? null,
-    model: record.model ?? meta.originalModel ?? null,
-    providerSnippet: byok ? byok.slice(0, 2048) : null,
-    hint: isFallback ? '请确认是否使用平台回退继续，或取消本次生成。' : undefined,
-  }
 }
 
 function clampPopoverPosition(rect: DOMRect): Record<string, string> {
@@ -702,6 +679,14 @@ onUnmounted(stopPolling)
                   :refs="recordMediaRefItems(attempt)"
                 />
               </div>
+
+              <button
+                type="button"
+                class="mt-2 flex w-full items-center justify-center rounded-lg border border-[var(--neo-border)] py-1.5 text-[10px] text-[var(--neo-text-secondary)] transition hover:border-[var(--neo-border-strong)] hover:bg-[var(--neo-active-bg)] hover:text-[var(--neo-text-primary)]"
+                @click="openFullInspector(attempt, $event)"
+              >
+                查看完整属性
+              </button>
 
               <div v-if="recordFailureMessage(attempt)">
                 <p class="mb-1 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">失败原因</p>

@@ -2,15 +2,23 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { modelOptionName } from '@lnkpi/shared'
-import type { MediaInfo, ProbedMediaFile } from '@lnkpi/shared'
+import type { GenerationDiagnostic, MediaInfo, ProbedMediaFile } from '@lnkpi/shared'
 import MediaRefList from '@/components/media/MediaRefList.vue'
+import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 import { useMediaInspector } from '@/composables/useMediaInspector'
 import {
   downloadMediaFile,
   mediaDownloadName,
 } from '@/composables/useCanvasMedia'
 import { resolveMediaUrl } from '@/services/api-base'
+import { studioApi } from '@/services/studio-api'
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
+import {
+  buildCopyForNode,
+  buildFallbackDiagnostic,
+  isFailedGenerationStatus,
+  sharedDiagnosticCache,
+} from '@/utils/generationDiagnostic'
 import {
   formatMediaBytes,
   formatMediaDimensions,
@@ -26,12 +34,30 @@ const {
   error,
   target,
   record,
+  locateNodeHandler,
   closeInspector,
   probeMedia,
+  locateCanvasNode,
 } = useMediaInspector()
 
 const lazyOutput = ref<ProbedMediaFile | undefined>()
 const lazyLoading = ref(false)
+const activeTab = ref<'info' | 'diagnostic'>('info')
+const diagnostic = ref<GenerationDiagnostic | null>(null)
+const diagnosticLoading = ref(false)
+const diagnosticCopyLabel = ref('复制诊断')
+
+watch(
+  () => open.value,
+  (isOpen) => {
+    if (!isOpen) {
+      activeTab.value = 'info'
+      diagnostic.value = null
+      diagnosticLoading.value = false
+      diagnosticCopyLabel.value = '复制诊断'
+    }
+  },
+)
 
 watch(
   () => [open.value, record.value?.id, record.value?.mediaInfo?.output] as const,
@@ -107,6 +133,20 @@ const outputFile = computed(() => mediaInfo.value?.output ?? lazyOutput.value)
 
 const refPreflight = computed(() => record.value?.refPreflight)
 
+const showDiagnosticTab = computed(() =>
+  Boolean(record.value && isFailedGenerationStatus(record.value.status)),
+)
+
+const diagnosticMessage = computed(() => {
+  if (diagnosticLoading.value) return '加载中…'
+  return diagnostic.value?.userMessage || '暂无诊断信息'
+})
+
+const diagnosticHint = computed(() => {
+  if (diagnosticLoading.value) return undefined
+  return diagnostic.value?.hint
+})
+
 const modelLabel = computed(() => {
   const model = record.value?.model || String(parsedMeta.value.originalModel ?? '')
   if (!model) return null
@@ -174,7 +214,84 @@ const referenceItems = computed(() => {
   return []
 })
 
+function formatMetaValue(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value, null, 2)
+    } catch {
+      return String(value)
+    }
+  }
+  return String(value)
+}
+
+const l2Rows = computed(() => {
+  const meta = parsedMeta.value
+  const rows: Array<{ label: string; value: string; multiline?: boolean }> = []
+  const add = (label: string, raw: unknown, multiline = false) => {
+    const value = formatMetaValue(raw)
+    if (value) rows.push({ label, value, multiline })
+  }
+  add('Prompt', record.value?.prompt || meta.prompt, true)
+  add('Seed', meta.seed)
+  add('Negative', meta.negativePrompt, true)
+  add('Generate audio', meta.generateAudio)
+  add('refWire', meta.refWire)
+  add('gatewayModelId', meta.gatewayModelId)
+  add('scenario', meta.scenario)
+  add('mergedText', meta.mergedText, true)
+  return rows
+})
+
+const nativeParamsJson = computed(() => {
+  const nativeParams = parsedMeta.value.nativeParams
+  if (nativeParams === undefined || nativeParams === null) return null
+  return formatMetaValue(nativeParams)
+})
+
+const hasL2 = computed(() => l2Rows.value.length > 0 || Boolean(nativeParamsJson.value))
+
+const canLocate = computed(() =>
+  Boolean(locateNodeHandler.value && (record.value?.id || target.value?.generationRecordId)),
+)
+
 const taskIdCopyLabel = ref('复制任务 ID')
+
+async function loadDiagnostic() {
+  const rec = record.value
+  if (!rec) return
+  diagnosticLoading.value = true
+  diagnosticCopyLabel.value = '复制诊断'
+  try {
+    diagnostic.value = await sharedDiagnosticCache.get('generation', rec.id, () =>
+      studioApi.getGenerationDiagnostic(rec.id),
+    )
+  } catch {
+    diagnostic.value = buildFallbackDiagnostic(rec)
+  } finally {
+    diagnosticLoading.value = false
+  }
+}
+
+async function switchToDiagnosticTab() {
+  activeTab.value = 'diagnostic'
+  if (!diagnostic.value && !diagnosticLoading.value) {
+    await loadDiagnostic()
+  }
+}
+
+watch(
+  () => [open.value, record.value?.id, record.value?.status] as const,
+  async ([isOpen, , status]) => {
+    diagnostic.value = null
+    if (!isOpen || !record.value || !status || !isFailedGenerationStatus(status)) return
+    if (activeTab.value === 'diagnostic') {
+      await loadDiagnostic()
+    }
+  },
+)
 
 async function copyTaskId() {
   const id = record.value?.id || target.value?.generationRecordId
@@ -187,6 +304,26 @@ async function copyTaskId() {
     }, 1500)
   } catch {
     taskIdCopyLabel.value = '复制失败'
+  }
+}
+
+async function copyDiagnostic() {
+  const rec = record.value
+  if (!rec) return
+  const payload = diagnostic.value || buildFallbackDiagnostic(rec)
+  const text = buildCopyForNode(payload, {
+    nodeId: target.value?.nodeId ?? rec.nodeId ?? undefined,
+    nodeLabel: target.value?.nodeLabel,
+    sessionId: sessionId.value,
+  })
+  try {
+    await copyTextToClipboard(text)
+    diagnosticCopyLabel.value = '已复制'
+    setTimeout(() => {
+      diagnosticCopyLabel.value = '复制诊断'
+    }, 1500)
+  } catch {
+    diagnosticCopyLabel.value = '复制失败'
   }
 }
 
@@ -231,8 +368,41 @@ async function copyValue(text: string) {
         </button>
       </header>
 
+      <div v-if="showDiagnosticTab" class="media-inspector-tabs">
+        <button
+          type="button"
+          class="media-inspector-tab"
+          :class="{ 'is-active': activeTab === 'info' }"
+          @click="activeTab = 'info'"
+        >
+          属性
+        </button>
+        <button
+          type="button"
+          class="media-inspector-tab"
+          :class="{ 'is-active': activeTab === 'diagnostic' }"
+          @click="switchToDiagnosticTab"
+        >
+          诊断
+        </button>
+      </div>
+
       <div v-if="loading" class="media-inspector-loading">加载中…</div>
       <div v-else-if="error" class="media-inspector-error">{{ error }}</div>
+      <div v-else-if="activeTab === 'diagnostic'" class="media-inspector-body">
+        <section class="media-inspector-section media-inspector-diagnostic">
+          <p class="media-inspector-diag-msg">{{ diagnosticMessage }}</p>
+          <p v-if="diagnosticHint" class="media-inspector-diag-hint">{{ diagnosticHint }}</p>
+          <button
+            type="button"
+            class="media-inspector-action"
+            :disabled="diagnosticLoading"
+            @click="copyDiagnostic"
+          >
+            {{ diagnosticCopyLabel }}
+          </button>
+        </section>
+      </div>
       <div v-else class="media-inspector-body">
         <section v-if="previewUrl" class="media-inspector-section">
           <div class="media-inspector-preview">
@@ -300,7 +470,32 @@ async function copyValue(text: string) {
           <MediaRefList :refs="referenceItems" />
         </section>
 
+        <section v-if="hasL2" class="media-inspector-section">
+          <details class="media-inspector-l2">
+            <summary class="media-inspector-section-title media-inspector-l2-summary">高级参数</summary>
+            <dl v-if="l2Rows.length" class="media-inspector-dl media-inspector-l2-dl">
+              <template v-for="row in l2Rows" :key="row.label">
+                <dt>{{ row.label }}</dt>
+                <dd :class="{ 'is-multiline': row.multiline }">{{ row.value }}</dd>
+              </template>
+            </dl>
+            <details v-if="nativeParamsJson" class="media-inspector-native">
+              <summary>nativeParams</summary>
+              <pre class="media-inspector-pre">{{ nativeParamsJson }}</pre>
+            </details>
+          </details>
+        </section>
+
         <section class="media-inspector-section media-inspector-actions">
+          <button
+            v-if="canLocate"
+            type="button"
+            class="media-inspector-action media-inspector-action-locate"
+            @click="locateCanvasNode"
+          >
+            <CanvasLocatePinIcon :size="14" />
+            定位画布节点
+          </button>
           <button type="button" class="media-inspector-action" @click="copyTaskId">
             {{ taskIdCopyLabel }}
           </button>
@@ -363,6 +558,29 @@ async function copyValue(text: string) {
 .media-inspector-close:hover {
   background: rgba(255, 255, 255, 0.06);
   color: var(--neo-text-primary);
+}
+
+.media-inspector-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px 0;
+}
+
+.media-inspector-tab {
+  flex: 1;
+  border: 1px solid var(--neo-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: transparent;
+  color: var(--neo-text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.media-inspector-tab.is-active {
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.35);
+  color: #ddd6fe;
 }
 
 .media-inspector-loading,
@@ -430,6 +648,11 @@ async function copyValue(text: string) {
   word-break: break-all;
 }
 
+.media-inspector-dl dd.is-multiline {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
 .media-inspector-copy-inline {
   margin-left: 6px;
   border: none;
@@ -465,6 +688,82 @@ async function copyValue(text: string) {
 
 .media-inspector-action:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.media-inspector-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.media-inspector-action-locate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.media-inspector-l2 {
+  border: 1px solid var(--neo-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.media-inspector-l2-summary {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+
+.media-inspector-l2-summary::-webkit-details-marker {
+  display: none;
+}
+
+.media-inspector-l2-dl {
+  margin-top: 10px;
+}
+
+.media-inspector-native {
+  margin-top: 10px;
+}
+
+.media-inspector-native summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--neo-text-secondary);
+}
+
+.media-inspector-pre {
+  margin: 8px 0 0;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 10px;
+  line-height: 1.4;
+  overflow: auto;
+  max-height: 160px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.media-inspector-diagnostic {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.media-inspector-diag-msg {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.media-inspector-diag-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--neo-text-secondary);
+  line-height: 1.45;
 }
 </style>
 

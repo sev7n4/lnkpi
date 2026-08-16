@@ -30,7 +30,7 @@ import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasAct
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
-import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary } from '@/composables/useMediaInspector'
+import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
@@ -131,6 +131,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const canvasEditor = useCanvasEditorStore()
+const { registerLocateNodeHandler } = useMediaInspector()
 const sessionId = computed(() => route.params.sessionId as string)
 
 interface CanvasEdge {
@@ -2781,6 +2782,7 @@ provide(CANVAS_REF_PICK_NODE_IDS_KEY, pickMode.pickedNodeIds)
 provide(CANVAS_REF_PICK_REJECT_KEY, pickRejectNodeId)
 
 onMounted(() => {
+  registerLocateNodeHandler(handleHistoryLocate)
   void loadProviderBootstrap().catch(() => {
     // Dock falls back to catalog defaults until bootstrap succeeds
   })
@@ -2852,6 +2854,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  registerLocateNodeHandler(null)
   if (pickModeKeydownHandler) {
     window.removeEventListener('keydown', pickModeKeydownHandler)
   }
