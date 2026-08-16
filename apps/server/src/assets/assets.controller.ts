@@ -16,6 +16,10 @@ import { Request } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { PrismaService } from '../prisma/prisma.service'
 import { PUBLIC_ASSETS } from './public-assets.data'
+import {
+  buildUserAssetMetadataFromGeneration,
+  serializeUserAssetMetadata,
+} from './build-user-asset-metadata'
 
 type AuthedRequest = Request & { user: { sub: string; phone: string } }
 
@@ -46,6 +50,11 @@ class SaveUserAssetDto {
   @IsString()
   @MaxLength(64)
   sourceNodeId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  generationRecordId?: string
 }
 
 @Controller('assets')
@@ -79,7 +88,16 @@ export class AssetsController {
   @Post('mine')
   @UseGuards(AuthGuard)
   async saveMine(@Req() req: AuthedRequest, @Body() dto: SaveUserAssetDto) {
-    // 同一 URL 重复保存时更新标签，保持幂等
+    let metadata: string | undefined
+    if (dto.generationRecordId) {
+      const record = await this.prisma.generationRecord.findFirst({
+        where: { id: dto.generationRecordId, userId: req.user.sub },
+      })
+      if (record) {
+        metadata = serializeUserAssetMetadata(buildUserAssetMetadataFromGeneration(record))
+      }
+    }
+
     const item = await this.prisma.userAsset.upsert({
       where: { userId_url: { userId: req.user.sub, url: dto.url } },
       create: {
@@ -88,8 +106,13 @@ export class AssetsController {
         url: dto.url,
         label: dto.label ?? '',
         sourceNodeId: dto.sourceNodeId,
+        metadata,
       },
-      update: { label: dto.label ?? '', kind: dto.kind },
+      update: {
+        label: dto.label ?? '',
+        kind: dto.kind,
+        ...(metadata ? { metadata } : {}),
+      },
     })
     return { code: 0, message: 'ok', data: item }
   }
@@ -100,7 +123,9 @@ export class AssetsController {
     const existing = await this.prisma.userAsset.findFirst({
       where: { id, userId: req.user.sub },
     })
-    if (!existing) throw new NotFoundException('资产不存在')
+    if (!existing) {
+      throw new NotFoundException('资产不存在')
+    }
     await this.prisma.userAsset.delete({ where: { id } })
     return { code: 0, message: 'ok', data: { id } }
   }

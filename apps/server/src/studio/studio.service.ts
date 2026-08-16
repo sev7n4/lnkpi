@@ -62,6 +62,7 @@ import {
   enrichVideoMediaInfoDimensions,
 } from '../media/build-media-info'
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
+import { downscaleOversizedReferenceImages } from '../media/upstream-ref-downscale'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -1067,9 +1068,11 @@ export class StudioService {
       providerOptions.model = resolved.modelName
     }
     const effectiveBundle = built.effectiveReferenceBundle
+    let upstreamImageRefs = effectiveBundle.images
     let refPreflight: MediaRefPreflight | undefined
+    let refDownscaled = false
     if (effectiveBundle.images.length > 0) {
-      const probedRefs = await Promise.all(
+      let probedRefs = await Promise.all(
         effectiveBundle.images.map(async (ref) => ({
           ...(await this.mediaProbe.probeUrl(ref.url)),
           refKey: ref.refKey,
@@ -1078,6 +1081,23 @@ export class StudioService {
       refPreflight = evaluateMediaRefPreflight(probedRefs, {
         blockWire: built.meta.refWire === 'agnes_keyframes' ? 'agnes_keyframes' : undefined,
       })
+      if (refPreflight.level === 'error' && built.meta.refWire === 'agnes_keyframes') {
+        const downscaled = await downscaleOversizedReferenceImages(upstreamImageRefs)
+        if (downscaled.changed) {
+          upstreamImageRefs = upstreamImageRefs.map((ref, index) => ({
+            ...ref,
+            url: downscaled.urls[index] ?? ref.url,
+          }))
+          probedRefs = downscaled.probed.map((item, index) => ({
+            ...item,
+            refKey: upstreamImageRefs[index]?.refKey ?? item.refKey,
+          }))
+          refPreflight = evaluateMediaRefPreflight(probedRefs, {
+            blockWire: 'agnes_keyframes',
+          })
+          refDownscaled = true
+        }
+      }
       if (refPreflight.level === 'error' && built.meta.refWire === 'agnes_keyframes') {
         await this.points.refund(userId, durationCredits, `${chargeReason}-预检拒绝退款`)
         throw new BadRequestException(refPreflight.message)
@@ -1098,7 +1118,7 @@ export class StudioService {
               aspectRatio,
               resolution,
               crop,
-              referenceImages: effectiveBundle.images.map(({ url }) => url),
+              referenceImages: upstreamImageRefs.map(({ url }) => url),
               referenceVideos: effectiveBundle.videos.map(({ url }) => url),
               referenceAudios: effectiveBundle.audios.map(({ url }) => url),
               skippedMerge,
@@ -1106,6 +1126,7 @@ export class StudioService {
               channelId: resolved.channelId,
               originalModel: model,
               providerSource: resolved.source,
+              ...(refDownscaled ? { refDownscaled: true } : {}),
               ...(refPreflight && refPreflight.level === 'warn' ? { refPreflight } : {}),
             },
             durationCredits,

@@ -94,6 +94,7 @@ function openPreview() {
     url: displayUrl.value,
     kind: 'image',
     label: props.data.label ?? props.data.prompt,
+    generationRecordId: props.data.generationRecordId,
   })
 }
 
@@ -114,6 +115,7 @@ function saveToLibrary() {
     url,
     label: props.data.label ?? props.data.prompt ?? '',
     sourceNodeId: props.id,
+    generationRecordId: props.data.generationRecordId,
   })
 }
 
@@ -266,6 +268,18 @@ function openMediaInspector(e: Event) {
                   : '上传或等待生成'
             }}
           </span>
+          <button
+            v-if="showInspectorBtn"
+            type="button"
+            class="neo-media-inspector-btn neo-media-inspector-btn--placeholder nodrag"
+            aria-label="媒体属性"
+            title="媒体属性"
+            @pointerdown.stop
+            @mousedown.stop
+            @click.stop="openMediaInspector"
+          >
+            ⓘ
+          </button>
           <div v-if="data.status === 'uploading'" class="neo-upload-progress">
             <div class="neo-upload-progress-bar" :style="{ width: `${data.uploadProgress ?? 0}%` }" />
           </div>

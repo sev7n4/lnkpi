@@ -14,6 +14,7 @@ export interface UserAssetItem {
   label: string
   kind: 'image' | 'video' | 'audio'
   sourceNodeId?: string | null
+  metadata?: string | null
   createdAt: string
 }
 
@@ -22,6 +23,7 @@ export interface SaveUserAssetPayload {
   url: string
   label?: string
   sourceNodeId?: string
+  generationRecordId?: string
 }
 
 export const assetsApi = {

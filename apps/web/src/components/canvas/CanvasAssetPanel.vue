@@ -7,6 +7,14 @@ import { fileToPersistedPayload } from '@/composables/useMediaUpload'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import CanvasRefTargetIcon from '@/components/shared/CanvasRefTargetIcon.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
+import {
+  buildAssetMediaInfoSummary,
+  parseAssetMetadata,
+  useMediaInspector,
+  type NodeMediaInfoSummary,
+} from '@/composables/useMediaInspector'
+import type { MediaInfo } from '@lnkpi/shared'
 
 export interface CanvasAssetItem {
   id: string
@@ -18,6 +26,9 @@ export interface CanvasAssetItem {
   createdAt?: number
   /** user = 用户全局资产库；public = 平台发布的公共资产 */
   source?: 'user' | 'public'
+  metadata?: string | null
+  generationRecordId?: string
+  mediaSummary?: NodeMediaInfoSummary
 }
 
 const emit = defineEmits<{
@@ -26,6 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const editor = useCanvasEditorStore()
+const { openInspector } = useMediaInspector()
 
 type AssetTab = 'user' | 'public'
 type AssetKindFilter = 'all' | 'image' | 'video' | 'audio'
@@ -60,15 +72,23 @@ async function loadUserAssets() {
   userLoading.value = true
   try {
     const res = await assetsApi.listMine()
-    userAssets.value = (res.data?.data?.items ?? []).map((item) => ({
-      id: item.id,
-      nodeId: item.sourceNodeId ?? '',
-      url: item.url,
-      label: item.label,
-      kind: item.kind,
-      createdAt: Date.parse(item.createdAt) || undefined,
-      source: 'user' as const,
-    }))
+    userAssets.value = (res.data?.data?.items ?? []).map((item) => {
+      const metadata = item.metadata ?? null
+      const parsed = parseAssetMetadata(metadata)
+      return {
+        id: item.id,
+        nodeId: item.sourceNodeId ?? '',
+        url: item.url,
+        label: item.label,
+        kind: item.kind,
+        createdAt: Date.parse(item.createdAt) || undefined,
+        source: 'user' as const,
+        metadata,
+        generationRecordId:
+          typeof parsed.generationRecordId === 'string' ? parsed.generationRecordId : undefined,
+        mediaSummary: buildAssetMediaInfoSummary({ kind: item.kind, metadata }),
+      }
+    })
   } catch {
     // 加载失败留空，切换 tab 或保存资产后会重试
   } finally {
@@ -174,14 +194,40 @@ function displayUrl(asset: CanvasAssetItem) {
   return resolveMediaUrl(asset.url)
 }
 
+function assetInspectorPayload(asset: CanvasAssetItem) {
+  const meta = parseAssetMetadata(asset.metadata)
+  const mediaInfo =
+    meta.mediaInfo && typeof meta.mediaInfo === 'object'
+      ? (meta.mediaInfo as MediaInfo)
+      : undefined
+  return {
+    generationRecordId: asset.generationRecordId,
+    nodeLabel: asset.label,
+    url: asset.url,
+    kind: (asset.kind === 'video' ? 'video' : 'image') as 'image' | 'video',
+    assetMediaInfo: mediaInfo,
+    assetMeta: meta,
+  }
+}
+
 /** 点击 = 预览 */
 function preview(asset: CanvasAssetItem) {
   if (asset.kind === 'other') return
+  const payload = assetInspectorPayload(asset)
   editor.openMediaPreview({
     url: displayUrl(asset),
     kind: asset.kind,
     label: asset.label,
+    generationRecordId: payload.generationRecordId,
+    assetMediaInfo: payload.assetMediaInfo,
+    assetMeta: payload.assetMeta,
   })
+}
+
+function openAssetInspector(asset: CanvasAssetItem, e?: Event) {
+  e?.stopPropagation()
+  if (asset.kind !== 'image' && asset.kind !== 'video') return
+  void openInspector(assetInspectorPayload(asset))
 }
 
 /** hover 操作：加载到当前画布（选中节点则作为引用，否则新建节点） */
@@ -400,10 +446,26 @@ function onDragStart(event: DragEvent, asset: CanvasAssetItem) {
               公共
             </span>
 
+            <MediaInfoSummary
+              v-if="asset.mediaSummary && (asset.kind === 'image' || asset.kind === 'video')"
+              v-bind="asset.mediaSummary"
+              class="absolute inset-x-0 bottom-0 z-[1] opacity-0 transition group-hover:opacity-100 neo-media-info-summary--overlay"
+            />
+
             <!-- hover 操作层 -->
             <div
               class="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/85 to-transparent px-1.5 pb-1.5 pt-5 opacity-0 transition group-hover:opacity-100"
             >
+              <button
+                v-if="asset.kind === 'image' || asset.kind === 'video'"
+                type="button"
+                class="asset-hover-btn"
+                title="媒体属性"
+                aria-label="媒体属性"
+                @click.stop="openAssetInspector(asset, $event)"
+              >
+                ⓘ
+              </button>
               <button
                 type="button"
                 class="asset-hover-btn"

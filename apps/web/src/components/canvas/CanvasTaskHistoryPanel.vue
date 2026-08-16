@@ -12,7 +12,6 @@ import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import MediaRefList from '@/components/media/MediaRefList.vue'
 import { buildNodeMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import {
   buildCopyForNode,
@@ -39,7 +38,6 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const editor = useCanvasEditorStore()
-const { allChannels } = useProviderBootstrap()
 const { openInspector } = useMediaInspector()
 
 const sessionId = computed(() => route.params.sessionId as string | undefined)
@@ -177,37 +175,6 @@ function recordModelName(record: GenerationRecord): string {
   const meta = parseRecordMeta(record)
   const raw = record.model ?? meta.originalModel ?? ''
   return raw ? modelOptionName(raw) : '—'
-}
-
-function recordChannelName(record: GenerationRecord): string {
-  const channelId = parseRecordMeta(record).channelId
-  if (!channelId) return '—'
-  const ch = allChannels.value.find((c) => c.id === channelId)
-  return ch?.name || channelId.slice(0, 8)
-}
-
-function recordParamRows(record: GenerationRecord): Array<{ label: string; value: string }> {
-  const meta = parseRecordMeta(record)
-  const rows: Array<{ label: string; value: string }> = []
-  const add = (label: string, v: unknown) => {
-    if (v === undefined || v === null || v === '') return
-    rows.push({ label, value: String(v) })
-  }
-  if (record.type === 'image') {
-    add('比例', meta.aspectRatio)
-    add('分辨率', meta.resolution)
-    add('尺寸', meta.size)
-    add('数量', meta.count)
-  } else if (record.type === 'video') {
-    add('时长', meta.duration != null ? `${meta.duration}s` : undefined)
-    add('分辨率', meta.resolution)
-    add('比例', meta.aspectRatio)
-    add('裁剪', meta.crop)
-  } else if (record.type === 'audio') {
-    add('音色', meta.voice)
-    add('语速', meta.speed)
-  }
-  return rows
 }
 
 function recordFailureMessage(record: GenerationRecord): string | null {
@@ -635,37 +602,12 @@ onUnmounted(stopPolling)
                 </p>
               </div>
 
-              <div class="grid grid-cols-2 gap-2">
-                <div>
-                  <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">类型</p>
-                  <p class="text-[var(--neo-text-secondary)]">{{ TYPE_LABELS[attempt.type] ?? attempt.type }}</p>
-                </div>
-                <div>
-                  <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">创建时间</p>
-                  <p class="tabular-nums text-[var(--neo-text-secondary)]">{{ formatFullTime(attempt.createdAt) }}</p>
-                </div>
-                <div class="col-span-2">
-                  <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">模型</p>
-                  <p class="truncate text-[var(--neo-text-secondary)]" :title="recordModelName(attempt)">
-                    {{ recordModelName(attempt) }}
-                  </p>
-                </div>
-                <div class="col-span-2">
-                  <p class="mb-0.5 text-[10px] text-[var(--neo-text-muted)]">渠道</p>
-                  <p class="truncate text-[var(--neo-text-secondary)]" :title="recordChannelName(attempt)">
-                    {{ recordChannelName(attempt) }}
-                  </p>
-                </div>
-              </div>
-
-              <div v-if="recordParamRows(attempt).length">
-                <p class="mb-1 text-[10px] uppercase tracking-wider text-[var(--neo-text-muted)]">参数</p>
-                <div class="grid grid-cols-2 gap-2 rounded-lg bg-[var(--neo-active-bg)] p-2">
-                  <div v-for="row in recordParamRows(attempt)" :key="row.label">
-                    <p class="text-[9px] text-[var(--neo-text-muted)]">{{ row.label }}</p>
-                    <p class="text-[var(--neo-text-secondary)]">{{ row.value }}</p>
-                  </div>
-                </div>
+              <div class="flex flex-wrap items-center gap-2 text-[10px] text-[var(--neo-text-muted)]">
+                <span>{{ TYPE_LABELS[attempt.type] ?? attempt.type }}</span>
+                <span>·</span>
+                <span class="tabular-nums">{{ formatFullTime(attempt.createdAt) }}</span>
+                <span>·</span>
+                <span class="truncate" :title="recordModelName(attempt)">{{ recordModelName(attempt) }}</span>
               </div>
 
               <div v-if="hasRecordMediaInfo(attempt)">

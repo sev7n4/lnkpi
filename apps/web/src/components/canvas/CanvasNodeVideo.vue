@@ -89,7 +89,13 @@ function download() {
 function saveToLibrary() {
   const url = String(props.data.url ?? '').trim()
   if (!url) return
-  void saveAssetToLibrary({ kind: 'video', url, label: props.data.label ?? '', sourceNodeId: props.id })
+  void saveAssetToLibrary({
+    kind: 'video',
+    url,
+    label: props.data.label ?? '',
+    sourceNodeId: props.id,
+    generationRecordId: props.data.generationRecordId,
+  })
 }
 
 function openMediaInspector(e: Event) {
@@ -283,6 +289,18 @@ onUnmounted(() => {
                   : '上传或等待生成'
             }}
           </span>
+          <button
+            v-if="showInspectorBtn"
+            type="button"
+            class="neo-media-inspector-btn neo-media-inspector-btn--placeholder nodrag"
+            aria-label="媒体属性"
+            title="媒体属性"
+            @pointerdown.stop
+            @mousedown.stop
+            @click.stop="openMediaInspector"
+          >
+            ⓘ
+          </button>
           <div v-if="data.status === 'uploading'" class="neo-upload-progress">
             <div class="neo-upload-progress-bar" :style="{ width: `${data.uploadProgress ?? 0}%` }" />
           </div>

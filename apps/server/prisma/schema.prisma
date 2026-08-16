@@ -36,6 +36,7 @@ model UserAsset {
   url          String
   label        String   @default("")
   sourceNodeId String?
+  metadata     String?
   createdAt    DateTime @default(now())
 
   @@unique([userId, url])
