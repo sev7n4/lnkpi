@@ -6,6 +6,8 @@ interface ShotMaterial {
   url?: string | null
   status: string
   prompt?: string | null
+  type?: string | null
+  metadata?: string | null
 }
 
 interface ShotStatus {

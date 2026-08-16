@@ -57,6 +57,10 @@ import {
   type ResolvedGenerationProvider,
 } from '../provider/provider-resolver.service'
 import { MediaProbeService } from '../media/media-probe.service'
+import {
+  buildMediaInfoPayload,
+  enrichVideoMediaInfoDimensions,
+} from '../media/build-media-info'
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -641,42 +645,14 @@ export class StudioService {
     outputUrl: string | null,
     referenceUrls: string[],
   ): Promise<MediaInfo> {
-    const output = outputUrl ? await this.mediaProbe.probeUrl(outputUrl) : undefined
-    const references = await Promise.all(
-      referenceUrls
-        .filter((url) => typeof url === 'string' && url.trim())
-        .map(async (url) => this.mediaProbe.probeUrl(url.trim())),
-    )
-    return {
-      ...(output ? { output } : {}),
-      ...(references.length ? { references } : {}),
-      probedAt: new Date().toISOString(),
-    }
+    return buildMediaInfoPayload(this.mediaProbe, outputUrl, referenceUrls)
   }
 
   private async enrichVideoMediaInfoDimensions(
     mediaInfo: MediaInfo,
     lastFrameUrl?: string | null,
   ): Promise<MediaInfo> {
-    if (mediaInfo.output?.width && mediaInfo.output?.height) {
-      return mediaInfo
-    }
-    const frameUrl = String(lastFrameUrl ?? '').trim()
-    if (!frameUrl) {
-      return mediaInfo
-    }
-    const lastFrame = await this.mediaProbe.probeUrl(frameUrl)
-    if (!lastFrame.width || !lastFrame.height) {
-      return mediaInfo
-    }
-    return {
-      ...mediaInfo,
-      output: {
-        ...(mediaInfo.output ?? { url: frameUrl, probeStatus: 'ok' as const }),
-        width: lastFrame.width,
-        height: lastFrame.height,
-      },
-    }
+    return enrichVideoMediaInfoDimensions(this.mediaProbe, mediaInfo, lastFrameUrl)
   }
 
   async getGenerationDiagnostic(userId: string, id: string): Promise<GenerationDiagnostic> {

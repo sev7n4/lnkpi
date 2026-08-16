@@ -7,6 +7,18 @@ import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
+import { MediaProbeService } from '../media/media-probe.service'
+
+const mediaProbeMock = {
+  probeUrl: vi.fn(async (url: string) => ({
+    url,
+    width: 1024,
+    height: 768,
+    bytes: 500_000,
+    mimeType: 'image/png',
+    probeStatus: 'ok' as const,
+  })),
+}
 
 function platformResolve(model?: string) {
   const modelName = model?.includes('::') ? model.split('::')[1]! : (model ?? '')
@@ -73,6 +85,10 @@ describe('MaterialService image', () => {
           useValue: {
             resolveForGeneration: vi.fn(async (_u: string, model?: string) => platformResolve(model)),
           },
+        },
+        {
+          provide: MediaProbeService,
+          useValue: mediaProbeMock,
         },
       ],
     }).compile()
@@ -202,6 +218,10 @@ describe('MaterialService video', () => {
           useValue: {
             resolveForGeneration: vi.fn(async (_u: string, model?: string) => platformResolve(model)),
           },
+        },
+        {
+          provide: MediaProbeService,
+          useValue: mediaProbeMock,
         },
       ],
     }).compile()

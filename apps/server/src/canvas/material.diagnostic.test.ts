@@ -5,6 +5,7 @@ import { NotFoundException } from '@nestjs/common'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
+import { MediaProbeService } from '../media/media-probe.service'
 import { MaterialService } from './material.service'
 
 describe('MaterialService.getMaterialDiagnostic', () => {
@@ -37,6 +38,15 @@ describe('MaterialService.getMaterialDiagnostic', () => {
         {
           provide: ProviderResolverService,
           useValue: { resolveForGeneration: vi.fn() },
+        },
+        {
+          provide: MediaProbeService,
+          useValue: {
+            probeUrl: vi.fn(async (url: string) => ({
+              url,
+              probeStatus: 'ok' as const,
+            })),
+          },
         },
       ],
     }).compile()

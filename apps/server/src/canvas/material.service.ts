@@ -44,6 +44,11 @@ import {
   rethrowWithRefundedPoints,
   throwCancelledException,
 } from '../points/charge-session'
+import { MediaProbeService } from '../media/media-probe.service'
+import {
+  buildMediaInfoPayload,
+  enrichVideoMediaInfoDimensions,
+} from '../media/build-media-info'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
 import { videoCredits } from '../points/video-credits'
@@ -246,6 +251,7 @@ export class MaterialService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(PointsService) private readonly points: PointsService,
     @Inject(ProviderResolverService) private readonly resolver: ProviderResolverService,
+    @Inject(MediaProbeService) private readonly mediaProbe: MediaProbeService,
   ) {}
 
   async createFromAgent(data: {
@@ -878,6 +884,13 @@ export class MaterialService {
       if (!existing || existing.status !== 'generating') return
       const prev = parseMeta(existing.metadata)
       if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const mediaInfo = await buildMediaInfoPayload(
+        this.mediaProbe,
+        url,
+        Array.isArray(referenceImages)
+          ? referenceImages.filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+          : [],
+      )
       const updated = await this.prisma.material.updateMany({
         where: { id: materialId, status: 'generating' },
         data: {
@@ -901,6 +914,7 @@ export class MaterialService {
                 effectivePrompt,
                 responseMode: built.meta.responseMode,
                 refWire: built.meta.refWire,
+                mediaInfo,
               },
               skipCharge ? 0 : cost,
             ),
@@ -1058,6 +1072,16 @@ export class MaterialService {
       if (!existing || existing.status !== 'generating') return
       const prev = parseMeta(existing.metadata)
       if (isCancelledMeta(prev) || alreadyRefunded(prev)) return
+      const referenceUrls = [
+        ...effectiveBundle.images.map(({ url: refUrl }) => refUrl),
+        ...effectiveBundle.videos.map(({ url: refUrl }) => refUrl),
+        ...effectiveBundle.audios.map(({ url: refUrl }) => refUrl),
+      ].filter((u): u is string => typeof u === 'string' && u.trim().length > 0)
+      const mediaInfo = await enrichVideoMediaInfoDimensions(
+        this.mediaProbe,
+        await buildMediaInfoPayload(this.mediaProbe, url, referenceUrls),
+        lastFrameUrl,
+      )
       const updated = await this.prisma.material.updateMany({
         where: { id: materialId, status: 'generating' },
         data: {
@@ -1082,6 +1106,7 @@ export class MaterialService {
                 channelId: resolved.channelId,
                 effectivePrompt,
                 ...(lastFrameUrl ? { lastFrameUrl } : {}),
+                mediaInfo,
               },
               skipCharge ? 0 : cost,
             ),
