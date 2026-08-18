@@ -537,15 +537,24 @@ class NestCanvasClient:
             {"sessionId": self._session_id},
         )
 
-    async def duplicate_node(self, *, node_id: str) -> dict[str, Any]:
-        return await self._post(
-            "/agent/internal/duplicate-node",
-            {
-                "sessionId": self._session_id,
-                "userId": self._user_id,
-                "nodeId": node_id,
-            },
-        )
+    async def duplicate_node(
+        self,
+        *,
+        node_id: str | None = None,
+        node_ids: list[str] | None = None,
+        include_upstream: bool = False,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+        }
+        if node_id is not None:
+            body["nodeId"] = node_id
+        if node_ids is not None:
+            body["nodeIds"] = node_ids
+        if include_upstream:
+            body["includeUpstream"] = include_upstream
+        return await self._post("/agent/internal/duplicate-node", body)
 
     async def upload_media_to_canvas(
         self,

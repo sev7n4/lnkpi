@@ -129,7 +129,12 @@ class FocusNodesInput(BaseModel):
 
 
 class DuplicateNodeInput(BaseModel):
-    node_id: str = Field(description="Source canvas node id to duplicate")
+    node_id: str | None = Field(default=None, description="Single seed node id")
+    node_ids: list[str] | None = Field(default=None, description="Multi-select subgraph ids")
+    include_upstream: bool = Field(
+        default=False,
+        description="When duplicating a single node, also copy direct upstream nodes and edges (one hop only)",
+    )
 
 
 class UploadMediaInput(BaseModel):
@@ -287,8 +292,16 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
     async def get_canvas_layout() -> dict:
         return await client.get_canvas_layout()
 
-    async def duplicate_node(node_id: str) -> dict:
-        return await client.duplicate_node(node_id=node_id)
+    async def duplicate_node(
+        node_id: str | None = None,
+        node_ids: list[str] | None = None,
+        include_upstream: bool = False,
+    ) -> dict:
+        return await client.duplicate_node(
+            node_id=node_id,
+            node_ids=node_ids,
+            include_upstream=include_upstream,
+        )
 
     async def upload_media_to_canvas(
         url: str, media_type: str, title: str | None = None
@@ -597,7 +610,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             StructuredTool.from_function(
                 coroutine=duplicate_node,
                 name="duplicate_node",
-                description="Clone a canvas node with offset position",
+                description=(
+                    "Duplicate canvas node(s) with internal edges preserved. "
+                    "Use node_ids for a selected subgraph; use node_id alone for a single node. "
+                    "Set include_upstream=true only for a single node when the upstream prompt/ref chain must be copied (one hop)."
+                ),
                 args_schema=DuplicateNodeInput,
             ),
         ),
