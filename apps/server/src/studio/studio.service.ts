@@ -1120,8 +1120,8 @@ export class StudioService {
       const saved = await this.upload.saveUserFile(userId, composited, 'edit.png', 'image/png')
       const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
       const meta = parseMeta(existing?.metadata)
-      return this.prisma.generationRecord.update({
-        where: { id: record.id },
+      await this.prisma.generationRecord.updateMany({
+        where: { id: record.id, status: 'generating' },
         data: {
           url: saved.url,
           status: 'completed',
@@ -1137,8 +1137,25 @@ export class StudioService {
           }),
         },
       })
+      return this.prisma.generationRecord.findFirst({ where: { id: record.id } })
     } catch (err) {
-      if (isCancelledException(err)) throw err
+      if (isCancelledException(err)) {
+        const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
+        const meta = parseMeta(existing?.metadata)
+        const cancelledMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta({ ...meta, cancelled: true }, cost, 'cancelled'),
+          err,
+          { errorCode: 'cancelled', userMessage: '已取消' },
+        )
+        await this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            status: 'failed',
+            metadata: JSON.stringify(cancelledMeta),
+          },
+        })
+        throw err
+      }
       return refundAndFail(err)
     }
   }

@@ -101,7 +101,11 @@ describe('StudioService.editImage', () => {
             generationRecord: {
               create: generationCreate,
               update: generationUpdate,
-              updateMany: vi.fn(async () => ({ count: 1 })),
+              updateMany: vi.fn(async (args: { where: { id: string; status?: string }; data: Record<string, unknown> }) => {
+                if (args.where.status && stored.status !== args.where.status) return { count: 0 }
+                stored = { ...stored, ...args.data, id: args.where.id }
+                return { count: 1 }
+              }),
               findFirst: vi.fn(async () => stored),
               findMany: vi.fn(async () => []),
             },
@@ -154,5 +158,20 @@ describe('StudioService.editImage', () => {
     expect(pointsRefund).toHaveBeenCalled()
     expect(stored.status).toBe('failed')
     expect(stored.type).toBe('image_edit')
+  })
+
+  it('refunds once and does not leave generating record when cancelled after create', async () => {
+    await expect(
+      svc.editImage('u1', input, { isCancelled: () => true }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+
+    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像精修')
+    expect(pointsRefund).toHaveBeenCalledTimes(1)
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像精修-取消退款')
+    expect(stored.status).not.toBe('generating')
+    expect(stored.status).toBe('failed')
+    const meta = JSON.parse(String(stored.metadata))
+    expect(meta.refundedPoints).toBe(10)
+    expect(meta.refundReason).toBe('cancelled')
   })
 })
