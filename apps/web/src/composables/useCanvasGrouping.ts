@@ -1,4 +1,7 @@
 import type { Node } from '@vue-flow/core'
+import { getGroupChildIds } from '@lnkpi/shared'
+
+export { getGroupChildIds }
 
 export const GROUP_PADDING = 80
 
@@ -124,13 +127,6 @@ export function createGroupFromNodes(
   }
 
   return { nodes: next, groupId }
-}
-
-export function getGroupChildIds(nodes: FlowNode[], groupId: string) {
-  const fromData = nodes.find((n) => n.id === groupId)?.data as { childIds?: string[] } | undefined
-  const linked = nodes.filter((n) => n.parentNode === groupId).map((n) => n.id)
-  if (!linked.length) return fromData?.childIds ?? []
-  return [...new Set([...(fromData?.childIds ?? []), ...linked])]
 }
 
 export function resizeGroupToFitChildren(nodes: FlowNode[], groupId: string): FlowNode[] {
