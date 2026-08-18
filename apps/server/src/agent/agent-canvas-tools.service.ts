@@ -1,12 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions, parseVisionQaJson } from '@lnkpi/agent'
 import {
+  duplicateResultToCanvasActions,
+  duplicateSubgraph,
+  resolveDuplicateSourceIds,
   resolveNodeRefs,
   resolveCanonicalVideoRequest,
   summarizePromptCompletion,
   type CanvasAction,
   type CanvasData,
   type CanvasNode,
+  type DuplicateCanvasNode,
   type LocalRefBinding,
   type NodeType,
   type SidebarAttachment,
@@ -1677,37 +1681,51 @@ export class AgentCanvasToolsService {
   async duplicateNode(input: {
     sessionId: string
     userId: string
-    nodeId: string
+    nodeId?: string
+    nodeIds?: string[]
+    includeUpstream?: boolean
     offset?: { x: number; y: number }
-  }): Promise<{ nodeId: string; actions: CanvasAction[]; canvasCommands: Array<{ type: string; nodeId: string }> }> {
+  }): Promise<{
+    nodeId: string
+    nodeIds: string[]
+    actions: CanvasAction[]
+    canvasCommands: Array<{ type: string; nodeId: string }>
+  }> {
     await this.loadOwnedSession(input.sessionId, input.userId)
-    const source = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
-    const offset = input.offset ?? { x: 40, y: 40 }
-    const nodeType = String(source.type ?? 'image') as NodeType
-    const newId = nextNodeId(nodeType)
-    const cloned = JSON.parse(JSON.stringify(source.data ?? {})) as Record<string, unknown>
-    delete cloned.generationRecordId
-    delete cloned.materialId
-    cloned.status = 'draft'
-    const actions: CanvasAction[] = [
-      {
-        type: 'add_node',
-        payload: {
-          id: newId,
-          nodeType,
-          position: {
-            x: source.position.x + offset.x,
-            y: source.position.y + offset.y,
-          },
-          data: cloned,
-        },
-      },
-    ]
-    await this.persist(input.sessionId, actions)
+    const { canvas } = await this.loadSession(input.sessionId)
+
+    const seeds = input.nodeIds?.length ? input.nodeIds : input.nodeId ? [input.nodeId] : []
+    if (!seeds.length) throw new BadRequestException('nodeId or nodeIds required')
+
+    const edgeMode = input.includeUpstream && seeds.length === 1 ? 'upstream' : 'internal'
+    const nodes = canvas.nodes as DuplicateCanvasNode[]
+    const edges = canvas.edges ?? []
+    const sourceIds = resolveDuplicateSourceIds(
+      nodes,
+      edges,
+      seeds[0],
+      seeds.length > 1 ? seeds : [seeds[0]],
+      edgeMode,
+    )
+    const result = duplicateSubgraph(nodes, edges, sourceIds, {
+      offset: input.offset ?? { x: 48, y: 48 },
+      createNodeId: (type) => nextNodeId(type),
+    })
+    const updated: CanvasData = {
+      ...canvas,
+      nodes: [...canvas.nodes, ...(result.nodes as CanvasNode[])],
+      edges: [...edges, ...result.edges],
+    }
+    await this.persistCanvasData(input.sessionId, updated)
+
+    const actions = duplicateResultToCanvasActions(result)
+    const nodeIds = result.nodes.map((node) => node.id)
+    const focusId = result.newRootIds[0] ?? result.nodes[0]?.id ?? nodeIds[0]
     return {
-      nodeId: newId,
+      nodeId: nodeIds[0]!,
+      nodeIds,
       actions,
-      canvasCommands: [{ type: 'focus_node', nodeId: newId }],
+      canvasCommands: [{ type: 'focus_node', nodeId: focusId }],
     }
   }
 
@@ -2336,6 +2354,27 @@ export class AgentCanvasToolsService {
    * Replace canvas nodes for layout operations (group/ungroup/grid) that need
    * parentNode/style fields not supported by applyCanvasActions.
    */
+  private async persistCanvasData(sessionId: string, canvas: CanvasData): Promise<CanvasData> {
+    await this.expireStaleStage(sessionId)
+    return this.prisma.$transaction(async (tx) => {
+      const session = await tx.session.findUnique({
+        where: { id: sessionId },
+        select: { canvasData: true, stagedActions: true },
+      })
+      if (!session) throw new NotFoundException('会话不存在')
+      if (session.stagedActions) {
+        throw new ConflictException(
+          'Canvas has staged actions pending commit; call commitStage or rollbackStage first',
+        )
+      }
+      await tx.session.update({
+        where: { id: sessionId },
+        data: { canvasData: JSON.stringify(canvas) },
+      })
+      return canvas
+    })
+  }
+
   private async persistLayoutNodes(sessionId: string, nodes: LayoutNode[]): Promise<CanvasData> {
     await this.expireStaleStage(sessionId)
     return this.prisma.$transaction(async (tx) => {

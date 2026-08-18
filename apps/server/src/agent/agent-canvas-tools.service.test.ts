@@ -1330,15 +1330,101 @@ describe('AgentCanvasToolsService', () => {
       expect(layout.groups).toEqual([])
     })
 
-    it('duplicateNode clones node and focuses copy', async () => {
+    it('duplicateNode copies internal subgraph with edges when duplicating p1 and i1', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'p1',
+            type: 'prompt',
+            position: { x: 0, y: 0 },
+            data: { title: 'Prompt' },
+          },
+          {
+            id: 'i1',
+            type: 'image',
+            position: { x: 200, y: 0 },
+            data: { title: 'Image', url: 'https://cdn.example/img.png', status: 'completed' },
+          },
+        ],
+        edges: [{ id: 'e-p1-i1', source: 'p1', target: 'i1' }],
+      }
       const result = await svc.duplicateNode({
         sessionId: 's1',
         userId: 'u1',
-        nodeId: 'img-1',
+        nodeIds: ['p1', 'i1'],
       })
-      expect(result.nodeId).not.toBe('img-1')
-      expect(canvas.nodes).toHaveLength(3)
+      expect(result.nodeIds).toHaveLength(2)
+      expect(result.nodeId).toBe(result.nodeIds[0])
+      expect(canvas.nodes).toHaveLength(4)
+      expect(canvas.edges).toHaveLength(2)
+      expect(result.actions.some((a) => a.type === 'add_edge')).toBe(true)
       expect(result.canvasCommands[0]?.type).toBe('focus_node')
+    })
+
+    it('duplicateNode includeUpstream copies only direct upstream nodes', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'a',
+            type: 'prompt',
+            position: { x: 0, y: 0 },
+            data: { title: 'Root prompt' },
+          },
+          {
+            id: 'b',
+            type: 'prompt',
+            position: { x: 100, y: 0 },
+            data: { title: 'Mid prompt' },
+          },
+          {
+            id: 'c',
+            type: 'image',
+            position: { x: 200, y: 0 },
+            data: { title: 'Image', url: 'https://cdn.example/img.png', status: 'completed' },
+          },
+        ],
+        edges: [
+          { id: 'e-a-b', source: 'a', target: 'b' },
+          { id: 'e-b-c', source: 'b', target: 'c' },
+        ],
+      }
+      const result = await svc.duplicateNode({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'c',
+        includeUpstream: true,
+      })
+      expect(result.nodeIds).toHaveLength(2)
+      expect(canvas.nodes).toHaveLength(5)
+      expect(canvas.edges).toHaveLength(3)
+    })
+
+    it('duplicateNode clears generationRecordId on copy', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-gen',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: 'Generated',
+              url: 'https://cdn.example/gen.png',
+              status: 'completed',
+              generationRecordId: 'rec-1',
+            },
+          },
+        ],
+        edges: [],
+      }
+      const result = await svc.duplicateNode({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-gen',
+      })
+      expect(result.nodeIds).toHaveLength(1)
+      const copy = canvas.nodes.find((node) => node.id === result.nodeIds[0])
+      expect(copy?.data?.generationRecordId).toBeUndefined()
+      expect(copy?.data?.url).toBe('https://cdn.example/gen.png')
     })
 
     it('getImageEditCapabilities reports image node support', async () => {

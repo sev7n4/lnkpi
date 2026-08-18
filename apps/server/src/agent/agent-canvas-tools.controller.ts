@@ -409,8 +409,18 @@ class DuplicateNodeDto {
   @IsString()
   userId!: string
 
+  @IsOptional()
   @IsString()
-  nodeId!: string
+  nodeId?: string
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds?: string[]
+
+  @IsOptional()
+  @IsBoolean()
+  includeUpstream?: boolean
 
   @IsOptional()
   offset?: { x: number; y: number }
