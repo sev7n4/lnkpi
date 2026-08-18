@@ -1,3 +1,5 @@
+import { isNodeGenerating } from '@/constants/dockStudio'
+
 export const STAIN_PRESET_PROMPT =
   '去除选区内的污渍、瑕疵、多余物体，其余像素保持不变'
 
@@ -14,8 +16,6 @@ export function decideRefineDismiss(input: {
   if (input.busy) return 'block'
   return 'dismiss'
 }
-
-import { isNodeGenerating } from '@/constants/dockStudio'
 
 export function canOpenRefineForNode(input: {
   type?: string | null
