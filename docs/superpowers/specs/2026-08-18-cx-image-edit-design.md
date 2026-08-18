@@ -1,7 +1,7 @@
 # 画布图像精修（Cx-image-edit P1）Design
 
 **Date:** 2026-08-18  
-**Status:** Approved for planning (pending user review of this file)  
+**Status:** Approved, plan in 2026-08-18-cx-image-edit.md  
 **代号:** **CX-IMAGE-EDIT**  
 **Related:**
 - `2026-08-08-image-upstream-capability-design.md` §7 / §13.2（生成 vs 编辑边界；本文件落地其独立规格）
