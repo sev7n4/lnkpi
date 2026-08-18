@@ -22,13 +22,13 @@ describe('duplicate with reactive canvas nodes', () => {
     expect(result.nodes[0].position).toEqual({ x: 148, y: 148 })
   })
 
-  it('upstream resolves with reactive edges array', () => {
+  it('upstream resolve keeps only seed ids', () => {
     const nodes = [
       { id: 'ref', type: 'image', position: { x: 0, y: 0 }, data: reactive({}) },
       { id: 'img', type: 'image', position: { x: 200, y: 0 }, data: reactive({ url: 'u' }) },
     ]
     const edges = [{ id: 'e-ref-img', source: 'ref', target: 'img' }]
     const sourceIds = resolveDuplicateSourceIds(nodes as any, edges, 'img', ['img'], 'upstream')
-    expect(sourceIds.sort()).toEqual(['img', 'ref'])
+    expect(sourceIds).toEqual(['img'])
   })
 })

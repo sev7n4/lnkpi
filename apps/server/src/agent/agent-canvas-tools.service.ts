@@ -1697,7 +1697,7 @@ export class AgentCanvasToolsService {
     const seeds = input.nodeIds?.length ? input.nodeIds : input.nodeId ? [input.nodeId] : []
     if (!seeds.length) throw new BadRequestException('nodeId or nodeIds required')
 
-    const edgeMode = input.includeUpstream && seeds.length === 1 ? 'upstream' : 'internal'
+    const edgeMode = input.includeUpstream ? 'upstream' : 'none'
     const nodes = canvas.nodes as DuplicateCanvasNode[]
     const edges = canvas.edges ?? []
     const sourceIds = resolveDuplicateSourceIds(
@@ -1705,10 +1705,10 @@ export class AgentCanvasToolsService {
       edges,
       seeds[0],
       seeds.length > 1 ? seeds : [seeds[0]],
-      edgeMode,
     )
     const result = duplicateSubgraph(nodes, edges, sourceIds, {
       offset: input.offset ?? { x: 48, y: 48 },
+      edgeMode,
       createNodeId: (type) => nextNodeId(type),
     })
     const updated: CanvasData = {
