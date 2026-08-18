@@ -95,11 +95,19 @@ export function resolveDuplicateSourceIds(
   return ids.filter((id) => nodes.some((node) => node.id === id))
 }
 
+function clonePlainRecord(data: Record<string, unknown>): Record<string, unknown> {
+  try {
+    return structuredClone(data)
+  } catch {
+    return JSON.parse(JSON.stringify(data)) as Record<string, unknown>
+  }
+}
+
 export function sanitizeNodeDataForDuplicate(
   type: string | undefined,
   data: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = structuredClone(data)
+  const next = clonePlainRecord(data)
   for (const key of STRIP_DATA_KEYS) {
     delete next[key]
   }

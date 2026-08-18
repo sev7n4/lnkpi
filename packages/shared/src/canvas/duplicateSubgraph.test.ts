@@ -93,6 +93,15 @@ describe('duplicateSubgraph', () => {
 })
 
 describe('sanitizeNodeDataForDuplicate', () => {
+  it('clones nested plain objects', () => {
+    const data = sanitizeNodeDataForDuplicate('image', {
+      prompt: 'p',
+      settings: { model: 'm' },
+    })
+    expect(data.prompt).toBe('p')
+    expect(data.settings).toEqual({ model: 'm' })
+  })
+
   it('resets generating status to idle when no url', () => {
     const data = sanitizeNodeDataForDuplicate('image', { status: 'generating', prompt: 'p' })
     expect(data.status).toBe('idle')
