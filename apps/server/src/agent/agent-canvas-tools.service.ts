@@ -1907,7 +1907,7 @@ export class AgentCanvasToolsService {
       canEdit,
       nodeType,
       hasUrl: Boolean(url),
-      supportedModes: canEdit ? ['crop', 'inpaint', 'outpaint', 'remove_bg'] : [],
+      supportedModes: canEdit ? ['inpaint'] : [],
     }
   }
 

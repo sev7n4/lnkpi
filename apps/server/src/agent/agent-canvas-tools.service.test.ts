@@ -1460,13 +1460,31 @@ describe('AgentCanvasToolsService', () => {
       expect(copy?.data?.url).toBe('https://cdn.example/gen.png')
     })
 
-    it('getImageEditCapabilities reports image node support', async () => {
-      const caps = await svc.getImageEditCapabilities({
-        sessionId: 's1',
-        nodeId: 'img-1',
-      })
+    it('getImageEditCapabilities reports only inpaint when image has url', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://x/a.png' },
+          },
+        ],
+        edges: [],
+      }
+      const caps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'img-1' })
       expect(caps.canEdit).toBe(true)
-      expect(caps.supportedModes).toContain('inpaint')
+      expect(caps.supportedModes).toEqual(['inpaint'])
+    })
+
+    it('getImageEditCapabilities is empty without url', async () => {
+      canvas = {
+        nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+        edges: [],
+      }
+      const caps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'img-1' })
+      expect(caps.canEdit).toBe(false)
+      expect(caps.supportedModes).toEqual([])
     })
   })
 
