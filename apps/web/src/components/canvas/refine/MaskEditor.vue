@@ -71,14 +71,16 @@ function resizeCanvas(width: number, height: number) {
 async function resolveBitmapSize() {
   const token = ++sizeToken
   if (isRealBitmapSize(props.width, props.height)) {
-    if (token === sizeToken) resizeCanvas(props.width as number, props.height as number)
+    if (token === sizeToken) resizeCanvas(Number(props.width), Number(props.height))
     return
   }
   try {
     const probed = await studioApi.probeMedia(props.url)
     if (token !== sizeToken) return
-    if (isRealBitmapSize(probed.width, probed.height)) {
-      resizeCanvas(probed.width, probed.height)
+    const probedWidth = Number(probed.width)
+    const probedHeight = Number(probed.height)
+    if (isRealBitmapSize(probedWidth, probedHeight)) {
+      resizeCanvas(probedWidth, probedHeight)
       return
     }
   } catch {
