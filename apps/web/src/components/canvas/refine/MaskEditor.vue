@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { studioApi } from '@/services/studio-api'
+import { isMaskDrawReady, isRealBitmapSize } from './maskCanvasReady'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 
 export type MaskTool = 'brush' | 'eraser' | 'rect'
@@ -26,6 +27,10 @@ const emit = defineEmits<{
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const sizeReady = ref(false)
+const drawReady = computed(() =>
+  isMaskDrawReady({ disabled: props.disabled, sizeReady: sizeReady.value }),
+)
 
 let drawing = false
 let lastX = 0
@@ -53,21 +58,26 @@ function clearCanvas() {
 function resizeCanvas(width: number, height: number) {
   const canvas = canvasRef.value
   if (!canvas) return
-  canvas.width = Math.max(1, Math.round(width))
-  canvas.height = Math.max(1, Math.round(height))
+  if (!isRealBitmapSize(width, height)) return
+  const nextWidth = Math.round(width)
+  const nextHeight = Math.round(height)
+  if (sizeReady.value) return
+  canvas.width = nextWidth
+  canvas.height = nextHeight
+  sizeReady.value = true
   emitCoverage()
 }
 
 async function resolveBitmapSize() {
   const token = ++sizeToken
-  if (props.width && props.height) {
-    if (token === sizeToken) resizeCanvas(props.width, props.height)
+  if (isRealBitmapSize(props.width, props.height)) {
+    if (token === sizeToken) resizeCanvas(props.width as number, props.height as number)
     return
   }
   try {
     const probed = await studioApi.probeMedia(props.url)
     if (token !== sizeToken) return
-    if (probed.width && probed.height) {
+    if (isRealBitmapSize(probed.width, probed.height)) {
       resizeCanvas(probed.width, probed.height)
       return
     }
@@ -78,17 +88,21 @@ async function resolveBitmapSize() {
   const img = new Image()
   img.onload = () => {
     if (token !== sizeToken) return
-    resizeCanvas(img.naturalWidth || img.width || 1, img.naturalHeight || img.height || 1)
-  }
-  img.onerror = () => {
-    if (token !== sizeToken) return
-    resizeCanvas(1, 1)
+    resizeCanvas(img.naturalWidth || img.width, img.naturalHeight || img.height)
   }
   img.src = props.url
 }
 
 watch(
-  () => [props.url, props.width, props.height] as const,
+  () => props.url,
+  () => {
+    sizeReady.value = false
+    void resolveBitmapSize()
+  },
+)
+
+watch(
+  () => [props.width, props.height] as const,
   () => {
     void resolveBitmapSize()
   },
@@ -140,7 +154,7 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
 }
 
 function onPointerDown(event: PointerEvent) {
-  if (props.disabled) return
+  if (!drawReady.value) return
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
@@ -159,7 +173,7 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (!drawing || props.disabled) return
+  if (!drawing || !drawReady.value) return
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
@@ -221,7 +235,7 @@ defineExpose({
     <canvas
       ref="canvasRef"
       class="mask-editor__canvas"
-      :class="{ 'is-disabled': disabled }"
+      :class="{ 'is-disabled': !drawReady }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { shouldShowRefineEntry } from './imageDockRefineEntry'
+import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
 
 describe('shouldShowRefineEntry', () => {
   it('shows when url exists, enabled, and not readonly', () => {
@@ -52,6 +52,35 @@ describe('shouldShowRefineEntry', () => {
         readonly: false,
         enabled: false,
       }),
+    ).toBe(false)
+  })
+})
+
+describe('isImageDockReadonly', () => {
+  it('is readonly when the parent dock already passed readonly', () => {
+    expect(isImageDockReadonly({ parentReadonly: true, generating: false, status: 'completed' })).toBe(
+      true,
+    )
+  })
+
+  it('is readonly while locally generating', () => {
+    expect(isImageDockReadonly({ parentReadonly: false, generating: true, status: 'completed' })).toBe(
+      true,
+    )
+    expect(
+      isImageDockReadonly({ parentReadonly: false, generating: false, status: 'generating' }),
+    ).toBe(true)
+  })
+
+  it('is readonly while the node is uploading', () => {
+    expect(
+      isImageDockReadonly({ parentReadonly: false, generating: false, status: 'uploading' }),
+    ).toBe(true)
+  })
+
+  it('is editable when idle with a completed image', () => {
+    expect(
+      isImageDockReadonly({ parentReadonly: false, generating: false, status: 'completed' }),
     ).toBe(false)
   })
 })

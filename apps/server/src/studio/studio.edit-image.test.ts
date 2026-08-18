@@ -49,6 +49,7 @@ describe('StudioService.editImage', () => {
   let resolveForGeneration: ReturnType<typeof vi.fn>
   let generationCreate: ReturnType<typeof vi.fn>
   let generationUpdate: ReturnType<typeof vi.fn>
+  let generationUpdateMany: ReturnType<typeof vi.fn>
   let pointsConsume: ReturnType<typeof vi.fn>
   let pointsRefund: ReturnType<typeof vi.fn>
   let saveUserFile: ReturnType<typeof vi.fn>
@@ -74,6 +75,11 @@ describe('StudioService.editImage', () => {
     generationUpdate = vi.fn(async (args: { where: { id: string }; data: Record<string, unknown> }) => {
       stored = { ...stored, ...args.data, id: args.where.id }
       return stored
+    })
+    generationUpdateMany = vi.fn(async (args: { where: { id: string; status?: string }; data: Record<string, unknown> }) => {
+      if (args.where.status && stored.status !== args.where.status) return { count: 0 }
+      stored = { ...stored, ...args.data, id: args.where.id }
+      return { count: 1 }
     })
 
     vi.mocked(readImageBuffer).mockResolvedValue(Buffer.from('img'))
@@ -101,11 +107,7 @@ describe('StudioService.editImage', () => {
             generationRecord: {
               create: generationCreate,
               update: generationUpdate,
-              updateMany: vi.fn(async (args: { where: { id: string; status?: string }; data: Record<string, unknown> }) => {
-                if (args.where.status && stored.status !== args.where.status) return { count: 0 }
-                stored = { ...stored, ...args.data, id: args.where.id }
-                return { count: 1 }
-              }),
+              updateMany: generationUpdateMany,
               findFirst: vi.fn(async () => stored),
               findMany: vi.fn(async () => []),
             },
@@ -149,6 +151,10 @@ describe('StudioService.editImage', () => {
     expect(record.type).toBe('image_edit')
     expect(record.url).toBe('https://cdn/comp.png')
     expect(JSON.parse(String(record.metadata)).composited).toBe(true)
+    expect(generationCreate.mock.calls[0]?.[0].data.prompt).toBe('去除污渍')
+    expect(imageEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ userPrompt: '去除污渍' }),
+    )
   })
 
   it('refunds points and marks record failed when provider throws', async () => {
@@ -173,5 +179,29 @@ describe('StudioService.editImage', () => {
     const meta = JSON.parse(String(stored.metadata))
     expect(meta.refundedPoints).toBe(10)
     expect(meta.refundReason).toBe('cancelled')
+  })
+
+  it('cancelGeneration refunds image_edit as 图像精修', async () => {
+    stored = {
+      id: 'g-edit',
+      userId: 'u1',
+      type: 'image_edit',
+      status: 'generating',
+      metadata: JSON.stringify({ chargedPoints: 10 }),
+    }
+    const result = await svc.cancelGeneration('u1', 'g-edit')
+    expect(result.status).toBe('failed')
+    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像精修-取消退款')
+  })
+
+  it('rejects when updateMany loses the generating race and does not look completed', async () => {
+    generationUpdateMany.mockResolvedValueOnce({ count: 0 })
+
+    await expect(svc.editImage('u1', input)).rejects.toMatchObject({
+      response: { message: '已取消', refundedPoints: 10 },
+    })
+    expect(pointsRefund).not.toHaveBeenCalled()
+    expect(stored.status).not.toBe('completed')
+    expect(stored.url).toBeUndefined()
   })
 })

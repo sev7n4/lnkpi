@@ -20,12 +20,11 @@ import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { resolveGenerationModel } from '@/constants/studioModels'
-import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { TURNAROUND_PIPELINE_DOCK_HINT, isTurnaroundLikePrompt } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
-import { shouldShowRefineEntry } from './imageDockRefineEntry'
+import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -34,6 +33,7 @@ const props = defineProps<{
   upstream: UpstreamNodeContext
   mentions?: MentionOption[]
   generating?: boolean
+  readonly?: boolean
   refs?: NodeRef[]
 }>()
 
@@ -58,7 +58,13 @@ const refUploadError = ref('')
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 
 const speech = useSpeechRecognition()
-const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const readonly = computed(() =>
+  isImageDockReadonly({
+    parentReadonly: props.readonly,
+    generating: props.generating,
+    status: props.node.data?.status,
+  }),
+)
 const credits = computed(() => estimateImageCredits(imageCount.value))
 const showRefineEntry = computed(() =>
   shouldShowRefineEntry({

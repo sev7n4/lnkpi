@@ -8,6 +8,7 @@ import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
+import { syncRefineUrls } from './syncRefineUrls'
 import CompareView from './CompareView.vue'
 import MaskEditor, { type MaskTool } from './MaskEditor.vue'
 import VersionStrip from './VersionStrip.vue'
@@ -55,9 +56,14 @@ watch(busy, (value) => emit('busy', value), { immediate: true })
 watch(
   () => props.beforeUrl,
   (url) => {
-    compareBeforeUrl.value = url
-    afterUrl.value = url
-    lastRecordId.value = undefined
+    const next = syncRefineUrls({
+      beforeUrl: url,
+      afterUrl: afterUrl.value,
+      compareBeforeUrl: compareBeforeUrl.value,
+    })
+    compareBeforeUrl.value = next.compareBeforeUrl
+    afterUrl.value = next.afterUrl
+    if (next.reset) lastRecordId.value = undefined
   },
 )
 

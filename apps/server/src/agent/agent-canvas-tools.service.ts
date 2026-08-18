@@ -281,6 +281,19 @@ function modalityDefaults(nodeType: NodeType | string, prefs: AccountGenPrefs): 
   }
 }
 
+function canEditImageNodeType(input: {
+  type: string
+  mediaKind?: unknown
+  mimeType?: unknown
+}): boolean {
+  if (input.type === 'image') return true
+  if (input.type !== 'mediaInput') return false
+  const kind = String(input.mediaKind ?? '').toLowerCase()
+  if (kind === 'image') return true
+  const mime = String(input.mimeType ?? '').toLowerCase()
+  return mime.startsWith('image/')
+}
+
 @Injectable()
 export class AgentCanvasToolsService {
   /** Overridable in unit tests */
@@ -1901,8 +1914,11 @@ export class AgentCanvasToolsService {
     const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
     const nodeType = String(node.type ?? '')
     const url = String(node.data?.url ?? '').trim()
-    const isImageLike = nodeType === 'image' || nodeType === 'mediaInput'
-    const canEdit = isImageLike && Boolean(url)
+    const canEdit = Boolean(url) && canEditImageNodeType({
+      type: nodeType,
+      mediaKind: node.data?.mediaKind,
+      mimeType: node.data?.mimeType,
+    })
     return {
       canEdit,
       nodeType,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CX_IMAGE_EDIT_ENABLED,
   STAIN_PRESET_PROMPT,
+  canOpenNodeImageEdit,
   canOpenRefineForNode,
   decideRefineDismiss,
 } from './refineSession'
@@ -100,5 +101,18 @@ describe('canOpenRefineForNode', () => {
   it('rejects other node types', () => {
     expect(canOpenRefineForNode({ type: 'video' })).toBe(false)
     expect(canOpenRefineForNode({ type: 'text' })).toBe(false)
+  })
+})
+
+describe('canOpenNodeImageEdit', () => {
+  it('blocks the node edit entry while generating or uploading', () => {
+    expect(canOpenNodeImageEdit('generating')).toBe(false)
+    expect(canOpenNodeImageEdit('fallback_pending')).toBe(false)
+    expect(canOpenNodeImageEdit('uploading')).toBe(false)
+  })
+
+  it('allows the node edit entry when idle', () => {
+    expect(canOpenNodeImageEdit('completed')).toBe(true)
+    expect(canOpenNodeImageEdit('draft')).toBe(true)
   })
 })

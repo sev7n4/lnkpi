@@ -4,7 +4,7 @@ import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue
 import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
-import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
+import { CX_IMAGE_EDIT_ENABLED, canOpenNodeImageEdit } from '@/utils/refineSession'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
@@ -82,6 +82,7 @@ const {
 
 function openEdit() {
   if (!CX_IMAGE_EDIT_ENABLED || !displayUrl.value) return
+  if (!canOpenNodeImageEdit(props.data.status)) return
   editor.openImageEditor({
     nodeId: props.id,
     url: displayUrl.value,

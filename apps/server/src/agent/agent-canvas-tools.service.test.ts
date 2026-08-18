@@ -1486,6 +1486,66 @@ describe('AgentCanvasToolsService', () => {
       expect(caps.canEdit).toBe(false)
       expect(caps.supportedModes).toEqual([])
     })
+
+    it('getImageEditCapabilities allows image mediaInput', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'media-1',
+            type: 'mediaInput',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://x/a.png', mediaKind: 'image' },
+          },
+        ],
+        edges: [],
+      }
+      const caps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'media-1' })
+      expect(caps.canEdit).toBe(true)
+      expect(caps.supportedModes).toEqual(['inpaint'])
+    })
+
+    it('getImageEditCapabilities allows mediaInput with image mimeType', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'media-2',
+            type: 'mediaInput',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://x/a.png', mimeType: 'image/png' },
+          },
+        ],
+        edges: [],
+      }
+      const caps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'media-2' })
+      expect(caps.canEdit).toBe(true)
+      expect(caps.supportedModes).toEqual(['inpaint'])
+    })
+
+    it('getImageEditCapabilities rejects video and audio mediaInput even with a url', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'vid-in',
+            type: 'mediaInput',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://x/a.mp4', mediaKind: 'video' },
+          },
+          {
+            id: 'aud-in',
+            type: 'mediaInput',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://x/a.mp3', mediaKind: 'audio', mimeType: 'audio/mpeg' },
+          },
+        ],
+        edges: [],
+      }
+      const videoCaps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'vid-in' })
+      const audioCaps = await svc.getImageEditCapabilities({ sessionId: 's1', nodeId: 'aud-in' })
+      expect(videoCaps.canEdit).toBe(false)
+      expect(videoCaps.supportedModes).toEqual([])
+      expect(audioCaps.canEdit).toBe(false)
+      expect(audioCaps.supportedModes).toEqual([])
+    })
   })
 
   describe('P2 layout harness', () => {

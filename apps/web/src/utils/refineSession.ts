@@ -15,6 +15,8 @@ export function decideRefineDismiss(input: {
   return 'dismiss'
 }
 
+import { isNodeGenerating } from '@/constants/dockStudio'
+
 export function canOpenRefineForNode(input: {
   type?: string | null
   mediaKind?: string | null
@@ -27,4 +29,8 @@ export function canOpenRefineForNode(input: {
   if (kind === 'image') return true
   const mime = String(input.mimeType ?? '').toLowerCase()
   return mime.startsWith('image/')
+}
+
+export function canOpenNodeImageEdit(status: unknown): boolean {
+  return !isNodeGenerating(status) && status !== 'uploading'
 }

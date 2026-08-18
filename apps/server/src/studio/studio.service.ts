@@ -1056,7 +1056,7 @@ export class StudioService {
       data: {
         userId,
         type: 'image_edit',
-        prompt: built.prompt,
+        prompt: input.prompt,
         model: P1_IMAGE_EDIT_MODEL_KEY,
         status: 'generating',
         metadata: JSON.stringify(applyChargeMeta(editMeta, cost)),
@@ -1120,7 +1120,7 @@ export class StudioService {
       const saved = await this.upload.saveUserFile(userId, composited, 'edit.png', 'image/png')
       const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
       const meta = parseMeta(existing?.metadata)
-      await this.prisma.generationRecord.updateMany({
+      const updated = await this.prisma.generationRecord.updateMany({
         where: { id: record.id, status: 'generating' },
         data: {
           url: saved.url,
@@ -1137,6 +1137,9 @@ export class StudioService {
           }),
         },
       })
+      if (updated.count === 0) {
+        throwCancelledException(cost)
+      }
       return this.prisma.generationRecord.findFirst({ where: { id: record.id } })
     } catch (err) {
       if (isCancelledException(err)) {
@@ -1762,7 +1765,13 @@ export class StudioService {
     const meta = parseMeta(record.metadata)
     const cost = typeof meta.chargedPoints === 'number' ? meta.chargedPoints : 0
     const chargeReason =
-      record.type === 'video' ? '视频生成' : record.type === 'image' ? '图像生成' : '生成'
+      record.type === 'video'
+        ? '视频生成'
+        : record.type === 'image'
+          ? '图像生成'
+          : record.type === 'image_edit'
+            ? '图像精修'
+            : '生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
       await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
