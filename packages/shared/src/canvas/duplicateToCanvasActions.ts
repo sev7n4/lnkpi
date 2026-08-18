@@ -1,4 +1,4 @@
-import type { CanvasAction } from '../agentContract'
+import type { CanvasAction, NodeType } from '../index'
 import type { DuplicateSubgraphResult } from './duplicateSubgraph'
 
 export function duplicateResultToCanvasActions(result: DuplicateSubgraphResult): CanvasAction[] {
@@ -8,7 +8,7 @@ export function duplicateResultToCanvasActions(result: DuplicateSubgraphResult):
       type: 'add_node',
       payload: {
         id: node.id,
-        nodeType: node.type,
+        nodeType: node.type as NodeType | undefined,
         position: node.position,
         data: node.data ?? {},
       },
