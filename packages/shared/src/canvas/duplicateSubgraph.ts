@@ -72,10 +72,10 @@ function expandGroupClosure(nodes: DuplicateCanvasNode[], ids: string[]): string
 
 export function resolveDuplicateSourceIds(
   nodes: DuplicateCanvasNode[],
-  edges: DuplicateCanvasEdge[],
+  _edges: DuplicateCanvasEdge[],
   contextNodeId: string,
   multiSelectedIds: string[],
-  edgeMode: DuplicateEdgeMode = 'internal',
+  _edgeMode: DuplicateEdgeMode = 'none',
 ): string[] {
   let ids =
     multiSelectedIds.includes(contextNodeId) && multiSelectedIds.length > 1
@@ -83,14 +83,6 @@ export function resolveDuplicateSourceIds(
       : [contextNodeId]
 
   ids = expandGroupClosure(nodes, ids)
-
-  if (edgeMode === 'upstream' && ids.length === 1) {
-    const seed = ids[0]
-    const upstream = edges
-      .filter((edge) => edge.target === seed)
-      .map((edge) => edge.source)
-    ids = [...new Set([seed, ...upstream])]
-  }
 
   return ids.filter((id) => nodes.some((node) => node.id === id))
 }
@@ -143,7 +135,7 @@ export function duplicateSubgraph(
   options?: DuplicateSubgraphOptions,
 ): DuplicateSubgraphResult {
   const offset = options?.offset ?? DEFAULT_OFFSET
-  const edgeMode = options?.edgeMode ?? 'internal'
+  const edgeMode = options?.edgeMode ?? 'none'
   const createNodeId = options?.createNodeId ?? defaultCreateNodeId
   const idSet = new Set(expandGroupClosure(nodes, sourceIds))
   const idMap = new Map<string, string>()
@@ -193,7 +185,7 @@ export function duplicateSubgraph(
   }
 
   const newEdges: DuplicateCanvasEdge[] = []
-  if (edgeMode !== 'none') {
+  if (edgeMode === 'internal') {
     for (const edge of edges) {
       const newSource = idMap.get(edge.source)
       const newTarget = idMap.get(edge.target)
@@ -202,6 +194,18 @@ export function duplicateSubgraph(
         ...edge,
         id: `e-dup-${newSource}-${newTarget}`,
         source: newSource,
+        target: newTarget,
+      })
+    }
+  } else if (edgeMode === 'upstream') {
+    for (const edge of edges) {
+      if (!idSet.has(edge.target) || idSet.has(edge.source)) continue
+      const newTarget = idMap.get(edge.target)
+      if (!newTarget) continue
+      newEdges.push({
+        ...edge,
+        id: `e-dup-${edge.source}-${newTarget}`,
+        source: edge.source,
         target: newTarget,
       })
     }

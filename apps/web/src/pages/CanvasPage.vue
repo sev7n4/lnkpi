@@ -2148,7 +2148,7 @@ function handleKeyboardDuplicate() {
       ? multiSelectedIds.value[0]
       : selectedNodeId.value ?? undefined
   if (!contextId) return
-  handleDuplicateSelection(contextId, 'internal')
+  handleDuplicateSelection(contextId, 'none')
 }
 
 function panViewport(dx: number, dy: number) {
@@ -2391,6 +2391,7 @@ function handleDuplicateSelection(
     nodes.value as import('@/utils/duplicateCanvasSubgraph').DuplicateFlowNode[],
     edges.value,
     sourceIds,
+    { edgeMode },
   )
   if (!result.nodes.length) return
 
@@ -2436,7 +2437,7 @@ function handleContextAction(action: string) {
   }
 
   if (action === 'duplicate' && menu.nodeId) {
-    handleDuplicateSelection(menu.nodeId, 'internal')
+    handleDuplicateSelection(menu.nodeId, 'none')
     return
   }
 

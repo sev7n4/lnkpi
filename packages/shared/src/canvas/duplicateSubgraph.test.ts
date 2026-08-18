@@ -25,19 +25,18 @@ const e = (source: string, target: string): DuplicateCanvasEdge => ({
   target,
 })
 
-describe('resolveDuplicateSourceIds upstream', () => {
-  it('adds only direct upstream nodes for single seed', () => {
+describe('resolveDuplicateSourceIds', () => {
+  it('does not expand upstream nodes into copy set', () => {
     const nodes = [n('ref'), n('img')]
     const edges = [e('ref', 'img')]
     const ids = resolveDuplicateSourceIds(nodes, edges, 'img', ['img'], 'upstream')
-    expect(ids.sort()).toEqual(['img', 'ref'])
+    expect(ids).toEqual(['img'])
   })
 
-  it('does not recurse upstream chain', () => {
-    const nodes = [n('a', 'prompt'), n('b', 'prompt'), n('c', 'image')]
-    const edges = [e('a', 'b'), e('b', 'c')]
-    const ids = resolveDuplicateSourceIds(nodes, edges, 'c', ['c'], 'upstream')
-    expect(ids.sort()).toEqual(['b', 'c'])
+  it('uses multi-select when context is in selection', () => {
+    const nodes = [n('a', 'prompt'), n('b', 'image')]
+    const ids = resolveDuplicateSourceIds(nodes, [], 'b', ['a', 'b'], 'none')
+    expect(ids.sort()).toEqual(['a', 'b'])
   })
 })
 
@@ -48,31 +47,59 @@ describe('duplicateSubgraph', () => {
         data: { generationRecordId: 'g1', url: 'u', status: 'completed' },
       }),
     ]
-    const { nodes: out } = duplicateSubgraph(nodes, [], ['a'])
+    const { nodes: out, edges: outEdges } = duplicateSubgraph(nodes, [e('ref', 'a')], ['a'])
+    expect(out).toHaveLength(1)
     expect(out[0].data?.generationRecordId).toBeUndefined()
     expect(out[0].data?.url).toBe('u')
     expect(out[0].id).not.toBe('a')
+    expect(outEdges).toHaveLength(0)
   })
 
-  it('copies internal edges for A->B->C selection', () => {
-    const nodes = [n('a', 'prompt'), n('b', 'image'), n('c', 'video')]
-    const edges = [e('a', 'b'), e('b', 'c'), e('a', 'c')]
-    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['a', 'b', 'c'])
-    expect(outNodes).toHaveLength(3)
-    expect(outEdges).toHaveLength(3)
-    for (const edge of outEdges) {
-      expect(outNodes.some((x) => x.id === edge.source)).toBe(true)
-      expect(outNodes.some((x) => x.id === edge.target)).toBe(true)
-    }
+  it('default mode copies nodes only without edges', () => {
+    const nodes = [n('a', 'prompt'), n('b', 'image')]
+    const edges = [e('a', 'b')]
+    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['a', 'b'])
+    expect(outNodes).toHaveLength(2)
+    expect(outEdges).toHaveLength(0)
   })
 
-  it('upstream mode copies ref->img when only img selected', () => {
+  it('upstream mode reuses upstream node and links to copy', () => {
     const nodes = [n('ref', 'image'), n('img', 'image')]
     const edges = [e('ref', 'img')]
-    const sourceIds = resolveDuplicateSourceIds(nodes, edges, 'img', ['img'], 'upstream')
-    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, sourceIds)
-    expect(outNodes).toHaveLength(2)
+    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['img'], {
+      edgeMode: 'upstream',
+    })
+    expect(outNodes).toHaveLength(1)
+    expect(outNodes[0].id).not.toBe('img')
     expect(outEdges).toHaveLength(1)
+    expect(outEdges[0].source).toBe('ref')
+    expect(outEdges[0].target).toBe(outNodes[0].id)
+  })
+
+  it('upstream mode does not duplicate internal edges among selection', () => {
+    const nodes = [n('p', 'prompt'), n('i', 'image'), n('v', 'video')]
+    const edges = [e('p', 'i'), e('i', 'v'), e('ext', 'p')]
+    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(
+      nodes,
+      edges,
+      ['p', 'i', 'v'],
+      { edgeMode: 'upstream' },
+    )
+    expect(outNodes).toHaveLength(3)
+    expect(outEdges).toHaveLength(1)
+    expect(outEdges[0].source).toBe('ext')
+    const copyP = outNodes.find((node) => node.type === 'prompt')!
+    expect(outEdges[0].target).toBe(copyP.id)
+  })
+
+  it('internal mode copies edges fully inside selection', () => {
+    const nodes = [n('a', 'prompt'), n('b', 'image'), n('c', 'video')]
+    const edges = [e('a', 'b'), e('b', 'c'), e('a', 'c')]
+    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['a', 'b', 'c'], {
+      edgeMode: 'internal',
+    })
+    expect(outNodes).toHaveLength(3)
+    expect(outEdges).toHaveLength(3)
   })
 
   it('offsets duplicated positions', () => {

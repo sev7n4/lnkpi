@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-const { x, y, nodeId, nodeType, multiSelectedCount = 1 } = defineProps<{
+const { x, y, nodeId, nodeType } = defineProps<{
   x: number
   y: number
   nodeId?: string
@@ -17,7 +17,7 @@ const emit = defineEmits<{
 const visible = ref(true)
 
 const showUpstreamDuplicate = computed(
-  () => multiSelectedCount <= 1 && nodeType !== 'group' && Boolean(nodeId),
+  () => nodeType !== 'group' && Boolean(nodeId),
 )
 
 function run(action: string, payload?: string) {

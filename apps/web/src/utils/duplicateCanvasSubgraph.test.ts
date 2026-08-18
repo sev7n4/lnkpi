@@ -25,19 +25,12 @@ const e = (source: string, target: string): FlowEdge => ({
   target,
 })
 
-describe('resolveDuplicateSourceIds upstream', () => {
-  it('adds only direct upstream nodes for single seed', () => {
+describe('resolveDuplicateSourceIds', () => {
+  it('keeps only selected seed for upstream mode', () => {
     const nodes = [n('ref'), n('img')]
     const edges = [e('ref', 'img')]
     const ids = resolveDuplicateSourceIds(nodes, edges, 'img', ['img'], 'upstream')
-    expect(ids.sort()).toEqual(['img', 'ref'])
-  })
-
-  it('does not recurse upstream chain', () => {
-    const nodes = [n('a', 'prompt'), n('b', 'prompt'), n('c', 'image')]
-    const edges = [e('a', 'b'), e('b', 'c')]
-    const ids = resolveDuplicateSourceIds(nodes, edges, 'c', ['c'], 'upstream')
-    expect(ids.sort()).toEqual(['b', 'c'])
+    expect(ids).toEqual(['img'])
   })
 })
 
@@ -54,25 +47,24 @@ describe('duplicateSubgraph', () => {
     expect(out[0].id).not.toBe('a')
   })
 
-  it('copies internal edges for A->B->C selection', () => {
+  it('copies nodes only by default', () => {
     const nodes = [n('a', 'prompt'), n('b', 'image'), n('c', 'video')]
-    const edges = [e('a', 'b'), e('b', 'c'), e('a', 'c')]
+    const edges = [e('a', 'b'), e('b', 'c')]
     const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['a', 'b', 'c'])
     expect(outNodes).toHaveLength(3)
-    expect(outEdges).toHaveLength(3)
-    for (const edge of outEdges) {
-      expect(outNodes.some((x) => x.id === edge.source)).toBe(true)
-      expect(outNodes.some((x) => x.id === edge.target)).toBe(true)
-    }
+    expect(outEdges).toHaveLength(0)
   })
 
-  it('upstream mode copies ref->img when only img selected', () => {
+  it('upstream mode links existing upstream to copy', () => {
     const nodes = [n('ref', 'image'), n('img', 'image')]
     const edges = [e('ref', 'img')]
-    const sourceIds = resolveDuplicateSourceIds(nodes, edges, 'img', ['img'], 'upstream')
-    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, sourceIds)
-    expect(outNodes).toHaveLength(2)
+    const { nodes: outNodes, edges: outEdges } = duplicateSubgraph(nodes, edges, ['img'], {
+      edgeMode: 'upstream',
+    })
+    expect(outNodes).toHaveLength(1)
     expect(outEdges).toHaveLength(1)
+    expect(outEdges[0].source).toBe('ref')
+    expect(outEdges[0].target).toBe(outNodes[0].id)
   })
 
   it('offsets duplicated positions', () => {

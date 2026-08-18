@@ -611,9 +611,9 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 coroutine=duplicate_node,
                 name="duplicate_node",
                 description=(
-                    "Duplicate canvas node(s) with internal edges preserved. "
-                    "Use node_ids for a selected subgraph; use node_id alone for a single node. "
-                    "Set include_upstream=true only for a single node when the upstream prompt/ref chain must be copied (one hop)."
+                    "Duplicate canvas node(s). Default: copy nodes only, no edges. "
+                    "Use node_ids for multi-select. "
+                    "Set include_upstream=true to reuse existing upstream nodes and connect them to the copies via inbound edges (edges only, upstream nodes are not duplicated)."
                 ),
                 args_schema=DuplicateNodeInput,
             ),
