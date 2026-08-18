@@ -4,6 +4,7 @@ export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot' 
 
 export * from './canvas/groupChildIds'
 export * from './canvas/duplicateSubgraph'
+export * from './canvas/duplicateToCanvasActions'
 export * from './sceneComposer'
 export * from './videoComposition'
 export * from './nodeRefs'
