@@ -38,6 +38,7 @@ const emit = defineEmits<{
   batchGenerate: []
   export: []
   continueShot: []
+  refine: []
 }>()
 
 const nodeType = computed(() => String(props.node?.type ?? ''))
@@ -94,6 +95,7 @@ const panelBindings = {
     @remove-ref="panelBindings.removeRef"
     @generate="panelBindings.generate"
     @close="panelBindings.close"
+    @refine="emit('refine')"
   />
   <VideoDockPanel
     v-else-if="node && nodeType === 'video'"
