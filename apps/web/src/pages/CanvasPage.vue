@@ -116,6 +116,11 @@ import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
+import {
+  duplicateSubgraph,
+  resolveDuplicateSourceIds,
+  type DuplicateEdgeMode,
+} from '@/utils/duplicateCanvasSubgraph'
 import StoryboardDialog, { type StoryboardShot } from '@/components/canvas/StoryboardDialog.vue'
 import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
@@ -2345,6 +2350,51 @@ function handleCanvasRefPickToggle() {
   }
 }
 
+function selectMultipleNodes(ids: string[]) {
+  const idSet = new Set(ids)
+  nodes.value = nodes.value.map((node) => {
+    const selected = idSet.has(node.id)
+    return node.selected === selected ? node : { ...node, selected }
+  })
+  multiSelectedIds.value = ids
+  if (ids.length === 1) {
+    selectedNodeId.value = ids[0]
+  } else {
+    clearEditorSelection()
+  }
+}
+
+function handleDuplicateSelection(
+  contextNodeId: string,
+  edgeMode: DuplicateEdgeMode,
+) {
+  const sourceIds = resolveDuplicateSourceIds(
+    nodes.value as import('@/utils/duplicateCanvasSubgraph').DuplicateFlowNode[],
+    edges.value,
+    contextNodeId,
+    multiSelectedIds.value,
+    edgeMode,
+  )
+  if (!sourceIds.length) return
+
+  const result = duplicateSubgraph(
+    nodes.value as import('@/utils/duplicateCanvasSubgraph').DuplicateFlowNode[],
+    edges.value,
+    sourceIds,
+  )
+  if (!result.nodes.length) return
+
+  nodes.value.push(...(result.nodes as EditableFlowNode[]))
+  edges.value.push(...(result.edges as CanvasEdge[]))
+  selectMultipleNodes(result.newRootIds.length ? result.newRootIds : result.nodes.map((n) => n.id))
+  persistUserEdit()
+
+  const count = result.nodes.length
+  if (count > 1) {
+    ElMessage.success(`已创建 ${count} 个节点副本`)
+  }
+}
+
 function handleContextAction(action: string) {
   const menu = contextMenu.value
   contextMenu.value = null
@@ -2376,13 +2426,12 @@ function handleContextAction(action: string) {
   }
 
   if (action === 'duplicate' && menu.nodeId) {
-    const node = findNodeById(menu.nodeId)
-    if (node) {
-      addNode(String(node.type), { ...(node.data as Record<string, unknown>) }, {
-        position: { x: node.position.x + 40, y: node.position.y + 40 },
-      })
-      persistUserEdit()
-    }
+    handleDuplicateSelection(menu.nodeId, 'internal')
+    return
+  }
+
+  if (action === 'duplicate-upstream' && menu.nodeId) {
+    handleDuplicateSelection(menu.nodeId, 'upstream')
     return
   }
 
@@ -3121,6 +3170,13 @@ onUnmounted(() => {
       :y="contextMenu.y"
       :node-id="contextMenu.nodeId"
       :node-type="contextMenu.nodeType"
+      :multi-selected-count="
+        contextMenu.nodeId &&
+        multiSelectedIds.includes(contextMenu.nodeId) &&
+        multiSelectedIds.length > 1
+          ? multiSelectedIds.length
+          : 1
+      "
       @action="handleContextAction"
       @close="closeContextMenu"
     />
