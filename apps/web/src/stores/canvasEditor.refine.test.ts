@@ -27,4 +27,14 @@ describe('canvasEditor refine target', () => {
     editor.closeImageEditor()
     expect(editor.imageTarget).toBeNull()
   })
+
+  it('ignores openImageEditor for a different nodeId while refineBusy', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.setRefineBusy(true)
+    editor.openImageEditor({ nodeId: 'n2', url: 'https://cdn/b.png' })
+    expect(editor.imageTarget?.nodeId).toBe('n1')
+    expect(editor.imageTarget?.url).toBe('https://cdn/a.png')
+  })
 })

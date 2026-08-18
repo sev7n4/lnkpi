@@ -14,3 +14,17 @@ export function decideRefineDismiss(input: {
   if (input.busy) return 'block'
   return 'dismiss'
 }
+
+export function canOpenRefineForNode(input: {
+  type?: string | null
+  mediaKind?: string | null
+  mimeType?: string | null
+}): boolean {
+  const type = String(input.type ?? '')
+  if (type === 'image') return true
+  if (type !== 'mediaInput') return false
+  const kind = String(input.mediaKind ?? '').toLowerCase()
+  if (kind === 'image') return true
+  const mime = String(input.mimeType ?? '').toLowerCase()
+  return mime.startsWith('image/')
+}

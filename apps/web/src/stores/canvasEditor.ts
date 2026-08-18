@@ -23,6 +23,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineBusy = ref(false)
 
   function openImageEditor(target: ImageEditTarget) {
+    const currentId = imageTarget.value?.nodeId
+    if (refineBusy.value && currentId && currentId !== target.nodeId) return
     imageTarget.value = target
   }
 

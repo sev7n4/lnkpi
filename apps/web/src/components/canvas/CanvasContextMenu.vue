@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
+import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode } from '@/utils/refineSession'
 
-const { x, y, nodeId, nodeType, hasUrl } = defineProps<{
+const { x, y, nodeId, nodeType, hasUrl, mediaKind, mimeType } = defineProps<{
   x: number
   y: number
   nodeId?: string
   nodeType?: string
   hasUrl?: boolean
+  mediaKind?: string
+  mimeType?: string
   multiSelectedCount?: number
 }>()
 
@@ -26,7 +28,7 @@ const showEditImage = computed(
   () =>
     CX_IMAGE_EDIT_ENABLED &&
     Boolean(hasUrl) &&
-    (nodeType === 'image' || nodeType === 'mediaInput'),
+    canOpenRefineForNode({ type: nodeType, mediaKind, mimeType }),
 )
 
 function run(action: string, payload?: string) {

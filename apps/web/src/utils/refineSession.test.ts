@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CX_IMAGE_EDIT_ENABLED,
   STAIN_PRESET_PROMPT,
+  canOpenRefineForNode,
   decideRefineDismiss,
 } from './refineSession'
 
@@ -73,5 +74,31 @@ describe('decideRefineDismiss', () => {
         selectedNodeId: 'node-a',
       }),
     ).toBe('keep')
+  })
+})
+
+describe('canOpenRefineForNode', () => {
+  it('allows image nodes', () => {
+    expect(canOpenRefineForNode({ type: 'image' })).toBe(true)
+  })
+
+  it('allows mediaInput when mediaKind is image', () => {
+    expect(canOpenRefineForNode({ type: 'mediaInput', mediaKind: 'image' })).toBe(true)
+  })
+
+  it('allows mediaInput when mimeType is an image', () => {
+    expect(canOpenRefineForNode({ type: 'mediaInput', mimeType: 'image/png' })).toBe(true)
+  })
+
+  it('rejects video and audio mediaInput even when a url exists', () => {
+    expect(canOpenRefineForNode({ type: 'mediaInput', mediaKind: 'video' })).toBe(false)
+    expect(canOpenRefineForNode({ type: 'mediaInput', mediaKind: 'audio' })).toBe(false)
+    expect(canOpenRefineForNode({ type: 'mediaInput', mimeType: 'video/mp4' })).toBe(false)
+    expect(canOpenRefineForNode({ type: 'mediaInput', mimeType: 'audio/mpeg' })).toBe(false)
+  })
+
+  it('rejects other node types', () => {
+    expect(canOpenRefineForNode({ type: 'video' })).toBe(false)
+    expect(canOpenRefineForNode({ type: 'text' })).toBe(false)
   })
 })

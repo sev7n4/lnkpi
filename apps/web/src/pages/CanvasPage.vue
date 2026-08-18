@@ -61,7 +61,7 @@ import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
-import { CX_IMAGE_EDIT_ENABLED, decideRefineDismiss } from '@/utils/refineSession'
+import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
@@ -225,7 +225,15 @@ const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
 const showStoryboard = ref(false)
 const showPublish = ref(false)
 const showModelSettings = ref(false)
-const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string; hasUrl?: boolean } | null>(null)
+const contextMenu = ref<{
+  x: number
+  y: number
+  nodeId?: string
+  nodeType?: string
+  hasUrl?: boolean
+  mediaKind?: string
+  mimeType?: string
+} | null>(null)
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
 const showMembership = ref(false)
@@ -2283,9 +2291,16 @@ function applyRefineSelectionDecision(selectedId: string | null) {
 
 function openRefineForNode(node: EditableFlowNode | null | undefined) {
   if (!CX_IMAGE_EDIT_ENABLED || !node) return
-  const type = String(node.type ?? '')
-  if (type !== 'image' && type !== 'mediaInput') return
   const data = (node.data ?? {}) as Record<string, unknown>
+  if (
+    !canOpenRefineForNode({
+      type: String(node.type ?? ''),
+      mediaKind: typeof data.mediaKind === 'string' ? data.mediaKind : null,
+      mimeType: typeof data.mimeType === 'string' ? data.mimeType : null,
+    })
+  ) {
+    return
+  }
   const url = String(data.url ?? '').trim()
   if (!url) return
   const targetId = canvasEditor.imageTarget?.nodeId
@@ -2465,6 +2480,8 @@ function onNodeContextMenu(event: NodeMouseEvent) {
     nodeId: event.node.id,
     nodeType: String(event.node.type),
     hasUrl: Boolean(String(data?.url ?? '').trim()),
+    mediaKind: typeof data?.mediaKind === 'string' ? data.mediaKind : undefined,
+    mimeType: typeof data?.mimeType === 'string' ? data.mimeType : undefined,
   }
 }
 
@@ -3354,6 +3371,8 @@ onUnmounted(() => {
       :node-id="contextMenu.nodeId"
       :node-type="contextMenu.nodeType"
       :has-url="contextMenu.hasUrl"
+      :media-kind="contextMenu.mediaKind"
+      :mime-type="contextMenu.mimeType"
       :multi-selected-count="
         contextMenu.nodeId &&
         multiSelectedIds.includes(contextMenu.nodeId) &&
