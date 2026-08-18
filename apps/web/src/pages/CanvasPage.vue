@@ -2142,6 +2142,15 @@ function handleKeyboardDelete() {
   }
 }
 
+function handleKeyboardDuplicate() {
+  const contextId =
+    multiSelectedIds.value.length > 0
+      ? multiSelectedIds.value[0]
+      : selectedNodeId.value ?? undefined
+  if (!contextId) return
+  handleDuplicateSelection(contextId, 'internal')
+}
+
 function panViewport(dx: number, dy: number) {
   const flow = vueFlowRef.value as {
     getViewport?: () => { x: number; y: number; zoom: number }
@@ -2168,6 +2177,7 @@ useCanvasKeyboard({
   onZoomOut: () => zoomViewport(1 / 1.12),
   onPan: panViewport,
   onDelete: handleKeyboardDelete,
+  onDuplicate: handleKeyboardDuplicate,
   onUndo: () => {
     if (canvasUndo.undo()) void saveCanvas()
   },

@@ -6,6 +6,7 @@ interface CanvasKeyboardOptions {
   onZoomOut: () => void
   onPan: (dx: number, dy: number) => void
   onDelete: () => void
+  onDuplicate?: () => void
   onUndo?: () => void
   onRedo?: () => void
 }
@@ -24,9 +25,16 @@ export function useCanvasKeyboard(options: CanvasKeyboardOptions) {
     if (!options.enabled.value || isTypingTarget(event.target)) return
 
     const key = event.key.toLowerCase()
+    const mod = event.metaKey || event.ctrlKey
+
+    if (mod && key === 'd') {
+      event.preventDefault()
+      options.onDuplicate?.()
+      return
+    }
+
     pressed.add(key)
 
-    const mod = event.metaKey || event.ctrlKey
     if (mod && key === 'z') {
       event.preventDefault()
       if (event.shiftKey) options.onRedo?.()
