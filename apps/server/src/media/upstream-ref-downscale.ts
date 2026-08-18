@@ -25,7 +25,7 @@ function toDataUrl(buffer: Buffer, mimeType: string): string {
   return `data:${mimeType};base64,${buffer.toString('base64')}`
 }
 
-async function readImageBuffer(url: string): Promise<Buffer> {
+export async function readImageBuffer(url: string): Promise<Buffer> {
   const upload = parseUploadRefPath(url)
   if (upload) {
     return readFile(join(UPLOADS_ROOT, upload.userId, upload.fileName))
