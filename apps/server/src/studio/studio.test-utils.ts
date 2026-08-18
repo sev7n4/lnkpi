@@ -5,6 +5,7 @@ import { PointsService } from '../points/points.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { StudioService } from './studio.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { UploadService } from '../upload/upload.service'
 
 export function createMediaProbeMock(probeUrl = vi.fn(async (url: string) => ({
   url,
@@ -90,6 +91,10 @@ export async function createStudioService() {
       {
         provide: MediaProbeService,
         useValue: createMediaProbeMock(),
+      },
+      {
+        provide: UploadService,
+        useValue: { saveUserFile: vi.fn(async () => ({ url: 'https://cdn/comp.png' })) },
       },
     ],
   }).compile()

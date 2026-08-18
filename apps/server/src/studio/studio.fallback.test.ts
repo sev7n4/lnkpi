@@ -16,6 +16,7 @@ import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { MediaProbeService } from '../media/media-probe.service'
+import { UploadService } from '../upload/upload.service'
 import { StudioService } from './studio.service'
 
 const imageGenerate = vi.fn()
@@ -124,6 +125,10 @@ describe('StudioService BYOK fallback_pending', () => {
         {
           provide: MediaProbeService,
           useValue: { probeUrl: vi.fn(async (url: string) => ({ url, probeStatus: 'ok' as const })) },
+        },
+        {
+          provide: UploadService,
+          useValue: { saveUserFile: vi.fn(async () => ({ url: 'https://cdn/comp.png' })) },
         },
       ],
     }).compile()

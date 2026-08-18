@@ -224,6 +224,25 @@ class ImageVariationDto extends CanvasScopeFields {
   model?: string
 }
 
+class ImageEditDto extends CanvasScopeFields {
+  @IsString()
+  prompt!: string
+
+  @IsString()
+  imageUrl!: string
+
+  @IsString()
+  maskUrl!: string
+
+  @IsOptional()
+  @IsString()
+  parentRecordId?: string
+
+  @IsOptional()
+  @IsString()
+  parentVersionId?: string
+}
+
 @Controller('studio')
 export class StudioController {
   constructor(
@@ -305,6 +324,29 @@ export class StudioController {
       dto.model,
       cancel,
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
+    )
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('image/edit')
+  @UseGuards(AuthGuard)
+  async editImage(
+    @Req() req: { user: { sub: string }; on(event: string, cb: () => void): void; aborted?: boolean },
+    @Body() dto: ImageEditDto,
+  ) {
+    const cancel = createCancelFlag(req)
+    const data = await this.studioService.editImage(
+      req.user.sub,
+      {
+        prompt: dto.prompt,
+        imageUrl: dto.imageUrl,
+        maskUrl: dto.maskUrl,
+        sessionId: dto.sessionId,
+        nodeId: dto.nodeId,
+        parentRecordId: dto.parentRecordId,
+        parentVersionId: dto.parentVersionId,
+      },
+      cancel,
     )
     return { code: 0, message: 'ok', data }
   }

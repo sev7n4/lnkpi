@@ -3,12 +3,14 @@ import {
   buildAudioRequest,
   buildEffectiveImagePrompt,
   buildEffectiveVideoPrompt,
+  buildImageEditRequest,
   buildImageProviderGenerateOptions,
   buildImageProviderOptions,
   buildVideoProviderGenerateOptions,
   buildVideoProviderOptions,
   buildVideoReferenceBundle,
   createAudioProvider,
+  createImageEditProvider,
   createImageProvider,
   createTextProvider,
   createVideoProvider,
@@ -25,6 +27,7 @@ import {
   BYOK_FALLBACK_CONFIRM_MESSAGE,
   evaluateMediaRefPreflight,
   mapMessageToErrorCode,
+  P1_IMAGE_EDIT_MODEL_KEY,
   redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
@@ -63,6 +66,13 @@ import {
 } from '../media/build-media-info'
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 import { downscaleOversizedReferenceImages } from '../media/upstream-ref-downscale'
+import {
+  assertSameDimensions,
+  compositeUnmaskedPixels,
+  MaskDimensionMismatchError,
+  readImageBuffer,
+} from '../media/composite-unmasked'
+import { UploadService } from '../upload/upload.service'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -243,6 +253,7 @@ export class StudioService {
     @Inject(PointsService) private readonly points: PointsService,
     @Inject(ProviderResolverService) private readonly resolver: ProviderResolverService,
     @Inject(MediaProbeService) private readonly mediaProbe: MediaProbeService,
+    @Inject(UploadService) private readonly upload: UploadService,
   ) {}
 
   async listGenerations(userId: string, type?: string, sessionId?: string) {
@@ -986,6 +997,172 @@ export class StudioService {
     }
   }
 
+  async editImage(
+    userId: string,
+    input: {
+      prompt: string
+      imageUrl: string
+      maskUrl: string
+      sessionId?: string
+      nodeId?: string
+      parentRecordId?: string
+      parentVersionId?: string
+    },
+    cancel?: CancelFlag,
+  ) {
+    const cost = 10
+    const chargeReason = '图像精修'
+    const scope = { sessionId: input.sessionId, nodeId: input.nodeId }
+
+    let base: Buffer
+    let mask: Buffer
+    try {
+      ;[base, mask] = await Promise.all([
+        readImageBuffer(input.imageUrl),
+        readImageBuffer(input.maskUrl),
+      ])
+      await assertSameDimensions(base, mask)
+    } catch (err) {
+      if (err instanceof MaskDimensionMismatchError) {
+        throw new BadRequestException(err.message)
+      }
+      throw err
+    }
+
+    await this.points.consume(userId, cost, chargeReason)
+    const resolved = await this.resolver.resolveForGeneration(
+      userId,
+      P1_IMAGE_EDIT_MODEL_KEY,
+      'image',
+    )
+    const built = buildImageEditRequest({
+      userPrompt: input.prompt,
+      imageUrl: input.imageUrl,
+      maskUrl: input.maskUrl,
+    })
+    const editMeta = {
+      editMode: 'inpaint' as const,
+      composited: false,
+      baseImageUrl: input.imageUrl,
+      maskUrl: input.maskUrl,
+      parentRecordId: input.parentRecordId,
+      parentVersionId: input.parentVersionId,
+      chargeReason,
+      channelId: resolved.channelId,
+      modelKey: built.meta.modelKey,
+      gatewayModelId: built.meta.gatewayModelId,
+    }
+    const record = await this.prisma.generationRecord.create({
+      data: {
+        userId,
+        type: 'image_edit',
+        prompt: input.prompt,
+        model: P1_IMAGE_EDIT_MODEL_KEY,
+        status: 'generating',
+        metadata: JSON.stringify(applyChargeMeta(editMeta, cost)),
+        ...withCanvasScope(scope),
+      },
+    })
+
+    const refundAndFail = async (err: unknown) => {
+      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
+      const meta = parseMeta(existing?.metadata)
+      const failedMeta = applyFailureDiagnosticMeta(
+        applyRefundMeta(meta, cost, 'platform_failed'),
+        err,
+      )
+      const failed = await this.prisma.generationRecord.update({
+        where: { id: record.id },
+        data: {
+          status: 'failed',
+          metadata: JSON.stringify(failedMeta),
+        },
+      })
+      throwGenerationFailure({
+        userMessage: String(failedMeta.userMessage ?? '精修失败'),
+        errorCode: failedMeta.errorCode as ErrorCode,
+        taskId: failed.id,
+        refundedPoints: cost,
+      })
+    }
+
+    try {
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throwCancelledException(cost)
+      }
+      const inlined = await inlineUpstreamReferenceImages([input.imageUrl, input.maskUrl])
+      const inlinedImage = inlined[0] ?? input.imageUrl
+      const inlinedMask = inlined[1] ?? input.maskUrl
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throwCancelledException(cost)
+      }
+      if (resolved.source === 'user' && !resolved.credentials.apiKey) {
+        throw new Error('missing api key')
+      }
+      const { url: upstreamUrl } = await createImageEditProvider(providerOpts(resolved)).edit({
+        userPrompt: input.prompt,
+        imageUrl: inlinedImage,
+        maskUrl: inlinedMask,
+      })
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throwCancelledException(cost)
+      }
+      const result = await readImageBuffer(upstreamUrl)
+      const { buffer: composited } = await compositeUnmaskedPixels({ base, result, mask })
+      if (cancel?.isCancelled()) {
+        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        throwCancelledException(cost)
+      }
+      const saved = await this.upload.saveUserFile(userId, composited, 'edit.png', 'image/png')
+      const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
+      const meta = parseMeta(existing?.metadata)
+      const updated = await this.prisma.generationRecord.updateMany({
+        where: { id: record.id, status: 'generating' },
+        data: {
+          url: saved.url,
+          status: 'completed',
+          metadata: JSON.stringify({
+            ...meta,
+            editMode: 'inpaint',
+            composited: true,
+            baseImageUrl: input.imageUrl,
+            maskUrl: input.maskUrl,
+            parentRecordId: input.parentRecordId,
+            parentVersionId: input.parentVersionId,
+            chargeReason,
+          }),
+        },
+      })
+      if (updated.count === 0) {
+        throwCancelledException(cost)
+      }
+      return this.prisma.generationRecord.findFirst({ where: { id: record.id } })
+    } catch (err) {
+      if (isCancelledException(err)) {
+        const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
+        const meta = parseMeta(existing?.metadata)
+        const cancelledMeta = applyFailureDiagnosticMeta(
+          applyRefundMeta({ ...meta, cancelled: true }, cost, 'cancelled'),
+          err,
+          { errorCode: 'cancelled', userMessage: '已取消' },
+        )
+        await this.prisma.generationRecord.update({
+          where: { id: record.id },
+          data: {
+            status: 'failed',
+            metadata: JSON.stringify(cancelledMeta),
+          },
+        })
+        throw err
+      }
+      return refundAndFail(err)
+    }
+  }
+
   async generateVideo(
     userId: string,
     prompt: string,
@@ -1588,7 +1765,13 @@ export class StudioService {
     const meta = parseMeta(record.metadata)
     const cost = typeof meta.chargedPoints === 'number' ? meta.chargedPoints : 0
     const chargeReason =
-      record.type === 'video' ? '视频生成' : record.type === 'image' ? '图像生成' : '生成'
+      record.type === 'video'
+        ? '视频生成'
+        : record.type === 'image'
+          ? '图像生成'
+          : record.type === 'image_edit'
+            ? '图像精修'
+            : '生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
       await this.points.refund(userId, cost, `${chargeReason}-取消退款`)

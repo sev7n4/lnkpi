@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode } from '@/utils/refineSession'
 
-const { x, y, nodeId, nodeType } = defineProps<{
+const { x, y, nodeId, nodeType, hasUrl, mediaKind, mimeType } = defineProps<{
   x: number
   y: number
   nodeId?: string
   nodeType?: string
+  hasUrl?: boolean
+  mediaKind?: string
+  mimeType?: string
   multiSelectedCount?: number
 }>()
 
@@ -18,6 +22,13 @@ const visible = ref(true)
 
 const showUpstreamDuplicate = computed(
   () => nodeType !== 'group' && Boolean(nodeId),
+)
+
+const showEditImage = computed(
+  () =>
+    CX_IMAGE_EDIT_ENABLED &&
+    Boolean(hasUrl) &&
+    canOpenRefineForNode({ type: nodeType, mediaKind, mimeType }),
 )
 
 function run(action: string, payload?: string) {
@@ -35,7 +46,7 @@ function run(action: string, payload?: string) {
     @click.stop
   >
     <button
-      v-if="nodeType === 'image'"
+      v-if="showEditImage"
       class="neo-popover-item block w-full px-4 py-2 text-left text-xs"
       @click="run('edit-image')"
     >

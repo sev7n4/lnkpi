@@ -1,4 +1,5 @@
 import type { ImageRefWire, ImageResponseMode } from '@lnkpi/shared'
+import { extractApimartTaskId, pollApimartImageTask } from './apimart-image-task'
 
 export interface ImageGenerateOptions {
   modelId?: string
@@ -34,10 +35,6 @@ export class PlaceholderImageProvider implements ImageProvider {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
 function isAgnesImageApi(baseUrl?: string, model?: string): boolean {
   if (model && /^agnes-image-/i.test(model)) return true
   return Boolean(baseUrl?.includes('agnes-ai.com') || baseUrl?.includes('agnes-ai.cn'))
@@ -60,34 +57,6 @@ function resolveResponseMode(options?: ImageGenerateOptions, baseUrl?: string): 
   if (options?.responseMode) return options.responseMode
   if (isApimartImageApi(baseUrl)) return 'async_task'
   return 'sync_url'
-}
-
-function extractApimartTaskId(json: unknown): string | undefined {
-  const payload = json as {
-    data?: Array<{ task_id?: string }> | { id?: string; task_id?: string }
-  }
-  if (Array.isArray(payload.data)) {
-    return payload.data[0]?.task_id
-  }
-  if (payload.data && typeof payload.data === 'object') {
-    const data = payload.data as { id?: string; task_id?: string }
-    return data.task_id ?? data.id
-  }
-  return undefined
-}
-
-function extractApimartImageUrls(data: unknown): string[] {
-  const result = (data as { result?: { images?: Array<{ url?: string | string[] }> } }).result
-  const images = result?.images ?? []
-  const urls: string[] = []
-  for (const item of images) {
-    if (Array.isArray(item.url)) {
-      urls.push(...item.url.filter((url): url is string => Boolean(url)))
-    } else if (typeof item.url === 'string') {
-      urls.push(item.url)
-    }
-  }
-  return urls
 }
 
 function extractSyncImageUrls(json: unknown): string[] {
@@ -136,34 +105,6 @@ export class OpenAIImageProvider implements ImageProvider {
     return body
   }
 
-  private async pollApimartTask(taskId: string, options?: ImageGenerateOptions): Promise<string[]> {
-    const root = this.baseUrl.replace(/\/$/, '')
-    const intervalMs = options?.pollIntervalMs ?? 8_000
-    const maxPollMs = options?.maxPollMs ?? 360_000
-    const deadline = Date.now() + maxPollMs
-
-    while (Date.now() < deadline) {
-      await sleep(intervalMs)
-      const res = await fetch(`${root}/tasks/${encodeURIComponent(taskId)}`, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-      })
-      if (!res.ok) continue
-
-      const json = await res.json()
-      const data = (json as { data?: unknown }).data ?? json
-      const status = (data as { status?: string }).status
-      if (status === 'completed') {
-        const urls = extractApimartImageUrls(data)
-        if (urls.length) return urls
-      }
-      if (status === 'failed') {
-        throw new Error(`Image task failed: ${JSON.stringify((data as { error?: unknown }).error ?? data)}`)
-      }
-    }
-
-    throw new Error(`Image task poll timeout (${maxPollMs}ms)`)
-  }
-
   async generate(prompt: string, options?: ImageGenerateOptions): Promise<{ url: string; urls?: string[] }> {
     const model = options?.modelId || this.model
     const responseMode = resolveResponseMode(options, this.baseUrl)
@@ -184,7 +125,13 @@ export class OpenAIImageProvider implements ImageProvider {
       if (!taskId) {
         throw new Error(`Image API async response missing task_id: ${JSON.stringify(json)}`)
       }
-      const urls = await this.pollApimartTask(taskId, options)
+      const urls = await pollApimartImageTask({
+        baseUrl: this.baseUrl,
+        apiKey: this.apiKey,
+        taskId,
+        pollIntervalMs: options?.pollIntervalMs,
+        maxPollMs: options?.maxPollMs,
+      })
       return { url: urls[0], urls }
     }
 

@@ -1,5 +1,6 @@
 export { applyCanvasActions } from './tools/executor'
 export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } from './tools/image-provider'
+export { createImageEditProvider, ApimartImageEditProvider } from './tools/image-edit-provider'
 export {
   createTextProvider,
   PlaceholderTextProvider,
@@ -11,6 +12,7 @@ export {
 export { createVideoProvider, PlaceholderVideoProvider, AgnesVideoProvider, resolveVideoParams } from './tools/video-provider'
 export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, FallbackAudioProvider } from './tools/audio-provider'
 export type { ImageProvider, ProviderCredentialOpts, ImageGenerateOptions } from './tools/image-provider'
+export type { ImageEditProvider, ImageEditInput } from './tools/image-edit-provider'
 export type { TextProvider, TextGenerateOptions, TextThinkingEffort } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'
@@ -55,6 +57,11 @@ export {
   buildVideoProviderGenerateOptions,
   Seedance1xUnsupportedError,
 } from './studio/generation-adapter'
+export {
+  buildImageEditRequest,
+  buildEditPrompt,
+  IMAGE_EDIT_PROMPT_PREFIX,
+} from './studio/edit-adapter'
 export {
   buildVideoReferenceBundle,
   inferVideoScenario,

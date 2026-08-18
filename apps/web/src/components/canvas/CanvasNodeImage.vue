@@ -4,6 +4,7 @@ import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue
 import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
+import { CX_IMAGE_EDIT_ENABLED, canOpenNodeImageEdit } from '@/utils/refineSession'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
@@ -80,7 +81,8 @@ const {
 } = useNodeMediaUpload(props.id, 'image')
 
 function openEdit() {
-  if (!displayUrl.value) return
+  if (!CX_IMAGE_EDIT_ENABLED || !displayUrl.value) return
+  if (!canOpenNodeImageEdit(props.data.status)) return
   editor.openImageEditor({
     nodeId: props.id,
     url: displayUrl.value,
@@ -207,6 +209,7 @@ function openMediaInspector(e: Event) {
           </svg>
         </button>
         <button
+          v-if="CX_IMAGE_EDIT_ENABLED"
           type="button"
           class="absolute bottom-1.5 right-1.5 rounded-xl border-none bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white backdrop-blur-sm transition hover:bg-black/85 nodrag"
           @pointerdown.stop

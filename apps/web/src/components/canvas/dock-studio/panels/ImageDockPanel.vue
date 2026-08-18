@@ -20,10 +20,11 @@ import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { resolveGenerationModel } from '@/constants/studioModels'
-import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { TURNAROUND_PIPELINE_DOCK_HINT, isTurnaroundLikePrompt } from '@lnkpi/shared'
+import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
+import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -32,6 +33,7 @@ const props = defineProps<{
   upstream: UpstreamNodeContext
   mentions?: MentionOption[]
   generating?: boolean
+  readonly?: boolean
   refs?: NodeRef[]
 }>()
 
@@ -40,6 +42,7 @@ const emit = defineEmits<{
   generate: []
   close: []
   removeRef: [ref: NodeRef]
+  refine: []
 }>()
 
 const prompt = ref('')
@@ -55,8 +58,21 @@ const refUploadError = ref('')
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 
 const speech = useSpeechRecognition()
-const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
+const readonly = computed(() =>
+  isImageDockReadonly({
+    parentReadonly: props.readonly,
+    generating: props.generating,
+    status: props.node.data?.status,
+  }),
+)
 const credits = computed(() => estimateImageCredits(imageCount.value))
+const showRefineEntry = computed(() =>
+  shouldShowRefineEntry({
+    url: props.node.data?.url,
+    readonly: readonly.value,
+    enabled: CX_IMAGE_EDIT_ENABLED,
+  }),
+)
 
 const showTurnaroundHint = computed(() => {
   const data = props.node.data ?? {}
@@ -310,6 +326,14 @@ function clearReferenceImage() {
           @toggle="toggleVoice"
         />
         <DockCreditBadge :credits="credits" />
+        <button
+          v-if="showRefineEntry"
+          type="button"
+          class="neo-chip rounded-md px-2 py-1 text-[10px]"
+          @click="emit('refine')"
+        >
+          精修这张图
+        </button>
         <DockGenerateButton
           :generating="generating"
           :disabled="!generating && !prompt.trim()"
