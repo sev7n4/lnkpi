@@ -14,6 +14,8 @@ const emit = defineEmits<{
   generateVideo: []
   download: []
   addAgentRef: []
+  duplicate: []
+  duplicateUpstream: []
 }>()
 </script>
 
@@ -55,6 +57,22 @@ const emit = defineEmits<{
         @click="emit('group')"
       >
         打组
+      </button>
+      <button
+        v-if="selectedIds.length >= 2"
+        type="button"
+        class="toolbar-action"
+        @click="emit('duplicate')"
+      >
+        新建副本
+      </button>
+      <button
+        v-if="selectedIds.length >= 2"
+        type="button"
+        class="toolbar-action"
+        @click="emit('duplicateUpstream')"
+      >
+        新建副本（含上游）
       </button>
       <button
         v-if="selectedIds.length >= 2"
