@@ -2,6 +2,8 @@ export type WorkType = 'canvas' | 'shortfilm'
 
 export type NodeType = 'prompt' | 'image' | 'video' | 'text' | 'group' | 'shot' | 'sceneComposer'
 
+export * from './canvas/groupChildIds'
+export * from './canvas/duplicateSubgraph'
 export * from './sceneComposer'
 export * from './videoComposition'
 export * from './nodeRefs'
