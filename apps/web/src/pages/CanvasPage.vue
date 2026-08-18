@@ -2151,6 +2151,12 @@ function handleKeyboardDuplicate() {
   handleDuplicateSelection(contextId, 'none')
 }
 
+function handleToolbarDuplicateUpstream() {
+  const contextId = multiSelectedIds.value[0]
+  if (!contextId) return
+  handleDuplicateSelection(contextId, 'upstream')
+}
+
 function panViewport(dx: number, dy: number) {
   const flow = vueFlowRef.value as {
     getViewport?: () => { x: number; y: number; zoom: number }
@@ -3006,6 +3012,8 @@ onUnmounted(() => {
             @generate-video="handleGenerateVideoFromSelection"
             @download="handlePackageDownload"
             @add-agent-ref="handleAddToAgentRefs()"
+            @duplicate="handleKeyboardDuplicate"
+            @duplicate-upstream="handleToolbarDuplicateUpstream"
           />
 
           <MultiSelectConnectOverlay

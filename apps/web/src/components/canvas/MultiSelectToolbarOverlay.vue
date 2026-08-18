@@ -18,6 +18,8 @@ const emit = defineEmits<{
   generateVideo: []
   download: []
   addAgentRef: []
+  duplicate: []
+  duplicateUpstream: []
 }>()
 
 const { viewport, nodes: flowNodes } = useVueFlow()
@@ -95,5 +97,7 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @generate-video="emit('generateVideo')"
     @download="emit('download')"
     @add-agent-ref="emit('addAgentRef')"
+    @duplicate="emit('duplicate')"
+    @duplicate-upstream="emit('duplicateUpstream')"
   />
 </template>
