@@ -31,6 +31,7 @@ const emit = defineEmits<{
   batchGenerate: []
   export: []
   continueShot: []
+  refine: []
 }>()
 
 const visible = computed(() => {
@@ -81,6 +82,7 @@ const dockLocked = computed(() => {
           @batch-generate="emit('batchGenerate')"
           @export="emit('export')"
           @continue-shot="emit('continueShot')"
+          @refine="emit('refine')"
         />
       </div>
     </div>

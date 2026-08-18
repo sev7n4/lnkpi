@@ -20,13 +20,19 @@ export interface MediaPreviewTarget {
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
   const previewTarget = ref<MediaPreviewTarget | null>(null)
+  const refineBusy = ref(false)
 
   function openImageEditor(target: ImageEditTarget) {
     imageTarget.value = target
   }
 
   function closeImageEditor() {
+    if (refineBusy.value) return
     imageTarget.value = null
+  }
+
+  function setRefineBusy(value: boolean) {
+    refineBusy.value = value
   }
 
   function openMediaPreview(target: MediaPreviewTarget) {
@@ -39,8 +45,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
 
   return {
     imageTarget,
+    refineBusy,
     openImageEditor,
     closeImageEditor,
+    setRefineBusy,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,

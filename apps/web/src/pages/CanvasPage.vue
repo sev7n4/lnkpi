@@ -21,7 +21,8 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
-import type { Session, CanvasAction } from '@lnkpi/shared'
+import type { Session, CanvasAction, ImageVersionEntry } from '@lnkpi/shared'
+import { appendEditVersion, revertImageVersion, seedImageVersions } from '@lnkpi/shared'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -60,6 +61,7 @@ import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
+import { CX_IMAGE_EDIT_ENABLED, decideRefineDismiss } from '@/utils/refineSession'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
@@ -112,7 +114,7 @@ import {
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
-import AIImageEditor from '@/components/canvas/AIImageEditor.vue'
+import RefineDockPanel from '@/components/canvas/refine/RefineDockPanel.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -223,7 +225,7 @@ const canvasMode = ref<'vueflow' | 'playcanvas'>('vueflow')
 const showStoryboard = ref(false)
 const showPublish = ref(false)
 const showModelSettings = ref(false)
-const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string } | null>(null)
+const contextMenu = ref<{ x: number; y: number; nodeId?: string; nodeType?: string; hasUrl?: boolean } | null>(null)
 const { settings: viewportSettings, cycleMinimap } = useCanvasViewportSettings()
 const { theme: canvasTheme, toggleTheme: toggleCanvasTheme } = useCanvasTheme()
 const showMembership = ref(false)
@@ -703,6 +705,43 @@ const editorNode = computed((): EditableFlowNode | null => {
     return node as EditableFlowNode
   }
   return null
+})
+
+const refinePanelNode = computed((): EditableFlowNode | null => {
+  if (!CX_IMAGE_EDIT_ENABLED) return null
+  const target = canvasEditor.imageTarget
+  if (!target) return null
+  return findNodeById(target.nodeId)
+})
+
+const refineBeforeUrl = computed(() => {
+  const data = refinePanelNode.value?.data as Record<string, unknown> | undefined
+  return String(data?.url ?? canvasEditor.imageTarget?.url ?? '')
+})
+
+const refineVersions = computed((): ImageVersionEntry[] => {
+  const versions = refinePanelNode.value?.data?.imageVersions
+  return Array.isArray(versions) ? (versions as ImageVersionEntry[]) : []
+})
+
+const refineCurrentVersionId = computed(() => {
+  const id = refinePanelNode.value?.data?.currentVersionId
+  return typeof id === 'string' ? id : undefined
+})
+
+const refineGenerationRecordId = computed(() => {
+  const id = refinePanelNode.value?.data?.generationRecordId
+  return typeof id === 'string' ? id : undefined
+})
+
+const refineMediaWidth = computed(() => {
+  const info = refinePanelNode.value?.data?.mediaInfo as { width?: number } | undefined
+  return typeof info?.width === 'number' ? info.width : undefined
+})
+
+const refineMediaHeight = computed(() => {
+  const info = refinePanelNode.value?.data?.mediaInfo as { height?: number } | undefined
+  return typeof info?.height === 'number' ? info.height : undefined
 })
 
 const editorUpstream = computed(() => {
@@ -1481,6 +1520,7 @@ async function handleGenerateVideoFromSelection() {
 }
 
 function onPaneClick() {
+  if (applyRefineSelectionDecision(null) === 'block') return
   pendingExclusiveSelectId = null
   multiSelectedIds.value = []
   selectedEdgeId.value = null
@@ -2200,18 +2240,141 @@ function handleAgentRedo() {
   if (canvasUndo.redo()) void saveCanvas()
 }
 
-function handleAgentOpenImageEditor(nodeId: string) {
-  const node = findNodeById(nodeId)
-  if (!node || (node.type !== 'image' && node.type !== 'mediaInput')) return
-  const data = node.data as Record<string, unknown>
-  const url = String(data.url ?? '').trim()
-  if (!url) return
-  canvasEditor.openImageEditor({
-    nodeId: node.id,
-    url,
-    prompt: data.prompt as string | undefined,
+function imageVersionStateFromData(data: Record<string, unknown>) {
+  const currentVersionId = typeof data.currentVersionId === 'string' ? data.currentVersionId : undefined
+  const generationRecordId = typeof data.generationRecordId === 'string' ? data.generationRecordId : undefined
+  const imageVersions = Array.isArray(data.imageVersions)
+    ? (data.imageVersions as ImageVersionEntry[])
+    : undefined
+  return {
+    url: String(data.url ?? '').trim(),
+    currentVersionId,
+    imageVersions,
+    generationRecordId,
+  }
+}
+
+function seedRefineIfNeeded(node: EditableFlowNode) {
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const state = imageVersionStateFromData(data)
+  if (!state.url || (state.imageVersions?.length ?? 0) > 0) return
+  const source = node.type === 'mediaInput' || !state.generationRecordId ? 'upload' : 'generate'
+  const seeded = seedImageVersions(state, { source })
+  patchNodeData(node.id, {
+    currentVersionId: seeded.currentVersionId,
+    imageVersions: seeded.imageVersions,
   })
 }
+
+function applyRefineSelectionDecision(selectedId: string | null) {
+  const decision = decideRefineDismiss({
+    busy: canvasEditor.refineBusy,
+    targetNodeId: canvasEditor.imageTarget?.nodeId ?? null,
+    selectedNodeId: selectedId,
+  })
+  if (decision === 'block') {
+    const targetId = canvasEditor.imageTarget?.nodeId
+    if (targetId) selectOnlyNode(targetId)
+    return decision
+  }
+  if (decision === 'dismiss') canvasEditor.closeImageEditor()
+  return decision
+}
+
+function openRefineForNode(node: EditableFlowNode | null | undefined) {
+  if (!CX_IMAGE_EDIT_ENABLED || !node) return
+  const type = String(node.type ?? '')
+  if (type !== 'image' && type !== 'mediaInput') return
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
+  if (!url) return
+  const targetId = canvasEditor.imageTarget?.nodeId
+  if (canvasEditor.refineBusy && targetId && targetId !== node.id) return
+  selectOnlyNode(node.id)
+  seedRefineIfNeeded(node)
+  const fresh = findNodeById(node.id)
+  const nextData = (fresh?.data ?? data) as Record<string, unknown>
+  canvasEditor.openImageEditor({
+    nodeId: node.id,
+    url: String(nextData.url ?? url),
+    prompt: typeof nextData.prompt === 'string' ? nextData.prompt : undefined,
+  })
+}
+
+function openRefineForSelected() {
+  openRefineForNode(editorNode.value)
+}
+
+function closeRefineWorkbench() {
+  canvasEditor.closeImageEditor()
+}
+
+function handleRefineApply(payload: { url: string; prompt: string; recordId?: string }) {
+  const nodeId = canvasEditor.imageTarget?.nodeId
+  if (!nodeId) return
+  const node = findNodeById(nodeId)
+  if (!node) return
+  const next = appendEditVersion(imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>), {
+    id: crypto.randomUUID(),
+    url: payload.url,
+    createdAt: new Date().toISOString(),
+    generationRecordId: payload.recordId,
+    editPrompt: payload.prompt,
+  })
+  patchNodeData(node.id, {
+    url: next.url,
+    currentVersionId: next.currentVersionId,
+    imageVersions: next.imageVersions,
+    generationRecordId: next.generationRecordId,
+    status: 'completed',
+  })
+  persistUserEdit()
+}
+
+function handleRefineRevert(payload: { versionId: string }) {
+  const nodeId = canvasEditor.imageTarget?.nodeId
+  if (!nodeId) return
+  const node = findNodeById(nodeId)
+  if (!node) return
+  const next = revertImageVersion(
+    imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>),
+    payload.versionId,
+  )
+  patchNodeData(node.id, {
+    url: next.url,
+    currentVersionId: next.currentVersionId,
+    generationRecordId: next.generationRecordId,
+  })
+  persistUserEdit()
+  const target = canvasEditor.imageTarget
+  if (target) {
+    canvasEditor.openImageEditor({
+      ...target,
+      url: next.url,
+    })
+  }
+}
+
+function handleAgentOpenImageEditor(nodeId: string) {
+  const url = String((findNodeById(nodeId)?.data as Record<string, unknown> | undefined)?.url ?? '').trim()
+  if (!url) return
+  openRefineForNode(findNodeById(nodeId))
+}
+
+watch(selectedNodeId, (id) => {
+  applyRefineSelectionDecision(id)
+})
+
+watch(
+  () => canvasEditor.imageTarget?.nodeId,
+  (nodeId) => {
+    if (!nodeId || !CX_IMAGE_EDIT_ENABLED) return
+    const node = findNodeById(nodeId)
+    if (!node) return
+    seedRefineIfNeeded(node)
+    if (selectedNodeId.value !== nodeId) selectOnlyNode(nodeId)
+  },
+)
 
 function patchSelectedNode(patch: Record<string, unknown>) {
   if (!editorNode.value) return
@@ -2295,11 +2458,13 @@ function findNodeById(id: string) {
 function onNodeContextMenu(event: NodeMouseEvent) {
   event.event.preventDefault()
   const { x, y } = getEventCoords(event.event)
+  const data = event.node.data as Record<string, unknown> | undefined
   contextMenu.value = {
     x,
     y,
     nodeId: event.node.id,
     nodeType: String(event.node.type),
+    hasUrl: Boolean(String(data?.url ?? '').trim()),
   }
 }
 
@@ -2430,15 +2595,7 @@ function handleContextAction(action: string) {
   }
 
   if (action === 'edit-image' && menu.nodeId) {
-    const node = findNodeById(menu.nodeId)
-    if (node?.type === 'image') {
-      const data = node.data as Record<string, unknown>
-      canvasEditor.openImageEditor({
-        nodeId: node.id,
-        url: String(data.url ?? ''),
-        prompt: data.prompt as string | undefined,
-      })
-    }
+    openRefineForNode(findNodeById(menu.nodeId))
     return
   }
 
@@ -2492,19 +2649,6 @@ function handleStoryboardUpdated(shots: StoryboardShot[]) {
     }
   }
   persistUserEdit()
-}
-
-function handleImageEditorApply(payload: { nodeId: string; url: string; prompt?: string }) {
-  const node = findNodeById(payload.nodeId)
-  if (node) {
-    node.data = {
-      ...(node.data as Record<string, unknown>),
-      url: payload.url,
-      status: 'completed',
-      prompt: payload.prompt,
-    }
-    persistUserEdit()
-  }
 }
 
 function openPublish() {
@@ -3055,7 +3199,27 @@ onUnmounted(() => {
         </VueFlow>
         <PlayCanvasView v-else class="h-full" :nodes="playCanvasNodes" />
 
+        <div
+          v-if="refinePanelNode"
+          class="dock-studio-toolbar pointer-events-none absolute inset-x-0 bottom-3 z-[45] flex justify-center px-4"
+        >
+          <RefineDockPanel
+            :node-id="refinePanelNode.id"
+            :before-url="refineBeforeUrl"
+            :versions="refineVersions"
+            :current-version-id="refineCurrentVersionId"
+            :session-id="sessionId"
+            :generation-record-id="refineGenerationRecordId"
+            :width="refineMediaWidth"
+            :height="refineMediaHeight"
+            @close="closeRefineWorkbench"
+            @apply="handleRefineApply"
+            @revert="handleRefineRevert"
+            @busy="canvasEditor.setRefineBusy"
+          />
+        </div>
         <DockStudioToolbar
+          v-else
           :node="editorNode"
           :upstream="editorUpstream"
           :refs="selectedRefs"
@@ -3074,6 +3238,7 @@ onUnmounted(() => {
           @convert="handleMediaInputConvert"
           @continue-shot="handleContinueShot"
           @close="onPaneClick"
+          @refine="openRefineForSelected"
         />
 
         <NodePanelDock
@@ -3180,7 +3345,6 @@ onUnmounted(() => {
       @published="loadSessions"
       @locate-node="handlePublishLocateNode"
     />
-    <AIImageEditor @apply="handleImageEditorApply" />
     <MediaPreviewOverlay />
     <MediaInspectorDrawer />
     <CanvasContextMenu
@@ -3189,6 +3353,7 @@ onUnmounted(() => {
       :y="contextMenu.y"
       :node-id="contextMenu.nodeId"
       :node-type="contextMenu.nodeType"
+      :has-url="contextMenu.hasUrl"
       :multi-selected-count="
         contextMenu.nodeId &&
         multiSelectedIds.includes(contextMenu.nodeId) &&
