@@ -2394,8 +2394,8 @@ function handleDuplicateSelection(
   )
   if (!result.nodes.length) return
 
-  nodes.value.push(...(result.nodes as EditableFlowNode[]))
-  edges.value.push(...(result.edges as CanvasEdge[]))
+  nodes.value = [...nodes.value, ...(result.nodes as EditableFlowNode[])]
+  edges.value = [...edges.value, ...(result.edges as CanvasEdge[])]
   selectMultipleNodes(result.newRootIds.length ? result.newRootIds : result.nodes.map((n) => n.id))
   persistUserEdit()
 
