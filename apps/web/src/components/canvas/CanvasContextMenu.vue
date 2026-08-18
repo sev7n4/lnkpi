@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-const { x, y, nodeId, nodeType } = defineProps<{
+const { x, y, nodeId, nodeType, multiSelectedCount = 1 } = defineProps<{
   x: number
   y: number
   nodeId?: string
   nodeType?: string
+  multiSelectedCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -14,6 +15,10 @@ const emit = defineEmits<{
 }>()
 
 const visible = ref(true)
+
+const showUpstreamDuplicate = computed(
+  () => multiSelectedCount <= 1 && nodeType !== 'group' && Boolean(nodeId),
+)
 
 function run(action: string, payload?: string) {
   emit('action', action, payload)
@@ -58,7 +63,14 @@ function run(action: string, payload?: string) {
       class="neo-popover-item block w-full px-4 py-2 text-left text-xs"
       @click="run('duplicate')"
     >
-      复制节点
+      新建副本
+    </button>
+    <button
+      v-if="showUpstreamDuplicate"
+      class="neo-popover-item block w-full px-4 py-2 text-left text-xs"
+      @click="run('duplicate-upstream')"
+    >
+      新建副本（含上游）
     </button>
     <button
       v-if="nodeId"
