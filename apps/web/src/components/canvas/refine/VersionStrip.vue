@@ -2,10 +2,14 @@
 import { computed, ref } from 'vue'
 import type { ImageVersionEntry } from '@lnkpi/shared'
 
-const props = defineProps<{
-  versions: ImageVersionEntry[]
-  currentVersionId?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    versions: ImageVersionEntry[]
+    currentVersionId?: string
+    disabled?: boolean
+  }>(),
+  { disabled: false },
+)
 
 const emit = defineEmits<{
   select: [versionId: string]
@@ -22,12 +26,13 @@ const activeId = computed(
 )
 
 function onSelect(id: string) {
+  if (props.disabled) return
   selectedId.value = id
   emit('select', id)
 }
 
 function onRevert() {
-  if (!activeId.value) return
+  if (props.disabled || !activeId.value) return
   emit('revert', { versionId: activeId.value })
 }
 </script>
@@ -42,6 +47,7 @@ function onRevert() {
         class="version-strip__thumb"
         :class="{ 'is-active': version.id === activeId }"
         :title="version.source"
+        :disabled="disabled"
         @click="onSelect(version.id)"
       >
         <img :src="version.url" alt="">
@@ -51,7 +57,7 @@ function onRevert() {
     <button
       type="button"
       class="version-strip__revert"
-      :disabled="!activeId"
+      :disabled="disabled || !activeId"
       @click="onRevert"
     >
       恢复此版本
@@ -117,7 +123,8 @@ function onRevert() {
   cursor: pointer;
 }
 
-.version-strip__revert:disabled {
+.version-strip__revert:disabled,
+.version-strip__thumb:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

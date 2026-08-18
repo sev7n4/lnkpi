@@ -226,7 +226,6 @@ defineExpose({
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
-      @pointerleave="onPointerUp"
     />
   </div>
 </template>
@@ -234,19 +233,17 @@ defineExpose({
 <style scoped>
 .mask-editor {
   position: relative;
-  display: flex;
+  display: inline-flex;
   max-width: 100%;
-  max-height: 100%;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   user-select: none;
 }
 
 .mask-editor__image {
   display: block;
   max-width: 100%;
-  max-height: 100%;
+  max-height: 220px;
   object-fit: contain;
   pointer-events: none;
 }

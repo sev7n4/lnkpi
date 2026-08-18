@@ -94,11 +94,13 @@ function focusReplacePrompt() {
 }
 
 function onSelectVersion(versionId: string) {
+  if (busy.value) return
   const version = props.versions.find((item) => item.id === versionId)
   if (version) compareBeforeUrl.value = version.url
 }
 
 function onRevert(payload: { versionId: string }) {
+  if (busy.value) return
   emit('revert', payload)
 }
 
@@ -147,7 +149,7 @@ async function runRefine() {
     const { data } = await studioApi.editImage(
       {
         prompt: prompt.value,
-        imageUrl: compareBeforeUrl.value,
+        imageUrl: props.beforeUrl,
         maskUrl,
         sessionId: props.sessionId,
         nodeId: props.nodeId,
@@ -194,9 +196,16 @@ async function runRefine() {
 
     <CompareView :before-url="compareBeforeUrl" :after-url="afterUrl">
       <template #before>
+        <img
+          v-if="compareBeforeUrl !== beforeUrl"
+          class="refine-dock__compare-image"
+          :src="compareBeforeUrl"
+          alt=""
+        >
         <MaskEditor
+          v-show="compareBeforeUrl === beforeUrl"
           ref="maskRef"
-          :url="compareBeforeUrl"
+          :url="beforeUrl"
           :width="width"
           :height="height"
           :tool="tool"
@@ -266,6 +275,7 @@ async function runRefine() {
     <VersionStrip
       :versions="versions"
       :current-version-id="currentVersionId"
+      :disabled="busy"
       @select="onSelectVersion"
       @revert="onRevert"
     />
@@ -282,6 +292,13 @@ async function runRefine() {
   font-size: 13px;
   font-weight: 600;
   color: var(--neo-text-primary);
+}
+
+.refine-dock__compare-image {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
 }
 
 .refine-dock__back {

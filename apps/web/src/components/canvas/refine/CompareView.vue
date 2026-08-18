@@ -25,23 +25,23 @@ function setHold(value: boolean) {
   emit('update:showingOriginal', value)
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
+function shouldSkipSpaceHold(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   const tag = target.tagName
-  if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return true
+  if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || tag === 'BUTTON') return true
   return target.isContentEditable
 }
 
 function onKeyDown(event: KeyboardEvent) {
   if (event.code !== 'Space' || event.repeat) return
-  if (isTypingTarget(event.target)) return
+  if (shouldSkipSpaceHold(event.target)) return
   event.preventDefault()
   setHold(true)
 }
 
 function onKeyUp(event: KeyboardEvent) {
   if (event.code !== 'Space') return
-  if (isTypingTarget(event.target)) return
+  if (shouldSkipSpaceHold(event.target)) return
   setHold(false)
 }
 
@@ -120,7 +120,6 @@ onBeforeUnmount(() => {
   max-height: 220px;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
   border: 1px solid var(--neo-border);
   border-radius: 12px;
   background: #0a0a0a;
