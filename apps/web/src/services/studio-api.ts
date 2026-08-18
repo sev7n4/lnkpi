@@ -82,6 +82,21 @@ export const studioApi = {
       { prompt, basePrompt, model, ...scopeBody(scope) },
       { timeout: 300_000, signal },
     ),
+  editImage: (
+    body: {
+      prompt: string
+      imageUrl: string
+      maskUrl: string
+      parentRecordId?: string
+      parentVersionId?: string
+    } & CanvasGenerationScope,
+    signal?: AbortSignal,
+  ) =>
+    api.post<{ data: GenerationRecord }>(
+      '/studio/image/edit',
+      { ...body, ...scopeBody({ sessionId: body.sessionId, nodeId: body.nodeId }) },
+      { timeout: 300_000, signal },
+    ),
   generateText: (
     prompt: string,
     model?: string,

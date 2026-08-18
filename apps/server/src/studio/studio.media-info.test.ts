@@ -6,6 +6,7 @@ import { MediaProbeService } from '../media/media-probe.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
+import { UploadService } from '../upload/upload.service'
 import { createMediaProbeMock, createPrismaMock, defaultPlatformResolve } from './studio.test-utils'
 import { StudioService } from './studio.service'
 
@@ -80,6 +81,10 @@ describe('StudioService mediaInfo on generation complete', () => {
         {
           provide: MediaProbeService,
           useValue: { probeUrl },
+        },
+        {
+          provide: UploadService,
+          useValue: { saveUserFile: vi.fn(async () => ({ url: 'https://cdn/comp.png' })) },
         },
       ],
     }).compile()
