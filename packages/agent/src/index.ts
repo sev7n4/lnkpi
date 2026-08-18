@@ -56,6 +56,11 @@ export {
   Seedance1xUnsupportedError,
 } from './studio/generation-adapter'
 export {
+  buildImageEditRequest,
+  buildEditPrompt,
+  IMAGE_EDIT_PROMPT_PREFIX,
+} from './studio/edit-adapter'
+export {
   buildVideoReferenceBundle,
   inferVideoScenario,
 } from './studio/video-refs'
