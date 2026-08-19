@@ -1,5 +1,7 @@
 export type RefineChromeMode = 'docked' | 'floating'
 export type CompareMode = 'split' | 'wipe'
+/** Left workspace: mask on Before vs expanded compare. Shared by future edit tools. */
+export type CompareWorkspace = 'work' | 'compare'
 export type AgentOpenWhileRefine = 'allow' | 'dismiss-refine' | 'block'
 export type InspectorOpenWhileRefine = 'allow' | 'dismiss-refine' | 'block'
 
@@ -33,4 +35,21 @@ export function shouldApplyRefineToNode(input: {
   sessionBeforeUrl: string
 }): boolean {
   return input.nodeUrl === input.sessionBeforeUrl
+}
+
+export function nextCompareWorkspace(current: CompareWorkspace): CompareWorkspace {
+  return current === 'compare' ? 'work' : 'compare'
+}
+
+/** Wipe is always a compare-mode switch, even before After exists. */
+export function wipeCompareLocked(_hasDistinctAfter: boolean): boolean {
+  return false
+}
+
+export function loupeSubcontrolsVisible(loupeOn: boolean): boolean {
+  return loupeOn
+}
+
+export function maskSubcontrolsVisible(menuOpen: boolean): boolean {
+  return menuOpen
 }

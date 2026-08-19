@@ -1,12 +1,9 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
-import MaskEditor from '@/components/canvas/refine/MaskEditor.vue'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { resolveMediaUrl } from '@/services/api-base'
-import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
 const props = defineProps<{
-  id: string
   selected?: boolean
   data: {
     url?: string
@@ -18,9 +15,6 @@ const props = defineProps<{
   }
 }>()
 
-const editor = useCanvasEditorStore()
-const maskRef = ref<InstanceType<typeof MaskEditor> | null>(null)
-
 const mediaKind = computed(() => {
   const kind = props.data.mediaKind
   if (kind === 'video' || kind === 'audio' || kind === 'image') return kind
@@ -31,27 +25,6 @@ const mediaKind = computed(() => {
 })
 
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
-const refiningThisNode = computed(
-  () => mediaKind.value === 'image' && editor.imageTarget?.nodeId === props.id,
-)
-
-watch(
-  [refiningThisNode, maskRef],
-  async () => {
-    await nextTick()
-    if (!refiningThisNode.value || !maskRef.value) return
-    editor.registerRefineMask({
-      exportPng: () => maskRef.value!.exportPng(),
-      clear: () => maskRef.value!.clear(),
-      getCanvas: () => maskRef.value!.getCanvas(),
-    })
-  },
-  { immediate: true },
-)
-
-onBeforeUnmount(() => {
-  if (editor.imageTarget?.nodeId === props.id) editor.registerRefineMask(null)
-})
 </script>
 
 <template>
@@ -62,19 +35,7 @@ onBeforeUnmount(() => {
         <div v-else-if="mediaKind === 'audio'" class="flex h-full items-center justify-center p-2">
           <audio :src="displayUrl" controls class="w-full" />
         </div>
-        <template v-else>
-          <img :src="displayUrl" alt="">
-          <MaskEditor
-            v-if="refiningThisNode"
-            ref="maskRef"
-            surface="node"
-            :url="displayUrl"
-            :tool="editor.refineTool"
-            :brush-size="editor.refineBrushSize"
-            :disabled="editor.refineBusy"
-            @coverage="(p) => { editor.refineCoverage = p.ratio }"
-          />
-        </template>
+        <img v-else :src="displayUrl" alt="">
       </div>
       <div v-else class="neo-node-placeholder">
         <div class="neo-placeholder-content">

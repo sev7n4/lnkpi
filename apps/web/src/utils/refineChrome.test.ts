@@ -3,7 +3,11 @@ import {
   clampWipeRatio,
   decideAgentOpenWhileRefine,
   decideInspectorOpenWhileRefine,
+  loupeSubcontrolsVisible,
+  maskSubcontrolsVisible,
+  nextCompareWorkspace,
   shouldApplyRefineToNode,
+  wipeCompareLocked,
 } from './refineChrome'
 
 describe('clampWipeRatio', () => {
@@ -74,6 +78,28 @@ describe('decideInspectorOpenWhileRefine', () => {
     expect(
       decideInspectorOpenWhileRefine({ refineOpen: true, refineBusy: true }),
     ).toBe('block')
+  })
+})
+
+describe('compare workspace chrome', () => {
+  it('toggles maximized compare back to the work image', () => {
+    expect(nextCompareWorkspace('work')).toBe('compare')
+    expect(nextCompareWorkspace('compare')).toBe('work')
+  })
+
+  it('keeps wipe switchable before After exists', () => {
+    expect(wipeCompareLocked(false)).toBe(false)
+    expect(wipeCompareLocked(true)).toBe(false)
+  })
+
+  it('hides loupe shape and zoom until the loupe is on', () => {
+    expect(loupeSubcontrolsVisible(false)).toBe(false)
+    expect(loupeSubcontrolsVisible(true)).toBe(true)
+  })
+
+  it('hides brush color, size and shape until the brush menu is open', () => {
+    expect(maskSubcontrolsVisible(false)).toBe(false)
+    expect(maskSubcontrolsVisible(true)).toBe(true)
   })
 })
 

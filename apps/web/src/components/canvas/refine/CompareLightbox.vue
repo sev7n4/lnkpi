@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CompareMode } from '@/utils/refineChrome'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import CompareView from './CompareView.vue'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
+import { refineWorkInsetRight } from './refineWorkLayout'
 
 const props = defineProps<{
   open: boolean
@@ -18,6 +20,7 @@ const emit = defineEmits<{
   'update:wipeRatio': [value: number]
 }>()
 
+const editor = useCanvasEditorStore()
 const scale = ref(1)
 const panX = ref(0)
 const panY = ref(0)
@@ -25,7 +28,17 @@ const draggingPan = ref(false)
 let lastX = 0
 let lastY = 0
 
-const wipeDisabled = computed(() => !props.afterUrl)
+const insetRight = computed(() =>
+  refineWorkInsetRight({
+    innerWidth: typeof window === 'undefined' ? 1280 : window.innerWidth,
+    chrome: editor.refineChrome,
+    collapsed: editor.refinePanelCollapsed,
+    panelWidth: editor.refinePanelWidth,
+  }),
+)
+const frameStyle = computed(() => ({
+  right: `${insetRight.value}px`,
+}))
 const transformStyle = computed(() => ({
   transform: `translate(${panX.value}px, ${panY.value}px) scale(${scale.value})`,
 }))
@@ -41,7 +54,6 @@ watch(
 )
 
 function setMode(mode: CompareMode) {
-  if (mode === 'wipe' && wipeDisabled.value) return
   emit('update:mode', mode)
 }
 
@@ -115,30 +127,47 @@ onBeforeUnmount(() => {
   <div
     v-if="open"
     class="compare-lightbox"
+    :style="frameStyle"
     @wheel.prevent="onWheel"
   >
     <header class="compare-lightbox__bar">
+      <button type="button" class="compare-lightbox__back" title="回到工作图" @click="emit('close')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+          <rect x="4" y="5" width="16" height="14" rx="2" />
+          <path stroke-linecap="round" d="M9 12h6M12 9v6" />
+        </svg>
+        <span>工作图</span>
+      </button>
       <div class="compare-lightbox__modes">
         <button
           type="button"
           class="compare-lightbox__mode"
           :class="{ 'is-active': mode === 'split' }"
+          title="左右对照"
           @click="setMode('split')"
         >
-          左右
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+            <rect x="3" y="5" width="7" height="14" rx="1.5" />
+            <rect x="14" y="5" width="7" height="14" rx="1.5" />
+          </svg>
         </button>
         <button
           type="button"
           class="compare-lightbox__mode"
           :class="{ 'is-active': mode === 'wipe' }"
-          :disabled="wipeDisabled"
+          title="重叠滑竿"
           @click="setMode('wipe')"
         >
-          重叠
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+            <rect x="3" y="5" width="18" height="14" rx="1.5" />
+            <path stroke-linecap="round" d="M12 5v14" />
+          </svg>
         </button>
       </div>
-      <button type="button" class="compare-lightbox__close" aria-label="关闭对照" @click="emit('close')">
-        关闭
+      <button type="button" class="compare-lightbox__close" title="回到工作图" aria-label="回到工作图" @click="emit('close')">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+        </svg>
       </button>
     </header>
     <div class="compare-lightbox__stage" @pointerdown="onPanPointerDown">
@@ -159,11 +188,18 @@ onBeforeUnmount(() => {
 <style scoped>
 .compare-lightbox {
   position: fixed;
-  inset: 0;
-  z-index: 80;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   background: rgba(8, 8, 8, 0.92);
+}
+
+.compare-lightbox__modes {
+  display: flex;
+  gap: 6px;
 }
 
 .compare-lightbox__bar {
@@ -174,15 +210,28 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
 }
 
-.compare-lightbox__modes {
-  display: flex;
+.compare-lightbox__back {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--neo-border);
+  border-radius: 999px;
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .compare-lightbox__mode,
 .compare-lightbox__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 28px;
-  padding: 0 12px;
+  min-width: 28px;
+  padding: 0;
   border: 1px solid var(--neo-border);
   border-radius: 999px;
   background: transparent;

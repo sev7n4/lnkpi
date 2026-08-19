@@ -15,12 +15,14 @@ const props = withDefaults(
     brushSize?: number
     disabled?: boolean
     surface?: 'panel' | 'node'
+    color?: string
   }>(),
   {
     tool: 'brush',
     brushSize: 24,
     disabled: false,
     surface: 'panel',
+    color: '#ffffff',
   },
 )
 
@@ -152,8 +154,8 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = 'rgba(0,0,0,1)'
   } else {
     ctx.globalCompositeOperation = 'source-over'
-    ctx.strokeStyle = 'rgba(255,255,255,1)'
-    ctx.fillStyle = 'rgba(255,255,255,1)'
+    ctx.strokeStyle = props.color
+    ctx.fillStyle = props.color
   }
 }
 
@@ -186,7 +188,7 @@ function onPointerMove(event: PointerEvent) {
     ctx.putImageData(snapshot, 0, 0)
     applyToolStyle(ctx)
     ctx.globalCompositeOperation = 'source-over'
-    ctx.fillStyle = 'rgba(255,255,255,1)'
+    ctx.fillStyle = props.color
     const x = Math.min(rectStart.x, pt.x)
     const y = Math.min(rectStart.y, pt.y)
     ctx.fillRect(x, y, Math.abs(pt.x - rectStart.x), Math.abs(pt.y - rectStart.y))

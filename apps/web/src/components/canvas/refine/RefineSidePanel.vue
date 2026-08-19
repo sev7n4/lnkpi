@@ -9,6 +9,7 @@ import { studioApi } from '@/services/studio-api'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
 import type { CompareMode } from '@/utils/refineChrome'
+import { loupeSubcontrolsVisible, maskSubcontrolsVisible, nextCompareWorkspace, wipeCompareLocked } from '@/utils/refineChrome'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { syncRefineUrls } from './syncRefineUrls'
 import CompareLightbox from './CompareLightbox.vue'
@@ -19,6 +20,7 @@ import { exportMaskPng } from './maskExport'
 const REFINE_MIN_W = 360
 const REFINE_MAX_W = 560
 const REFINE_DEFAULT_W = 400
+const REFINE_COLLAPSED_W = 44
 
 const props = defineProps<{
   nodeId: string
@@ -62,25 +64,38 @@ const refineDisabled = computed(() => busy.value || coverageKind.value === 'empt
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
 const floating = computed(() => editor.refineChrome === 'floating')
-const wipeDisabled = computed(() => !canApply.value)
+const collapsed = computed(() => editor.refinePanelCollapsed && !isNarrow.value)
+const wipeLocked = computed(() => wipeCompareLocked(canApply.value))
+const loupeMenuOpen = computed(() => loupeSubcontrolsVisible(editor.refineLoupeOn))
+const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
 const panelStyle = computed(() => {
+  const width = collapsed.value
+    ? REFINE_COLLAPSED_W
+    : isNarrow.value
+      ? undefined
+      : panelWidth.value
   if (floating.value && !isNarrow.value) {
     return {
-      left: `${floatPos.value.x}px`,
-      top: `${floatPos.value.y}px`,
-      width: `${panelWidth.value}px`,
-      height: 'calc(100vh - 72px)',
+      left: collapsed.value ? undefined : `${floatPos.value.x}px`,
+      right: collapsed.value ? '0px' : undefined,
+      top: collapsed.value ? '0px' : `${floatPos.value.y}px`,
+      width: `${collapsed.value ? REFINE_COLLAPSED_W : panelWidth.value}px`,
+      height: collapsed.value ? '100vh' : 'calc(100vh - 72px)',
     }
   }
   return {
     top: '0',
     right: '0',
     bottom: '0',
-    width: isNarrow.value ? '100%' : `${panelWidth.value}px`,
+    width: isNarrow.value ? '100%' : `${width}px`,
   }
 })
 
 watch(busy, (value) => emit('busy', value), { immediate: true })
+
+watch(panelWidth, (width) => {
+  if (!editor.refinePanelCollapsed) editor.setRefinePanelWidth(width)
+}, { immediate: true })
 
 watch(
   () => props.beforeUrl,
@@ -95,10 +110,6 @@ watch(
     if (next.reset) lastRecordId.value = undefined
   },
 )
-
-watch(canApply, (ok) => {
-  if (!ok && compareMode.value === 'wipe') compareMode.value = 'split'
-})
 
 function isAbortError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
@@ -128,6 +139,18 @@ function focusReplacePrompt() {
   promptRef.value?.focus()
 }
 
+function onLoupeZoomInput(event: Event) {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  editor.setRefineLoupeZoom(Number(target.value))
+}
+
+function onBrushColorInput(event: Event) {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  editor.setRefineBrushColor(target.value)
+}
+
 function onSelectVersion(versionId: string) {
   if (busy.value) return
   const version = props.versions.find((item) => item.id === versionId)
@@ -137,6 +160,25 @@ function onSelectVersion(versionId: string) {
 function onRevert(payload: { versionId: string }) {
   if (busy.value) return
   emit('revert', payload)
+}
+
+function toggleCompareWorkspace() {
+  const next = nextCompareWorkspace(editor.compareLightboxOpen ? 'compare' : 'work')
+  editor.setCompareLightboxOpen(next === 'compare')
+}
+
+function onBrushParentClick() {
+  if (busy.value) return
+  if (!editor.refineMaskMenuOpen) {
+    editor.setRefineMaskMenuOpen(true)
+    editor.refineTool = 'brush'
+    return
+  }
+  if (editor.refineTool !== 'brush') {
+    editor.refineTool = 'brush'
+    return
+  }
+  editor.setRefineMaskMenuOpen(false)
 }
 
 function onBackOrCancel() {
@@ -172,6 +214,11 @@ function toggleFloating() {
     y: 56,
   }
   editor.setRefineChrome('floating')
+}
+
+function toggleCollapsed() {
+  if (isNarrow.value) return
+  editor.setRefinePanelCollapsed(!editor.refinePanelCollapsed)
 }
 
 function startResize(event: MouseEvent) {
@@ -299,78 +346,171 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <aside
       class="refine-side"
-      :class="{ 'is-floating': floating && !isNarrow }"
+      :class="{ 'is-floating': floating && !isNarrow && !collapsed, 'is-collapsed': collapsed }"
       :style="panelStyle"
       @click.stop
     >
-      <div class="refine-resize" title="拖拉调整宽度" @mousedown="startResize" />
+      <div v-if="!collapsed" class="refine-resize" title="拖拉调整宽度" @mousedown="startResize" />
       <header
         class="refine-side__head"
-        :class="{ 'cursor-move': floating && !isNarrow }"
+        :class="{ 'cursor-move': floating && !isNarrow && !collapsed }"
         @mousedown="startDrag"
       >
-        <div class="flex items-center gap-2">
-          <span class="bottom-toolbar-type-icon" title="精修">
-            <DockTypeIcon icon="image" :size="18" />
-          </span>
-          <span class="refine-side__title">精修</span>
-        </div>
-        <div class="flex items-center gap-1">
+        <div class="flex min-w-0 items-center gap-1">
           <button
             v-if="!isNarrow"
             type="button"
-            class="refine-side__icon"
+            class="refine-side__collapse"
+            :title="collapsed ? '展开精修侧栏' : '收缩精修侧栏'"
+            @click="toggleCollapsed"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path v-if="collapsed" stroke-linecap="round" stroke-linejoin="round" d="M15 6 9 12l6 6" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M9 6l6 6-6 6" />
+            </svg>
+          </button>
+          <span v-if="!collapsed" class="bottom-toolbar-type-icon" title="精修">
+            <DockTypeIcon icon="image" :size="18" />
+          </span>
+          <span v-if="!collapsed" class="refine-side__title">精修</span>
+        </div>
+        <div v-if="!collapsed" class="flex items-center gap-1">
+          <button
+            v-if="!isNarrow"
+            type="button"
+            class="refine-side__icon-btn"
             :title="floating ? '停靠回侧栏' : '切换为浮动窗口'"
             @click="toggleFloating"
           >
-            {{ floating ? '停靠' : '浮动' }}
+            <svg v-if="!floating" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path stroke-linecap="round" d="M20 9V5.5A1.5 1.5 0 0 0 18.5 4H5.5A1.5 1.5 0 0 0 4 5.5v10A1.5 1.5 0 0 0 5.5 17H9" />
+              <rect x="12" y="12" width="9" height="8" rx="1.5" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path stroke-linecap="round" d="M15 4v16" />
+            </svg>
           </button>
-          <button type="button" class="refine-dock__back" @click="onBackOrCancel">{{ backLabel }}</button>
+          <button type="button" class="refine-side__icon-btn" :title="backLabel" @click="onBackOrCancel">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path v-if="busy" stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
         </div>
       </header>
-      <div class="refine-side__body">
-        <div class="refine-side__compare-head">
-          <div class="flex gap-1">
-            <button
-              type="button"
-              class="refine-dock__tool"
-              :class="{ 'is-active': compareMode === 'split' }"
-              @click="compareMode = 'split'"
-            >
-              左右
+      <div v-show="!collapsed" class="refine-side__body">
+        <div class="refine-side__toolbar">
+          <div class="refine-side__icon-row">
+            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': compareMode === 'split' }" title="左右对照" @click="compareMode = 'split'">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <rect x="3" y="5" width="7" height="14" rx="1.5" />
+                <rect x="14" y="5" width="7" height="14" rx="1.5" />
+              </svg>
+            </button>
+            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': compareMode === 'wipe' }" title="重叠滑竿" :disabled="wipeLocked" @click="compareMode = 'wipe'">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <rect x="3" y="5" width="18" height="14" rx="1.5" />
+                <path stroke-linecap="round" d="M12 5v14" />
+              </svg>
             </button>
             <button
               type="button"
-              class="refine-dock__tool"
-              :class="{ 'is-active': compareMode === 'wipe' }"
-              :disabled="wipeDisabled"
-              @click="compareMode = 'wipe'"
+              class="refine-side__icon-btn"
+              :class="{ 'is-active': editor.compareLightboxOpen }"
+              :title="editor.compareLightboxOpen ? '回到工作图' : '最大化对照'"
+              @click="toggleCompareWorkspace"
             >
-              重叠
+              <svg v-if="!editor.compareLightboxOpen" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H5v4M15 4h4v4M5 15v4h4M19 15v4h-4" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 9H5V5M15 9h4V5M5 15v4h4M19 15v4h-4" />
+              </svg>
             </button>
+            <span class="refine-side__divider" />
+            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeOn }" title="放大镜" @click="editor.setRefineLoupe(!editor.refineLoupeOn)">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <circle cx="11" cy="11" r="6" />
+                <path stroke-linecap="round" d="m20 20-3.5-3.5" />
+              </svg>
+            </button>
+            <template v-if="loupeMenuOpen">
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeShape === 'circle' }" title="圆形放大区" @click="editor.setRefineLoupeShape('circle')">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <circle cx="12" cy="12" r="7" />
+                </svg>
+              </button>
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeShape === 'rect' }" title="矩形放大区" @click="editor.setRefineLoupeShape('rect')">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="5" y="6" width="14" height="12" rx="2" />
+                </svg>
+              </button>
+              <label class="refine-side__slider" title="放大镜倍数">
+                <input
+                  type="range"
+                  min="1.5"
+                  max="6"
+                  step="0.5"
+                  :value="editor.refineLoupeZoom"
+                  @input="onLoupeZoomInput"
+                >
+                <span>×{{ editor.refineLoupeZoom }}</span>
+              </label>
+            </template>
           </div>
-          <button type="button" class="refine-dock__tool" @click="editor.setCompareLightboxOpen(true)">
-            最大化对照
-          </button>
-        </div>
 
-        <CompareView
-          :before-url="compareBeforeUrl"
-          :after-url="afterUrl"
-          :mode="compareMode"
-          :wipe-ratio="wipeRatio"
-          @update:wipe-ratio="wipeRatio = $event"
-        />
+          <CompareView
+            :before-url="compareBeforeUrl"
+            :after-url="afterUrl"
+            :mode="compareMode"
+            :wipe-ratio="wipeRatio"
+            @update:wipe-ratio="wipeRatio = $event"
+          />
 
-        <div class="refine-dock__tools">
-          <button type="button" class="refine-dock__tool" :class="{ 'is-active': editor.refineTool === 'brush' }" :disabled="busy" @click="editor.refineTool = 'brush'">画笔</button>
-          <button type="button" class="refine-dock__tool" :class="{ 'is-active': editor.refineTool === 'eraser' }" :disabled="busy" @click="editor.refineTool = 'eraser'">橡皮</button>
-          <button type="button" class="refine-dock__tool" :class="{ 'is-active': editor.refineTool === 'rect' }" :disabled="busy" @click="editor.refineTool = 'rect'">矩形</button>
-          <label class="refine-dock__size">
-            笔刷大小
-            <input v-model.number="editor.refineBrushSize" type="range" min="4" max="80" :disabled="busy">
-          </label>
-          <button type="button" class="refine-dock__tool" :disabled="busy" @click="editor.getRefineMask()?.clear()">清除选区</button>
+          <div class="refine-side__icon-row">
+            <button
+              type="button"
+              class="refine-side__icon-btn"
+              :class="{ 'is-active': maskMenuOpen }"
+              title="画笔"
+              :disabled="busy"
+              @click="onBrushParentClick"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 4 20 9 9 20H4v-5L15 4z" />
+              </svg>
+            </button>
+            <template v-if="maskMenuOpen">
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'eraser' }" title="橡皮" :disabled="busy" @click="editor.refineTool = 'eraser'">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m7 17-3-3 8-8 6 6-8 8H7zM14 8l2 2" />
+                </svg>
+              </button>
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'rect' }" title="矩形选区" :disabled="busy" @click="editor.refineTool = 'rect'">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2" />
+                </svg>
+              </button>
+              <label class="refine-side__color" title="选区颜色">
+                <input
+                  type="color"
+                  :value="editor.refineBrushColor"
+                  :disabled="busy"
+                  @input="onBrushColorInput"
+                >
+              </label>
+              <label class="refine-side__slider" title="笔刷粗细">
+                <input v-model.number="editor.refineBrushSize" type="range" min="4" max="80" :disabled="busy">
+                <span>{{ editor.refineBrushSize }}</span>
+              </label>
+              <button type="button" class="refine-side__icon-btn" title="清除选区" :disabled="busy" @click="editor.getRefineMask()?.clear()">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <path stroke-linecap="round" d="M5 7h14M10 7V5h4v2M8 7l1 12h6l1-12" />
+                </svg>
+              </button>
+            </template>
+          </div>
         </div>
 
         <div class="refine-dock__chips">
@@ -438,11 +578,40 @@ onBeforeUnmount(() => {
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.28);
 }
 
+.refine-side.is-collapsed {
+  overflow: hidden;
+}
+
 .refine-side.is-floating {
   z-index: 70;
   border: 1px solid var(--neo-border);
   border-radius: 12px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.refine-side.is-collapsed .refine-side__head {
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 8px 4px;
+}
+
+.refine-side__collapse {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neo-text-muted);
+  cursor: pointer;
+}
+
+.refine-side__collapse:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 
 .refine-resize {
@@ -497,11 +666,87 @@ onBeforeUnmount(() => {
   padding: 10px 12px 16px;
 }
 
-.refine-side__compare-head {
-  display: flex;
+.refine-side__icon-btn {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neo-text-muted);
+  cursor: pointer;
+}
+
+.refine-side__icon-btn:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.refine-side__icon-btn.is-active {
+  border-color: var(--neo-border-strong);
+  color: var(--neo-text-primary);
+  background: var(--neo-hover-bg);
+}
+
+.refine-side__icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.refine-side__toolbar {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+}
+
+.refine-side__icon-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.refine-side__divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--neo-border);
+}
+
+.refine-side__slider {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  color: var(--neo-text-muted);
+  font-size: 11px;
+}
+
+.refine-side__slider input {
+  min-width: 0;
+  flex: 1;
+}
+
+.refine-side__color {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  overflow: hidden;
+  border: 1px solid var(--neo-border);
+  border-radius: 8px;
+}
+
+.refine-side__color input {
+  height: 36px;
+  width: 36px;
+  margin: -4px;
+  cursor: pointer;
+  border: none;
+  background: none;
 }
 
 .refine-dock__tools,

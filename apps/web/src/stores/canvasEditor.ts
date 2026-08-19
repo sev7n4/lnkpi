@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
 import type { RefineChromeMode } from '@/utils/refineChrome'
+import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 
 export type RefineMaskTool = 'brush' | 'eraser' | 'rect'
+export type RefineLoupeShape = 'circle' | 'rect'
 
 export interface ImageEditTarget {
   nodeId: string
@@ -36,6 +38,13 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineBrushSize = ref(24)
   const refineCoverage = ref(0)
   const refineMask = shallowRef<RefineMaskHandle | null>(null)
+  const refineLoupeOn = ref(false)
+  const refineLoupeShape = ref<RefineLoupeShape>('circle')
+  const refineLoupeZoom = ref(2.5)
+  const refineBrushColor = ref('#22d3ee')
+  const refineMaskMenuOpen = ref(false)
+  const refinePanelWidth = ref(400)
+  const refinePanelCollapsed = ref(false)
 
   function resetRefineChromeState() {
     refineChrome.value = 'docked'
@@ -44,6 +53,13 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineBrushSize.value = 24
     refineCoverage.value = 0
     refineMask.value = null
+    refineLoupeOn.value = false
+    refineLoupeShape.value = 'circle'
+    refineLoupeZoom.value = 2.5
+    refineBrushColor.value = '#22d3ee'
+    refineMaskMenuOpen.value = false
+    refinePanelWidth.value = 400
+    refinePanelCollapsed.value = false
   }
 
   function openImageEditor(target: ImageEditTarget) {
@@ -78,6 +94,34 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     return refineMask.value
   }
 
+  function setRefineLoupe(on: boolean) {
+    refineLoupeOn.value = on
+  }
+
+  function setRefineLoupeShape(shape: RefineLoupeShape) {
+    refineLoupeShape.value = shape
+  }
+
+  function setRefineLoupeZoom(zoom: number) {
+    refineLoupeZoom.value = clampLoupeZoom(zoom)
+  }
+
+  function setRefineBrushColor(color: string) {
+    refineBrushColor.value = color
+  }
+
+  function setRefineMaskMenuOpen(open: boolean) {
+    refineMaskMenuOpen.value = open
+  }
+
+  function setRefinePanelWidth(width: number) {
+    refinePanelWidth.value = width
+  }
+
+  function setRefinePanelCollapsed(collapsed: boolean) {
+    refinePanelCollapsed.value = collapsed
+  }
+
   function openMediaPreview(target: MediaPreviewTarget) {
     previewTarget.value = target
   }
@@ -94,6 +138,13 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineTool,
     refineBrushSize,
     refineCoverage,
+    refineLoupeOn,
+    refineLoupeShape,
+    refineLoupeZoom,
+    refineBrushColor,
+    refineMaskMenuOpen,
+    refinePanelWidth,
+    refinePanelCollapsed,
     openImageEditor,
     closeImageEditor,
     setRefineBusy,
@@ -101,6 +152,13 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setCompareLightboxOpen,
     registerRefineMask,
     getRefineMask,
+    setRefineLoupe,
+    setRefineLoupeShape,
+    setRefineLoupeZoom,
+    setRefineBrushColor,
+    setRefineMaskMenuOpen,
+    setRefinePanelWidth,
+    setRefinePanelCollapsed,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,

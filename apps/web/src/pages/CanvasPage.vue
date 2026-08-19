@@ -116,6 +116,7 @@ import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
 import RefineSidePanel from '@/components/canvas/refine/RefineSidePanel.vue'
+import RefineWorkViewport from '@/components/canvas/refine/RefineWorkViewport.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -3244,6 +3245,13 @@ onUnmounted(() => {
         </VueFlow>
         <PlayCanvasView v-else class="h-full" :nodes="playCanvasNodes" />
 
+        <RefineWorkViewport
+          v-if="refinePanelNode"
+          v-show="!canvasEditor.compareLightboxOpen"
+          :url="refineBeforeUrl"
+          :width="refineMediaWidth"
+          :height="refineMediaHeight"
+        />
         <RefineSidePanel
           v-if="refinePanelNode"
           :node-id="refinePanelNode.id"

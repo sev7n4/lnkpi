@@ -5,8 +5,7 @@ import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { resolveMediaUrl } from '@/services/api-base'
 import { CX_IMAGE_EDIT_ENABLED, canOpenNodeImageEdit } from '@/utils/refineSession'
-import MaskEditor from '@/components/canvas/refine/MaskEditor.vue'
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
 import { useMediaInspector } from '@/composables/useMediaInspector'
@@ -42,32 +41,6 @@ const props = defineProps<{
 }>()
 
 const editor = useCanvasEditorStore()
-const maskRef = ref<InstanceType<typeof MaskEditor> | null>(null)
-const refiningThisNode = computed(() => editor.imageTarget?.nodeId === props.id)
-
-watch(
-  [refiningThisNode, maskRef],
-  async () => {
-    await nextTick()
-    if (!refiningThisNode.value || !maskRef.value) {
-      if (!refiningThisNode.value && editor.getRefineMask()) {
-        const handle = editor.getRefineMask()
-        if (handle && maskRef.value == null) editor.registerRefineMask(null)
-      }
-      return
-    }
-    editor.registerRefineMask({
-      exportPng: () => maskRef.value!.exportPng(),
-      clear: () => maskRef.value!.clear(),
-      getCanvas: () => maskRef.value!.getCanvas(),
-    })
-  },
-  { immediate: true },
-)
-
-onBeforeUnmount(() => {
-  if (editor.imageTarget?.nodeId === props.id) editor.registerRefineMask(null)
-})
 const route = useRoute()
 const { openInspector } = useMediaInspector()
 const sessionId = computed(() => route.params.sessionId as string | undefined)
@@ -182,18 +155,6 @@ function openMediaInspector(e: Event) {
         @dblclick.stop="openPreview"
       >
         <img :src="displayUrl" alt="" class="pointer-events-none" draggable="false">
-        <MaskEditor
-          v-if="refiningThisNode"
-          ref="maskRef"
-          surface="node"
-          :url="displayUrl"
-          :width="data.mediaInfo?.width"
-          :height="data.mediaInfo?.height"
-          :tool="editor.refineTool"
-          :brush-size="editor.refineBrushSize"
-          :disabled="editor.refineBusy"
-          @coverage="(p) => { editor.refineCoverage = p.ratio }"
-        />
         <button
           type="button"
           class="neo-node-preview-btn nodrag"
