@@ -185,13 +185,17 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
   }
 }
 
+function putRgba(ctx: CanvasRenderingContext2D, rgba: Uint8ClampedArray, width: number, height: number) {
+  const data = new Uint8ClampedArray(rgba)
+  ctx.putImageData(new ImageData(data, width, height), 0, 0)
+}
+
 function invertCanvas() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
   const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const next = invertMaskRgba(mask.data)
-  ctx.putImageData(new ImageData(next, canvas.width, canvas.height), 0, 0)
+  putRgba(ctx, invertMaskRgba(mask.data), canvas.width, canvas.height)
   emitCoverage()
 }
 
@@ -214,7 +218,7 @@ function onPointerDown(event: PointerEvent) {
       tolerance: props.wandTolerance,
       fillRgb: parseFillHex(props.color),
     })
-    ctx.putImageData(new ImageData(filled, canvas.width, canvas.height), 0, 0)
+    putRgba(ctx, filled, canvas.width, canvas.height)
     emitCoverage()
     return
   }
