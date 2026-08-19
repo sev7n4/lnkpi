@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { studioApi } from '@/services/studio-api'
 import { isMaskDrawReady, isRealBitmapSize } from './maskCanvasReady'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
+import { floodFillMask, invertMaskRgba, parseFillHex } from './maskWand'
 
-export type MaskTool = 'brush' | 'eraser' | 'rect'
+export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand'
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +17,7 @@ const props = withDefaults(
     disabled?: boolean
     surface?: 'panel' | 'node'
     color?: string
+    wandTolerance?: number
   }>(),
   {
     tool: 'brush',
@@ -23,6 +25,7 @@ const props = withDefaults(
     disabled: false,
     surface: 'panel',
     color: '#ffffff',
+    wandTolerance: 24,
   },
 )
 
@@ -42,6 +45,7 @@ let lastY = 0
 let rectStart: { x: number; y: number } | null = null
 let snapshot: ImageData | null = null
 let sizeToken = 0
+let imageRgba: Uint8ClampedArray | null = null
 
 function emitCoverage() {
   const canvas = canvasRef.value
@@ -70,6 +74,27 @@ function resizeCanvas(width: number, height: number) {
   canvas.height = nextHeight
   sizeReady.value = true
   emitCoverage()
+  loadImageRgba(nextWidth, nextHeight)
+}
+
+function loadImageRgba(width: number, height: number) {
+  imageRgba = null
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => {
+    const off = document.createElement('canvas')
+    off.width = width
+    off.height = height
+    const ctx = off.getContext('2d')
+    if (!ctx) return
+    ctx.drawImage(img, 0, 0, width, height)
+    try {
+      imageRgba = ctx.getImageData(0, 0, width, height).data
+    } catch {
+      imageRgba = null
+    }
+  }
+  img.src = props.url
 }
 
 async function resolveBitmapSize() {
@@ -103,6 +128,7 @@ watch(
   () => props.url,
   () => {
     sizeReady.value = false
+    imageRgba = null
     void resolveBitmapSize()
   },
 )
@@ -159,14 +185,41 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
   }
 }
 
+function invertCanvas() {
+  const canvas = canvasRef.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx) return
+  const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const next = invertMaskRgba(mask.data)
+  ctx.putImageData(new ImageData(next, canvas.width, canvas.height), 0, 0)
+  emitCoverage()
+}
+
 function onPointerDown(event: PointerEvent) {
   if (!drawReady.value) return
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
+  const pt = canvasPoint(event)
+  if (props.tool === 'wand') {
+    if (!imageRgba) return
+    const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const filled = floodFillMask({
+      width: canvas.width,
+      height: canvas.height,
+      imageRgba,
+      maskRgba: mask.data,
+      x: pt.x,
+      y: pt.y,
+      tolerance: props.wandTolerance,
+      fillRgb: parseFillHex(props.color),
+    })
+    ctx.putImageData(new ImageData(filled, canvas.width, canvas.height), 0, 0)
+    emitCoverage()
+    return
+  }
   canvas.setPointerCapture(event.pointerId)
   drawing = true
-  const pt = canvasPoint(event)
   lastX = pt.x
   lastY = pt.y
   applyToolStyle(ctx)
@@ -179,6 +232,7 @@ function onPointerDown(event: PointerEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
+  if (props.tool === 'wand') return
   if (!drawing || !drawReady.value) return
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
@@ -227,6 +281,7 @@ defineExpose({
   getCanvas: () => canvasRef.value,
   exportPng,
   clear: clearCanvas,
+  invert: invertCanvas,
 })
 </script>
 

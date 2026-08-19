@@ -158,6 +158,7 @@ watch([maskRef], async () => {
     exportPng: () => maskRef.value!.exportPng(),
     clear: () => maskRef.value!.clear(),
     getCanvas: () => maskRef.value!.getCanvas(),
+    invert: () => maskRef.value?.invert(),
   })
 }, { immediate: true })
 
@@ -211,6 +212,7 @@ onBeforeUnmount(() => {
               :tool="editor.refineTool"
               :brush-size="editor.refineBrushSize"
               :color="editor.refineBrushColor"
+              :wand-tolerance="editor.refineWandTolerance"
               :disabled="editor.refineBusy || spaceDown"
               @coverage="(p) => { editor.refineCoverage = p.ratio }"
             />
