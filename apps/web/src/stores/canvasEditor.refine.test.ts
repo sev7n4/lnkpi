@@ -37,4 +37,43 @@ describe('canvasEditor refine target', () => {
     expect(editor.imageTarget?.nodeId).toBe('n1')
     expect(editor.imageTarget?.url).toBe('https://cdn/a.png')
   })
+
+  it('defaults chrome to docked and resets on close', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.setRefineChrome('floating')
+    expect(editor.refineChrome).toBe('floating')
+    editor.closeImageEditor()
+    expect(editor.imageTarget).toBeNull()
+    expect(editor.refineChrome).toBe('docked')
+  })
+
+  it('resets overlay tool state when the session closes', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.refineTool = 'eraser'
+    editor.refineBrushSize = 48
+    editor.refineCoverage = 0.4
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.closeImageEditor()
+    expect(editor.refineTool).toBe('brush')
+    expect(editor.refineBrushSize).toBe(24)
+    expect(editor.refineCoverage).toBe(0)
+  })
+
+  it('registers and clears the mask handle with the session', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    const handle = {
+      exportPng: async () => new Blob(),
+      clear: () => {},
+      getCanvas: () => null,
+    }
+    editor.registerRefineMask(handle)
+    expect(editor.getRefineMask()).toBe(handle)
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.closeImageEditor()
+    expect(editor.getRefineMask()).toBeNull()
+  })
 })
