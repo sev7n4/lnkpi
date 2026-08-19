@@ -128,6 +128,7 @@ const props = defineProps<{
   selectedNodeId?: string | null
   /** M2: 选中节点数据，发送时升格为 canvasNode attachment */
   selectedNode?: { id: string; type?: string; data?: Record<string, unknown> } | null
+  canOpen?: () => boolean
 }>()
 
 const emit = defineEmits<{
@@ -1000,6 +1001,7 @@ watch(
 )
 
 function openPanel() {
+  if (props.canOpen && !props.canOpen()) return
   if (isMobileLayout.value) floating.value = false
   open.value = true
   emit('expandedChange', true)
@@ -1845,6 +1847,7 @@ function reconcileFromNodes(rawNodes: CanvasNodeLike[]) {
 
 defineExpose({
   openPanel,
+  closePanel,
   setComposerInput,
   addAttachment,
   reconcileFromNodes,
