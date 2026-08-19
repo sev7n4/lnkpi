@@ -348,8 +348,8 @@ Material 表本轮不扩列。画布节点不依赖 `Material` 版本。
 | Phase | 本规格 | 内容 |
 |-------|--------|------|
 | **P1** | **本文件** | 手动画 mask + 指令 + 左右对照 + 同节点版本链 + EditProvider Image2 + 服务端合成 + 替换旧编辑弹窗 + 修正 capabilities |
-| P2 | 后续 spec | 智能选区；Wipe 滑杆；工作室「最近生成」上的精修入口；编辑模型可选 |
-| P3 | 后续 spec | 抠图 / 透明底工具槽 |
+| P2 | 后续 spec | 智能选区（第一刀见 toolchain：魔棒；SAM/文本指代更后）；工作室「最近生成」上的精修入口；编辑模型可选。Wipe 已在 chrome |
+| P3 | 后续 spec | 抠图 / 透明底（toolchain 本轮仅禁用槽，不接上游） |
 | P4 | 后续 spec | 强度、Agent 自动 apply、局部超分 |
 
 P1 实施可再拆任务（mask 编辑器、API、Dock 接入、版本链、合成、Agent 文案），但不拆成多个产品规格。

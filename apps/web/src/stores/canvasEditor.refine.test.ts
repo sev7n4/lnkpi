@@ -69,6 +69,7 @@ describe('canvasEditor refine target', () => {
       exportPng: async () => new Blob(),
       clear: () => {},
       getCanvas: () => null,
+      invert: () => {},
     }
     editor.registerRefineMask(handle)
     expect(editor.getRefineMask()).toBe(handle)
@@ -122,5 +123,16 @@ describe('canvasEditor refine target', () => {
     editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
     editor.closeImageEditor()
     expect(editor.refinePanelCollapsed).toBe(false)
+  })
+
+  it('resets wand tolerance when the session closes', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.refineTool = 'wand'
+    editor.setRefineWandTolerance(40)
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.closeImageEditor()
+    expect(editor.refineTool).toBe('brush')
+    expect(editor.refineWandTolerance).toBe(24)
   })
 })
