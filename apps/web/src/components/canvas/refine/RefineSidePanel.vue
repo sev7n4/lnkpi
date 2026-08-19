@@ -151,6 +151,12 @@ function onBrushColorInput(event: Event) {
   editor.setRefineBrushColor(target.value)
 }
 
+function onWandToleranceInput(event: Event) {
+  const target = event.target
+  if (!(target instanceof HTMLInputElement)) return
+  editor.setRefineWandTolerance(Number(target.value))
+}
+
 function onSelectVersion(versionId: string) {
   if (busy.value) return
   const version = props.versions.find((item) => item.id === versionId)
@@ -511,6 +517,41 @@ onBeforeUnmount(() => {
               </button>
             </template>
           </div>
+          <div class="refine-side__icon-row">
+            <button
+              type="button"
+              class="refine-side__icon-btn"
+              :class="{ 'is-active': editor.refineTool === 'wand' }"
+              title="魔棒"
+              :disabled="busy"
+              @click="editor.refineTool = 'wand'"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linecap="round" d="M7 17 17 7" />
+                <path d="M15.5 5.5 18.5 8.5 9 18H6v-3Z" />
+              </svg>
+            </button>
+            <template v-if="editor.refineTool === 'wand'">
+              <label class="refine-side__slider" title="魔棒容差">
+                <input
+                  type="range"
+                  min="0"
+                  max="48"
+                  step="1"
+                  :value="editor.refineWandTolerance"
+                  :disabled="busy"
+                  @input="onWandToleranceInput"
+                >
+                <span>{{ editor.refineWandTolerance }}</span>
+              </label>
+              <button type="button" class="refine-side__icon-btn" title="反向选区" :disabled="busy" @click="editor.getRefineMask()?.invert()">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                  <circle cx="12" cy="12" r="7" />
+                  <path d="M12 5a7 7 0 0 1 0 14Z" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+            </template>
+          </div>
         </div>
 
         <div class="refine-dock__chips">
@@ -540,6 +581,7 @@ onBeforeUnmount(() => {
         <div class="bottom-toolbar-actions refine-dock__actions">
           <DockCreditBadge :credits="credits" />
           <button type="button" class="refine-dock__primary" :disabled="refineDisabled" @click="runRefine">精修</button>
+          <button type="button" class="refine-dock__apply" disabled title="抠图将走专用通道，尚未接入">抠图</button>
           <button v-if="canApply" type="button" class="refine-dock__apply" :disabled="busy" @click="onApply">应用到节点</button>
         </div>
 
