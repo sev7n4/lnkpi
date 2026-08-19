@@ -14,11 +14,13 @@ const props = withDefaults(
     tool?: MaskTool
     brushSize?: number
     disabled?: boolean
+    surface?: 'panel' | 'node'
   }>(),
   {
     tool: 'brush',
     brushSize: 24,
     disabled: false,
+    surface: 'panel',
   },
 )
 
@@ -227,8 +229,9 @@ defineExpose({
 </script>
 
 <template>
-  <div class="mask-editor">
+  <div class="mask-editor" :class="{ 'mask-editor--node': surface === 'node' }">
     <img
+      v-if="surface !== 'node'"
       class="mask-editor__image"
       :src="url"
       alt=""
@@ -236,7 +239,7 @@ defineExpose({
     >
     <canvas
       ref="canvasRef"
-      class="mask-editor__canvas"
+      class="mask-editor__canvas nodrag nowheel"
       :class="{ 'is-disabled': !drawReady }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
@@ -278,5 +281,19 @@ defineExpose({
 .mask-editor__canvas.is-disabled {
   pointer-events: none;
   cursor: not-allowed;
+}
+
+.mask-editor--node {
+  position: absolute;
+  inset: 0;
+  display: block;
+  max-width: none;
+}
+
+.mask-editor--node .mask-editor__canvas {
+  width: 100%;
+  height: 100%;
+  opacity: 0.55;
+  mix-blend-mode: screen;
 }
 </style>
