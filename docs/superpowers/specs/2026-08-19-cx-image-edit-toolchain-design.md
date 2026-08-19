@@ -1,7 +1,7 @@
 # 画布精修工具链（选区槽 + 作业槽）Design
 
 **Date:** 2026-08-19  
-**Status:** Draft pending user review  
+**Status:** Approved, plan in `2026-08-19-cx-image-edit-toolchain.md`  
 **代号:** **CX-IMAGE-EDIT-TOOLCHAIN**  
 **Related:**
 - `2026-08-18-cx-image-edit-design.md` — 作业 A+B（去污渍 / 替换局部）、EditProvider、合成、版本链、积分仍有效
