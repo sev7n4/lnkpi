@@ -1,7 +1,7 @@
 # 画布图像精修壳层（Side panel + 节点选区 + 对照）Design
 
 **Date:** 2026-08-19  
-**Status:** Draft pending user review of this file  
+**Status:** Approved, plan in 2026-08-19-cx-image-edit-sidepanel.md  
 **代号:** **CX-IMAGE-EDIT-CHROME**（P1 后端不变，只改画布精修壳层）  
 **Related:**
 - `2026-08-18-cx-image-edit-design.md` — P1 作业、积分、EditProvider、合成、版本链仍有效；**本文覆盖其入口布局、mask 表面、对照形态**
