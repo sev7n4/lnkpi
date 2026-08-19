@@ -3,8 +3,9 @@ import { ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
 import type { RefineChromeMode } from '@/utils/refineChrome'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
+import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 
-export type RefineMaskTool = 'brush' | 'eraser' | 'rect'
+export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand'
 export type RefineLoupeShape = 'circle' | 'rect'
 
 export interface ImageEditTarget {
@@ -26,6 +27,7 @@ export type RefineMaskHandle = {
   exportPng: () => Promise<Blob>
   clear: () => void
   getCanvas: () => HTMLCanvasElement | null
+  invert: () => void
 }
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
@@ -43,6 +45,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineLoupeZoom = ref(2.5)
   const refineBrushColor = ref('#22d3ee')
   const refineMaskMenuOpen = ref(false)
+  const refineWandTolerance = ref(24)
   const refinePanelWidth = ref(400)
   const refinePanelCollapsed = ref(false)
 
@@ -58,6 +61,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineLoupeZoom.value = 2.5
     refineBrushColor.value = '#22d3ee'
     refineMaskMenuOpen.value = false
+    refineWandTolerance.value = 24
     refinePanelWidth.value = 400
     refinePanelCollapsed.value = false
   }
@@ -114,6 +118,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskMenuOpen.value = open
   }
 
+  function setRefineWandTolerance(n: number) {
+    refineWandTolerance.value = clampWandTolerance(n)
+  }
+
   function setRefinePanelWidth(width: number) {
     refinePanelWidth.value = width
   }
@@ -143,6 +151,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineLoupeZoom,
     refineBrushColor,
     refineMaskMenuOpen,
+    refineWandTolerance,
     refinePanelWidth,
     refinePanelCollapsed,
     openImageEditor,
@@ -157,6 +166,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineLoupeZoom,
     setRefineBrushColor,
     setRefineMaskMenuOpen,
+    setRefineWandTolerance,
     setRefinePanelWidth,
     setRefinePanelCollapsed,
     previewTarget,
