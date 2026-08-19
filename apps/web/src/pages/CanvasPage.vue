@@ -62,6 +62,7 @@ import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDi
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
+import { decideAgentOpenWhileRefine, shouldApplyRefineToNode } from '@/utils/refineChrome'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
@@ -114,7 +115,8 @@ import {
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
-import RefineDockPanel from '@/components/canvas/refine/RefineDockPanel.vue'
+import RefineSidePanel from '@/components/canvas/refine/RefineSidePanel.vue'
+import RefineWorkViewport from '@/components/canvas/refine/RefineWorkViewport.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -138,7 +140,7 @@ const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
 const canvasEditor = useCanvasEditorStore()
-const { registerLocateNodeHandler } = useMediaInspector()
+const { registerLocateNodeHandler, closeInspector } = useMediaInspector()
 const sessionId = computed(() => route.params.sessionId as string)
 
 interface CanvasEdge {
@@ -2314,6 +2316,16 @@ function openRefineForNode(node: EditableFlowNode | null | undefined) {
     url: String(nextData.url ?? url),
     prompt: typeof nextData.prompt === 'string' ? nextData.prompt : undefined,
   })
+  closeInspector()
+  agentRailRef.value?.closePanel()
+  void nextTick(async () => {
+    await vueFlowRef.value?.fitView({
+      nodes: [node.id],
+      padding: 0.38,
+      duration: 320,
+      maxZoom: 1.2,
+    })
+  })
 }
 
 function openRefineForSelected() {
@@ -2329,6 +2341,9 @@ function handleRefineApply(payload: { url: string; prompt: string; recordId?: st
   if (!nodeId) return
   const node = findNodeById(nodeId)
   if (!node) return
+  const nodeUrl = String((node.data as Record<string, unknown> | undefined)?.url ?? '')
+  const sessionBeforeUrl = String(canvasEditor.imageTarget?.url ?? '')
+  if (!shouldApplyRefineToNode({ nodeUrl, sessionBeforeUrl })) return
   const next = appendEditVersion(imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>), {
     id: crypto.randomUUID(),
     url: payload.url,
@@ -2992,6 +3007,20 @@ function onAgentExpandedChange(expanded: boolean) {
   agentPanelExpanded.value = expanded
 }
 
+function canOpenAgentPanel(): boolean {
+  const d = decideAgentOpenWhileRefine({
+    refineOpen: Boolean(canvasEditor.imageTarget),
+    refineBusy: canvasEditor.refineBusy,
+    refineChrome: canvasEditor.refineChrome,
+  })
+  if (d === 'block') {
+    ElMessage.warning('精修进行中，请先取消')
+    return false
+  }
+  if (d === 'dismiss-refine') canvasEditor.closeImageEditor()
+  return true
+}
+
 watch(
   () => pickMode.active.value,
   (active, prev) => {
@@ -3216,27 +3245,30 @@ onUnmounted(() => {
         </VueFlow>
         <PlayCanvasView v-else class="h-full" :nodes="playCanvasNodes" />
 
-        <div
+        <RefineWorkViewport
           v-if="refinePanelNode"
-          class="dock-studio-toolbar pointer-events-none absolute inset-x-0 bottom-3 z-[45] flex justify-center px-4"
-        >
-          <RefineDockPanel
-            :node-id="refinePanelNode.id"
-            :before-url="refineBeforeUrl"
-            :versions="refineVersions"
-            :current-version-id="refineCurrentVersionId"
-            :session-id="sessionId"
-            :generation-record-id="refineGenerationRecordId"
-            :width="refineMediaWidth"
-            :height="refineMediaHeight"
-            @close="closeRefineWorkbench"
-            @apply="handleRefineApply"
-            @revert="handleRefineRevert"
-            @busy="canvasEditor.setRefineBusy"
-          />
-        </div>
+          v-show="!canvasEditor.compareLightboxOpen"
+          :url="refineBeforeUrl"
+          :width="refineMediaWidth"
+          :height="refineMediaHeight"
+        />
+        <RefineSidePanel
+          v-if="refinePanelNode"
+          :node-id="refinePanelNode.id"
+          :before-url="refineBeforeUrl"
+          :versions="refineVersions"
+          :current-version-id="refineCurrentVersionId"
+          :session-id="sessionId"
+          :generation-record-id="refineGenerationRecordId"
+          :width="refineMediaWidth"
+          :height="refineMediaHeight"
+          @close="closeRefineWorkbench"
+          @apply="handleRefineApply"
+          @revert="handleRefineRevert"
+          @busy="canvasEditor.setRefineBusy"
+        />
         <DockStudioToolbar
-          v-else
+          v-if="!refinePanelNode"
           :node="editorNode"
           :upstream="editorUpstream"
           :refs="selectedRefs"
@@ -3338,6 +3370,7 @@ onUnmounted(() => {
         @open-image-editor="handleAgentOpenImageEditor"
         @canvas-ref-pick-toggle="handleCanvasRefPickToggle"
         @expanded-change="onAgentExpandedChange"
+        :can-open="canOpenAgentPanel"
       />
     </div>
 

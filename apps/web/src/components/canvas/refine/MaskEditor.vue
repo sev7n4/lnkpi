@@ -14,11 +14,15 @@ const props = withDefaults(
     tool?: MaskTool
     brushSize?: number
     disabled?: boolean
+    surface?: 'panel' | 'node'
+    color?: string
   }>(),
   {
     tool: 'brush',
     brushSize: 24,
     disabled: false,
+    surface: 'panel',
+    color: '#ffffff',
   },
 )
 
@@ -150,8 +154,8 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = 'rgba(0,0,0,1)'
   } else {
     ctx.globalCompositeOperation = 'source-over'
-    ctx.strokeStyle = 'rgba(255,255,255,1)'
-    ctx.fillStyle = 'rgba(255,255,255,1)'
+    ctx.strokeStyle = props.color
+    ctx.fillStyle = props.color
   }
 }
 
@@ -184,7 +188,7 @@ function onPointerMove(event: PointerEvent) {
     ctx.putImageData(snapshot, 0, 0)
     applyToolStyle(ctx)
     ctx.globalCompositeOperation = 'source-over'
-    ctx.fillStyle = 'rgba(255,255,255,1)'
+    ctx.fillStyle = props.color
     const x = Math.min(rectStart.x, pt.x)
     const y = Math.min(rectStart.y, pt.y)
     ctx.fillRect(x, y, Math.abs(pt.x - rectStart.x), Math.abs(pt.y - rectStart.y))
@@ -227,8 +231,9 @@ defineExpose({
 </script>
 
 <template>
-  <div class="mask-editor">
+  <div class="mask-editor" :class="{ 'mask-editor--node': surface === 'node' }">
     <img
+      v-if="surface !== 'node'"
       class="mask-editor__image"
       :src="url"
       alt=""
@@ -236,7 +241,7 @@ defineExpose({
     >
     <canvas
       ref="canvasRef"
-      class="mask-editor__canvas"
+      class="mask-editor__canvas nodrag nowheel"
       :class="{ 'is-disabled': !drawReady }"
       @pointerdown="onPointerDown"
       @pointermove="onPointerMove"
@@ -278,5 +283,19 @@ defineExpose({
 .mask-editor__canvas.is-disabled {
   pointer-events: none;
   cursor: not-allowed;
+}
+
+.mask-editor--node {
+  position: absolute;
+  inset: 0;
+  display: block;
+  max-width: none;
+}
+
+.mask-editor--node .mask-editor__canvas {
+  width: 100%;
+  height: 100%;
+  opacity: 0.55;
+  mix-blend-mode: screen;
 }
 </style>

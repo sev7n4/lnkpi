@@ -1,4 +1,7 @@
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { decideInspectorOpenWhileRefine } from '@/utils/refineChrome'
 import type { MediaInfo, ProbedMediaFile } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 
@@ -200,6 +203,16 @@ export function buildAssetMediaInfoSummary(asset: AssetMediaSource): NodeMediaIn
 
 export function useMediaInspector() {
   async function openInspector(next: MediaInspectorTarget) {
+    const editor = useCanvasEditorStore()
+    const d = decideInspectorOpenWhileRefine({
+      refineOpen: Boolean(editor.imageTarget),
+      refineBusy: editor.refineBusy,
+    })
+    if (d === 'block') {
+      ElMessage.warning('精修进行中，请先取消')
+      return
+    }
+    if (d === 'dismiss-refine') editor.closeImageEditor()
     target.value = next
     open.value = true
     error.value = null

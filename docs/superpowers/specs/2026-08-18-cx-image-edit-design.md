@@ -7,6 +7,7 @@
 - `2026-08-08-image-upstream-capability-design.md` §7 / §13.2（生成 vs 编辑边界；本文件落地其独立规格）
 - `2026-07-19-dock-studio-model-adapter-design.md`（C1 生成适配层；精修**不**扩展 `ImageProvider.generate()`）
 - `2026-08-15-media-inspector-design.md`（Inspector 只读；版本回看可挂 L1，P1 以精修面板内版本条为准）
+- `2026-08-19-cx-image-edit-sidepanel-design.md` — **覆盖本文件入口布局、mask 表面、对照形态**（含重叠滑竿提前到本轮；上下擦除 / 溶解 / 闪光仍为后续）。作业、积分、EditProvider、合成、版本链仍以本文件为准
 - 现有入口：`AIImageEditor.vue`、节点「编辑图像」、`open_image_editor`
 
 ---
