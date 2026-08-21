@@ -1,7 +1,7 @@
 # 画布精修选区链第二刀（多边形套索 + 魔棒减选）Design
 
 **Date:** 2026-08-21  
-**Status:** Draft pending user review  
+**Status:** Approved, plan in `2026-08-21-cx-image-edit-selection-tools.md`  
 **代号:** **CX-IMAGE-EDIT-SELECTION-TOOLS**  
 **Related:**
 - `2026-08-19-cx-image-edit-toolchain-design.md` — 第一刀魔棒 + 反向 + 禁用抠图槽；本文件为其选区链续篇
