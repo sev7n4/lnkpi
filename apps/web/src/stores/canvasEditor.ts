@@ -5,7 +5,8 @@ import type { RefineChromeMode } from '@/utils/refineChrome'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 
-export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand'
+export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon'
+export type RefineMaskOp = 'add' | 'subtract'
 export type RefineLoupeShape = 'circle' | 'rect'
 
 export interface ImageEditTarget {
@@ -46,6 +47,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineBrushColor = ref('#22d3ee')
   const refineMaskMenuOpen = ref(false)
   const refineWandTolerance = ref(24)
+  const refineMaskOp = ref<RefineMaskOp>('add')
   const refinePanelWidth = ref(400)
   const refinePanelCollapsed = ref(false)
 
@@ -62,6 +64,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineBrushColor.value = '#22d3ee'
     refineMaskMenuOpen.value = false
     refineWandTolerance.value = 24
+    refineMaskOp.value = 'add'
     refinePanelWidth.value = 400
     refinePanelCollapsed.value = false
   }
@@ -122,6 +125,12 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineWandTolerance.value = clampWandTolerance(n)
   }
 
+  function setRefineTool(tool: RefineMaskTool) {
+    refineTool.value = tool
+    if (tool === 'eraser') refineMaskOp.value = 'subtract'
+    else if (tool === 'brush' || tool === 'rect') refineMaskOp.value = 'add'
+  }
+
   function setRefinePanelWidth(width: number) {
     refinePanelWidth.value = width
   }
@@ -152,6 +161,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineBrushColor,
     refineMaskMenuOpen,
     refineWandTolerance,
+    refineMaskOp,
     refinePanelWidth,
     refinePanelCollapsed,
     openImageEditor,
@@ -167,6 +177,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineBrushColor,
     setRefineMaskMenuOpen,
     setRefineWandTolerance,
+    setRefineTool,
     setRefinePanelWidth,
     setRefinePanelCollapsed,
     previewTarget,

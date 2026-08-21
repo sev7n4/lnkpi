@@ -213,6 +213,7 @@ onBeforeUnmount(() => {
               :brush-size="editor.refineBrushSize"
               :color="editor.refineBrushColor"
               :wand-tolerance="editor.refineWandTolerance"
+              :mask-op="editor.refineMaskOp"
               :disabled="editor.refineBusy || spaceDown"
               @coverage="(p) => { editor.refineCoverage = p.ratio }"
             />

@@ -107,6 +107,26 @@ describe('floodFillMask', () => {
     expect(count(tight)).toBe(1)
     expect(count(wide)).toBe(3)
   })
+
+  it('subtract clears 4-connected pixels to transparent', () => {
+    const image = rgba([255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 255, 255])
+    const mask = rgba([
+      255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    ])
+    const next = floodFillMask({
+      width: 3,
+      height: 1,
+      imageRgba: image,
+      maskRgba: mask,
+      x: 0,
+      y: 0,
+      tolerance: 0,
+      fillRgb: [9, 9, 9],
+      mode: 'subtract',
+    })
+    expect([...next.slice(0, 8)]).toEqual([0, 0, 0, 0, 0, 0, 0, 0])
+    expect([...next.slice(8, 12)]).toEqual([255, 255, 255, 255])
+  })
 })
 
 describe('invertMaskRgba', () => {

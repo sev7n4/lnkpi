@@ -177,11 +177,11 @@ function onBrushParentClick() {
   if (busy.value) return
   if (!editor.refineMaskMenuOpen) {
     editor.setRefineMaskMenuOpen(true)
-    editor.refineTool = 'brush'
+    editor.setRefineTool('brush')
     return
   }
   if (editor.refineTool !== 'brush') {
-    editor.refineTool = 'brush'
+    editor.setRefineTool('brush')
     return
   }
   editor.setRefineMaskMenuOpen(false)
@@ -488,12 +488,12 @@ onBeforeUnmount(() => {
               </svg>
             </button>
             <template v-if="maskMenuOpen">
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'eraser' }" title="橡皮" :disabled="busy" @click="editor.refineTool = 'eraser'">
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'eraser' }" title="橡皮" :disabled="busy" @click="editor.setRefineTool('eraser')">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m7 17-3-3 8-8 6 6-8 8H7zM14 8l2 2" />
                 </svg>
               </button>
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'rect' }" title="矩形选区" :disabled="busy" @click="editor.refineTool = 'rect'">
+              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'rect' }" title="矩形选区" :disabled="busy" @click="editor.setRefineTool('rect')">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
                   <rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2" />
                 </svg>
@@ -522,13 +522,25 @@ onBeforeUnmount(() => {
               type="button"
               class="refine-side__icon-btn"
               :class="{ 'is-active': editor.refineTool === 'wand' }"
-              title="魔棒"
+              :title="editor.refineMaskOp === 'subtract' ? '魔棒减选' : '魔棒'"
               :disabled="busy"
-              @click="editor.refineTool = 'wand'"
+              @click="editor.setRefineTool('wand')"
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linecap="round" d="M7 17 17 7" />
                 <path d="M15.5 5.5 18.5 8.5 9 18H6v-3Z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="refine-side__icon-btn"
+              :class="{ 'is-active': editor.refineTool === 'polygon' }"
+              :title="editor.refineMaskOp === 'subtract' ? '多边形减选' : '多边形选区'"
+              :disabled="busy"
+              @click="editor.setRefineTool('polygon')"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <path stroke-linejoin="round" d="M12 4 20 9.5 17 19H7L4 9.5Z" />
               </svg>
             </button>
             <template v-if="editor.refineTool === 'wand'">
