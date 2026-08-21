@@ -19,6 +19,20 @@
   cursor: text;
 }
 
+.neo-node-external-footer {
+  position: absolute;
+  bottom: -32px;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  pointer-events: auto;
+  min-width: 0;
+}
+
 .neo-node-icon {
   display: flex;
   width: 24px;

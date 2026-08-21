@@ -6,11 +6,11 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
-import { useMediaInspector } from '@/composables/useMediaInspector'
+import { useMediaInspector, type NodeMediaInfoSummary } from '@/composables/useMediaInspector'
+import { useNodeMediaInfoFooter } from '@/composables/useNodeMediaInfoFooter'
 import { downloadMediaFile, isUpstreamMediaUrl, mediaDownloadName, UPSTREAM_MEDIA_DOWNLOAD_HINT } from '@/composables/useCanvasMedia'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 import { NODE_GENERATION_STATUS } from '@/constants/dockStudio'
-import type { MediaRefWarningLevel } from '@lnkpi/shared'
 
 const props = defineProps<{
   id: string
@@ -26,15 +26,7 @@ const props = defineProps<{
     generationStartedAt?: string
     generationRecordId?: string
     materialId?: string
-    mediaInfo?: {
-      kind?: 'image' | 'video'
-      width?: number
-      height?: number
-      bytes?: number
-      aspectRatio?: string
-      resolution?: string
-      refWarning?: MediaRefWarningLevel
-    }
+    mediaInfo?: NodeMediaInfoSummary
   }
 }>()
 
@@ -60,11 +52,15 @@ const downloadTitle = computed(() =>
     ? UPSTREAM_MEDIA_DOWNLOAD_HINT
     : '下载视频',
 )
-const showMediaSummary = computed(
-  () => props.data.status === NODE_GENERATION_STATUS.completed && Boolean(props.data.mediaInfo),
-)
+const showMediaSummary = computed(() => Boolean(props.data.url && props.data.mediaInfo))
 const showInspectorBtn = computed(() => Boolean(props.data.generationRecordId))
 const isCompleted = computed(() => props.data.status === NODE_GENERATION_STATUS.completed)
+useNodeMediaInfoFooter({
+  nodeId: props.id,
+  url: computed(() => props.data.url),
+  kind: 'video',
+  mediaInfo: computed(() => props.data.mediaInfo),
+})
 const {
   accept,
   dragOver,
@@ -151,6 +147,9 @@ onUnmounted(() => {
 
 <template>
   <NeoBaseNode node-type="video" :selected="selected" :data="data" :status="data.status">
+    <template v-if="showMediaSummary && data.mediaInfo" #footer>
+      <MediaInfoSummary v-bind="data.mediaInfo" />
+    </template>
     <div
       class="neo-gen-card neo-node-upload-target"
       :class="{
@@ -236,11 +235,6 @@ onUnmounted(() => {
             <path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
         </button>
-        <MediaInfoSummary
-          v-if="showMediaSummary && data.mediaInfo"
-          v-bind="data.mediaInfo"
-          class="neo-media-info-summary--overlay"
-        />
         <button
           v-if="showInspectorBtn"
           type="button"

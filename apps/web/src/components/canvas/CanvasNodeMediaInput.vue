@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { computed } from 'vue'
+import { useNode } from '@vue-flow/core'
 import { resolveMediaUrl } from '@/services/api-base'
+import { useNodeMediaInfoFooter } from '@/composables/useNodeMediaInfoFooter'
+import type { NodeMediaInfoSummary } from '@/composables/useMediaInspector'
 
 const props = defineProps<{
   selected?: boolean
@@ -12,8 +16,11 @@ const props = defineProps<{
     label?: string
     mimeType?: string
     mediaKind?: string
+    mediaInfo?: NodeMediaInfoSummary
   }
 }>()
+
+const { id: nodeId } = useNode()
 
 const mediaKind = computed(() => {
   const kind = props.data.mediaKind
@@ -25,15 +32,31 @@ const mediaKind = computed(() => {
 })
 
 const displayUrl = computed(() => resolveMediaUrl(String(props.data.url ?? '')))
+const showMediaSummary = computed(() => Boolean(props.data.url && props.data.mediaInfo))
+
+const { applyDurationSec } = useNodeMediaInfoFooter({
+  nodeId,
+  url: computed(() => props.data.url),
+  kind: mediaKind,
+  mediaInfo: computed(() => props.data.mediaInfo),
+})
+
+function onAudioLoadedMetadata(e: Event) {
+  const el = e.target as HTMLAudioElement
+  if (Number.isFinite(el.duration)) applyDurationSec(el.duration)
+}
 </script>
 
 <template>
   <NeoBaseNode node-type="mediaInput" :selected="selected" :data="data" :status="data.status">
+    <template v-if="showMediaSummary && data.mediaInfo" #footer>
+      <MediaInfoSummary v-bind="data.mediaInfo" />
+    </template>
     <div class="neo-gen-card">
       <div v-if="data.url" class="neo-gen-preview">
         <video v-if="mediaKind === 'video'" :src="displayUrl" class="h-full w-full object-cover" muted playsinline />
         <div v-else-if="mediaKind === 'audio'" class="flex h-full items-center justify-center p-2">
-          <audio :src="displayUrl" controls class="w-full" />
+          <audio :src="displayUrl" controls class="w-full" @loadedmetadata="onAudioLoadedMetadata" />
         </div>
         <img v-else :src="displayUrl" alt="">
       </div>

@@ -6,12 +6,14 @@ import type { MediaInfo, ProbedMediaFile } from '@lnkpi/shared'
 import { studioApi, type GenerationRecord } from '@/services/studio-api'
 
 export interface NodeMediaInfoSummary {
-  kind?: 'image' | 'video'
+  kind?: 'image' | 'video' | 'audio'
   width?: number
   height?: number
   bytes?: number
   aspectRatio?: string
   resolution?: string
+  durationSec?: number
+  format?: string
   refWarning?: 'warn' | 'error'
 }
 
