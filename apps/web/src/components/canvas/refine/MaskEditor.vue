@@ -3,9 +3,11 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { studioApi } from '@/services/studio-api'
 import { isMaskDrawReady, isRealBitmapSize } from './maskCanvasReady'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
+import { fillPolygonMask, isNearPolygonStart } from './maskPolygon'
 import { floodFillMask, invertMaskRgba, parseFillHex } from './maskWand'
 
-export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand'
+export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon'
+export type MaskOp = 'add' | 'subtract'
 
 const props = withDefaults(
   defineProps<{
@@ -18,6 +20,7 @@ const props = withDefaults(
     surface?: 'panel' | 'node'
     color?: string
     wandTolerance?: number
+    maskOp?: MaskOp
   }>(),
   {
     tool: 'brush',
@@ -26,6 +29,7 @@ const props = withDefaults(
     surface: 'panel',
     color: '#ffffff',
     wandTolerance: 24,
+    maskOp: 'add',
   },
 )
 
@@ -46,6 +50,32 @@ let rectStart: { x: number; y: number } | null = null
 let snapshot: ImageData | null = null
 let sizeToken = 0
 let imageRgba: Uint8ClampedArray | null = null
+let polygonPoints: Array<{ x: number; y: number }> = []
+const polygonPreview = ref<Array<{ x: number; y: number }> | null>(null)
+
+function cancelPolygonDraft() {
+  polygonPoints = []
+  polygonPreview.value = null
+}
+
+function commitPolygon(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+  if (polygonPoints.length < 3) {
+    cancelPolygonDraft()
+    return
+  }
+  const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const next = fillPolygonMask({
+    width: canvas.width,
+    height: canvas.height,
+    maskRgba: mask.data,
+    points: polygonPoints,
+    fillRgb: parseFillHex(props.color),
+    mode: props.maskOp === 'subtract' ? 'subtract' : 'add',
+  })
+  putRgba(ctx, next, canvas.width, canvas.height)
+  cancelPolygonDraft()
+  emitCoverage()
+}
 
 function emitCoverage() {
   const canvas = canvasRef.value
@@ -140,11 +170,7 @@ watch(
   },
 )
 
-onMounted(() => {
-  void resolveBitmapSize()
-})
-
-function canvasPoint(event: PointerEvent): { x: number; y: number } {
+function canvasPoint(event: { clientX: number; clientY: number }): { x: number; y: number } {
   const canvas = canvasRef.value
   if (!canvas) return { x: 0, y: 0 }
   const rect = canvas.getBoundingClientRect()
@@ -217,9 +243,19 @@ function onPointerDown(event: PointerEvent) {
       y: pt.y,
       tolerance: props.wandTolerance,
       fillRgb: parseFillHex(props.color),
+      mode: props.maskOp === 'subtract' ? 'subtract' : 'add',
     })
     putRgba(ctx, filled, canvas.width, canvas.height)
     emitCoverage()
+    return
+  }
+  if (props.tool === 'polygon') {
+    if (polygonPoints.length >= 3 && isNearPolygonStart(polygonPoints, pt.x, pt.y)) {
+      commitPolygon(ctx, canvas)
+      return
+    }
+    polygonPoints.push(pt)
+    polygonPreview.value = [...polygonPoints]
     return
   }
   canvas.setPointerCapture(event.pointerId)
@@ -235,8 +271,24 @@ function onPointerDown(event: PointerEvent) {
   paintDot(ctx, pt.x, pt.y)
 }
 
+function onDblClick(event: MouseEvent) {
+  if (props.tool !== 'polygon' || !drawReady.value) return
+  event.preventDefault()
+  if (polygonPoints.length >= 4) polygonPoints.pop()
+  const canvas = canvasRef.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx) return
+  commitPolygon(ctx, canvas)
+}
+
 function onPointerMove(event: PointerEvent) {
   if (props.tool === 'wand') return
+  if (props.tool === 'polygon') {
+    if (!drawReady.value) return
+    const pt = canvasPoint(event)
+    polygonPreview.value = [...polygonPoints, pt]
+    return
+  }
   if (!drawing || !drawReady.value) return
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
@@ -271,8 +323,25 @@ function onPointerUp(event: PointerEvent) {
   emitCoverage()
 }
 
+function onKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape') cancelPolygonDraft()
+}
+
+watch(
+  () => props.tool,
+  () => {
+    cancelPolygonDraft()
+  },
+)
+
+onMounted(() => {
+  void resolveBitmapSize()
+  window.addEventListener('keydown', onKeyDown)
+})
+
 onBeforeUnmount(() => {
   drawing = false
+  window.removeEventListener('keydown', onKeyDown)
 })
 
 async function exportPng(): Promise<Blob> {
@@ -281,11 +350,18 @@ async function exportPng(): Promise<Blob> {
   return exportMaskPng(canvas)
 }
 
+const polygonPolyline = computed(() => {
+  const pts = polygonPreview.value
+  if (!pts?.length) return ''
+  return pts.map((p) => `${p.x},${p.y}`).join(' ')
+})
+
 defineExpose({
   getCanvas: () => canvasRef.value,
   exportPng,
   clear: clearCanvas,
   invert: invertCanvas,
+  cancelPolygonDraft,
 })
 </script>
 
@@ -306,7 +382,23 @@ defineExpose({
       @pointermove="onPointerMove"
       @pointerup="onPointerUp"
       @pointercancel="onPointerUp"
+      @dblclick="onDblClick"
     />
+    <svg
+      v-if="polygonPolyline && canvasRef"
+      class="mask-editor__polygon-preview"
+      :viewBox="`0 0 ${canvasRef.width} ${canvasRef.height}`"
+      preserveAspectRatio="none"
+    >
+      <polyline
+        :points="polygonPolyline"
+        fill="none"
+        :stroke="color"
+        stroke-width="2"
+        stroke-dasharray="4 3"
+        vector-effect="non-scaling-stroke"
+      />
+    </svg>
   </div>
 </template>
 
@@ -342,6 +434,15 @@ defineExpose({
 .mask-editor__canvas.is-disabled {
   pointer-events: none;
   cursor: not-allowed;
+}
+
+.mask-editor__polygon-preview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.9;
 }
 
 .mask-editor--node {
