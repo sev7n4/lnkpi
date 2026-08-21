@@ -156,8 +156,9 @@ mask + 指令 → `POST /studio/image/edit` → After → 合成保真 → 应�
 
 | 刀 | 内容 |
 |----|------|
-| 选区 2 | SAM / 点击主体；再后文本指代 |
-| 作业 2 | CutoutProvider + 真透明底；capabilities 才加 `remove_bg` |
+| 选区 2 | 多边形套索 + 魔棒减选 — 见 `2026-08-21-cx-image-edit-selection-tools-design.md` |
+| 选区 3 | SAM / 点击主体；再后文本指代 |
+| 作业 2 | CutoutProvider + 真透明底（搁置）；capabilities 才加 `remove_bg` |
 | 壳 | 上下擦除 / 溶解 / 闪光 |
 
 ---
