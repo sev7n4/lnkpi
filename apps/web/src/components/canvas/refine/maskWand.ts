@@ -37,8 +37,10 @@ export function floodFillMask(input: {
   y: number
   tolerance: number
   fillRgb: [number, number, number]
+  mode?: 'add' | 'subtract'
 }): Uint8ClampedArray {
   const { width, height, imageRgba, maskRgba, fillRgb } = input
+  const mode = input.mode === 'subtract' ? 'subtract' : 'add'
   const expected = width * height * 4
   if (
     width <= 0 ||
@@ -75,10 +77,17 @@ export function floodFillMask(input: {
     const x = qx.pop()!
     const y = qy.pop()!
     const o = (y * width + x) * 4
-    next[o] = fillRgb[0]
-    next[o + 1] = fillRgb[1]
-    next[o + 2] = fillRgb[2]
-    next[o + 3] = 255
+    if (mode === 'subtract') {
+      next[o] = 0
+      next[o + 1] = 0
+      next[o + 2] = 0
+      next[o + 3] = 0
+    } else {
+      next[o] = fillRgb[0]
+      next[o + 1] = fillRgb[1]
+      next[o + 2] = fillRgb[2]
+      next[o + 3] = 255
+    }
     const nbs = [
       [x - 1, y],
       [x + 1, y],
