@@ -51,7 +51,7 @@ describe('useNodeMediaInfoFooter', () => {
       },
     })
     await nextTick()
-    for (let i = 0; i < 20 && !studioApi.probeMedia.mock.calls.length; i++) {
+    for (let i = 0; i < 20 && !vi.mocked(studioApi.probeMedia).mock.calls.length; i++) {
       await nextTick()
       await new Promise((r) => setTimeout(r, 10))
     }
