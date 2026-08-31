@@ -19,6 +19,12 @@ import VersionStrip from './VersionStrip.vue'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
 import { parseFillHex } from './maskWand'
+import { resetMediaPipeSegmentSession, segmentPointLocal } from './mediapipeSegment'
+import {
+  createPointSegmentSession,
+  resetPointSegmentSession,
+  resolvePointMaskRgba,
+} from './pointSegmentSession'
 
 const REFINE_MIN_W = 360
 const REFINE_MAX_W = 560
@@ -61,6 +67,20 @@ let abortController: AbortController | null = null
 let resizing = false
 let dragging = false
 let dragOffset = { x: 0, y: 0 }
+const pointSession = createPointSegmentSession()
+
+function resetPointFallbackState() {
+  resetPointSegmentSession(pointSession)
+  resetMediaPipeSegmentSession()
+}
+
+async function loadWorkImage(url: string): Promise<HTMLImageElement> {
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.src = url
+  await img.decode()
+  return img
+}
 
 const credits = computed(() => estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
@@ -112,6 +132,7 @@ watch(
     compareBeforeUrl.value = next.compareBeforeUrl
     afterUrl.value = next.afterUrl
     if (next.reset) lastRecordId.value = undefined
+    resetPointFallbackState()
   },
 )
 
@@ -297,13 +318,33 @@ async function onPointSelect({ x, y }: { x: number; y: number }) {
 
   segmentBusy.value = true
   try {
-    const { data } = await studioApi.segmentImage({
-      imageUrl: props.beforeUrl,
-      x,
-      y,
-      label: 1,
+    const remoteRgba = await resolvePointMaskRgba({
+      session: pointSession,
+      remoteSegment: async () => {
+        const { data } = await studioApi.segmentImage({
+          imageUrl: props.beforeUrl,
+          x,
+          y,
+          label: 1,
+        })
+        return { maskUrl: data.data.maskUrl }
+      },
+      loadRemoteRgba: (maskUrl) => loadMaskRgbaFromUrl(maskUrl, canvas.width, canvas.height),
+      localSegment: async () => {
+        const img = await loadWorkImage(props.beforeUrl)
+        return segmentPointLocal({
+          image: img,
+          imageKey: props.beforeUrl,
+          x,
+          y,
+          width: canvas.width,
+          height: canvas.height,
+        })
+      },
+      onFallbackToast: () => {
+        ElMessage.warning('云端点选暂不可用，已用本地点选')
+      },
     })
-    const remoteRgba = await loadMaskRgbaFromUrl(data.data.maskUrl, canvas.width, canvas.height)
     const base = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const merged = mergeMaskRgba({
       width: canvas.width,
@@ -384,6 +425,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   registerRefinePointSelectHandler(null)
+  resetPointFallbackState()
   window.removeEventListener('resize', syncNarrow)
   window.removeEventListener('keydown', onKeydown)
   stopResize()
