@@ -37,3 +37,13 @@ After implementation, all membership and points tests passed.
 ## Concerns
 
 - The transactions response is intentionally a breaking change from the previous bare array; the ProfilePage consumer is scheduled for a later task.
+
+## Review Fix: transactions limit validation
+
+**Finding:** `GET /membership/transactions` passed `limit: limit ? Number(limit) : 50` without validating NaN/negative/0/huge values.
+
+**Fix:** Added exported `parseLimit()` in `membership.controller.ts` — defaults to 50, rejects non-finite/non-positive/non-integer input, clamps max 100.
+
+**Tests:** `membership.controller.test.ts` — 2 cases covering invalid inputs and clamp behavior.
+
+**Verification:** `pnpm --filter @lnkpi/server exec vitest run src/membership src/points` — 6 files, 32 tests passed.

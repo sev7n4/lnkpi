@@ -13,6 +13,16 @@ function parseRange(range: string): PointsRangeKey {
   return range === '7d' || range === 'all' || range === 'month' ? range : 'month'
 }
 
+const DEFAULT_TRANSACTIONS_LIMIT = 50
+const MAX_TRANSACTIONS_LIMIT = 100
+
+export function parseLimit(raw?: string): number {
+  if (raw == null || raw === '') return DEFAULT_TRANSACTIONS_LIMIT
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0 || !Number.isInteger(n)) return DEFAULT_TRANSACTIONS_LIMIT
+  return Math.min(n, MAX_TRANSACTIONS_LIMIT)
+}
+
 @Controller('membership')
 export class MembershipController {
   constructor(@Inject(MembershipService) private readonly membershipService: MembershipService) {}
@@ -59,7 +69,7 @@ export class MembershipController {
       kind,
       category,
       cursor,
-      limit: limit ? Number(limit) : 50,
+      limit: parseLimit(limit),
     })
     return { code: 0, message: 'ok', data }
   }
