@@ -1,7 +1,7 @@
 # 画布精修选区：SAM 点击选主体 Design
 
 **Date:** 2026-08-31  
-**Status:** Approved, plan in `docs/superpowers/plans/2026-08-31-cx-image-edit-sam-point-select.md`  
+**Status:** Implemented on `feature/cx-image-edit-sam-point-select`; Approved, plan in `docs/superpowers/plans/2026-08-31-cx-image-edit-sam-point-select.md`  
 **代号:** **CX-IMAGE-EDIT-SAM-POINT**  
 **Related:**
 - `2026-08-18-cx-image-edit-design.md` — 精修作业、积分、EditProvider、版本链
