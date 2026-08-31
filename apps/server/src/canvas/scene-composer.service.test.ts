@@ -82,7 +82,12 @@ describe('SceneComposerService batchGenerate', () => {
     })
 
     expect(consume).toHaveBeenCalledTimes(1)
-    expect(consume).toHaveBeenCalledWith('u1', 60, '导演台批量生成 ×2')
+    expect(consume).toHaveBeenCalledWith('u1', 60, '导演台批量生成 ×2', {
+      kind: 'consume',
+      category: 'other',
+      status: 'success',
+      generationId: null,
+    })
     expect(generateImage).toHaveBeenCalledWith({
       userId: 'u1',
       shotId: 'shot-img',

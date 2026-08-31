@@ -11,3 +11,18 @@ export interface PointTxMeta {
   model?: string | null
   generationId?: string | null
 }
+
+export function consumeMeta(
+  category: PointCategory,
+  extra: Partial<PointTxMeta> = {},
+): PointTxMeta {
+  return { kind: 'consume', category, status: 'success', ...extra }
+}
+
+export function refundMeta(
+  category: PointCategory,
+  status: PointTxStatus,
+  extra: Partial<PointTxMeta> = {},
+): PointTxMeta {
+  return { kind: 'refund', category, status, ...extra }
+}

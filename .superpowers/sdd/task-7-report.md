@@ -1,3 +1,43 @@
+# Task 7 Report: Studio/Canvas PointTxMeta
+
+**Status:** Complete
+**Branch:** `feat/points-stats-personal-center`
+
+## Summary
+
+- Added `consumeMeta` and `refundMeta` helpers beside `PointTxMeta`.
+- Wired explicit transaction metadata into every `PointsService.consume` and `refund`
+  call in studio, canvas material, and scene composer services.
+- Applied text/image/audio/video categories to direct generation, `other` to scene
+  composer batches, and image/video-or-other classification to platform fallback.
+- Added available model and generation IDs; pre-record charges use
+  `generationId: null`.
+- Updated affected point, studio, material, and scene composer tests.
+
+## TDD Evidence
+
+- Added helper and call-site expectations first.
+- Red run: helper tests failed with `consumeMeta/refundMeta is not a function`.
+- Green run: required suite passed 9 files and 68 tests.
+
+## Verification
+
+- `pnpm --filter @lnkpi/server exec vitest run src/points src/membership src/studio/studio.fallback.test.ts src/canvas/material.fallback.test.ts`
+  passed: 9 files, 68 tests.
+- `pnpm --filter @lnkpi/server build` passed.
+- `pnpm build` passed all workspace builds; existing Vite annotation/chunk warnings only.
+- `git diff --check` passed.
+
+## Self-review
+
+- All charge/refund sites in the three task services pass a fourth argument.
+- Refund status mapping uses `failed_refund`, `cancelled_refund`, or `byok_refund`.
+- `PointsService` metadata remains optional for compatibility.
+- Unrelated untracked `apps/server/prisma/prisma/` content was not modified or staged.
+
+## Concerns
+
+None blocking.
 # Task 7 Report: Advanced Options seed / negative_prompt (G-06)
 
 **Status:** ✅ Complete  

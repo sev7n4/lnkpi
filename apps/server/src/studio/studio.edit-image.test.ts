@@ -143,7 +143,12 @@ describe('StudioService.editImage', () => {
     const record = await svc.editImage('u1', input)
 
     expect(resolveForGeneration).toHaveBeenCalledWith('u1', P1_IMAGE_EDIT_MODEL_KEY, 'image')
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像精修')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像精修',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
     expect(createImageEditProvider).toHaveBeenCalled()
     expect(imageEdit).toHaveBeenCalled()
     expect(compositeUnmaskedPixels).toHaveBeenCalled()
@@ -171,9 +176,19 @@ describe('StudioService.editImage', () => {
       svc.editImage('u1', input, { isCancelled: () => true }),
     ).rejects.toBeInstanceOf(BadRequestException)
 
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像精修')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像精修',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
     expect(pointsRefund).toHaveBeenCalledTimes(1)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像精修-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像精修-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'cancelled_refund' }),
+    )
     expect(stored.status).not.toBe('generating')
     expect(stored.status).toBe('failed')
     const meta = JSON.parse(String(stored.metadata))
@@ -191,7 +206,12 @@ describe('StudioService.editImage', () => {
     }
     const result = await svc.cancelGeneration('u1', 'g-edit')
     expect(result.status).toBe('failed')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像精修-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像精修-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'cancelled_refund' }),
+    )
   })
 
   it('rejects when updateMany loses the generating race and does not look completed', async () => {
