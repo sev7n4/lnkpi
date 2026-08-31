@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { ImageVersionEntry } from '@lnkpi/shared'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
@@ -15,7 +16,9 @@ import { syncRefineUrls } from './syncRefineUrls'
 import CompareLightbox from './CompareLightbox.vue'
 import CompareView from './CompareView.vue'
 import VersionStrip from './VersionStrip.vue'
-import { exportMaskPng } from './maskExport'
+import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
+import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
+import { parseFillHex } from './maskWand'
 
 const REFINE_MIN_W = 360
 const REFINE_MAX_W = 560
@@ -44,6 +47,7 @@ const editor = useCanvasEditorStore()
 const promptRef = ref<HTMLTextAreaElement | null>(null)
 const prompt = ref('')
 const busy = ref(false)
+const segmentBusy = ref(false)
 const afterUrl = ref(props.beforeUrl)
 const errorMessage = ref('')
 const compareBeforeUrl = ref(props.beforeUrl)
@@ -283,6 +287,43 @@ function onKeydown(event: KeyboardEvent) {
   if (!busy.value) emit('close')
 }
 
+async function onPointSelect({ x, y }: { x: number; y: number }) {
+  if (busy.value || segmentBusy.value) return
+  const mask = editor.getRefineMask()
+  const canvas = mask?.getCanvas()
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  segmentBusy.value = true
+  try {
+    const { data } = await studioApi.segmentImage({
+      imageUrl: props.beforeUrl,
+      x,
+      y,
+      label: 1,
+    })
+    const remoteRgba = await loadMaskRgbaFromUrl(data.data.maskUrl, canvas.width, canvas.height)
+    const base = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const merged = mergeMaskRgba({
+      width: canvas.width,
+      height: canvas.height,
+      baseMaskRgba: base.data,
+      remoteMaskRgba: remoteRgba,
+      fillRgb: parseFillHex(editor.refineBrushColor),
+      mode: editor.refineMaskOp === 'subtract' ? 'subtract' : 'add',
+    })
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(merged), canvas.width, canvas.height), 0, 0)
+    const counted = countMaskPixelsFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height))
+    editor.refineCoverage = counted.ratio
+  } catch (err) {
+    const message = formatError(err, '点选失败，请重试')
+    if (message) ElMessage.error(message)
+  } finally {
+    segmentBusy.value = false
+  }
+}
+
 async function runRefine() {
   if (refineDisabled.value) return
   const mask = editor.getRefineMask()
@@ -335,12 +376,14 @@ async function runRefine() {
 }
 
 onMounted(() => {
+  registerRefinePointSelectHandler(onPointSelect)
   syncNarrow()
   window.addEventListener('resize', syncNarrow)
   window.addEventListener('keydown', onKeydown)
 })
 
 onBeforeUnmount(() => {
+  registerRefinePointSelectHandler(null)
   window.removeEventListener('resize', syncNarrow)
   window.removeEventListener('keydown', onKeydown)
   stopResize()
@@ -541,6 +584,19 @@ onBeforeUnmount(() => {
             >
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
                 <path stroke-linejoin="round" d="M12 4 20 9.5 17 19H7L4 9.5Z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="refine-side__icon-btn"
+              :class="{ 'is-active': editor.refineTool === 'point' }"
+              :title="editor.refineMaskOp === 'subtract' ? '点选减选' : '点选主体'"
+              :disabled="busy || segmentBusy"
+              @click="editor.setRefineTool('point')"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
+                <circle cx="12" cy="12" r="3" />
+                <path stroke-linecap="round" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
               </svg>
             </button>
             <template v-if="editor.refineTool === 'wand'">
