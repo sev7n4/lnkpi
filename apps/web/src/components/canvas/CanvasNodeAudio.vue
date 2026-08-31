@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import NeoBaseNode from '@/components/canvas/NeoBaseNode.vue'
 import NodeTaskCornerActions from '@/components/canvas/NodeTaskCornerActions.vue'
+import MediaInfoSummary from '@/components/media/MediaInfoSummary.vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { resolveMediaUrl } from '@/services/api-base'
 import { useNodeMediaUpload } from '@/composables/useNodeMediaUpload'
+import { useNodeMediaInfoFooter } from '@/composables/useNodeMediaInfoFooter'
+import type { NodeMediaInfoSummary } from '@/composables/useMediaInspector'
 import { downloadMediaFile, isUpstreamMediaUrl, mediaDownloadName, UPSTREAM_MEDIA_DOWNLOAD_HINT } from '@/composables/useCanvasMedia'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 
@@ -22,6 +25,7 @@ const props = defineProps<{
     generationStartedAt?: string
     generationRecordId?: string
     materialId?: string
+    mediaInfo?: NodeMediaInfoSummary
   }
 }>()
 
@@ -46,6 +50,13 @@ const downloadTitle = computed(() =>
     ? UPSTREAM_MEDIA_DOWNLOAD_HINT
     : '下载音频',
 )
+const showMediaSummary = computed(() => Boolean(props.data.url && props.data.mediaInfo))
+const { applyDurationSec } = useNodeMediaInfoFooter({
+  nodeId: props.id,
+  url: computed(() => props.data.url),
+  kind: 'audio',
+  mediaInfo: computed(() => props.data.mediaInfo),
+})
 const {
   accept,
   dragOver,
@@ -57,6 +68,11 @@ const {
   onDragLeave,
   onDrop,
 } = useNodeMediaUpload(props.id, 'audio')
+
+function onAudioLoadedMetadata(e: Event) {
+  const el = e.target as HTMLAudioElement
+  if (Number.isFinite(el.duration)) applyDurationSec(el.duration)
+}
 
 function download() {
   if (!displayUrl.value) return
@@ -81,6 +97,9 @@ function saveToLibrary() {
 
 <template>
   <NeoBaseNode node-type="audio" :selected="selected" :data="data" :status="data.status">
+    <template v-if="showMediaSummary && data.mediaInfo" #footer>
+      <MediaInfoSummary v-bind="data.mediaInfo" />
+    </template>
     <div
       class="neo-audio-card neo-node-upload-target"
       :class="{
@@ -92,7 +111,12 @@ function saveToLibrary() {
       @drop="onDrop"
     >
       <div v-if="data.url" class="relative">
-        <audio :src="displayUrl" controls class="nodrag nowheel w-full" />
+        <audio
+          :src="displayUrl"
+          controls
+          class="nodrag nowheel w-full"
+          @loadedmetadata="onAudioLoadedMetadata"
+        />
         <button
           type="button"
           class="neo-node-replace-btn nodrag"
