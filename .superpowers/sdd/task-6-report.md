@@ -1,48 +1,39 @@
-# Task 6 Report: S8 Continue Shot — lastFrameUrl Writeback + 「接下一段」(G-08)
+# Task 6 Report: Membership Points Summary + Filtered Transactions API
 
-**Status:** ✅ Complete  
-**Branch:** `feature/i2v-capability-productization`  
-**Commit:** `52c80a9` — `feat(web): persist lastFrameUrl and add continue-shot action for Seedance`
+**Status:** Complete
+**Branch:** `feat/points-stats-personal-center`
 
 ## Summary
 
-Verified Apimart `lastFrameUrl` already flows through `applyStudioRecord` for completed video records; added regression test. Added Seedance-only「接下一段」button that creates a sibling video node pre-wired with the prior segment's last frame as an image ref, preserving prompt/settings and auto-connecting an edge.
+- Added range-aware points summaries using `resolvePointsRange`.
+- Aggregated consume/refund transactions by category with net consumption clamped to zero.
+- Added filtered, cursor-paginated transaction responses in `{ items, nextCursor, from, to }` shape.
+- Added `GET /membership/points-summary` and query handling for the transactions endpoint.
+- Updated daily claims and membership upgrades to persist structured grant metadata and `balanceAfter`.
 
-## Changes
+## TDD Evidence
 
-| File | Change |
-|------|--------|
-| `apps/web/src/composables/useNodeGeneration.test.ts` | New test: completed video record metadata → `patchNodeData({ lastFrameUrl })` |
-| `apps/web/src/components/canvas/dock-studio/panels/VideoDockPanel.vue` | `showContinueShotButton` when `node.data.lastFrameUrl` + `supportsReturnLastFrame`;「接下一段」button emits `continueShot` |
-| `apps/web/src/components/canvas/dock-studio/DockStudioRouter.vue` | Pass through `continueShot` emit |
-| `apps/web/src/components/canvas/DockStudioToolbar.vue` | Pass through `continueShot` emit |
-| `apps/web/src/pages/CanvasPage.vue` | `handleContinueShot()` — sibling video node + localRef from lastFrame + edge from self |
+The new membership tests were run before implementation and failed for the expected missing behavior:
 
-## Behavior
+- `pointsSummary` did not exist.
+- `listTransactions` returned a bare array.
+- `claimDaily` and `upgrade` did not use the structured transactional grant flow.
 
-### lastFrameUrl writeback (verified, no code change needed)
+After implementation, all membership and points tests passed.
 
-`useNodeGeneration.applyStudioRecord` already patches `lastFrameUrl` from `parseRecordLastFrameUrl(record)` when `record.type === 'video'` and status is `completed`.
+## Verification
 
-### 「接下一段」 workflow
+- `pnpm --dir apps/server exec vitest run src/membership src/points` — 5 files, 30 tests passed.
+- `pnpm --dir apps/server build` — passed.
+- `pnpm build` — all workspace package builds passed.
 
-1. Visible when node has `lastFrameUrl` and model capabilities include `supportsReturnLastFrame` (Seedance).
-2. Click creates a new video node to the right of the current node.
-3. New node inherits prompt, `videoModel`, `videoSettings`; sets `videoMode: image_to_video`.
-4. Adds local ref `{ label: 上一镜末帧, url: lastFrameUrl }`.
-5. Auto edge: `source → sibling`.
+## Self-review
 
-Existing「延续上一镜」(upstream `lastFrameUrl`) remains unchanged.
+- Summary range boundaries are included in both queries and response metadata.
+- Pagination uses stable `createdAt DESC, id DESC` ordering and an extra row to derive `nextCursor`.
+- Grant writes and balance updates remain atomic via interactive Prisma transactions.
+- No unrelated untracked files were staged.
 
-## Test Summary
+## Concerns
 
-| Command | Result |
-|---------|--------|
-| `pnpm exec vitest run src/composables/useNodeGeneration.test.ts` | ✅ 42/42 passed |
-| `pnpm build` | ✅ Passed |
-
-## Gap Register
-
-| Gap ID | Status |
-|--------|--------|
-| G-08 S8 连续镜 lastFrameUrl + 接下一段 | ✅ Covered |
+- The transactions response is intentionally a breaking change from the previous bare array; the ProfilePage consumer is scheduled for a later task.

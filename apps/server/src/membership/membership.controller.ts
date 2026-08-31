@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Inject, Post, Req, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, Inject, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { IsString } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
-import { MembershipService } from './membership.service'
+import { PointsRangeKey } from '../points/points-range'
+import { MembershipService, PointCategory, PointKind } from './membership.service'
 
 class UpgradeDto {
   @IsString()
   plan!: string
+}
+
+function parseRange(range: string): PointsRangeKey {
+  return range === '7d' || range === 'all' || range === 'month' ? range : 'month'
 }
 
 @Controller('membership')
@@ -41,8 +46,31 @@ export class MembershipController {
 
   @Get('transactions')
   @UseGuards(AuthGuard)
-  async transactions(@Req() req: { user: { sub: string } }) {
-    const data = await this.membershipService.listTransactions(req.user.sub)
+  async transactions(
+    @Req() req: { user: { sub: string } },
+    @Query('range') range = 'month',
+    @Query('kind') kind?: PointKind,
+    @Query('category') category?: PointCategory,
+    @Query('cursor') cursor?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const data = await this.membershipService.listTransactions(req.user.sub, {
+      range: parseRange(range),
+      kind,
+      category,
+      cursor,
+      limit: limit ? Number(limit) : 50,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Get('points-summary')
+  @UseGuards(AuthGuard)
+  async pointsSummary(
+    @Req() req: { user: { sub: string } },
+    @Query('range') range = 'month',
+  ) {
+    const data = await this.membershipService.pointsSummary(req.user.sub, parseRange(range))
     return { code: 0, message: 'ok', data }
   }
 }
