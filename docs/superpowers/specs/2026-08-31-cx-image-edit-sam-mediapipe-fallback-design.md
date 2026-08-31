@@ -1,7 +1,7 @@
 # 精修点选：主 SAM3 + MediaPipe 故障降级 Design
 
 **Date:** 2026-08-31  
-**Status:** Approved for planning (pending user review of this file)  
+**Status:** Approved; plan in `docs/superpowers/plans/2026-08-31-cx-image-edit-sam-mediapipe-fallback.md`  
 **代号:** **CX-IMAGE-EDIT-SAM-MEDIAPIPE-FALLBACK**  
 **Related:**
 - `2026-08-31-cx-image-edit-sam-point-select-design.md` — 点选主路径（fal SAM3）
