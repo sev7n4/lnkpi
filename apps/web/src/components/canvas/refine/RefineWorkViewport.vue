@@ -4,6 +4,7 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
+import { dispatchRefinePointSelect } from './maskRemote'
 import { containRect, refineWorkInsetRight } from './refineWorkLayout'
 
 const props = defineProps<{
@@ -216,6 +217,7 @@ onBeforeUnmount(() => {
               :mask-op="editor.refineMaskOp"
               :disabled="editor.refineBusy || spaceDown"
               @coverage="(p) => { editor.refineCoverage = p.ratio }"
+              @point-select="dispatchRefinePointSelect"
             />
           </ImageLoupe>
         </div>
