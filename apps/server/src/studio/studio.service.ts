@@ -1,4 +1,12 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common'
 import {
   buildAudioRequest,
   buildEffectiveImagePrompt,
@@ -12,6 +20,7 @@ import {
   createAudioProvider,
   createImageEditProvider,
   createImageProvider,
+  createSegmentProvider,
   createTextProvider,
   createVideoProvider,
   generatePromptFromUserInput,
@@ -79,6 +88,27 @@ const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-So
 // Grace window before returning the async `generating` record: fast image
 // providers usually finish within this, sparing the client a polling round.
 const IMAGE_FAST_PATH_MS = 3000
+
+const segmentTimestamps = new Map<string, number[]>()
+
+export function allowSegmentRate(
+  userId: string,
+  now = Date.now(),
+  windowMs = 60_000,
+  max = 20,
+): boolean {
+  const recent = (segmentTimestamps.get(userId) ?? []).filter((t) => now - t < windowMs)
+  if (recent.length >= max) {
+    return false
+  }
+  recent.push(now)
+  segmentTimestamps.set(userId, recent)
+  return true
+}
+
+export function resetSegmentRateLimitForTests(): void {
+  segmentTimestamps.clear()
+}
 
 export interface StudioRefInput {
   refKey: string
@@ -1161,6 +1191,40 @@ export class StudioService {
       }
       return refundAndFail(err)
     }
+  }
+
+  async segmentImage(
+    userId: string,
+    input: { imageUrl: string; x: number; y: number; label?: 0 | 1 },
+  ): Promise<{ maskUrl: string }> {
+    const imageUrl = input.imageUrl?.trim()
+    if (!imageUrl) {
+      throw new BadRequestException('imageUrl 不能为空')
+    }
+    if (!Number.isFinite(input.x) || input.x < 0) {
+      throw new BadRequestException('x 无效')
+    }
+    if (!Number.isFinite(input.y) || input.y < 0) {
+      throw new BadRequestException('y 无效')
+    }
+    if (!allowSegmentRate(userId)) {
+      throw new HttpException('点选过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    }
+
+    const apiKey = process.env.FAL_KEY?.trim()
+    if (!apiKey) {
+      throw new ServiceUnavailableException('点选暂不可用')
+    }
+
+    const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
+    const publicUrl = inlinedUrl ?? imageUrl
+
+    return createSegmentProvider({ apiKey }).segment({
+      imageUrl: publicUrl,
+      x: input.x,
+      y: input.y,
+      label: input.label ?? 1,
+    })
   }
 
   async generateVideo(

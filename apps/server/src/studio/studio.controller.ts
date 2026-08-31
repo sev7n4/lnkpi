@@ -243,6 +243,21 @@ class ImageEditDto extends CanvasScopeFields {
   parentVersionId?: string
 }
 
+class ImageSegmentDto {
+  @IsString()
+  imageUrl!: string
+
+  @IsNumber()
+  x!: number
+
+  @IsNumber()
+  y!: number
+
+  @IsOptional()
+  @IsIn([0, 1])
+  label?: 0 | 1
+}
+
 @Controller('studio')
 export class StudioController {
   constructor(
@@ -348,6 +363,21 @@ export class StudioController {
       },
       cancel,
     )
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('image/segment')
+  @UseGuards(AuthGuard)
+  async segmentImage(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ImageSegmentDto,
+  ) {
+    const data = await this.studioService.segmentImage(req.user.sub, {
+      imageUrl: dto.imageUrl,
+      x: dto.x,
+      y: dto.y,
+      label: dto.label,
+    })
     return { code: 0, message: 'ok', data }
   }
 
