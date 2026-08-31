@@ -1,10 +1,17 @@
+type MediaPipeMaskLike = {
+  getAsFloat32Array(): Float32Array
+}
+
+type LegacyMediaPipeSegmentResult = {
+  confidenceMasks?: MediaPipeMaskLike[]
+}
+
 export type MediaPipeSegmenterLike = {
   setImage(image: CanvasImageSource): void
-  segment(strokes: unknown): {
-    confidenceMasks?: Array<{
-      getAsFloat32Array?: () => Float32Array
-    }>
-  } | void
+  segment(
+    strokes: unknown,
+  ): MediaPipeMaskLike | LegacyMediaPipeSegmentResult | void
+  close?: () => void
 }
 
 export type MediaPipeDeps = {
@@ -33,6 +40,7 @@ const PRIMARY_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float16/latest/magic_touch.tflite'
 const FALLBACK_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/interactive_segmenter_v2/magic_touch/int8/latest/interactive_segmentation.task'
+const BRUSH_POSITIVE = 1
 
 let segmenterPromise: Promise<MediaPipeSegmenterLike> | undefined
 let cachedImageKey: string | undefined
@@ -85,13 +93,35 @@ async function defaultLoadSegmenter(): Promise<MediaPipeSegmenterLike> {
   }
 }
 
-export function resetMediaPipeSegmentSession(): void {
-  segmenterPromise = undefined
-  cachedImageKey = undefined
+export async function resetMediaPipeSegmentSession(): Promise<void> {
+  const pendingSegmenter = segmenterPromise
+  if (pendingSegmenter) {
+    try {
+      const segmenter = await pendingSegmenter
+      segmenter.close?.()
+    } catch {
+      // Reset must remain best-effort when loading or closing MediaPipe fails.
+    }
+  }
+
+  if (segmenterPromise === pendingSegmenter) {
+    segmenterPromise = undefined
+    cachedImageKey = undefined
+  }
 }
 
 function clampNormalized(value: number): number {
   return Math.min(1, Math.max(0, value))
+}
+
+function extractConfidence(
+  result: MediaPipeMaskLike | LegacyMediaPipeSegmentResult | void,
+): Float32Array | undefined {
+  if (!result) return undefined
+  if ('getAsFloat32Array' in result) {
+    return result.getAsFloat32Array()
+  }
+  return result.confidenceMasks?.[0]?.getAsFloat32Array()
 }
 
 export async function segmentPointLocal(opts: {
@@ -116,11 +146,11 @@ export async function segmentPointLocal(opts: {
   const result = segmenter.segment([
     {
       isCompleted: true,
-      brushMode: 'ADD',
+      brushMode: BRUSH_POSITIVE,
       point: [{ x: nx, y: ny }],
     },
   ])
-  const confidence = result?.confidenceMasks?.[0]?.getAsFloat32Array?.()
+  const confidence = extractConfidence(result)
 
   if (!confidence || confidence.length !== opts.width * opts.height) {
     throw new Error('本地点选失败')
