@@ -2,6 +2,7 @@ import 'reflect-metadata'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import {
+  BadGatewayException,
   BadRequestException,
   HttpException,
   HttpStatus,
@@ -175,5 +176,13 @@ describe('StudioService.segmentImage', () => {
     expect(segment).toHaveBeenCalledWith(
       expect.objectContaining({ label: 0 }),
     )
+  })
+
+  it('maps provider failure to BadGatewayException', async () => {
+    segment.mockRejectedValueOnce(new Error('Segment API 403: TOP_UP'))
+
+    await expect(
+      svc.segmentImage('u1', { imageUrl: 'https://a.png', x: 1, y: 2 }),
+    ).rejects.toBeInstanceOf(BadGatewayException)
   })
 })

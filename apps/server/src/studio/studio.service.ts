@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   HttpException,
   HttpStatus,
@@ -1219,12 +1220,23 @@ export class StudioService {
     const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
     const publicUrl = inlinedUrl ?? imageUrl
 
-    return createSegmentProvider({ apiKey }).segment({
-      imageUrl: publicUrl,
-      x: input.x,
-      y: input.y,
-      label: input.label ?? 1,
-    })
+    try {
+      return await createSegmentProvider({ apiKey }).segment({
+        imageUrl: publicUrl,
+        x: input.x,
+        y: input.y,
+        label: input.label ?? 1,
+      })
+    } catch (err) {
+      if (
+        err instanceof BadRequestException
+        || err instanceof ServiceUnavailableException
+        || err instanceof HttpException
+      ) {
+        throw err
+      }
+      throw new BadGatewayException('云端点选失败')
+    }
   }
 
   async generateVideo(
