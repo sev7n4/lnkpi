@@ -112,6 +112,31 @@ describe('PointsService', () => {
     })
   })
 
+  it('preserves an explicit null grant status', async () => {
+    const updateMany = vi.fn(async () => ({ count: 1 }))
+    const findUnique = vi.fn(async () => ({ points: 105 }))
+    const create = vi.fn()
+    const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({ user: { updateMany, findUnique }, pointTransaction: { create } }),
+    )
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        PointsService,
+        { provide: PrismaService, useValue: { $transaction } },
+      ],
+    }).compile()
+
+    await moduleRef.get(PointsService).refund('u1', 5, '人工赠送', {
+      kind: 'grant',
+      category: 'other',
+      status: null,
+    })
+
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ kind: 'grant', status: null }),
+    })
+  })
+
   it('derives structured fields from reason when consume meta is omitted', async () => {
     const updateMany = vi.fn(async () => ({ count: 1 }))
     const findUnique = vi.fn(async () => ({ points: 90 }))

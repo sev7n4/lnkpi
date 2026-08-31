@@ -6,6 +6,7 @@ import { MembershipService } from './membership.service'
 
 describe('MembershipService', () => {
   const findMany = vi.fn()
+  const groupBy = vi.fn()
   const userUpdate = vi.fn()
   const transactionCreate = vi.fn()
   const $transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
@@ -24,7 +25,7 @@ describe('MembershipService', () => {
         {
           provide: PrismaService,
           useValue: {
-            pointTransaction: { findMany },
+            pointTransaction: { findMany, groupBy },
             $transaction,
           },
         },
@@ -36,12 +37,11 @@ describe('MembershipService', () => {
   it('aggregates non-negative net consumption and totals for the selected range', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'))
-    findMany.mockResolvedValue([
-      { amount: -10, kind: 'consume', category: 'image' },
-      { amount: -20, kind: 'consume', category: 'image' },
-      { amount: 10, kind: 'refund', category: 'image' },
-      { amount: 100, kind: 'grant', category: 'other' },
-      { amount: 7, kind: 'refund', category: 'audio' },
+    groupBy.mockResolvedValue([
+      { kind: 'consume', category: 'image', _sum: { amount: -30 } },
+      { kind: 'refund', category: 'image', _sum: { amount: 10 } },
+      { kind: 'grant', category: 'other', _sum: { amount: 100 } },
+      { kind: 'refund', category: 'audio', _sum: { amount: 7 } },
     ])
 
     await expect(service.pointsSummary('u1', 'month')).resolves.toEqual({
@@ -53,7 +53,8 @@ describe('MembershipService', () => {
       refundTotal: 17,
       grantTotal: 100,
     })
-    expect(findMany).toHaveBeenCalledWith({
+    expect(groupBy).toHaveBeenCalledWith({
+      by: ['kind', 'category'],
       where: {
         userId: 'u1',
         createdAt: {
@@ -61,7 +62,7 @@ describe('MembershipService', () => {
           lte: new Date('2026-08-20T12:00:00.000Z'),
         },
       },
-      select: { amount: true, kind: true, category: true },
+      _sum: { amount: true },
     })
     vi.useRealTimers()
   })

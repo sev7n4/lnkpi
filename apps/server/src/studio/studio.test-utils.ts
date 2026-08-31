@@ -60,6 +60,7 @@ export function createPrismaMock() {
         return (arg as (tx: unknown) => Promise<unknown>)({
           user: {
             updateMany: async () => ({ count: 1 }),
+            findUnique: async () => ({ points: 9994 }),
           },
           pointTransaction: {
             create: async (a: { data: Record<string, unknown> }) => ({ id: 'pt1', ...a.data }),

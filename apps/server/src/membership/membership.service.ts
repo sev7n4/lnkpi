@@ -102,12 +102,13 @@ export class MembershipService {
 
   async pointsSummary(userId: string, range: PointsRangeKey): Promise<PointsSummaryDto> {
     const { from, to } = resolvePointsRange(range)
-    const rows = await this.prisma.pointTransaction.findMany({
+    const rows = await this.prisma.pointTransaction.groupBy({
+      by: ['kind', 'category'],
       where: {
         userId,
         createdAt: from ? { gte: from, lte: to } : { lte: to },
       },
-      select: { amount: true, kind: true, category: true },
+      _sum: { amount: true },
     })
 
     const consumed = { text: 0, image: 0, audio: 0, video: 0, other: 0 }
@@ -117,12 +118,13 @@ export class MembershipService {
 
     for (const row of rows) {
       const category = row.category in consumed ? (row.category as PointCategory) : 'other'
-      if (row.kind === 'consume') consumed[category] += row.amount
+      const amount = row._sum.amount ?? 0
+      if (row.kind === 'consume') consumed[category] += amount
       if (row.kind === 'refund') {
-        refunded[category] += row.amount
-        refundTotal += row.amount
+        refunded[category] += amount
+        refundTotal += amount
       }
-      if (row.kind === 'grant') grantTotal += row.amount
+      if (row.kind === 'grant') grantTotal += amount
     }
 
     const netConsumed = (category: PointCategory) =>

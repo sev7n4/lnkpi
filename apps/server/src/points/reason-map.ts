@@ -15,13 +15,7 @@ function resolveCategory(reason: string): PointCategory {
 }
 
 function isRefundReason(reason: string): boolean {
-  return (
-    reason.includes('-失败退款') ||
-    reason.includes('-取消退款') ||
-    reason.includes('-BYOK失败退款') ||
-    reason.includes('失败退款') ||
-    reason.includes('取消退款')
-  )
+  return reason.includes('退款')
 }
 
 function parseRefundStatus(reason: string): PointTxStatus {

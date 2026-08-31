@@ -259,7 +259,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'text',
-      pointCategory: 'other',
+      pointCategory: 'text',
       platformCost: 5,
       setupPending: async () => {
         vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('unauthorized'))
@@ -271,7 +271,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'audio',
-      pointCategory: 'other',
+      pointCategory: 'audio',
       platformCost: 5,
       setupPending: async () => {
         audioGenerate.mockRejectedValueOnce(new Error('network'))

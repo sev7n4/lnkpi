@@ -1,8 +1,10 @@
 import { PrismaClient } from '@prisma/client'
-import { mapReasonToPointFields } from '../src/points/reason-map'
+import { resolveBackfillFields } from '../src/points/backfill-fields'
 
 const prisma = new PrismaClient()
 
+// Run once immediately after the schema migration, before heavy new traffic:
+// DATABASE_URL='file:./prisma/dev.db' pnpm backfill:point-transactions
 async function main() {
   const batchSize = 200
   let cursor: string | undefined
@@ -17,14 +19,11 @@ async function main() {
     if (!rows.length) break
 
     for (const row of rows) {
-      const mapped = mapReasonToPointFields(row.reason, row.amount)
+      const fields = resolveBackfillFields(row)
+      if (!fields) continue
       await prisma.pointTransaction.update({
         where: { id: row.id },
-        data: {
-          kind: mapped.kind,
-          category: mapped.category,
-          status: mapped.status,
-        },
+        data: fields,
       })
       updated++
     }

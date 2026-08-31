@@ -34,6 +34,14 @@ describe('mapReasonToPointFields', () => {
     })
   })
 
+  it('maps 预检拒绝退款', () => {
+    expect(mapReasonToPointFields('视频生成-预检拒绝退款', 30)).toEqual({
+      kind: 'refund',
+      category: 'video',
+      status: 'failed_refund',
+    })
+  })
+
   it('maps 每日签到 to grant/other', () => {
     expect(mapReasonToPointFields('每日签到', 100)).toEqual({
       kind: 'grant',

@@ -181,10 +181,6 @@ function studioPointCategory(type: string): PointCategory {
   return 'other'
 }
 
-function fallbackPointCategory(type: string): PointCategory {
-  return type === 'image' || type === 'video' ? type : 'other'
-}
-
 function hintForCode(code: ErrorCode): string | undefined {
   switch (code) {
     case 'upstream_timeout':
@@ -1768,7 +1764,7 @@ export class StudioService {
     }
     const meta = parseMeta(record.metadata)
     const platformCost = this.platformFallbackCost(record.type, meta)
-    const pointCategory = fallbackPointCategory(record.type)
+    const pointCategory = studioPointCategory(record.type)
     const pointExtra = {
       model: record.model ?? null,
       generationId: record.id,
@@ -2048,7 +2044,7 @@ export class StudioService {
         userId,
         cost,
         '平台回退取消退款',
-        refundMeta(fallbackPointCategory(record.type), 'cancelled_refund', {
+        refundMeta(studioPointCategory(record.type), 'cancelled_refund', {
           model: record.model ?? null,
           generationId: record.id,
         }),
