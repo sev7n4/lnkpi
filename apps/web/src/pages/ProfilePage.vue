@@ -26,6 +26,14 @@ const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const loadError = ref('')
 
+/** Monotonic generation; stale responses are discarded when range/filters change. */
+let fetchGeneration = 0
+
+function bumpFetchGeneration() {
+  fetchGeneration += 1
+  return fetchGeneration
+}
+
 const rangeOptions: Array<{ value: PointsRangeKey; label: string }> = [
   { value: '7d', label: '近 7 天' },
   { value: 'month', label: '本月' },
@@ -83,7 +91,9 @@ function shortGenerationId(id: string) {
 }
 
 async function reload() {
+  const gen = bumpFetchGeneration()
   isLoading.value = true
+  isLoadingMore.value = false
   loadError.value = ''
   try {
     const [summaryResponse, transactionsResponse] = await Promise.all([
@@ -94,18 +104,23 @@ async function reload() {
         kind: filterKind.value,
       }),
     ])
+    if (gen !== fetchGeneration) return
     summary.value = summaryResponse.data.data
     transactions.value = transactionsResponse.data.data.items
     nextCursor.value = transactionsResponse.data.data.nextCursor
   } catch {
+    if (gen !== fetchGeneration) return
     loadError.value = '积分账单加载失败，请稍后重试'
   } finally {
-    isLoading.value = false
+    if (gen === fetchGeneration) {
+      isLoading.value = false
+    }
   }
 }
 
 async function loadMore() {
   if (!nextCursor.value || isLoadingMore.value) return
+  const gen = fetchGeneration
   isLoadingMore.value = true
   try {
     const response = await membershipApi.transactions({
@@ -114,12 +129,16 @@ async function loadMore() {
       kind: filterKind.value,
       cursor: nextCursor.value,
     })
+    if (gen !== fetchGeneration) return
     transactions.value.push(...response.data.data.items)
     nextCursor.value = response.data.data.nextCursor
   } catch {
+    if (gen !== fetchGeneration) return
     loadError.value = '更多账单加载失败，请稍后重试'
   } finally {
-    isLoadingMore.value = false
+    if (gen === fetchGeneration) {
+      isLoadingMore.value = false
+    }
   }
 }
 

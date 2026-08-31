@@ -33,3 +33,14 @@ Implemented the ProfilePage points summary and ledger card UI against the Task 8
 ## Notes
 
 No page test was added because this area has no existing page-test pattern; build/type-check and the manual checklist cover this UI task.
+
+## Review fix: stale fetch race protection
+
+**Finding:** `reload` / `loadMore` lacked race protection; fast range/filter switches could apply stale responses.
+
+**Fix:** Added monotonic `fetchGeneration` in `ProfilePage.vue`. Each `reload` bumps the generation and resets `isLoadingMore`; responses and loading/error state updates apply only when `gen === fetchGeneration`. `loadMore` captures the generation at start and is invalidated when filters/range change trigger a new `reload`.
+
+**Verification**
+
+- `pnpm --dir apps/web build` (worktree): passed (`vue-tsc -b && vite build`, exit 0, built in ~1m 31s).
+- Card UI behavior unchanged; only fetch lifecycle guarded.
