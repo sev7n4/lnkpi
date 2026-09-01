@@ -1,6 +1,7 @@
 import { Inject, Injectable, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsRangeKey, resolvePointsRange } from '../points/points-range'
+import { computePointsInsights, type PointsInsights } from '../points/points-insights'
 
 export type PointKind = 'consume' | 'refund' | 'grant'
 export type PointCategory = 'text' | 'image' | 'audio' | 'video' | 'other'
@@ -27,6 +28,7 @@ export interface PointsSummaryDto {
   otherNetConsumed: number
   refundTotal: number
   grantTotal: number
+  insights: PointsInsights
 }
 
 const PLANS = [
@@ -130,6 +132,29 @@ export class MembershipService {
     const netConsumed = (category: PointCategory) =>
       Math.max(0, -consumed[category] - refunded[category])
 
+    const netConsumedTotal =
+      netConsumed('text') +
+      netConsumed('image') +
+      netConsumed('audio') +
+      netConsumed('video') +
+      netConsumed('other')
+
+    const consumeRows = await this.prisma.pointTransaction.findMany({
+      where: {
+        userId,
+        kind: 'consume',
+        createdAt: from ? { gte: from, lte: to } : { lte: to },
+      },
+      select: { createdAt: true, amount: true },
+    })
+
+    const insights = computePointsInsights({
+      netConsumedTotal,
+      consumeRows,
+      from,
+      to,
+    })
+
     return {
       range,
       from: from?.toISOString() ?? null,
@@ -143,6 +168,7 @@ export class MembershipService {
       otherNetConsumed: netConsumed('other'),
       refundTotal,
       grantTotal,
+      insights,
     }
   }
 
