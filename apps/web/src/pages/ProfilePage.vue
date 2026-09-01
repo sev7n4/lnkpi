@@ -10,6 +10,7 @@ import type {
   PointCategory,
   PointKind,
   PointTransactionItem,
+  PointsInsights,
   PointsRangeKey,
   PointsSummary,
 } from '@/services/users-api'
@@ -74,6 +75,19 @@ const categoryLabels: Record<PointCategory, string> = {
   audio: '音频',
   video: '视频',
   other: '其他',
+}
+
+const insightOptions = [
+  { key: 'netConsumedTotal' as const, label: '净消耗' },
+  { key: 'peakDayConsumed' as const, label: '单日峰值' },
+  { key: 'avgDailyConsumed' as const, label: '日均消耗' },
+  { key: 'activeDays' as const, label: '活跃天数' },
+  { key: 'longestStreakDays' as const, label: '最长连续活跃' },
+]
+
+function formatInsightValue(key: keyof PointsInsights, value: number) {
+  if (key === 'avgDailyConsumed') return value < 10 ? value.toFixed(1) : Math.round(value).toString()
+  return String(Math.round(value))
 }
 
 function toggleCategory(category: PointCategory) {
@@ -247,6 +261,19 @@ onMounted(async () => {
             {{ summary.byCategory[category.value] }}
           </p>
         </button>
+      </div>
+
+      <div v-if="summary?.insights" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div
+          v-for="item in insightOptions"
+          :key="item.key"
+          class="rounded-xl border border-white/8 bg-[#242424] p-4"
+        >
+          <p class="text-xs text-white/45">{{ item.label }}</p>
+          <p class="mt-2 text-xl font-semibold text-white/85">
+            {{ formatInsightValue(item.key, summary.insights[item.key]) }}
+          </p>
+        </div>
       </div>
 
       <div v-if="summary" class="mt-3 grid grid-cols-2 gap-3" :class="{ 'sm:grid-cols-3': summary.otherNetConsumed > 0 }">
