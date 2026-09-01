@@ -160,7 +160,12 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.chargedPoints).toBe(10)
     expect(meta.refundedPoints).toBe(10)
     expect(meta.refundReason).toBe('byok_failed')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-BYOK失败退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像生成-BYOK失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'byok_refund' }),
+    )
     expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createImageProvider).toHaveBeenCalledTimes(1)
     expect(createImageProvider).toHaveBeenCalledWith({
@@ -201,7 +206,12 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(meta.referenceImages).toEqual(['https://cdn.example.com/frame.png'])
     expect(meta.image).toBe('https://cdn.example.com/frame.png')
     expect(meta.refundedPoints).toBe(30)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      30,
+      '视频生成-BYOK失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'video', status: 'byok_refund' }),
+    )
     expect(call.data.prompt).toBe(meta.effectivePrompt)
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
@@ -269,7 +279,12 @@ describe('MaterialService BYOK fallback_pending', () => {
     expect(result.status).toBe('completed')
     expect(createImageProvider).toHaveBeenCalledWith(undefined)
     expect(imageGenerate).toHaveBeenCalled()
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
     expect(meta.chargedPoints).toBe(10)
@@ -314,7 +329,12 @@ describe('MaterialService BYOK fallback_pending', () => {
         image: 'https://cdn.example.com/frame.png',
       }),
     )
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 30, '平台回退生成')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      30,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'video', status: 'success' }),
+    )
     const meta = JSON.parse(String(result.metadata))
     expect(meta.providerFallback).toBe(true)
   })
@@ -330,8 +350,18 @@ describe('MaterialService BYOK fallback_pending', () => {
     await vi.waitFor(() =>
       expect(materialUpdate.mock.calls.some((c) => c[0].data.status === 'failed')).toBe(true),
     )
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '图像生成')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-失败退款')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像生成-失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'failed_refund' }),
+    )
     const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')!
     const meta = JSON.parse(String(failedUpdate[0].data.metadata))
     expect(meta.refundedPoints).toBe(10)
@@ -352,8 +382,18 @@ describe('MaterialService BYOK fallback_pending', () => {
 
     await expect(svc.confirmPlatformFallback('u1', 'm1')).rejects.toThrow('platform confirm failed')
 
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退失败退款')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'failed_refund' }),
+    )
     const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
     expect(failedUpdate).toBeTruthy()
     const meta = JSON.parse(String(failedUpdate![0].data.metadata))
@@ -404,9 +444,19 @@ describe('MaterialService BYOK fallback_pending', () => {
     await expect(promise).rejects.toMatchObject({
       response: { message: '已取消', refundedPoints: 10 },
     })
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
     expect(pointsRefund).toHaveBeenCalledTimes(1)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'cancelled_refund' }),
+    )
     const failedUpdate = materialUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
     expect(failedUpdate).toBeTruthy()
     const meta = JSON.parse(String(failedUpdate![0].data.metadata))
@@ -429,7 +479,12 @@ describe('MaterialService BYOK fallback_pending', () => {
     })
     const result = await svc.cancelGeneration('u1', 'm1')
     expect(result.status).toBe('failed')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像生成-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'cancelled_refund' }),
+    )
     const meta = JSON.parse(String(materialUpdate.mock.calls.at(-1)?.[0].data.metadata))
     expect(meta.cancelled).toBe(true)
     expect(meta.refundedPoints).toBe(10)

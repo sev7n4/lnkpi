@@ -62,6 +62,11 @@ import {
   throwCancelledException,
 } from '../points/charge-session'
 import { PointsService } from '../points/points.service'
+import {
+  consumeMeta,
+  refundMeta,
+  type PointCategory,
+} from '../points/point-tx.types'
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
@@ -168,6 +173,13 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function studioPointCategory(type: string): PointCategory {
+  if (type === 'text' || type === 'prompt') return 'text'
+  if (type === 'image' || type === 'image_edit') return 'image'
+  if (type === 'audio' || type === 'video') return type
+  return 'other'
 }
 
 function hintForCode(code: ErrorCode): string | undefined {
@@ -436,7 +448,12 @@ export class StudioService {
   ) {
     const cost = 5
     const chargeReason = '文本生成'
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('text', { model: model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
     const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
     const gatewayModelId =
@@ -482,7 +499,15 @@ export class StudioService {
         textOpts,
       })
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('text', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
@@ -500,7 +525,15 @@ export class StudioService {
     } catch (err) {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('text', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         const failedMeta = applyFailureDiagnosticMeta(
           applyRefundMeta(applyChargeMeta({ ...baseMeta }, cost), cost, 'platform_failed'),
           err,
@@ -524,7 +557,15 @@ export class StudioService {
           refundedPoints: cost,
         })
       }
-      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-BYOK失败退款`,
+        refundMeta('text', 'byok_refund', {
+          model: resolved.modelName,
+          generationId: null,
+        }),
+      )
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -556,7 +597,12 @@ export class StudioService {
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     const cost = 5
     const chargeReason = '提示词模式生成'
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('text', { model: model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'text')
     const { modelKey: resolvedKey, entry, fallback } = resolveModelKey('text', resolved.modelName)
     const gatewayModelId =
@@ -580,7 +626,15 @@ export class StudioService {
         baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
       })
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('text', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
@@ -598,7 +652,15 @@ export class StudioService {
     } catch (err) {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('text', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         const failedMeta = applyFailureDiagnosticMeta(
           applyRefundMeta(applyChargeMeta({ ...baseMeta }, cost), cost, 'platform_failed'),
           err,
@@ -622,7 +684,15 @@ export class StudioService {
           refundedPoints: cost,
         })
       }
-      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-BYOK失败退款`,
+        refundMeta('text', 'byok_refund', {
+          model: resolved.modelName,
+          generationId: null,
+        }),
+      )
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -759,7 +829,12 @@ export class StudioService {
     const n = Math.max(1, Math.min(4, Number(count) || 1))
     const cost = 10 * n
     const chargeReason = '图像生成'
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('image', { model: model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const { mergedText, skippedMerge, referenceImages } = await this.resolveMergedPrompt(
       prompt,
@@ -899,7 +974,15 @@ export class StudioService {
       const meta = parseMeta(existing.metadata)
       if (isCancelledMeta(meta) || alreadyRefunded(meta)) return null
       if (resolved.source === 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-BYOK失败退款`,
+          refundMeta('image', 'byok_refund', {
+            model: resolved.modelName,
+            generationId: id,
+          }),
+        )
         return this.prisma.generationRecord.update({
           where: { id },
           data: {
@@ -908,7 +991,15 @@ export class StudioService {
           },
         })
       }
-      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-失败退款`,
+        refundMeta('image', 'failed_refund', {
+          model: resolved.modelName,
+          generationId: id,
+        }),
+      )
       const failedMeta = applyFailureDiagnosticMeta(
         applyRefundMeta(meta, cost, 'platform_failed'),
         err,
@@ -933,7 +1024,12 @@ export class StudioService {
   ) {
     const cost = 10
     const chargeReason = '图像变体'
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('image', { model: model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
     const combined = basePrompt ? `${basePrompt}。变体要求：${prompt}` : prompt
     try {
@@ -944,7 +1040,15 @@ export class StudioService {
         modelId: resolved.modelName || undefined,
       })
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('image', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         throwCancelledException(cost)
       }
       return this.prisma.generationRecord.create({
@@ -971,7 +1075,15 @@ export class StudioService {
     } catch (err) {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('image', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         const failedMeta = applyFailureDiagnosticMeta(
           applyRefundMeta(
             applyChargeMeta(
@@ -1006,7 +1118,15 @@ export class StudioService {
           refundedPoints: cost,
         })
       }
-      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-BYOK失败退款`,
+        refundMeta('image', 'byok_refund', {
+          model: resolved.modelName,
+          generationId: null,
+        }),
+      )
       return this.prisma.generationRecord.create({
         data: {
           userId,
@@ -1060,7 +1180,12 @@ export class StudioService {
       throw err
     }
 
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('image', { model: P1_IMAGE_EDIT_MODEL_KEY, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(
       userId,
       P1_IMAGE_EDIT_MODEL_KEY,
@@ -1096,7 +1221,15 @@ export class StudioService {
     })
 
     const refundAndFail = async (err: unknown) => {
-      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-失败退款`,
+        refundMeta('image', 'failed_refund', {
+          model: resolved.modelName,
+          generationId: record.id,
+        }),
+      )
       const existing = await this.prisma.generationRecord.findFirst({ where: { id: record.id } })
       const meta = parseMeta(existing?.metadata)
       const failedMeta = applyFailureDiagnosticMeta(
@@ -1120,14 +1253,30 @@ export class StudioService {
 
     try {
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('image', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: record.id,
+          }),
+        )
         throwCancelledException(cost)
       }
       const inlined = await inlineUpstreamReferenceImages([input.imageUrl, input.maskUrl])
       const inlinedImage = inlined[0] ?? input.imageUrl
       const inlinedMask = inlined[1] ?? input.maskUrl
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('image', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: record.id,
+          }),
+        )
         throwCancelledException(cost)
       }
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
@@ -1139,13 +1288,29 @@ export class StudioService {
         maskUrl: inlinedMask,
       })
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('image', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: record.id,
+          }),
+        )
         throwCancelledException(cost)
       }
       const result = await readImageBuffer(upstreamUrl)
       const { buffer: composited } = await compositeUnmaskedPixels({ base, result, mask })
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('image', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: record.id,
+          }),
+        )
         throwCancelledException(cost)
       }
       const saved = await this.upload.saveUserFile(userId, composited, 'edit.png', 'image/png')
@@ -1279,7 +1444,12 @@ export class StudioService {
     }
     const durationCredits = this.videoDurationCredits(duration)
     const chargeReason = '视频生成'
-    await this.points.consume(userId, durationCredits, chargeReason)
+    await this.points.consume(
+      userId,
+      durationCredits,
+      chargeReason,
+      consumeMeta('video', { model: model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
     const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
       prompt,
@@ -1352,7 +1522,15 @@ export class StudioService {
         }
       }
       if (refPreflight.level === 'error' && built.meta.refWire === 'agnes_keyframes') {
-        await this.points.refund(userId, durationCredits, `${chargeReason}-预检拒绝退款`)
+        await this.points.refund(
+          userId,
+          durationCredits,
+          `${chargeReason}-预检拒绝退款`,
+          refundMeta('video', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         throw new BadRequestException(refPreflight.message)
       }
     }
@@ -1419,7 +1597,12 @@ export class StudioService {
   ) {
     const cost = 5
     const chargeReason = '音频生成'
-    await this.points.consume(userId, cost, chargeReason)
+    await this.points.consume(
+      userId,
+      cost,
+      chargeReason,
+      consumeMeta('audio', { model: options.model ?? null, generationId: null }),
+    )
     const resolved = await this.resolver.resolveForGeneration(userId, options.model, 'audio')
     const { mergedText, skippedMerge } = await this.resolveMergedPrompt(
       text,
@@ -1456,7 +1639,15 @@ export class StudioService {
       )
       const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
       if (cancel?.isCancelled()) {
-        await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-取消退款`,
+          refundMeta('audio', 'cancelled_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         throwCancelledException(cost)
       }
       const record = await this.prisma.generationRecord.create({
@@ -1491,7 +1682,15 @@ export class StudioService {
     } catch (err) {
       if (isCancelledException(err)) throw err
       if (resolved.source !== 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('audio', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: null,
+          }),
+        )
         const failedMeta = applyFailureDiagnosticMeta(
           applyRefundMeta(
             applyChargeMeta(
@@ -1532,7 +1731,15 @@ export class StudioService {
           refundedPoints: cost,
         })
       }
-      await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-BYOK失败退款`,
+        refundMeta('audio', 'byok_refund', {
+          model: resolved.modelName,
+          generationId: null,
+        }),
+      )
       const record = await this.prisma.generationRecord.create({
         data: {
           userId,
@@ -1569,7 +1776,17 @@ export class StudioService {
     }
     const meta = parseMeta(record.metadata)
     const platformCost = this.platformFallbackCost(record.type, meta)
-    await this.points.consume(userId, platformCost, '平台回退生成')
+    const pointCategory = studioPointCategory(record.type)
+    const pointExtra = {
+      model: record.model ?? null,
+      generationId: record.id,
+    }
+    await this.points.consume(
+      userId,
+      platformCost,
+      '平台回退生成',
+      consumeMeta(pointCategory, pointExtra),
+    )
     const chargedMeta = { ...meta, chargedPoints: platformCost, priorByokRefunded: true }
 
     try {
@@ -1618,7 +1835,12 @@ export class StudioService {
         })
         const imageUrls = urls?.length ? urls : [url]
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
@@ -1665,7 +1887,12 @@ export class StudioService {
           text = result.text
         }
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
@@ -1701,7 +1928,12 @@ export class StudioService {
         )
         const storeUrl = url.startsWith('data:') ? AUDIO_PLACEHOLDER : url
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
@@ -1734,7 +1966,12 @@ export class StudioService {
             : undefined,
         })
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.generationRecord.update({
@@ -1770,10 +2007,20 @@ export class StudioService {
         throw err
       }
       if (err instanceof BadRequestException && err.message === '不支持的生成类型') {
-        await this.points.refund(userId, platformCost, '平台回退失败退款')
+        await this.points.refund(
+          userId,
+          platformCost,
+          '平台回退失败退款',
+          refundMeta(pointCategory, 'failed_refund', pointExtra),
+        )
         rethrowWithRefundedPoints(err, platformCost)
       }
-      await this.points.refund(userId, platformCost, '平台回退失败退款')
+      await this.points.refund(
+        userId,
+        platformCost,
+        '平台回退失败退款',
+        refundMeta(pointCategory, 'failed_refund', pointExtra),
+      )
       const failedMeta = applyFailureDiagnosticMeta(
         applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
         err,
@@ -1805,7 +2052,15 @@ export class StudioService {
         typeof meta.chargedPoints === 'number'
           ? meta.chargedPoints
           : this.platformFallbackCost(record.type, meta)
-      await this.points.refund(userId, cost, '平台回退取消退款')
+      await this.points.refund(
+        userId,
+        cost,
+        '平台回退取消退款',
+        refundMeta(studioPointCategory(record.type), 'cancelled_refund', {
+          model: record.model ?? null,
+          generationId: record.id,
+        }),
+      )
     }
     const byokErrorRaw =
       (typeof meta.byokErrorRaw === 'string' && meta.byokErrorRaw.trim()
@@ -1850,7 +2105,15 @@ export class StudioService {
             : '生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
-      await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-取消退款`,
+        refundMeta(studioPointCategory(record.type), 'cancelled_refund', {
+          model: record.model ?? null,
+          generationId: record.id,
+        }),
+      )
       updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
     }
     updatedMeta = applyFailureDiagnosticMeta(updatedMeta, new Error('已取消'), {
@@ -1916,7 +2179,15 @@ export class StudioService {
       const meta = parseMeta(existing.metadata)
       if (isCancelledMeta(meta) || alreadyRefunded(meta)) return
       if (resolved.source === 'user') {
-        await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-BYOK失败退款`,
+          refundMeta('video', 'byok_refund', {
+            model: resolved.modelName,
+            generationId: id,
+          }),
+        )
         await this.prisma.generationRecord.update({
           where: { id },
           data: {
@@ -1926,7 +2197,15 @@ export class StudioService {
         })
         return
       }
-      await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-失败退款`,
+        refundMeta('video', 'failed_refund', {
+          model: resolved.modelName,
+          generationId: id,
+        }),
+      )
       const failedMeta = applyFailureDiagnosticMeta(
         applyRefundMeta(meta, cost, 'platform_failed'),
         err,

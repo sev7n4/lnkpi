@@ -102,12 +102,21 @@ model UserWebdavConfig {
 }
 
 model PointTransaction {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  amount    Int
-  reason    String
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount       Int
+  reason       String
+  kind         String   @default("consume")
+  category     String   @default("other")
+  status       String?
+  model        String?
+  generationId String?
+  balanceAfter Int?
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, kind, category, createdAt])
 }
 
 model GenerationRecord {
