@@ -29,6 +29,19 @@ const isLoadingMore = ref(false)
 const loadError = ref('')
 const showMembership = ref(false)
 
+type BillKindTab = 'all' | 'consume' | 'grant'
+
+const billKindTab = ref<BillKindTab>('all')
+
+watch(billKindTab, (tab) => {
+  filterKind.value = tab === 'all' ? undefined : tab
+})
+
+watch(filterKind, (kind) => {
+  if (!kind) billKindTab.value = 'all'
+  else if (kind === 'consume' || kind === 'grant') billKindTab.value = kind
+})
+
 const membershipLabel = computed(() => {
   const m = profile.value?.membership
   if (m === 'pro') return '专业版'
@@ -319,32 +332,29 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-white/8 pt-4">
-        <span class="mr-1 text-xs text-white/35">记录类型</span>
+      <div v-if="filterCategory || filterKind" class="mt-4 flex justify-end border-t border-white/8 pt-4">
         <button
-          v-for="kind in (['consume', 'refund', 'grant'] as PointKind[])"
-          :key="kind"
           type="button"
-          class="rounded-full border px-3 py-1 text-xs transition"
-          :class="
-            filterKind === kind
-              ? 'border-[#818cf8]/60 bg-[#6366f1]/15 text-[#a5b4fc]'
-              : 'border-white/10 text-white/45 hover:text-white/70'
-          "
-          @click="toggleKind(kind)"
-        >
-          {{ kindLabels[kind] }}
-        </button>
-        <button
-          v-if="filterCategory || filterKind"
-          type="button"
-          class="ml-auto text-xs text-white/40 transition hover:text-white/70"
+          class="text-xs text-white/40 transition hover:text-white/70"
           @click="filterCategory = undefined; filterKind = undefined"
         >
           清除筛选
         </button>
       </div>
     </section>
+
+    <div class="mb-4 flex rounded-xl bg-[#242424] p-1">
+      <button
+        v-for="tab in ([['all', '全部'], ['consume', '消耗'], ['grant', '获得']] as const)"
+        :key="tab[0]"
+        type="button"
+        class="flex-1 rounded-lg px-3 py-2 text-xs transition"
+        :class="billKindTab === tab[0] ? 'bg-[#6366f1] text-white' : 'text-white/50'"
+        @click="billKindTab = tab[0]"
+      >
+        {{ tab[1] }}
+      </button>
+    </div>
 
     <div v-if="isLoading" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-sm text-white/35">
       正在加载积分账单…
@@ -383,9 +393,14 @@ onMounted(async () => {
         </div>
         <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
           <time class="text-xs text-white/30" :datetime="tx.createdAt">{{ formatCreatedAt(tx.createdAt) }}</time>
-          <span v-if="tx.generationId" class="font-mono text-[11px] text-[#818cf8]/70" :title="tx.generationId">
-            生成 ID · {{ shortGenerationId(tx.generationId) }}
-          </span>
+          <div class="flex items-center gap-3">
+            <span v-if="tx.generationId" class="font-mono text-[11px] text-[#818cf8]/70" :title="tx.generationId">
+              生成 ID · {{ shortGenerationId(tx.generationId) }}
+            </span>
+            <span class="text-xs text-white/35">
+              余额 {{ tx.balanceAfter ?? '—' }}
+            </span>
+          </div>
         </div>
       </div>
       <p v-if="loadError" class="py-2 text-center text-xs text-red-300/70">{{ loadError }}</p>
@@ -400,7 +415,7 @@ onMounted(async () => {
         </button>
       </div>
       <p v-if="!transactions.length" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-white/30">
-        暂无该时间范围的账单记录
+        {{ filterCategory || filterKind ? '该条件下暂无记录' : '暂无该时间范围的账单记录' }}
       </p>
     </div>
   </div>
