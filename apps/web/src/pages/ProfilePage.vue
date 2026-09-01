@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import MembershipModal from '@/components/membership/MembershipModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { membershipApi } from '@/services/users-api'
 import { api } from '@/services/api'
@@ -25,6 +26,16 @@ const nextCursor = ref<string | null>(null)
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const loadError = ref('')
+const showMembership = ref(false)
+
+const membershipLabel = computed(() => {
+  const m = profile.value?.membership
+  if (m === 'pro') return '专业版'
+  if (m === 'studio') return '工作室版'
+  return '免费版'
+})
+
+const isFreeMembership = computed(() => !profile.value?.membership || profile.value.membership === 'free')
 
 /** Monotonic generation; stale responses are discarded when range/filters change. */
 let fetchGeneration = 0
@@ -176,18 +187,26 @@ onMounted(async () => {
           <p class="text-sm text-white/50">{{ profile.phone }}</p>
         </div>
       </div>
-      <div class="mt-6 grid grid-cols-2 gap-4">
-        <div class="rounded-xl bg-[#242424] p-4">
-          <p class="text-xs text-white/40">积分余额</p>
-          <p class="text-2xl font-semibold text-[#818cf8]">{{ profile.points ?? 0 }}</p>
+      <div class="mt-6 rounded-xl border border-white/8 bg-[#242424] p-5">
+        <div class="flex items-end justify-between gap-4">
+          <div>
+            <p class="text-xs text-white/40">可用总积分</p>
+            <p class="text-3xl font-semibold text-[#818cf8]">{{ profile.points ?? 0 }}</p>
+          </div>
+          <span class="rounded-full bg-white/[0.06] px-3 py-1 text-xs text-white/60">{{ membershipLabel }}</span>
         </div>
-        <div class="rounded-xl bg-[#242424] p-4">
-          <p class="text-xs text-white/40">会员等级</p>
-          <p class="text-lg font-medium">
-            {{ profile.membership === 'pro' ? '专业版' : profile.membership === 'studio' ? '工作室版' : '免费版' }}
-          </p>
+        <p v-if="isFreeMembership" class="mt-3 text-xs text-white/35">开通会员，获得更多积分与高级能力</p>
+        <div class="mt-4 flex gap-3">
+          <button type="button" class="flex-1 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black" @click="showMembership = true">
+            充值
+          </button>
+          <button type="button" class="flex-1 rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/80" @click="showMembership = true">
+            {{ isFreeMembership ? '升级会员' : '管理会员' }}
+          </button>
         </div>
       </div>
+
+      <MembershipModal v-model="showMembership" />
     </div>
 
     <section class="mb-6 rounded-2xl border border-white/8 bg-[#1a1a1a] p-5">
