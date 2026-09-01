@@ -43,6 +43,14 @@ export interface PointTransactionItem {
   balanceAfter: number | null
 }
 
+export interface PointsInsights {
+  netConsumedTotal: number
+  peakDayConsumed: number
+  avgDailyConsumed: number
+  activeDays: number
+  longestStreakDays: number
+}
+
 export interface PointsSummary {
   range: PointsRangeKey
   from: string | null
@@ -51,6 +59,7 @@ export interface PointsSummary {
   otherNetConsumed: number
   refundTotal: number
   grantTotal: number
+  insights: PointsInsights
 }
 
 export const membershipApi = {
