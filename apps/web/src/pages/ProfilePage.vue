@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import MembershipModal from '@/components/membership/MembershipModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { membershipApi } from '@/services/users-api'
 import { api } from '@/services/api'
@@ -9,6 +10,7 @@ import type {
   PointCategory,
   PointKind,
   PointTransactionItem,
+  PointsInsights,
   PointsRangeKey,
   PointsSummary,
 } from '@/services/users-api'
@@ -25,6 +27,29 @@ const nextCursor = ref<string | null>(null)
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const loadError = ref('')
+const showMembership = ref(false)
+
+type BillKindTab = 'all' | 'consume' | 'grant'
+
+const billKindTab = ref<BillKindTab>('all')
+
+watch(billKindTab, (tab) => {
+  filterKind.value = tab === 'all' ? undefined : tab
+})
+
+watch(filterKind, (kind) => {
+  if (!kind) billKindTab.value = 'all'
+  else if (kind === 'consume' || kind === 'grant') billKindTab.value = kind
+})
+
+const membershipLabel = computed(() => {
+  const m = profile.value?.membership
+  if (m === 'pro') return '专业版'
+  if (m === 'studio') return '工作室版'
+  return '免费版'
+})
+
+const isFreeMembership = computed(() => !profile.value?.membership || profile.value.membership === 'free')
 
 /** Monotonic generation; stale responses are discarded when range/filters change. */
 let fetchGeneration = 0
@@ -63,6 +88,19 @@ const categoryLabels: Record<PointCategory, string> = {
   audio: '音频',
   video: '视频',
   other: '其他',
+}
+
+const insightOptions = [
+  { key: 'netConsumedTotal' as const, label: '净消耗' },
+  { key: 'peakDayConsumed' as const, label: '单日峰值' },
+  { key: 'avgDailyConsumed' as const, label: '日均消耗' },
+  { key: 'activeDays' as const, label: '活跃天数' },
+  { key: 'longestStreakDays' as const, label: '最长连续活跃' },
+]
+
+function formatInsightValue(key: keyof PointsInsights, value: number) {
+  if (key === 'avgDailyConsumed') return value < 10 ? value.toFixed(1) : Math.round(value).toString()
+  return String(Math.round(value))
 }
 
 function toggleCategory(category: PointCategory) {
@@ -176,18 +214,26 @@ onMounted(async () => {
           <p class="text-sm text-white/50">{{ profile.phone }}</p>
         </div>
       </div>
-      <div class="mt-6 grid grid-cols-2 gap-4">
-        <div class="rounded-xl bg-[#242424] p-4">
-          <p class="text-xs text-white/40">积分余额</p>
-          <p class="text-2xl font-semibold text-[#818cf8]">{{ profile.points ?? 0 }}</p>
+      <div class="mt-6 rounded-xl border border-white/8 bg-[#242424] p-5">
+        <div class="flex items-end justify-between gap-4">
+          <div>
+            <p class="text-xs text-white/40">可用总积分</p>
+            <p class="text-3xl font-semibold text-[#818cf8]">{{ profile.points ?? 0 }}</p>
+          </div>
+          <span class="rounded-full bg-white/[0.06] px-3 py-1 text-xs text-white/60">{{ membershipLabel }}</span>
         </div>
-        <div class="rounded-xl bg-[#242424] p-4">
-          <p class="text-xs text-white/40">会员等级</p>
-          <p class="text-lg font-medium">
-            {{ profile.membership === 'pro' ? '专业版' : profile.membership === 'studio' ? '工作室版' : '免费版' }}
-          </p>
+        <p v-if="isFreeMembership" class="mt-3 text-xs text-white/35">开通会员，获得更多积分与高级能力</p>
+        <div class="mt-4 flex gap-3">
+          <button type="button" class="flex-1 rounded-xl bg-white px-4 py-2.5 text-sm font-medium text-black" @click="showMembership = true">
+            充值
+          </button>
+          <button type="button" class="flex-1 rounded-xl border border-white/15 px-4 py-2.5 text-sm text-white/80" @click="showMembership = true">
+            {{ isFreeMembership ? '升级会员' : '管理会员' }}
+          </button>
         </div>
       </div>
+
+      <MembershipModal v-model="showMembership" />
     </div>
 
     <section class="mb-6 rounded-2xl border border-white/8 bg-[#1a1a1a] p-5">
@@ -228,6 +274,19 @@ onMounted(async () => {
             {{ summary.byCategory[category.value] }}
           </p>
         </button>
+      </div>
+
+      <div v-if="summary?.insights" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div
+          v-for="item in insightOptions"
+          :key="item.key"
+          class="rounded-xl border border-white/8 bg-[#242424] p-4"
+        >
+          <p class="text-xs text-white/45">{{ item.label }}</p>
+          <p class="mt-2 text-xl font-semibold text-white/85">
+            {{ formatInsightValue(item.key, summary.insights[item.key]) }}
+          </p>
+        </div>
       </div>
 
       <div v-if="summary" class="mt-3 grid grid-cols-2 gap-3" :class="{ 'sm:grid-cols-3': summary.otherNetConsumed > 0 }">
@@ -273,32 +332,29 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-white/8 pt-4">
-        <span class="mr-1 text-xs text-white/35">记录类型</span>
+      <div v-if="filterCategory || filterKind" class="mt-4 flex justify-end border-t border-white/8 pt-4">
         <button
-          v-for="kind in (['consume', 'refund', 'grant'] as PointKind[])"
-          :key="kind"
           type="button"
-          class="rounded-full border px-3 py-1 text-xs transition"
-          :class="
-            filterKind === kind
-              ? 'border-[#818cf8]/60 bg-[#6366f1]/15 text-[#a5b4fc]'
-              : 'border-white/10 text-white/45 hover:text-white/70'
-          "
-          @click="toggleKind(kind)"
-        >
-          {{ kindLabels[kind] }}
-        </button>
-        <button
-          v-if="filterCategory || filterKind"
-          type="button"
-          class="ml-auto text-xs text-white/40 transition hover:text-white/70"
+          class="text-xs text-white/40 transition hover:text-white/70"
           @click="filterCategory = undefined; filterKind = undefined"
         >
           清除筛选
         </button>
       </div>
     </section>
+
+    <div class="mb-4 flex rounded-xl bg-[#242424] p-1">
+      <button
+        v-for="tab in ([['all', '全部'], ['consume', '消耗'], ['grant', '获得']] as const)"
+        :key="tab[0]"
+        type="button"
+        class="flex-1 rounded-lg px-3 py-2 text-xs transition"
+        :class="billKindTab === tab[0] ? 'bg-[#6366f1] text-white' : 'text-white/50'"
+        @click="billKindTab = tab[0]"
+      >
+        {{ tab[1] }}
+      </button>
+    </div>
 
     <div v-if="isLoading" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-sm text-white/35">
       正在加载积分账单…
@@ -337,9 +393,14 @@ onMounted(async () => {
         </div>
         <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
           <time class="text-xs text-white/30" :datetime="tx.createdAt">{{ formatCreatedAt(tx.createdAt) }}</time>
-          <span v-if="tx.generationId" class="font-mono text-[11px] text-[#818cf8]/70" :title="tx.generationId">
-            生成 ID · {{ shortGenerationId(tx.generationId) }}
-          </span>
+          <div class="flex items-center gap-3">
+            <span v-if="tx.generationId" class="font-mono text-[11px] text-[#818cf8]/70" :title="tx.generationId">
+              生成 ID · {{ shortGenerationId(tx.generationId) }}
+            </span>
+            <span class="text-xs text-white/35">
+              余额 {{ tx.balanceAfter ?? '—' }}
+            </span>
+          </div>
         </div>
       </div>
       <p v-if="loadError" class="py-2 text-center text-xs text-red-300/70">{{ loadError }}</p>
@@ -354,7 +415,7 @@ onMounted(async () => {
         </button>
       </div>
       <p v-if="!transactions.length" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-white/30">
-        暂无该时间范围的账单记录
+        {{ filterCategory || filterKind ? '该条件下暂无记录' : '暂无该时间范围的账单记录' }}
       </p>
     </div>
   </div>

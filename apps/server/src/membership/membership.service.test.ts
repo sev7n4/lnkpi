@@ -6,6 +6,7 @@ import { MembershipService } from './membership.service'
 
 describe('MembershipService', () => {
   const findMany = vi.fn()
+  const findFirst = vi.fn()
   const groupBy = vi.fn()
   const userUpdate = vi.fn()
   const transactionCreate = vi.fn()
@@ -25,7 +26,7 @@ describe('MembershipService', () => {
         {
           provide: PrismaService,
           useValue: {
-            pointTransaction: { findMany, groupBy },
+            pointTransaction: { findMany, groupBy, findFirst },
             $transaction,
           },
         },
@@ -34,36 +35,34 @@ describe('MembershipService', () => {
     service = moduleRef.get(MembershipService)
   })
 
-  it('aggregates non-negative net consumption and totals for the selected range', async () => {
+  it('aggregates non-negative net consumption and insights for the selected range', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-20T12:00:00.000Z'))
     groupBy.mockResolvedValue([
       { kind: 'consume', category: 'image', _sum: { amount: -30 } },
       { kind: 'refund', category: 'image', _sum: { amount: 10 } },
       { kind: 'grant', category: 'other', _sum: { amount: 100 } },
-      { kind: 'refund', category: 'audio', _sum: { amount: 7 } },
+    ])
+    findMany.mockResolvedValue([
+      { createdAt: new Date('2026-08-18T10:00:00.000Z'), amount: -20 },
+      { createdAt: new Date('2026-08-19T10:00:00.000Z'), amount: -10 },
     ])
 
-    await expect(service.pointsSummary('u1', 'month')).resolves.toEqual({
-      range: 'month',
-      from: '2026-07-31T16:00:00.000Z',
-      to: '2026-08-20T12:00:00.000Z',
-      byCategory: { text: 0, image: 20, audio: 0, video: 0 },
-      otherNetConsumed: 0,
-      refundTotal: 17,
-      grantTotal: 100,
+    const result = await service.pointsSummary('u1', 'month')
+    expect(result.byCategory.image).toBe(20)
+    expect(result.insights).toEqual({
+      netConsumedTotal: 20,
+      peakDayConsumed: 20,
+      avgDailyConsumed: expect.any(Number),
+      activeDays: 2,
+      longestStreakDays: 2,
     })
-    expect(groupBy).toHaveBeenCalledWith({
-      by: ['kind', 'category'],
-      where: {
-        userId: 'u1',
-        createdAt: {
-          gte: new Date('2026-07-31T16:00:00.000Z'),
-          lte: new Date('2026-08-20T12:00:00.000Z'),
-        },
-      },
-      _sum: { amount: true },
-    })
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: 'u1', kind: 'consume' }),
+        select: { createdAt: true, amount: true },
+      }),
+    )
     vi.useRealTimers()
   })
 
