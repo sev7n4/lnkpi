@@ -40,6 +40,8 @@ from app.graph.sidebar_attachments import (
     normalize_mentioned_keys,
     normalize_sidebar_attachments,
 )
+from app.graph.cancel_checkpoint import build_cancelled_checkpoint_update
+from app.run_cancel import is_cancel_requested, request_cancel
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -281,6 +283,12 @@ class RunRequest(BaseModel):
         default=None,
         validation_alias="mentioned_keys",
     )
+
+
+class CancelRunRequest(BaseModel):
+    thread_id: str
+    session_id: str | None = None
+    reason: str = "user"
 
 
 class NestEventProxy:
@@ -684,6 +692,97 @@ async def get_thread_state(
     }
 
 
+async def cancel_run(
+    req: CancelRunRequest,
+    *,
+    checkpointer: Any | None = None,
+    nest: Any | None = None,
+) -> dict[str, Any]:
+    """Request cooperative cancellation and persist it for product-visual runs."""
+    thread_id = req.thread_id.strip()
+    request_cancel(thread_id, reason=req.reason)
+
+    class _NoOpNest:
+        async def close(self) -> None:
+            pass
+
+    cp = checkpointer if checkpointer is not None else await _get_checkpointer()
+    graph = build_agent_graph(
+        nest=_NoOpNest(),
+        llm=default_llm(),
+        skills_dir=resolve_skills_dir(),
+        checkpointer=cp,
+    )
+    config = {"configurable": {"thread_id": thread_id}}
+    snap = await graph.aget_state(config)
+    vals = getattr(snap, "values", None) or {}
+    phase = str(vals["phase"]) if vals.get("phase") is not None else None
+    gen_by_key = vals.get("gen_by_key")
+    by_key = gen_by_key if isinstance(gen_by_key, dict) else {}
+    completed_keys = {
+        str(key) for key in (vals.get("gen_completed_keys") or [])
+    }
+    completed_tasks = sum(
+        1
+        for key, item in by_key.items()
+        if str(key) in completed_keys
+        or (
+            isinstance(item, dict)
+            and (
+                str(item.get("status") or "").lower() in {"completed", "done", "success"}
+                or bool(item.get("url"))
+            )
+        )
+    )
+    total_tasks = len(by_key)
+    base = {
+        "ok": True,
+        "phase": phase,
+        "cancelled_node_ids": [],
+        "completed_tasks": completed_tasks,
+        "total_tasks": total_tasks,
+    }
+
+    if vals.get("flow_mode") != "product_visual":
+        return {**base, "skipped": True, "reason": "flow_not_supported"}
+    if phase == "cancelled":
+        return base
+
+    cancelled_node_ids: list[str] = []
+    for key, item in by_key.items():
+        if not isinstance(item, dict):
+            continue
+        is_completed = (
+            str(key) in completed_keys
+            or str(item.get("status") or "").lower() in {"completed", "done", "success"}
+            or bool(item.get("url"))
+        )
+        node_id = item.get("node_id")
+        if is_completed or not node_id:
+            continue
+        if nest is not None:
+            try:
+                await nest.cancel_generation(node_id=str(node_id))
+            except Exception:  # noqa: BLE001 — cancellation remains cooperative
+                pass
+        cancelled_node_ids.append(str(node_id))
+
+    await graph.aupdate_state(
+        config,
+        build_cancelled_checkpoint_update(
+            completed_tasks=completed_tasks,
+            total_tasks=total_tasks,
+            reason=req.reason,
+        ),
+        as_node="gen_scheduler",
+    )
+    return {
+        **base,
+        "phase": "cancelled",
+        "cancelled_node_ids": cancelled_node_ids,
+    }
+
+
 async def _load_history(nest: NestCanvasClient, thread_id: str) -> list[Any]:
     """Load conversation history for the current thread only (Nest single-writer)."""
     try:
@@ -846,6 +945,7 @@ async def stream_run_events(
         executed_nodes: set[str] = set()
         stream_input: Any = input_state
         stream_vals: dict[str, Any] = dict(pre_vals)
+        cancelled_during_stream = False
         try:
             for pass_idx in range(2):
                 async for update in graph.astream(stream_input, config, stream_mode="updates"):
@@ -922,7 +1022,41 @@ async def stream_run_events(
                                 ms=int((time.monotonic() - t0) * 1000),
                             )
                         )
+                    if is_cancel_requested(thread_id):
+                        cancel_snap = await graph.aget_state(config)
+                        cancel_vals = getattr(cancel_snap, "values", None) or {}
+                        by_key = cancel_vals.get("gen_by_key")
+                        by_key = by_key if isinstance(by_key, dict) else {}
+                        completed = {
+                            str(key)
+                            for key in (cancel_vals.get("gen_completed_keys") or [])
+                        }
+                        completed_tasks = len(completed.intersection(str(key) for key in by_key))
+                        total_tasks = len(by_key)
+                        if cancel_vals.get("phase") != "cancelled":
+                            await graph.aupdate_state(
+                                config,
+                                build_cancelled_checkpoint_update(
+                                    completed_tasks=completed_tasks,
+                                    total_tasks=total_tasks,
+                                ),
+                                as_node="gen_scheduler",
+                            )
+                        await emit(
+                            {
+                                "type": "run_cancelled",
+                                "data": {
+                                    "phase": "cancelled",
+                                    "completedTasks": completed_tasks,
+                                    "totalTasks": total_tasks,
+                                },
+                            }
+                        )
+                        cancelled_during_stream = True
+                        break
 
+                if cancelled_during_stream:
+                    break
                 mid = await graph.aget_state(config)
                 mid_next = [str(n) for n in (getattr(mid, "next", None) or [])]
                 gate = pre_next[0] if pre_next else None

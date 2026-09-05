@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from app.config import settings
 from app.metrics import metrics_payload
-from app.runs import RunRequest, get_thread_state, stream_run_events
+from app.runs import CancelRunRequest, RunRequest, get_thread_state, stream_run_events
 from app.tracing import setup_tracing, shutdown_tracing
 
 
@@ -112,3 +112,18 @@ async def create_run(
             yield json.dumps(event, ensure_ascii=False) + "\n"
 
     return StreamingResponse(ndjson(), media_type="application/x-ndjson")
+
+
+@app.post("/v1/runs/cancel")
+async def cancel_run_route(
+    body: CancelRunRequest,
+    x_lnkpi_service_token: str | None = Header(default=None),
+):
+    _require_runtime_auth(x_lnkpi_service_token)
+    from app.runs import cancel_run
+
+    return await cancel_run(
+        body,
+        checkpointer=_run_overrides.get("checkpointer"),
+        nest=_run_overrides.get("nest"),
+    )
