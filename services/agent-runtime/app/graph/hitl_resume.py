@@ -58,6 +58,8 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "visual_intent": None,
     "presentation": None,
     "journey_trace": None,
+    "run_cancelled": None,
+    "cancel_reason": None,
 }
 
 

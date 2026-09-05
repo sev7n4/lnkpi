@@ -124,6 +124,7 @@ class AgentRuntimeState(TypedDict, total=False):
         "orchestrate_shots",
         "phase1_seed_lazy",
         "phase1_seed_eager",
+        "cancelled",
     ]
     skill_id: str | None
     requested_skill_id: str | None  # explicit Dock/API skill; intake reads each turn
@@ -234,3 +235,5 @@ class AgentRuntimeState(TypedDict, total=False):
     presentation: dict | None
     # UX-PV: journey trace snapshot (synced with presentation stepper)
     journey_trace: dict | None
+    run_cancelled: bool | None
+    cancel_reason: str | None
