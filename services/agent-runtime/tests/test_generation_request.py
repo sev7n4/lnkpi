@@ -65,7 +65,7 @@ def test_colloquial_create_with_sidebar_refs():
         "atomic_node_id": "img-1",
     }
     req = build_generation_request_from_atomic_state(state)
-    assert req["prompt"]
+    assert "小女孩" in req["prompt"]
     assert req["modality"] == "image"
     assert req["mentioned_keys"] == ["I1"]
     assert any(r.get("url") == "https://a/1.jpg" for r in (req.get("refs") or []))
@@ -116,8 +116,7 @@ async def test_create_atomic_node_writes_generation_request():
     assert req.get("slots") == {"ref": "T1", "style": "3"}
 
 
-@pytest.mark.asyncio
-async def test_apply_generation_request_after_clarify_resume_fields():
+def test_apply_generation_request_after_clarify_resume_fields():
     state = {
         "messages": [HumanMessage(content="请帮我生一个小女孩的图片")],
         "atomic_spec": {

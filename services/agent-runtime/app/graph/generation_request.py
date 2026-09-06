@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Any, Literal, TypedDict
 
 from app.graph.atomic_intent_ir import AtomicIntent, derive_studio_prompt, intent_slots_dict, resolve_atomic_intent
+from app.graph.media_utterance import suspected_media_create
 from app.graph.route_context import latest_user_text
 from app.graph.sidebar_attachments import assign_sidebar_ref_keys, resolve_sidebar_mentioned_keys
 
@@ -121,7 +122,9 @@ def build_generation_request_from_atomic_state(state: dict[str, Any]) -> Generat
     intent = _intent_from_state(state, utterance, mentioned)
     derived = derive_studio_prompt(intent).strip()
     spec_prompt = str(spec.get("prompt") or "").strip()
-    if intent.mentioned_keys and derived:
+    # Colloquial create carries the subject in the utterance ("生一个小女孩的图片"), which the
+    # ref-backed derived prompt would drop — keep the spec/utterance prompt in that case.
+    if intent.mentioned_keys and derived and not suspected_media_create(utterance):
         prompt = derived
     else:
         prompt = spec_prompt or derived
