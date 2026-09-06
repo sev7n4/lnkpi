@@ -5,7 +5,7 @@ import type { RefineChromeMode } from '@/utils/refineChrome'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 
-export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon'
+export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
 export type RefineMaskOp = 'add' | 'subtract'
 export type RefineLoupeShape = 'circle' | 'rect'
 

@@ -155,6 +155,16 @@ describe('canvasEditor refine target', () => {
     expect(editor.refineMaskOp).toBe('add')
   })
 
+  it('keeps refineMaskOp when switching to point', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.setRefineTool('eraser')
+    expect(editor.refineMaskOp).toBe('subtract')
+    editor.setRefineTool('point')
+    expect(editor.refineTool).toBe('point')
+    expect(editor.refineMaskOp).toBe('subtract')
+  })
+
   it('resets refineMaskOp and polygon tool on close', () => {
     setActivePinia(createPinia())
     const editor = useCanvasEditorStore()

@@ -8,6 +8,7 @@ import type {
 import { MaterialService } from './material.service'
 import { ShotService } from './shot.service'
 import { PointsService } from '../points/points.service'
+import { consumeMeta } from '../points/point-tx.types'
 import { videoCredits } from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 
@@ -111,7 +112,12 @@ export class SceneComposerService {
 
     const total = dto.items.reduce((sum, item) => sum + this.itemCredits(item), 0)
     if (total > 0) {
-      await this.points.consume(userId, total, `导演台批量生成 ×${dto.items.length}`)
+      await this.points.consume(
+        userId,
+        total,
+        `导演台批量生成 ×${dto.items.length}`,
+        consumeMeta('other', { generationId: null }),
+      )
     }
 
     const results: Array<{ shotNodeId: string; materialId?: string; mediaType: string }> = []

@@ -51,6 +51,11 @@ import {
 } from '../media/build-media-info'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsService } from '../points/points.service'
+import {
+  consumeMeta,
+  refundMeta,
+  type PointCategory,
+} from '../points/point-tx.types'
 import { videoCredits } from '../points/video-credits'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
@@ -147,6 +152,11 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
   } catch {
     return {}
   }
+}
+
+function materialPointCategory(type: string): PointCategory {
+  if (type === 'image' || type === 'video') return type
+  return 'other'
 }
 
 function hintForCode(code: ErrorCode): string | undefined {
@@ -357,7 +367,12 @@ export class MaterialService {
     const cost = 10
     const chargeReason = '图像生成'
     if (!skipCharge) {
-      await this.points.consume(userId, cost, chargeReason)
+      await this.points.consume(
+        userId,
+        cost,
+        chargeReason,
+        consumeMeta('image', { model: model ?? null, generationId: null }),
+      )
     }
 
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'image')
@@ -437,7 +452,12 @@ export class MaterialService {
     const cost = videoCredits(duration)
     const chargeReason = '视频生成'
     if (!skipCharge) {
-      await this.points.consume(userId, cost, chargeReason)
+      await this.points.consume(
+        userId,
+        cost,
+        chargeReason,
+        consumeMeta('video', { model: model ?? null, generationId: null }),
+      )
     }
 
     const resolved = await this.resolver.resolveForGeneration(userId, model, 'video')
@@ -496,7 +516,17 @@ export class MaterialService {
     }
     const meta = parseMeta(material.metadata)
     const platformCost = this.platformFallbackCost(material.type, meta)
-    await this.points.consume(userId, platformCost, '平台回退生成')
+    const pointCategory = materialPointCategory(material.type)
+    const pointExtra = {
+      model: typeof meta.model === 'string' ? meta.model : null,
+      generationId: material.id,
+    }
+    await this.points.consume(
+      userId,
+      platformCost,
+      '平台回退生成',
+      consumeMeta(pointCategory, pointExtra),
+    )
     const chargedMeta = { ...meta, chargedPoints: platformCost, priorByokRefunded: true }
 
     try {
@@ -554,7 +584,12 @@ export class MaterialService {
               : undefined,
         })
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.material.update({
@@ -595,7 +630,12 @@ export class MaterialService {
                 : undefined,
         })
         if (cancel?.isCancelled()) {
-          await this.points.refund(userId, platformCost, '平台回退-取消退款')
+          await this.points.refund(
+            userId,
+            platformCost,
+            '平台回退-取消退款',
+            refundMeta(pointCategory, 'cancelled_refund', pointExtra),
+          )
           throwCancelledException(platformCost)
         }
         return this.prisma.material.update({
@@ -633,10 +673,20 @@ export class MaterialService {
         throw err
       }
       if (err instanceof BadRequestException && err.message === '不支持的素材类型') {
-        await this.points.refund(userId, platformCost, '平台回退失败退款')
+        await this.points.refund(
+          userId,
+          platformCost,
+          '平台回退失败退款',
+          refundMeta(pointCategory, 'failed_refund', pointExtra),
+        )
         rethrowWithRefundedPoints(err, platformCost)
       }
-      await this.points.refund(userId, platformCost, '平台回退失败退款')
+      await this.points.refund(
+        userId,
+        platformCost,
+        '平台回退失败退款',
+        refundMeta(pointCategory, 'failed_refund', pointExtra),
+      )
       const failedMeta = applyFailureDiagnosticMeta(
         applyRefundMeta(chargedMeta, platformCost, 'platform_fallback_failed'),
         err,
@@ -671,7 +721,15 @@ export class MaterialService {
         typeof meta.chargedPoints === 'number'
           ? meta.chargedPoints
           : this.platformFallbackCost(material.type, meta)
-      await this.points.refund(userId, cost, '平台回退取消退款')
+      await this.points.refund(
+        userId,
+        cost,
+        '平台回退取消退款',
+        refundMeta(materialPointCategory(material.type), 'cancelled_refund', {
+          model: typeof meta.model === 'string' ? meta.model : null,
+          generationId: material.id,
+        }),
+      )
     }
     const cancelledMeta: Record<string, unknown> = (() => {
       const byokErrorRaw =
@@ -714,7 +772,15 @@ export class MaterialService {
     const chargeReason = material.type === 'video' ? '视频生成' : '图像生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
-      await this.points.refund(userId, cost, `${chargeReason}-取消退款`)
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-取消退款`,
+        refundMeta(materialPointCategory(material.type), 'cancelled_refund', {
+          model: typeof meta.model === 'string' ? meta.model : null,
+          generationId: material.id,
+        }),
+      )
       updatedMeta = applyRefundMeta(updatedMeta, cost, 'cancelled')
     }
     updatedMeta = applyFailureDiagnosticMeta(updatedMeta, new Error('已取消'), {
@@ -926,7 +992,15 @@ export class MaterialService {
       console.error('Image generation failed:', err)
       if (resolved.source === 'user') {
         if (!skipCharge) {
-          await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+          await this.points.refund(
+            userId,
+            cost,
+            `${chargeReason}-BYOK失败退款`,
+            refundMeta('image', 'byok_refund', {
+              model: resolved.modelName,
+              generationId: materialId,
+            }),
+          )
         }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
         if (!existing || existing.status !== 'generating') return
@@ -958,7 +1032,15 @@ export class MaterialService {
         return
       }
       if (!skipCharge) {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('image', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: materialId,
+          }),
+        )
       }
       const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existingFailed || existingFailed.status !== 'generating') return
@@ -1118,7 +1200,15 @@ export class MaterialService {
       console.error('Video generation failed:', err)
       if (resolved.source === 'user') {
         if (!skipCharge) {
-          await this.points.refund(userId, cost, `${chargeReason}-BYOK失败退款`)
+          await this.points.refund(
+            userId,
+            cost,
+            `${chargeReason}-BYOK失败退款`,
+            refundMeta('video', 'byok_refund', {
+              model: resolved.modelName,
+              generationId: materialId,
+            }),
+          )
         }
         const existing = await this.prisma.material.findFirst({ where: { id: materialId } })
         if (!existing || existing.status !== 'generating') return
@@ -1154,7 +1244,15 @@ export class MaterialService {
         return
       }
       if (!skipCharge) {
-        await this.points.refund(userId, cost, `${chargeReason}-失败退款`)
+        await this.points.refund(
+          userId,
+          cost,
+          `${chargeReason}-失败退款`,
+          refundMeta('video', 'failed_refund', {
+            model: resolved.modelName,
+            generationId: materialId,
+          }),
+        )
       }
       const existingFailed = await this.prisma.material.findFirst({ where: { id: materialId } })
       if (!existingFailed || existingFailed.status !== 'generating') return
