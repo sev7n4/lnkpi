@@ -178,3 +178,37 @@ cases:
       atomic_node_id: node-1
       atomic_spec: { target_type: image, prompt: x, title: x }
     gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-01
+    state:
+      messages: [{ role: user, content: "请帮我生一个小女孩的图片" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-02
+    state:
+      messages: [{ role: user, content: "请帮我生成一张图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-03
+    state:
+      messages: [{ role: user, content: "这个图片是什么？" }]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/1.jpg" }
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-chat-sink-04
+    state:
+      messages: [{ role: user, content: "生活怎么样" }]
+    gold: { flow_mode: chat }
+
+  - id: rt-chat-sink-05
+    state:
+      messages: [{ role: user, content: "帮我做一套天猫详情页营销方案" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-chat-sink-06
+    state:
+      messages: [{ role: user, content: "帮我弄张图看看" }]
+    gold:
+      # soft suspected: clarify_route or atomic_create — never chat
+      flow_mode: clarify_route
