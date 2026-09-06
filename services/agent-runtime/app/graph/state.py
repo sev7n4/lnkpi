@@ -237,3 +237,5 @@ class AgentRuntimeState(TypedDict, total=False):
     journey_trace: dict | None
     run_cancelled: bool | None
     cancel_reason: str | None
+    # Phase the run was in when cancelled; drives revise CLEAR tiering (§4.3)
+    cancelled_from_phase: str | None

@@ -29,9 +29,43 @@ def test_resolve_turn_input_new_task_after_cancel():
     assert input_state.goto == "intake"
     assert input_state.update["shot_manifest"] is None
     assert input_state.update["run_cancelled"] is None
+    assert input_state.update["cancelled_from_phase"] is None
+    # M7: a fresh task must also drop the whole gen run channel.
+    for key in ("gen_by_key", "gen_completed_keys", "gen_failed_keys", "gen_progress_id"):
+        assert input_state.update[key] is None
 
 
-def test_resolve_turn_input_revise_after_cancel():
+def test_resolve_turn_input_revise_after_gen_phase_cancel_keeps_upstream_ssot():
+    """§4.3: a gen-phase revise reuses the confirmed macro + shot SSOT."""
+    turn_update = {
+        "messages": [HumanMessage(content="换成白底风格")],
+        "session_id": "s",
+    }
+
+    input_state = resolve_turn_input(
+        {
+            "phase": "cancelled",
+            "cancelled_from_phase": "orchestrate_gen",
+            "run_cancelled": True,
+        },
+        [],
+        "换成白底风格",
+        None,
+        turn_update,
+    )
+
+    assert input_state.goto == "intake"
+    assert "shot_manifest" not in input_state.update
+    assert "selected_macro_scheme_ids" not in input_state.update
+    assert input_state.update["gen_by_key"] is None
+    assert input_state.update["delivery_selections"] is None
+    assert input_state.update["cancel_reason"] is None
+    assert input_state.update["cancelled_from_phase"] is None
+    assert input_state.update["messages"] == turn_update["messages"]
+
+
+def test_resolve_turn_input_revise_without_origin_phase_clears_downstream():
+    """Without ``cancelled_from_phase`` nothing downstream can be trusted."""
     turn_update = {
         "messages": [HumanMessage(content="换成白底风格")],
         "session_id": "s",
@@ -47,8 +81,31 @@ def test_resolve_turn_input_revise_after_cancel():
 
     assert input_state.goto == "intake"
     assert input_state.update["shot_manifest"] is None
+    assert input_state.update["selected_macro_scheme_ids"] is None
     assert input_state.update["cancel_reason"] is None
-    assert input_state.update["messages"] == turn_update["messages"]
+    assert input_state.update["cancelled_from_phase"] is None
+
+
+def test_resolve_turn_input_revise_after_shot_phase_cancel_keeps_macro_choice():
+    turn_update = {
+        "messages": [HumanMessage(content="去掉第三张")],
+        "session_id": "s",
+    }
+
+    input_state = resolve_turn_input(
+        {
+            "phase": "cancelled",
+            "cancelled_from_phase": "await_shot_topo_confirm",
+            "run_cancelled": True,
+        },
+        [],
+        "去掉第三张",
+        None,
+        turn_update,
+    )
+
+    assert input_state.update["shot_manifest"] is None
+    assert "selected_macro_scheme_ids" not in input_state.update
 
 
 def test_resolve_turn_input_preserves_non_cancelled_paths():

@@ -7,7 +7,8 @@ from typing import Any, Literal
 
 from langgraph.types import Command
 
-from app.graph.hitl_resume import should_resume_interrupt
+from app.graph.cancel_checkpoint import CANCEL_STATE_CLEAR
+from app.graph.hitl_resume import GEN_STATE_CLEAR, should_resume_interrupt
 
 PostCancelIntent = Literal["gate_resume", "revise", "new_task"]
 
@@ -32,19 +33,9 @@ NEW_TASK_HINTS: tuple[str, ...] = (
 )
 REF_MENTION_RE = re.compile(r"@[TIVA]\d+", re.IGNORECASE)
 
-_GEN_STATE_CLEAR: dict[str, None] = {
-    "gen_progress_id": None,
-    "gen_ordered_keys": None,
-    "gen_deps_of": None,
-    "gen_by_key": None,
-    "gen_completed_keys": None,
-    "gen_failed_keys": None,
-    "gen_needs_user_keys": None,
-    "gen_fail_details": None,
-}
 _DELIVERY_AND_GEN_CLEAR: dict[str, None] = {
     "delivery_selections": None,
-    **_GEN_STATE_CLEAR,
+    **GEN_STATE_CLEAR,
 }
 _SHOT_AND_DOWNSTREAM_CLEAR: dict[str, None] = {
     "shot_manifest": None,
@@ -132,6 +123,9 @@ def classify_post_cancel_intent(
 def revise_state_clear_for_phase(phase: str | None) -> dict[str, Any]:
     """Return only checkpoint fields that a revision must overwrite."""
     normalized = (phase or "").strip()
+    if normalized == "cancelled":
+        # ``phase`` alone says nothing about where the run stopped.
+        normalized = ""
     if normalized in _GEN_PHASES:
         return dict(_DELIVERY_AND_GEN_CLEAR)
     if normalized in _SHOT_PHASES:
@@ -152,8 +146,7 @@ def build_revise_turn_command(*, phase_hint: str | None, update: dict[str, Any])
         goto="intake",
         update={
             **clear,
-            "run_cancelled": None,
-            "cancel_reason": None,
+            **CANCEL_STATE_CLEAR,
             "phase": None,
             **update,
         },

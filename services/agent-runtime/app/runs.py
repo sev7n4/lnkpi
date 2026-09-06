@@ -22,9 +22,11 @@ from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
     GATE_RESUME_COMMAND_GOTO,
+    HITL_GATE_NODES,
     build_fresh_turn_command,
     build_interrupt_resume_command,
     build_interrupt_state_update,
+    cancel_state_clear_for_resume,
     interrupt_event_payload,
     prepare_interrupt_resume,
     should_resume_interrupt,
@@ -650,6 +652,9 @@ def resolve_turn_input(
     """Resolve synchronous turn routing; ``None`` defers a gate resume."""
     nodes = [str(node) for node in next_nodes]
     phase = str(pre_vals.get("phase") or "") or None
+    # Post-cancel revise must tier off the phase the run was stopped in, not "cancelled".
+    cancelled_from = str(pre_vals.get("cancelled_from_phase") or "") or None
+    phase_hint = cancelled_from or (None if phase == "cancelled" else phase)
     intent = classify_post_cancel_intent(
         message,
         next_nodes=nodes,
@@ -660,7 +665,7 @@ def resolve_turn_input(
     if intent == "new_task":
         return build_fresh_turn_command(update=turn_update)
     if intent == "revise":
-        return build_revise_turn_command(phase_hint=phase, update=turn_update)
+        return build_revise_turn_command(phase_hint=phase_hint, update=turn_update)
 
     is_gate_resume = bool(
         nodes
@@ -769,6 +774,11 @@ async def cancel_run(
     config = {"configurable": {"thread_id": thread_id}}
     snap = await graph.aget_state(config)
     vals = getattr(snap, "values", None) or {}
+    pending_gate_nodes = [
+        str(node)
+        for node in (getattr(snap, "next", None) or ())
+        if str(node) in HITL_GATE_NODES
+    ]
     phase = str(vals["phase"]) if vals.get("phase") is not None else None
     gen_by_key = vals.get("gen_by_key")
     by_key = gen_by_key if isinstance(gen_by_key, dict) else {}
@@ -833,6 +843,17 @@ async def cancel_run(
             clear_cancel(thread_id)
             return {**base, "skipped": True, "reason": "flow_not_supported"}
 
+        if pending_gate_nodes:
+            # Idle thread paused at an interrupt_before gate: writing the cancelled
+            # checkpoint would drop ``next`` and strand the gate, so the user could no
+            # longer answer it. Report ok and let the client show its local callout.
+            clear_cancel(thread_id)
+            return {
+                **base,
+                "gate_preserved": True,
+                "next_nodes": pending_gate_nodes,
+            }
+
         request_cancel(thread_id, reason=req.reason)
         try:
             cancelled_node_ids: list[str] = []
@@ -859,6 +880,7 @@ async def cancel_run(
                     completed_tasks=completed_tasks,
                     total_tasks=total_tasks,
                     reason=req.reason,
+                    from_phase=phase,
                 ),
                 as_node="gen_scheduler",
             )
@@ -1020,6 +1042,7 @@ async def stream_run_events(
                 gate,
                 req.message,
                 user_decision=req.user_decision,
+                extra_update=cancel_state_clear_for_resume(pre_vals),
             )
         else:
             input_state, _ = await prepare_interrupt_resume(
@@ -1140,6 +1163,11 @@ async def stream_run_events(
                                     completed_tasks=completed_tasks,
                                     total_tasks=total_tasks,
                                     reason=peek_cancel_reason(thread_id) or "user",
+                                    from_phase=(
+                                        str(cancel_vals.get("phase"))
+                                        if cancel_vals.get("phase") is not None
+                                        else None
+                                    ),
                                 ),
                                 as_node="gen_scheduler",
                             )
