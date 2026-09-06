@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.graph.atomic_intent_ir import resolve_atomic_intent
 from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.route_context import assemble_route_context
 from app.graph.route_features import extract_route_features
 from app.graph.route_precedence import (
+    ROUTE_CLARIFY_MEDIA,
+    ROUTE_CLARIFY_MEDIA_NO_SIDEBAR,
     ROUTE_CLARIFY_ORCHESTRATION,
     apply_route_precedence,
 )
@@ -182,3 +186,90 @@ def test_precedence_clarify_resume():
     )
     assert d["flow_mode"] == "atomic_create"
     assert d["precedence_rule_id"] == "clarify_resume"
+
+
+def test_sheng_xiao_girl_not_default_chat():
+    d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
+    assert d["flow_mode"] != "chat"
+    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] in ("atomic_create", "clarify_route")
+
+
+def test_sheng_xiao_girl_prefers_atomic_when_high():
+    d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
+    assert d["flow_mode"] == "atomic_create"
+    assert d["precedence_rule_id"] in ("atomic_generate", "media_create_high")
+
+
+@pytest.mark.parametrize(
+    "utterance",
+    [
+        "生活怎么样",
+        "生意很好",
+        "先生这张图不错",
+        "产生了很多图表",
+        "卫生间的示意图在哪",
+        "学生画的图我看不懂",
+        "整个图表看起来不错",
+        "来个图书推荐",
+        "请帮我生一个图书推荐",
+        "请帮我生一个图表分析",
+    ],
+)
+def test_casual_chat_not_hijacked_by_media_create(utterance: str):
+    d = _decide({"messages": [{"role": "user", "content": utterance}]})
+    assert d["flow_mode"] == "chat"
+    assert d["precedence_rule_id"] == "default_chat"
+
+
+def test_vision_qa_with_sidebar_not_chat():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "这个图片是什么？"}],
+            "sidebar_attachments": [
+                {"refKey": "I1", "mediaType": "image", "url": "https://a/1.jpg"}
+            ],
+        }
+    )
+    assert d["flow_mode"] != "chat"
+    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] in ("clarify_route", "atomic_create")
+    if d["flow_mode"] == "clarify_route":
+        assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
+
+
+def test_vision_qa_without_sidebar_routes_to_media_clarify():
+    for utterance in ("这个图片是什么？", "看看这张图"):
+        d = _decide({"messages": [{"role": "user", "content": utterance}]})
+        assert d["flow_mode"] == "clarify_route"
+        assert d["precedence_rule_id"] == "suspected_vision_clarify"
+        assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA_NO_SIDEBAR
+        assert "解读侧栏图片" not in d["clarify_question"]
+
+
+def test_sidebar_media_question_not_chat():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "这是什么？"}],
+            "sidebar_attachments": [
+                {"refKey": "I1", "mediaType": "image", "url": "https://a/1.jpg"}
+            ],
+        }
+    )
+    assert d["flow_mode"] == "clarify_route"
+    assert d["precedence_rule_id"] == "sidebar_media_question"
+    assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
+    assert "解读侧栏图片" in d["clarify_question"]
+
+
+def test_bare_question_without_sidebar_media_stays_chat():
+    d = _decide({"messages": [{"role": "user", "content": "这是什么？"}]})
+    assert d["flow_mode"] == "chat"
+    assert d["precedence_rule_id"] == "default_chat"
+
+
+def test_soft_suspected_clarify_uses_media_question():
+    d = _decide({"messages": [{"role": "user", "content": "帮我弄张图看看"}]})
+    assert d["precedence_rule_id"] != "default_chat"
+    if d["flow_mode"] == "clarify_route":
+        assert "1）" in (d.get("clarify_question") or "")

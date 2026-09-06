@@ -61,6 +61,23 @@ ROUTE_CLARIFY_ORCHESTRATION = (
     "回复 1 / 2 / 3。"
 )
 
+_MEDIA_CLARIFY_HEAD = (
+    "听起来您想处理图片。请确认：\n"
+    "1）直接生成一张图；\n"
+    "2）做营销/详情页方案；\n"
+)
+
+# 侧栏有图可解读时的三选项文案
+ROUTE_CLARIFY_MEDIA = _MEDIA_CLARIFY_HEAD + "3）解读侧栏图片（描述/问答）。\n回复 1 / 2 / 3。"
+
+# 侧栏无图时不提供「解读侧栏图片」，避免给出无法执行的选项
+ROUTE_CLARIFY_MEDIA_NO_SIDEBAR = _MEDIA_CLARIFY_HEAD + "回复 1 / 2。"
+
+
+def route_clarify_media(*, has_sidebar_media: bool) -> str:
+    """Media clarify copy — option 3 only when sidebar media actually exists."""
+    return ROUTE_CLARIFY_MEDIA if has_sidebar_media else ROUTE_CLARIFY_MEDIA_NO_SIDEBAR
+
 RuleFn = Callable[
     [AtomicIntent, RouteFeatures, RouteContext, set[str] | None],
     dict[str, Any] | None,
@@ -398,6 +415,17 @@ def _rule_explore(
 def _rule_atomic_generate(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
+    if features.get("media_create_high"):
+        return _base_decision(
+            ctx,
+            flow_mode="atomic_create",
+            reason="media_create_normalized",
+            confidence=0.90,
+            precedence_rule_id="atomic_generate",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
     utterance = intent.utterance
     l0 = detect_l0_action(utterance)
     route = resolve_intake_route(utterance, focus_node_id=ctx.get("focus_node_id"))
@@ -412,6 +440,65 @@ def _rule_atomic_generate(
             reason="atomic_create_intent",
             confidence=0.88,
             precedence_rule_id="atomic_generate",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_suspected_vision_clarify(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if features.get("suspected_vision_qa"):
+        return _base_decision(
+            ctx,
+            flow_mode="clarify_route",
+            reason="suspected_vision_qa",
+            confidence=0.72,
+            precedence_rule_id="suspected_vision_clarify",
+            clarify_question=route_clarify_media(
+                has_sidebar_media=bool(features.get("has_sidebar_media"))
+            ),
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_suspected_media_clarify(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if features.get("suspected_media_create") and not features.get("media_create_high"):
+        return _base_decision(
+            ctx,
+            flow_mode="clarify_route",
+            reason="suspected_media_create",
+            confidence=0.70,
+            precedence_rule_id="suspected_media_clarify",
+            clarify_question=route_clarify_media(
+                has_sidebar_media=bool(features.get("has_sidebar_media"))
+            ),
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_sidebar_media_question(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    """Sidebar media + 疑问/指示 utterance must not fall into the chat sink (R-PREC-02)."""
+    if features.get("has_sidebar_media") and features.get("media_directed_question"):
+        return _base_decision(
+            ctx,
+            flow_mode="clarify_route",
+            reason="sidebar_media_question",
+            confidence=0.71,
+            precedence_rule_id="sidebar_media_question",
+            clarify_question=ROUTE_CLARIFY_MEDIA,
             guard_veto=_guard_veto(ctx),
             intent=intent,
             features=features,
@@ -464,6 +551,9 @@ PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("orch_ambiguous", _rule_orch_ambiguous),
     ("explore", _rule_explore),
     ("atomic_generate", _rule_atomic_generate),
+    ("suspected_vision_clarify", _rule_suspected_vision_clarify),
+    ("suspected_media_clarify", _rule_suspected_media_clarify),
+    ("sidebar_media_question", _rule_sidebar_media_question),
     ("empty", _rule_empty),
     ("default_chat", _rule_default_chat),
 ]

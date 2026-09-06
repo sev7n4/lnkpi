@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-21  
 **Status:** Implemented on `feature/cx-media-info-footer`; plan in `docs/superpowers/plans/2026-08-21-canvas-media-info-footer.md`  
+
 **代号:** **CX-MEDIA-INFO-FOOTER**  
 **Related:**
 - `2026-08-15-media-inspector-design.md` — L0 摘要与 `mediaInfo` / `probeMedia`；本文件修正画布节点 L0 放置与覆盖范围

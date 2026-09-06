@@ -1,10 +1,19 @@
-"""P2: unified GenerationRequest DTO — sidebar atomic path ≡ Dock (RU-9, R-ALIGN-02)."""
+"""P2/P1: unified GenerationRequest DTO — sidebar atomic path ≡ Dock (RU-9).
+
+唯一构造入口：
+- build_generation_request_from_atomic_state
+- build_generation_request_from_dock
+- apply_generation_request_to_state（写入 state）
+
+禁止在 nodes/* 内手写 prompt/refs 平行字典。
+"""
 
 from __future__ import annotations
 
 from typing import Any, Literal, TypedDict
 
 from app.graph.atomic_intent_ir import AtomicIntent, derive_studio_prompt, intent_slots_dict, resolve_atomic_intent
+from app.graph.media_utterance import suspected_media_create
 from app.graph.route_context import latest_user_text
 from app.graph.sidebar_attachments import assign_sidebar_ref_keys, resolve_sidebar_mentioned_keys
 
@@ -113,7 +122,11 @@ def build_generation_request_from_atomic_state(state: dict[str, Any]) -> Generat
     intent = _intent_from_state(state, utterance, mentioned)
     derived = derive_studio_prompt(intent).strip()
     spec_prompt = str(spec.get("prompt") or "").strip()
-    if intent.mentioned_keys and derived:
+    prompt_basis = spec_prompt or intent.utterance or utterance
+    # Colloquial create carries the subject in the utterance ("生一个小女孩的图片"), which the
+    # ref-backed derived prompt would drop. After clarify, the latest utterance is only "1",
+    # so inspect the restored spec prompt instead of that reply.
+    if intent.mentioned_keys and derived and not suspected_media_create(prompt_basis):
         prompt = derived
     else:
         prompt = spec_prompt or derived
