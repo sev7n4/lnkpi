@@ -29,6 +29,7 @@ from app.graph.hitl_resume import (
     prepare_interrupt_resume,
     should_resume_interrupt,
 )
+from app.graph.post_cancel import build_revise_turn_command, classify_post_cancel_intent
 from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
@@ -639,6 +640,43 @@ def resolve_vision_creds(req: RunRequest) -> dict[str, str | None]:
     }
 
 
+def resolve_turn_input(
+    pre_vals: dict[str, Any],
+    next_nodes: list[str] | tuple[str, ...],
+    message: str,
+    user_decision: str | None,
+    turn_update: dict[str, Any],
+) -> Any | None:
+    """Resolve synchronous turn routing; ``None`` defers a gate resume."""
+    nodes = [str(node) for node in next_nodes]
+    phase = str(pre_vals.get("phase") or "") or None
+    intent = classify_post_cancel_intent(
+        message,
+        next_nodes=nodes,
+        user_decision=user_decision,
+        run_cancelled=bool(pre_vals.get("run_cancelled")) or phase == "cancelled",
+        phase=phase,
+    )
+    if intent == "new_task":
+        return build_fresh_turn_command(update=turn_update)
+    if intent == "revise":
+        return build_revise_turn_command(phase_hint=phase, update=turn_update)
+
+    is_gate_resume = bool(
+        nodes
+        and should_resume_interrupt(
+            message,
+            nodes,
+            user_decision=user_decision,
+        )
+    )
+    if intent == "gate_resume" or is_gate_resume:
+        return None
+    if nodes:
+        return build_fresh_turn_command(update=turn_update)
+    return turn_update
+
+
 async def get_thread_state(
     thread_id: str,
     *,
@@ -672,7 +710,11 @@ async def get_thread_state(
         "phase": phase_str,
         "nextNodes": next_nodes,
         "interrupted": bool(next_nodes),
-        "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+        "finished": phase_str == "done"
+        or (phase_str != "cancelled" and not next_nodes and bool(vals)),
+        "runCancelled": bool(vals.get("run_cancelled"))
+        if vals.get("run_cancelled") is not None
+        else None,
         "productVisualPlan": plan if isinstance(plan, dict) else None,
         "macroSchemes": vals.get("macro_schemes") if isinstance(vals.get("macro_schemes"), list) else None,
         "shotManifest": vals.get("shot_manifest") if isinstance(vals.get("shot_manifest"), list) else None,
@@ -960,8 +1002,15 @@ async def stream_run_events(
 
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False
+    input_state = resolve_turn_input(
+        pre_vals,
+        next_nodes,
+        req.message,
+        req.user_decision,
+        turn_update,
+    )
 
-    if next_nodes and is_gate_resume:
+    if input_state is None and next_nodes and is_gate_resume:
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         resume_attempt = True
@@ -979,7 +1028,7 @@ async def stream_run_events(
                 req.message,
                 user_decision=req.user_decision,
             )
-    elif next_nodes:
+    elif next_nodes and not is_gate_resume:
         # Fresh @ref task while a gate is still pending — restart at intake.
         logger.info(
             "agent_turn_fresh_restart thread_id=%s session_id=%s gate=%s",
@@ -987,9 +1036,6 @@ async def stream_run_events(
             req.session_id,
             list(next_nodes),
         )
-        input_state = build_fresh_turn_command(update=turn_update)
-    else:
-        input_state = turn_update
 
     async def run_graph() -> None:
         last_text_delta: str | None = None
