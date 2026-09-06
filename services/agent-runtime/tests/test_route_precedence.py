@@ -201,6 +201,28 @@ def test_sheng_xiao_girl_prefers_atomic_when_high():
     assert d["precedence_rule_id"] in ("atomic_generate", "media_create_high")
 
 
+def test_generate_zhi_dongbei_hu_atomic():
+    """Prod case: 生成一只…图片 must not fall to chat (classifier 只 ≠ 张/个)."""
+    d = _decide(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "生成一只东北虎图片，卡通版，戴着红围巾、正在笑、或者背景是雪地",
+                }
+            ]
+        }
+    )
+    assert d["flow_mode"] == "atomic_create"
+    assert d["precedence_rule_id"] != "default_chat"
+
+
+def test_generate_dongbei_hu_without_classifier_atomic():
+    d = _decide({"messages": [{"role": "user", "content": "生成东北虎图片"}]})
+    assert d["flow_mode"] == "atomic_create"
+    assert d["precedence_rule_id"] != "default_chat"
+
+
 @pytest.mark.parametrize(
     "utterance",
     [

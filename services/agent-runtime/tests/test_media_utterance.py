@@ -23,6 +23,8 @@ CREATE_POSITIVES = (
     "生一张图",
     "帮我生个海报",
     "帮我弄张图看看",
+    "生成一只东北虎图片，卡通版，戴着红围巾、正在笑、或者背景是雪地",
+    "生成东北虎图片",
 )
 
 
@@ -41,6 +43,14 @@ def test_normalize_does_not_touch_shenghuo():
 def test_normalize_is_idempotent_for_already_shengcheng(text: str):
     assert normalize_colloquial_create_verbs(text) == text
     assert normalize_colloquial_create_verbs(normalize_colloquial_create_verbs(text)) == text
+
+
+def test_normalize_generate_zhi_to_zhang():
+    raw = "生成一只东北虎图片，卡通版"
+    out = normalize_colloquial_create_verbs(raw)
+    assert "生成一张" in out
+    assert "东北虎图片" in out
+    assert "生成一只" not in out
 
 
 @pytest.mark.parametrize("text", CASUAL_NEGATIVES)

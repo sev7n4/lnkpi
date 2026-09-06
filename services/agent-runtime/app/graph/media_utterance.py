@@ -12,6 +12,12 @@ _SHENG_CREATE = re.compile(
 _SOFT_CREATE = re.compile(
     r"(?:弄|整|来)\s*(?:一\s*)?(?:张|个)\s*[^。，,.!?？！]{0,8}?(?:图片|图)(?![书层标表例])"
 )
+# 生成 + 可选量词(只|张|个|幅|条) + 短跨度 + 图类宾语（覆盖「生成一只东北虎图片」「生成东北虎图片」）
+_GENERATE_MEDIA = re.compile(
+    r"生成\s*(?:一\s*)?(?:只|张|个|幅|条)?\s*[^。，,.!?？！]{0,24}?(?:图片|海报|主图|图(?![书层标表例]))"
+)
+# 生成一只 → 生成一张，便于下游 ATOMIC hint「生成一张」命中
+_GENERATE_ZHI = re.compile(r"(生成\s*(?:一\s*)?)只")
 _VISION_QA = re.compile(
     r"(?:这(?:个|张)?图片是什么|这是什么图|看看这张图|描述一下(?:这张)?图|"
     r"图里(?:有什么|是什么)|识别一下(?:这张)?图)"
@@ -27,18 +33,20 @@ _MEDIA_OBJECT = re.compile(r"(?:图片|海报|主图|照片|图)")
 
 
 def normalize_colloquial_create_verbs(text: str) -> str:
-    """Map oral 「生…图」→「生成…图」 for downstream suggest checks. Narrow patterns only.
+    """Map oral create phrasing for downstream suggest checks. Narrow patterns only.
 
-    Idempotent for already-「生成」 text: 生成 never matches _SHENG_CREATE because
-    the quantifier (个|张|幅) is required right after 生.
+    - 「生 + 量词 + 图」→「生成…」
+    - 「生成一只」→「生成一张」（动物量词对齐 hint「生成一张」）
+    Idempotent for already-「生成一张/一个」 text.
     """
     t = text or ""
     if not t.strip():
         return t
 
+    t = _GENERATE_ZHI.sub(r"\1张", t, count=1)
+
     def _repl(m: re.Match[str]) -> str:
         chunk = m.group(0)
-        # only first 生 → 生成 when pattern matched
         return "生成" + chunk[1:]
 
     return _SHENG_CREATE.sub(_repl, t, count=1)
@@ -46,6 +54,11 @@ def normalize_colloquial_create_verbs(text: str) -> str:
 
 def utterance_has_media_object(text: str) -> bool:
     return bool(_MEDIA_OBJECT.search(text or ""))
+
+
+def strong_generate_media(text: str) -> bool:
+    """True when utterance clearly asks to generate an image/poster (feature, not hint table)."""
+    return bool(_GENERATE_MEDIA.search(text or ""))
 
 
 def suspected_media_create(text: str) -> bool:
@@ -56,7 +69,9 @@ def suspected_media_create(text: str) -> bool:
         return False
     if _SHENG_CREATE.search(t):
         return True
-    return bool(_SOFT_CREATE.search(t))
+    if _SOFT_CREATE.search(t):
+        return True
+    return strong_generate_media(t)
 
 
 def suspected_vision_qa(text: str) -> bool:
