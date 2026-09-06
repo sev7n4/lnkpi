@@ -53,3 +53,14 @@
 - 语法：`python3 -m py_compile app/runs.py tests/test_runs_cancel_api.py` → exit 0。
 - 仓库门禁：Prisma generate、`pnpm build` 均通过；`pnpm --filter @lnkpi/agent test` → `19 files / 124 tests passed`。
 - 扩展回归：`tests/test_runs_stream.py` 与 3 个 scheduler cancel 测试通过；`tests/test_thread_busy.py` 两个既有测试单独复跑仍在进入 fake LLM 前的 5 秒等待点超时（`2 failed, 1 passed`），未修改该测试或其前置运行路径。
+
+## Critical/Major follow-up（2026-09-06）
+
+- `gen_scheduler` 与 `gen_node` 仅在 `flow_mode == "product_visual"` 时消费 cooperative cancel；scheduler 将 `flow_mode` 透传给 fan-out worker，campaign/atomic 不再进入 cancelled 分支。
+- stream 遇到未设置或非 PV flow 时立即 `clear_cancel(thread_id)`；PV cancelled checkpoint 使用 `peek_cancel_reason(thread_id) or "user"` 保留请求原因。
+- 无 Nest/session 且本地线程未活跃时不再留下 cancel flag；锁探测异常、非 PV skip、checkpoint 写入异常路径都会清理无法保证被消费的 flag。
+- RED：新增 scheduler payload/campaign、gen_node campaign、unknown idle flow、stream missing/campaign flow 与 cancel reason 断言；旧实现首先在 scheduler payload 断言以 `KeyError: flow_mode` 失败。
+- GREEN：定向测试 `tests/test_gen_scheduler_cancel.py tests/test_runs_cancel_api.py` → `15 passed, 1 warning`。
+- 覆盖回归：`tests/test_runs_cancel_api.py tests/test_runs_stream.py tests/test_gen_scheduler_cancel.py tests/test_gen_scheduler.py tests/test_gen_node.py` → `33 passed, 2 warnings`。
+- 语法检查：`python3 -m py_compile app/runs.py app/graph/nodes/gen_scheduler.py app/graph/nodes/gen_node.py tests/test_runs_cancel_api.py tests/test_gen_scheduler_cancel.py` → exit 0。
+- 仓库门禁：`pnpm install --frozen-lockfile`、Prisma generate、`pnpm build` 均 exit 0；`pnpm --filter @lnkpi/agent test` → `19 files / 124 tests passed`。

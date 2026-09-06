@@ -97,7 +97,11 @@ def make_gen_node(*, nest: Any) -> Callable:
             }
 
         thread_id = str(state.get("thread_id") or "")
-        if thread_id and is_cancel_requested(thread_id):
+        if (
+            state.get("flow_mode") == "product_visual"
+            and thread_id
+            and is_cancel_requested(thread_id)
+        ):
             try:
                 await nest.cancel_generation(node_id=str(node_id))
             except Exception:  # noqa: BLE001

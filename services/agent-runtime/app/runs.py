@@ -41,7 +41,12 @@ from app.graph.sidebar_attachments import (
     normalize_sidebar_attachments,
 )
 from app.graph.cancel_checkpoint import build_cancelled_checkpoint_update
-from app.run_cancel import clear_cancel, is_cancel_requested, request_cancel
+from app.run_cancel import (
+    clear_cancel,
+    is_cancel_requested,
+    peek_cancel_reason,
+    request_cancel,
+)
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -755,8 +760,16 @@ async def cancel_run(
         )
 
     if cancel_nest is None:
-        request_cancel(thread_id, reason=req.reason)
-        return base
+        local_lock = _thread_locks.get(thread_id)
+        if (
+            local_lock is not None
+            and local_lock.locked()
+            and flow_mode in (None, "product_visual")
+        ):
+            request_cancel(thread_id, reason=req.reason)
+            return base
+        clear_cancel(thread_id)
+        return {**base, "skipped": True, "reason": "flow_not_supported"}
 
     acquired = False
     holder_id: str | None = None
@@ -764,8 +777,8 @@ async def cancel_run(
         try:
             acquired, holder_id = await _try_acquire_thread(thread_id, cancel_nest)
         except Exception:  # noqa: BLE001 — lock uncertainty must avoid checkpoint races
-            request_cancel(thread_id, reason=req.reason)
-            return base
+            clear_cancel(thread_id)
+            return {**base, "skipped": True, "reason": "cancel_unavailable"}
 
         if not acquired:
             request_cancel(thread_id, reason=req.reason)
@@ -776,39 +789,41 @@ async def cancel_run(
             return {**base, "skipped": True, "reason": "flow_not_supported"}
 
         request_cancel(thread_id, reason=req.reason)
-        cancelled_node_ids: list[str] = []
-        for key, item in by_key.items():
-            if not isinstance(item, dict):
-                continue
-            is_completed = (
-                str(key) in completed_keys
-                or str(item.get("status") or "").lower() in {"completed", "done", "success"}
-                or bool(item.get("url"))
-            )
-            node_id = item.get("node_id")
-            if is_completed or not node_id:
-                continue
-            try:
-                await cancel_nest.cancel_generation(node_id=str(node_id))
-            except Exception:  # noqa: BLE001 — cancellation remains cooperative
-                pass
-            cancelled_node_ids.append(str(node_id))
+        try:
+            cancelled_node_ids: list[str] = []
+            for key, item in by_key.items():
+                if not isinstance(item, dict):
+                    continue
+                is_completed = (
+                    str(key) in completed_keys
+                    or str(item.get("status") or "").lower() in {"completed", "done", "success"}
+                    or bool(item.get("url"))
+                )
+                node_id = item.get("node_id")
+                if is_completed or not node_id:
+                    continue
+                try:
+                    await cancel_nest.cancel_generation(node_id=str(node_id))
+                except Exception:  # noqa: BLE001 — cancellation remains cooperative
+                    pass
+                cancelled_node_ids.append(str(node_id))
 
-        await graph.aupdate_state(
-            config,
-            build_cancelled_checkpoint_update(
-                completed_tasks=completed_tasks,
-                total_tasks=total_tasks,
-                reason=req.reason,
-            ),
-            as_node="gen_scheduler",
-        )
-        clear_cancel(thread_id)
-        return {
-            **base,
-            "phase": "cancelled",
-            "cancelled_node_ids": cancelled_node_ids,
-        }
+            await graph.aupdate_state(
+                config,
+                build_cancelled_checkpoint_update(
+                    completed_tasks=completed_tasks,
+                    total_tasks=total_tasks,
+                    reason=req.reason,
+                ),
+                as_node="gen_scheduler",
+            )
+            return {
+                **base,
+                "phase": "cancelled",
+                "cancelled_node_ids": cancelled_node_ids,
+            }
+        finally:
+            clear_cancel(thread_id)
     finally:
         if acquired:
             await _release_thread(thread_id, holder_id, cancel_nest)
@@ -1061,6 +1076,7 @@ async def stream_run_events(
                         cancel_snap = await graph.aget_state(config)
                         cancel_vals = getattr(cancel_snap, "values", None) or {}
                         if cancel_vals.get("flow_mode") != "product_visual":
+                            clear_cancel(thread_id)
                             continue
                         by_key = cancel_vals.get("gen_by_key")
                         by_key = by_key if isinstance(by_key, dict) else {}
@@ -1076,6 +1092,7 @@ async def stream_run_events(
                                 build_cancelled_checkpoint_update(
                                     completed_tasks=completed_tasks,
                                     total_tasks=total_tasks,
+                                    reason=peek_cancel_reason(thread_id) or "user",
                                 ),
                                 as_node="gen_scheduler",
                             )

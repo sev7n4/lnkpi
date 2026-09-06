@@ -229,6 +229,25 @@ async def test_cancel_run_non_product_visual_clears_stale_flag():
 
 
 @pytest.mark.asyncio
+async def test_cancel_run_unknown_idle_flow_without_nest_does_not_set_flag():
+    cp = MemorySaver()
+    tid = "thread-cancel-api-unknown-idle"
+    clear_cancel(tid)
+
+    try:
+        result = await cancel_run(
+            CancelRunRequest(thread_id=tid, reason="user"),
+            checkpointer=cp,
+        )
+
+        assert result["skipped"] is True
+        assert result["reason"] == "flow_not_supported"
+        assert is_cancel_requested(tid) is False
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
 async def test_cancel_run_builds_and_closes_default_nest(monkeypatch):
     cp = MemorySaver()
     tid = "thread-cancel-api-default-nest"
@@ -268,7 +287,7 @@ async def test_cancel_run_builds_and_closes_default_nest(monkeypatch):
 async def test_stream_clears_flag_after_cooperative_product_visual_cancel(monkeypatch):
     tid = "thread-stream-clear-cooperative-cancel"
     clear_cancel(tid)
-    request_cancel(tid)
+    request_cancel(tid, reason="operator")
 
     class _Snapshot:
         next: list[str] = []
@@ -325,6 +344,61 @@ async def test_stream_clears_flag_after_cooperative_product_visual_cancel(monkey
         cancelled = next(event for event in events if event["type"] == "run_cancelled")
         assert cancelled["data"]["completedTasks"] == 2
         assert graph.values["phase"] == "cancelled"
+        assert graph.values["cancel_reason"] == "operator"
+        assert is_cancel_requested(tid) is False
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("flow_mode", [None, "campaign"])
+async def test_stream_clears_cancel_for_non_product_visual_flow(monkeypatch, flow_mode):
+    tid = f"thread-stream-clear-non-pv-{flow_mode}"
+    clear_cancel(tid)
+    request_cancel(tid)
+
+    class _Snapshot:
+        next: list[str] = []
+
+        def __init__(self, values: dict[str, Any]) -> None:
+            self.values = values
+
+    class _Graph:
+        def __init__(self) -> None:
+            self.values = {"flow_mode": flow_mode, "phase": "execute"}
+            self.updated = False
+
+        async def aget_state(self, _config: dict[str, Any]) -> _Snapshot:
+            return _Snapshot(dict(self.values))
+
+        async def astream(self, *_args: Any, **_kwargs: Any):
+            yield {"intake": {"flow_mode": flow_mode}}
+
+        async def aupdate_state(self, *_args: Any, **_kwargs: Any) -> None:
+            self.updated = True
+
+    graph = _Graph()
+    monkeypatch.setattr("app.runs.build_agent_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr("app.runs._load_history", lambda *_args: _async_empty_list())
+
+    try:
+        events = [
+            event
+            async for event in stream_run_events(
+                RunRequest(
+                    session_id="s1",
+                    user_id="u1",
+                    message="继续",
+                    thread_id=tid,
+                ),
+                nest=_Nest(),
+                llm=object(),
+                checkpointer=object(),
+            )
+        ]
+
+        assert not any(event["type"] == "run_cancelled" for event in events)
+        assert graph.updated is False
         assert is_cancel_requested(tid) is False
     finally:
         clear_cancel(tid)

@@ -13,6 +13,7 @@ from app.run_cancel import clear_cancel, request_cancel
 def _state(thread_id: str) -> dict[str, Any]:
     return {
         "thread_id": thread_id,
+        "flow_mode": "product_visual",
         "gen_ordered_keys": ["a", "b"],
         "gen_deps_of": {"a": [], "b": ["a"]},
         "gen_by_key": {
@@ -56,6 +57,26 @@ async def test_gen_scheduler_passes_thread_id_to_gen_node():
     sends = [target for target in cmd.goto if isinstance(target, Send)]
     assert sends
     assert sends[0].arg["thread_id"] == tid
+    assert sends[0].arg["flow_mode"] == "product_visual"
+
+
+@pytest.mark.asyncio
+async def test_gen_scheduler_does_not_consume_cancel_for_campaign():
+    tid = "t-sched-campaign-cancel"
+    clear_cancel(tid)
+    request_cancel(tid, reason="user")
+    try:
+        state = _state(tid)
+        state["flow_mode"] = "campaign"
+        node = make_gen_scheduler_node(max_concurrency=4)
+
+        cmd = await node(state)
+
+        sends = [target for target in cmd.goto if isinstance(target, Send)]
+        assert [target.arg["key"] for target in sends] == ["a"]
+        assert cmd.update.get("phase") != "cancelled"
+    finally:
+        clear_cancel(tid)
 
 
 class _CancelNest:
@@ -82,6 +103,7 @@ async def test_gen_node_cancels_before_generation():
         out = await node(
             {
                 "thread_id": tid,
+                "flow_mode": "product_visual",
                 "key": "a",
                 "gen_by_key": {"a": {"node_id": "n1", "title": "A"}},
             }
@@ -91,5 +113,29 @@ async def test_gen_node_cancels_before_generation():
         assert nest.generated_node_ids == []
         assert out["gen_needs_user_keys"] == ["a"]
         assert out["gen_fail_details"]["a"]["reason"] == "cancelled"
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
+async def test_gen_node_does_not_consume_cancel_for_campaign():
+    tid = "t-node-campaign-cancel"
+    clear_cancel(tid)
+    request_cancel(tid, reason="user")
+    nest = _CancelNest()
+    try:
+        node = make_gen_node(nest=nest)
+        out = await node(
+            {
+                "thread_id": tid,
+                "flow_mode": "campaign",
+                "key": "a",
+                "gen_by_key": {"a": {"node_id": "n1", "title": "A"}},
+            }
+        )
+
+        assert nest.cancelled_node_ids == []
+        assert nest.generated_node_ids == ["n1"]
+        assert out["gen_completed_keys"] == ["a"]
     finally:
         clear_cancel(tid)

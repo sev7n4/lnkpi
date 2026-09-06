@@ -53,7 +53,12 @@ def make_gen_scheduler_node(*, max_concurrency: int | None = None) -> Callable:
         needs_user: set[str] = set(state.get("gen_needs_user_keys") or [])
 
         thread_id = str(state.get("thread_id") or "")
-        if thread_id and is_cancel_requested(thread_id):
+        flow_mode = state.get("flow_mode")
+        if (
+            flow_mode == "product_visual"
+            and thread_id
+            and is_cancel_requested(thread_id)
+        ):
             reason = peek_cancel_reason(thread_id) or "user"
             update = build_cancelled_checkpoint_update(
                 completed_tasks=len(completed),
@@ -116,6 +121,7 @@ def make_gen_scheduler_node(*, max_concurrency: int | None = None) -> Callable:
                             "gen_by_key": by_key,
                             "plan_node_id": plan_node_id,
                             "thread_id": state.get("thread_id"),
+                            "flow_mode": flow_mode,
                         },
                     )
                     for k in to_dispatch
