@@ -13,7 +13,7 @@ import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import settings
 from app.checkpoint_observability import checkpoint_diagnostics
@@ -41,7 +41,7 @@ from app.graph.sidebar_attachments import (
     normalize_sidebar_attachments,
 )
 from app.graph.cancel_checkpoint import build_cancelled_checkpoint_update
-from app.run_cancel import is_cancel_requested, request_cancel
+from app.run_cancel import clear_cancel, is_cancel_requested, request_cancel
 from app.tools.nest_client import NestCanvasClient
 
 EmitFn = Callable[[dict[str, Any]], Awaitable[None]]
@@ -289,6 +289,13 @@ class CancelRunRequest(BaseModel):
     thread_id: str
     session_id: str | None = None
     reason: str = "user"
+
+    @field_validator("thread_id")
+    @classmethod
+    def validate_thread_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("thread_id must not be blank")
+        return value
 
 
 class NestEventProxy:
@@ -700,7 +707,6 @@ async def cancel_run(
 ) -> dict[str, Any]:
     """Request cooperative cancellation and persist it for product-visual runs."""
     thread_id = req.thread_id.strip()
-    request_cancel(thread_id, reason=req.reason)
 
     class _NoOpNest:
         async def close(self) -> None:
@@ -722,18 +728,7 @@ async def cancel_run(
     completed_keys = {
         str(key) for key in (vals.get("gen_completed_keys") or [])
     }
-    completed_tasks = sum(
-        1
-        for key, item in by_key.items()
-        if str(key) in completed_keys
-        or (
-            isinstance(item, dict)
-            and (
-                str(item.get("status") or "").lower() in {"completed", "done", "success"}
-                or bool(item.get("url"))
-            )
-        )
-    )
+    completed_tasks = len(completed_keys)
     total_tasks = len(by_key)
     base = {
         "ok": True,
@@ -743,44 +738,82 @@ async def cancel_run(
         "total_tasks": total_tasks,
     }
 
-    if vals.get("flow_mode") != "product_visual":
+    flow_mode = vals.get("flow_mode")
+    if flow_mode is not None and flow_mode != "product_visual":
+        clear_cancel(thread_id)
         return {**base, "skipped": True, "reason": "flow_not_supported"}
     if phase == "cancelled":
+        clear_cancel(thread_id)
         return base
 
-    cancelled_node_ids: list[str] = []
-    for key, item in by_key.items():
-        if not isinstance(item, dict):
-            continue
-        is_completed = (
-            str(key) in completed_keys
-            or str(item.get("status") or "").lower() in {"completed", "done", "success"}
-            or bool(item.get("url"))
+    owns_cancel_nest = nest is None and bool(req.session_id)
+    cancel_nest = nest
+    if cancel_nest is None and req.session_id:
+        cancel_nest = default_nest(
+            session_id=req.session_id,
+            user_id=str(vals.get("user_id") or ""),
         )
-        node_id = item.get("node_id")
-        if is_completed or not node_id:
-            continue
-        if nest is not None:
+
+    if cancel_nest is None:
+        request_cancel(thread_id, reason=req.reason)
+        return base
+
+    acquired = False
+    holder_id: str | None = None
+    try:
+        try:
+            acquired, holder_id = await _try_acquire_thread(thread_id, cancel_nest)
+        except Exception:  # noqa: BLE001 — lock uncertainty must avoid checkpoint races
+            request_cancel(thread_id, reason=req.reason)
+            return base
+
+        if not acquired:
+            request_cancel(thread_id, reason=req.reason)
+            return base
+
+        if flow_mode != "product_visual":
+            clear_cancel(thread_id)
+            return {**base, "skipped": True, "reason": "flow_not_supported"}
+
+        request_cancel(thread_id, reason=req.reason)
+        cancelled_node_ids: list[str] = []
+        for key, item in by_key.items():
+            if not isinstance(item, dict):
+                continue
+            is_completed = (
+                str(key) in completed_keys
+                or str(item.get("status") or "").lower() in {"completed", "done", "success"}
+                or bool(item.get("url"))
+            )
+            node_id = item.get("node_id")
+            if is_completed or not node_id:
+                continue
             try:
-                await nest.cancel_generation(node_id=str(node_id))
+                await cancel_nest.cancel_generation(node_id=str(node_id))
             except Exception:  # noqa: BLE001 — cancellation remains cooperative
                 pass
-        cancelled_node_ids.append(str(node_id))
+            cancelled_node_ids.append(str(node_id))
 
-    await graph.aupdate_state(
-        config,
-        build_cancelled_checkpoint_update(
-            completed_tasks=completed_tasks,
-            total_tasks=total_tasks,
-            reason=req.reason,
-        ),
-        as_node="gen_scheduler",
-    )
-    return {
-        **base,
-        "phase": "cancelled",
-        "cancelled_node_ids": cancelled_node_ids,
-    }
+        await graph.aupdate_state(
+            config,
+            build_cancelled_checkpoint_update(
+                completed_tasks=completed_tasks,
+                total_tasks=total_tasks,
+                reason=req.reason,
+            ),
+            as_node="gen_scheduler",
+        )
+        clear_cancel(thread_id)
+        return {
+            **base,
+            "phase": "cancelled",
+            "cancelled_node_ids": cancelled_node_ids,
+        }
+    finally:
+        if acquired:
+            await _release_thread(thread_id, holder_id, cancel_nest)
+        if owns_cancel_nest:
+            await cancel_nest.close()
 
 
 async def _load_history(nest: NestCanvasClient, thread_id: str) -> list[Any]:
@@ -845,6 +878,7 @@ async def stream_run_events(
     )
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+    cooperative_cancel_handled = False
 
     async def emit(event: dict[str, Any]) -> None:
         await queue.put(event)
@@ -941,6 +975,7 @@ async def stream_run_events(
         input_state = turn_update
 
     async def run_graph() -> None:
+        nonlocal cooperative_cancel_handled
         last_text_delta: str | None = None
         executed_nodes: set[str] = set()
         stream_input: Any = input_state
@@ -1025,13 +1060,15 @@ async def stream_run_events(
                     if is_cancel_requested(thread_id):
                         cancel_snap = await graph.aget_state(config)
                         cancel_vals = getattr(cancel_snap, "values", None) or {}
+                        if cancel_vals.get("flow_mode") != "product_visual":
+                            continue
                         by_key = cancel_vals.get("gen_by_key")
                         by_key = by_key if isinstance(by_key, dict) else {}
                         completed = {
                             str(key)
                             for key in (cancel_vals.get("gen_completed_keys") or [])
                         }
-                        completed_tasks = len(completed.intersection(str(key) for key in by_key))
+                        completed_tasks = len(completed)
                         total_tasks = len(by_key)
                         if cancel_vals.get("phase") != "cancelled":
                             await graph.aupdate_state(
@@ -1053,6 +1090,7 @@ async def stream_run_events(
                             }
                         )
                         cancelled_during_stream = True
+                        cooperative_cancel_handled = True
                         break
 
                 if cancelled_during_stream:
@@ -1185,6 +1223,8 @@ async def stream_run_events(
         except asyncio.CancelledError:
             pass
         await _release_thread(thread_id, holder_id, lock_nest)
+        if cooperative_cancel_handled:
+            clear_cancel(thread_id)
         if owns_nest:
             await lock_nest.close()
         if not task.done():
