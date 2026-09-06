@@ -264,21 +264,28 @@ async def test_cancel_run_builds_and_closes_default_nest(monkeypatch):
     )
     production_nest = _Nest()
     closed = False
+    nest_kwargs: dict[str, str] = {}
 
     async def close() -> None:
         nonlocal closed
         closed = True
 
     production_nest.close = close  # type: ignore[method-assign]
-    monkeypatch.setattr("app.runs.default_nest", lambda **_kwargs: production_nest)
+
+    def build_default_nest(**kwargs: str) -> _Nest:
+        nest_kwargs.update(kwargs)
+        return production_nest
+
+    monkeypatch.setattr("app.runs.default_nest", build_default_nest)
 
     result = await cancel_run(
-        CancelRunRequest(thread_id=tid, session_id="s1", reason="user"),
+        CancelRunRequest(thread_id=tid, session_id="   ", reason="user"),
         checkpointer=cp,
     )
 
     assert result["phase"] == "cancelled"
     assert production_nest.cancelled_node_ids == ["n-pending"]
+    assert nest_kwargs == {"session_id": "s1", "user_id": "u1"}
     assert closed is True
     assert is_cancel_requested(tid) is False
 
@@ -345,6 +352,57 @@ async def test_stream_clears_flag_after_cooperative_product_visual_cancel(monkey
         assert cancelled["data"]["completedTasks"] == 2
         assert graph.values["phase"] == "cancelled"
         assert graph.values["cancel_reason"] == "operator"
+        assert is_cancel_requested(tid) is False
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
+async def test_stream_clears_late_cancel_requested_as_stream_exits(monkeypatch):
+    tid = "thread-stream-clear-late-cancel"
+    clear_cancel(tid)
+
+    class _Snapshot:
+        next: list[str] = []
+
+        def __init__(self, values: dict[str, Any]) -> None:
+            self.values = values
+
+    class _Graph:
+        def __init__(self) -> None:
+            self.state_reads = 0
+
+        async def aget_state(self, _config: dict[str, Any]) -> _Snapshot:
+            self.state_reads += 1
+            if self.state_reads == 3:
+                request_cancel(tid, reason="late")
+            return _Snapshot({"flow_mode": "product_visual", "phase": "done"})
+
+        async def astream(self, *_args: Any, **_kwargs: Any):
+            yield {"intake": {"flow_mode": "product_visual"}}
+
+    graph = _Graph()
+    monkeypatch.setattr("app.runs.build_agent_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr("app.runs._load_history", lambda *_args: _async_empty_list())
+
+    try:
+        events = [
+            event
+            async for event in stream_run_events(
+                RunRequest(
+                    session_id="s1",
+                    user_id="u1",
+                    message="短任务",
+                    thread_id=tid,
+                ),
+                nest=_Nest(),
+                llm=object(),
+                checkpointer=object(),
+            )
+        ]
+
+        assert events[-1]["type"] == "done"
+        assert graph.state_reads == 3
         assert is_cancel_requested(tid) is False
     finally:
         clear_cancel(tid)

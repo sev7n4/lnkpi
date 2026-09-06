@@ -64,3 +64,13 @@
 - 覆盖回归：`tests/test_runs_cancel_api.py tests/test_runs_stream.py tests/test_gen_scheduler_cancel.py tests/test_gen_scheduler.py tests/test_gen_node.py` → `33 passed, 2 warnings`。
 - 语法检查：`python3 -m py_compile app/runs.py app/graph/nodes/gen_scheduler.py app/graph/nodes/gen_node.py tests/test_runs_cancel_api.py tests/test_gen_scheduler_cancel.py` → exit 0。
 - 仓库门禁：`pnpm install --frozen-lockfile`、Prisma generate、`pnpm build` 均 exit 0；`pnpm --filter @lnkpi/agent test` → `19 files / 124 tests passed`。
+
+## Remaining review findings 修复（2026-09-06）
+
+- `stream_run_events` 对持有线程锁的运行在释放锁前无条件清除 cooperative cancel flag，覆盖最后一次循环检查后才到达的迟到取消，避免污染下一轮 scheduler。
+- `cancel_run` 将空白请求 `session_id` 视为缺失，并回退读取 checkpoint 的 `session_id`；构造默认 Nest 时继续使用 checkpoint `user_id`，不再误报 `flow_not_supported`。
+- RED：`tests/test_runs_cancel_api.py` 新增/加强两个断言，旧实现结果为 `2 failed, 9 passed`，分别复现 sticky cancel 与空白 session 未回退。
+- GREEN：同一定向测试 → `11 passed, 1 warning`。
+- 覆盖回归：`tests/test_runs_cancel_api.py tests/test_runs_stream.py tests/test_gen_scheduler_cancel.py tests/test_gen_scheduler.py tests/test_gen_node.py` → `34 passed, 2 warnings`。
+- 语法：`python3 -m py_compile app/runs.py tests/test_runs_cancel_api.py` → exit 0。
+- 仓库门禁：Prisma generate 与 `pnpm build` 通过；`pnpm --filter @lnkpi/agent test` → `19 files / 124 tests passed`。安装阶段镜像源曾返回一次既有 `403` 提示，但组合门禁最终 exit 0。

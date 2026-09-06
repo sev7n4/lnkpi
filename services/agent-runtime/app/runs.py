@@ -751,11 +751,14 @@ async def cancel_run(
         clear_cancel(thread_id)
         return base
 
-    owns_cancel_nest = nest is None and bool(req.session_id)
+    request_session_id = (req.session_id or "").strip()
+    checkpoint_session_id = str(vals.get("session_id") or "").strip()
+    cancel_session_id = request_session_id or checkpoint_session_id
+    owns_cancel_nest = nest is None and bool(cancel_session_id)
     cancel_nest = nest
-    if cancel_nest is None and req.session_id:
+    if cancel_nest is None and cancel_session_id:
         cancel_nest = default_nest(
-            session_id=req.session_id,
+            session_id=cancel_session_id,
             user_id=str(vals.get("user_id") or ""),
         )
 
@@ -893,7 +896,6 @@ async def stream_run_events(
     )
 
     queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
-    cooperative_cancel_handled = False
 
     async def emit(event: dict[str, Any]) -> None:
         await queue.put(event)
@@ -990,7 +992,6 @@ async def stream_run_events(
         input_state = turn_update
 
     async def run_graph() -> None:
-        nonlocal cooperative_cancel_handled
         last_text_delta: str | None = None
         executed_nodes: set[str] = set()
         stream_input: Any = input_state
@@ -1107,7 +1108,6 @@ async def stream_run_events(
                             }
                         )
                         cancelled_during_stream = True
-                        cooperative_cancel_handled = True
                         break
 
                 if cancelled_during_stream:
@@ -1239,9 +1239,8 @@ async def stream_run_events(
             await hb_task
         except asyncio.CancelledError:
             pass
+        clear_cancel(thread_id)
         await _release_thread(thread_id, holder_id, lock_nest)
-        if cooperative_cancel_handled:
-            clear_cancel(thread_id)
         if owns_nest:
             await lock_nest.close()
         if not task.done():
