@@ -751,6 +751,14 @@ async def get_thread_state(
     }
 
 
+def _hitl_gate_nodes(next_nodes: Any) -> list[str]:
+    return [
+        str(node)
+        for node in (next_nodes or ())
+        if str(node).startswith("await_") or str(node) in HITL_GATE_NODES
+    ]
+
+
 async def cancel_run(
     req: CancelRunRequest,
     *,
@@ -774,11 +782,7 @@ async def cancel_run(
     config = {"configurable": {"thread_id": thread_id}}
     snap = await graph.aget_state(config)
     vals = getattr(snap, "values", None) or {}
-    pending_gate_nodes = [
-        str(node)
-        for node in (getattr(snap, "next", None) or ())
-        if str(node) in HITL_GATE_NODES
-    ]
+    pending_gate_nodes = _hitl_gate_nodes(getattr(snap, "next", None))
     phase = str(vals["phase"]) if vals.get("phase") is not None else None
     gen_by_key = vals.get("gen_by_key")
     by_key = gen_by_key if isinstance(gen_by_key, dict) else {}
@@ -1145,6 +1149,9 @@ async def stream_run_events(
                     if is_cancel_requested(thread_id):
                         cancel_snap = await graph.aget_state(config)
                         cancel_vals = getattr(cancel_snap, "values", None) or {}
+                        cancel_gate_nodes = _hitl_gate_nodes(
+                            getattr(cancel_snap, "next", None)
+                        )
                         if cancel_vals.get("flow_mode") != "product_visual":
                             clear_cancel(thread_id)
                             continue
@@ -1156,7 +1163,10 @@ async def stream_run_events(
                         }
                         completed_tasks = len(completed)
                         total_tasks = len(by_key)
-                        if cancel_vals.get("phase") != "cancelled":
+                        if (
+                            cancel_vals.get("phase") != "cancelled"
+                            and not cancel_gate_nodes
+                        ):
                             await graph.aupdate_state(
                                 config,
                                 build_cancelled_checkpoint_update(

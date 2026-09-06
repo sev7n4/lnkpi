@@ -358,6 +358,72 @@ async def test_stream_clears_flag_after_cooperative_product_visual_cancel(monkey
 
 
 @pytest.mark.asyncio
+async def test_stream_cooperative_cancel_preserves_gate_reached_by_astream(monkeypatch):
+    tid = "thread-stream-cancel-races-gate"
+    clear_cancel(tid)
+    request_cancel(tid, reason="operator")
+
+    class _Snapshot:
+        def __init__(self, values: dict[str, Any], next_nodes: list[str]) -> None:
+            self.values = values
+            self.next = next_nodes
+
+    class _Graph:
+        def __init__(self) -> None:
+            self.values = {
+                "flow_mode": "product_visual",
+                "phase": "await_future_confirm",
+                "gen_by_key": {"pending": {"node_id": "n-pending"}},
+                "gen_completed_keys": [],
+            }
+            self.next_nodes: list[str] = []
+            self.update_calls = 0
+
+        async def aget_state(self, _config: dict[str, Any]) -> _Snapshot:
+            return _Snapshot(dict(self.values), list(self.next_nodes))
+
+        async def astream(self, *_args: Any, **_kwargs: Any):
+            self.next_nodes = ["await_future_confirm"]
+            yield {"decompose_from_ssot": {"phase": "await_future_confirm"}}
+
+        async def aupdate_state(self, *_args: Any, **_kwargs: Any) -> None:
+            self.update_calls += 1
+            self.next_nodes = []
+
+    graph = _Graph()
+    monkeypatch.setattr("app.runs.build_agent_graph", lambda **_kwargs: graph)
+    monkeypatch.setattr("app.runs._load_history", lambda *_args: _async_empty_list())
+
+    try:
+        events = [
+            event
+            async for event in stream_run_events(
+                RunRequest(
+                    session_id="s1",
+                    user_id="u1",
+                    message="继续",
+                    thread_id=tid,
+                ),
+                nest=_Nest(),
+                llm=object(),
+                checkpointer=object(),
+            )
+        ]
+
+        assert any(event["type"] == "run_cancelled" for event in events)
+        assert graph.update_calls == 0
+        assert graph.next_nodes == ["await_future_confirm"]
+        assert any(
+            event["type"] == "interrupt"
+            and event["data"]["node"] == "await_future_confirm"
+            for event in events
+        )
+        assert is_cancel_requested(tid) is False
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
 async def test_stream_clears_late_cancel_requested_as_stream_exits(monkeypatch):
     tid = "thread-stream-clear-late-cancel"
     clear_cancel(tid)
