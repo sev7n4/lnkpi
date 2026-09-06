@@ -141,7 +141,7 @@ classify_post_cancel_intent → gate_resume | revise | new_task
 取消收口写：
 
 - `phase: "cancelled"`
-- `run_cancelled: true`、`cancel_reason: "user"`
+- `run_cancelled: true`、`cancel_reason: "user"`、`cancelled_from_phase: <取消前阶段>`（供 §4.3 revise 分档）
 - `presentation: callout_info`（人话）
 - gen 通道：未派发标 cancelled；在途 best-effort cancel
 - **不**清画布节点 / 本会话附件 SSOT
@@ -179,12 +179,16 @@ classify_post_cancel_intent → gate_resume | revise | new_task
 
 原则：**改意图不丢已确认的上游门控结果；下游未确认产物可作废。**
 
+分档依据是 `cancelled_from_phase`（`phase` 已被覆写成 `cancelled`，不能用作依据）；缺失时退化为最保守的 QA 及下游全清。
+
+**gate_resume** → 清 `run_cancelled` / `cancel_reason` / `cancelled_from_phase`，并把 `phase` 恢复为 `cancelled_from_phase`，其余一律保留。
+
 ### 4.4 侧栏 UX
 
 | 状态 | 生成钮 | Composer | 提示 |
 |------|--------|----------|------|
 | streaming（含 generating） | ⏹ 停止 | disabled | 现有 banner |
-| cancelled | ↑ 发送 | enabled | callout +「发起新任务」chip |
+| cancelled | ↑ 发送 | enabled | callout +「发起新任务」chip；若仍有 pending 门控，门控 chips 同时保留在 callout 下方 |
 | await_* 门控 | ↑ / 确认 chips | enabled | 现有 HITL；未 new_task 时可继续确认 |
 
 ---
@@ -211,6 +215,7 @@ Nest → Runtime：`POST /v1/runs/cancel`（`thread_id` / `session_id` / `reason
 
 - 幂等：重复 cancel → `ok: true`
 - 无活跃 run：仍 `ok: true`
+- 无活跃 run 且停在 `interrupt_before` 门控：**不写** cancelled checkpoint（否则 `next` 被抹掉、门控再也答不了），返回 `ok: true, gate_preserved: true, next_nodes: [...]`，`phase` 为当前门控；callout 由前端本地状态渲染，门控 chips 继续可用（UAT-INT-PV-05）
 - 非 PV 首期：可 `ok: true, skipped: true, reason: "flow_not_supported"`（Expand-B 再接）
 
 ### 5.2 Runtime cancel 步骤
