@@ -308,6 +308,7 @@ export class AgentService {
     nextNodes: string[]
     interrupted: boolean
     finished: boolean
+    runCancelled?: boolean | null
     hasAtomicCheckpoint?: boolean
     atomicNodeId?: string | null
     atomicTargetType?: string | null
