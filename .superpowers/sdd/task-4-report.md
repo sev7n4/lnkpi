@@ -74,3 +74,9 @@
 - 覆盖回归：`tests/test_runs_cancel_api.py tests/test_runs_stream.py tests/test_gen_scheduler_cancel.py tests/test_gen_scheduler.py tests/test_gen_node.py` → `34 passed, 2 warnings`。
 - 语法：`python3 -m py_compile app/runs.py tests/test_runs_cancel_api.py` → exit 0。
 - 仓库门禁：Prisma generate 与 `pnpm build` 通过；`pnpm --filter @lnkpi/agent test` → `19 files / 124 tests passed`。安装阶段镜像源曾返回一次既有 `403` 提示，但组合门禁最终 exit 0。
+
+## stream finally 清理顺序（2026-09-06）
+
+- `stream_run_events` finally 块改为先 `await _release_thread(...)` 再 `clear_cancel(thread_id)`，避免 cancel_run 在锁仍持有时看到 busy 路径并重新设置 sticky flag。
+- 新增 `test_stream_finally_releases_lock_before_clearing_cancel` 断言 release→clear 顺序。
+- GREEN：`tests/test_runs_cancel_api.py tests/test_gen_scheduler_cancel.py tests/test_run_cancel_registry.py tests/test_cancel_checkpoint.py` → `20 passed, 1 warning`。

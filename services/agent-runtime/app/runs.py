@@ -1239,8 +1239,10 @@ async def stream_run_events(
             await hb_task
         except asyncio.CancelledError:
             pass
-        clear_cancel(thread_id)
         await _release_thread(thread_id, holder_id, lock_nest)
+        # Release lock before clearing cancel: cancel_run busy-path checks
+        # local lock; clearing first lets it re-set the sticky flag.
+        clear_cancel(thread_id)
         if owns_nest:
             await lock_nest.close()
         if not task.done():

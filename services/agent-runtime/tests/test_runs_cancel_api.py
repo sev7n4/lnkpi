@@ -409,6 +409,65 @@ async def test_stream_clears_late_cancel_requested_as_stream_exits(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_stream_finally_releases_lock_before_clearing_cancel(monkeypatch):
+    """Release-before-clear prevents cancel_run busy-path from re-sticking the flag."""
+    tid = "thread-stream-release-before-clear"
+    clear_cancel(tid)
+    order: list[str] = []
+
+    import app.runs as runs_mod
+
+    real_release = runs_mod._release_thread
+
+    async def _track_release(*args: Any, **kwargs: Any) -> None:
+        order.append("release")
+        await real_release(*args, **kwargs)
+
+    def _track_clear(thread_id: str) -> None:
+        order.append("clear")
+        clear_cancel(thread_id)
+
+    monkeypatch.setattr("app.runs._release_thread", _track_release)
+    monkeypatch.setattr("app.runs.clear_cancel", _track_clear)
+
+    class _Snapshot:
+        next: list[str] = []
+
+        def __init__(self, values: dict[str, Any]) -> None:
+            self.values = values
+
+    class _Graph:
+        async def aget_state(self, _config: dict[str, Any]) -> _Snapshot:
+            return _Snapshot({"flow_mode": "product_visual", "phase": "done"})
+
+        async def astream(self, *_args: Any, **_kwargs: Any):
+            yield {"intake": {"flow_mode": "product_visual"}}
+
+    monkeypatch.setattr("app.runs.build_agent_graph", lambda **_kwargs: _Graph())
+    monkeypatch.setattr("app.runs._load_history", lambda *_args: _async_empty_list())
+
+    try:
+        events = [
+            event
+            async for event in stream_run_events(
+                RunRequest(
+                    session_id="s1",
+                    user_id="u1",
+                    message="done",
+                    thread_id=tid,
+                ),
+                nest=_Nest(),
+                llm=object(),
+                checkpointer=object(),
+            )
+        ]
+        assert events[-1]["type"] == "done"
+        assert order == ["release", "clear"]
+    finally:
+        clear_cancel(tid)
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("flow_mode", [None, "campaign"])
 async def test_stream_clears_cancel_for_non_product_visual_flow(monkeypatch, flow_mode):
     tid = f"thread-stream-clear-non-pv-{flow_mode}"
