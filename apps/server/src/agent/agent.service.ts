@@ -1,4 +1,9 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common'
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from '@nestjs/common'
 import { applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
 import type {
   AgentMessageMetadata,
@@ -273,6 +278,18 @@ export class AgentService {
   }
 
   // ── Runtime Health ───────────────────────────────────────────
+
+  async cancelRun(input: {
+    threadId: string
+    sessionId: string
+    reason?: 'user' | 'timeout'
+  }) {
+    const runtimeUrl = process.env.AGENT_RUNTIME_URL?.trim()
+    if (!runtimeUrl) {
+      throw new ServiceUnavailableException('Agent runtime is not configured')
+    }
+    return this.createRuntimeClient(runtimeUrl).cancelRun(input)
+  }
 
   /** Proxy agent-runtime health check for frontend heartbeat detection. */
   async checkRuntimeHealth(): Promise<{ ok: boolean; latencyMs?: number }> {

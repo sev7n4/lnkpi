@@ -16,6 +16,7 @@ import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { SessionsService } from '../sessions/sessions.service'
 import { AgentService } from './agent.service'
+import { CancelRunDto } from './dto/cancel-run.dto'
 
 const SESSION_FORBIDDEN_HINT =
   '⚠️ 此画布不属于当前账号，无法写入。请返回工作台新建画布，或使用画布所有者账号登录。'
@@ -155,6 +156,17 @@ export class AgentController {
   @Get('runtime-health')
   async runtimeHealth() {
     const data = await this.agentService.checkRuntimeHealth()
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('runs/cancel')
+  @UseGuards(AuthGuard)
+  async cancelRun(
+    @Body() dto: CancelRunDto,
+    @Req() req: Request & { user: { sub: string } },
+  ) {
+    await this.sessionsService.findOne(dto.sessionId, req.user.sub)
+    const data = await this.agentService.cancelRun(dto)
     return { code: 0, message: 'ok', data }
   }
 

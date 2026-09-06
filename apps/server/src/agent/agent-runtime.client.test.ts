@@ -146,4 +146,50 @@ describe('AgentRuntimeClient', () => {
     expect(body.attachments).toEqual(attachments)
     expect(body.ref_order).toEqual(['a1'])
   })
+
+  it('cancelRun posts snake_case input and maps response to camelCase', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        phase: 'cancelled',
+        cancelled_node_ids: ['node-1'],
+        completed_tasks: 2,
+        total_tasks: 4,
+        skipped: false,
+        reason: 'user',
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const client = new AgentRuntimeClient('http://runtime.test/', 'dev-token')
+    await expect(
+      client.cancelRun({
+        threadId: 'thread-1',
+        sessionId: 'session-1',
+        reason: 'user',
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      phase: 'cancelled',
+      cancelledNodeIds: ['node-1'],
+      completedTasks: 2,
+      totalTasks: 4,
+      skipped: false,
+      reason: 'user',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('http://runtime.test/v1/runs/cancel', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-lnkpi-service-token': 'dev-token',
+      },
+      body: JSON.stringify({
+        thread_id: 'thread-1',
+        session_id: 'session-1',
+        reason: 'user',
+      }),
+    })
+  })
 })
