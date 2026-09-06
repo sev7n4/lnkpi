@@ -212,6 +212,8 @@ def test_sheng_xiao_girl_prefers_atomic_when_high():
         "学生画的图我看不懂",
         "整个图表看起来不错",
         "来个图书推荐",
+        "请帮我生一个图书推荐",
+        "请帮我生一个图表分析",
     ],
 )
 def test_casual_chat_not_hijacked_by_media_create(utterance: str):

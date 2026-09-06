@@ -122,9 +122,11 @@ def build_generation_request_from_atomic_state(state: dict[str, Any]) -> Generat
     intent = _intent_from_state(state, utterance, mentioned)
     derived = derive_studio_prompt(intent).strip()
     spec_prompt = str(spec.get("prompt") or "").strip()
+    prompt_basis = spec_prompt or intent.utterance or utterance
     # Colloquial create carries the subject in the utterance ("生一个小女孩的图片"), which the
-    # ref-backed derived prompt would drop — keep the spec/utterance prompt in that case.
-    if intent.mentioned_keys and derived and not suspected_media_create(utterance):
+    # ref-backed derived prompt would drop. After clarify, the latest utterance is only "1",
+    # so inspect the restored spec prompt instead of that reply.
+    if intent.mentioned_keys and derived and not suspected_media_create(prompt_basis):
         prompt = derived
     else:
         prompt = spec_prompt or derived
