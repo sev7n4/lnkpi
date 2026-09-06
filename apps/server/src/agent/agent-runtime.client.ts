@@ -25,6 +25,7 @@ export interface RuntimeThreadState {
   nextNodes: string[]
   interrupted: boolean
   finished: boolean
+  runCancelled?: boolean | null
   hasAtomicCheckpoint?: boolean
   atomicNodeId?: string | null
   atomicTargetType?: string | null
@@ -165,6 +166,71 @@ export class AgentRuntimeClient {
       return (await res.json()) as RuntimeThreadTimeline
     } catch {
       return null
+    }
+  }
+
+  async cancelRun(input: {
+    threadId: string
+    sessionId: string
+    reason?: string
+  }): Promise<{
+    ok: boolean
+    phase?: string | null
+    cancelledNodeIds?: string[]
+    completedTasks?: number
+    totalTasks?: number
+    skipped?: boolean
+    reason?: string
+    gatePreserved?: boolean
+    nextNodes?: string[]
+  }> {
+    const url = `${this.baseUrl.replace(/\/$/, '')}/v1/runs/cancel`
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+    const token =
+      this.serviceToken?.trim() || process.env.AGENT_RUNTIME_SERVICE_TOKEN?.trim()
+    if (token) {
+      headers['x-lnkpi-service-token'] = token
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        thread_id: input.threadId,
+        session_id: input.sessionId,
+        reason: input.reason,
+      }),
+    })
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      throw new Error(
+        `Agent runtime /v1/runs/cancel failed: ${res.status}${detail ? ` ${detail}` : ''}`,
+      )
+    }
+
+    const body = (await res.json()) as {
+      ok: boolean
+      phase?: string | null
+      cancelled_node_ids?: string[]
+      completed_tasks?: number
+      total_tasks?: number
+      skipped?: boolean
+      reason?: string
+      gate_preserved?: boolean
+      next_nodes?: string[]
+    }
+    return {
+      ok: body.ok,
+      phase: body.phase,
+      cancelledNodeIds: body.cancelled_node_ids,
+      completedTasks: body.completed_tasks,
+      totalTasks: body.total_tasks,
+      skipped: body.skipped,
+      reason: body.reason,
+      gatePreserved: body.gate_preserved,
+      nextNodes: body.next_nodes,
     }
   }
 
