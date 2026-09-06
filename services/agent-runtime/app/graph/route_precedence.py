@@ -441,7 +441,7 @@ def _rule_atomic_generate(
 def _rule_suspected_vision_clarify(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if features.get("suspected_vision_qa") and features.get("has_sidebar_media"):
+    if features.get("suspected_vision_qa"):
         return _base_decision(
             ctx,
             flow_mode="clarify_route",

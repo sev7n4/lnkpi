@@ -220,6 +220,14 @@ def test_vision_qa_with_sidebar_not_chat():
         assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
 
 
+def test_vision_qa_without_sidebar_routes_to_media_clarify():
+    for utterance in ("这个图片是什么？", "看看这张图"):
+        d = _decide({"messages": [{"role": "user", "content": utterance}]})
+        assert d["flow_mode"] == "clarify_route"
+        assert d["precedence_rule_id"] == "suspected_vision_clarify"
+        assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
+
+
 def test_soft_suspected_clarify_uses_media_question():
     d = _decide({"messages": [{"role": "user", "content": "帮我弄张图看看"}]})
     assert d["precedence_rule_id"] != "default_chat"
