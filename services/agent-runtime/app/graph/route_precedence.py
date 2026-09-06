@@ -15,7 +15,12 @@ from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_crea
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
 from app.graph.explore_route import explore_canvas_signal
 from app.graph.intent import modify_intent, single_node_gen_intent
-from app.graph.l0_action import TRANSFORM_VERBS, detect_l0_action, has_preserve_intent
+from app.graph.l0_action import (
+    SIDEBAR_SINGLE_EDIT_VERBS,
+    TRANSFORM_VERBS,
+    detect_l0_action,
+    has_preserve_intent,
+)
 from app.graph.route_context import RouteContext
 from app.graph.route_features import RouteFeatures, orchestration_campaign_signal
 
@@ -169,15 +174,21 @@ def has_planning_image_conflict(utterance: str) -> bool:
 def _sidebar_img2img_match(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext
 ) -> bool:
+    """Multi-image transform OR single sidebar/ref image edit (e.g. 给这只老虎带上眼镜)."""
     utterance = intent.utterance
-    if not features.get("has_multi_image_ref"):
-        return False
     keys = list(ctx.get("mentioned_keys") or [])
     image_keys = [k for k in keys if str(k).upper().startswith("I")]
-    has_transform = any(v in utterance for v in TRANSFORM_VERBS) or (
-        len(image_keys) >= 2 and ("让" in utterance or "请" in utterance)
-    )
-    return has_transform or bool(features.get("preserve_composition"))
+    multi = bool(features.get("has_multi_image_ref"))
+    single_ctx = bool(features.get("has_sidebar_media") or features.get("has_image_ref"))
+    if not multi and not single_ctx:
+        return False
+    if multi:
+        has_transform = any(v in utterance for v in TRANSFORM_VERBS) or (
+            len(image_keys) >= 2 and ("让" in utterance or "请" in utterance)
+        )
+        return has_transform or bool(features.get("preserve_composition"))
+    # Single image: require explicit edit/accessory verbs (not bare 「搭配」).
+    return any(v in utterance for v in SIDEBAR_SINGLE_EDIT_VERBS)
 
 
 def _ref_backed_generate_match(intent: AtomicIntent, features: RouteFeatures) -> bool:

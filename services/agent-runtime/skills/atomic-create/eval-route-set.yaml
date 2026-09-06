@@ -243,3 +243,11 @@ cases:
     state:
       messages: [{ role: user, content: "生成东北虎图片" }]
     gold: { flow_mode: atomic_create }
+
+  - id: rt-sidebar-edit-01
+    state:
+      messages: [{ role: user, content: "给这只小老虎带上眼镜和帽子" }]
+      sidebar_mentioned_keys: [I1]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/tiger.jpg" }
+    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }

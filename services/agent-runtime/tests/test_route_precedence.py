@@ -82,6 +82,35 @@ def test_precedence_sidebar_img2img():
     assert d["reason"] == "sidebar_img2img_p1"
 
 
+def test_sidebar_single_tiger_edit_not_chat():
+    """Prod: sidebar chip image + 给这只小老虎带上眼镜和帽子 → atomic, not chat."""
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "给这只小老虎带上眼镜和帽子"}],
+            "sidebar_attachments": [
+                {"refKey": "I1", "mediaType": "image", "url": "https://a/tiger.jpg"}
+            ],
+            "sidebar_mentioned_keys": ["I1"],
+        }
+    )
+    assert d["flow_mode"] == "atomic_create"
+    assert d["precedence_rule_id"] == "sidebar_img2img"
+    assert d["precedence_rule_id"] != "default_chat"
+
+
+def test_sidebar_open_without_edit_verb_stays_chat():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "这只老虎看起来不错"}],
+            "sidebar_attachments": [
+                {"refKey": "I1", "mediaType": "image", "url": "https://a/tiger.jpg"}
+            ],
+        }
+    )
+    assert d["flow_mode"] == "chat"
+    assert d["precedence_rule_id"] == "default_chat"
+
+
 def test_precedence_product_visual_beats_ref_backed_with_product_photo():
     d = _decide(
         {
