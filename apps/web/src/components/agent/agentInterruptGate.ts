@@ -21,6 +21,18 @@ export interface RetakePhaseInput {
   retakePending?: boolean | null
 }
 
+export interface RunCancelledStateInput {
+  phase?: string | null
+  runCancelled?: boolean | null
+}
+
+export function isRunCancelledState(
+  state: RunCancelledStateInput | null | undefined,
+): boolean {
+  if (!state) return false
+  return state.runCancelled === true || state.phase === 'cancelled'
+}
+
 export interface ProductVisualScheme {
   scheme_id: string
   name?: string | null
@@ -99,6 +111,7 @@ const MACHINE_PAYLOAD_PREFIXES = [
   SCHEME_DECISION_PREFIX,
   MACRO_SCHEME_DECISION_PREFIX,
   DELIVERY_DECISION_PREFIX,
+  '__new_task__',
 ] as const
 
 const INTERNAL_QA_ERROR_SNIPPETS = [

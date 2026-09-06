@@ -47,6 +47,7 @@ import {
   chipSetFromInterrupt,
   interruptPayloadFromThreadState,
   buildRetakeContinueMessage,
+  isRunCancelledState,
   isRetakePendingPhase,
   resolveImageQaBodyText,
   resolveImageQaChecks,
@@ -428,6 +429,8 @@ function pollTasksFromProgress() {
 
 let streamAbortController: AbortController | null = null
 const runCancelled = ref(false)
+const threadRunState = ref<{ phase?: string | null; runCancelled?: boolean | null } | null>(null)
+const cancelledPresentation = ref<AgentPresentationEnvelope | null>(null)
 const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
 /** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
@@ -482,6 +485,13 @@ const retakeCalloutText = computed(() => {
 const retakeContinueLabel = computed(
   () => gatePresentation.value?.secondary_actions?.[0]?.label ?? '继续',
 )
+const showCancelledCallout = computed(
+  () => isRunCancelledState(threadRunState.value) || runCancelled.value,
+)
+const cancelledCalloutText = computed(() => {
+  const text = String(cancelledPresentation.value?.body?.text ?? '').trim()
+  return text || '当前任务已停止，你可以发起新任务或直接输入新的需求。'
+})
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
 const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme_select')
 const awaitingShotConfirm = computed(
@@ -564,7 +574,8 @@ const hasDockPresentation = computed(
     || (awaitingDeliveryConfirm.value && Boolean(productVisualPlan.value) && !productVisualSchemeV2.value)
     || awaitingShotConfirm.value
     || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)
-    || isRetakePending.value,
+    || isRetakePending.value
+    || showCancelledCallout.value,
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
@@ -943,6 +954,9 @@ async function selectThread(threadId: string) {
   historyOpen.value = false
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
+  runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
   effectiveUtterance.value = null
@@ -994,6 +1008,9 @@ watch(
   () => {
     taskProgress.value = emptyTaskProgress()
     interruptGate.value = null
+    runCancelled.value = false
+    threadRunState.value = null
+    cancelledPresentation.value = null
     hasAtomicCheckpoint.value = false
     retakePending.value = false
     effectiveUtterance.value = null
@@ -1090,6 +1107,9 @@ function newAgentSession() {
   agent.clear()
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
+  runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
   threadJourneyTrace.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
@@ -1098,6 +1118,24 @@ function newAgentSession() {
   agentThreadId.value = createAgentThreadId(props.sessionId)
   persistActiveThreadId(props.sessionId, agentThreadId.value)
   ElMessage.info('已新建对话')
+}
+
+function syncCancelledFromThreadState(
+  state:
+    | {
+        phase?: string | null
+        runCancelled?: boolean | null
+        presentation?: AgentPresentationEnvelope | null
+      }
+    | null
+    | undefined,
+): boolean {
+  threadRunState.value = state
+    ? { phase: state.phase ?? null, runCancelled: state.runCancelled ?? null }
+    : null
+  const cancelled = isRunCancelledState(state)
+  cancelledPresentation.value = cancelled ? (state?.presentation ?? null) : null
+  return cancelled
 }
 
 async function refreshThreadCheckpoint() {
@@ -1112,6 +1150,7 @@ async function refreshThreadCheckpoint() {
         hasAtomicCheckpoint?: boolean
         interrupted?: boolean
         phase?: string | null
+        runCancelled?: boolean | null
         productVisualPlan?: ProductVisualPlan | null
         macroSchemes?: ProductVisualMacroScheme[] | null
         shotManifest?: ProductVisualShot[] | null
@@ -1164,7 +1203,8 @@ async function refreshThreadCheckpoint() {
         json.data?.deliveryGenByKey,
       )
     }
-    const gatePayload = interruptPayloadFromThreadState(json.data)
+    const cancelled = syncCancelledFromThreadState(json.data)
+    const gatePayload = cancelled ? null : interruptPayloadFromThreadState(json.data)
     interruptGate.value = gatePayload
   } catch {
     // ignore — checkpoint hint is best-effort
@@ -1277,6 +1317,11 @@ async function sendPreset(text: string) {
   await sendMessage(text.trim(), decision)
 }
 
+async function startNewTask() {
+  if (agent.isStreaming || isUploading.value) return
+  await sendMessage('__new_task__')
+}
+
 /** 把按钮文本映射为后端可识别的 userDecision 值。 */
 function mapPresetToDecision(text: string): 'confirm' | 'revise' | undefined {
   const t = (text || '').trim()
@@ -1373,6 +1418,8 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   effectiveUtterance.value = null
   completionPresentation.value = null
   runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1480,6 +1527,7 @@ async function reconnectStream() {
     const json = (await res.json()) as {
       data?: {
         phase?: string | null
+        runCancelled?: boolean | null
         interrupted?: boolean
         finished?: boolean
         nextNodes?: string[]
@@ -1529,7 +1577,8 @@ async function reconnectStream() {
         json.data?.deliveryGenByKey,
       )
     }
-    interruptGate.value = interruptPayloadFromThreadState(json.data)
+    const cancelled = syncCancelledFromThreadState(json.data)
+    interruptGate.value = cancelled ? null : interruptPayloadFromThreadState(json.data)
 
     const hint = phaseHintFromInterrupt(interruptGate.value)
     if (hint) {
@@ -1545,7 +1594,9 @@ async function reconnectStream() {
 
     const label = formatPhaseLabel(phase)
     recoveredPhaseHint.value =
-      json.data?.finished
+      cancelled
+        ? '服务已恢复。上一轮已停止，可发起新任务。'
+        : json.data?.finished
         ? '服务已恢复。上一轮已完成，可继续新的指令。'
         : `服务已恢复。当前阶段：${label}。请继续操作。`
     pollTasksFromProgress()
@@ -1750,7 +1801,12 @@ function handleEvent(event: { type: string; data: unknown }) {
       break
     case 'run_cancelled': {
       runCancelled.value = true
-      const text = String((event.data as { text?: string }).text ?? '').trim()
+      const data = event.data as {
+        text?: string
+        presentation?: AgentPresentationEnvelope | null
+      }
+      if (data.presentation) cancelledPresentation.value = data.presentation
+      const text = String(data.text ?? '').trim()
       if (text) {
         agent.appendText(`\n\n${text}`)
         scrollToBottom()
@@ -2257,7 +2313,27 @@ defineExpose({
             class="agent-input-area shrink-0 px-2.5 pb-2.5 pt-1"
             :class="{ 'agent-input-area--scrollable': hasDockPresentation }"
           >
-            <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+            <div
+              v-if="showCancelledCallout"
+              class="mb-2 px-0.5"
+              data-testid="run-cancelled-callout"
+            >
+              <p
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs leading-relaxed text-[var(--neo-text-secondary)]"
+              >
+                {{ cancelledCalloutText }}
+              </p>
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="new-task-chip"
+                :disabled="agent.isStreaming || isUploading"
+                @click="startNewTask()"
+              >
+                发起新任务
+              </button>
+            </div>
+            <div v-else-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
