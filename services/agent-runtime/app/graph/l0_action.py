@@ -9,7 +9,36 @@ if TYPE_CHECKING:
     from app.graph.planning_guard import ActionKind
 
 PRESERVE_MARKERS = ("不变", "保持", "维持", "沿用")
-TRANSFORM_VERBS = ("穿上", "换装", "替换", "融合", "上身", "换上", "换穿", "试穿", "佩戴", "搭配")
+TRANSFORM_VERBS = (
+    "穿上",
+    "换装",
+    "替换",
+    "融合",
+    "上身",
+    "换上",
+    "换穿",
+    "试穿",
+    "佩戴",
+    "搭配",
+    "带上",
+    "戴上",
+    "加上",
+)
+# Single sidebar/ref image edits — exclude bare 「搭配」 to avoid hijacking soft chat.
+SIDEBAR_SINGLE_EDIT_VERBS = (
+    "穿上",
+    "换装",
+    "替换",
+    "融合",
+    "上身",
+    "换上",
+    "换穿",
+    "试穿",
+    "佩戴",
+    "带上",
+    "戴上",
+    "加上",
+)
 _REF_KEY_PATTERN = re.compile(r"@([ITVA]\d+)", re.IGNORECASE)
 
 
