@@ -192,4 +192,28 @@ describe('AgentRuntimeClient', () => {
       }),
     })
   })
+
+  it('cancelRun maps preserved-gate response fields', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ok: true,
+          phase: 'await_shot_topo_confirm',
+          cancelled_node_ids: [],
+          completed_tasks: 0,
+          total_tasks: 0,
+          gate_preserved: true,
+          next_nodes: ['await_shot_topo_confirm'],
+        }),
+      }),
+    )
+
+    const client = new AgentRuntimeClient('http://runtime.test', 'dev-token')
+    const result = await client.cancelRun({ threadId: 't1', sessionId: 's1' })
+
+    expect(result.gatePreserved).toBe(true)
+    expect(result.nextNodes).toEqual(['await_shot_topo_confirm'])
+  })
 })

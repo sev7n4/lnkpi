@@ -181,6 +181,8 @@ export class AgentRuntimeClient {
     totalTasks?: number
     skipped?: boolean
     reason?: string
+    gatePreserved?: boolean
+    nextNodes?: string[]
   }> {
     const url = `${this.baseUrl.replace(/\/$/, '')}/v1/runs/cancel`
     const headers: Record<string, string> = {
@@ -216,6 +218,8 @@ export class AgentRuntimeClient {
       total_tasks?: number
       skipped?: boolean
       reason?: string
+      gate_preserved?: boolean
+      next_nodes?: string[]
     }
     return {
       ok: body.ok,
@@ -225,6 +229,8 @@ export class AgentRuntimeClient {
       totalTasks: body.total_tasks,
       skipped: body.skipped,
       reason: body.reason,
+      gatePreserved: body.gate_preserved,
+      nextNodes: body.next_nodes,
     }
   }
 

@@ -16,7 +16,10 @@ import AgentCanvasOutputs from '@/components/agent/AgentCanvasOutputs.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import { resolveMessageOutputs } from '@/components/agent/agentCanvasOutputs'
 import type { AgentStreamMessage } from '@/stores/agent'
-import { cancelAgentRun } from '@/components/agent/cancelAgentRun'
+import {
+  cancelAgentRun,
+  cancelledCalloutTextFromProgress,
+} from '@/components/agent/cancelAgentRun'
 import {
   applyTaskEvent,
   applyPollRecordToTask,
@@ -431,6 +434,8 @@ let streamAbortController: AbortController | null = null
 const runCancelled = ref(false)
 const threadRunState = ref<{ phase?: string | null; runCancelled?: boolean | null } | null>(null)
 const cancelledPresentation = ref<AgentPresentationEnvelope | null>(null)
+/** Progress line built from the cancel API response, before the checkpoint refresh lands. */
+const cancelledProgressText = ref<string | null>(null)
 const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
 /** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
@@ -489,7 +494,9 @@ const showCancelledCallout = computed(
   () => isRunCancelledState(threadRunState.value) || runCancelled.value,
 )
 const cancelledCalloutText = computed(() => {
-  const text = String(cancelledPresentation.value?.body?.text ?? '').trim()
+  const text =
+    String(cancelledPresentation.value?.body?.text ?? '').trim() ||
+    (cancelledProgressText.value ?? '')
   return text || '当前任务已停止，你可以发起新任务或直接输入新的需求。'
 })
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
@@ -957,6 +964,7 @@ async function selectThread(threadId: string) {
   runCancelled.value = false
   threadRunState.value = null
   cancelledPresentation.value = null
+  cancelledProgressText.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
   effectiveUtterance.value = null
@@ -1011,6 +1019,7 @@ watch(
     runCancelled.value = false
     threadRunState.value = null
     cancelledPresentation.value = null
+    cancelledProgressText.value = null
     hasAtomicCheckpoint.value = false
     retakePending.value = false
     effectiveUtterance.value = null
@@ -1110,6 +1119,7 @@ function newAgentSession() {
   runCancelled.value = false
   threadRunState.value = null
   cancelledPresentation.value = null
+  cancelledProgressText.value = null
   threadJourneyTrace.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
@@ -1134,7 +1144,13 @@ function syncCancelledFromThreadState(
     ? { phase: state.phase ?? null, runCancelled: state.runCancelled ?? null }
     : null
   const cancelled = isRunCancelledState(state)
-  cancelledPresentation.value = cancelled ? (state?.presentation ?? null) : null
+  if (cancelled) {
+    cancelledPresentation.value = state?.presentation ?? null
+  } else if (!runCancelled.value) {
+    // A gate-preserved stop leaves the checkpoint uncancelled; keep the local callout.
+    cancelledPresentation.value = null
+    cancelledProgressText.value = null
+  }
   return cancelled
 }
 
@@ -1203,9 +1219,9 @@ async function refreshThreadCheckpoint() {
         json.data?.deliveryGenByKey,
       )
     }
-    const cancelled = syncCancelledFromThreadState(json.data)
-    const gatePayload = cancelled ? null : interruptPayloadFromThreadState(json.data)
-    interruptGate.value = gatePayload
+    syncCancelledFromThreadState(json.data)
+    // A cancelled run can still hold a pending gate; chips stay under the callout.
+    interruptGate.value = interruptPayloadFromThreadState(json.data)
   } catch {
     // ignore — checkpoint hint is best-effort
   }
@@ -1256,7 +1272,7 @@ function authHeaders(): Record<string, string> {
 async function cancelActiveStream() {
   if (!agent.isStreaming) return
   runCancelled.value = true
-  const { apiOk } = await cancelAgentRun({
+  const { apiOk, completedTasks, totalTasks } = await cancelAgentRun({
     threadId: agentThreadId.value,
     sessionId: props.sessionId,
     abort: () => {
@@ -1270,9 +1286,14 @@ async function cancelActiveStream() {
         headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(3000),
-      }).then((r) => r.json()),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`cancel failed: ${r.status}`)
+        return r.json()
+      }),
   })
+  cancelledProgressText.value = cancelledCalloutTextFromProgress(completedTasks, totalTasks)
   ElMessage.info(apiOk ? '已停止当前任务，您可以发送新需求' : '已断开回复，后台可能仍在收尾')
+  if (apiOk) await refreshThreadCheckpoint()
 }
 
 async function send() {
@@ -1420,6 +1441,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   runCancelled.value = false
   threadRunState.value = null
   cancelledPresentation.value = null
+  cancelledProgressText.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1578,7 +1600,7 @@ async function reconnectStream() {
       )
     }
     const cancelled = syncCancelledFromThreadState(json.data)
-    interruptGate.value = cancelled ? null : interruptPayloadFromThreadState(json.data)
+    interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     const hint = phaseHintFromInterrupt(interruptGate.value)
     if (hint) {
@@ -2333,7 +2355,7 @@ defineExpose({
                 发起新任务
               </button>
             </div>
-            <div v-else-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+            <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
