@@ -1,4 +1,12 @@
-"""P2: unified GenerationRequest DTO — sidebar atomic path ≡ Dock (RU-9, R-ALIGN-02)."""
+"""P2/P1: unified GenerationRequest DTO — sidebar atomic path ≡ Dock (RU-9).
+
+唯一构造入口：
+- build_generation_request_from_atomic_state
+- build_generation_request_from_dock
+- apply_generation_request_to_state（写入 state）
+
+禁止在 nodes/* 内手写 prompt/refs 平行字典。
+"""
 
 from __future__ import annotations
 

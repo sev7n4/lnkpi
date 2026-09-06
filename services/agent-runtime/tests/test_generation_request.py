@@ -116,6 +116,22 @@ async def test_create_atomic_node_writes_generation_request():
     assert req.get("slots") == {"ref": "T1", "style": "3"}
 
 
+@pytest.mark.asyncio
+async def test_apply_generation_request_after_clarify_resume_fields():
+    state = {
+        "messages": [HumanMessage(content="请帮我生一个小女孩的图片")],
+        "atomic_spec": {
+            "target_type": "image",
+            "prompt": "请帮我生一个小女孩的图片",
+            "title": "小女孩",
+        },
+        "sidebar_attachments": [],
+    }
+    patch = apply_generation_request_to_state(state)
+    gr = patch.get("generation_request") or {}
+    assert set(gr.keys()) >= {"prompt", "refs", "mentioned_keys", "modality"}
+
+
 def test_apply_generation_request_syncs_atomic_spec():
     state = {
         "messages": [HumanMessage(content=STYLE3)],
