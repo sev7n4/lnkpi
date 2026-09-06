@@ -16,6 +16,7 @@ import AgentCanvasOutputs from '@/components/agent/AgentCanvasOutputs.vue'
 import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import { resolveMessageOutputs } from '@/components/agent/agentCanvasOutputs'
 import type { AgentStreamMessage } from '@/stores/agent'
+import { cancelAgentRun } from '@/components/agent/cancelAgentRun'
 import {
   applyTaskEvent,
   applyPollRecordToTask,
@@ -426,6 +427,7 @@ function pollTasksFromProgress() {
 }
 
 let streamAbortController: AbortController | null = null
+const runCancelled = ref(false)
 const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
 /** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
@@ -1206,18 +1208,37 @@ function toggleVoice() {
   })
 }
 
-function cancelActiveStream() {
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function cancelActiveStream() {
   if (!agent.isStreaming) return
-  streamAbortController?.abort()
-  agentStream.stop()
-  agent.finishStreaming()
-  ElMessage.info('已停止当前回复，您可以发送新需求')
+  runCancelled.value = true
+  const { apiOk } = await cancelAgentRun({
+    threadId: agentThreadId.value,
+    sessionId: props.sessionId,
+    abort: () => {
+      streamAbortController?.abort()
+      agentStream.stop()
+      agent.finishStreaming()
+    },
+    postCancel: (body) =>
+      fetch(apiUrl('/api/agent/runs/cancel'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(3000),
+      }).then((r) => r.json()),
+  })
+  ElMessage.info(apiOk ? '已停止当前任务，您可以发送新需求' : '已断开回复，后台可能仍在收尾')
 }
 
 async function send() {
   if (isUploading.value) return
   if (agent.isStreaming) {
-    cancelActiveStream()
+    await cancelActiveStream()
     return
   }
   if (!canSubmitComposer.value) return
@@ -1351,6 +1372,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   retakePending.value = false
   effectiveUtterance.value = null
   completionPresentation.value = null
+  runCancelled.value = false
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1411,7 +1433,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     agentStream.stop()
     streamAbortController = null
     // SSE abnormal-end detection: stream broke without [DONE]
-    if (!streamEndedNormally) {
+    if (!streamEndedNormally && !runCancelled.value) {
       const last = agent.messages[agent.messages.length - 1]
       if (last?.role === 'assistant' && !last.content.trim()) {
         agent.appendText('\n\n⚠️ 连接意外断开，请稍后重试。')
@@ -1423,7 +1445,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     }
 
     const last = agent.messages[agent.messages.length - 1]
-    if (last?.role === 'assistant' && !last.content.trim()) {
+    if (!runCancelled.value && last?.role === 'assistant' && !last.content.trim()) {
       agent.appendText('（本轮无文本回复。若在确认方案，可再发「确认」；或点「新建对话」后重试。）')
     }
     agent.finishStreaming()
@@ -1726,6 +1748,15 @@ function handleEvent(event: { type: string; data: unknown }) {
     }
     case 'ping':
       break
+    case 'run_cancelled': {
+      runCancelled.value = true
+      const text = String((event.data as { text?: string }).text ?? '').trim()
+      if (text) {
+        agent.appendText(`\n\n${text}`)
+        scrollToBottom()
+      }
+      break
+    }
     case 'interrupt': {
       const data = event.data as AgentInterruptPayload & {
         imageQaReason?: string | null
