@@ -284,6 +284,15 @@ PV-1 / PV-2 可同一实现 PR 串行，验收按 §七分项勾选。
 | UAT-INT-PV-06 | 停止后重连 thread-state | `runCancelled` + callout；composer 可用 |
 | UAT-INT-PV-07 | 重复停止 / cancel 幂等 | 两次 `ok: true`，无异常 |
 
+**实现 PR 手动验收清单（staging，由人工执行）：**
+- [ ] UAT-INT-PV-01
+- [ ] UAT-INT-PV-02
+- [ ] UAT-INT-PV-03
+- [ ] UAT-INT-PV-04
+- [ ] UAT-INT-PV-05
+- [ ] UAT-INT-PV-06
+- [ ] UAT-INT-PV-07
+
 ---
 
 ## 八、风险与缓解
