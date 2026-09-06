@@ -21,13 +21,44 @@ from langchain_core.messages import HumanMessage
 from langgraph.errors import InvalidUpdateError
 from langgraph.types import Command
 
+from app.graph.cancel_checkpoint import CANCEL_STATE_CLEAR
+
 GATE_DECISION_CLEAR = {"user_decision": "none", "force_choice": None}
 
+# ``interrupt_before`` nodes registered in builder.py / product_visual_v2 routing.
+HITL_GATE_NODES: frozenset[str] = frozenset(
+    {
+        "await_confirm",
+        "await_topo",
+        "await_copy_confirm",
+        "await_atomic_confirm",
+        "await_image_qa",
+        "await_scheme_select",
+        "await_macro_scheme_select",
+        "await_shot_confirm",
+        "await_shot_topo_confirm",
+        "await_delivery_confirm",
+    }
+)
+
 REF_MENTION_RE = re.compile(r"@[TIVA]\d+", re.IGNORECASE)
+
+# Tier-B gen run channel; a fresh task or a gen-phase revise must drop all of it.
+GEN_STATE_CLEAR: dict[str, None] = {
+    "gen_progress_id": None,
+    "gen_ordered_keys": None,
+    "gen_deps_of": None,
+    "gen_by_key": None,
+    "gen_completed_keys": None,
+    "gen_failed_keys": None,
+    "gen_needs_user_keys": None,
+    "gen_fail_details": None,
+}
 
 # Cleared when a new user task arrives while a HITL gate is still pending.
 FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     **GATE_DECISION_CLEAR,
+    **GEN_STATE_CLEAR,
     "phase": None,
     "flow_mode": None,
     "mode": None,
@@ -55,10 +86,22 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "selected_macro_scheme_ids": None,
     "macro_scheme_decision": None,
     "shot_manifest": None,
+    "expected_delivery_count": None,
+    "retake_pending": None,
     "visual_intent": None,
     "presentation": None,
     "journey_trace": None,
+    **CANCEL_STATE_CLEAR,
 }
+
+
+def cancel_state_clear_for_resume(pre_vals: dict[str, Any]) -> dict[str, Any]:
+    """Cancel fields to clear (and phase to restore) when resuming a gate post-cancel."""
+    cancelled = bool(pre_vals.get("run_cancelled")) or pre_vals.get("phase") == "cancelled"
+    if not cancelled:
+        return {}
+    origin = str(pre_vals.get("cancelled_from_phase") or "").strip() or None
+    return {**CANCEL_STATE_CLEAR, "phase": None if origin == "cancelled" else origin}
 
 
 def should_resume_interrupt(
@@ -217,11 +260,15 @@ def build_interrupt_resume_command(
     message: str,
     *,
     user_decision: str | None = None,
+    extra_update: dict[str, Any] | None = None,
 ) -> Command:
     """Jump directly to a gate with user reply (fixes interrupt_before no-op resume)."""
     return Command(
         goto=gate,
-        update=build_interrupt_state_update(message, user_decision=user_decision),
+        update={
+            **(extra_update or {}),
+            **build_interrupt_state_update(message, user_decision=user_decision),
+        },
     )
 
 
@@ -253,7 +300,10 @@ async def prepare_interrupt_resume(
     gate_node = next_nodes[0] if next_nodes else None
     resume_as_node = as_node or (GATE_RESUME_AS_NODE.get(gate_node or "") if gate_node else None)
     assistant_save_after = len(vals.get("messages") or []) + 1
-    update = build_interrupt_state_update(message, user_decision=user_decision)
+    update = {
+        **cancel_state_clear_for_resume(vals),
+        **build_interrupt_state_update(message, user_decision=user_decision),
+    }
     update_kwargs: dict[str, Any] = {}
     if resume_as_node:
         update_kwargs["as_node"] = resume_as_node

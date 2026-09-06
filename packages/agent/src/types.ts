@@ -60,6 +60,7 @@ export interface AgentStreamEvent {
     | 'interrupt'
     | 'journey_update'
     | 'force_choice'
+    | 'run_cancelled'
     | 'ping'
     | 'done'
     | 'error'

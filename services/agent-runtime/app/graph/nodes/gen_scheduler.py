@@ -28,6 +28,8 @@ from typing import Any, Callable
 from langgraph.types import Command, Send
 
 from app.config import settings
+from app.graph.cancel_checkpoint import build_cancelled_checkpoint_update
+from app.run_cancel import is_cancel_requested, peek_cancel_reason
 
 
 def _detail(by_key: dict[str, dict], key: str, reason: str) -> dict[str, dict]:
@@ -49,6 +51,21 @@ def make_gen_scheduler_node(*, max_concurrency: int | None = None) -> Callable:
         completed: set[str] = set(state.get("gen_completed_keys") or [])
         failed: set[str] = set(state.get("gen_failed_keys") or [])
         needs_user: set[str] = set(state.get("gen_needs_user_keys") or [])
+
+        thread_id = str(state.get("thread_id") or "")
+        flow_mode = state.get("flow_mode")
+        if (
+            flow_mode == "product_visual"
+            and thread_id
+            and is_cancel_requested(thread_id)
+        ):
+            reason = peek_cancel_reason(thread_id) or "user"
+            update = build_cancelled_checkpoint_update(
+                completed_tasks=len(completed),
+                total_tasks=len(ordered_keys),
+                reason=reason,
+            )
+            return Command(update=update, goto=["collect_gen"])
 
         # 1. Forward topo cascade: mark dependency_failed / dependency_skipped.
         # ordered_keys is topo-sorted, so a key's deps are classified before it.
@@ -103,6 +120,8 @@ def make_gen_scheduler_node(*, max_concurrency: int | None = None) -> Callable:
                             "key": k,
                             "gen_by_key": by_key,
                             "plan_node_id": plan_node_id,
+                            "thread_id": state.get("thread_id"),
+                            "flow_mode": flow_mode,
                         },
                     )
                     for k in to_dispatch

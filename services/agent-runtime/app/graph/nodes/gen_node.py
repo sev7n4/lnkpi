@@ -21,6 +21,7 @@ from app.errors import AgentToolError, from_exception
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.gen_copy import format_gen_progress_line
 from app.graph.task_events import hint_for_error, is_recoverable, max_auto_retries
+from app.run_cancel import is_cancel_requested
 
 
 async def _emit_task_update(nest: Any, **payload: Any) -> None:
@@ -93,6 +94,23 @@ def make_gen_node(*, nest: Any) -> Callable:
             return {
                 "gen_failed_keys": [key],
                 "gen_fail_details": {key: {"node_id": None, "title": title, "reason": "missing_node_id"}},
+            }
+
+        thread_id = str(state.get("thread_id") or "")
+        if (
+            state.get("flow_mode") == "product_visual"
+            and thread_id
+            and is_cancel_requested(thread_id)
+        ):
+            try:
+                await nest.cancel_generation(node_id=str(node_id))
+            except Exception:  # noqa: BLE001
+                pass
+            return {
+                "gen_needs_user_keys": [key],
+                "gen_fail_details": {
+                    key: {"node_id": node_id, "title": title, "reason": "cancelled"}
+                },
             }
 
         plan_node_id = state.get("plan_node_id")

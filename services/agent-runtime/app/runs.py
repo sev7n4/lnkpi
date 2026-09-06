@@ -13,7 +13,7 @@ import aiosqlite
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config import settings
 from app.checkpoint_observability import checkpoint_diagnostics
@@ -22,13 +22,16 @@ from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
     GATE_RESUME_COMMAND_GOTO,
+    HITL_GATE_NODES,
     build_fresh_turn_command,
     build_interrupt_resume_command,
     build_interrupt_state_update,
+    cancel_state_clear_for_resume,
     interrupt_event_payload,
     prepare_interrupt_resume,
     should_resume_interrupt,
 )
+from app.graph.post_cancel import build_revise_turn_command, classify_post_cancel_intent
 from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.step_copy import phase_hint_event, step_event
 from app.graph.route_trace import route_decision_event
@@ -39,6 +42,13 @@ from app.graph.nodes.intake import modify_intent
 from app.graph.sidebar_attachments import (
     normalize_mentioned_keys,
     normalize_sidebar_attachments,
+)
+from app.graph.cancel_checkpoint import build_cancelled_checkpoint_update
+from app.run_cancel import (
+    clear_cancel,
+    is_cancel_requested,
+    peek_cancel_reason,
+    request_cancel,
 )
 from app.tools.nest_client import NestCanvasClient
 
@@ -281,6 +291,19 @@ class RunRequest(BaseModel):
         default=None,
         validation_alias="mentioned_keys",
     )
+
+
+class CancelRunRequest(BaseModel):
+    thread_id: str
+    session_id: str | None = None
+    reason: str = "user"
+
+    @field_validator("thread_id")
+    @classmethod
+    def validate_thread_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("thread_id must not be blank")
+        return value
 
 
 class NestEventProxy:
@@ -619,6 +642,46 @@ def resolve_vision_creds(req: RunRequest) -> dict[str, str | None]:
     }
 
 
+def resolve_turn_input(
+    pre_vals: dict[str, Any],
+    next_nodes: list[str] | tuple[str, ...],
+    message: str,
+    user_decision: str | None,
+    turn_update: dict[str, Any],
+) -> Any | None:
+    """Resolve synchronous turn routing; ``None`` defers a gate resume."""
+    nodes = [str(node) for node in next_nodes]
+    phase = str(pre_vals.get("phase") or "") or None
+    # Post-cancel revise must tier off the phase the run was stopped in, not "cancelled".
+    cancelled_from = str(pre_vals.get("cancelled_from_phase") or "") or None
+    phase_hint = cancelled_from or (None if phase == "cancelled" else phase)
+    intent = classify_post_cancel_intent(
+        message,
+        next_nodes=nodes,
+        user_decision=user_decision,
+        run_cancelled=bool(pre_vals.get("run_cancelled")) or phase == "cancelled",
+        phase=phase,
+    )
+    if intent == "new_task":
+        return build_fresh_turn_command(update=turn_update)
+    if intent == "revise":
+        return build_revise_turn_command(phase_hint=phase_hint, update=turn_update)
+
+    is_gate_resume = bool(
+        nodes
+        and should_resume_interrupt(
+            message,
+            nodes,
+            user_decision=user_decision,
+        )
+    )
+    if intent == "gate_resume" or is_gate_resume:
+        return None
+    if nodes:
+        return build_fresh_turn_command(update=turn_update)
+    return turn_update
+
+
 async def get_thread_state(
     thread_id: str,
     *,
@@ -652,7 +715,11 @@ async def get_thread_state(
         "phase": phase_str,
         "nextNodes": next_nodes,
         "interrupted": bool(next_nodes),
-        "finished": phase_str == "done" or (not next_nodes and bool(vals)),
+        "finished": phase_str == "done"
+        or (phase_str != "cancelled" and not next_nodes and bool(vals)),
+        "runCancelled": bool(vals.get("run_cancelled"))
+        if vals.get("run_cancelled") is not None
+        else None,
         "productVisualPlan": plan if isinstance(plan, dict) else None,
         "macroSchemes": vals.get("macro_schemes") if isinstance(vals.get("macro_schemes"), list) else None,
         "shotManifest": vals.get("shot_manifest") if isinstance(vals.get("shot_manifest"), list) else None,
@@ -682,6 +749,157 @@ async def get_thread_state(
         "journeyTrace": _resolve_journey_trace(vals),
         **diag,
     }
+
+
+def _hitl_gate_nodes(next_nodes: Any) -> list[str]:
+    return [
+        str(node)
+        for node in (next_nodes or ())
+        if str(node).startswith("await_") or str(node) in HITL_GATE_NODES
+    ]
+
+
+async def cancel_run(
+    req: CancelRunRequest,
+    *,
+    checkpointer: Any | None = None,
+    nest: Any | None = None,
+) -> dict[str, Any]:
+    """Request cooperative cancellation and persist it for product-visual runs."""
+    thread_id = req.thread_id.strip()
+
+    class _NoOpNest:
+        async def close(self) -> None:
+            pass
+
+    cp = checkpointer if checkpointer is not None else await _get_checkpointer()
+    graph = build_agent_graph(
+        nest=_NoOpNest(),
+        llm=default_llm(),
+        skills_dir=resolve_skills_dir(),
+        checkpointer=cp,
+    )
+    config = {"configurable": {"thread_id": thread_id}}
+    snap = await graph.aget_state(config)
+    vals = getattr(snap, "values", None) or {}
+    pending_gate_nodes = _hitl_gate_nodes(getattr(snap, "next", None))
+    phase = str(vals["phase"]) if vals.get("phase") is not None else None
+    gen_by_key = vals.get("gen_by_key")
+    by_key = gen_by_key if isinstance(gen_by_key, dict) else {}
+    completed_keys = {
+        str(key) for key in (vals.get("gen_completed_keys") or [])
+    }
+    completed_tasks = len(completed_keys)
+    total_tasks = len(by_key)
+    base = {
+        "ok": True,
+        "phase": phase,
+        "cancelled_node_ids": [],
+        "completed_tasks": completed_tasks,
+        "total_tasks": total_tasks,
+    }
+
+    flow_mode = vals.get("flow_mode")
+    if flow_mode is not None and flow_mode != "product_visual":
+        clear_cancel(thread_id)
+        return {**base, "skipped": True, "reason": "flow_not_supported"}
+    if phase == "cancelled":
+        clear_cancel(thread_id)
+        return base
+
+    request_session_id = (req.session_id or "").strip()
+    checkpoint_session_id = str(vals.get("session_id") or "").strip()
+    cancel_session_id = request_session_id or checkpoint_session_id
+    owns_cancel_nest = nest is None and bool(cancel_session_id)
+    cancel_nest = nest
+    if cancel_nest is None and cancel_session_id:
+        cancel_nest = default_nest(
+            session_id=cancel_session_id,
+            user_id=str(vals.get("user_id") or ""),
+        )
+
+    if cancel_nest is None:
+        local_lock = _thread_locks.get(thread_id)
+        if (
+            local_lock is not None
+            and local_lock.locked()
+            and flow_mode in (None, "product_visual")
+        ):
+            request_cancel(thread_id, reason=req.reason)
+            return base
+        clear_cancel(thread_id)
+        return {**base, "skipped": True, "reason": "flow_not_supported"}
+
+    acquired = False
+    holder_id: str | None = None
+    try:
+        try:
+            acquired, holder_id = await _try_acquire_thread(thread_id, cancel_nest)
+        except Exception:  # noqa: BLE001 — lock uncertainty must avoid checkpoint races
+            clear_cancel(thread_id)
+            return {**base, "skipped": True, "reason": "cancel_unavailable"}
+
+        if not acquired:
+            request_cancel(thread_id, reason=req.reason)
+            return base
+
+        if flow_mode != "product_visual":
+            clear_cancel(thread_id)
+            return {**base, "skipped": True, "reason": "flow_not_supported"}
+
+        if pending_gate_nodes:
+            # Idle thread paused at an interrupt_before gate: writing the cancelled
+            # checkpoint would drop ``next`` and strand the gate, so the user could no
+            # longer answer it. Report ok and let the client show its local callout.
+            clear_cancel(thread_id)
+            return {
+                **base,
+                "gate_preserved": True,
+                "next_nodes": pending_gate_nodes,
+            }
+
+        request_cancel(thread_id, reason=req.reason)
+        try:
+            cancelled_node_ids: list[str] = []
+            for key, item in by_key.items():
+                if not isinstance(item, dict):
+                    continue
+                is_completed = (
+                    str(key) in completed_keys
+                    or str(item.get("status") or "").lower() in {"completed", "done", "success"}
+                    or bool(item.get("url"))
+                )
+                node_id = item.get("node_id")
+                if is_completed or not node_id:
+                    continue
+                try:
+                    await cancel_nest.cancel_generation(node_id=str(node_id))
+                except Exception:  # noqa: BLE001 — cancellation remains cooperative
+                    pass
+                cancelled_node_ids.append(str(node_id))
+
+            await graph.aupdate_state(
+                config,
+                build_cancelled_checkpoint_update(
+                    completed_tasks=completed_tasks,
+                    total_tasks=total_tasks,
+                    reason=req.reason,
+                    from_phase=phase,
+                ),
+                as_node="gen_scheduler",
+            )
+            return {
+                **base,
+                "phase": "cancelled",
+                "cancelled_node_ids": cancelled_node_ids,
+            }
+        finally:
+            clear_cancel(thread_id)
+    finally:
+        if acquired:
+            await _release_thread(thread_id, holder_id, cancel_nest)
+        if owns_cancel_nest:
+            await cancel_nest.close()
 
 
 async def _load_history(nest: NestCanvasClient, thread_id: str) -> list[Any]:
@@ -810,8 +1028,15 @@ async def stream_run_events(
 
     pre_next = [str(n) for n in (getattr(snap, "next", None) or [])]
     resume_attempt = False
+    input_state = resolve_turn_input(
+        pre_vals,
+        next_nodes,
+        req.message,
+        req.user_decision,
+        turn_update,
+    )
 
-    if next_nodes and is_gate_resume:
+    if input_state is None and next_nodes and is_gate_resume:
         # interrupt_before: inject user message, then continue with input=None.
         # See app/graph/hitl_resume.py — Command(resume=...) is for in-node interrupt() only.
         resume_attempt = True
@@ -821,6 +1046,7 @@ async def stream_run_events(
                 gate,
                 req.message,
                 user_decision=req.user_decision,
+                extra_update=cancel_state_clear_for_resume(pre_vals),
             )
         else:
             input_state, _ = await prepare_interrupt_resume(
@@ -829,7 +1055,7 @@ async def stream_run_events(
                 req.message,
                 user_decision=req.user_decision,
             )
-    elif next_nodes:
+    elif next_nodes and not is_gate_resume:
         # Fresh @ref task while a gate is still pending — restart at intake.
         logger.info(
             "agent_turn_fresh_restart thread_id=%s session_id=%s gate=%s",
@@ -837,15 +1063,13 @@ async def stream_run_events(
             req.session_id,
             list(next_nodes),
         )
-        input_state = build_fresh_turn_command(update=turn_update)
-    else:
-        input_state = turn_update
 
     async def run_graph() -> None:
         last_text_delta: str | None = None
         executed_nodes: set[str] = set()
         stream_input: Any = input_state
         stream_vals: dict[str, Any] = dict(pre_vals)
+        cancelled_during_stream = False
         try:
             for pass_idx in range(2):
                 async for update in graph.astream(stream_input, config, stream_mode="updates"):
@@ -922,7 +1146,56 @@ async def stream_run_events(
                                 ms=int((time.monotonic() - t0) * 1000),
                             )
                         )
+                    if is_cancel_requested(thread_id):
+                        cancel_snap = await graph.aget_state(config)
+                        cancel_vals = getattr(cancel_snap, "values", None) or {}
+                        cancel_gate_nodes = _hitl_gate_nodes(
+                            getattr(cancel_snap, "next", None)
+                        )
+                        if cancel_vals.get("flow_mode") != "product_visual":
+                            clear_cancel(thread_id)
+                            continue
+                        by_key = cancel_vals.get("gen_by_key")
+                        by_key = by_key if isinstance(by_key, dict) else {}
+                        completed = {
+                            str(key)
+                            for key in (cancel_vals.get("gen_completed_keys") or [])
+                        }
+                        completed_tasks = len(completed)
+                        total_tasks = len(by_key)
+                        if (
+                            cancel_vals.get("phase") != "cancelled"
+                            and not cancel_gate_nodes
+                        ):
+                            await graph.aupdate_state(
+                                config,
+                                build_cancelled_checkpoint_update(
+                                    completed_tasks=completed_tasks,
+                                    total_tasks=total_tasks,
+                                    reason=peek_cancel_reason(thread_id) or "user",
+                                    from_phase=(
+                                        str(cancel_vals.get("phase"))
+                                        if cancel_vals.get("phase") is not None
+                                        else None
+                                    ),
+                                ),
+                                as_node="gen_scheduler",
+                            )
+                        await emit(
+                            {
+                                "type": "run_cancelled",
+                                "data": {
+                                    "phase": "cancelled",
+                                    "completedTasks": completed_tasks,
+                                    "totalTasks": total_tasks,
+                                },
+                            }
+                        )
+                        cancelled_during_stream = True
+                        break
 
+                if cancelled_during_stream:
+                    break
                 mid = await graph.aget_state(config)
                 mid_next = [str(n) for n in (getattr(mid, "next", None) or [])]
                 gate = pre_next[0] if pre_next else None
@@ -1051,6 +1324,9 @@ async def stream_run_events(
         except asyncio.CancelledError:
             pass
         await _release_thread(thread_id, holder_id, lock_nest)
+        # Release lock before clearing cancel: cancel_run busy-path checks
+        # local lock; clearing first lets it re-set the sticky flag.
+        clear_cancel(thread_id)
         if owns_nest:
             await lock_nest.close()
         if not task.done():
