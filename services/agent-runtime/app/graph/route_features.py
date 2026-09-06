@@ -15,6 +15,7 @@ from app.graph.explore_route import explore_explicit_intent
 from app.graph.intent import single_node_gen_intent
 from app.graph.l0_action import has_preserve_intent, utterance_has_multi_image_refs
 from app.graph.media_utterance import (
+    media_directed_question,
     normalize_colloquial_create_verbs,
     suspected_media_create,
     suspected_vision_qa,
@@ -48,6 +49,7 @@ class RouteFeatures(TypedDict, total=False):
     has_sidebar_media: bool
     suspected_media_create: bool
     suspected_vision_qa: bool
+    media_directed_question: bool
     media_create_high: bool
     explicit_skill: bool
     has_atomic_checkpoint: bool
@@ -133,10 +135,7 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
     suspected_create = suspected_media_create(utterance)
     suspected_vision = suspected_vision_qa(utterance)
     normalized = normalize_colloquial_create_verbs(utterance)
-    media_high = bool(
-        utterance_suggests_atomic_create(normalized)
-        or (suspected_create and utterance_suggests_atomic_create(normalized))
-    )
+    media_high = bool(utterance_suggests_atomic_create(normalized))
 
     checkpoint = ctx.get("checkpoint") or {}
     atomic_node_id = str(checkpoint.get("atomic_node_id") or ctx.get("atomic_node_id") or "").strip()
@@ -156,6 +155,7 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
         has_sidebar_media=has_sidebar_media,
         suspected_media_create=suspected_create,
         suspected_vision_qa=suspected_vision,
+        media_directed_question=media_directed_question(utterance),
         media_create_high=media_high,
         explicit_skill=bool(str(ctx.get("requested_skill_id") or "").strip()),
         has_atomic_checkpoint=has_checkpoint,

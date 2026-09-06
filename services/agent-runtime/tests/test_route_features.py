@@ -130,6 +130,24 @@ def test_sidebar_image_sets_has_sidebar_media():
     features = extract_route_features(ctx, intent)
     assert features["has_sidebar_media"] is True
     assert features["suspected_vision_qa"] is True
+    assert features["media_directed_question"] is True
+
+
+def test_bare_question_sets_media_directed_question_only():
+    utterance = "这是什么？"
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": utterance}]})
+    features = extract_route_features(ctx, _intent(utterance))
+    assert features["media_directed_question"] is True
+    assert features["has_sidebar_media"] is False
+    assert features["suspected_vision_qa"] is False
+
+
+@pytest.mark.parametrize("utterance", ["先生这张图不错", "整个图表看起来不错", "来个图书推荐"])
+def test_casual_chat_has_no_media_create_features(utterance: str):
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": utterance}]})
+    features = extract_route_features(ctx, _intent(utterance))
+    assert features["suspected_media_create"] is False
+    assert features["media_create_high"] is False
 
 
 def test_empty_url_attachment_not_sidebar_media():
