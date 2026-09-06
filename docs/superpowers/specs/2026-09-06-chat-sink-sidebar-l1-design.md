@@ -1,6 +1,6 @@
 # Chat Sink 治理与侧栏媒体参与 L1 — 设计规格
 
-> 状态：**Proposed**（2026-09-06）  
+> 状态：**Implemented P0–P1**（Tasks 1–8 done，2026-09-06）
 > 范围：**Chat 能力诚实 + 禁止疑似媒体意图静默落入 `default_chat` + 侧栏媒体信号参与 L0 feature/precedence + Agent≡Dock `GenerationRequest` 契约对齐（实现分 P0/P1）**  
 > 前置：  
 > - [2026-08-09-sidebar-ref-image-routing-design.md](./2026-08-09-sidebar-ref-image-routing-design.md) §9 Route Unification ADR（RU-3/6/7/9）  
