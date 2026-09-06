@@ -23,3 +23,8 @@ def test_chat_system_mentions_honest_capability_or_redirect():
 
 def test_chat_system_not_legacy_no_image_promise():
     assert "不要擅自创建画布方案或承诺自动出图" not in _SYSTEM
+
+
+def test_chat_system_forbids_fake_in_progress_generation():
+    assert "马上生成" in _SYSTEM or "正在生成" in _SYSTEM
+    assert "闲聊" in _SYSTEM or "未进入创作" in _SYSTEM or "尚未进入创作" in _SYSTEM

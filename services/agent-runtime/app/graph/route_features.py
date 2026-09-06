@@ -17,6 +17,7 @@ from app.graph.l0_action import has_preserve_intent, utterance_has_multi_image_r
 from app.graph.media_utterance import (
     media_directed_question,
     normalize_colloquial_create_verbs,
+    strong_generate_media,
     suspected_media_create,
     suspected_vision_qa,
 )
@@ -135,7 +136,11 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
     suspected_create = suspected_media_create(utterance)
     suspected_vision = suspected_vision_qa(utterance)
     normalized = normalize_colloquial_create_verbs(utterance)
-    media_high = bool(utterance_suggests_atomic_create(normalized))
+    media_high = bool(
+        utterance_suggests_atomic_create(normalized)
+        or strong_generate_media(utterance)
+        or strong_generate_media(normalized)
+    )
 
     checkpoint = ctx.get("checkpoint") or {}
     atomic_node_id = str(checkpoint.get("atomic_node_id") or ctx.get("atomic_node_id") or "").strip()

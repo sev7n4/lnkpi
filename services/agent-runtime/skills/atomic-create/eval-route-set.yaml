@@ -229,3 +229,17 @@ cases:
     state:
       messages: [{ role: user, content: "整个图表看起来不错" }]
     gold: { flow_mode: chat, reason: default_chat }
+
+  - id: rt-chat-sink-10
+    state:
+      messages:
+        - {
+            role: user,
+            content: "生成一只东北虎图片，卡通版，戴着红围巾、正在笑、或者背景是雪地",
+          }
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-11
+    state:
+      messages: [{ role: user, content: "生成东北虎图片" }]
+    gold: { flow_mode: atomic_create }
