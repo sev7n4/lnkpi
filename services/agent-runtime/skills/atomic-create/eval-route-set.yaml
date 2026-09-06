@@ -212,3 +212,20 @@ cases:
     gold:
       # soft suspected: clarify_route or atomic_create — never chat
       flow_mode: clarify_route
+
+  - id: rt-chat-sink-07
+    state:
+      messages: [{ role: user, content: "这是什么？" }]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/1.jpg" }
+    gold: { flow_mode: clarify_route, reason: sidebar_media_question }
+
+  - id: rt-chat-sink-08
+    state:
+      messages: [{ role: user, content: "先生这张图不错" }]
+    gold: { flow_mode: chat, reason: default_chat }
+
+  - id: rt-chat-sink-09
+    state:
+      messages: [{ role: user, content: "整个图表看起来不错" }]
+    gold: { flow_mode: chat, reason: default_chat }
