@@ -61,6 +61,14 @@ ROUTE_CLARIFY_ORCHESTRATION = (
     "回复 1 / 2 / 3。"
 )
 
+ROUTE_CLARIFY_MEDIA = (
+    "听起来您想处理图片。请确认：\n"
+    "1）直接生成一张图；\n"
+    "2）做营销/详情页方案；\n"
+    "3）解读侧栏图片（描述/问答）。\n"
+    "回复 1 / 2 / 3。"
+)
+
 RuleFn = Callable[
     [AtomicIntent, RouteFeatures, RouteContext, set[str] | None],
     dict[str, Any] | None,
@@ -398,6 +406,17 @@ def _rule_explore(
 def _rule_atomic_generate(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
+    if features.get("media_create_high"):
+        return _base_decision(
+            ctx,
+            flow_mode="atomic_create",
+            reason="media_create_normalized",
+            confidence=0.90,
+            precedence_rule_id="atomic_generate",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
     utterance = intent.utterance
     l0 = detect_l0_action(utterance)
     route = resolve_intake_route(utterance, focus_node_id=ctx.get("focus_node_id"))
@@ -412,6 +431,42 @@ def _rule_atomic_generate(
             reason="atomic_create_intent",
             confidence=0.88,
             precedence_rule_id="atomic_generate",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_suspected_vision_clarify(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if features.get("suspected_vision_qa") and features.get("has_sidebar_media"):
+        return _base_decision(
+            ctx,
+            flow_mode="clarify_route",
+            reason="suspected_vision_qa",
+            confidence=0.72,
+            precedence_rule_id="suspected_vision_clarify",
+            clarify_question=ROUTE_CLARIFY_MEDIA,
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_suspected_media_clarify(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if features.get("suspected_media_create") and not features.get("media_create_high"):
+        return _base_decision(
+            ctx,
+            flow_mode="clarify_route",
+            reason="suspected_media_create",
+            confidence=0.70,
+            precedence_rule_id="suspected_media_clarify",
+            clarify_question=ROUTE_CLARIFY_MEDIA,
             guard_veto=_guard_veto(ctx),
             intent=intent,
             features=features,
@@ -464,6 +519,8 @@ PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("orch_ambiguous", _rule_orch_ambiguous),
     ("explore", _rule_explore),
     ("atomic_generate", _rule_atomic_generate),
+    ("suspected_vision_clarify", _rule_suspected_vision_clarify),
+    ("suspected_media_clarify", _rule_suspected_media_clarify),
     ("empty", _rule_empty),
     ("default_chat", _rule_default_chat),
 ]

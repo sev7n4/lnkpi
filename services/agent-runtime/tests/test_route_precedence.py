@@ -7,6 +7,7 @@ from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.route_context import assemble_route_context
 from app.graph.route_features import extract_route_features
 from app.graph.route_precedence import (
+    ROUTE_CLARIFY_MEDIA,
     ROUTE_CLARIFY_ORCHESTRATION,
     apply_route_precedence,
 )
@@ -182,3 +183,45 @@ def test_precedence_clarify_resume():
     )
     assert d["flow_mode"] == "atomic_create"
     assert d["precedence_rule_id"] == "clarify_resume"
+
+
+def test_sheng_xiao_girl_not_default_chat():
+    d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
+    assert d["flow_mode"] != "chat"
+    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] in ("atomic_create", "clarify_route")
+
+
+def test_sheng_xiao_girl_prefers_atomic_when_high():
+    d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
+    assert d["flow_mode"] == "atomic_create"
+    assert d["precedence_rule_id"] in ("atomic_generate", "media_create_high")
+
+
+def test_shenghuo_still_chat():
+    d = _decide({"messages": [{"role": "user", "content": "生活怎么样"}]})
+    assert d["flow_mode"] == "chat"
+    assert d["precedence_rule_id"] == "default_chat"
+
+
+def test_vision_qa_with_sidebar_not_chat():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "这个图片是什么？"}],
+            "sidebar_attachments": [
+                {"refKey": "I1", "mediaType": "image", "url": "https://a/1.jpg"}
+            ],
+        }
+    )
+    assert d["flow_mode"] != "chat"
+    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] in ("clarify_route", "atomic_create")
+    if d["flow_mode"] == "clarify_route":
+        assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
+
+
+def test_soft_suspected_clarify_uses_media_question():
+    d = _decide({"messages": [{"role": "user", "content": "帮我弄张图看看"}]})
+    assert d["precedence_rule_id"] != "default_chat"
+    if d["flow_mode"] == "clarify_route":
+        assert "1）" in (d.get("clarify_question") or "")
