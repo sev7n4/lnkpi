@@ -49,6 +49,28 @@ def test_style3_sidebar_dock_parity():
     assert sidebar_req["prompt"] == STYLE3
 
 
+def test_colloquial_create_with_sidebar_refs():
+    utterance = "请帮我生一个小女孩的图片"
+    state = {
+        "messages": [HumanMessage(content=utterance)],
+        "sidebar_mentioned_keys": ["I1"],
+        "sidebar_attachments": [
+            {"refKey": "I1", "mediaType": "image", "url": "https://a/1.jpg"}
+        ],
+        "atomic_spec": {
+            "target_type": "image",
+            "prompt": utterance,
+            "title": "小女孩",
+        },
+        "atomic_node_id": "img-1",
+    }
+    req = build_generation_request_from_atomic_state(state)
+    assert req["prompt"]
+    assert req["modality"] == "image"
+    assert req["mentioned_keys"] == ["I1"]
+    assert any(r.get("url") == "https://a/1.jpg" for r in (req.get("refs") or []))
+
+
 def test_atomic_state_uses_spec_prompt():
     state = {
         "messages": [HumanMessage(content="帮我生成一张蓝牙耳机主图")],
