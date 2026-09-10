@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ElMessage } from 'element-plus'
 import {
   downloadMediaFile,
+  downloadMediaPackage,
   isUpstreamMediaUrl,
   UPSTREAM_MEDIA_DOWNLOAD_HINT,
 } from './useCanvasMedia'
@@ -74,5 +76,22 @@ describe('downloadMediaFile', () => {
 describe('UPSTREAM_MEDIA_DOWNLOAD_HINT', () => {
   it('has expiry copy', () => {
     expect(UPSTREAM_MEDIA_DOWNLOAD_HINT).toMatch(/过期/)
+  })
+})
+
+describe('downloadMediaPackage', () => {
+  beforeEach(() => {
+    vi.mocked(ElMessage.warning).mockClear()
+  })
+
+  it('toasts when no media in selection', async () => {
+    const count = await downloadMediaPackage(
+      [{ id: 'n1', type: 'image', data: {} }],
+      ['n1'],
+    )
+    expect(count).toBe(0)
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      '没有可导出的媒体，请确认定稿节点已生成',
+    )
   })
 })

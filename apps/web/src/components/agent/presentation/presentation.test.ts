@@ -55,7 +55,7 @@ const doneEnvelope: AgentPresentationEnvelope = {
     basics_section_title: '基础资产',
   },
   primary_action: { label: '在画布中定位全部', message: '__focus_all_canvas__' },
-  secondary_actions: [{ label: '导出打包（二期）', message: '__export_pack__', disabled: true }],
+  secondary_actions: [{ label: '导出打包', message: '__export_pack__' }],
 }
 
 describe('AgentStepper', () => {
@@ -100,6 +100,31 @@ describe('AgentPresentationHost', () => {
     expect(wrapper.find('[data-testid="primary-action"]').text()).toBe('在画布中定位全部')
     await wrapper.find('[data-testid="primary-action"]').trigger('click')
     expect(wrapper.emitted('focusAll')?.[0]?.[0]).toEqual(['node-hero', 'node-gift', 'node-seed'])
+  })
+
+  it('emits exportPack on secondary export action without primaryAction', async () => {
+    const wrapper = mount(AgentPresentationHost, {
+      props: { presentation: doneEnvelope },
+    })
+    const secondary = wrapper.find('[data-testid="secondary-action"]')
+    expect(secondary.text()).toBe('导出打包')
+    expect(secondary.attributes('disabled')).toBeUndefined()
+    await secondary.trigger('click')
+    expect(wrapper.emitted('exportPack')?.[0]?.[0]).toEqual(['node-hero', 'node-gift', 'node-seed'])
+    expect(wrapper.emitted('primaryAction')).toBeUndefined()
+  })
+
+  it('emits exportPack with empty ids when no node_ids', async () => {
+    const emptyDone: AgentPresentationEnvelope = {
+      ...doneEnvelope,
+      body: { ...doneEnvelope.body!, finalized: [], basics: [] },
+    }
+    const wrapper = mount(AgentPresentationHost, {
+      props: { presentation: emptyDone },
+    })
+    await wrapper.find('[data-testid="secondary-action"]').trigger('click')
+    expect(wrapper.emitted('exportPack')?.[0]?.[0]).toEqual([])
+    expect(wrapper.emitted('primaryAction')).toBeUndefined()
   })
 
   it('renders shot_topo_merged with topo cards and merged primary label', () => {

@@ -103,7 +103,10 @@ export async function downloadMediaPackage(
   opts?: DownloadMediaOptions,
 ) {
   const items = collectMediaFromNodes(nodes, selectedIds)
-  if (!items.length) return 0
+  if (!items.length) {
+    ElMessage.warning('没有可导出的媒体，请确认定稿节点已生成')
+    return 0
+  }
 
   const manifest = {
     exportedAt: new Date().toISOString(),
