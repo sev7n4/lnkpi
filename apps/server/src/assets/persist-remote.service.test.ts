@@ -1,11 +1,17 @@
 import 'reflect-metadata'
-import { ForbiddenException, ServiceUnavailableException } from '@nestjs/common'
+import {
+  BadGatewayException,
+  BadRequestException,
+  ForbiddenException,
+  ServiceUnavailableException,
+} from '@nestjs/common'
 import { Readable } from 'stream'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import { PrismaService } from '../prisma/prisma.service'
 import { MediaService, openDownloadStream } from '../media/media.service'
 import { STORAGE_ADAPTER } from '../storage/storage.adapter'
+import { UnconfiguredStorageAdapter } from '../storage/unconfigured.storage-adapter'
 import { PersistRemoteService } from './persist-remote.service'
 import { parseUserAssetMetadata } from './build-user-asset-metadata'
 
@@ -23,15 +29,35 @@ describe('PersistRemoteService', () => {
   const putStream = vi.fn()
   const userAssetUpsert = vi.fn()
   const userAssetDeleteMany = vi.fn()
+  const userAssetFindUnique = vi.fn()
+  const userAssetFindMany = vi.fn()
+  const userAssetUpdate = vi.fn()
   const sessionFindFirst = vi.fn()
   const sessionUpdate = vi.fn()
   const generationFindFirst = vi.fn()
+  const $transaction = vi.fn()
 
   beforeEach(async () => {
     vi.clearAllMocks()
     userAssetUpsert.mockResolvedValue({ id: 'asset-1', url: '/api/uploads/u1/a.png' })
     userAssetDeleteMany.mockResolvedValue({ count: 0 })
+    userAssetFindUnique.mockResolvedValue(null)
+    userAssetFindMany.mockResolvedValue([])
+    userAssetUpdate.mockImplementation(async ({ where, data }) => ({
+      id: where.id,
+      url: 'https://cos.example/users/u1/assets/2026/abc.png',
+      label: data.label ?? 'kept',
+      metadata: null,
+    }))
     generationFindFirst.mockResolvedValue(null)
+    $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        userAsset: {
+          upsert: userAssetUpsert,
+          deleteMany: userAssetDeleteMany,
+        },
+      }),
+    )
 
     const moduleRef = await Test.createTestingModule({
       providers: [
@@ -50,6 +76,9 @@ describe('PersistRemoteService', () => {
             userAsset: {
               upsert: userAssetUpsert,
               deleteMany: userAssetDeleteMany,
+              findUnique: userAssetFindUnique,
+              findMany: userAssetFindMany,
+              update: userAssetUpdate,
             },
             session: {
               findFirst: sessionFindFirst,
@@ -58,6 +87,7 @@ describe('PersistRemoteService', () => {
             generationRecord: {
               findFirst: generationFindFirst,
             },
+            $transaction,
           },
         },
       ],
@@ -131,6 +161,8 @@ describe('PersistRemoteService', () => {
         contentLength: 3,
       }),
     )
+    expect($transaction).toHaveBeenCalled()
+    expect(userAssetUpsert).toHaveBeenCalled()
     expect(userAssetDeleteMany).toHaveBeenCalledWith({
       where: { userId: 'u1', url: original },
     })
@@ -145,8 +177,70 @@ describe('PersistRemoteService', () => {
     })
   })
 
-  it('propagates 503 when adapter unconfigured', async () => {
+  it('second persist same upstream reuses asset without putStream', async () => {
     const original = 'https://platform-outputs.example/out.png'
+    const publicUrl = 'https://cos.example/users/u1/assets/2026/abc.png'
+    const existing = {
+      id: 'asset-persisted',
+      url: publicUrl,
+      label: 'old-label',
+      metadata: JSON.stringify({
+        storageTier: 'persisted',
+        upstreamUrl: original,
+        objectKey: 'users/u1/assets/2026/abc.png',
+      }),
+    }
+    userAssetFindMany.mockResolvedValue([existing])
+
+    const result = await service.persistRemote({
+      userId: 'u1',
+      url: original,
+      kind: 'image',
+      label: 'new-label',
+    })
+
+    expect(putStream).not.toHaveBeenCalled()
+    expect(openDownloadStream).not.toHaveBeenCalled()
+    expect(resolveDownloadSource).not.toHaveBeenCalled()
+    expect(userAssetUpdate).toHaveBeenCalledWith({
+      where: { id: 'asset-persisted' },
+      data: { label: 'new-label' },
+    })
+    expect(result).toEqual({
+      persistedUrl: publicUrl,
+      assetId: 'asset-persisted',
+      storageTier: 'persisted',
+    })
+  })
+
+  it('omitted label does not wipe existing label on reuse', async () => {
+    const original = 'https://platform-outputs.example/out.png'
+    const publicUrl = 'https://cos.example/users/u1/assets/2026/abc.png'
+    const existing = {
+      id: 'asset-persisted',
+      url: publicUrl,
+      label: 'keep-me',
+      metadata: JSON.stringify({
+        storageTier: 'persisted',
+        upstreamUrl: original,
+      }),
+    }
+    userAssetFindMany.mockResolvedValue([existing])
+
+    const result = await service.persistRemote({
+      userId: 'u1',
+      url: original,
+      kind: 'image',
+    })
+
+    expect(userAssetUpdate).not.toHaveBeenCalled()
+    expect(result.assetId).toBe('asset-persisted')
+    expect(result.persistedUrl).toBe(publicUrl)
+  })
+
+  it('omitted label does not clear label on upsert update', async () => {
+    const original = 'https://platform-outputs.example/out.png'
+    const publicUrl = 'https://cos.example/users/u1/assets/2026/abc.png'
     resolveDownloadSource.mockResolvedValue({
       kind: 'remote',
       fetchUrl: original,
@@ -155,13 +249,82 @@ describe('PersistRemoteService', () => {
     vi.mocked(openDownloadStream).mockResolvedValue({
       body: Readable.from([Buffer.from('png')]),
       contentType: 'image/png',
+      contentLength: 3,
     })
-    putStream.mockRejectedValue(new ServiceUnavailableException('对象存储未配置'))
+    putStream.mockResolvedValue({ publicUrl })
+    userAssetUpsert.mockResolvedValue({ id: 'asset-persisted', url: publicUrl })
+
+    await service.persistRemote({
+      userId: 'u1',
+      url: original,
+      kind: 'image',
+    })
+
+    const updateArg = userAssetUpsert.mock.calls[0][0].update
+    expect(updateArg).not.toHaveProperty('label')
+  })
+
+  it('fail-fast 503 when adapter unconfigured without network', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        PersistRemoteService,
+        {
+          provide: MediaService,
+          useValue: { resolveDownloadSource },
+        },
+        {
+          provide: STORAGE_ADAPTER,
+          useValue: new UnconfiguredStorageAdapter(),
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            userAsset: {
+              upsert: userAssetUpsert,
+              deleteMany: userAssetDeleteMany,
+              findUnique: userAssetFindUnique,
+              findMany: userAssetFindMany,
+              update: userAssetUpdate,
+            },
+            session: { findFirst: sessionFindFirst, update: sessionUpdate },
+            generationRecord: { findFirst: generationFindFirst },
+            $transaction,
+          },
+        },
+      ],
+    }).compile()
+    const unconfigured = moduleRef.get(PersistRemoteService)
+
+    await expect(
+      unconfigured.persistRemote({
+        userId: 'u1',
+        url: 'https://platform-outputs.example/out.png',
+        kind: 'image',
+      }),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException)
+
+    expect(resolveDownloadSource).not.toHaveBeenCalled()
+    expect(openDownloadStream).not.toHaveBeenCalled()
+    expect(putStream).not.toHaveBeenCalled()
+    expect(userAssetUpsert).not.toHaveBeenCalled()
+  })
+
+  it('maps upstream fetch failure to BadGatewayException', async () => {
+    const original = 'https://platform-outputs.example/out.png'
+    resolveDownloadSource.mockResolvedValue({
+      kind: 'remote',
+      fetchUrl: original,
+      filename: 'out.png',
+    })
+    vi.mocked(openDownloadStream).mockRejectedValue(
+      new BadRequestException('上游资源不可达 (502)'),
+    )
 
     await expect(
       service.persistRemote({ userId: 'u1', url: original, kind: 'image' }),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException)
+    ).rejects.toBeInstanceOf(BadGatewayException)
 
+    expect(putStream).not.toHaveBeenCalled()
     expect(userAssetUpsert).not.toHaveBeenCalled()
   })
 
