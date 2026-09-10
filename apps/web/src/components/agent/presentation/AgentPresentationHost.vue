@@ -12,6 +12,7 @@ import type { JourneyTraceSnapshot } from '@/components/agent/journeyTraceTypes'
 import type { AgentPresentationEnvelope, AgentPresentationPrimaryAction } from './types'
 
 const FOCUS_ALL_MESSAGE = '__focus_all_canvas__'
+const EXPORT_PACK_MESSAGE = '__export_pack__'
 
 const props = defineProps<{
   presentation: AgentPresentationEnvelope
@@ -26,8 +27,11 @@ const emit = defineEmits<{
   macroToggle: [schemeId: string, checked: boolean]
   focusNode: [nodeId: string]
   focusAll: [nodeIds: string[]]
+  exportPack: [nodeIds: string[]]
   deliverySwitch: [shotId: string, variantKey: string]
 }>()
+
+const exportBusy = ref(false)
 
 const macroSelections = ref<string[]>(props.macroSelectedIds ?? [])
 
@@ -83,6 +87,19 @@ function onPrimaryAction() {
   if (action.message === FOCUS_ALL_MESSAGE) {
     const ids = collectAllNodeIds()
     if (ids.length) emit('focusAll', ids)
+    return
+  }
+  emit('primaryAction', action.message)
+}
+
+function onSecondaryAction(action: AgentPresentationPrimaryAction) {
+  if (action.message === EXPORT_PACK_MESSAGE) {
+    if (exportBusy.value) return
+    exportBusy.value = true
+    emit('exportPack', collectAllNodeIds())
+    window.setTimeout(() => {
+      exportBusy.value = false
+    }, 800)
     return
   }
   emit('primaryAction', action.message)
@@ -215,9 +232,9 @@ function onPrimaryAction() {
         :key="`${action.label}-${idx}`"
         type="button"
         class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
-        :disabled="disabled || action.disabled"
+        :disabled="disabled || action.disabled || (action.message === EXPORT_PACK_MESSAGE && exportBusy)"
         data-testid="secondary-action"
-        @click="emit('primaryAction', action.message)"
+        @click="onSecondaryAction(action)"
       >
         {{ action.label }}
       </button>
