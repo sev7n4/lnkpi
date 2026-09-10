@@ -1,8 +1,10 @@
+import type { Readable } from 'stream'
+
 export const STORAGE_ADAPTER = Symbol('STORAGE_ADAPTER')
 
 export interface StoragePutInput {
   key: string
-  body: NodeJS.ReadableStream
+  body: Readable
   contentType: string
   contentLength?: number
 }
