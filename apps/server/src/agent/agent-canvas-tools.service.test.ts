@@ -1718,4 +1718,51 @@ describe('AgentCanvasToolsService', () => {
       expect(persistRemote).not.toHaveBeenCalled()
     })
   })
+
+  describe('exportMediaPackage', () => {
+    it('returns count 0 and empty items when nodeIds is empty', async () => {
+      const result = await svc.exportMediaPackage({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: [],
+      })
+      expect(result.manifest.count).toBe(0)
+      expect(result.manifest.items).toEqual([])
+      expect(result.manifest.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    })
+
+    it('skips nodes without url and builds stream-download downloadPath', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { title: '主图', url: 'https://cdn.example/img.png' },
+          },
+          {
+            id: 'img-no-url',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { title: '无URL' },
+          },
+        ],
+        edges: [],
+      }
+      const result = await svc.exportMediaPackage({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeIds: ['img-1', 'img-no-url'],
+      })
+      expect(result.manifest.count).toBe(1)
+      expect(result.manifest.items).toHaveLength(1)
+      expect(result.manifest.items[0]).toMatchObject({
+        nodeId: 'img-1',
+        url: 'https://cdn.example/img.png',
+        fileName: '主图.png',
+      })
+      expect(result.manifest.items[0].downloadPath).toMatch(/^\/api\/media\/stream-download\?/)
+      expect(result.manifest.items[0].downloadPath).toContain('sessionId=s1')
+    })
+  })
 })
