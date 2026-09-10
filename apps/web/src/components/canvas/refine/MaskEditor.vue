@@ -6,7 +6,7 @@ import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { fillPolygonMask, isNearPolygonStart } from './maskPolygon'
 import { floodFillMask, invertMaskRgba, parseFillHex } from './maskWand'
 
-export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon'
+export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
 export type MaskOp = 'add' | 'subtract'
 
 const props = withDefaults(
@@ -35,6 +35,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   coverage: [payload: { ratio: number; width: number; height: number }]
+  pointSelect: [payload: { x: number; y: number }]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -231,6 +232,10 @@ function onPointerDown(event: PointerEvent) {
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
   const pt = canvasPoint(event)
+  if (props.tool === 'point') {
+    emit('pointSelect', { x: Math.round(pt.x), y: Math.round(pt.y) })
+    return
+  }
   if (props.tool === 'wand') {
     if (!imageRgba) return
     const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -282,7 +287,7 @@ function onDblClick(event: MouseEvent) {
 }
 
 function onPointerMove(event: PointerEvent) {
-  if (props.tool === 'wand') return
+  if (props.tool === 'wand' || props.tool === 'point') return
   if (props.tool === 'polygon') {
     if (!drawReady.value) return
     const pt = canvasPoint(event)

@@ -169,7 +169,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
   ] as const)(
     '$name: user channel failure → fallback_pending without platform provider',
-    async ({ failOnce, run, createProvider, generate, cost, refundReason }) => {
+    async ({ name, failOnce, run, createProvider, generate, cost, refundReason }) => {
       failOnce()
       const record = await run()
 
@@ -181,7 +181,16 @@ describe('StudioService BYOK fallback_pending', () => {
       expect(meta.chargedPoints).toBe(cost)
       expect(meta.refundedPoints).toBe(cost)
       expect(meta.refundReason).toBe('byok_failed')
-      expect(pointsRefund).toHaveBeenCalledWith('u1', cost, refundReason)
+      expect(pointsRefund).toHaveBeenCalledWith(
+        'u1',
+        cost,
+        refundReason,
+        expect.objectContaining({
+          kind: 'refund',
+          category: name,
+          status: 'byok_refund',
+        }),
+      )
       expect(createProvider).toHaveBeenCalledTimes(1)
       if (createProvider === generateTextForRefs) {
         expect(generate).toHaveBeenCalledWith(
@@ -218,7 +227,12 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(meta.channelId).toBe('ch_user')
     expect(meta.failureClass).toBeTruthy()
     expect(meta.refundedPoints).toBe(30)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-BYOK失败退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      30,
+      '视频生成-BYOK失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'video', status: 'byok_refund' }),
+    )
 
     expect(createVideoProvider).toHaveBeenCalledTimes(1)
     expect(createVideoProvider).toHaveBeenCalledWith({
@@ -230,6 +244,7 @@ describe('StudioService BYOK fallback_pending', () => {
   it.each([
     {
       name: 'image',
+      pointCategory: 'image',
       platformCost: 10,
       setupPending: async () => {
         imageGenerate.mockRejectedValueOnce(new Error('upstream 502'))
@@ -244,6 +259,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'text',
+      pointCategory: 'text',
       platformCost: 5,
       setupPending: async () => {
         vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('unauthorized'))
@@ -255,6 +271,7 @@ describe('StudioService BYOK fallback_pending', () => {
     },
     {
       name: 'audio',
+      pointCategory: 'audio',
       platformCost: 5,
       setupPending: async () => {
         audioGenerate.mockRejectedValueOnce(new Error('network'))
@@ -264,7 +281,13 @@ describe('StudioService BYOK fallback_pending', () => {
       createProvider: createAudioProvider,
       generate: audioGenerate,
     },
-  ] as const)('$name: confirm → platform generate called', async ({ setupPending, createProvider, generate, platformCost }) => {
+  ] as const)('$name: confirm → platform generate called', async ({
+    setupPending,
+    createProvider,
+    generate,
+    platformCost,
+    pointCategory,
+  }) => {
     await setupPending()
     vi.clearAllMocks()
     resolveForGeneration.mockImplementation(async (_uid: string, model?: string) => ({
@@ -278,7 +301,12 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(meta.providerFallback).toBe(true)
     expect(meta.chargedPoints).toBe(platformCost)
     expect(meta.priorByokRefunded).toBe(true)
-    expect(pointsConsume).toHaveBeenCalledWith('u1', platformCost, '平台回退生成')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      platformCost,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: pointCategory, status: 'success' }),
+    )
 
     expect(createProvider).toHaveBeenCalled()
     const credCall = vi.mocked(createProvider).mock.calls.find((c) => c[0] == null || c.length === 0 || !c[0]?.apiKey)
@@ -382,8 +410,18 @@ describe('StudioService BYOK fallback_pending', () => {
     resolveForGeneration.mockResolvedValue(platformResolved)
     vi.mocked(generateTextForRefs).mockRejectedValueOnce(new Error('platform upstream 502'))
     await expect(svc.generateText('u1', 'hello')).rejects.toThrow('platform upstream 502')
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 5, expect.any(String))
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-失败退款')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      5,
+      expect.any(String),
+      expect.objectContaining({ kind: 'consume', category: 'text', status: 'success' }),
+    )
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      5,
+      '文本生成-失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'text', status: 'failed_refund' }),
+    )
   })
 
   it('image: platform source failure → failed record with refund metadata', async () => {
@@ -397,8 +435,18 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(meta.refundedPoints).toBe(10)
     expect(meta.refundReason).toBe('platform_failed')
     expect(meta.errorCode).toBeTruthy()
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, expect.any(String))
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '图像生成-失败退款')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      expect.any(String),
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '图像生成-失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'failed_refund' }),
+    )
   })
 
   it('confirmPlatformFallback: platform generate failure → refund, failed, refundedPoints', async () => {
@@ -414,8 +462,18 @@ describe('StudioService BYOK fallback_pending', () => {
 
     await expect(svc.confirmPlatformFallback('u1', 'g1')).rejects.toThrow('platform confirm failed')
 
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退失败退款')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'failed_refund' }),
+    )
     const failedUpdate = generationUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
     expect(failedUpdate).toBeTruthy()
     const meta = JSON.parse(String(failedUpdate![0].data.metadata))
@@ -438,7 +496,12 @@ describe('StudioService BYOK fallback_pending', () => {
     const meta = JSON.parse(String(failedUpdate[0].data.metadata))
     expect(meta.refundedPoints).toBe(30)
     expect(meta.refundReason).toBe('platform_failed')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-失败退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      30,
+      '视频生成-失败退款',
+      expect.objectContaining({ kind: 'refund', category: 'video', status: 'failed_refund' }),
+    )
   })
 
   it('cancel-platform-fallback → failed without double refund', async () => {
@@ -461,7 +524,12 @@ describe('StudioService BYOK fallback_pending', () => {
     generationFindFirst.mockResolvedValue(stored)
     const result = await svc.cancelGeneration('u1', 'g-vid')
     expect(result.status).toBe('failed')
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 30, '视频生成-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      30,
+      '视频生成-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'video', status: 'cancelled_refund' }),
+    )
     const meta = JSON.parse(String(generationUpdate.mock.calls.at(-1)?.[0].data.metadata))
     expect(meta.cancelled).toBe(true)
     expect(meta.refundedPoints).toBe(30)
@@ -509,7 +577,12 @@ describe('StudioService BYOK fallback_pending', () => {
       response: { message: '已取消', refundedPoints: 5 },
     })
     expect(pointsRefund).toHaveBeenCalledTimes(1)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 5, '文本生成-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      5,
+      '文本生成-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'text', status: 'cancelled_refund' }),
+    )
     expect(generationCreate).not.toHaveBeenCalled()
   })
 
@@ -606,9 +679,19 @@ describe('StudioService BYOK fallback_pending', () => {
     await expect(promise).rejects.toMatchObject({
       response: { message: '已取消', refundedPoints: 10 },
     })
-    expect(pointsConsume).toHaveBeenCalledWith('u1', 10, '平台回退生成')
+    expect(pointsConsume).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退生成',
+      expect.objectContaining({ kind: 'consume', category: 'image', status: 'success' }),
+    )
     expect(pointsRefund).toHaveBeenCalledTimes(1)
-    expect(pointsRefund).toHaveBeenCalledWith('u1', 10, '平台回退-取消退款')
+    expect(pointsRefund).toHaveBeenCalledWith(
+      'u1',
+      10,
+      '平台回退-取消退款',
+      expect.objectContaining({ kind: 'refund', category: 'image', status: 'cancelled_refund' }),
+    )
     const failedUpdate = generationUpdate.mock.calls.find((c) => c[0].data.status === 'failed')
     expect(failedUpdate).toBeTruthy()
     const meta = JSON.parse(String(failedUpdate![0].data.metadata))

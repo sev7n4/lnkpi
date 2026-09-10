@@ -1,21 +1,30 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { MediaRefWarningLevel } from '@lnkpi/shared'
-import { formatMediaBytes, formatMediaDimensions } from '@/utils/mediaInfoFormat'
+import { formatMediaBytes, formatMediaDimensions, formatMediaDuration } from '@/utils/mediaInfoFormat'
 
 const props = defineProps<{
-  kind?: 'image' | 'video'
+  kind?: 'image' | 'video' | 'audio'
   width?: number
   height?: number
   bytes?: number
   aspectRatio?: string
   resolution?: string
+  durationSec?: number
+  format?: string
   refWarning?: MediaRefWarningLevel
 }>()
 
 const parts = computed(() => {
   const line: string[] = []
   const size = formatMediaBytes(props.bytes)
+  if (props.kind === 'audio') {
+    const dur = formatMediaDuration(props.durationSec)
+    if (dur) line.push(dur)
+    if (props.format?.trim()) line.push(props.format.trim())
+    if (size) line.push(size)
+    return line
+  }
   if (props.kind === 'video') {
     if (props.resolution?.trim()) line.push(props.resolution.trim())
     if (props.aspectRatio?.trim()) line.push(props.aspectRatio.trim())

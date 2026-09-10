@@ -193,6 +193,15 @@ function onAddToAgent(event: MouseEvent) {
       </div>
     </div>
 
+    <div
+      v-if="$slots.footer"
+      class="neo-node-external-footer"
+      @mouseenter="setHovered(true)"
+      @mouseleave="setHovered(false)"
+    >
+      <slot name="footer" />
+    </div>
+
     <Handle
       v-if="!hideTargetHandle"
       id="target"

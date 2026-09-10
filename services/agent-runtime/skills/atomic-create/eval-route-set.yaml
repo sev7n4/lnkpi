@@ -178,3 +178,76 @@ cases:
       atomic_node_id: node-1
       atomic_spec: { target_type: image, prompt: x, title: x }
     gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-01
+    state:
+      messages: [{ role: user, content: "请帮我生一个小女孩的图片" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-02
+    state:
+      messages: [{ role: user, content: "请帮我生成一张图" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-03
+    state:
+      messages: [{ role: user, content: "这个图片是什么？" }]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/1.jpg" }
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-chat-sink-04
+    state:
+      messages: [{ role: user, content: "生活怎么样" }]
+    gold: { flow_mode: chat }
+
+  - id: rt-chat-sink-05
+    state:
+      messages: [{ role: user, content: "帮我做一套天猫详情页营销方案" }]
+    gold: { flow_mode: clarify_route }
+
+  - id: rt-chat-sink-06
+    state:
+      messages: [{ role: user, content: "帮我弄张图看看" }]
+    gold:
+      # soft suspected: clarify_route or atomic_create — never chat
+      flow_mode: clarify_route
+
+  - id: rt-chat-sink-07
+    state:
+      messages: [{ role: user, content: "这是什么？" }]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/1.jpg" }
+    gold: { flow_mode: clarify_route, reason: sidebar_media_question }
+
+  - id: rt-chat-sink-08
+    state:
+      messages: [{ role: user, content: "先生这张图不错" }]
+    gold: { flow_mode: chat, reason: default_chat }
+
+  - id: rt-chat-sink-09
+    state:
+      messages: [{ role: user, content: "整个图表看起来不错" }]
+    gold: { flow_mode: chat, reason: default_chat }
+
+  - id: rt-chat-sink-10
+    state:
+      messages:
+        - {
+            role: user,
+            content: "生成一只东北虎图片，卡通版，戴着红围巾、正在笑、或者背景是雪地",
+          }
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-chat-sink-11
+    state:
+      messages: [{ role: user, content: "生成东北虎图片" }]
+    gold: { flow_mode: atomic_create }
+
+  - id: rt-sidebar-edit-01
+    state:
+      messages: [{ role: user, content: "给这只小老虎带上眼镜和帽子" }]
+      sidebar_mentioned_keys: [I1]
+      sidebar_attachments:
+        - { refKey: I1, mediaType: image, url: "https://a/tiger.jpg" }
+    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }

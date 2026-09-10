@@ -106,7 +106,13 @@ describe('MaterialService image', () => {
       count: 3,
     })
     await vi.waitFor(() => expect(imageGenerate).toHaveBeenCalled())
-    expect(consume).toHaveBeenCalledWith('u1', 10, '图像生成')
+    expect(consume).toHaveBeenCalledWith('u1', 10, '图像生成', {
+      kind: 'consume',
+      category: 'image',
+      status: 'success',
+      model: 'seedream-5.0-pro',
+      generationId: null,
+    })
     expect(imageGenerate).toHaveBeenCalledWith('a cat', {
       modelId: 'doubao-seedream-5-0-pro',
       size: '16:9',
@@ -240,7 +246,13 @@ describe('MaterialService video', () => {
       crop: 'none',
     })
     await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
-    expect(consume).toHaveBeenCalledWith('u1', 50, '视频生成')
+    expect(consume).toHaveBeenCalledWith('u1', 50, '视频生成', {
+      kind: 'consume',
+      category: 'video',
+      status: 'success',
+      model: 'seedance-2.0-min',
+      generationId: null,
+    })
     expect(videoGenerate).toHaveBeenCalledWith(
       'walk',
       expect.objectContaining({

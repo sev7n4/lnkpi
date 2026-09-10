@@ -13,6 +13,7 @@ import {
   resolveGatePrimaryActionLabel,
   IMAGE_QA_OPTIONS,
   interruptPayloadFromThreadState,
+  isRunCancelledState,
   isRetakePendingPhase,
   resolveImageQaChecks,
   resolveImageQaBodyText,
@@ -145,6 +146,13 @@ describe('interruptPayloadFromThreadState', () => {
   })
 })
 
+describe('isRunCancelledState', () => {
+  it('detects cancelled thread state', () => {
+    expect(isRunCancelledState({ phase: 'cancelled', runCancelled: true })).toBe(true)
+    expect(isRunCancelledState({ phase: 'done', runCancelled: false })).toBe(false)
+  })
+})
+
 describe('defaultMacroSchemeSelection', () => {
   it('prefers recommended macro schemes up to 2', () => {
     const schemes = [
@@ -247,6 +255,10 @@ describe('filterAssistantVisibleText', () => {
         '"__macro_scheme_decision__{\\"action\\":\\"confirm\\",\\"selected_ids\\":[\\"A\\",\\"B\\"]}"',
       ),
     ).toBe('')
+  })
+
+  it('hides the new-task machine message from user bubbles', () => {
+    expect(filterUserVisibleText('__new_task__')).toBe('')
   })
 
   it('filters internal QA error strings from assistant text', () => {

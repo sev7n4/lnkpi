@@ -1,48 +1,24 @@
-# Task 6 Report: S8 Continue Shot — lastFrameUrl Writeback + 「接下一段」(G-08)
+# Task 6 Report: Eval-route-set 金标（AC-01..07）
 
-**Status:** ✅ Complete  
-**Branch:** `feature/i2v-capability-productization`  
-**Commit:** `52c80a9` — `feat(web): persist lastFrameUrl and add continue-shot action for Seedance`
+## Status
+**Done** — 新增 `rt-chat-sink-01` 至 `rt-chat-sink-06`，锁定 chat-sink 与侧栏 vision 路由行为。
 
-## Summary
-
-Verified Apimart `lastFrameUrl` already flows through `applyStudioRecord` for completed video records; added regression test. Added Seedance-only「接下一段」button that creates a sibling video node pre-wired with the prior segment's last frame as an image ref, preserving prompt/settings and auto-connecting an edge.
+## Commit
+`ec3c5c5` — `test(runtime): add chat-sink and sidebar vision eval-route cases`
 
 ## Changes
+- `生一个小女孩的图片`、`生成一张图` → `atomic_create`
+- 侧栏图片 + `这个图片是什么？` → `clarify_route`
+- `生活怎么样` → `chat`
+- 天猫详情页营销方案 → `clarify_route`
+- `弄张图看看` → `clarify_route`，明确禁止 media suspected case 落入 `chat`
+- AC-07 为 Chat 回复禁语约束，已由 Task 5 的 prompt golden 覆盖，不新增 route case
 
-| File | Change |
-|------|--------|
-| `apps/web/src/composables/useNodeGeneration.test.ts` | New test: completed video record metadata → `patchNodeData({ lastFrameUrl })` |
-| `apps/web/src/components/canvas/dock-studio/panels/VideoDockPanel.vue` | `showContinueShotButton` when `node.data.lastFrameUrl` + `supportsReturnLastFrame`;「接下一段」button emits `continueShot` |
-| `apps/web/src/components/canvas/dock-studio/DockStudioRouter.vue` | Pass through `continueShot` emit |
-| `apps/web/src/components/canvas/DockStudioToolbar.vue` | Pass through `continueShot` emit |
-| `apps/web/src/pages/CanvasPage.vue` | `handleContinueShot()` — sibling video node + localRef from lastFrame + edge from self |
+## Verification
+```text
+python3 -m pytest tests/test_eval_route_set.py -v
+2 passed, 1 warning
+```
 
-## Behavior
-
-### lastFrameUrl writeback (verified, no code change needed)
-
-`useNodeGeneration.applyStudioRecord` already patches `lastFrameUrl` from `parseRecordLastFrameUrl(record)` when `record.type === 'video'` and status is `completed`.
-
-### 「接下一段」 workflow
-
-1. Visible when node has `lastFrameUrl` and model capabilities include `supportsReturnLastFrame` (Seedance).
-2. Click creates a new video node to the right of the current node.
-3. New node inherits prompt, `videoModel`, `videoSettings`; sets `videoMode: image_to_video`.
-4. Adds local ref `{ label: 上一镜末帧, url: lastFrameUrl }`.
-5. Auto edge: `source → sibling`.
-
-Existing「延续上一镜」(upstream `lastFrameUrl`) remains unchanged.
-
-## Test Summary
-
-| Command | Result |
-|---------|--------|
-| `pnpm exec vitest run src/composables/useNodeGeneration.test.ts` | ✅ 42/42 passed |
-| `pnpm build` | ✅ Passed |
-
-## Gap Register
-
-| Gap ID | Status |
-|--------|--------|
-| G-08 S8 连续镜 lastFrameUrl + 接下一段 | ✅ Covered |
+## Notes
+- 所有新增 gold 与 Task 3 既定行为一致，无需修改路由实现或扩张 hint 表。

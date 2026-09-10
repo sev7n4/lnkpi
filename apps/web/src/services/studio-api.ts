@@ -97,6 +97,8 @@ export const studioApi = {
       { ...body, ...scopeBody({ sessionId: body.sessionId, nodeId: body.nodeId }) },
       { timeout: 300_000, signal },
     ),
+  segmentImage: (body: { imageUrl: string; x: number; y: number; label?: 0 | 1 }) =>
+    api.post<{ data: { maskUrl: string } }>('/studio/image/segment', body),
   generateText: (
     prompt: string,
     model?: string,

@@ -9,12 +9,42 @@ from app.graph.intent_parse_schema import IntentParseResult
 
 ClarifyReplyResult = IntentParseResult | Literal["none"]
 
-_CHOICE_ONE = frozenset({"1", "1）", "一", "单张主图", "单张", "直接出图", "只要主图", "出主图"})
+_CHOICE_ONE = frozenset(
+    {
+        "1",
+        "1）",
+        "一",
+        "单张主图",
+        "单张",
+        "直接出图",
+        "只要主图",
+        "出主图",
+        "生成一张图",
+        "直接生成",
+        "生图",
+        "只要图",
+    }
+)
 _CHOICE_TWO = frozenset(
     {"2", "2）", "二", "完整方案", "campaign", "全链路", "营销方案", "完整详情页", "详情页方案"}
 )
 _CHOICE_THREE = frozenset(
-    {"3", "3）", "三", "文字策划", "文字版", "不出图", "构图策划", "只要文字", "文字方案"}
+    {
+        "3",
+        "3）",
+        "三",
+        "文字策划",
+        "文字版",
+        "不出图",
+        "构图策划",
+        "只要文字",
+        "文字方案",
+        "解读侧栏图片",
+        "解读侧栏",
+        "看看图",
+        "描述图片",
+        "看图问答",
+    }
 )
 
 
@@ -36,21 +66,11 @@ def classify_clarify_reply(
         return "none"
 
     lowered = _normalize_reply(raw)
-    if lowered in _CHOICE_ONE or any(k in raw for k in ("单张主图", "直接出图", "只要主图")):
+    if lowered in _CHOICE_ONE or any(
+        k in raw for k in ("单张主图", "直接出图", "只要主图", "生成一张图", "直接生成")
+    ):
         original = (original_utterance or "").strip()
-        if original and (
-            "@" in original
-            or "出图" in original
-            or "按风格" in original
-            or is_img2img_utterance(original)
-        ):
-            prompt = original
-        else:
-            prompt = "生成一张蓝牙耳机主图"
-            if "蓝牙耳机" in original_utterance:
-                prompt = "生成一张蓝牙耳机主图"
-            elif "主图" in original_utterance:
-                prompt = "生成一张主图"
+        prompt = original or "生成一张图"
         return {
             "action": "generate",
             "scope": "atomic",
@@ -84,7 +104,17 @@ def classify_clarify_reply(
         }
 
     if lowered in _CHOICE_THREE or any(
-        k in raw for k in ("文字策划", "不出图", "文字版", "构图策划")
+        k in raw
+        for k in (
+            "文字策划",
+            "不出图",
+            "文字版",
+            "构图策划",
+            "解读侧栏",
+            "看看图",
+            "描述图片",
+            "看图问答",
+        )
     ):
         prompt = original_utterance.strip() or "视觉构图策划"
         return {

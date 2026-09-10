@@ -17,6 +17,10 @@ import AgentExecutionTrace from '@/components/agent/AgentExecutionTrace.vue'
 import { resolveMessageOutputs } from '@/components/agent/agentCanvasOutputs'
 import type { AgentStreamMessage } from '@/stores/agent'
 import {
+  cancelAgentRun,
+  cancelledCalloutTextFromProgress,
+} from '@/components/agent/cancelAgentRun'
+import {
   applyTaskEvent,
   applyPollRecordToTask,
   emptyTaskProgress,
@@ -46,6 +50,7 @@ import {
   chipSetFromInterrupt,
   interruptPayloadFromThreadState,
   buildRetakeContinueMessage,
+  isRunCancelledState,
   isRetakePendingPhase,
   resolveImageQaBodyText,
   resolveImageQaChecks,
@@ -426,6 +431,11 @@ function pollTasksFromProgress() {
 }
 
 let streamAbortController: AbortController | null = null
+const runCancelled = ref(false)
+const threadRunState = ref<{ phase?: string | null; runCancelled?: boolean | null } | null>(null)
+const cancelledPresentation = ref<AgentPresentationEnvelope | null>(null)
+/** Progress line built from the cancel API response, before the checkpoint refresh lands. */
+const cancelledProgressText = ref<string | null>(null)
 const reconnecting = ref(false)
 const recoveredPhaseHint = ref<string | null>(null)
 /** P0-06: authoritative gate from SSE interrupt or thread-state reconnect */
@@ -480,6 +490,15 @@ const retakeCalloutText = computed(() => {
 const retakeContinueLabel = computed(
   () => gatePresentation.value?.secondary_actions?.[0]?.label ?? '继续',
 )
+const showCancelledCallout = computed(
+  () => isRunCancelledState(threadRunState.value) || runCancelled.value,
+)
+const cancelledCalloutText = computed(() => {
+  const text =
+    String(cancelledPresentation.value?.body?.text ?? '').trim() ||
+    (cancelledProgressText.value ?? '')
+  return text || '当前任务已停止，你可以发起新任务或直接输入新的需求。'
+})
 const awaitingSchemeSelect = computed(() => chipSet.value === 'scheme_select')
 const awaitingMacroSchemeSelect = computed(() => chipSet.value === 'macro_scheme_select')
 const awaitingShotConfirm = computed(
@@ -562,7 +581,8 @@ const hasDockPresentation = computed(
     || (awaitingDeliveryConfirm.value && Boolean(productVisualPlan.value) && !productVisualSchemeV2.value)
     || awaitingShotConfirm.value
     || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)
-    || isRetakePending.value,
+    || isRetakePending.value
+    || showCancelledCallout.value,
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
@@ -941,6 +961,10 @@ async function selectThread(threadId: string) {
   historyOpen.value = false
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
+  runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
+  cancelledProgressText.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
   effectiveUtterance.value = null
@@ -992,6 +1016,10 @@ watch(
   () => {
     taskProgress.value = emptyTaskProgress()
     interruptGate.value = null
+    runCancelled.value = false
+    threadRunState.value = null
+    cancelledPresentation.value = null
+    cancelledProgressText.value = null
     hasAtomicCheckpoint.value = false
     retakePending.value = false
     effectiveUtterance.value = null
@@ -1088,6 +1116,10 @@ function newAgentSession() {
   agent.clear()
   taskProgress.value = emptyTaskProgress()
   interruptGate.value = null
+  runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
+  cancelledProgressText.value = null
   threadJourneyTrace.value = null
   hasAtomicCheckpoint.value = false
   retakePending.value = false
@@ -1096,6 +1128,30 @@ function newAgentSession() {
   agentThreadId.value = createAgentThreadId(props.sessionId)
   persistActiveThreadId(props.sessionId, agentThreadId.value)
   ElMessage.info('已新建对话')
+}
+
+function syncCancelledFromThreadState(
+  state:
+    | {
+        phase?: string | null
+        runCancelled?: boolean | null
+        presentation?: AgentPresentationEnvelope | null
+      }
+    | null
+    | undefined,
+): boolean {
+  threadRunState.value = state
+    ? { phase: state.phase ?? null, runCancelled: state.runCancelled ?? null }
+    : null
+  const cancelled = isRunCancelledState(state)
+  if (cancelled) {
+    cancelledPresentation.value = state?.presentation ?? null
+  } else if (!runCancelled.value) {
+    // A gate-preserved stop leaves the checkpoint uncancelled; keep the local callout.
+    cancelledPresentation.value = null
+    cancelledProgressText.value = null
+  }
+  return cancelled
 }
 
 async function refreshThreadCheckpoint() {
@@ -1110,6 +1166,7 @@ async function refreshThreadCheckpoint() {
         hasAtomicCheckpoint?: boolean
         interrupted?: boolean
         phase?: string | null
+        runCancelled?: boolean | null
         productVisualPlan?: ProductVisualPlan | null
         macroSchemes?: ProductVisualMacroScheme[] | null
         shotManifest?: ProductVisualShot[] | null
@@ -1162,8 +1219,9 @@ async function refreshThreadCheckpoint() {
         json.data?.deliveryGenByKey,
       )
     }
-    const gatePayload = interruptPayloadFromThreadState(json.data)
-    interruptGate.value = gatePayload
+    syncCancelledFromThreadState(json.data)
+    // A cancelled run can still hold a pending gate; chips stay under the callout.
+    interruptGate.value = interruptPayloadFromThreadState(json.data)
   } catch {
     // ignore — checkpoint hint is best-effort
   }
@@ -1206,18 +1264,42 @@ function toggleVoice() {
   })
 }
 
-function cancelActiveStream() {
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('token')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+async function cancelActiveStream() {
   if (!agent.isStreaming) return
-  streamAbortController?.abort()
-  agentStream.stop()
-  agent.finishStreaming()
-  ElMessage.info('已停止当前回复，您可以发送新需求')
+  runCancelled.value = true
+  const { apiOk, completedTasks, totalTasks } = await cancelAgentRun({
+    threadId: agentThreadId.value,
+    sessionId: props.sessionId,
+    abort: () => {
+      streamAbortController?.abort()
+      agentStream.stop()
+      agent.finishStreaming()
+    },
+    postCancel: (body) =>
+      fetch(apiUrl('/api/agent/runs/cancel'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(3000),
+      }).then((r) => {
+        if (!r.ok) throw new Error(`cancel failed: ${r.status}`)
+        return r.json()
+      }),
+  })
+  cancelledProgressText.value = cancelledCalloutTextFromProgress(completedTasks, totalTasks)
+  ElMessage.info(apiOk ? '已停止当前任务，您可以发送新需求' : '已断开回复，后台可能仍在收尾')
+  if (apiOk) await refreshThreadCheckpoint()
 }
 
 async function send() {
   if (isUploading.value) return
   if (agent.isStreaming) {
-    cancelActiveStream()
+    await cancelActiveStream()
     return
   }
   if (!canSubmitComposer.value) return
@@ -1254,6 +1336,11 @@ async function sendPreset(text: string) {
   // 否则后端 interrupt_before 恢复（aupdate_state + astream(None)）拿不到 userDecision，会卡在 await_confirm
   const decision = mapPresetToDecision(text)
   await sendMessage(text.trim(), decision)
+}
+
+async function startNewTask() {
+  if (agent.isStreaming || isUploading.value) return
+  await sendMessage('__new_task__')
 }
 
 /** 把按钮文本映射为后端可识别的 userDecision 值。 */
@@ -1351,6 +1438,10 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
   retakePending.value = false
   effectiveUtterance.value = null
   completionPresentation.value = null
+  runCancelled.value = false
+  threadRunState.value = null
+  cancelledPresentation.value = null
+  cancelledProgressText.value = null
   streamAbortController = new AbortController()
   agentStream.start()
 
@@ -1411,7 +1502,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     agentStream.stop()
     streamAbortController = null
     // SSE abnormal-end detection: stream broke without [DONE]
-    if (!streamEndedNormally) {
+    if (!streamEndedNormally && !runCancelled.value) {
       const last = agent.messages[agent.messages.length - 1]
       if (last?.role === 'assistant' && !last.content.trim()) {
         agent.appendText('\n\n⚠️ 连接意外断开，请稍后重试。')
@@ -1423,7 +1514,7 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
     }
 
     const last = agent.messages[agent.messages.length - 1]
-    if (last?.role === 'assistant' && !last.content.trim()) {
+    if (!runCancelled.value && last?.role === 'assistant' && !last.content.trim()) {
       agent.appendText('（本轮无文本回复。若在确认方案，可再发「确认」；或点「新建对话」后重试。）')
     }
     agent.finishStreaming()
@@ -1458,6 +1549,7 @@ async function reconnectStream() {
     const json = (await res.json()) as {
       data?: {
         phase?: string | null
+        runCancelled?: boolean | null
         interrupted?: boolean
         finished?: boolean
         nextNodes?: string[]
@@ -1507,6 +1599,7 @@ async function reconnectStream() {
         json.data?.deliveryGenByKey,
       )
     }
+    const cancelled = syncCancelledFromThreadState(json.data)
     interruptGate.value = interruptPayloadFromThreadState(json.data)
 
     const hint = phaseHintFromInterrupt(interruptGate.value)
@@ -1523,7 +1616,9 @@ async function reconnectStream() {
 
     const label = formatPhaseLabel(phase)
     recoveredPhaseHint.value =
-      json.data?.finished
+      cancelled
+        ? '服务已恢复。上一轮已停止，可发起新任务。'
+        : json.data?.finished
         ? '服务已恢复。上一轮已完成，可继续新的指令。'
         : `服务已恢复。当前阶段：${label}。请继续操作。`
     pollTasksFromProgress()
@@ -1726,6 +1821,20 @@ function handleEvent(event: { type: string; data: unknown }) {
     }
     case 'ping':
       break
+    case 'run_cancelled': {
+      runCancelled.value = true
+      const data = event.data as {
+        text?: string
+        presentation?: AgentPresentationEnvelope | null
+      }
+      if (data.presentation) cancelledPresentation.value = data.presentation
+      const text = String(data.text ?? '').trim()
+      if (text) {
+        agent.appendText(`\n\n${text}`)
+        scrollToBottom()
+      }
+      break
+    }
     case 'interrupt': {
       const data = event.data as AgentInterruptPayload & {
         imageQaReason?: string | null
@@ -2226,6 +2335,26 @@ defineExpose({
             class="agent-input-area shrink-0 px-2.5 pb-2.5 pt-1"
             :class="{ 'agent-input-area--scrollable': hasDockPresentation }"
           >
+            <div
+              v-if="showCancelledCallout"
+              class="mb-2 px-0.5"
+              data-testid="run-cancelled-callout"
+            >
+              <p
+                class="mb-2 rounded-lg border border-[var(--neo-border)] bg-[var(--neo-panel)] px-2 py-1.5 text-xs leading-relaxed text-[var(--neo-text-secondary)]"
+              >
+                {{ cancelledCalloutText }}
+              </p>
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="new-task-chip"
+                :disabled="agent.isStreaming || isUploading"
+                @click="startNewTask()"
+              >
+                发起新任务
+              </button>
+            </div>
             <div v-if="awaitingConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"

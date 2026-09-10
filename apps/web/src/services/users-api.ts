@@ -26,10 +26,57 @@ export interface MembershipPlan {
   features: string[]
 }
 
+export type PointsRangeKey = '7d' | 'month' | 'all'
+export type PointKind = 'consume' | 'refund' | 'grant'
+export type PointCategory = 'text' | 'image' | 'audio' | 'video' | 'other'
+
+export interface PointTransactionItem {
+  id: string
+  amount: number
+  reason: string
+  createdAt: string
+  kind: PointKind
+  category: PointCategory
+  status: string | null
+  model: string | null
+  generationId: string | null
+  balanceAfter: number | null
+}
+
+export interface PointsInsights {
+  netConsumedTotal: number
+  peakDayConsumed: number
+  avgDailyConsumed: number
+  activeDays: number
+  longestStreakDays: number
+}
+
+export interface PointsSummary {
+  range: PointsRangeKey
+  from: string | null
+  to: string
+  byCategory: Record<'text' | 'image' | 'audio' | 'video', number>
+  otherNetConsumed: number
+  refundTotal: number
+  grantTotal: number
+  insights: PointsInsights
+}
+
 export const membershipApi = {
   getPlans: () => api.get<{ data: MembershipPlan[] }>('/membership/plans'),
   getPoints: () => api.get<{ data: { points: number; membership: string } }>('/membership/points'),
   claimDaily: () => api.post<{ data: { points: number; added: number } }>('/membership/claim-daily'),
   upgrade: (plan: string) => api.post<{ data: { membership: string; points: number } }>('/membership/upgrade', { plan }),
-  transactions: () => api.get<{ data: Array<{ id: string; amount: number; reason: string; createdAt: string }> }>('/membership/transactions'),
+  transactions: (params?: {
+    range?: PointsRangeKey
+    kind?: PointKind
+    category?: PointCategory
+    cursor?: string
+    limit?: number
+  }) =>
+    api.get<{
+      data: { items: PointTransactionItem[]; nextCursor: string | null; from: string | null; to: string }
+    }>('/membership/transactions', { params }),
+  pointsSummary: (range?: PointsRangeKey) =>
+    api.get<{ data: PointsSummary }>('/membership/points-summary', { params: { range } }),
 }

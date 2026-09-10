@@ -5,11 +5,22 @@ from __future__ import annotations
 import re
 from typing import TypedDict
 
-from app.graph.atomic_intent import atomic_regenerate_intent, regenerate_phrase_intent
+from app.graph.atomic_intent import (
+    atomic_regenerate_intent,
+    regenerate_phrase_intent,
+    utterance_suggests_atomic_create,
+)
 from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create
 from app.graph.explore_route import explore_explicit_intent
 from app.graph.intent import single_node_gen_intent
 from app.graph.l0_action import has_preserve_intent, utterance_has_multi_image_refs
+from app.graph.media_utterance import (
+    media_directed_question,
+    normalize_colloquial_create_verbs,
+    strong_generate_media,
+    suspected_media_create,
+    suspected_vision_qa,
+)
 from app.graph.planning_guard import has_planning_image_conflict
 from app.graph.route_context import RouteContext
 
@@ -36,6 +47,11 @@ class RouteFeatures(TypedDict, total=False):
     has_text_ref: bool
     has_image_ref: bool
     has_multi_image_ref: bool
+    has_sidebar_media: bool
+    suspected_media_create: bool
+    suspected_vision_qa: bool
+    media_directed_question: bool
+    media_create_high: bool
     explicit_skill: bool
     has_atomic_checkpoint: bool
     preserve_composition: bool
@@ -110,6 +126,21 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
     has_image_attachment = any(
         str(a.get("mediaType") or "").lower() == "image" for a in attachments
     )
+    has_sidebar_media = any(
+        str(a.get("mediaType") or "").lower() in ("image", "video")
+        and str(a.get("url") or "").strip()
+        for a in attachments
+        if isinstance(a, dict)
+    )
+
+    suspected_create = suspected_media_create(utterance)
+    suspected_vision = suspected_vision_qa(utterance)
+    normalized = normalize_colloquial_create_verbs(utterance)
+    media_high = bool(
+        utterance_suggests_atomic_create(normalized)
+        or strong_generate_media(utterance)
+        or strong_generate_media(normalized)
+    )
 
     checkpoint = ctx.get("checkpoint") or {}
     atomic_node_id = str(checkpoint.get("atomic_node_id") or ctx.get("atomic_node_id") or "").strip()
@@ -126,6 +157,11 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
         has_text_ref=bool(text_keys or has_text_attachment),
         has_image_ref=bool(image_keys or has_image_attachment),
         has_multi_image_ref=multi_image,
+        has_sidebar_media=has_sidebar_media,
+        suspected_media_create=suspected_create,
+        suspected_vision_qa=suspected_vision,
+        media_directed_question=media_directed_question(utterance),
+        media_create_high=media_high,
         explicit_skill=bool(str(ctx.get("requested_skill_id") or "").strip()),
         has_atomic_checkpoint=has_checkpoint,
         preserve_composition=has_preserve_intent(utterance),
