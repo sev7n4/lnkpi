@@ -90,6 +90,7 @@ function saveToLibrary() {
     url,
     label: props.data.label ?? '',
     sourceNodeId: props.id,
+    sessionId: sessionId.value,
     generationRecordId: props.data.generationRecordId,
   })
 }

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import type { CanvasData, SidebarAttachment } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
@@ -71,6 +72,10 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
             confirmPlatformFallback: vi.fn(),
             cancelPlatformFallback: vi.fn(),
           },
+        },
+        {
+          provide: PersistRemoteService,
+          useValue: { persistRemote: vi.fn() },
         },
         VideoGenerationOrchestrator,
       ],

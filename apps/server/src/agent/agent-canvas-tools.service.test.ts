@@ -1,9 +1,10 @@
 import 'reflect-metadata'
-import { ForbiddenException, NotFoundException } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
 import type { CanvasData } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
@@ -34,6 +35,7 @@ describe('AgentCanvasToolsService', () => {
   const getMaterialDiagnostic = vi.fn()
   const confirmPlatformFallbackMaterial = vi.fn()
   const materialFindFirst = vi.fn()
+  const persistRemote = vi.fn()
 
   const defaultPrefs = {
     userId: 'u1',
@@ -194,6 +196,10 @@ describe('AgentCanvasToolsService', () => {
             confirmPlatformFallback: confirmPlatformFallbackMaterial,
             cancelPlatformFallback: cancelPlatformFallbackMaterial,
           },
+        },
+        {
+          provide: PersistRemoteService,
+          useValue: { persistRemote },
         },
       ],
     }).compile()
@@ -1636,6 +1642,80 @@ describe('AgentCanvasToolsService', () => {
       expect(canvas.nodes.find((n) => n.id === 'img-1')?.parentNode).toBeTruthy()
       expect(canvas.nodes.find((n) => n.id === 'vid-1')?.position).toEqual({ x: 900, y: 900 })
       vi.restoreAllMocks()
+    })
+  })
+
+  describe('saveNodeToAssetLibrary', () => {
+    it('delegates to PersistRemoteService and returns persisted url', async () => {
+      canvas.nodes.push({
+        id: 'img-1',
+        type: 'image',
+        position: { x: 0, y: 0 },
+        data: { url: 'https://upstream.example/out.png', title: 'shot' },
+      } as CanvasData['nodes'][number])
+      persistRemote.mockResolvedValue({
+        persistedUrl: 'https://cos.example/persisted.png',
+        assetId: 'asset-1',
+        storageTier: 'persisted',
+      })
+
+      const result = await svc.saveNodeToAssetLibrary({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+        label: 'my shot',
+      })
+
+      expect(persistRemote).toHaveBeenCalledWith({
+        userId: 'u1',
+        url: 'https://upstream.example/out.png',
+        kind: 'image',
+        label: 'my shot',
+        sessionId: 's1',
+        sourceNodeId: 'img-1',
+        replaceNodeUrl: false,
+      })
+      expect(result).toEqual({
+        assetId: 'asset-1',
+        url: 'https://cos.example/persisted.png',
+        kind: 'image',
+      })
+    })
+
+    it('surfaces 503 when storage adapter is unconfigured', async () => {
+      canvas.nodes.push({
+        id: 'img-1',
+        type: 'image',
+        position: { x: 0, y: 0 },
+        data: { url: 'https://upstream.example/out.png' },
+      } as CanvasData['nodes'][number])
+      persistRemote.mockRejectedValue(new ServiceUnavailableException('对象存储未配置'))
+
+      await expect(
+        svc.saveNodeToAssetLibrary({
+          sessionId: 's1',
+          userId: 'u1',
+          nodeId: 'img-1',
+        }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException)
+    })
+
+    it('rejects nodes without media url', async () => {
+      canvas.nodes.push({
+        id: 'img-1',
+        type: 'image',
+        position: { x: 0, y: 0 },
+        data: {},
+      } as CanvasData['nodes'][number])
+
+      await expect(
+        svc.saveNodeToAssetLibrary({
+          sessionId: 's1',
+          userId: 'u1',
+          nodeId: 'img-1',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(persistRemote).not.toHaveBeenCalled()
     })
   })
 })

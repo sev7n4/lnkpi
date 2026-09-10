@@ -1,19 +1,35 @@
-# Task 8 Report — GenerationRequest P1 sole builder docs + field completeness
+# Task 8 Report: Agent `saveNodeToAssetLibrary` 同路径
 
-## Done
+## Status
+**Done**
 
-- **Docstring** (`generation_request.py`): 标明 P2/P1 唯一构造入口三函数；禁止 nodes 内手写 prompt/refs 平行字典。
-- **Test** (`test_apply_generation_request_after_clarify_resume_fields`): clarify→atomic resume 场景断言 `generation_request` 含 `prompt`, `refs`, `mentioned_keys`, `modality`。
-- **Grep nodes/**: `atomic_create_node.py` 已调用 `apply_generation_request_to_state`；未发现需改的手写平行 mapping。
+## Changes
+
+### `apps/server/src/agent/agent-canvas-tools.service.ts`
+- Injected `PersistRemoteService`.
+- Replaced `prisma.userAsset.upsert` with `persistRemote.persistRemote`.
+- Returns `{ assetId, url: persistedUrl, kind }` (`replaceNodeUrl: false`).
+
+### `apps/server/src/agent/agent.module.ts`
+- Imported `AssetsModule` so `PersistRemoteService` is available to `AgentCanvasToolsService`.
+
+### Tests
+- `agent-canvas-tools.service.test.ts`: mock `PersistRemoteService`; 3 cases for save (persisted url, 503 propagation, missing URL).
+- `agent-canvas-tools.sidebar.test.ts`: provide `PersistRemoteService` mock for DI.
 
 ## Verification
 
-```
-pytest tests/test_generation_request.py -v → 6 passed
+```bash
+pnpm --filter @lnkpi/server exec vitest run src/agent/agent-canvas-tools.service.test.ts src/agent/agent-canvas-tools.sidebar.test.ts
+# ✓ 62 passed (58 + 4)
 ```
 
 ## Commit
 
 ```
-docs(runtime): lock GenerationRequest as sole Agent/Dock builder
+feat(server): agent save_node_to_asset_library uses persist-remote
 ```
+
+## Concerns / Follow-ups
+- When adapter is unconfigured, 503 propagates from `PersistRemoteService` (via storage `putStream`); agent tool no longer writes upstream URL as a successful library entry.
+- `replaceNodeUrl: false` keeps canvas node URL unchanged after agent save (same as prior upsert behavior for the node itself).

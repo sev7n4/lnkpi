@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildUserAssetMetadataFromGeneration } from './build-user-asset-metadata'
+import {
+  buildUserAssetMetadataFromGeneration,
+  mergeUserAssetMetadata,
+} from './build-user-asset-metadata'
 
 describe('buildUserAssetMetadataFromGeneration', () => {
   it('copies mediaInfo snapshot from generation record metadata', () => {
@@ -26,5 +29,17 @@ describe('buildUserAssetMetadataFromGeneration', () => {
     expect(metadata.promptPreview).toBe('a cute cat')
     expect(metadata.aspectRatio).toBe('16:9')
     expect(metadata.mediaInfo?.output?.width).toBe(1024)
+  })
+})
+
+describe('mergeUserAssetMetadata', () => {
+  it('mergeUserAssetMetadata sets storageTier persisted and keeps upstreamUrl', () => {
+    const merged = mergeUserAssetMetadata(null, {
+      storageTier: 'persisted',
+      upstreamUrl: 'https://cdn.example/a.png',
+      objectKey: 'users/u/assets/2026/x.png',
+    })
+    expect(merged.storageTier).toBe('persisted')
+    expect(merged.upstreamUrl).toContain('cdn.example')
   })
 })

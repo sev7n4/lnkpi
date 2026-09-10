@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { assetsApi, type SaveUserAssetPayload } from '@/services/assets-api'
+import { isUpstreamMediaUrl } from '@/composables/useCanvasMedia'
 
 /** 资产库版本号：保存/删除成功后自增，资产库面板据此重新拉取 */
 export const assetLibraryVersion = ref(0)
@@ -20,12 +21,29 @@ export async function saveAssetToLibrary(payload: SaveUserAssetPayload) {
     return false
   }
   try {
-    await assetsApi.saveMine(payload)
+    if (isUpstreamMediaUrl(payload.url)) {
+      await assetsApi.persistRemote({
+        url: payload.url,
+        kind: payload.kind,
+        label: payload.label,
+        sourceNodeId: payload.sourceNodeId,
+        sessionId: payload.sessionId,
+        replaceNodeUrl: payload.replaceNodeUrl,
+        generationRecordId: payload.generationRecordId,
+      })
+    } else {
+      await assetsApi.saveMine(payload)
+    }
     bumpAssetLibrary()
     ElMessage.success('已存入资产库')
     return true
-  } catch {
-    ElMessage.error('保存失败，请稍后重试')
+  } catch (e: unknown) {
+    const status = (e as { response?: { status?: number } })?.response?.status
+    if (status === 503) {
+      ElMessage.error('对象存储未配置，无法持久化收藏。请配置 OBJECT_STORAGE_* 或稍后重试')
+    } else {
+      ElMessage.error('保存失败，请稍后重试')
+    }
     return false
   }
 }

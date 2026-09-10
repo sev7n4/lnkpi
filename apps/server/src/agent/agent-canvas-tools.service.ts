@@ -17,6 +17,7 @@ import {
   validateSidebarAttachments,
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
+import { PersistRemoteService } from '../assets/persist-remote.service'
 import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { MaterialService } from '../canvas/material.service'
 import { sanitizeAgentMessageContent } from './agentMessageSanitize'
@@ -305,6 +306,7 @@ export class AgentCanvasToolsService {
     @Inject(StudioService) private readonly studio: StudioService,
     @Inject(MaterialService) private readonly material: MaterialService,
     @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
+    @Inject(PersistRemoteService) private readonly persistRemote: PersistRemoteService,
   ) {}
 
   private async loadAccountGenPrefs(userId: string): Promise<AccountGenPrefs> {
@@ -1556,22 +1558,17 @@ export class AgentCanvasToolsService {
     if (!kind || !url) {
       throw new BadRequestException('节点缺少可保存的媒体 URL')
     }
-    const item = await this.prisma.userAsset.upsert({
-      where: { userId_url: { userId: input.userId, url } },
-      create: {
-        userId: input.userId,
-        kind,
-        url,
-        label: input.label?.trim() || nodeTitle(node) || node.id,
-        sourceNodeId: node.id,
-      },
-      update: {
-        label: input.label?.trim() || nodeTitle(node) || node.id,
-        kind,
-        sourceNodeId: node.id,
-      },
+
+    const result = await this.persistRemote.persistRemote({
+      userId: input.userId,
+      url,
+      kind,
+      label: input.label?.trim() || nodeTitle(node) || node.id,
+      sessionId: input.sessionId,
+      sourceNodeId: node.id,
+      replaceNodeUrl: false,
     })
-    return { assetId: item.id, url: item.url, kind: item.kind }
+    return { assetId: result.assetId, url: result.persistedUrl, kind }
   }
 
   async introduceNodesToAgent(input: {

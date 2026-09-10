@@ -91,6 +91,7 @@ function saveToLibrary() {
     url,
     label: props.data.label ?? props.data.prompt ?? '',
     sourceNodeId: props.id,
+    sessionId: sessionId.value,
   })
 }
 </script>

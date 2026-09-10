@@ -1,5 +1,7 @@
 import type { MediaInfo } from '@lnkpi/shared'
 
+export type StorageTier = 'upstream' | 'upload' | 'persisted'
+
 export interface UserAssetMetadata {
   generationRecordId?: string
   promptPreview?: string
@@ -7,6 +9,9 @@ export interface UserAssetMetadata {
   aspectRatio?: string
   resolution?: string
   mediaInfo?: MediaInfo
+  storageTier?: StorageTier
+  upstreamUrl?: string
+  objectKey?: string
 }
 
 function parseGenerationMeta(raw?: string | null): Record<string, unknown> {
@@ -48,4 +53,11 @@ export function parseUserAssetMetadata(raw?: string | null): UserAssetMetadata {
   } catch {
     return {}
   }
+}
+
+export function mergeUserAssetMetadata(
+  raw: string | null | undefined,
+  patch: Partial<UserAssetMetadata>,
+): UserAssetMetadata {
+  return { ...parseUserAssetMetadata(raw), ...patch }
 }

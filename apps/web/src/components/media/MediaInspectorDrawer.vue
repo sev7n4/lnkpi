@@ -8,7 +8,9 @@ import CanvasLocatePinIcon from '@/components/shared/CanvasLocatePinIcon.vue'
 import { useMediaInspector } from '@/composables/useMediaInspector'
 import {
   downloadMediaFile,
+  isUpstreamMediaUrl,
   mediaDownloadName,
+  UPSTREAM_MEDIA_DOWNLOAD_HINT,
 } from '@/composables/useCanvasMedia'
 import { resolveMediaUrl } from '@/services/api-base'
 import { studioApi } from '@/services/studio-api'
@@ -279,6 +281,11 @@ const canLocate = computed(() =>
   Boolean(locateNodeHandler.value && (record.value?.id || target.value?.generationRecordId)),
 )
 
+const downloadTitle = computed(() => {
+  const url = record.value?.url || target.value?.url || outputFile.value?.url || ''
+  return isUpstreamMediaUrl(String(url)) ? UPSTREAM_MEDIA_DOWNLOAD_HINT : '下载'
+})
+
 const taskIdCopyLabel = ref('复制任务 ID')
 
 async function loadDiagnostic() {
@@ -534,6 +541,7 @@ async function copyValue(text: string) {
             v-if="previewUrl"
             type="button"
             class="media-inspector-action"
+            :title="downloadTitle"
             @click="downloadOutput"
           >
             下载
