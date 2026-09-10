@@ -19,6 +19,15 @@ describe('StorageAdapter factory', () => {
     expect(adapter).toBeInstanceOf(UnconfiguredStorageAdapter)
   })
 
+  it('returns S3CompatibleStorageAdapter when env complete', () => {
+    process.env.OBJECT_STORAGE_ENDPOINT = 'https://cos.example'
+    process.env.OBJECT_STORAGE_BUCKET = 'b'
+    process.env.OBJECT_STORAGE_ACCESS_KEY = 'ak'
+    process.env.OBJECT_STORAGE_SECRET_KEY = 'sk'
+    const adapter = createStorageAdapterFromEnv()
+    expect(adapter.constructor.name).toBe('S3CompatibleStorageAdapter')
+  })
+
   it('Unconfigured putStream throws 503', async () => {
     const adapter = new UnconfiguredStorageAdapter()
     await expect(

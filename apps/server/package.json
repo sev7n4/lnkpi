@@ -13,6 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1129.0",
+    "@aws-sdk/lib-storage": "^3.1129.0",
     "@lnkpi/agent": "workspace:*",
     "@lnkpi/shared": "workspace:*",
     "@nestjs/common": "^10.4.15",
