@@ -217,6 +217,10 @@ def test_build_done_presentation_delivery_summary_table():
     assert pres["primary_action"]["label"] == "在画布中定位全部"
     assert pres["primary_action"]["message"] == "__focus_all_canvas__"
     assert "成功" not in pres["body"]["headline"]
+    export = pres["secondary_actions"][0]
+    assert export["label"] == "导出打包"
+    assert export["message"] == "__export_pack__"
+    assert export.get("disabled") in (None, False)
 
 
 @pytest.mark.asyncio

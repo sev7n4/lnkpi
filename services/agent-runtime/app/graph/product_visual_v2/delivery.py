@@ -295,7 +295,6 @@ def build_done_presentation(
             {
                 "label": copy.get("done.export_label"),
                 "message": _EXPORT_PACK_MESSAGE,
-                "disabled": True,
             }
         ],
     }
