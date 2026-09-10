@@ -2136,6 +2136,14 @@ async function handlePackageDownload() {
   )
 }
 
+async function handleExportPack(nodeIds: string[]) {
+  await downloadMediaPackage(
+    nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
+    nodeIds,
+    { sessionId: sessionId.value },
+  )
+}
+
 function connectSelectionToTarget(targetId: string, sourceIds = multiSelectedIds.value) {
   for (const sourceId of sourceIds) {
     if (sourceId === targetId) continue
@@ -3365,6 +3373,7 @@ onUnmounted(() => {
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"
         @focus-all="focusNodesByIds"
+        @export-pack="handleExportPack"
         @undo="handleAgentUndo"
         @redo="handleAgentRedo"
         @open-image-editor="handleAgentOpenImageEditor"

@@ -142,6 +142,7 @@ const emit = defineEmits<{
   turnComplete: []
   focusNode: [nodeId: string]
   focusAll: [nodeIds: string[]]
+  exportPack: [nodeIds: string[]]
   undo: []
   redo: []
   openImageEditor: [nodeId: string]
@@ -1049,6 +1050,10 @@ function onFocusNode(nodeId: string) {
 function onFocusAll(nodeIds: string[]) {
   emit('focusAll', nodeIds)
   if (isMobileLayout.value) closePanel()
+}
+
+function onExportPack(nodeIds: string[]) {
+  emit('exportPack', nodeIds)
 }
 
 function toggleFloating() {
@@ -2326,6 +2331,7 @@ defineExpose({
                 :disabled="agent.isStreaming"
                 @focus-node="onFocusNode($event)"
                 @focus-all="onFocusAll($event)"
+                @export-pack="onExportPack($event)"
               />
             </div>
           </div>
