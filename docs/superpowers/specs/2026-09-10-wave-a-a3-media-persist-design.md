@@ -174,3 +174,4 @@ P0 通过即标 **A3-P0 Done**。
 | 日期 | 变更 |
 |------|------|
 | 2026-09-10 | 初稿：确认 StorageAdapter（C）、P0 补洞 + P2 主交付；对话批准 §1–§3 后入库 |
+| 2026-09-10 | 实现完成：`OBJECT_STORAGE_*` 见 `apps/server/.env.example`；`persist-remote`、`saveAssetToLibrary` upstream 转存、Agent 同路径已落地 |
