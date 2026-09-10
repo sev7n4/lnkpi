@@ -1,51 +1,39 @@
-# Task 7 Report: Advanced Options seed / negative_prompt (G-06)
+# Task 7 Report: 前端 `saveAssetToLibrary` 接线
 
-**Status:** ✅ Complete  
-**Branch:** `feature/i2v-capability-productization`  
-**Commit:** _(see git log after commit)_
-
-## Summary
-
-Exposed optional `seed` and `negativePrompt` across the canonical video generation pipeline: shared types → server DTO/orchestrator → generation adapter → Web Dock advanced panel.
+## Status
+**Done**
 
 ## Changes
 
-| File | Change |
-|------|--------|
-| `packages/shared/src/videoGeneration/types.ts` | Added optional `seed?`, `negativePrompt?` on `CanonicalVideoGenerationRequest` |
-| `packages/shared/src/videoGeneration/resolveCanonicalVideoRequest.ts` | Read `seed` / `negativePrompt` from node data |
-| `packages/shared/src/studioModelCatalog.ts` | Agnes catalog: `seed` + `negativePrompt` marked `native` |
-| `apps/server/src/studio/video-generation-request.util.ts` | DTO fields + body → canonical mapping |
-| `apps/server/src/studio/video-generation.orchestrator.ts` | Pass advanced options to `StudioService.generateVideo` |
-| `apps/server/src/studio/studio.service.ts` | Forward to `buildVideoProviderOptions` |
-| `apps/server/src/studio/studio.controller.ts` | `GenerateVideoDto` + `/video/generate` pass-through |
-| `packages/agent/src/studio/generation-adapter.ts` | Native pass-through via catalog `params`; droppedFields when unsupported |
-| `apps/web/src/services/studio-api.ts` | `startVideoGeneration` body fields |
-| `apps/web/src/composables/useNodeGeneration.ts` | Read node data → API |
-| `apps/web/src/components/canvas/dock-studio/panels/VideoDockPanel.vue` | Collapsible「高级」section (default collapsed): Seed + Negative prompt |
+### `apps/web/src/services/assets-api.ts`
+- Added `PersistRemotePayload`, `PersistRemoteResult` types.
+- Extended `SaveUserAssetPayload` with optional `sessionId`, `replaceNodeUrl`.
+- Added `assetsApi.persistRemote()` → `POST /assets/persist-remote`.
 
-## Behavior
+### `apps/web/src/composables/useAssetLibrary.ts`
+- Upstream URLs (`isUpstreamMediaUrl`) → `assetsApi.persistRemote`.
+- Local `/api/uploads/` paths → `assetsApi.saveMine` (unchanged path).
+- 503 responses show storage-not-configured message.
 
-- **Seedance:** `seed` forwarded when catalog marks `seed: native`; `negativePrompt` dropped (metadata) — APIMart provider has no negative field.
-- **Agnes:** both `seed` and `negativePrompt` forwarded to `AgnesVideoProvider` (`seed`, `negative_prompt` body fields).
-- **UI:** values stored on node (`seed`, `negativePrompt`); patched before generate.
+### Canvas call sites (optional `sessionId`)
+- `CanvasNodeImage.vue`, `CanvasNodeVideo.vue`, `CanvasNodeAudio.vue` pass `sessionId` from route.
 
-## Test Summary
+### Tests
+- Created `useAssetLibrary.test.ts` (2 cases, TDD).
 
-| Command | Result |
-|---------|--------|
-| `pnpm build` | ✅ Pass |
-| `pnpm --filter @lnkpi/shared exec vitest run src/videoGeneration/resolveCanonicalVideoRequest.test.ts` | ✅ 7/7 |
-| `pnpm --filter @lnkpi/agent exec vitest run src/studio/generation-adapter.test.ts` | ✅ 32/32 |
-| `cd apps/server && pnpm exec vitest run src/studio/video-generation-request.util.test.ts src/studio/studio.integration.test.ts` | ✅ 17/17 |
+## Verification
 
-New assertions:
-- Body/canonical mapping for seed + negativePrompt
-- Adapter native pass-through (Seedance seed, Agnes both)
-- Integration: Agnes `generateVideo` forwards seed/negativePrompt to mocked provider
+```bash
+pnpm --filter @lnkpi/web test -- useAssetLibrary
+# ✓ 2 passed
+```
 
-## Gap Register
+## Commit
 
-| Gap ID | Status |
-|--------|--------|
-| G-06 | ✅ Covered |
+```
+feat(web): persist upstream assets via persist-remote on save
+```
+
+## Concerns / Follow-ups
+- `CanvasAssetPanel` upload path still calls `saveAssetToLibrary` without `sessionId` (acceptable per spec — backend scans all user sessions).
+- No E2E against real COS; relies on server Task 5–6 + manual smoke when storage is configured.
