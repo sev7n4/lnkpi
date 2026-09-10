@@ -11,7 +11,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common'
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
 import { Request } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { PrismaService } from '../prisma/prisma.service'
@@ -20,6 +20,7 @@ import {
   buildUserAssetMetadataFromGeneration,
   serializeUserAssetMetadata,
 } from './build-user-asset-metadata'
+import { PersistRemoteService } from './persist-remote.service'
 
 type AuthedRequest = Request & { user: { sub: string; phone: string } }
 
@@ -31,6 +32,44 @@ class PublicAssetsQueryDto {
   @IsOptional()
   @IsString()
   search?: string
+}
+
+class PersistRemoteDto {
+  @IsString()
+  @MaxLength(4096)
+  url!: string
+
+  @IsIn(['image', 'video', 'audio'])
+  kind!: 'image' | 'video' | 'audio'
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  label?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sessionId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sourceNodeId?: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  nodeId?: string
+
+  @IsOptional()
+  @IsBoolean()
+  replaceNodeUrl?: boolean
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  generationRecordId?: string
 }
 
 class SaveUserAssetDto {
@@ -59,7 +98,10 @@ class SaveUserAssetDto {
 
 @Controller('assets')
 export class AssetsController {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PersistRemoteService) private readonly persistRemoteService: PersistRemoteService,
+  ) {}
 
   @Get('public')
   findPublic(@Query() query: PublicAssetsQueryDto) {
@@ -83,6 +125,22 @@ export class AssetsController {
       take: 500,
     })
     return { code: 0, message: 'ok', data: { items } }
+  }
+
+  @Post('persist-remote')
+  @UseGuards(AuthGuard)
+  async persistRemote(@Req() req: AuthedRequest, @Body() dto: PersistRemoteDto) {
+    const data = await this.persistRemoteService.persistRemote({
+      userId: req.user.sub,
+      url: dto.url,
+      kind: dto.kind,
+      label: dto.label,
+      sessionId: dto.sessionId,
+      sourceNodeId: dto.sourceNodeId ?? dto.nodeId,
+      replaceNodeUrl: dto.replaceNodeUrl ?? false,
+      generationRecordId: dto.generationRecordId,
+    })
+    return { code: 0, message: 'ok', data }
   }
 
   @Post('mine')
