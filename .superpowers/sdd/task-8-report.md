@@ -1,37 +1,35 @@
-# Task 8 Report: API Docs + refs×videoMode Integration Tests (G-12)
+# Task 8 Report: Agent `saveNodeToAssetLibrary` 同路径
 
-**Status:** ✅ Complete  
-**Branch:** `feature/i2v-capability-productization`  
-**Commit:** _(pending)_
-
-## Summary
-
-Added appendix §A to the I2V audit spec documenting `POST /studio/video/start` refs × videoMode example matrix (S2/S4/S5/S6) with JSON request samples and refWire routing table. Created server integration tests that exercise the canonical request → bundle → `buildVideoProviderOptions` path for each matrix row.
+## Status
+**Done**
 
 ## Changes
 
-| File | Change |
-|------|--------|
-| `docs/superpowers/specs/2026-08-15-i2v-upstream-capability-audit-design.md` | Appendix §A: scenario matrix, 4 JSON examples, refWire routing table |
-| `apps/server/src/studio/video-generation.integration.test.ts` | New: 4 integration tests for G-12 matrix rows |
+### `apps/server/src/agent/agent-canvas-tools.service.ts`
+- Injected `PersistRemoteService`.
+- Replaced `prisma.userAsset.upsert` with `persistRemote.persistRemote`.
+- Returns `{ assetId, url: persistedUrl, kind }` (`replaceNodeUrl: false`).
 
-## Matrix Coverage
+### `apps/server/src/agent/agent.module.ts`
+- Imported `AssetsModule` so `PersistRemoteService` is available to `AgentCanvasToolsService`.
 
-| videoMode | refs | scenario | Assertions |
-|---|---|---|---|
-| `image_to_video` | 1×I | S2 | `apimart_multimodal`, `returnLastFrame`, `referenceImages` |
-| `first_last_frame` | 2×I | S5 | `apimart_first_last`, `imageWithRoles` first/last |
-| `image_to_video` | 2×I | S4 | `apimart_multimodal`, 2× `referenceImages` |
-| `text_to_video` | 1×V | S6 | `apimart_multimodal`, `refVideoMode: native`, `referenceVideos` |
+### Tests
+- `agent-canvas-tools.service.test.ts`: mock `PersistRemoteService`; 3 cases for save (persisted url, 503 propagation, missing URL).
+- `agent-canvas-tools.sidebar.test.ts`: provide `PersistRemoteService` mock for DI.
 
-## Test Summary
+## Verification
 
-| Command | Result |
-|---------|--------|
-| `pnpm exec vitest run src/studio/video-generation.integration.test.ts` (apps/server) | ✅ 4/4 passed |
+```bash
+pnpm --filter @lnkpi/server exec vitest run src/agent/agent-canvas-tools.service.test.ts src/agent/agent-canvas-tools.sidebar.test.ts
+# ✓ 62 passed (58 + 4)
+```
 
-## Gap Register
+## Commit
 
-| Gap ID | Status |
-|--------|--------|
-| G-12 API 缺 refs+videoMode 组合说明 | ✅ Covered |
+```
+feat(server): agent save_node_to_asset_library uses persist-remote
+```
+
+## Concerns / Follow-ups
+- When adapter is unconfigured, 503 propagates from `PersistRemoteService` (via storage `putStream`); agent tool no longer writes upstream URL as a successful library entry.
+- `replaceNodeUrl: false` keeps canvas node URL unchanged after agent save (same as prior upsert behavior for the node itself).

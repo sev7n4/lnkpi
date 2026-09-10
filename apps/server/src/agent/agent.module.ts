@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { AssetsModule } from '../assets/assets.module'
 import { CanvasModule } from '../canvas/canvas.module'
 import { ProviderModule } from '../provider/provider.module'
 import { SessionsModule } from '../sessions/sessions.module'
@@ -10,7 +11,7 @@ import { AgentInternalGuard } from './agent-internal.guard'
 import { AgentService } from './agent.service'
 
 @Module({
-  imports: [CanvasModule, ProviderModule, SessionsModule, StudioModule],
+  imports: [CanvasModule, ProviderModule, SessionsModule, StudioModule, AssetsModule],
   controllers: [AgentController, AgentCanvasToolsController],
   providers: [AgentService, AgentCanvasToolsService, AgentInternalGuard],
   exports: [AgentService, AgentCanvasToolsService],
