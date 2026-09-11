@@ -3,12 +3,12 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getEditIntent,
-  listEditIntents,
   resolveImageEditProfile,
   type ImageVersionEntry,
 } from '@lnkpi/shared'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
+import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
@@ -59,7 +59,7 @@ const editor = useCanvasEditorStore()
 const promptRef = ref<HTMLTextAreaElement | null>(null)
 const prompt = ref('')
 const activeGuideEditIntentId = ref<string | null>(null)
-const editIntents = listEditIntents()
+const editIntentPickerOpen = ref(false)
 const guideCapabilities =
   resolveImageEditProfile().capabilities ?? {
     transparentBackground: false,
@@ -189,12 +189,6 @@ function editIntentChipDisabled(intentId: string): boolean {
   return busy.value || !!editIntentDisabledReason(intentId, guideCapabilities)
 }
 
-function editIntentChipTitle(intentId: string): string {
-  const disabled = editIntentDisabledReason(intentId, guideCapabilities)
-  if (disabled) return disabled
-  return getEditIntent(intentId)?.description ?? ''
-}
-
 function applyEditIntent(intentId: string) {
   if (editIntentChipDisabled(intentId)) return
   const result = applyGuideEditIntent({
@@ -209,6 +203,11 @@ function applyEditIntent(intentId: string) {
   }
   activeGuideEditIntentId.value = result.guideEditIntentId
   prompt.value = result.prompt
+}
+
+function clearEditIntent() {
+  activeGuideEditIntentId.value = null
+  editIntentPickerOpen.value = false
 }
 
 function focusReplacePrompt() {
@@ -530,6 +529,41 @@ onBeforeUnmount(() => {
           <span v-if="!collapsed" class="refine-side__title">精修</span>
         </div>
         <div v-if="!collapsed" class="flex items-center gap-1">
+          <div class="relative">
+            <button
+              type="button"
+              class="refine-side__icon-btn relative"
+              :class="{ 'is-guide-active': activeGuideEditIntentId }"
+              :disabled="busy"
+              aria-label="编辑意图"
+              title="编辑意图"
+              :aria-expanded="editIntentPickerOpen"
+              @click="editIntentPickerOpen = !editIntentPickerOpen"
+            >
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+                <rect x="4" y="4" width="6" height="6" rx="1" />
+                <rect x="14" y="4" width="6" height="6" rx="1" />
+                <rect x="4" y="14" width="6" height="6" rx="1" />
+                <rect x="14" y="14" width="6" height="6" rx="1" />
+              </svg>
+              <span
+                v-if="activeGuideEditIntentId"
+                class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
+                aria-hidden="true"
+              />
+            </button>
+            <GuidePickerPopover
+              class="refine-side__guide-picker"
+              mode="edit_intent"
+              :active-id="activeGuideEditIntentId"
+              :capabilities="guideCapabilities"
+              :open="editIntentPickerOpen"
+              :ref-image-count="refineRefImageCount"
+              @select="applyEditIntent"
+              @clear="clearEditIntent"
+              @close="editIntentPickerOpen = false"
+            />
+          </div>
           <button
             v-if="!isNarrow"
             type="button"
@@ -731,18 +765,6 @@ onBeforeUnmount(() => {
         <div class="refine-dock__chips">
           <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">去除污渍瑕疵</button>
           <button type="button" class="refine-dock__chip" :disabled="busy" @click="focusReplacePrompt">替换选区内容</button>
-          <button
-            v-for="intent in editIntents"
-            :key="intent.id"
-            type="button"
-            class="refine-dock__chip"
-            :class="{ 'is-active': activeGuideEditIntentId === intent.id }"
-            :disabled="editIntentChipDisabled(intent.id)"
-            :title="editIntentChipTitle(intent.id)"
-            @click="applyEditIntent(intent.id)"
-          >
-            {{ intent.label }}
-          </button>
         </div>
 
         <p v-if="activeRefRoleHints" class="refine-dock__hint">
@@ -921,6 +943,17 @@ onBeforeUnmount(() => {
   border-color: var(--neo-border-strong);
   color: var(--neo-text-primary);
   background: var(--neo-hover-bg);
+}
+
+.refine-side__icon-btn.is-guide-active {
+  border-color: color-mix(in srgb, rgb(232 121 249) 25%, transparent);
+  background: color-mix(in srgb, rgb(217 70 239) 15%, transparent);
+  color: rgb(240 171 252);
+}
+
+.refine-side__guide-picker {
+  right: 0;
+  left: auto;
 }
 
 .refine-side__icon-btn:disabled {
