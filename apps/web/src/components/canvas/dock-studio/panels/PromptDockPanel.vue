@@ -11,6 +11,7 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
+import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 import { estimateTextCredits } from '@/constants/credits'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
@@ -21,7 +22,7 @@ import {
   PROMPT_MODE_LABELS,
   buildPromptNodeCardPreview,
   countMarkdownTableDataRows,
-  listGenerationScenes,
+  defaultGuideCapabilities,
 } from '@lnkpi/shared'
 import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
 
@@ -49,6 +50,7 @@ const textModel = ref(getConfig('text').model)
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const guidePickerOpen = ref(false)
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const promptMode = computed(() => {
   const mode = props.node.data?.promptMode
@@ -75,7 +77,11 @@ const tableRowCount = computed(() =>
 )
 
 const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType === 'text'))
-const guideScenes = listGenerationScenes()
+// Prompt dock only stamps guide ids; it does not generate images itself.
+const guideCapabilities = {
+  ...defaultGuideCapabilities(),
+  transparentBackground: true,
+}
 const activeGuideSceneId = computed(() => {
   const id = props.node.data?.guideSceneId
   return typeof id === 'string' && id.trim() ? id.trim() : ''
@@ -94,6 +100,16 @@ function onSelectGuideScene(sceneId: string) {
 function onClearGuideScene() {
   if (readonly.value) return
   emit('patch', clearGuideScene())
+}
+
+function selectGuideScene(sceneId: string) {
+  onSelectGuideScene(sceneId)
+  guidePickerOpen.value = false
+}
+
+function clearSelectedGuideScene() {
+  onClearGuideScene()
+  guidePickerOpen.value = false
 }
 
 function syncFromNode() {
@@ -171,7 +187,43 @@ function onRefMention(refKey: string) {
 </script>
 
 <template>
-  <DockToolbarShell type="prompt" @close="emit('close')">
+  <DockToolbarShell type="prompt" :show-close="false" @close="emit('close')">
+    <template #header-end>
+      <div class="relative">
+        <button
+          type="button"
+          class="bottom-toolbar-close relative"
+          :class="activeGuideSceneId ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-white/35'"
+          :disabled="readonly"
+          aria-label="场景模板"
+          :aria-expanded="guidePickerOpen"
+          @click="guidePickerOpen = !guidePickerOpen"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="4" y="4" width="6" height="6" rx="1" />
+            <rect x="14" y="4" width="6" height="6" rx="1" />
+            <rect x="4" y="14" width="6" height="6" rx="1" />
+            <rect x="14" y="14" width="6" height="6" rx="1" />
+          </svg>
+          <span
+            v-if="activeGuideSceneId"
+            class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
+            aria-hidden="true"
+          />
+        </button>
+        <GuidePickerPopover
+          mode="generation_scene"
+          :active-id="activeGuideSceneId || null"
+          :capabilities="guideCapabilities"
+          :open="guidePickerOpen"
+          placement="above-end"
+          @select="selectGuideScene"
+          @clear="clearSelectedGuideScene"
+          @close="guidePickerOpen = false"
+        />
+      </div>
+    </template>
+
     <DockRefStrip
       :refs="textRefs"
       @reorder="onRefReorder"
@@ -187,30 +239,6 @@ function onRefMention(refKey: string) {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
-
-    <div class="mx-3 mb-2 flex flex-wrap items-center gap-1.5">
-      <button
-        v-for="scene in guideScenes"
-        :key="scene.id"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px]"
-        :class="activeGuideSceneId === scene.id ? 'border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-200' : ''"
-        :disabled="readonly"
-        :title="scene.description"
-        @click="onSelectGuideScene(scene.id)"
-      >
-        {{ scene.label }}
-      </button>
-      <button
-        v-if="activeGuideSceneId"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px] text-white/55"
-        :disabled="readonly"
-        @click="onClearGuideScene"
-      >
-        清除场景
-      </button>
-    </div>
 
     <section
       v-if="generatedContent"

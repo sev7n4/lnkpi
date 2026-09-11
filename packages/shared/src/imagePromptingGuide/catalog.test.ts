@@ -3,6 +3,7 @@ import {
   FUNDAMENTALS,
   formatFundamentalsBlock,
   getEditIntent,
+  getGenerationScene,
   listEditIntents,
   listGenerationScenes,
 } from './catalog'
@@ -13,23 +14,40 @@ describe('imagePromptingGuide catalog scaffold', () => {
     expect(FUNDAMENTALS[0]?.id).toBe('define_result')
   })
 
-  it('registers P0 generation scenes', () => {
+  it('registers all generation scenes', () => {
     expect(listGenerationScenes().map((s) => s.id).sort()).toEqual([
       'g1_style_lighting',
+      'g2_process_infographic',
       'g3_exact_text',
+      'g4_reusable_logo',
+      'g5_historical_context',
+      'g6_comic_strip',
+      'g7_interface_preview',
+      'g8_scientific_visual',
+      'g9_slides_charts',
     ])
   })
 
-  it('registers P0 edit intents', () => {
+  it('registers all edit intents', () => {
     expect(listEditIntents().map((i) => i.id).sort()).toEqual([
+      'e1_translate_layout',
+      'e2_style_transfer',
       'e3_identity_clothing',
       'e4_combine_refs',
       'e5_transparent_cutout',
+      'e6_drawing_to_realistic',
+      'e7_remove_object',
+      'e8_insert_person',
     ])
   })
 
-  it('E5 requires transparent capability', () => {
+  it('marks transparent-background assets', () => {
+    expect(getGenerationScene('g4_reusable_logo')?.capability.requiresTransparentBackground).toBe(true)
     expect(getEditIntent('e5_transparent_cutout')?.capability.requiresTransparentBackground).toBe(true)
+  })
+
+  it('expands G6 through storyboard mode', () => {
+    expect(getGenerationScene('g6_comic_strip')?.expandViaPromptMode).toBe('storyboard')
   })
 
   it('formats fundamentals block', () => {

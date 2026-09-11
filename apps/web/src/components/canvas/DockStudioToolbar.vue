@@ -4,7 +4,7 @@ import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
 import DockStudioRouter from '@/components/canvas/dock-studio/DockStudioRouter.vue'
 import { EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import type { CompositionTrack } from '@/utils/compositionUpstream'
 import type { NodeRef } from '@/composables/useNodeRefs'
@@ -53,6 +53,19 @@ const dockLocked = computed(() => {
   if (props.generating) return true
   const status = props.node?.data?.status
   return isNodeGenerating(status) || status === 'uploading'
+})
+
+function handleDockEscape(event: KeyboardEvent) {
+  if (event.defaultPrevented) return
+  if (event.key === 'Escape' && visible.value) emit('close')
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleDockEscape)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleDockEscape)
 })
 </script>
 

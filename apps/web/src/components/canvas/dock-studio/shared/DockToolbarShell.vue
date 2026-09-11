@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import DockTypeIcon from './DockTypeIcon.vue'
 import { DOCK_TYPE_LABELS, dockTypeToIcon } from './dockIcons'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** Node type key, e.g. text / image / video / audio */
   type?: string
   /** @deprecated Prefer `type` — kept for legacy panels */
@@ -12,7 +12,10 @@ const props = defineProps<{
   title?: string
   titlePlaceholder?: string
   readonly?: boolean
-}>()
+  showClose?: boolean
+}>(), {
+  showClose: true,
+})
 
 const emit = defineEmits<{
   close: []
@@ -46,11 +49,20 @@ const tooltip = computed(() => {
           @input="emit('update:title', ($event.target as HTMLInputElement).value)"
         >
       </div>
-      <button type="button" class="bottom-toolbar-close" aria-label="关闭" @click="emit('close')">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6 6 18M6 6l12 12" />
-        </svg>
-      </button>
+      <div class="bottom-toolbar-header-end flex items-center gap-1">
+        <slot name="header-end" />
+        <button
+          v-if="showClose"
+          type="button"
+          class="bottom-toolbar-close"
+          aria-label="关闭"
+          @click="emit('close')"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 6 6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
     </div>
     <slot />
   </div>

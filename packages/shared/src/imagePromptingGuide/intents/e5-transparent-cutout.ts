@@ -6,6 +6,9 @@ export const e5TransparentCutout: EditIntent = {
   kind: 'edit_intent',
   label: '透明抠图',
   description: 'Isolate the product on a fully transparent background; no checkerboard or scenery.',
+  groupId: 'identity_product',
+  groupLabel: '身份/产品',
+  fundamentalsRefs: ['define_result', 'separate_changes', 'iterate'],
   changePreserveTemplate: `Extract the product from the input image and isolate it on a fully transparent background.
 Output: centered product, crisp silhouette, no halos/fringing.
 Preserve product geometry and label legibility exactly.

@@ -36,7 +36,10 @@ const style = computed(() => {
 })
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') emit('close')
+  if (e.key !== 'Escape') return
+  e.preventDefault()
+  e.stopPropagation()
+  emit('close')
 }
 
 onMounted(() => document.addEventListener('keydown', onKey))

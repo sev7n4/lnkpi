@@ -1,5 +1,14 @@
 export type GuideKind = 'generation_scene' | 'edit_intent'
 
+export type GuideGroupId =
+  | 'photo_ad'
+  | 'info_design'
+  | 'brand_ui'
+  | 'narrative'
+  | 'local_edit'
+  | 'identity_product'
+  | 'ref_compose'
+
 export interface ParamContract {
   size?: string
   quality?: 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
@@ -25,6 +34,8 @@ export interface GenerationScene {
   kind: 'generation_scene'
   label: string
   description: string
+  groupId?: GuideGroupId
+  groupLabel?: string
   fundamentalsRefs: string[]
   promptScaffold: string
   systemOverlay?: string
@@ -39,6 +50,9 @@ export interface EditIntent {
   kind: 'edit_intent'
   label: string
   description: string
+  groupId?: GuideGroupId
+  groupLabel?: string
+  fundamentalsRefs: string[]
   changePreserveTemplate: string
   refRoles: Array<{ role: string; required: boolean; hint: string }>
   preferredParams: ParamContract

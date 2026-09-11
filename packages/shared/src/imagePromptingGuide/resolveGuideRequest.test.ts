@@ -7,6 +7,7 @@ const e5: EditIntent = {
   kind: 'edit_intent',
   label: '透明抠图',
   description: 'x',
+  fundamentalsRefs: ['separate_changes'],
   changePreserveTemplate: 'Extract…',
   refRoles: [{ role: 'product', required: true, hint: '产品图' }],
   preferredParams: { background: 'transparent', outputFormat: 'png', quality: 'medium' },
@@ -61,6 +62,7 @@ describe('resolveGuideRequest', () => {
       kind: 'edit_intent',
       label: '换装保身份',
       description: 'x',
+      fundamentalsRefs: ['separate_changes'],
       changePreserveTemplate: 'Edit…',
       refRoles: [
         { role: 'subject', required: true, hint: '人物' },
