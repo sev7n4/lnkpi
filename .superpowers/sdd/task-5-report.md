@@ -88,3 +88,21 @@ pnpm --filter @lnkpi/web exec vitest run \
 结果：5 个测试文件通过，71 个测试通过，0 失败。`pnpm --filter @lnkpi/web exec vue-tsc --noEmit` 通过。
 
 剩余关注：无。
+
+## Final review fixes (round 2)
+
+- `apps/web/src/composables/useNodeGeneration.ts`：重新生成前同时 best-effort 取消节点上的 `generationRecordId` 与 `materialId`，单个取消失败不阻断另一个取消或后续生成。
+- `apps/web/src/composables/useNodeGeneration.ts`：在等待 pending fallback 预取消前建立节点 busy/controller；双击会走既有取消路径，中止首个调用，且统一由 `finally` 释放 busy 状态。
+- `apps/web/src/composables/useNodeGeneration.test.ts`：新增双 ID 两类 API 均取消、预取消等待期间双击不产生并发生成的回归覆盖。
+
+测试命令：
+
+```bash
+pnpm --filter @lnkpi/web exec vitest run \
+  src/composables/useNodeGeneration.test.ts \
+  src/utils/generationPollGate.test.ts
+```
+
+结果：2 个测试文件通过，58 个测试通过，0 失败。
+
+剩余关注：无。

@@ -436,15 +436,15 @@ async function cancelRemoteGeneration(
     if (node.data?.status !== NODE_GENERATION_STATUS.fallback_pending) return
     const recordId = node.data?.generationRecordId
     const materialId = resolveMaterialId(node)
-    try {
-      if (typeof recordId === 'string' && recordId.trim()) {
-        await studioApi.cancelPlatformFallback(recordId.trim())
-      } else if (materialId) {
-        await canvasApi.cancelMaterialPlatformFallback(materialId)
-      }
-    } catch {
-      // Best effort: a new generation must still be allowed to replace the old task.
+    const cancellations: Array<() => Promise<unknown>> = []
+    if (typeof recordId === 'string' && recordId.trim()) {
+      cancellations.push(() => studioApi.cancelPlatformFallback(recordId.trim()))
     }
+    if (materialId) {
+      cancellations.push(() => canvasApi.cancelMaterialPlatformFallback(materialId))
+    }
+    // Best effort: a new generation must still be allowed to replace old tasks.
+    await Promise.allSettled(cancellations.map((cancel) => Promise.resolve().then(cancel)))
     refreshPointsAfterGeneration()
   }
 
@@ -730,10 +730,12 @@ async function cancelRemoteGeneration(
       if (!assertModelSelectable(node, modality, model)) return
     }
 
-    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
 
     try {
+      await cancelPendingFallbackBeforeGenerate(node)
+      if (signal.aborted) return
+
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
         const guideSceneId =

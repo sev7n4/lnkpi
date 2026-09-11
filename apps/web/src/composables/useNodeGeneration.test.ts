@@ -1081,6 +1081,55 @@ describe('useNodeGeneration', () => {
     expect(node.data?.status).toBe(NODE_GENERATION_STATUS.completed)
   })
 
+  it('cancels both prior fallback ids before regenerating a dual-id node', async () => {
+    vi.mocked(studioApi.cancelPlatformFallback).mockRejectedValue(new Error('studio cancel failed'))
+    vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({ data: { id: 'mat-old', status: 'failed' } }),
+    )
+    const node = createNode('image', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      generationRecordId: 'rec-old',
+      materialId: 'mat-old',
+      prompt: 'regenerate',
+    }, 'image-dual-id-regenerate')
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.cancelPlatformFallback).toHaveBeenCalledWith('rec-old')
+    expect(canvasApi.cancelMaterialPlatformFallback).toHaveBeenCalledWith('mat-old')
+    expect(studioApi.generateImage).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a pending regenerate busy while pre-cancel is awaiting', async () => {
+    let resolveCancel!: (value: AxiosResponse<unknown>) => void
+    const cancelPending = new Promise<AxiosResponse<unknown>>((resolve) => {
+      resolveCancel = resolve
+    })
+    vi.mocked(studioApi.cancelPlatformFallback).mockImplementation(() => cancelPending as never)
+    const node = createNode('image', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      generationRecordId: 'rec-old',
+      prompt: 'regenerate',
+    }, 'image-pre-cancel-race')
+    const { api } = createDeps([node])
+
+    const first = api.generateForNode(node)
+    await vi.waitFor(() =>
+      expect(studioApi.cancelPlatformFallback).toHaveBeenCalledWith('rec-old'),
+    )
+
+    expect(api.isNodeBusy(node.id)).toBe(true)
+    const second = api.generateForNode(node)
+    expect(studioApi.generateImage).not.toHaveBeenCalled()
+
+    resolveCancel(mockAxiosResponse({ data: { id: 'rec-old', status: 'failed' } }))
+    await Promise.all([first, second])
+
+    expect(studioApi.generateImage).not.toHaveBeenCalled()
+    expect(api.isNodeBusy(node.id)).toBe(false)
+  })
+
   it('cancels prior material fallback before starting a new shot-linked generation', async () => {
     const order: string[] = []
     vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockImplementation(async () => {
