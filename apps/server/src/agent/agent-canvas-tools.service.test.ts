@@ -1729,6 +1729,7 @@ describe('AgentCanvasToolsService', () => {
       expect(result.manifest.count).toBe(0)
       expect(result.manifest.items).toEqual([])
       expect(result.manifest.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+      expect(result.canvasCommands).toEqual([{ type: 'export_pack', nodeIds: [] }])
     })
 
     it('skips nodes without url and builds stream-download downloadPath', async () => {
@@ -1763,6 +1764,7 @@ describe('AgentCanvasToolsService', () => {
       })
       expect(result.manifest.items[0].downloadPath).toMatch(/^\/api\/media\/stream-download\?/)
       expect(result.manifest.items[0].downloadPath).toContain('sessionId=s1')
+      expect(result.canvasCommands).toEqual([{ type: 'export_pack', nodeIds: ['img-1'] }])
     })
   })
 })

@@ -632,7 +632,12 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             StructuredTool.from_function(
                 coroutine=export_media_package,
                 name="export_media_package",
-                description="Export downloadable URLs for node media",
+                description=(
+                    "Export selected canvas media to the user's browser downloads. "
+                    "Returns a manifest and triggers client-side authenticated downloads "
+                    "(do not claim files are already saved until the browser downloads; "
+                    "do not paste stream-download markdown links as a substitute)."
+                ),
                 args_schema=ExportMediaInput,
             ),
         ),
