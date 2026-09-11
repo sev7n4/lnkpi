@@ -56,6 +56,7 @@ const dockLocked = computed(() => {
 })
 
 function handleDockEscape(event: KeyboardEvent) {
+  if (event.defaultPrevented) return
   if (event.key === 'Escape' && visible.value) emit('close')
 }
 

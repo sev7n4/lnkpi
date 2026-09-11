@@ -8,7 +8,7 @@ import {
   type GuideCapabilities,
   type GuideKind,
 } from '@lnkpi/shared'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { guidePickerDisabledReason } from './guidePickerDisable'
 import { filterGuideItems, groupGuideItems } from './guidePickerFilter'
 
@@ -57,15 +57,31 @@ const clearLabel = computed(() =>
   props.mode === 'generation_scene' ? '清除场景' : '清除意图',
 )
 
+function handleWindowEscape(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  event.preventDefault()
+  event.stopPropagation()
+  event.stopImmediatePropagation()
+  emit('close')
+}
+
 watch(
   () => props.open,
-  (open) => {
+  (open, _prev, onCleanup) => {
     if (!open) return
     query.value = ''
     void nextTick(() => searchInput.value?.focus())
+    window.addEventListener('keydown', handleWindowEscape, { capture: true })
+    onCleanup(() => {
+      window.removeEventListener('keydown', handleWindowEscape, { capture: true })
+    })
   },
   { immediate: true },
 )
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleWindowEscape, { capture: true })
+})
 
 function disabledReason(id: string): string | null {
   return guidePickerDisabledReason(props.mode, id, props.capabilities)

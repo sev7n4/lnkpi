@@ -41,4 +41,24 @@ describe('DockStudioToolbar', () => {
     expect(wrapper.emitted('close')).toHaveLength(1)
     wrapper.unmount()
   })
+
+  it('does not emit close when Escape was defaultPrevented', () => {
+    const wrapper = shallowMount(DockStudioToolbar, {
+      props: {
+        node: { id: 'text-1', type: 'text', data: {} } as never,
+        upstream: {} as never,
+      },
+    })
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    })
+    event.preventDefault()
+    window.dispatchEvent(event)
+
+    expect(wrapper.emitted('close')).toBeUndefined()
+    wrapper.unmount()
+  })
 })
