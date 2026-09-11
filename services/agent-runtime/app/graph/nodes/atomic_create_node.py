@@ -47,6 +47,21 @@ def _atomic_batch_items(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     if item.get("referenceImageUrl")
                     else {}
                 ),
+                **(
+                    {"promptMode": item.get("promptMode") or item.get("prompt_mode")}
+                    if (item.get("promptMode") or item.get("prompt_mode"))
+                    else {}
+                ),
+                **(
+                    {"guideSceneId": item["guideSceneId"]}
+                    if item.get("guideSceneId")
+                    else {}
+                ),
+                **(
+                    {"guideEditIntentId": item["guideEditIntentId"]}
+                    if item.get("guideEditIntentId")
+                    else {}
+                ),
             }
         )
     return batch

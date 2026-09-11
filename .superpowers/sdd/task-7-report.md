@@ -1,39 +1,50 @@
-# Task 7 Report: 前端 `saveAssetToLibrary` 接线
+# Task 7 Report: Agent taxonomy hooks
 
-## Status
-**Done**
+**Status:** DONE  
+**Branch:** `feature/image-prompting-guide-catalog-spec`  
+**Commit:** (see git log) — `feat(runtime): image prompting guide taxonomy hooks`
 
-## Changes
+## What landed
 
-### `apps/web/src/services/assets-api.ts`
-- Added `PersistRemotePayload`, `PersistRemoteResult` types.
-- Extended `SaveUserAssetPayload` with optional `sessionId`, `replaceNodeUrl`.
-- Added `assetsApi.persistRemote()` → `POST /assets/persist-remote`.
+### Taxonomy YAML (parallel copies)
+- `packages/agent/src/prompt-modes/image-prompting-guide-taxonomy.yaml`
+- `services/agent-runtime/skills/atomic-create/assets/image-prompting-guide-taxonomy.yaml`
+- P0 ids: `g3_exact_text`, `g1_style_lighting`, `e3_identity_clothing`, `e4_combine_refs`, `e5_transparent_cutout`
 
-### `apps/web/src/composables/useAssetLibrary.ts`
-- Upstream URLs (`isUpstreamMediaUrl`) → `assetsApi.persistRemote`.
-- Local `/api/uploads/` paths → `assetsApi.saveMine` (unchanged path).
-- 503 responses show storage-not-configured message.
+### Runtime resolver
+- `services/agent-runtime/app/tools/guide_taxonomy.py`
+  - `resolve_guide_scene` / `resolve_guide_edit_intent`
+  - `apply_guide_taxonomy_to_items` — if both match, prefer edit intent (换装/抠图/合成); never clears `prompt_mode`
 
-### Canvas call sites (optional `sessionId`)
-- `CanvasNodeImage.vue`, `CanvasNodeVideo.vue`, `CanvasNodeAudio.vue` pass `sessionId` from route.
+### Parse hook
+- `atomic_parse.py`: `_apply_taxonomies_to_result` (prompt_mode then guide) on LLM/clarify paths
+- `parse_outcome_to_state(..., utterance=)` stamps guide ids on rule/LLM outcomes
+- Schema + intent normalize preserve `guideSceneId` / `guideEditIntentId`
 
-### Tests
-- Created `useAssetLibrary.test.ts` (2 cases, TDD).
+### Node persistence
+- `atomic_create_node._atomic_batch_items` forwards `promptMode` / guide ids
+- `addNodesBatch` (controller DTO + service) writes them onto draft nodes
+- `runPromptGeneration` finish + turnaround expand re-persist guide ids alongside `promptMode`
 
-## Verification
+## TDD evidence
 
-```bash
-pnpm --filter @lnkpi/web test -- useAssetLibrary
-# ✓ 2 passed
+| Step | Result |
+|------|--------|
+| RED | `ModuleNotFoundError: app.tools.guide_taxonomy` |
+| GREEN | `tests/test_guide_taxonomy.py` 4 pass; `test_prompt_mode_taxonomy.py` 4 pass |
+
+```text
+.venv/bin/python -m pytest tests/test_guide_taxonomy.py tests/test_prompt_mode_taxonomy.py -v
+7+1 passed
 ```
 
-## Commit
+## Self-review
 
-```
-feat(web): persist upstream assets via persist-remote on save
-```
+- Hooks only — no multi-turn edit pipeline auto-run
+- No Image 2.5 models
+- `prompt_mode` still applied; guide stamps do not clear it
 
-## Concerns / Follow-ups
-- `CanvasAssetPanel` upload path still calls `saveAssetToLibrary` without `sessionId` (acceptable per spec — backend scans all user sessions).
-- No E2E against real COS; relies on server Task 5–6 + manual smoke when storage is configured.
+## Concerns
+
+- Guide resolve on rule path depends on `utterance=` passed into `parse_outcome_to_state`; call sites outside `atomic_parse` omit it (existing tests OK)
+- Nest `addNodesBatch` previously did not persist `promptMode`; now does when provided (behavior additive)

@@ -26,6 +26,8 @@ class IntentParseItem(TypedDict, total=False):
     prompt: str
     confirm_gate: bool
     prompt_mode: str
+    guideSceneId: str
+    guideEditIntentId: str
     pipeline: str
     imageAspect: str
     resolutionBump: bool
@@ -68,6 +70,12 @@ def _normalize_parse_item(raw: dict[str, Any]) -> IntentParseItem | None:
         item["confirm_gate"] = bool(raw["confirm_gate"])
     if raw.get("prompt_mode"):
         item["prompt_mode"] = str(raw["prompt_mode"])
+    scene = raw.get("guideSceneId") or raw.get("guide_scene_id")
+    if scene:
+        item["guideSceneId"] = str(scene)
+    edit_intent = raw.get("guideEditIntentId") or raw.get("guide_edit_intent_id")
+    if edit_intent:
+        item["guideEditIntentId"] = str(edit_intent)
     if raw.get("pipeline"):
         item["pipeline"] = str(raw["pipeline"])
     if raw.get("imageAspect"):
