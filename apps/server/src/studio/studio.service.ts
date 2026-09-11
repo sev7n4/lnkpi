@@ -592,6 +592,7 @@ export class StudioService {
     model?: string,
     cancel?: CancelFlag,
     scope?: CanvasGenerationScope,
+    guideSceneId?: string,
   ) {
     const trimmed = prompt?.trim()
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
@@ -614,6 +615,7 @@ export class StudioService {
       gatewayModelId,
       channelId: resolved.channelId,
       ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
+      ...(guideSceneId ? { guideSceneId } : {}),
     }
 
     try {
@@ -624,6 +626,7 @@ export class StudioService {
         model: gatewayModelId,
         apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
         baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        guideSceneId,
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(
@@ -1867,13 +1870,18 @@ export class StudioService {
         let text: string
         let promptMeta: Record<string, unknown> = {}
         if (record.type === 'prompt') {
+          const guideSceneId =
+            typeof meta.guideSceneId === 'string' && meta.guideSceneId.trim()
+              ? meta.guideSceneId.trim()
+              : undefined
           const { mode, content } = await generatePromptFromUserInput(record.prompt, {
             model: gatewayModelId,
             apiKey: process.env.OPENAI_API_KEY,
             baseUrl: process.env.OPENAI_BASE_URL,
+            guideSceneId,
           })
           text = content
-          promptMeta = { mode, content }
+          promptMeta = { mode, content, ...(guideSceneId ? { guideSceneId } : {}) }
         } else if (referenceImages.length > 0) {
           const providerRefs = await inlineUpstreamReferenceImages(referenceImages)
           const result = await generateTextForRefs(record.prompt, providerRefs, {

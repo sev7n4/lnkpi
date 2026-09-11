@@ -1153,12 +1153,14 @@ export class AgentCanvasToolsService {
     try {
       const prefs = await this.loadAccountGenPrefs(input.userId)
       const model = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
+      const guideSceneId = pickString(node.data?.guideSceneId, '') || undefined
       const record = await this.studio.generatePrompt(
         input.userId,
         prompt,
         model,
         undefined,
         { sessionId: input.sessionId, nodeId: input.nodeId },
+        guideSceneId,
       )
       const recordId = record.id
       const parsed = parseRecordPromptContent(record.metadata, prompt)
