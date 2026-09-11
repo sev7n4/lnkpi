@@ -14,6 +14,15 @@ const defaultProps = {
 }
 
 describe('GuidePickerPopover', () => {
+  it('applies above-end placement for bottom dock popovers', () => {
+    const wrapper = mount(GuidePickerPopover, {
+      props: { ...defaultProps, placement: 'above-end' },
+    })
+
+    expect(wrapper.classes()).toContain('guide-picker-popover--above-end')
+    wrapper.unmount()
+  })
+
   it('emits close on window Escape even without focus inside', async () => {
     const wrapper = mount(GuidePickerPopover, { props: defaultProps })
 

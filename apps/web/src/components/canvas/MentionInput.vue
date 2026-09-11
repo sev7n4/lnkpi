@@ -133,6 +133,8 @@ function onKeydown(e: KeyboardEvent) {
       e.preventDefault()
       insertMention(filteredMentions.value[selectedIndex.value])
     } else if (e.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
       showMenu.value = false
     }
     return

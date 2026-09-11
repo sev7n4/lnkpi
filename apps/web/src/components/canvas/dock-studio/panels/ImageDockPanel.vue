@@ -338,6 +338,7 @@ function clearReferenceImage() {
           :active-id="activeGuideSceneId || null"
           :capabilities="guideCapabilities"
           :open="guidePickerOpen"
+          placement="above-end"
           @select="selectGuideScene"
           @clear="clearSelectedGuideScene"
           @close="guidePickerOpen = false"

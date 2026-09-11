@@ -11,6 +11,10 @@ def test_g3_exact_text():
     assert resolve_guide_scene("广告图，标语必须精确文字 Yours to Create，不要多余字") == "g3_exact_text"
 
 
+def test_exact_text_takes_priority_over_style_lighting():
+    assert resolve_guide_scene("写实摄影广告图，包含精确文字") == "g3_exact_text"
+
+
 def test_e5_cutout():
     assert resolve_guide_edit_intent("把产品抠图做成透明底 PNG") == "e5_transparent_cutout"
 

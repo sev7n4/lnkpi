@@ -21,9 +21,11 @@ const props = withDefaults(
     capabilities: GuideCapabilities
     open: boolean
     refImageCount?: number
+    placement?: 'below-start' | 'above-end'
   }>(),
   {
     refImageCount: 0,
+    placement: 'below-start',
   },
 )
 
@@ -103,6 +105,7 @@ function onEscape(event: KeyboardEvent) {
   <section
     v-if="open"
     class="guide-picker-popover neo-popover"
+    :class="`guide-picker-popover--${placement}`"
     role="dialog"
     :aria-label="mode === 'generation_scene' ? '选择生成场景' : '选择编辑意图'"
     @keydown.escape.prevent="onEscape"
@@ -188,6 +191,13 @@ function onEscape(event: KeyboardEvent) {
   width: min(288px, calc(100vw - 24px));
   overflow: hidden;
   border-radius: 16px;
+}
+
+.guide-picker-popover--above-end {
+  top: auto;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
 }
 
 .guide-picker-popover__search {

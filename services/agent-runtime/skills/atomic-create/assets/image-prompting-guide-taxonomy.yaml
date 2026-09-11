@@ -1,12 +1,12 @@
 # Image prompting guide taxonomy — mirrors catalog scene/intent ids
 version: 1
 generation_scenes:
+  - id: g3_exact_text
+    patterns: [精确文字, 标语必须, tagline, 不要多余字, render text]
   - id: g1_style_lighting
     patterns: [光影, 胶片感, 35mm, candid, 写实摄影]
   - id: g2_process_infographic
     patterns: [流程信息图, 流程图, 步骤信息图, process infographic]
-  - id: g3_exact_text
-    patterns: [精确文字, 标语必须, tagline, 不要多余字, render text]
   - id: g4_reusable_logo
     patterns: [可复用 logo, 可复用logo, logo 透明, logo透明, reusable logo]
   - id: g5_historical_context
@@ -20,16 +20,16 @@ generation_scenes:
   - id: g9_slides_charts
     patterns: [幻灯片图表, 幻灯片, 演示图表, 数据图表, presentation slide]
 edit_intents:
-  - id: e1_translate_layout
-    patterns: [版面翻译, 翻译版面, 保持版式翻译, translate layout]
-  - id: e2_style_transfer
-    patterns: [风格迁移, 风格转换, 参考图风格, style transfer]
   - id: e3_identity_clothing
     patterns: [换装, 只换衣服, 保留脸, 试穿, identity]
   - id: e4_combine_refs
     patterns: [合成到场景, 放到场景, 图1图2, combine reference]
   - id: e5_transparent_cutout
     patterns: [抠图, 透明底, 去背景, cutout]
+  - id: e1_translate_layout
+    patterns: [版面翻译, 翻译版面, 保持版式翻译, translate layout]
+  - id: e2_style_transfer
+    patterns: [风格迁移, 风格转换, 参考图风格, style transfer]
   - id: e6_drawing_to_realistic
     patterns: [草图转写实, 线稿转写实, 草图写实化, drawing to realistic]
   - id: e7_remove_object

@@ -77,7 +77,11 @@ const tableRowCount = computed(() =>
 )
 
 const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType === 'text'))
-const guideCapabilities = defaultGuideCapabilities()
+// Prompt dock only stamps guide ids; it does not generate images itself.
+const guideCapabilities = {
+  ...defaultGuideCapabilities(),
+  transparentBackground: true,
+}
 const activeGuideSceneId = computed(() => {
   const id = props.node.data?.guideSceneId
   return typeof id === 'string' && id.trim() ? id.trim() : ''
@@ -212,6 +216,7 @@ function onRefMention(refKey: string) {
           :active-id="activeGuideSceneId || null"
           :capabilities="guideCapabilities"
           :open="guidePickerOpen"
+          placement="above-end"
           @select="selectGuideScene"
           @clear="clearSelectedGuideScene"
           @close="guidePickerOpen = false"
