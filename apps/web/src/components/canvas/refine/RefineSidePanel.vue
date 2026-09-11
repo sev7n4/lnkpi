@@ -559,7 +559,7 @@ onBeforeUnmount(() => {
               :capabilities="guideCapabilities"
               :open="editIntentPickerOpen"
               :ref-image-count="refineRefImageCount"
-              placement="above-end"
+              placement="below-end"
               @select="applyEditIntent"
               @clear="clearEditIntent"
               @close="editIntentPickerOpen = false"

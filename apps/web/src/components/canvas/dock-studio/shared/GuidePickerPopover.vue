@@ -21,7 +21,7 @@ const props = withDefaults(
     capabilities: GuideCapabilities
     open: boolean
     refImageCount?: number
-    placement?: 'below-start' | 'above-end'
+    placement?: 'below-start' | 'below-end' | 'above-end'
   }>(),
   {
     refImageCount: 0,
@@ -191,6 +191,12 @@ function onEscape(event: KeyboardEvent) {
   width: min(288px, calc(100vw - 24px));
   overflow: hidden;
   border-radius: 16px;
+}
+
+.guide-picker-popover--below-end {
+  top: calc(100% + 8px);
+  right: 0;
+  left: auto;
 }
 
 .guide-picker-popover--above-end {
