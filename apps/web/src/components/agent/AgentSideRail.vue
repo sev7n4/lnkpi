@@ -1774,6 +1774,9 @@ function handleEvent(event: { type: string; data: unknown }) {
         onFocusNode(cmd.nodeId)
       } else if (cmd.type === 'focus_nodes' && cmd.nodeIds?.length) {
         onFocusAll(cmd.nodeIds)
+      } else if (cmd.type === 'export_pack') {
+        // Agent export_media_package → same local download path as UI chip
+        onExportPack(Array.isArray(cmd.nodeIds) ? cmd.nodeIds : [])
       } else if (cmd.type === 'undo') {
         emit('undo')
       } else if (cmd.type === 'redo') {

@@ -9,6 +9,16 @@ def test_extract_canvas_commands_from_harness_result():
     assert extract_canvas_commands(result) == [{"type": "focus_node", "nodeId": "n1"}]
 
 
+def test_extract_export_pack_canvas_command():
+    result = {
+        "manifest": {"count": 2, "items": []},
+        "canvasCommands": [{"type": "export_pack", "nodeIds": ["img-1", "vid-2"]}],
+    }
+    assert extract_canvas_commands(result) == [
+        {"type": "export_pack", "nodeIds": ["img-1", "vid-2"]},
+    ]
+
+
 def test_extract_ignores_invalid():
     assert extract_canvas_commands("x") == []
     assert extract_canvas_commands({"canvasCommands": [{"bad": 1}]}) == []

@@ -1803,6 +1803,8 @@ export class AgentCanvasToolsService {
       count: number
       items: Array<{ nodeId: string; url: string; fileName: string; downloadPath: string }>
     }
+    /** Client command: browser triggers authenticated downloadMediaPackage (same path as UI). */
+    canvasCommands: Array<{ type: 'export_pack'; nodeIds: string[] }>
   }> {
     await this.loadOwnedSession(input.sessionId, input.userId)
     const { canvas } = await this.loadSession(input.sessionId)
@@ -1826,12 +1828,14 @@ export class AgentCanvasToolsService {
         downloadPath: `/api/media/stream-download?${params.toString()}`,
       })
     }
+    const exportedNodeIds = items.map((item) => item.nodeId)
     return {
       manifest: {
         exportedAt: new Date().toISOString(),
         count: items.length,
         items,
       },
+      canvasCommands: [{ type: 'export_pack', nodeIds: exportedNodeIds }],
     }
   }
 
