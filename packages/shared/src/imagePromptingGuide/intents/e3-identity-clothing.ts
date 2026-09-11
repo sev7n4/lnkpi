@@ -8,6 +8,7 @@ export const e3IdentityClothing: EditIntent = {
   description: 'Change only clothing; preserve face, identity, pose, and background.',
   groupId: 'identity_product',
   groupLabel: '身份/产品',
+  fundamentalsRefs: ['separate_changes', 'assign_ref_roles', 'iterate'],
   changePreserveTemplate: `Edit the image to dress the person using the provided clothing reference(s).
 Change only the clothing. Do not change face, facial features, skin tone, body shape, pose, or identity.
 Preserve exact likeness, expression, hairstyle, and proportions.

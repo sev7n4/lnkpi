@@ -52,6 +52,7 @@ export interface EditIntent {
   description: string
   groupId?: GuideGroupId
   groupLabel?: string
+  fundamentalsRefs: string[]
   changePreserveTemplate: string
   refRoles: Array<{ role: string; required: boolean; hint: string }>
   preferredParams: ParamContract
