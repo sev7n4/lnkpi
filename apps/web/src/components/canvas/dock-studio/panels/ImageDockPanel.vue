@@ -17,17 +17,20 @@ import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
+import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
-import { resolveGenerationModel } from '@/constants/studioModels'
+import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/studioModels'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import {
   TURNAROUND_PIPELINE_DOCK_HINT,
+  defaultGuideCapabilities,
   getGenerationScene,
+  getModelEntry,
   isTurnaroundLikePrompt,
-  listGenerationScenes,
+  resolveImageModelProfile,
 } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
 import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
@@ -64,6 +67,7 @@ const refUploading = ref(false)
 const refUploadProgress = ref(0)
 const refUploadError = ref('')
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const guidePickerOpen = ref(false)
 
 const speech = useSpeechRecognition()
 const readonly = computed(() =>
@@ -88,7 +92,14 @@ const showTurnaroundHint = computed(() => {
   return isTurnaroundLikePrompt(prompt.value)
 })
 
-const guideScenes = listGenerationScenes()
+const guideCapabilities = computed(() => {
+  const modelKey = catalogModelKeyFromValue(imageModel.value)
+  const gatewayModelId = getModelEntry(modelKey)?.gatewayModelId ?? modelKey
+  return (
+    resolveImageModelProfile(modelKey, gatewayModelId).capabilities ??
+    defaultGuideCapabilities()
+  )
+})
 const activeGuideSceneId = computed(() => {
   const id = props.node.data?.guideSceneId
   return typeof id === 'string' && id.trim() ? id.trim() : ''
@@ -118,6 +129,16 @@ function onSelectGuideScene(sceneId: string) {
 function onClearGuideScene() {
   if (readonly.value) return
   emit('patch', clearGuideScene())
+}
+
+function selectGuideScene(sceneId: string) {
+  onSelectGuideScene(sceneId)
+  guidePickerOpen.value = false
+}
+
+function clearSelectedGuideScene() {
+  onClearGuideScene()
+  guidePickerOpen.value = false
 }
 
 const effectiveRefUrl = computed(() => {
@@ -288,7 +309,42 @@ function clearReferenceImage() {
 </script>
 
 <template>
-  <DockToolbarShell type="image" @close="emit('close')">
+  <DockToolbarShell type="image" :show-close="false" @close="emit('close')">
+    <template #header-end>
+      <div class="relative">
+        <button
+          type="button"
+          class="bottom-toolbar-close relative"
+          :class="activeGuideSceneId ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-white/35'"
+          :disabled="readonly"
+          aria-label="场景模板"
+          :aria-expanded="guidePickerOpen"
+          @click="guidePickerOpen = !guidePickerOpen"
+        >
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="4" y="4" width="6" height="6" rx="1" />
+            <rect x="14" y="4" width="6" height="6" rx="1" />
+            <rect x="4" y="14" width="6" height="6" rx="1" />
+            <rect x="14" y="14" width="6" height="6" rx="1" />
+          </svg>
+          <span
+            v-if="activeGuideSceneId"
+            class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
+            aria-hidden="true"
+          />
+        </button>
+        <GuidePickerPopover
+          mode="generation_scene"
+          :active-id="activeGuideSceneId || null"
+          :capabilities="guideCapabilities"
+          :open="guidePickerOpen"
+          @select="selectGuideScene"
+          @clear="clearSelectedGuideScene"
+          @close="guidePickerOpen = false"
+        />
+      </div>
+    </template>
+
     <DockRefStrip
       :refs="stripRefs"
       @reorder="onRefReorder"
@@ -304,30 +360,6 @@ function clearReferenceImage() {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
-
-    <div class="mx-3 mb-2 flex flex-wrap items-center gap-1.5">
-      <button
-        v-for="scene in guideScenes"
-        :key="scene.id"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px]"
-        :class="activeGuideSceneId === scene.id ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-200' : ''"
-        :disabled="readonly"
-        :title="scene.description"
-        @click="onSelectGuideScene(scene.id)"
-      >
-        {{ scene.label }}
-      </button>
-      <button
-        v-if="activeGuideSceneId"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px] text-white/55"
-        :disabled="readonly"
-        @click="onClearGuideScene"
-      >
-        清除场景
-      </button>
-    </div>
 
     <p
       v-if="showTurnaroundHint"
