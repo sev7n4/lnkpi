@@ -23,6 +23,15 @@ describe('GuidePickerPopover', () => {
     wrapper.unmount()
   })
 
+  it('applies below-end placement for top-of-panel pickers (Refine)', () => {
+    const wrapper = mount(GuidePickerPopover, {
+      props: { ...defaultProps, mode: 'edit_intent', placement: 'below-end' },
+    })
+
+    expect(wrapper.classes()).toContain('guide-picker-popover--below-end')
+    wrapper.unmount()
+  })
+
   it('emits close on window Escape even without focus inside', async () => {
     const wrapper = mount(GuidePickerPopover, { props: defaultProps })
 
