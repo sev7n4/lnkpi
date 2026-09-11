@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
@@ -22,9 +23,16 @@ import { useModelProviderSettings } from '@/composables/useModelProviderSettings
 import { resolveGenerationModel } from '@/constants/studioModels'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
-import { TURNAROUND_PIPELINE_DOCK_HINT, isTurnaroundLikePrompt } from '@lnkpi/shared'
+import {
+  TURNAROUND_PIPELINE_DOCK_HINT,
+  getGenerationScene,
+  isTurnaroundLikePrompt,
+  listGenerationScenes,
+} from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
+import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
 import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
+import { mapPreferredSizeToAspect } from './mapPreferredSizeToAspect'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -79,6 +87,38 @@ const showTurnaroundHint = computed(() => {
   if (data.pipeline === 'turnaround_image') return true
   return isTurnaroundLikePrompt(prompt.value)
 })
+
+const guideScenes = listGenerationScenes()
+const activeGuideSceneId = computed(() => {
+  const id = props.node.data?.guideSceneId
+  return typeof id === 'string' && id.trim() ? id.trim() : ''
+})
+
+function onSelectGuideScene(sceneId: string) {
+  if (readonly.value) return
+  const result = applyGuideSceneToPrompt({ sceneId, currentPrompt: prompt.value })
+  prompt.value = result.prompt
+  const patch: Record<string, unknown> = {
+    prompt: result.prompt,
+    guideSceneId: result.guideSceneId,
+  }
+  // preferredParams.size → aspect when unambiguous; resolution/quality deferred (Image 2.5 specialty).
+  const preferredSize = getGenerationScene(sceneId)?.preferredParams?.size
+  const mappedAspect = mapPreferredSizeToAspect(preferredSize)
+  if (mappedAspect) {
+    imageAspect.value = mappedAspect
+    patch.imageAspect = mappedAspect
+  }
+  emit('patch', patch)
+  if (!result.didPrefill) {
+    ElMessage.info(`已套用「${result.label}」场景约束（未改写现有提示词）`)
+  }
+}
+
+function onClearGuideScene() {
+  if (readonly.value) return
+  emit('patch', clearGuideScene())
+}
 
 const effectiveRefUrl = computed(() => {
   const local = referenceImageUrl.value.trim()
@@ -264,6 +304,30 @@ function clearReferenceImage() {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
+
+    <div class="mx-3 mb-2 flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="scene in guideScenes"
+        :key="scene.id"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :class="activeGuideSceneId === scene.id ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-200' : ''"
+        :disabled="readonly"
+        :title="scene.description"
+        @click="onSelectGuideScene(scene.id)"
+      >
+        {{ scene.label }}
+      </button>
+      <button
+        v-if="activeGuideSceneId"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px] text-white/55"
+        :disabled="readonly"
+        @click="onClearGuideScene"
+      >
+        清除场景
+      </button>
+    </div>
 
     <p
       v-if="showTurnaroundHint"

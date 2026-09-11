@@ -209,6 +209,10 @@ class GeneratePromptDto extends CanvasScopeFields {
   @IsOptional()
   @IsString()
   model?: string
+
+  @IsOptional()
+  @IsString()
+  guideSceneId?: string
 }
 
 class ImageVariationDto extends CanvasScopeFields {
@@ -321,6 +325,7 @@ export class StudioController {
       dto.model,
       cancel,
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
+      dto.guideSceneId,
     )
     return { code: 0, message: 'ok', data }
   }

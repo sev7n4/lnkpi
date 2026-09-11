@@ -22,6 +22,11 @@ describe('resolveImageModelProfile', () => {
     expect(p.refWire).toBe('apimart_image_urls')
     expect(p.maxN).toBe(4)
     expect(p.maxRefs).toBe(16)
+    expect(p.capabilities).toEqual({
+      transparentBackground: false,
+      qualityParam: true,
+      maxRefImages: 4,
+    })
   })
 
   it('maps APIMart gemini-3.x-flash aliases to gpt-image-2-official', () => {

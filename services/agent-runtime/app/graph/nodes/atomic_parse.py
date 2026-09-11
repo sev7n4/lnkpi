@@ -33,6 +33,7 @@ from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.intent_parse_llm import LLM_PARSE_TIMEOUT_SEC, llm_parse_intent
 from app.graph.intent_parse_schema import IntentParseResult, intent_result_to_parse_outcome
 from app.graph.planning_guard import validate_llm_parse
+from app.tools.guide_taxonomy import apply_guide_taxonomy_to_items
 from app.tools.prompt_mode_taxonomy import resolve_prompt_mode
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,22 @@ def _apply_prompt_mode_to_result(result: IntentParseResult, utterance: str) -> I
     return result
 
 
+def _apply_guide_taxonomy_to_result(result: IntentParseResult, utterance: str) -> IntentParseResult:
+    """Stamp guide scene/edit intent without clearing prompt_mode."""
+    raw_items = [dict(i) for i in (result.get("items") or [])]
+    stamped = apply_guide_taxonomy_to_items(raw_items, utterance)
+    if stamped == raw_items:
+        return result
+    result = dict(result)
+    result["items"] = stamped  # type: ignore[assignment]
+    return result
+
+
+def _apply_taxonomies_to_result(result: IntentParseResult, utterance: str) -> IntentParseResult:
+    """Apply prompt_mode then guide ids; guide never clears prompt_mode."""
+    return _apply_guide_taxonomy_to_result(_apply_prompt_mode_to_result(result, utterance), utterance)
+
+
 def _outcome_label(outcome: ParseOutcome) -> str:
     if outcome["kind"] == "clarify":
         return f"clarify:{outcome.get('reason', '')}"
@@ -138,7 +155,7 @@ async def _structured_llm_outcome(
     if raw is None:
         return None, None, False
 
-    raw = _apply_prompt_mode_to_result(raw, text)
+    raw = _apply_taxonomies_to_result(raw, text)
     guard = validate_llm_parse(raw, text)
     if guard is not None:
         return guard, raw, True
@@ -228,6 +245,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 canvas_context=parse_ctx,
                 prior_spec=prior_spec,
                 sidebar_attachments=sidebar_attachments,
+                utterance=text,
             )
             patch.pop("pre_parsed_intent", None)
             patch.pop("clarify_context", None)
@@ -239,7 +257,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             question = str(clarify_ctx.get("clarify_question") or state.get("clarify_question") or "")
             classified = classify_clarify_reply(original, question, text, checkpoint=checkpoint)
             if classified != "none":
-                classified = _apply_prompt_mode_to_result(classified, original or text)
+                classified = _apply_taxonomies_to_result(classified, original or text)
                 reason = str(classified.get("reason") or "")
                 validation_u = (
                     classified["items"][0]["prompt"]
@@ -263,6 +281,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_context=parse_ctx,
                     prior_spec=prior_spec,
                     sidebar_attachments=sidebar_attachments,
+                    utterance=original or text,
                 )
                 patch.pop("clarify_context", None)
                 return patch
@@ -291,6 +310,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                     canvas_context=parse_ctx,
                     prior_spec=prior_spec,
                     sidebar_attachments=sidebar_attachments,
+                    utterance=parse_utterance,
                 )
                 patch.pop("clarify_context", None)
                 return patch
@@ -318,6 +338,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
                 canvas_context=parse_ctx,
                 prior_spec=prior_spec,
                 sidebar_attachments=sidebar_attachments,
+                utterance=text,
             )
 
         canvas_ctx = parse_ctx
@@ -425,6 +446,7 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
             canvas_context=canvas_ctx,
             prior_spec=prior_spec,
             sidebar_attachments=sidebar_attachments,
+            utterance=text,
         )
         patch["explore_summary"] = explore_summary_from_packet(context_packet)
         if settings.agent_thinking_ui and outcome.get("kind") == "items":

@@ -28,6 +28,8 @@ class AtomicParseItem(TypedDict, total=False):
     resolutionBump: bool
     promptMode: str
     prompt_mode: str
+    guideSceneId: str
+    guideEditIntentId: str
     videoSettings: dict[str, Any]
     videoMode: str
     referenceImageUrl: str
@@ -102,6 +104,12 @@ def _normalize_item(raw: dict[str, Any]) -> AtomicParseItem | None:
     pm = raw.get("promptMode") or raw.get("prompt_mode")
     if pm:
         item["promptMode"] = str(pm)
+    scene = raw.get("guideSceneId") or raw.get("guide_scene_id")
+    if scene:
+        item["guideSceneId"] = str(scene)
+    edit_intent = raw.get("guideEditIntentId") or raw.get("guide_edit_intent_id")
+    if edit_intent:
+        item["guideEditIntentId"] = str(edit_intent)
     video_settings = _normalize_video_settings(raw.get("videoSettings"))
     if video_settings:
         item["videoSettings"] = video_settings
@@ -256,6 +264,7 @@ def parse_outcome_to_state(
     canvas_context: str | None = None,
     prior_spec: dict[str, Any] | None = None,
     sidebar_attachments: list[dict[str, Any]] | None = None,
+    utterance: str | None = None,
 ) -> dict[str, Any]:
     """Map validated parse outcome to graph state patch."""
     if outcome["kind"] == "clarify":
@@ -266,7 +275,11 @@ def parse_outcome_to_state(
             "clarify_question": outcome["clarify_question"],
         }
 
-    items = outcome["items"]
+    items = [dict(i) for i in outcome["items"]]
+    if utterance:
+        from app.tools.guide_taxonomy import apply_guide_taxonomy_to_items
+
+        items = apply_guide_taxonomy_to_items(items, utterance)
     first = dict(items[0])
     if canvas_context:
         first["canvas_context"] = canvas_context

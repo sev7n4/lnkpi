@@ -29,6 +29,7 @@ export * from './journeyTrace'
 export * from './mediaInfo'
 export * from './videoGeneration/types'
 export { resolveCanonicalVideoRequest } from './videoGeneration/resolveCanonicalVideoRequest'
+export * from './imagePromptingGuide'
 
 export type GenerationType = 'text' | 'image' | 'video'
 

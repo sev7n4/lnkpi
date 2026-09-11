@@ -1,24 +1,56 @@
-# Task 6 Report: Eval-route-set 金标（AC-01..07）
+# Task 6 Report: Refine edit intent chips + gates
 
-## Status
-**Done** — 新增 `rt-chat-sink-01` 至 `rt-chat-sink-06`，锁定 chat-sink 与侧栏 vision 路由行为。
+**Status:** DONE  
+**Branch:** `feature/image-prompting-guide-catalog-spec`  
+**Commit:** `531a184` — `feat(web): Refine edit intent chips with capability gates`
 
-## Commit
-`ec3c5c5` — `test(runtime): add chat-sink and sidebar vision eval-route cases`
+## What landed
 
-## Changes
-- `生一个小女孩的图片`、`生成一张图` → `atomic_create`
-- 侧栏图片 + `这个图片是什么？` → `clarify_route`
-- `生活怎么样` → `chat`
-- 天猫详情页营销方案 → `clarify_route`
-- `弄张图看看` → `clarify_route`，明确禁止 media suspected case 落入 `chat`
-- AC-07 为 Chat 回复禁语约束，已由 Task 5 的 prompt golden 覆盖，不新增 route case
+### Helper
+- `guideEditIntentApply.ts`: `editIntentDisabledReason` (E5 without transparent → 中文/transparent reason) + `applyGuideEditIntent` via `resolveGuideRequest` + `changePreserveTemplate`
+- Vitest: E5 disable, E3 fill, E5 block, minRefImages fail
 
-## Verification
+### Refine UI
+- `RefineSidePanel`: chips from `listEditIntents()` beside stain preset; E5 disabled + tooltip from image2 `capabilities.transparentBackground: false`
+- Click fills prompt like stain preset; `runRefine` guards if active intent still capability-blocked
+
+## TDD evidence
+
+| Step | Result |
+|------|--------|
+| RED | import `./guideEditIntentApply` unresolved |
+| GREEN | `guideEditIntentApply.test.ts` 6 pass |
+
+## Self-review
+
+- No Agent taxonomy (Task 7); no Image 2.5 models; no fake transparent backgrounds.
+- Capabilities from `resolveImageEditProfile()` (image2 defaults).
+
+## Concerns
+
+- ~~Chip click uses `Math.max(1, minRefImages)` so E3/E4 templates fill despite Refine still being single-image; submit guard only checks capability disable (not min refs).~~ **Fixed below.**
+- Active intent id is local panel state only (not persisted on node).
+
+---
+
+## Review fix (Critical / Important)
+
+**Status:** FIXED  
+**Findings addressed:**
+1. Stop faking `refImageCount` on chip fill — pass real `refineRefImageCount` (1).
+2. Fill path still writes `changePreserveTemplate` when only `minRefImages` fails; capability failures (E5 transparent) still blocked.
+3. `runRefine` submit gate calls `applyGuideEditIntent(..., mode: 'submit')` with real ref count; blocks on min refs or capability and does not send edit.
+
+### Changes
+- `guideEditIntentApply.ts`: `mode: 'fill' | 'submit'` — fill allows template when refs insufficient; submit fails closed.
+- `RefineSidePanel.vue`: chip fill uses real ref count + `mode: 'fill'`; `runRefine` uses `mode: 'submit'` gate.
+- Tests: fill-with-insufficient-refs, submit minRef/capability gates.
+
+### Test evidence
+
 ```text
-python3 -m pytest tests/test_eval_route_set.py -v
-2 passed, 1 warning
+pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/guideEditIntentApply.test.ts
+✓ guideEditIntentApply.test.ts (9 tests) 8ms
+Test Files  1 passed (1)
+Tests  9 passed (9)
 ```
-
-## Notes
-- 所有新增 gold 与 Task 3 既定行为一致，无需修改路由实现或扩张 hint 表。

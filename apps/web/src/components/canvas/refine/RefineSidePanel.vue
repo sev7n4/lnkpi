@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import type { ImageVersionEntry } from '@lnkpi/shared'
+import {
+  getEditIntent,
+  listEditIntents,
+  resolveImageEditProfile,
+  type ImageVersionEntry,
+} from '@lnkpi/shared'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
@@ -12,6 +17,7 @@ import { maskCoverageMessage } from '@/utils/maskCoverage'
 import type { CompareMode } from '@/utils/refineChrome'
 import { loupeSubcontrolsVisible, maskSubcontrolsVisible, nextCompareWorkspace, wipeCompareLocked } from '@/utils/refineChrome'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
+import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { syncRefineUrls } from './syncRefineUrls'
 import CompareLightbox from './CompareLightbox.vue'
 import CompareView from './CompareView.vue'
@@ -52,6 +58,24 @@ const emit = defineEmits<{
 const editor = useCanvasEditorStore()
 const promptRef = ref<HTMLTextAreaElement | null>(null)
 const prompt = ref('')
+const activeGuideEditIntentId = ref<string | null>(null)
+const editIntents = listEditIntents()
+const guideCapabilities =
+  resolveImageEditProfile().capabilities ?? {
+    transparentBackground: false,
+    qualityParam: true,
+    maxRefImages: 4,
+  }
+/** Refine work image always counts as one ref; multi-ref upload is out of scope for P0 chips. */
+const refineRefImageCount = 1
+const activeEditIntent = computed(() =>
+  activeGuideEditIntentId.value ? getEditIntent(activeGuideEditIntentId.value) ?? null : null,
+)
+const activeRefRoleHints = computed(() => {
+  const roles = activeEditIntent.value?.refRoles
+  if (!roles?.length) return ''
+  return roles.map((r) => r.hint).join(' · ')
+})
 const busy = ref(false)
 const segmentBusy = ref(false)
 const afterUrl = ref(props.beforeUrl)
@@ -157,10 +181,38 @@ function formatError(err: unknown, fallback: string): string {
 }
 
 function applyStainPreset() {
+  activeGuideEditIntentId.value = null
   prompt.value = STAIN_PRESET_PROMPT
 }
 
+function editIntentChipDisabled(intentId: string): boolean {
+  return busy.value || !!editIntentDisabledReason(intentId, guideCapabilities)
+}
+
+function editIntentChipTitle(intentId: string): string {
+  const disabled = editIntentDisabledReason(intentId, guideCapabilities)
+  if (disabled) return disabled
+  return getEditIntent(intentId)?.description ?? ''
+}
+
+function applyEditIntent(intentId: string) {
+  if (editIntentChipDisabled(intentId)) return
+  const result = applyGuideEditIntent({
+    intentId,
+    capabilities: guideCapabilities,
+    refImageCount: refineRefImageCount,
+    mode: 'fill',
+  })
+  if (!result.ok) {
+    ElMessage.warning(result.reason)
+    return
+  }
+  activeGuideEditIntentId.value = result.guideEditIntentId
+  prompt.value = result.prompt
+}
+
 function focusReplacePrompt() {
+  activeGuideEditIntentId.value = null
   promptRef.value?.focus()
 }
 
@@ -367,6 +419,18 @@ async function onPointSelect({ x, y }: { x: number; y: number }) {
 
 async function runRefine() {
   if (refineDisabled.value) return
+  if (activeGuideEditIntentId.value) {
+    const gate = applyGuideEditIntent({
+      intentId: activeGuideEditIntentId.value,
+      capabilities: guideCapabilities,
+      refImageCount: refineRefImageCount,
+      mode: 'submit',
+    })
+    if (!gate.ok) {
+      errorMessage.value = gate.reason
+      return
+    }
+  }
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
   if (!mask || !canvas) return
@@ -667,7 +731,23 @@ onBeforeUnmount(() => {
         <div class="refine-dock__chips">
           <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">去除污渍瑕疵</button>
           <button type="button" class="refine-dock__chip" :disabled="busy" @click="focusReplacePrompt">替换选区内容</button>
+          <button
+            v-for="intent in editIntents"
+            :key="intent.id"
+            type="button"
+            class="refine-dock__chip"
+            :class="{ 'is-active': activeGuideEditIntentId === intent.id }"
+            :disabled="editIntentChipDisabled(intent.id)"
+            :title="editIntentChipTitle(intent.id)"
+            @click="applyEditIntent(intent.id)"
+          >
+            {{ intent.label }}
+          </button>
         </div>
+
+        <p v-if="activeRefRoleHints" class="refine-dock__hint">
+          参考图：{{ activeRefRoleHints }}
+        </p>
 
         <textarea
           ref="promptRef"
@@ -925,6 +1005,7 @@ onBeforeUnmount(() => {
 }
 
 .refine-dock__tool.is-active,
+.refine-dock__chip.is-active,
 .refine-dock__chip:hover,
 .refine-dock__tool:hover {
   border-color: var(--neo-border-strong);

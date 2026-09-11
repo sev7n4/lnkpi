@@ -1,0 +1,14 @@
+# Image prompting guide taxonomy — mirrors P0 catalog scene/intent ids
+version: 1
+generation_scenes:
+  - id: g3_exact_text
+    patterns: [精确文字, 标语必须, tagline, 不要多余字, render text]
+  - id: g1_style_lighting
+    patterns: [光影, 胶片感, 35mm, candid, 写实摄影]
+edit_intents:
+  - id: e3_identity_clothing
+    patterns: [换装, 只换衣服, 保留脸, 试穿, identity]
+  - id: e4_combine_refs
+    patterns: [合成到场景, 放到场景, 图1图2, combine reference]
+  - id: e5_transparent_cutout
+    patterns: [抠图, 透明底, 去背景, cutout]

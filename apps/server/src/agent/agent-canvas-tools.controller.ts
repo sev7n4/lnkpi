@@ -91,6 +91,18 @@ class BatchNodeItemDto {
   @IsOptional()
   @IsString()
   referenceImageUrl?: string
+
+  @IsOptional()
+  @IsString()
+  promptMode?: string
+
+  @IsOptional()
+  @IsString()
+  guideSceneId?: string
+
+  @IsOptional()
+  @IsString()
+  guideEditIntentId?: string
 }
 
 class AddNodesBatchDto {

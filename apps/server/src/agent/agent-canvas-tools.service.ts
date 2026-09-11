@@ -423,6 +423,9 @@ export class AgentCanvasToolsService {
       }
       videoMode?: string
       referenceImageUrl?: string
+      promptMode?: string
+      guideSceneId?: string
+      guideEditIntentId?: string
     }>
     stage?: boolean
   }): Promise<{ nodes: Array<{ key: string; nodeId: string }>; actions: CanvasAction[] }> {
@@ -461,6 +464,9 @@ export class AgentCanvasToolsService {
       }
       if (item.videoMode) nodeData.videoMode = item.videoMode
       if (item.referenceImageUrl) nodeData.referenceImageUrl = item.referenceImageUrl
+      if (item.promptMode) nodeData.promptMode = item.promptMode
+      if (item.guideSceneId) nodeData.guideSceneId = item.guideSceneId
+      if (item.guideEditIntentId) nodeData.guideEditIntentId = item.guideEditIntentId
       actions.push({
         type: 'add_node',
         payload: {
@@ -823,6 +829,12 @@ export class AgentCanvasToolsService {
               imageAspect: aspectRatio,
               imageResolution: resolution,
               ...(bumpedResolution !== userResolution ? { resolutionBump: true } : {}),
+              ...(pickString(node.data?.guideSceneId, '')
+                ? { guideSceneId: pickString(node.data?.guideSceneId, '') }
+                : {}),
+              ...(pickString(node.data?.guideEditIntentId, '')
+                ? { guideEditIntentId: pickString(node.data?.guideEditIntentId, '') }
+                : {}),
             },
           },
         },
@@ -1153,12 +1165,14 @@ export class AgentCanvasToolsService {
     try {
       const prefs = await this.loadAccountGenPrefs(input.userId)
       const model = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
+      const guideSceneId = pickString(node.data?.guideSceneId, '') || undefined
       const record = await this.studio.generatePrompt(
         input.userId,
         prompt,
         model,
         undefined,
         { sessionId: input.sessionId, nodeId: input.nodeId },
+        guideSceneId,
       )
       const recordId = record.id
       const parsed = parseRecordPromptContent(record.metadata, prompt)
@@ -1169,6 +1183,10 @@ export class AgentCanvasToolsService {
         errorMessage: null,
       }
       if (parsed.mode) finishData.promptMode = parsed.mode
+      const existingGuideScene = pickString(node.data?.guideSceneId, '')
+      if (existingGuideScene) finishData.guideSceneId = existingGuideScene
+      const existingGuideEdit = pickString(node.data?.guideEditIntentId, '')
+      if (existingGuideEdit) finishData.guideEditIntentId = existingGuideEdit
       const finishActions: CanvasAction[] = [
         { type: 'update_node', payload: { id: input.nodeId, data: finishData } },
       ]

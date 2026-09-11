@@ -1,3 +1,6 @@
+import { defaultGuideCapabilities } from './imagePromptingGuide/resolveGuideRequest'
+import type { GuideCapabilities } from './imagePromptingGuide/types'
+
 export const P1_IMAGE_EDIT_MODEL_KEY = 'image2'
 export const IMAGE_EDIT_GATEWAY_MODEL_ID = 'gpt-image-2-official'
 
@@ -10,6 +13,7 @@ export interface ImageEditModelProfile {
   size: 'auto'
   pollIntervalMs: number
   maxPollMs: number
+  capabilities?: GuideCapabilities
 }
 
 const IMAGE2_EDIT_PROFILE: ImageEditModelProfile = {
@@ -19,6 +23,7 @@ const IMAGE2_EDIT_PROFILE: ImageEditModelProfile = {
   size: 'auto',
   pollIntervalMs: 8000,
   maxPollMs: 360000,
+  capabilities: defaultGuideCapabilities(),
 }
 
 /** P1: ignore unknown keys; always return the Image2 edit profile. */

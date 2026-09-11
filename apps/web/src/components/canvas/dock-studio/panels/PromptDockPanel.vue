@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
@@ -20,7 +21,9 @@ import {
   PROMPT_MODE_LABELS,
   buildPromptNodeCardPreview,
   countMarkdownTableDataRows,
+  listGenerationScenes,
 } from '@lnkpi/shared'
+import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
 
 const MODE_LABELS = PROMPT_MODE_LABELS
 
@@ -72,6 +75,26 @@ const tableRowCount = computed(() =>
 )
 
 const textRefs = computed(() => (props.refs ?? []).filter((ref) => ref.mediaType === 'text'))
+const guideScenes = listGenerationScenes()
+const activeGuideSceneId = computed(() => {
+  const id = props.node.data?.guideSceneId
+  return typeof id === 'string' && id.trim() ? id.trim() : ''
+})
+
+function onSelectGuideScene(sceneId: string) {
+  if (readonly.value) return
+  const result = applyGuideSceneToPrompt({ sceneId, currentPrompt: prompt.value })
+  prompt.value = result.prompt
+  emit('patch', { prompt: result.prompt, guideSceneId: result.guideSceneId })
+  if (!result.didPrefill) {
+    ElMessage.info(`已套用「${result.label}」场景约束（未改写现有提示词）`)
+  }
+}
+
+function onClearGuideScene() {
+  if (readonly.value) return
+  emit('patch', clearGuideScene())
+}
 
 function syncFromNode() {
   const data = props.node.data ?? {}
@@ -164,6 +187,30 @@ function onRefMention(refKey: string) {
       @update:model-value="onPromptInput"
       @submit="onGenerate"
     />
+
+    <div class="mx-3 mb-2 flex flex-wrap items-center gap-1.5">
+      <button
+        v-for="scene in guideScenes"
+        :key="scene.id"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :class="activeGuideSceneId === scene.id ? 'border-fuchsia-400/50 bg-fuchsia-500/20 text-fuchsia-200' : ''"
+        :disabled="readonly"
+        :title="scene.description"
+        @click="onSelectGuideScene(scene.id)"
+      >
+        {{ scene.label }}
+      </button>
+      <button
+        v-if="activeGuideSceneId"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px] text-white/55"
+        :disabled="readonly"
+        @click="onClearGuideScene"
+      >
+        清除场景
+      </button>
+    </div>
 
     <section
       v-if="generatedContent"

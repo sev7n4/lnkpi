@@ -1,10 +1,26 @@
-import { getPromptMode } from './registry'
+import { formatFundamentalsBlock, getGenerationScene } from '@lnkpi/shared'
+import { getPromptMode, PROMPT_MODE_IDS } from './registry'
 import type { PromptModeId } from './types'
 import { classifyPromptMode } from './classify'
 import { validateCommercialStoryboardOutput } from './modes/commercial-storyboard-validate'
 
 const MODE_TEMPERATURE: Partial<Record<PromptModeId, number>> = {
   commercial_storyboard: 0.35,
+}
+
+export type GeneratePromptOpts = {
+  apiKey?: string
+  baseUrl?: string
+  model?: string
+  guideSceneId?: string
+}
+
+export function buildGuideSystemOverlay(guideSceneId?: string): string | null {
+  if (!guideSceneId) return null
+  const scene = getGenerationScene(guideSceneId)
+  if (!scene) return null
+  const fundamentals = formatFundamentalsBlock(scene.fundamentalsRefs)
+  return [scene.systemOverlay, fundamentals].filter(Boolean).join('\n\n')
 }
 
 async function callChat(
@@ -35,7 +51,7 @@ async function callChat(
 export async function generatePromptContent(
   prompt: string,
   mode: PromptModeId,
-  opts?: { apiKey?: string; baseUrl?: string; model?: string },
+  opts?: GeneratePromptOpts,
 ): Promise<{ mode: PromptModeId; content: string }> {
   const key = opts?.apiKey ?? process.env.OPENAI_API_KEY
   const def = getPromptMode(mode)
@@ -48,8 +64,10 @@ export async function generatePromptContent(
   const model = opts?.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
   const temperature = MODE_TEMPERATURE[mode] ?? 0.8
   const fewShots = def.fewShots ?? [def.fewShot]
+  const overlay = buildGuideSystemOverlay(opts?.guideSceneId)
+  const system = overlay ? `${def.system}\n\n## Image prompting guide\n${overlay}` : def.system
   const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-    { role: 'system', content: def.system },
+    { role: 'system', content: system },
   ]
   for (const shot of fewShots) {
     messages.push({ role: 'user', content: shot.user })
@@ -82,8 +100,13 @@ export async function generatePromptContent(
 
 export async function generatePromptFromUserInput(
   prompt: string,
-  opts?: { apiKey?: string; baseUrl?: string; model?: string },
+  opts?: GeneratePromptOpts,
 ): Promise<{ mode: PromptModeId; content: string }> {
-  const { mode } = await classifyPromptMode(prompt, opts)
+  const scene = opts?.guideSceneId ? getGenerationScene(opts.guideSceneId) : undefined
+  const forced = scene?.expandViaPromptMode
+  const mode =
+    forced && PROMPT_MODE_IDS.includes(forced as PromptModeId)
+      ? (forced as PromptModeId)
+      : (await classifyPromptMode(prompt, opts)).mode
   return generatePromptContent(prompt, mode, opts)
 }
