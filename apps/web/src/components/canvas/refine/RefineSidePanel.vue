@@ -68,6 +68,14 @@ const guideCapabilities =
   }
 /** Refine work image always counts as one ref; multi-ref upload is out of scope for P0 chips. */
 const refineRefImageCount = 1
+const activeEditIntent = computed(() =>
+  activeGuideEditIntentId.value ? getEditIntent(activeGuideEditIntentId.value) ?? null : null,
+)
+const activeRefRoleHints = computed(() => {
+  const roles = activeEditIntent.value?.refRoles
+  if (!roles?.length) return ''
+  return roles.map((r) => r.hint).join(' · ')
+})
 const busy = ref(false)
 const segmentBusy = ref(false)
 const afterUrl = ref(props.beforeUrl)
@@ -736,6 +744,10 @@ onBeforeUnmount(() => {
             {{ intent.label }}
           </button>
         </div>
+
+        <p v-if="activeRefRoleHints" class="refine-dock__hint">
+          参考图：{{ activeRefRoleHints }}
+        </p>
 
         <textarea
           ref="promptRef"

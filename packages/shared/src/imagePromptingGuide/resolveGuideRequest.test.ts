@@ -20,7 +20,7 @@ describe('resolveGuideRequest', () => {
       capabilities: { transparentBackground: false, qualityParam: true, maxRefImages: 4 },
       refImageCount: 1,
     })
-    expect(r.blocked?.reason).toMatch(/transparent/i)
+    expect(r.blocked?.reason).toMatch(/透明/)
     expect(r.applied).toEqual([])
   })
 
@@ -51,6 +51,29 @@ describe('resolveGuideRequest', () => {
       capabilities: { transparentBackground: true, qualityParam: true, maxRefImages: 4 },
       refImageCount: 0,
     })
-    expect(r.blocked?.reason).toMatch(/ref/i)
+    expect(r.blocked?.reason).toMatch(/需要至少 1 张参考图/)
+    expect(r.blocked?.reason).toMatch(/产品图/)
+  })
+
+  it('minRef block lists required refRoles for multi-ref intents', () => {
+    const e3: EditIntent = {
+      id: 'e3_identity_clothing',
+      kind: 'edit_intent',
+      label: '换装保身份',
+      description: 'x',
+      changePreserveTemplate: 'Edit…',
+      refRoles: [
+        { role: 'subject', required: true, hint: '人物' },
+        { role: 'clothing', required: true, hint: '服装' },
+      ],
+      preferredParams: {},
+      capability: { minRefImages: 2 },
+    }
+    const r = resolveGuideRequest({
+      guide: e3,
+      capabilities: { transparentBackground: false, qualityParam: true, maxRefImages: 4 },
+      refImageCount: 1,
+    })
+    expect(r.blocked?.reason).toBe('需要至少 2 张参考图：人物 + 服装')
   })
 })

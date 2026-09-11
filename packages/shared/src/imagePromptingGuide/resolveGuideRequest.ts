@@ -46,15 +46,24 @@ export function resolveGuideRequest(input: GuideResolveInput): GuideResolveResul
   if (guide.capability.requiresTransparentBackground && !capabilities.transparentBackground) {
     return {
       ...empty,
-      blocked: { reason: 'Model does not support transparent background' },
+      blocked: { reason: '当前模型不支持透明背景' },
     }
   }
 
   const minRefs = guide.capability.minRefImages
   if (minRefs != null && (refImageCount ?? 0) < minRefs) {
+    const roleHints =
+      'refRoles' in guide && Array.isArray(guide.refRoles)
+        ? guide.refRoles
+            .filter((r) => r.required)
+            .map((r) => r.hint)
+            .filter(Boolean)
+            .join(' + ')
+        : ''
+    const detail = roleHints ? `：${roleHints}` : ''
     return {
       ...empty,
-      blocked: { reason: `Requires at least ${minRefs} ref image(s)` },
+      blocked: { reason: `需要至少 ${minRefs} 张参考图${detail}` },
     }
   }
 

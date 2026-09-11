@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
@@ -85,6 +86,9 @@ function onSelectGuideScene(sceneId: string) {
   const result = applyGuideSceneToPrompt({ sceneId, currentPrompt: prompt.value })
   prompt.value = result.prompt
   emit('patch', { prompt: result.prompt, guideSceneId: result.guideSceneId })
+  if (!result.didPrefill) {
+    ElMessage.info(`已套用「${result.label}」场景约束（未改写现有提示词）`)
+  }
 }
 
 function onClearGuideScene() {

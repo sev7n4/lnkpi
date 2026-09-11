@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import type { UpstreamNodeContext } from '@/composables/useUpstreamNodeContext'
 import type { MentionOption } from '@/components/canvas/MentionInput.vue'
@@ -22,10 +23,16 @@ import { useModelProviderSettings } from '@/composables/useModelProviderSettings
 import { resolveGenerationModel } from '@/constants/studioModels'
 import { estimateImageCredits } from '@/constants/credits'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
-import { TURNAROUND_PIPELINE_DOCK_HINT, isTurnaroundLikePrompt, listGenerationScenes } from '@lnkpi/shared'
+import {
+  TURNAROUND_PIPELINE_DOCK_HINT,
+  getGenerationScene,
+  isTurnaroundLikePrompt,
+  listGenerationScenes,
+} from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
 import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
 import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
+import { mapPreferredSizeToAspect } from './mapPreferredSizeToAspect'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -91,7 +98,21 @@ function onSelectGuideScene(sceneId: string) {
   if (readonly.value) return
   const result = applyGuideSceneToPrompt({ sceneId, currentPrompt: prompt.value })
   prompt.value = result.prompt
-  emit('patch', { prompt: result.prompt, guideSceneId: result.guideSceneId })
+  const patch: Record<string, unknown> = {
+    prompt: result.prompt,
+    guideSceneId: result.guideSceneId,
+  }
+  // preferredParams.size → aspect when unambiguous; resolution/quality deferred (Image 2.5 specialty).
+  const preferredSize = getGenerationScene(sceneId)?.preferredParams?.size
+  const mappedAspect = mapPreferredSizeToAspect(preferredSize)
+  if (mappedAspect) {
+    imageAspect.value = mappedAspect
+    patch.imageAspect = mappedAspect
+  }
+  emit('patch', patch)
+  if (!result.didPrefill) {
+    ElMessage.info(`已套用「${result.label}」场景约束（未改写现有提示词）`)
+  }
 }
 
 function onClearGuideScene() {
