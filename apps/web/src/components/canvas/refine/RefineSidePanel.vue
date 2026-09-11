@@ -210,11 +210,6 @@ function clearEditIntent() {
   editIntentPickerOpen.value = false
 }
 
-function focusReplacePrompt() {
-  activeGuideEditIntentId.value = null
-  promptRef.value?.focus()
-}
-
 function onLoupeZoomInput(event: Event) {
   const target = event.target
   if (!(target instanceof HTMLInputElement)) return
@@ -529,42 +524,6 @@ onBeforeUnmount(() => {
           <span v-if="!collapsed" class="refine-side__title">精修</span>
         </div>
         <div v-if="!collapsed" class="flex items-center gap-1">
-          <div class="relative">
-            <button
-              type="button"
-              class="refine-side__icon-btn relative"
-              :class="{ 'is-guide-active': activeGuideEditIntentId }"
-              :disabled="busy"
-              aria-label="编辑意图"
-              title="编辑意图"
-              :aria-expanded="editIntentPickerOpen"
-              @click="editIntentPickerOpen = !editIntentPickerOpen"
-            >
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
-                <rect x="4" y="4" width="6" height="6" rx="1" />
-                <rect x="14" y="4" width="6" height="6" rx="1" />
-                <rect x="4" y="14" width="6" height="6" rx="1" />
-                <rect x="14" y="14" width="6" height="6" rx="1" />
-              </svg>
-              <span
-                v-if="activeGuideEditIntentId"
-                class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
-                aria-hidden="true"
-              />
-            </button>
-            <GuidePickerPopover
-              class="refine-side__guide-picker"
-              mode="edit_intent"
-              :active-id="activeGuideEditIntentId"
-              :capabilities="guideCapabilities"
-              :open="editIntentPickerOpen"
-              :ref-image-count="refineRefImageCount"
-              placement="above-end"
-              @select="applyEditIntent"
-              @clear="clearEditIntent"
-              @close="editIntentPickerOpen = false"
-            />
-          </div>
           <button
             v-if="!isNarrow"
             type="button"
@@ -764,8 +723,44 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="refine-dock__chips">
-          <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">去除污渍瑕疵</button>
-          <button type="button" class="refine-dock__chip" :disabled="busy" @click="focusReplacePrompt">替换选区内容</button>
+          <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">清除瑕疵</button>
+          <div class="relative">
+            <button
+              type="button"
+              class="refine-dock__chip refine-dock__chip--intent"
+              :class="{ 'is-guide-active': activeGuideEditIntentId }"
+              :disabled="busy"
+              aria-label="编辑意图"
+              title="编辑意图"
+              :aria-expanded="editIntentPickerOpen"
+              @click="editIntentPickerOpen = !editIntentPickerOpen"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <rect x="4" y="4" width="6" height="6" rx="1" />
+                <rect x="14" y="4" width="6" height="6" rx="1" />
+                <rect x="4" y="14" width="6" height="6" rx="1" />
+                <rect x="14" y="14" width="6" height="6" rx="1" />
+              </svg>
+              <span>{{ activeEditIntent?.label ?? '编辑意图' }}</span>
+              <span
+                v-if="activeGuideEditIntentId"
+                class="refine-dock__intent-dot"
+                aria-hidden="true"
+              />
+            </button>
+            <GuidePickerPopover
+              class="refine-side__guide-picker"
+              mode="edit_intent"
+              :active-id="activeGuideEditIntentId"
+              :capabilities="guideCapabilities"
+              :open="editIntentPickerOpen"
+              :ref-image-count="refineRefImageCount"
+              placement="below-end"
+              @select="applyEditIntent"
+              @clear="clearEditIntent"
+              @close="editIntentPickerOpen = false"
+            />
+          </div>
         </div>
 
         <p v-if="activeRefRoleHints" class="refine-dock__hint">
@@ -1044,6 +1039,36 @@ onBeforeUnmount(() => {
 .refine-dock__tool:hover {
   border-color: var(--neo-border-strong);
   color: var(--neo-text-primary);
+}
+
+.refine-dock__chip--intent {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+}
+
+.refine-dock__chip--intent > span:not(.refine-dock__intent-dot) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refine-dock__chip.is-guide-active {
+  border-color: color-mix(in srgb, rgb(232 121 249) 25%, transparent);
+  background: color-mix(in srgb, rgb(217 70 239) 15%, transparent);
+  color: rgb(240 171 252);
+}
+
+.refine-dock__intent-dot {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  height: 5px;
+  width: 5px;
+  border-radius: 999px;
+  background: rgb(232 121 249);
 }
 
 .refine-dock__tool:disabled,
