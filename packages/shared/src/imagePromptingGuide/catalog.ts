@@ -1,8 +1,13 @@
 import { FUNDAMENTALS, formatFundamentalsBlock } from './fundamentals'
+import { e3IdentityClothing } from './intents/e3-identity-clothing'
+import { e4CombineRefs } from './intents/e4-combine-refs'
+import { e5TransparentCutout } from './intents/e5-transparent-cutout'
+import { g1StyleLighting } from './scenes/g1-style-lighting'
+import { g3ExactText } from './scenes/g3-exact-text'
 import type { EditIntent, GenerationScene } from './types'
 
-const GENERATION_SCENES: GenerationScene[] = []
-const EDIT_INTENTS: EditIntent[] = []
+const GENERATION_SCENES: GenerationScene[] = [g1StyleLighting, g3ExactText]
+const EDIT_INTENTS: EditIntent[] = [e3IdentityClothing, e4CombineRefs, e5TransparentCutout]
 
 export { FUNDAMENTALS, formatFundamentalsBlock }
 export function listGenerationScenes() { return GENERATION_SCENES }
