@@ -996,6 +996,121 @@ describe('useNodeGeneration', () => {
     )
   })
 
+  it('uses structured cancelPlatformFallback error when pending cancel fails', async () => {
+    vi.mocked(studioApi.cancelPlatformFallback).mockRejectedValue({
+      response: {
+        data: {
+          message: '取消回退失败，请稍后重试',
+          errorCode: 'upstream_error',
+        },
+      },
+    })
+    const node = createNode('video', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      generationRecordId: 'rec-fb-fail',
+      prompt: 'x',
+    }, 'video-fb-fail')
+    const { api } = createDeps([node])
+
+    api.cancelGeneration('video-fb-fail')
+
+    await vi.waitFor(() => {
+      expect(node.data).toEqual(expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '取消回退失败，请稍后重试',
+        errorCode: 'upstream_error',
+      }))
+    })
+  })
+
+  it('does not let a late pending cancel reply overwrite a newer generation', async () => {
+    let resolveCancel!: (value: AxiosResponse<unknown>) => void
+    vi.mocked(studioApi.cancelPlatformFallback).mockImplementation(
+      () => new Promise((resolve) => { resolveCancel = resolve }) as never,
+    )
+    const node = createNode('video', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      generationRecordId: 'rec-old',
+      prompt: 'x',
+    }, 'video-race')
+    const { api, deps } = createDeps([node])
+
+    api.cancelGeneration('video-race')
+    await vi.waitFor(() =>
+      expect(studioApi.cancelPlatformFallback).toHaveBeenCalledWith('rec-old'),
+    )
+    deps.patchNodeData('video-race', {
+      status: NODE_GENERATION_STATUS.generating,
+      generationRecordId: 'rec-new',
+    })
+    vi.mocked(deps.patchNodeData).mockClear()
+
+    resolveCancel(mockAxiosResponse({ data: { id: 'rec-old', status: 'failed' } }))
+    await vi.waitFor(() => expect(deps.saveCanvas).toHaveBeenCalled())
+
+    expect(deps.patchNodeData).not.toHaveBeenCalledWith(
+      'video-race',
+      expect.objectContaining({ status: NODE_GENERATION_STATUS.error }),
+    )
+    expect(node.data).toEqual(expect.objectContaining({
+      status: NODE_GENERATION_STATUS.generating,
+      generationRecordId: 'rec-new',
+    }))
+  })
+
+  it('cancels prior studio fallback before starting a new generation', async () => {
+    const order: string[] = []
+    vi.mocked(studioApi.cancelPlatformFallback).mockImplementation(async () => {
+      order.push('cancel')
+      return mockAxiosResponse({ data: { id: 'rec-old', status: 'failed' } }) as never
+    })
+    vi.mocked(studioApi.generateImage).mockImplementation(async () => {
+      order.push('generate')
+      return mockAxiosResponse({ data: completedRecord })
+    })
+    const node = createNode('image', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      generationRecordId: 'rec-old',
+      prompt: 'regenerate',
+    }, 'image-regenerate')
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(order).toEqual(['cancel', 'generate'])
+    expect(node.data?.status).toBe(NODE_GENERATION_STATUS.completed)
+  })
+
+  it('cancels prior material fallback before starting a new shot-linked generation', async () => {
+    const order: string[] = []
+    vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockImplementation(async () => {
+      order.push('cancel')
+      return mockAxiosResponse({ data: { id: 'mat-old', status: 'failed' } }) as never
+    })
+    vi.mocked(canvasApi.generateImage).mockImplementation(async () => {
+      order.push('generate')
+      return mockAxiosResponse({ data: { id: 'mat-new' } })
+    })
+    const shot = createNode('shot', { prompt: 'regenerate' }, 'shot-regenerate')
+    const image = createNode('image', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      materialId: 'mat-old',
+      prompt: 'regenerate',
+    }, 'image-material-regenerate')
+    const { api, deps } = createDeps([shot, image])
+    deps.edges.value = [{
+      id: 'e-regenerate',
+      source: 'shot-regenerate',
+      target: 'image-material-regenerate',
+    }]
+
+    await api.generateForNode(image)
+
+    expect(order).toEqual(['cancel', 'generate'])
+    expect(image.data?.status).toBe(NODE_GENERATION_STATUS.generating)
+    expect(image.data?.materialId).toBe('mat-new')
+  })
+
   it('cancelGeneration on material fallback_pending calls cancelMaterialPlatformFallback and sets error', async () => {
     vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockResolvedValue(
       mockAxiosResponse({ data: { id: 'mat-fb-cancel', status: 'failed' } }),
@@ -1167,8 +1282,7 @@ describe('useNodeGeneration', () => {
     const { api, deps } = createDeps([node], { requestFallbackConfirm })
 
     const pending = api.generateForNode(node)
-    await Promise.resolve()
-    expect(requestFallbackConfirm).toHaveBeenCalled()
+    await vi.waitFor(() => expect(requestFallbackConfirm).toHaveBeenCalled())
 
     api.cancelGeneration('img-fb')
     expect(node.data?.status).toBe(NODE_GENERATION_STATUS.draft)

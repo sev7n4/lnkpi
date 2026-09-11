@@ -343,25 +343,62 @@ async function cancelRemoteGeneration(
     const targets = new Map<string, {
       kind: 'studio' | 'material'
       id: string
-      nodeIds: string[]
+      nodes: Array<{
+        nodeId: string
+        status: unknown
+        generationRecordId?: string
+        materialId?: string
+      }>
     }>()
 
     for (const node of nodes) {
       const recordId = node.data?.generationRecordId
       const materialId = resolveMaterialId(node)
-      const kind = typeof recordId === 'string' && recordId.trim() ? 'studio' : 'material'
-      const id = kind === 'studio' ? String(recordId).trim() : materialId
+      const generationRecordId =
+        typeof recordId === 'string' && recordId.trim() ? recordId.trim() : undefined
+      const kind = generationRecordId ? 'studio' : 'material'
+      const id = kind === 'studio' ? generationRecordId : materialId
       if (!id) {
-        deps.patchNodeData(node.id, {
-          status: NODE_GENERATION_STATUS.error,
-          errorMessage: '无法取消平台回退：缺少任务标识',
-        })
+        if (node.data?.status === NODE_GENERATION_STATUS.fallback_pending) {
+          deps.patchNodeData(node.id, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage: '无法取消平台回退：缺少任务标识',
+          })
+        }
         continue
+      }
+      const snapshot = {
+        nodeId: node.id,
+        status: node.data?.status,
+        generationRecordId,
+        materialId,
       }
       const key = `${kind}:${id}`
       const target = targets.get(key)
-      if (target) target.nodeIds.push(node.id)
-      else targets.set(key, { kind, id, nodeIds: [node.id] })
+      if (target) target.nodes.push(snapshot)
+      else targets.set(key, { kind, id, nodes: [snapshot] })
+    }
+
+    function stillMatchesPendingTask(
+      target: { kind: 'studio' | 'material'; id: string },
+      snapshot: {
+        nodeId: string
+        status: unknown
+        generationRecordId?: string
+        materialId?: string
+      },
+    ): boolean {
+      if (snapshot.status !== NODE_GENERATION_STATUS.fallback_pending) return false
+      const current = findNodeById(deps.nodes.value, snapshot.nodeId)
+      if (current?.data?.status !== NODE_GENERATION_STATUS.fallback_pending) return false
+      const currentRecordId =
+        typeof current.data?.generationRecordId === 'string'
+          ? current.data.generationRecordId.trim() || undefined
+          : undefined
+      const currentMaterialId = resolveMaterialId(current)
+      return target.kind === 'studio'
+        ? currentRecordId === target.id && currentRecordId === snapshot.generationRecordId
+        : currentMaterialId === target.id && currentMaterialId === snapshot.materialId
     }
 
     await Promise.all([...targets.values()].map(async (target) => {
@@ -371,26 +408,44 @@ async function cancelRemoteGeneration(
         } else {
           await canvasApi.cancelMaterialPlatformFallback(target.id)
         }
-        for (const nodeId of target.nodeIds) {
-          deps.patchNodeData(nodeId, {
+        for (const snapshot of target.nodes) {
+          if (!stillMatchesPendingTask(target, snapshot)) continue
+          deps.patchNodeData(snapshot.nodeId, {
             status: NODE_GENERATION_STATUS.error,
             errorMessage: '已取消平台回退',
           })
         }
       } catch (err) {
         const short = parseShortGenerationError(err)
-        for (const nodeId of target.nodeIds) {
+        for (const snapshot of target.nodes) {
+          if (!stillMatchesPendingTask(target, snapshot)) continue
           const patch: Record<string, unknown> = {
             status: NODE_GENERATION_STATUS.error,
             errorMessage: short.userMessage || '平台回退取消失败',
           }
           if (short.errorCode) patch.errorCode = short.errorCode
-          deps.patchNodeData(nodeId, patch)
+          deps.patchNodeData(snapshot.nodeId, patch)
         }
       }
     }))
     refreshPointsAfterGeneration()
-    await deps.saveCanvas()
+    await deps.saveCanvas().catch(() => undefined)
+  }
+
+  async function cancelPendingFallbackBeforeGenerate(node: EditableFlowNode) {
+    if (node.data?.status !== NODE_GENERATION_STATUS.fallback_pending) return
+    const recordId = node.data?.generationRecordId
+    const materialId = resolveMaterialId(node)
+    try {
+      if (typeof recordId === 'string' && recordId.trim()) {
+        await studioApi.cancelPlatformFallback(recordId.trim())
+      } else if (materialId) {
+        await canvasApi.cancelMaterialPlatformFallback(materialId)
+      }
+    } catch {
+      // Best effort: a new generation must still be allowed to replace the old task.
+    }
+    refreshPointsAfterGeneration()
   }
 
   function cancelGeneration(nodeId: string) {
@@ -461,10 +516,9 @@ async function cancelRemoteGeneration(
       const recordId = pendingNode.data?.generationRecordId
       if (typeof recordId === 'string' && recordId.trim()) {
         excludedRecordIds.add(recordId.trim())
-      } else {
-        const materialId = resolveMaterialId(pendingNode)
-        if (materialId) excludedMaterialIds.add(materialId)
       }
+      const materialId = resolveMaterialId(pendingNode)
+      if (materialId) excludedMaterialIds.add(materialId)
     }
     if (fallbackPendingNodes.length) {
       void cancelFallbackPendingNodes(fallbackPendingNodes)
@@ -634,7 +688,14 @@ async function cancelRemoteGeneration(
   }
 
   async function generateForNode(node: EditableFlowNode) {
-    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
+      cancelGeneration(node.id)
+      return
+    }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
       cancelGeneration(node.id)
       return
     }
@@ -669,6 +730,7 @@ async function cancelRemoteGeneration(
       if (!assertModelSelectable(node, modality, model)) return
     }
 
+    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
 
     try {
@@ -1100,10 +1162,18 @@ async function cancelRemoteGeneration(
 
   async function batchGenerateSceneComposer(node: EditableFlowNode) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
       cancelGeneration(node.id)
       return
     }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
+      cancelGeneration(node.id)
+      return
+    }
+    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
     try {
       const payload = readSceneComposerFromNode(node)
@@ -1166,7 +1236,14 @@ async function cancelRemoteGeneration(
 
   async function exportVideoComposition(node: EditableFlowNode, tracks: CompositionTrack[]) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
+      cancelGeneration(node.id)
+      return
+    }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
       cancelGeneration(node.id)
       return
     }
@@ -1174,6 +1251,7 @@ async function cancelRemoteGeneration(
     const exportTracks = ordered.filter((track) => track.url.trim())
     if (!exportTracks.length) return
 
+    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
     try {
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })

@@ -527,6 +527,8 @@ const shotPolling = useShotPolling((shots) => {
     for (const material of shot.materials) {
       if (material.status === NODE_GENERATION_STATUS.fallback_pending) {
         const nodeId = findLinkedMediaNodeId(shot.id, material.id)
+        const childNode = nodes.value.find((n) => n.id === nodeId)
+        if (!acceptsPollWrite(childNode?.data?.status)) continue
         patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.fallback_pending })
         void invokeFallbackPendingFromPoll('material', material.id, nodeId)
         continue
