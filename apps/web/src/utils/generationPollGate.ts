@@ -4,7 +4,7 @@ const TERMINAL_POLL_STATUSES = new Set<string>([
   NODE_GENERATION_STATUS.completed,
   NODE_GENERATION_STATUS.failed,
   NODE_GENERATION_STATUS.error,
-  NODE_GENERATION_STATUS.fallback_pending,
+  // fallback_pending is NOT terminal for overwrite-from-error recovery
 ])
 
 function hasRecordId(value: unknown): value is string | number {
@@ -31,6 +31,15 @@ export function shouldApplyGenerationPoll(opts: {
 
   // User cancelled — ignore late results.
   if (nodeStatus === NODE_GENERATION_STATUS.draft) {
+    return false
+  }
+
+  // User already cancelled / failed locally — do not revive fallback_pending.
+  if (
+    incomingStatus === NODE_GENERATION_STATUS.fallback_pending &&
+    (nodeStatus === NODE_GENERATION_STATUS.error ||
+      nodeStatus === NODE_GENERATION_STATUS.failed)
+  ) {
     return false
   }
 

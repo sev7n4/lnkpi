@@ -46,4 +46,26 @@ describe('shouldApplyGenerationPoll', () => {
       }),
     ).toBe(false)
   })
+
+  it('rejects fallback_pending overwrite after local error cancel', () => {
+    expect(
+      shouldApplyGenerationPoll({
+        nodeStatus: 'error',
+        nodeRecordId: 'rec-1',
+        incomingRecordId: 'rec-1',
+        incomingStatus: 'fallback_pending',
+      }),
+    ).toBe(false)
+  })
+
+  it('still applies failed terminal after error for same recordId', () => {
+    expect(
+      shouldApplyGenerationPoll({
+        nodeStatus: 'error',
+        nodeRecordId: 'rec-1',
+        incomingRecordId: 'rec-1',
+        incomingStatus: 'failed',
+      }),
+    ).toBe(true)
+  })
 })
