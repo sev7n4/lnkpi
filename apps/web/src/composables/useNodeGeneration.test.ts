@@ -957,6 +957,104 @@ describe('useNodeGeneration', () => {
     expect(stopShotPolling).toHaveBeenCalledWith('img-1')
   })
 
+  it('cancelGeneration on fallback_pending calls cancelPlatformFallback and sets error', async () => {
+    vi.mocked(studioApi.cancelPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          id: 'rec-fb-cancel',
+          type: 'video',
+          prompt: 'x',
+          status: 'failed',
+          metadata: JSON.stringify({ userMessage: '已取消平台回退', cancelled: true }),
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    )
+
+    const node = createNode(
+      'video',
+      {
+        status: NODE_GENERATION_STATUS.fallback_pending,
+        generationRecordId: 'rec-fb-cancel',
+        prompt: 'x',
+      },
+      'video-fb',
+    )
+    const { api, deps } = createDeps([node])
+
+    api.cancelGeneration('video-fb')
+    await vi.waitFor(() =>
+      expect(studioApi.cancelPlatformFallback).toHaveBeenCalledWith('rec-fb-cancel'),
+    )
+    expect(studioApi.cancelGeneration).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'video-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: expect.stringMatching(/已取消/),
+      }),
+    )
+  })
+
+  it('cancelGeneration on material fallback_pending calls cancelMaterialPlatformFallback and sets error', async () => {
+    vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({ data: { id: 'mat-fb-cancel', status: 'failed' } }),
+    )
+    const node = createNode(
+      'image',
+      {
+        status: NODE_GENERATION_STATUS.fallback_pending,
+        materialId: 'mat-fb-cancel',
+        prompt: 'x',
+      },
+      'image-fb',
+    )
+    const { api, deps } = createDeps([node])
+
+    api.cancelGeneration('image-fb')
+    await vi.waitFor(() =>
+      expect(canvasApi.cancelMaterialPlatformFallback).toHaveBeenCalledWith('mat-fb-cancel'),
+    )
+    expect(canvasApi.cancelMaterial).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'image-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: expect.stringMatching(/已取消/),
+      }),
+    )
+  })
+
+  it('cancelGeneration on shot cancels fallback_pending media child via platform fallback API', async () => {
+    vi.mocked(canvasApi.cancelMaterialPlatformFallback).mockResolvedValue(
+      mockAxiosResponse({ data: { id: 'mat-child-fb', status: 'failed' } }),
+    )
+    const shot = createNode('shot', {
+      status: NODE_GENERATION_STATUS.generating,
+      materialId: 'mat-child-fb',
+    }, 'shot-fb')
+    const child = createNode('video', {
+      status: NODE_GENERATION_STATUS.fallback_pending,
+      materialId: 'mat-child-fb',
+    }, 'video-child-fb')
+    const { api, deps } = createDeps([shot, child])
+    deps.edges.value = [{ id: 'e-fb', source: 'shot-fb', target: 'video-child-fb' }]
+
+    api.cancelGeneration('shot-fb')
+    await vi.waitFor(() =>
+      expect(canvasApi.cancelMaterialPlatformFallback).toHaveBeenCalledWith('mat-child-fb'),
+    )
+
+    expect(canvasApi.cancelMaterial).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith(
+      'video-child-fb',
+      expect.objectContaining({
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: expect.stringMatching(/已取消/),
+      }),
+    )
+  })
+
   it('cancelGeneration stops linked shot polling for shot-linked media', () => {
     const stopShotPolling = vi.fn()
     const shot = createNode('shot', {
