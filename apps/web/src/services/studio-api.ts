@@ -127,10 +127,16 @@ export const studioApi = {
     model?: string,
     signal?: AbortSignal,
     scope?: CanvasGenerationScope,
+    guideSceneId?: string,
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/prompt/generate',
-      { prompt, model, ...scopeBody(scope) },
+      {
+        prompt,
+        model,
+        ...scopeBody(scope),
+        ...(guideSceneId ? { guideSceneId } : {}),
+      },
       { timeout: 180_000, signal },
     ),
   generateVideo: (

@@ -586,11 +586,16 @@ async function cancelRemoteGeneration(nodeId: string) {
     try {
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
+        const guideSceneId =
+          typeof data.guideSceneId === 'string' && data.guideSceneId.trim()
+            ? data.guideSceneId.trim()
+            : undefined
         const { data: res } = await studioApi.generatePrompt(
           local,
           resolveGenerationModel('text', data.textModel as string | undefined),
           signal,
           canvasScope(node.id),
+          guideSceneId,
         )
         if (signal.aborted) return
         // Bump record id before resolve — otherwise poll gate treats the new

@@ -1338,4 +1338,33 @@ describe('useNodeGeneration', () => {
     )
     expect(canvasApi.generateImage).not.toHaveBeenCalled()
   })
+
+  it('forwards guideSceneId from prompt node data to generatePrompt', async () => {
+    vi.mocked(studioApi.generatePrompt).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'prompt',
+          id: 'prompt-rec-1',
+          url: null,
+        },
+      }),
+    )
+    const node = createNode('prompt', {
+      prompt: 'expand this',
+      guideSceneId: 'g3_exact_text',
+      textModel: encodeChannelModel('platform', defaultModelKey('text')),
+    })
+    const { api } = createDeps([node])
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generatePrompt).toHaveBeenCalledWith(
+      'expand this',
+      encodeChannelModel('platform', defaultModelKey('text')),
+      expect.any(AbortSignal),
+      canvasScope('prompt-1'),
+      'g3_exact_text',
+    )
+  })
 })
