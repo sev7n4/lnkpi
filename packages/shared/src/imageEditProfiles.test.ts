@@ -14,5 +14,10 @@ describe('resolveImageEditProfile', () => {
     expect(p.size).toBe('auto')
     expect(p.pollIntervalMs).toBe(8000)
     expect(p.maxPollMs).toBe(360000)
+    expect(p.capabilities).toEqual({
+      transparentBackground: false,
+      qualityParam: true,
+      maxRefImages: 4,
+    })
   })
 })

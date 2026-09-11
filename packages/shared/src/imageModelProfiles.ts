@@ -1,4 +1,6 @@
 import type { ImageResolutionTier } from './imageParams'
+import { defaultGuideCapabilities } from './imagePromptingGuide/resolveGuideRequest'
+import type { GuideCapabilities } from './imagePromptingGuide/types'
 
 export type ImageRefWire = 'none' | 'agnes_extra_body' | 'apimart_image_urls' | 'legacy_prompt_tags'
 export type ImageSizeWire = 'pixel' | 'ratio_resolution'
@@ -17,6 +19,7 @@ export interface ImageModelProfile {
   defaultQuality?: string
   pollIntervalMs: number
   maxPollMs: number
+  capabilities?: GuideCapabilities
 }
 
 const SEEDREAM_GATEWAY = 'doubao-seedream-5-0-pro'
@@ -114,6 +117,7 @@ const APIMART_IMAGE2_PROFILE: Omit<ImageModelProfile, 'gatewayModelId'> = {
   resolutionCase: 'lower',
   defaultQuality: 'high',
   maxPollMs: 360_000,
+  capabilities: defaultGuideCapabilities(),
 }
 
 const APIMART_GENERIC_IMAGE_PROFILE: Omit<ImageModelProfile, 'gatewayModelId'> = {
