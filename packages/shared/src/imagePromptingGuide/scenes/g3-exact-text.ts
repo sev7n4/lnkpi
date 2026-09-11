@@ -6,6 +6,8 @@ export const g3ExactText: GenerationScene = {
   kind: 'generation_scene',
   label: '精确文字',
   description: 'Quote required copy; render the tagline exactly once with no extra text.',
+  groupId: 'photo_ad',
+  groupLabel: '摄影/广告',
   fundamentalsRefs: ['define_result', 'exact_text', 'visible_details'],
   promptScaffold: `Create a polished campaign / fashion ad for a brand.
 The ad features the subject with the tagline "{{TAGLINE}}".

@@ -6,6 +6,8 @@ export const g1StyleLighting: GenerationScene = {
   kind: 'generation_scene',
   label: '风格与光线',
   description: 'Describe subject, framing, light, and texture; avoid heavy retouching.',
+  groupId: 'photo_ad',
+  groupLabel: '摄影/广告',
   fundamentalsRefs: ['define_result', 'visible_details', 'people_actions'],
   promptScaffold: `Create a photorealistic candid photograph of {{SUBJECT}}.
 Describe framing (e.g. medium close-up at eye level), lens cues, and composition.
