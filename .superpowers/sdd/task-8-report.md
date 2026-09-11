@@ -154,5 +154,5 @@ a0dc0ae feat(agent): overlay guide scene rules on prompt generate
 
 ### Commit / push
 
-- Commit on `feature/image-prompting-guide-catalog-spec` (this fix pass)
-- Push to origin (no force); PR https://github.com/sev7n4/lnkpi/pull/278
+- Commit: `0f9a973` `fix(web): localize guide gates and scene apply UX`
+- Pushed to origin (no force); PR https://github.com/sev7n4/lnkpi/pull/278 (+ deferred preferredParams note comment)
