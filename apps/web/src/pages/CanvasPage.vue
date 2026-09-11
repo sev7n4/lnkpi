@@ -39,7 +39,7 @@ import { studioApi } from '@/services/studio-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
-import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { NODE_GENERATION_STATUS, isDockGenerateBusy, isNodeGenerating } from '@/constants/dockStudio'
 import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import CanvasNodePrompt from '@/components/canvas/CanvasNodePrompt.vue'
 import CanvasNodeImage from '@/components/canvas/CanvasNodeImage.vue'
@@ -2436,14 +2436,14 @@ async function handleNodeGenerate() {
   const node = editorNode.value
   if (!node) return
   // Cancel before flush so a second click isn't delayed by pending patches.
-  if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+  if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
     cancelGeneration(node.id)
     return
   }
   await debouncedNodePatch.flush()
   const fresh = editorNode.value
   if (!fresh) return
-  if (isNodeBusy(fresh.id) || isNodeGenerating(fresh.data?.status)) {
+  if (isNodeBusy(fresh.id) || isDockGenerateBusy(fresh.data?.status)) {
     cancelGeneration(fresh.id)
     return
   }
@@ -2778,7 +2778,7 @@ provide(CANVAS_NODE_RETRY_KEY, (id) => { void retryNodeGeneration(id) })
 const selectedNodeGenerating = computed(() => {
   const node = editorNode.value
   if (!node) return false
-  return isNodeBusy(node.id) || isNodeGenerating(node.data?.status)
+  return isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)
 })
 
 onFallbackPendingFromPoll = onFallbackPending

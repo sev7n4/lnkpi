@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
-import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { NODE_GENERATION_STATUS, isDockGenerateBusy, isNodeGenerating } from '@/constants/dockStudio'
 import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
@@ -546,7 +546,7 @@ async function cancelRemoteGeneration(nodeId: string) {
   }
 
   async function generateForNode(node: EditableFlowNode) {
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
       cancelGeneration(node.id)
       return
     }
@@ -1012,7 +1012,7 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   async function batchGenerateSceneComposer(node: EditableFlowNode) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
       cancelGeneration(node.id)
       return
     }
@@ -1078,7 +1078,7 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   async function exportVideoComposition(node: EditableFlowNode, tracks: CompositionTrack[]) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id) || isDockGenerateBusy(node.data?.status)) {
       cancelGeneration(node.id)
       return
     }
