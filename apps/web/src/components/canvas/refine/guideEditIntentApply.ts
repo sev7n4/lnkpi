@@ -16,10 +16,18 @@ export function editIntentDisabledReason(
   return null
 }
 
+export type GuideEditIntentMode = 'fill' | 'submit'
+
 export function applyGuideEditIntent(input: {
   intentId: string
   capabilities: GuideCapabilities
+  /** Real refine ref count — do not inflate to satisfy minRefImages. */
   refImageCount: number
+  /**
+   * `fill`: chip select — still write template when only minRefImages fails.
+   * `submit`: runRefine gate — block on capability or insufficient refs.
+   */
+  mode: GuideEditIntentMode
 }):
   | { ok: true; prompt: string; guideEditIntentId: string; label: string }
   | { ok: false; reason: string; disabled: boolean } {
@@ -40,6 +48,20 @@ export function applyGuideEditIntent(input: {
   })
 
   if (resolved.blocked) {
+    // Fill path: allow selecting/filling template when only refs are insufficient.
+    if (input.mode === 'fill') {
+      const minRefs = intent.capability.minRefImages
+      const refsInsufficient =
+        minRefs != null && input.refImageCount < minRefs
+      if (refsInsufficient) {
+        return {
+          ok: true,
+          prompt: intent.changePreserveTemplate,
+          guideEditIntentId: intent.id,
+          label: intent.label,
+        }
+      }
+    }
     return {
       ok: false,
       reason: resolved.blocked.reason,

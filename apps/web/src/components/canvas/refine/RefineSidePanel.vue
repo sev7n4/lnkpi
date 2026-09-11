@@ -189,12 +189,11 @@ function editIntentChipTitle(intentId: string): string {
 
 function applyEditIntent(intentId: string) {
   if (editIntentChipDisabled(intentId)) return
-  const intent = getEditIntent(intentId)
-  const refImageCount = Math.max(refineRefImageCount, intent?.capability.minRefImages ?? 1)
   const result = applyGuideEditIntent({
     intentId,
     capabilities: guideCapabilities,
-    refImageCount,
+    refImageCount: refineRefImageCount,
+    mode: 'fill',
   })
   if (!result.ok) {
     ElMessage.warning(result.reason)
@@ -413,9 +412,14 @@ async function onPointSelect({ x, y }: { x: number; y: number }) {
 async function runRefine() {
   if (refineDisabled.value) return
   if (activeGuideEditIntentId.value) {
-    const blocked = editIntentDisabledReason(activeGuideEditIntentId.value, guideCapabilities)
-    if (blocked) {
-      errorMessage.value = blocked
+    const gate = applyGuideEditIntent({
+      intentId: activeGuideEditIntentId.value,
+      capabilities: guideCapabilities,
+      refImageCount: refineRefImageCount,
+      mode: 'submit',
+    })
+    if (!gate.ok) {
+      errorMessage.value = gate.reason
       return
     }
   }
