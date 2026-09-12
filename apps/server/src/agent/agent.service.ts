@@ -4,7 +4,7 @@ import {
   Injectable,
   ServiceUnavailableException,
 } from '@nestjs/common'
-import { applyCanvasActions, type AgentStreamEvent } from '@lnkpi/agent'
+import { applyCanvasActions, createUpscaleProviders, type AgentStreamEvent } from '@lnkpi/agent'
 import type {
   AgentMessageMetadata,
   CanvasAction,
@@ -81,6 +81,8 @@ export class AgentService {
       image: IMAGE_MODELS,
       video: VIDEO_MODELS,
       stsDirectUpload: isObjectStorageConfigured(),
+      imageUpscale:
+        createUpscaleProviders({ falApiKey: process.env.FAL_KEY }).length > 0,
     }
   }
 

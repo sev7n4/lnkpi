@@ -10,6 +10,8 @@ const OBJECT_STORAGE_ENV_KEYS = [
   'OBJECT_STORAGE_SECRET_KEY',
 ] as const
 
+const CAPABILITY_ENV_KEYS = [...OBJECT_STORAGE_ENV_KEYS, 'FAL_KEY'] as const
+
 function createAgentService() {
   return new AgentService(
     {} as never,
@@ -20,17 +22,17 @@ function createAgentService() {
 }
 
 describe('AgentService getCapabilities', () => {
-  const savedEnv: Partial<Record<(typeof OBJECT_STORAGE_ENV_KEYS)[number], string | undefined>> = {}
+  const savedEnv: Partial<Record<(typeof CAPABILITY_ENV_KEYS)[number], string | undefined>> = {}
 
   beforeEach(() => {
-    for (const key of OBJECT_STORAGE_ENV_KEYS) {
+    for (const key of CAPABILITY_ENV_KEYS) {
       savedEnv[key] = process.env[key]
       delete process.env[key]
     }
   })
 
   afterEach(() => {
-    for (const key of OBJECT_STORAGE_ENV_KEYS) {
+    for (const key of CAPABILITY_ENV_KEYS) {
       if (savedEnv[key] === undefined) {
         delete process.env[key]
       } else {
@@ -70,5 +72,16 @@ describe('AgentService getCapabilities', () => {
 
     const svc = createAgentService()
     expect(svc.getCapabilities().stsDirectUpload).toBe(false)
+  })
+
+  it('returns imageUpscale false when no upscale providers are registered', () => {
+    const svc = createAgentService()
+    expect(svc.getCapabilities().imageUpscale).toBe(false)
+  })
+
+  it('returns imageUpscale true when FAL_KEY registers upscale providers', () => {
+    process.env.FAL_KEY = 'fal-test-key'
+    const svc = createAgentService()
+    expect(svc.getCapabilities().imageUpscale).toBe(true)
   })
 })
