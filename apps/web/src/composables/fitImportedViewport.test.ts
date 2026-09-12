@@ -27,14 +27,15 @@ describe('fitImportedViewport', () => {
     expect(updateNodeInternals).toHaveBeenCalledWith(['a', 'b'])
     expect(fitView).toHaveBeenCalled()
     expect(fitBounds).toHaveBeenCalledOnce()
-    const [bounds, opts] = fitBounds.mock.calls[0]
-    expect(bounds).toEqual({
-      x: 2000,
-      y: 2100,
-      width: 400 + IMPORT_NODE_ESTIMATE.width,
-      height: IMPORT_NODE_ESTIMATE.height,
-    })
-    expect(opts).toMatchObject({ padding: 0.2, duration: 300 })
+    expect(fitBounds).toHaveBeenCalledWith(
+      {
+        x: 2000,
+        y: 2100,
+        width: 400 + IMPORT_NODE_ESTIMATE.width,
+        height: IMPORT_NODE_ESTIMATE.height,
+      },
+      expect.objectContaining({ padding: 0.2, duration: 300 }),
+    )
     expect(result).toBe('fitBounds')
   })
 
