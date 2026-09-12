@@ -1,8 +1,18 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import { createUpscaleProviders } from './upscale-provider'
+import {
+  createUpscaleProviders,
+  SPEC_CONNECTED_UPSCALE_PROVIDERS,
+} from './upscale-provider'
+
+const testCreds = { falApiKey: 'fal-k' }
 
 describe('createUpscaleProviders', () => {
   afterEach(() => vi.unstubAllGlobals())
+
+  it('registered provider ids are listed as connected in spec checklist constant', () => {
+    const ids = createUpscaleProviders(testCreds).map((p) => p.id)
+    expect(SPEC_CONNECTED_UPSCALE_PROVIDERS).toEqual(expect.arrayContaining(ids))
+  })
 
   it('returns empty without credentials', () => {
     expect(createUpscaleProviders({})).toEqual([])

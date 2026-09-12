@@ -1,3 +1,10 @@
+/**
+ * Spec §5.3 「已接入」provider ids — must stay in sync with
+ * docs/superpowers/specs/2026-09-12-wave-a-a1-sts-upscale-design.md §5.3.
+ * Changing the checklist requires updating this constant.
+ */
+export const SPEC_CONNECTED_UPSCALE_PROVIDERS = ['fal'] as const
+
 export interface UpscaleInput {
   imageUrl: string
   scale: 2 | 4

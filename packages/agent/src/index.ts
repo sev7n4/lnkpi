@@ -2,7 +2,11 @@ export { applyCanvasActions } from './tools/executor'
 export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } from './tools/image-provider'
 export { createImageEditProvider, ApimartImageEditProvider } from './tools/image-edit-provider'
 export { createSegmentProvider } from './tools/segment-provider'
-export { createUpscaleProviders, FalEsrganUpscaleProvider } from './tools/upscale-provider'
+export {
+  createUpscaleProviders,
+  FalEsrganUpscaleProvider,
+  SPEC_CONNECTED_UPSCALE_PROVIDERS,
+} from './tools/upscale-provider'
 export {
   createTextProvider,
   PlaceholderTextProvider,
