@@ -73,6 +73,19 @@ def nest_client(captured):
             )
         if path.endswith("/cancel-platform-fallback"):
             return httpx.Response(200, json=_ok({"status": "failed", "generationRecordId": "rec-1", "actions": []}))
+        if path.endswith("/import-workflow"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "addedNodeIds": ["image-99"],
+                        "idMap": {"image-1": "image-99"},
+                        "mediaOk": 1,
+                        "mediaFail": 0,
+                        "actions": [],
+                    }
+                ),
+            )
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -123,6 +136,33 @@ async def test_add_nodes_batch(nest_client, captured):
     assert result["nodes"][0]["nodeId"] == "n2"
     req = _last(captured)
     assert req["json"] == {"sessionId": SESSION_ID, "userId": USER_ID, "items": items}
+
+
+@pytest.mark.asyncio
+async def test_import_workflow_inline(nest_client, captured):
+    workflow = {"format": "lnkpi.workflow", "version": "1.0.0"}
+    result = await nest_client.import_workflow(workflow=workflow)
+    assert result["addedNodeIds"] == ["image-99"]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/import-workflow"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "workflow": workflow,
+    }
+
+
+@pytest.mark.asyncio
+async def test_import_workflow_url(nest_client, captured):
+    result = await nest_client.import_workflow(workflow_url="https://example.com/wf.json")
+    assert result["idMap"]["image-1"] == "image-99"
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/import-workflow"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "workflowUrl": "https://example.com/wf.json",
+    }
 
 
 @pytest.mark.asyncio
@@ -251,12 +291,25 @@ async def test_circuit_open_raises_without_http_call():
     assert exc_info.value.error["error_type"] == "circuit_open"
 
 
+def test_import_workflow_input_requires_one_source():
+    from pydantic import ValidationError
+
+    from app.tools.definitions import ImportWorkflowInput
+
+    ImportWorkflowInput(workflow={"format": "lnkpi.workflow"})
+    ImportWorkflowInput(workflow_url="https://example.com/wf.json")
+    with pytest.raises(ValidationError):
+        ImportWorkflowInput()
+
+
 def test_build_canvas_tools_hides_session_and_user(nest_client):
     tools = build_canvas_tools(nest_client)
     names = {tool.name for tool in tools}
     assert "upsert_prompt_node" in names
     assert "get_node" in names
     assert "run_image_generation" in names
+    assert "import_workflow" in names
+    assert "export_media_package" in names
 
     for tool in tools:
         schema = tool.args_schema.model_json_schema()

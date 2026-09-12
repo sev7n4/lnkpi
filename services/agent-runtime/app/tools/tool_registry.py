@@ -80,6 +80,7 @@ TOOL_TIERS: dict[str, ToolTier] = {
     "run_icon_refine": ToolTier.GEN,
     "get_image_edit_capabilities": ToolTier.READ,
     "add_nodes_batch": ToolTier.GRAPH_BATCH,
+    "import_workflow": ToolTier.GRAPH_BATCH,
     "connect_nodes": ToolTier.GRAPH_BATCH,
     "update_nodes_batch": ToolTier.GRAPH_BATCH,
     "run_image_generation": ToolTier.GEN,

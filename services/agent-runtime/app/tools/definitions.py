@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from langchain_core.tools import StructuredTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.tools.nest_client import NestCanvasClient
 from app.tools.prompt_templates import (
@@ -73,6 +73,23 @@ class AddNodesBatchInput(BaseModel):
     items: list[dict[str, Any]] = Field(
         description="Batch node specs with key, title, targetType, optional prompt/position"
     )
+
+
+class ImportWorkflowInput(BaseModel):
+    workflow: dict[str, Any] | None = Field(
+        default=None,
+        description="lnkpi.workflow JSON object to merge into the current canvas",
+    )
+    workflow_url: str | None = Field(
+        default=None,
+        description="HTTPS URL that returns lnkpi.workflow JSON (used when workflow is omitted)",
+    )
+
+    @model_validator(mode="after")
+    def require_workflow_or_url(self) -> ImportWorkflowInput:
+        if self.workflow is None and not (self.workflow_url or "").strip():
+            raise ValueError("workflow or workflow_url is required")
+        return self
 
 
 class ConnectNodesInput(BaseModel):
@@ -202,6 +219,14 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def add_nodes_batch(items: list[dict[str, Any]]) -> dict:
         return await client.add_nodes_batch(items)
+
+    async def import_workflow(
+        workflow: dict[str, Any] | None = None,
+        workflow_url: str | None = None,
+    ) -> dict:
+        if workflow is None and not (workflow_url or "").strip():
+            raise ValueError("workflow or workflow_url is required")
+        return await client.import_workflow(workflow=workflow, workflow_url=workflow_url)
 
     async def connect_nodes(edges: list[dict[str, str]]) -> dict:
         return await client.connect_nodes(edges)
@@ -400,6 +425,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="add_nodes_batch",
                 description="Add multiple canvas nodes in one batch",
                 args_schema=AddNodesBatchInput,
+            ),
+        ),
+        (
+            "import_workflow",
+            StructuredTool.from_function(
+                coroutine=import_workflow,
+                name="import_workflow",
+                description=(
+                    "Merge an lnkpi.workflow JSON document into the current canvas "
+                    "(validate, remap ids, place nodes). Not a zip import — pass a "
+                    "workflow object or workflow_url."
+                ),
+                args_schema=ImportWorkflowInput,
             ),
         ),
         (

@@ -583,6 +583,22 @@ class NestCanvasClient:
             },
         )
 
+    async def import_workflow(
+        self,
+        *,
+        workflow: dict[str, Any] | None = None,
+        workflow_url: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+        }
+        if workflow is not None:
+            body["workflow"] = workflow
+        if workflow_url:
+            body["workflowUrl"] = workflow_url
+        return await self._post("/agent/internal/import-workflow", body)
+
     async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,

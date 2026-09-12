@@ -339,6 +339,18 @@ class NestEventProxy:
             await self._inner.add_nodes_batch(items, **kwargs)
         )
 
+    async def import_workflow(
+        self,
+        *,
+        workflow: dict[str, Any] | None = None,
+        workflow_url: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._forward_actions(
+            await self._inner.import_workflow(
+                workflow=workflow, workflow_url=workflow_url
+            )
+        )
+
     async def connect_nodes(
         self, edges: list[dict[str, Any]], **kwargs: Any
     ) -> dict[str, Any]:
