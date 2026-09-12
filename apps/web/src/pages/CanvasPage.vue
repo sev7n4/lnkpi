@@ -2204,7 +2204,12 @@ async function onWorkflowImportSelected(event: Event) {
         return { width: rect?.width || 1000, height: rect?.height || 800 }
       },
       fitImportedNodes: async (ids) => {
-        await vueFlowRef.value?.fitView({ nodes: ids, padding: 0.2, duration: 300 })
+        await nextTick()
+        try {
+          await vueFlowRef.value?.fitView({ nodes: ids, padding: 0.2, duration: 300 })
+        } catch {
+          // ignore
+        }
       },
       applyMerge: (mergeNodes, mergeEdges) => {
         for (const n of mergeNodes) {

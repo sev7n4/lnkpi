@@ -376,6 +376,9 @@ describe('importWorkflowPackage', () => {
 
     expect(applyMerge).toHaveBeenCalledOnce()
     expect(fitImportedNodes).toHaveBeenCalledOnce()
+    expect(applyMerge.mock.invocationCallOrder[0]).toBeLessThan(
+      fitImportedNodes.mock.invocationCallOrder[0],
+    )
     expect(fitImportedNodes).toHaveBeenCalledWith(['prompt-fit-1', 'image-fit-2'])
   })
 
