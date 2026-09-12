@@ -1,6 +1,7 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
+import { CaptchaService } from './captcha.service'
 
 /** fixed = 固定验证码（开发/生产临时）；real = 真实短信（未接入时 sendCode 会报错） */
 type AuthSmsMode = 'fixed' | 'real'
@@ -10,10 +11,16 @@ export class AuthService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(JwtService) private readonly jwt: JwtService,
+    @Inject(CaptchaService) private readonly captcha: CaptchaService,
   ) {}
 
   private get smsMode(): AuthSmsMode {
     return process.env.AUTH_SMS_MODE === 'real' ? 'real' : 'fixed'
+  }
+
+  private get captchaMode(): 'off' | 'soft' | 'strict' {
+    const m = process.env.AUTH_CAPTCHA_MODE
+    return m === 'strict' || m === 'off' ? m : 'soft'
   }
 
   private get fixedCode(): string {
@@ -24,13 +31,25 @@ export class AuthService {
     const fixed = this.smsMode === 'fixed'
     return {
       smsMode: this.smsMode,
+      captchaMode: this.captchaMode,
       /** 固定码模式下前端可展示提示；未接入短信前生产环境使用 */
       fixedCodeHint: fixed ? this.fixedCode : null,
       message: fixed ? '当前为固定验证码模式，未发送真实短信' : null,
     }
   }
 
-  async sendCode(phone: string) {
+  async sendCode(phone: string, captchaTicket?: string) {
+    const mode = this.captchaMode
+    if (mode !== 'off') {
+      const result = this.captcha.consumeTicket(captchaTicket)
+      if (mode === 'strict' && result !== 'ok') {
+        throw new UnauthorizedException('请先完成安全验证')
+      }
+      if (mode === 'soft' && result !== 'ok') {
+        console.warn(`[AUTH:captcha:soft] send-code without valid ticket phone=${phone} result=${result}`)
+      }
+    }
+
     if (this.smsMode === 'real') {
       throw new UnauthorizedException('短信服务未配置，请将 AUTH_SMS_MODE 设为 fixed 或接入 SMS Provider')
     }
