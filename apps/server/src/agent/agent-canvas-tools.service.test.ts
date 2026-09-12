@@ -1720,7 +1720,7 @@ describe('AgentCanvasToolsService', () => {
   })
 
   describe('exportMediaPackage', () => {
-    it('returns count 0 and empty items when nodeIds is empty', async () => {
+    it('returns empty canvasCommands nodeIds and exportMode full_package when nodeIds is empty', async () => {
       const result = await svc.exportMediaPackage({
         sessionId: 's1',
         userId: 'u1',
@@ -1729,10 +1729,12 @@ describe('AgentCanvasToolsService', () => {
       expect(result.manifest.count).toBe(0)
       expect(result.manifest.items).toEqual([])
       expect(result.manifest.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
-      expect(result.canvasCommands).toEqual([{ type: 'export_pack', nodeIds: [] }])
+      expect(result.canvasCommands).toEqual([
+        { type: 'export_pack', nodeIds: [], exportMode: 'full_package' },
+      ])
     })
 
-    it('skips nodes without url and builds stream-download downloadPath', async () => {
+    it('scopes canvasCommands to graph node ids including nodes without url', async () => {
       canvas = {
         nodes: [
           {
@@ -1747,13 +1749,25 @@ describe('AgentCanvasToolsService', () => {
             position: { x: 0, y: 0 },
             data: { title: '无URL' },
           },
+          {
+            id: 'prompt-1',
+            type: 'prompt',
+            position: { x: 10, y: 10 },
+            data: { title: '提示词', text: 'hello' },
+          },
+          {
+            id: 'other-1',
+            type: 'image',
+            position: { x: 20, y: 20 },
+            data: { title: '未选中', url: 'https://cdn.example/other.png' },
+          },
         ],
         edges: [],
       }
       const result = await svc.exportMediaPackage({
         sessionId: 's1',
         userId: 'u1',
-        nodeIds: ['img-1', 'img-no-url'],
+        nodeIds: ['img-1', 'img-no-url', 'prompt-1', 'missing-id'],
       })
       expect(result.manifest.count).toBe(1)
       expect(result.manifest.items).toHaveLength(1)
@@ -1764,7 +1778,13 @@ describe('AgentCanvasToolsService', () => {
       })
       expect(result.manifest.items[0].downloadPath).toMatch(/^\/api\/media\/stream-download\?/)
       expect(result.manifest.items[0].downloadPath).toContain('sessionId=s1')
-      expect(result.canvasCommands).toEqual([{ type: 'export_pack', nodeIds: ['img-1'] }])
+      expect(result.canvasCommands).toEqual([
+        {
+          type: 'export_pack',
+          nodeIds: ['img-1', 'img-no-url', 'prompt-1'],
+          exportMode: 'full_package',
+        },
+      ])
     })
   })
 })

@@ -1803,8 +1803,12 @@ export class AgentCanvasToolsService {
       count: number
       items: Array<{ nodeId: string; url: string; fileName: string; downloadPath: string }>
     }
-    /** Client command: browser triggers authenticated downloadMediaPackage (same path as UI). */
-    canvasCommands: Array<{ type: 'export_pack'; nodeIds: string[] }>
+    /** Client command: browser downloads workflow zip (graph + media). */
+    canvasCommands: Array<{
+      type: 'export_pack'
+      nodeIds: string[]
+      exportMode?: 'full_package' | 'lightweight'
+    }>
   }> {
     await this.loadOwnedSession(input.sessionId, input.userId)
     const { canvas } = await this.loadSession(input.sessionId)
@@ -1828,14 +1832,20 @@ export class AgentCanvasToolsService {
         downloadPath: `/api/media/stream-download?${params.toString()}`,
       })
     }
-    const exportedNodeIds = items.map((item) => item.nodeId)
+    // Empty nodeIds → client treats as full canvas; otherwise graph scope (incl. nodes without url).
+    const scopedNodeIds =
+      input.nodeIds.length === 0
+        ? []
+        : canvas.nodes.filter((node) => idSet.has(node.id)).map((node) => node.id)
     return {
       manifest: {
         exportedAt: new Date().toISOString(),
         count: items.length,
         items,
       },
-      canvasCommands: [{ type: 'export_pack', nodeIds: exportedNodeIds }],
+      canvasCommands: [
+        { type: 'export_pack', nodeIds: scopedNodeIds, exportMode: 'full_package' },
+      ],
     }
   }
 

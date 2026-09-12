@@ -2152,7 +2152,11 @@ async function handlePackageDownload(mode: WorkflowExportMode = 'full_package') 
   })
 }
 
-async function handleExportPack(nodeIds: string[]) {
+async function handleExportPack(
+  nodeIds: string[],
+  exportMode: 'full_package' | 'lightweight' = 'full_package',
+) {
+  // Empty nodeIds = full canvas (exportWorkflowPackage expands selectedIds).
   await exportWorkflowPackage({
     nodes: nodes.value.map((n) => ({
       id: n.id,
@@ -2164,7 +2168,7 @@ async function handleExportPack(nodeIds: string[]) {
     edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
     selectedIds: nodeIds,
     sessionId: sessionId.value,
-    exportMode: 'full_package',
+    exportMode,
   })
 }
 

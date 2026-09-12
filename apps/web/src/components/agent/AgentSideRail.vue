@@ -142,7 +142,7 @@ const emit = defineEmits<{
   turnComplete: []
   focusNode: [nodeId: string]
   focusAll: [nodeIds: string[]]
-  exportPack: [nodeIds: string[]]
+  exportPack: [nodeIds: string[], exportMode?: 'full_package' | 'lightweight']
   undo: []
   redo: []
   openImageEditor: [nodeId: string]
@@ -1052,8 +1052,11 @@ function onFocusAll(nodeIds: string[]) {
   if (isMobileLayout.value) closePanel()
 }
 
-function onExportPack(nodeIds: string[]) {
-  emit('exportPack', nodeIds)
+function onExportPack(
+  nodeIds: string[],
+  exportMode: 'full_package' | 'lightweight' = 'full_package',
+) {
+  emit('exportPack', nodeIds, exportMode)
 }
 
 function toggleFloating() {
@@ -1768,6 +1771,7 @@ function handleEvent(event: { type: string; data: unknown }) {
         type: string
         nodeId?: string
         nodeIds?: string[]
+        exportMode?: 'full_package' | 'lightweight'
         attachments?: SidebarAttachment[]
       }
       if (cmd.type === 'focus_node' && cmd.nodeId) {
@@ -1775,8 +1779,11 @@ function handleEvent(event: { type: string; data: unknown }) {
       } else if (cmd.type === 'focus_nodes' && cmd.nodeIds?.length) {
         onFocusAll(cmd.nodeIds)
       } else if (cmd.type === 'export_pack') {
-        // Agent export_media_package → same local download path as UI chip
-        onExportPack(Array.isArray(cmd.nodeIds) ? cmd.nodeIds : [])
+        // Agent export_media_package → browser downloads workflow zip (graph + media)
+        onExportPack(
+          Array.isArray(cmd.nodeIds) ? cmd.nodeIds : [],
+          cmd.exportMode === 'lightweight' ? 'lightweight' : 'full_package',
+        )
       } else if (cmd.type === 'undo') {
         emit('undo')
       } else if (cmd.type === 'redo') {

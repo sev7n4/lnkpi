@@ -633,10 +633,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 coroutine=export_media_package,
                 name="export_media_package",
                 description=(
-                    "Export selected canvas media to the user's browser downloads. "
-                    "Returns a manifest and triggers client-side authenticated downloads "
-                    "(do not claim files are already saved until the browser downloads; "
-                    "do not paste stream-download markdown links as a substitute)."
+                    "Export the selected canvas subgraph (or full canvas when node_ids is empty) "
+                    "as a workflow zip package (graph JSON + media files) to the user's browser downloads. "
+                    "Returns a manifest and triggers the browser download "
+                    "(do not claim the zip is already saved until the browser finishes; "
+                    "do not paste markdown Bearer/stream-download links or media-list-only framing as a substitute)."
                 ),
                 args_schema=ExportMediaInput,
             ),
