@@ -2,7 +2,7 @@ import type { PointCategory, PointKind, PointTxStatus } from './point-tx.types'
 
 const CATEGORY_BY_LABEL: Array<{ match: RegExp; category: PointCategory }> = [
   { match: /文本生成|提示词模式生成/, category: 'text' },
-  { match: /图像生成|图像变体|图像精修/, category: 'image' },
+  { match: /图像生成|图像变体|图像精修|图像放大/, category: 'image' },
   { match: /视频生成/, category: 'video' },
   { match: /音频/, category: 'audio' },
 ]

@@ -10,6 +10,22 @@ describe('mapReasonToPointFields', () => {
     })
   })
 
+  it('maps 图像放大 to consume/image/success', () => {
+    expect(mapReasonToPointFields('图像放大', -10)).toEqual({
+      kind: 'consume',
+      category: 'image',
+      status: 'success',
+    })
+  })
+
+  it('maps 图像放大-失败退款', () => {
+    expect(mapReasonToPointFields('图像放大-失败退款', 10)).toEqual({
+      kind: 'refund',
+      category: 'image',
+      status: 'failed_refund',
+    })
+  })
+
   it('maps 文本生成-失败退款', () => {
     expect(mapReasonToPointFields('文本生成-失败退款', 5)).toEqual({
       kind: 'refund',
