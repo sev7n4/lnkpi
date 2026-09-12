@@ -11,12 +11,13 @@ import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockOptimizePrompt from '@/components/canvas/dock-studio/shared/DockOptimizePrompt.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
-import type { NodeRef } from '@/composables/useNodeRefs'
+import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { resolveGenerationModel, isDeepSeekV4Model } from '@/constants/studioModels'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateTextCredits } from '@/constants/credits'
+import { useDockLocalImageUpload } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -45,6 +46,16 @@ const legacySeededForId = ref<string | null>(null)
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const {
+  inputRef: refInput,
+  uploading: refUploading,
+  uploadError: refUploadError,
+  pick: pickReferenceImage,
+  onFileChange: onRefFileChange,
+} = useDockLocalImageUpload({
+  getExistingLocalRefs: () => (props.node.data?.localRefs as LocalRefBinding[]) ?? [],
+  onPatch: (patch) => emit('patch', patch),
+})
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const wordCount = computed(() => prompt.value.replace(/\s/g, '').length)
 const credits = computed(() => estimateTextCredits())
@@ -151,10 +162,16 @@ function onRefMention(refKey: string) {
   <DockToolbarShell type="text" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
+      show-add-upload
+      :add-upload-disabled="readonly"
+      :add-upload-busy="refUploading"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
+      @add-upload="pickReferenceImage"
     />
+    <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+    <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
     <DockPromptSection
       ref="promptSectionRef"

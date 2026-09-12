@@ -1174,6 +1174,55 @@
   color: var(--neo-text-primary);
 }
 
+.dock-guide-scene-btn {
+  position: relative;
+  display: inline-flex;
+  max-width: min(148px, 42vw);
+  height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px 0 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--neo-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dock-guide-scene-btn:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.dock-guide-scene-btn.is-guide-active {
+  border-color: color-mix(in srgb, rgb(232 121 249) 25%, transparent);
+  background: color-mix(in srgb, rgb(217 70 239) 15%, transparent);
+  color: rgb(240 171 252);
+}
+
+.dock-guide-scene-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dock-guide-scene-btn__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dock-guide-scene-btn__dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  height: 5px;
+  width: 5px;
+  border-radius: 999px;
+  background: rgb(232 121 249);
+}
+
 .bottom-toolbar-actions {
   display: flex;
   flex-wrap: wrap;

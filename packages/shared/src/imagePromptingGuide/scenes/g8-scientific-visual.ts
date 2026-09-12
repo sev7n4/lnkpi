@@ -9,11 +9,11 @@ export const g8ScientificVisual: GenerationScene = {
   groupId: 'info_design',
   groupLabel: '信息设计',
   fundamentalsRefs: ['define_result', 'visible_details', 'exact_text'],
-  promptScaffold: `Create an educational scientific visual explaining {{CONCEPT}} for {{AUDIENCE}}.
-Show the relevant structures, relationships, scale cues, and process accurately.
-Use a clean composition, restrained colors, and clear callouts.
-Render supplied labels exactly and keep annotation lines unambiguous.
-Do not invent unsupported anatomy, data, labels, logos, or watermarks.`,
+  promptScaffold: `创作一张面向 {{AUDIENCE}} 的科学教育图，讲解 {{CONCEPT}}。
+准确呈现相关结构、关系、比例线索与过程。
+构图干净、配色克制、标注清楚。
+所给标签须精确呈现，指示线指向明确、不歧义。
+不要杜撰结构、数据、标签，以及 logo 或水印。`,
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: {},
 }

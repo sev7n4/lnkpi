@@ -9,11 +9,11 @@ export const g9SlidesCharts: GenerationScene = {
   groupId: 'info_design',
   groupLabel: '信息设计',
   fundamentalsRefs: ['define_result', 'maintainable_format', 'exact_text'],
-  promptScaffold: `Create a presentation slide about {{TOPIC}} using the supplied data.
-Choose a chart form that represents the values faithfully and label units, categories, and legend clearly.
-Use one strong takeaway, concise supporting copy, and a professional visual hierarchy.
-Render titles, labels, and values exactly as provided.
-Do not invent data, distort axes, add unrelated copy, logos, or watermarks.`,
+  promptScaffold: `用所给数据创作一张关于 {{TOPIC}} 的演示幻灯片。
+选择忠实呈现数值的图表类型，并清楚标注单位、类别与图例。
+突出一条核心结论，辅以简短说明，视觉层级专业。
+标题、标签与数值须按提供内容精确呈现。
+不要编造数据、扭曲坐标轴，不要加无关文案、logo 或水印。`,
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: {},
 }

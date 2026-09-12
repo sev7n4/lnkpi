@@ -29,7 +29,7 @@ import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/st
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating, NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
-import { persistMediaUrl } from '@/composables/useMediaUpload'
+import { useDockLocalImageUpload, createLocalRefId } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
 import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
 import {
@@ -64,14 +64,28 @@ const videoMode = ref<VideoGenerationMode>('text_to_video')
 const referenceImageUrl = ref('')
 const seed = ref<number | undefined>(undefined)
 const negativePrompt = ref('')
-const refInput = ref<HTMLInputElement | null>(null)
-const refUploading = ref(false)
-const refUploadProgress = ref(0)
-const refUploadError = ref('')
 const refPreflight = ref<MediaRefPreflight | null>(null)
 const refPreflightLoading = ref(false)
 const pendingPreflightToast = ref(false)
 let preflightSeq = 0
+
+const {
+  inputRef: refInput,
+  uploading: refUploading,
+  uploadError: refUploadError,
+  pick: pickReferenceImage,
+  onFileChange: onRefFileChange,
+} = useDockLocalImageUpload({
+  getExistingLocalRefs: () => (props.node.data?.localRefs as LocalRefBinding[]) ?? [],
+  onPatch: (patch) => {
+    if (typeof patch.referenceImageUrl === 'string') {
+      referenceImageUrl.value = patch.referenceImageUrl
+      videoMode.value = 'image_to_video'
+    }
+    emit('patch', { ...patch, videoMode: 'image_to_video' })
+  },
+  syncReferenceImageUrl: true,
+})
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
@@ -356,68 +370,6 @@ function toggleVoice() {
   })
 }
 
-function pickReferenceImage() {
-  refInput.value?.click()
-}
-
-function createLocalRefId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-async function onRefFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !file.type.startsWith('image/')) return
-
-  refUploadError.value = ''
-  refUploadProgress.value = 0
-  refUploading.value = true
-  const blobUrl = URL.createObjectURL(file)
-  referenceImageUrl.value = blobUrl
-  videoMode.value = 'image_to_video'
-
-  try {
-    const url = await persistMediaUrl(file, blobUrl, {
-      onProgress: (p) => {
-        refUploadProgress.value = p
-      },
-    })
-    if (url !== blobUrl) URL.revokeObjectURL(blobUrl)
-
-    referenceImageUrl.value = url
-    const binding: LocalRefBinding = {
-      id: createLocalRefId('upload'),
-      mediaType: 'image',
-      sourceKind: 'upload',
-      label: file.name,
-      url,
-    }
-    const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
-    emit('patch', {
-      localRefs: [...prev, binding],
-      videoMode: 'image_to_video',
-    })
-  } catch (err) {
-    refUploadError.value = err instanceof Error ? err.message : '参考图上传失败，请重试'
-    URL.revokeObjectURL(blobUrl)
-    referenceImageUrl.value = ''
-  } finally {
-    refUploading.value = false
-    refUploadProgress.value = 0
-  }
-}
-
-function clearReferenceImage() {
-  referenceImageUrl.value = ''
-  videoMode.value = 'text_to_video'
-  const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
-  emit('patch', {
-    localRefs: prev.filter((r) => r.mediaType !== 'image'),
-    videoMode: 'text_to_video',
-  })
-}
-
 function onRefReorder(refIds: string[]) {
   emit('patch', { refOrder: refIds })
 }
@@ -436,10 +388,16 @@ function onRefMention(refKey: string) {
     <DockRefStrip
       :refs="refs ?? []"
       :video-mode="videoMode"
+      show-add-upload
+      :add-upload-disabled="readonly"
+      :add-upload-busy="refUploading"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
+      @add-upload="pickReferenceImage"
     />
+    <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+    <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
     <p
       v-if="unsupportedMediaRefs.showWarning"
@@ -558,40 +516,6 @@ function onRefMention(refKey: string) {
         :model-key="catalogModelKeyFromValue(videoModel)"
         @update:model-value="syncField('videoSettings', $event)"
       />
-
-      <template v-if="videoMode === 'image_to_video'">
-        <div class="flex items-center gap-1.5">
-          <button
-            type="button"
-            class="dock-icon-btn"
-            :disabled="readonly || refUploading"
-            title="参考图"
-            @click="pickReferenceImage"
-          >
-            <DockTypeIcon v-if="!refUploading" icon="image" :size="13" />
-            <span v-else class="whitespace-nowrap text-[9px] text-white/60">
-              {{ refUploadProgress > 0 ? `上传中 ${refUploadProgress}%` : '上传中...' }}
-            </span>
-          </button>
-          <div
-            v-if="effectiveRefUrl"
-            class="relative h-7 w-7 overflow-hidden rounded-md border border-white/15"
-          >
-            <img :src="effectiveRefUrl" alt="" class="h-full w-full object-cover">
-            <button
-              type="button"
-              class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition hover:opacity-100"
-              @click="clearReferenceImage"
-            >
-              <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
-          <p v-if="refUploadError" class="text-[10px] text-red-400/90">{{ refUploadError }}</p>
-        </div>
-      </template>
 
       <ElAlert
         v-if="showRefPreflightAlert"

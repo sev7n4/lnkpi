@@ -16,14 +16,12 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
-import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/studioModels'
 import { estimateImageCredits } from '@/constants/credits'
-import { persistMediaUrl } from '@/composables/useMediaUpload'
 import {
   TURNAROUND_PIPELINE_DOCK_HINT,
   defaultGuideCapabilities,
@@ -32,10 +30,10 @@ import {
   isTurnaroundLikePrompt,
   resolveImageModelProfile,
 } from '@lnkpi/shared'
-import { CX_IMAGE_EDIT_ENABLED } from '@/utils/refineSession'
 import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
-import { isImageDockReadonly, shouldShowRefineEntry } from './imageDockRefineEntry'
+import { isImageDockReadonly } from './imageDockRefineEntry'
 import { mapPreferredSizeToAspect } from './mapPreferredSizeToAspect'
+import { useDockLocalImageUpload } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -53,7 +51,6 @@ const emit = defineEmits<{
   generate: []
   close: []
   removeRef: [ref: NodeRef]
-  refine: []
 }>()
 
 const prompt = ref('')
@@ -62,12 +59,25 @@ const imageAspect = ref<ImageAspectRatio>('16:9')
 const imageResolution = ref<ImageResolution>('1K')
 const imageCount = ref<ImageCount>(1)
 const referenceImageUrl = ref('')
-const refInput = ref<HTMLInputElement | null>(null)
-const refUploading = ref(false)
-const refUploadProgress = ref(0)
-const refUploadError = ref('')
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
 const guidePickerOpen = ref(false)
+
+const {
+  inputRef: refInput,
+  uploading: refUploading,
+  uploadError: refUploadError,
+  pick: pickReferenceImage,
+  onFileChange: onRefFileChange,
+} = useDockLocalImageUpload({
+  getExistingLocalRefs: () => (props.node.data?.localRefs as LocalRefBinding[]) ?? [],
+  onPatch: (patch) => {
+    if (typeof patch.referenceImageUrl === 'string') {
+      referenceImageUrl.value = patch.referenceImageUrl
+    }
+    emit('patch', patch)
+  },
+  syncReferenceImageUrl: true,
+})
 
 const speech = useSpeechRecognition()
 const readonly = computed(() =>
@@ -78,13 +88,6 @@ const readonly = computed(() =>
   }),
 )
 const credits = computed(() => estimateImageCredits(imageCount.value))
-const showRefineEntry = computed(() =>
-  shouldShowRefineEntry({
-    url: props.node.data?.url,
-    readonly: readonly.value,
-    enabled: CX_IMAGE_EDIT_ENABLED,
-  }),
-)
 
 const showTurnaroundHint = computed(() => {
   const data = props.node.data ?? {}
@@ -104,6 +107,9 @@ const activeGuideSceneId = computed(() => {
   const id = props.node.data?.guideSceneId
   return typeof id === 'string' && id.trim() ? id.trim() : ''
 })
+const activeGuideScene = computed(() =>
+  activeGuideSceneId.value ? getGenerationScene(activeGuideSceneId.value) ?? null : null,
+)
 
 function onSelectGuideScene(sceneId: string) {
   if (readonly.value) return
@@ -250,62 +256,6 @@ function toggleVoice() {
     }
   })
 }
-
-function pickReferenceImage() {
-  refInput.value?.click()
-}
-
-function createLocalRefId(prefix: string) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-}
-
-async function onRefFileChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = ''
-  if (!file || !file.type.startsWith('image/')) return
-
-  refUploadError.value = ''
-  refUploadProgress.value = 0
-  refUploading.value = true
-  const blobUrl = URL.createObjectURL(file)
-  referenceImageUrl.value = blobUrl
-
-  try {
-    const url = await persistMediaUrl(file, blobUrl, {
-      onProgress: (p) => {
-        refUploadProgress.value = p
-      },
-    })
-    if (url !== blobUrl) URL.revokeObjectURL(blobUrl)
-
-    referenceImageUrl.value = url
-    const binding: LocalRefBinding = {
-      id: createLocalRefId('upload'),
-      mediaType: 'image',
-      sourceKind: 'upload',
-      label: file.name,
-      url,
-    }
-    const prev = (props.node.data?.localRefs as LocalRefBinding[]) ?? []
-    emit('patch', {
-      localRefs: [...prev, binding],
-      referenceImageUrl: url,
-    })
-  } catch (err) {
-    refUploadError.value = err instanceof Error ? err.message : '参考图上传失败，请重试'
-    URL.revokeObjectURL(blobUrl)
-    referenceImageUrl.value = ''
-  } finally {
-    refUploading.value = false
-    refUploadProgress.value = 0
-  }
-}
-
-function clearReferenceImage() {
-  referenceImageUrl.value = ''
-  syncField('referenceImageUrl', '')
-}
 </script>
 
 <template>
@@ -314,22 +264,24 @@ function clearReferenceImage() {
       <div class="relative">
         <button
           type="button"
-          class="bottom-toolbar-close relative"
-          :class="activeGuideSceneId ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-white/35'"
+          class="dock-guide-scene-btn relative"
+          :class="{ 'is-guide-active': activeGuideSceneId }"
           :disabled="readonly"
           aria-label="场景模板"
+          :title="activeGuideScene?.label ?? '场景模板'"
           :aria-expanded="guidePickerOpen"
           @click="guidePickerOpen = !guidePickerOpen"
         >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <rect x="4" y="4" width="6" height="6" rx="1" />
             <rect x="14" y="4" width="6" height="6" rx="1" />
             <rect x="4" y="14" width="6" height="6" rx="1" />
             <rect x="14" y="14" width="6" height="6" rx="1" />
           </svg>
+          <span class="dock-guide-scene-btn__label">{{ activeGuideScene?.label ?? '场景模板' }}</span>
           <span
             v-if="activeGuideSceneId"
-            class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
+            class="dock-guide-scene-btn__dot"
             aria-hidden="true"
           />
         </button>
@@ -348,10 +300,16 @@ function clearReferenceImage() {
 
     <DockRefStrip
       :refs="stripRefs"
+      show-add-upload
+      :add-upload-disabled="readonly"
+      :add-upload-busy="refUploading"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
+      @add-upload="pickReferenceImage"
     />
+    <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+    <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
     <DockPromptSection
       ref="promptSectionRef"
@@ -384,38 +342,6 @@ function clearReferenceImage() {
         @update:count="imageCount = $event; syncField('imageCount', $event)"
       />
 
-      <div class="flex items-center gap-1.5">
-        <button
-          type="button"
-          class="dock-icon-btn"
-          :disabled="readonly || refUploading"
-          title="参考图"
-          @click="pickReferenceImage"
-        >
-          <DockTypeIcon v-if="!refUploading" icon="image" :size="13" />
-          <span v-else class="whitespace-nowrap text-[9px] text-white/60">
-            {{ refUploadProgress > 0 ? `上传中 ${refUploadProgress}%` : '上传中...' }}
-          </span>
-        </button>
-        <div
-          v-if="effectiveRefUrl"
-          class="relative h-7 w-7 overflow-hidden rounded-md border border-white/15"
-        >
-          <img :src="effectiveRefUrl" alt="" class="h-full w-full object-cover">
-          <button
-            type="button"
-            class="absolute inset-0 flex items-center justify-center bg-black/50 text-[10px] opacity-0 transition hover:opacity-100"
-            @click="clearReferenceImage"
-          >
-            <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5">
-              <path d="M18 6 6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
-        <p v-if="refUploadError" class="text-[10px] text-red-400/90">{{ refUploadError }}</p>
-      </div>
-
       <div class="ml-auto flex items-center gap-2">
         <DockMicButton
           :listening="speech.listening.value"
@@ -423,14 +349,6 @@ function clearReferenceImage() {
           @toggle="toggleVoice"
         />
         <DockCreditBadge :credits="credits" />
-        <button
-          v-if="showRefineEntry"
-          type="button"
-          class="neo-chip rounded-md px-2 py-1 text-[10px]"
-          @click="emit('refine')"
-        >
-          精修这张图
-        </button>
         <DockGenerateButton
           :generating="generating"
           :disabled="!generating && !prompt.trim()"

@@ -9,11 +9,11 @@ export const g4ReusableLogo: GenerationScene = {
   groupId: 'brand_ui',
   groupLabel: '品牌/UI',
   fundamentalsRefs: ['define_result', 'visible_details', 'exact_text'],
-  promptScaffold: `Create a distinctive, reusable logo for {{BRAND}}.
-Use a simple silhouette, balanced geometry, and a limited color palette that works at small sizes.
-If lettering is requested, render "{{LOGOTYPE}}" exactly once and keep it legible.
-Isolate the logo on a fully transparent background with crisp, clean edges.
-Do not add mockups, scenery, shadows, extra text, or watermarks.`,
+  promptScaffold: `为 {{BRAND}} 创作一个可复用、辨识度高的 logo。
+造型简洁、几何平衡，小尺寸仍清晰，配色克制。
+若需要字标，将「{{LOGOTYPE}}」精确呈现一次并保持可读。
+logo 置于完全透明背景，边缘干净利落。
+不要样机、场景、投影、多余文字或水印。`,
   preferredParams: {
     size: '1024x1024',
     quality: 'medium',

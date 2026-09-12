@@ -12,7 +12,7 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
-import type { NodeRef } from '@/composables/useNodeRefs'
+import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import {
   DEFAULT_AUDIO_EMOTION,
@@ -31,6 +31,7 @@ import {
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { isNodeGenerating } from '@/constants/dockStudio'
 import { estimateAudioCredits } from '@/constants/credits'
+import { useDockLocalImageUpload } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -64,6 +65,16 @@ const modelVoices = computed(() => getModelEntry(catalogModelKeyFromValue(audioM
 
 const speech = useSpeechRecognition()
 const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null)
+const {
+  inputRef: refInput,
+  uploading: refUploading,
+  uploadError: refUploadError,
+  pick: pickReferenceImage,
+  onFileChange: onRefFileChange,
+} = useDockLocalImageUpload({
+  getExistingLocalRefs: () => (props.node.data?.localRefs as LocalRefBinding[]) ?? [],
+  onPatch: (patch) => emit('patch', patch),
+})
 const readonly = computed(() => isNodeGenerating(props.node.data?.status) || !!props.generating)
 const credits = computed(() => estimateAudioCredits())
 
@@ -164,10 +175,16 @@ function onRefMention(refKey: string) {
   <DockToolbarShell type="audio" @close="emit('close')">
     <DockRefStrip
       :refs="refs ?? []"
+      show-add-upload
+      :add-upload-disabled="readonly"
+      :add-upload-busy="refUploading"
       @reorder="onRefReorder"
       @remove="onRefRemove"
       @mention="onRefMention"
+      @add-upload="pickReferenceImage"
     />
+    <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
+    <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
     <DockPromptSection
       ref="promptSectionRef"

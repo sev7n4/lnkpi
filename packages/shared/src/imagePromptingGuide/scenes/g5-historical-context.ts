@@ -9,10 +9,10 @@ export const g5HistoricalContext: GenerationScene = {
   groupId: 'narrative',
   groupLabel: '叙事',
   fundamentalsRefs: ['define_result', 'visible_details', 'people_actions'],
-  promptScaffold: `Create a historically grounded scene set in {{TIME_AND_PLACE}}.
-Depict {{SUBJECT_AND_ACTION}} with period-appropriate clothing, architecture, objects, and materials.
-Use a coherent composition and lighting appropriate to the setting and intended medium.
-Avoid modern objects, anachronistic styling, unsupported symbols, text, logos, or watermarks.`,
+  promptScaffold: `创作一张有历史依据的场景，设定在 {{TIME_AND_PLACE}}。
+表现 {{SUBJECT_AND_ACTION}}，服饰、建筑、器物与材质符合时代。
+构图与光线贴合场景与目标媒介。
+避免现代物品、时代错乱造型、无依据符号，以及多余文字、logo、水印。`,
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: {},
 }
