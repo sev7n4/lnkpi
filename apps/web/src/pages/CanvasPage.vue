@@ -104,6 +104,7 @@ import {
   importWorkflowPackage,
   type WorkflowExportMode,
 } from '@/composables/useWorkflowExchange'
+import { fitImportedViewport } from '@/composables/fitImportedViewport'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
@@ -2206,7 +2207,28 @@ async function onWorkflowImportSelected(event: Event) {
       fitImportedNodes: async (ids) => {
         await nextTick()
         try {
-          await vueFlowRef.value?.fitView({ nodes: ids, padding: 0.2, duration: 300 })
+          const flow = vueFlowRef.value as {
+            findNode?: (id: string) => { id: string; dimensions?: { width: number; height: number } } | undefined
+            fitView?: (opts: { nodes: string[]; padding: number; duration: number }) => Promise<boolean | void>
+            fitBounds?: (
+              bounds: { x: number; y: number; width: number; height: number },
+              opts: { padding: number; duration: number },
+            ) => Promise<unknown>
+            updateNodeInternals?: (ids?: string[] | string) => void
+          } | null
+          if (!flow?.fitView || !flow.fitBounds) return
+          await fitImportedViewport({
+            ids,
+            nodes: nodes.value.map((n) => ({
+              id: n.id,
+              position: n.position,
+              parentNode: (n as { parentNode?: string }).parentNode,
+            })),
+            getMeasuredNode: (id) => flow.findNode?.(id),
+            fitView: (opts) => flow.fitView!(opts),
+            fitBounds: (bounds, opts) => flow.fitBounds!(bounds, opts),
+            updateNodeInternals: (nodeIds) => flow.updateNodeInternals?.(nodeIds),
+          })
         } catch {
           // ignore
         }
