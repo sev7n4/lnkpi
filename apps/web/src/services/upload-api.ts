@@ -8,6 +8,19 @@ export interface UploadResult {
   size: number
 }
 
+type DirectUploadCredential =
+  | { mode: 'local' }
+  | {
+      mode: 'presign'
+      key: string
+      putUrl: string
+      headers: Record<string, string>
+      expiresAt: string
+      publicUrl: string
+    }
+
+type PresignCredential = Extract<DirectUploadCredential, { mode: 'presign' }>
+
 /** 经 Vercel 代理时单请求体约 4.5MB；分片 raw 取 2MB（base64 后仍安全） */
 const CHUNK_RAW_BYTES = 2 * 1024 * 1024
 
@@ -32,6 +45,61 @@ function uploadErrorMessage(err: unknown): string {
     return '上传通道异常，请刷新后重试；若仍失败请缩小文件或联系管理员。'
   }
   return typeof msg === 'string' ? msg : '上传失败'
+}
+
+async function fetchDirectCredential(file: File): Promise<DirectUploadCredential> {
+  const { data: credRes } = await api.post<{ code?: number; message?: string; data: DirectUploadCredential }>(
+    '/upload/direct-credential',
+    {
+      fileName: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+    },
+  )
+  if (credRes.code != null && credRes.code !== 0) {
+    throw new Error(credRes.message || '获取直传凭证失败')
+  }
+  return credRes.data
+}
+
+async function putViaPresign(file: File, cred: PresignCredential): Promise<Response> {
+  return fetch(cred.putUrl, {
+    method: 'PUT',
+    headers: cred.headers,
+    body: file,
+  })
+}
+
+function toUploadResult(file: File, publicUrl: string): UploadResult {
+  return {
+    url: publicUrl,
+    fileName: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    size: file.size,
+  }
+}
+
+/** PUT once; on failure re-fetch credential and retry PUT once. */
+export async function uploadViaPresign(
+  file: File,
+  cred: PresignCredential,
+  opts?: { onProgress?: (pct: number) => void },
+): Promise<UploadResult> {
+  let active = cred
+  let res = await putViaPresign(file, active)
+  if (!res.ok) {
+    const retryCred = await fetchDirectCredential(file)
+    if (retryCred.mode !== 'presign') {
+      throw new Error(`直传失败 HTTP ${res.status}`)
+    }
+    active = retryCred
+    res = await putViaPresign(file, active)
+  }
+  if (!res.ok) {
+    throw new Error(`直传失败 HTTP ${res.status}`)
+  }
+  opts?.onProgress?.(100)
+  return toUploadResult(file, active.publicUrl)
 }
 
 async function uploadMultipart(
@@ -97,6 +165,25 @@ async function uploadChunked(
   return done.data
 }
 
+async function uploadLegacy(
+  file: File,
+  opts?: { onProgress?: (pct: number) => void },
+): Promise<UploadResult> {
+  if (shouldPreferChunkedUpload(file)) {
+    return await uploadChunked(file, opts)
+  }
+  try {
+    return await uploadMultipart(file, opts)
+  } catch (err) {
+    // multipart 仍失败时回退分片（兼容旧代理）
+    const status = (err as AxiosError).response?.status
+    if (status === 400 || status === 413) {
+      return await uploadChunked(file, opts)
+    }
+    throw err
+  }
+}
+
 /** Vercel Serverless 代理约 4.5MB/请求且 multipart 易损坏，需分片；CVM/nginx 直连可 multipart */
 export function shouldPreferChunkedUpload(file: File): boolean {
   if (typeof window !== 'undefined') {
@@ -109,19 +196,11 @@ export function shouldPreferChunkedUpload(file: File): boolean {
 export const uploadApi = {
   upload: async (file: File, opts?: { onProgress?: (pct: number) => void }) => {
     try {
-      if (shouldPreferChunkedUpload(file)) {
-        return await uploadChunked(file, opts)
+      const cred = await fetchDirectCredential(file)
+      if (cred.mode === 'presign') {
+        return await uploadViaPresign(file, cred, opts)
       }
-      try {
-        return await uploadMultipart(file, opts)
-      } catch (err) {
-        // multipart 仍失败时回退分片（兼容旧代理）
-        const status = (err as AxiosError).response?.status
-        if (status === 400 || status === 413) {
-          return await uploadChunked(file, opts)
-        }
-        throw err
-      }
+      return await uploadLegacy(file, opts)
     } catch (err) {
       throw Object.assign(new Error(uploadErrorMessage(err)), { cause: err })
     }
