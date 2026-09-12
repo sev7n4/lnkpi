@@ -122,7 +122,7 @@ UI「导出打包」或 Agent export（canvasCommands.export_pack）
 | 完成态「导出打包」/ 画布菜单 | 默认工作流包 |
 | 高级选项 | 仅媒体清单（A2 旧行为）；轻量 workflow JSON |
 | 画布「导入工作流」 | 新 UI |
-| Agent | 导出：扩展现有 `export_pack`（可带 `mode`/`scope`/`exportMode`）；导入：W1 可后置 `import_workflow` tool，须走同一解析/remap 服务 |
+| Agent | 导出：扩展现有 `export_pack`（可带 `mode`/`scope`/`exportMode`）；导入：W1 可后置 `import_workflow` tool，须走同一解析/remap 服务（**进行中：`feature/agent-import-workflow`**） |
 
 ## 7. 与 Wave A 关系
 
