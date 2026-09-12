@@ -1,10 +1,20 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   buildWorkflowDocument,
   remapWorkflowIds,
   validateWorkflow,
   inferMediaRole,
+  WORKFLOW_FORMAT,
+  WORKFLOW_VERSION,
 } from './workflowExchange'
+
+const goldenWorkflowPath = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../../docs/workflow/examples/minimal-workflow.json',
+)
 
 describe('workflowExchange', () => {
   it('validateWorkflow throws on invalid input', () => {
@@ -97,5 +107,17 @@ describe('workflowExchange', () => {
       inferMediaRole({ url: 'https://x/a.png', generationRecordId: 'g1' }),
     ).toBe('generated')
     expect(inferMediaRole({})).toBe('none')
+  })
+
+  it('validateWorkflow accepts golden minimal-workflow.json', () => {
+    const raw = JSON.parse(readFileSync(goldenWorkflowPath, 'utf-8'))
+    const doc = validateWorkflow(raw)
+    expect(doc.format).toBe(WORKFLOW_FORMAT)
+    expect(doc.version).toBe(WORKFLOW_VERSION)
+    expect(doc.exportMode).toBe('lightweight')
+    expect(doc.graph.nodes).toHaveLength(2)
+    expect(doc.graph.edges).toHaveLength(1)
+    expect(doc.graph.edges[0].source).toBe('prompt-golden-1')
+    expect(doc.graph.edges[0].target).toBe('image-golden-1')
   })
 })
