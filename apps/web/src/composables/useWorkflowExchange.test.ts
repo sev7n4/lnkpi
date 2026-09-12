@@ -267,6 +267,65 @@ describe('importWorkflowPackage', () => {
     expect(ElMessage.error).toHaveBeenCalled()
   })
 
+  it('offsets only root nodes; group children keep relative position and parent constraints', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'group-1',
+          type: 'group',
+          position: { x: 40, y: 50 },
+          data: { title: 'pack' },
+        },
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 12, y: 18 },
+          parentNode: 'group-1',
+          data: { prompt: 'inside' },
+        },
+      ],
+      edges: [],
+      mode: 'subgraph',
+      exportMode: 'lightweight',
+      mediaIndex: [],
+    })
+    const file = new File([JSON.stringify(doc)], 'workflow.json', { type: 'application/json' })
+    const applyMerge = vi.fn()
+    let seq = 0
+
+    await importWorkflowPackage(file, {
+      nodes: [],
+      edges: [],
+      applyMerge,
+      createId: (type) => `${type}-grp-${++seq}`,
+      uploadMedia: uploadMediaMock,
+    })
+
+    expect(applyMerge).toHaveBeenCalledOnce()
+    const [mergedNodes] = applyMerge.mock.calls[0] as [
+      Array<{
+        id: string
+        position: { x: number; y: number }
+        parentNode?: string
+        extent?: string
+        expandParent?: boolean
+      }>,
+    ]
+
+    const parent = mergedNodes.find((n) => n.id === 'group-grp-1')
+    const child = mergedNodes.find((n) => n.id === 'prompt-grp-2')
+    expect(parent).toBeDefined()
+    expect(child).toBeDefined()
+    expect(parent!.position).toEqual({ x: 120, y: 130 })
+    expect(child!.position).toEqual({ x: 12, y: 18 })
+    expect(child!.parentNode).toBe('group-grp-1')
+    expect(child!.extent).toBe('parent')
+    expect(child!.expandParent).toBe(true)
+    expect(parent!.parentNode).toBeUndefined()
+    expect(parent!.extent).toBeUndefined()
+    expect(parent!.expandParent).toBeUndefined()
+  })
+
   it('lightweight json keeps existing urls without re-upload', async () => {
     const doc = buildWorkflowDocument({
       nodes: [

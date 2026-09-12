@@ -1,75 +1,93 @@
-# Task 3 Report: Precedence — 禁 chat sink + media clarify 问句
+# Task 3 Report: Browser import — merge into current canvas
 
-## Status
+**Status:** DONE  
+**Branch:** `feature/canvas-workflow-exchange`  
+**Commit:** `f13ecefd` — `feat(web): import workflow package into current canvas`
 
-Implemented the Task 3 route-precedence change on `feature/chat-sink-sidebar-l1`.
+## Summary
 
-## Changes
+Round-trip import: parse `.zip` / `.json` → `validateWorkflow` → `remapWorkflowIds` → upload zip `media/` → offset (+80,+80) → `applyMerge` into current canvas + `persistUserEdit`. Top-right chrome「导入工作流」+ hidden file input.
 
-- Added `ROUTE_CLARIFY_MEDIA`.
-- Enhanced `atomic_generate` so `media_create_high` routes to `atomic_create` with stable rule id `atomic_generate`.
-- Added `suspected_vision_clarify` for vision questions with sidebar media.
-- Added `suspected_media_clarify` for lower-confidence media-create requests.
-- Registered both clarify rules after `atomic_generate` and before `empty`.
-- Added acceptance and regression tests for colloquial image creation, ordinary chat, sidebar vision QA, and soft media requests.
-- Did not modify `ATOMIC_CREATE_HINTS` or any taxonomy hints (R-POL-01).
+## Files Changed
+
+| File | Action |
+|------|--------|
+| `apps/web/src/composables/useWorkflowExchange.ts` | Add `importWorkflowPackage` |
+| `apps/web/src/composables/useWorkflowExchange.test.ts` | Import merge / invalid / lightweight tests |
+| `apps/web/src/pages/CanvasPage.vue` | Wire file picker, merge, persist |
 
 ## TDD Evidence
 
 ### RED
 
-Command:
+```bash
+pnpm --filter @lnkpi/web exec vitest run src/composables/useWorkflowExchange.test.ts
+```
 
-`python3 -m pytest tests/test_route_precedence.py::test_sheng_xiao_girl_not_default_chat tests/test_route_precedence.py::test_sheng_xiao_girl_prefers_atomic_when_high tests/test_route_precedence.py::test_vision_qa_with_sidebar_not_chat -v`
-
-After introducing the new public constant needed by test collection, all three behavior tests failed because each request still returned `flow_mode="chat"` through `default_chat`.
+```
+ FAIL  src/composables/useWorkflowExchange.test.ts
+ × importWorkflowPackage > merges remapped zip nodes/edges without colliding with seed canvas ids
+   → importWorkflowPackage is not a function
+ × importWorkflowPackage > rejects invalid format without calling applyMerge
+   → importWorkflowPackage is not a function
+ × importWorkflowPackage > lightweight json keeps existing urls without re-upload
+   → importWorkflowPackage is not a function
+ Test Files  1 failed (1)
+      Tests  3 failed | 3 passed (6)
+```
 
 ### GREEN
 
-Command:
+```bash
+pnpm --filter @lnkpi/web exec vitest run src/composables/useWorkflowExchange.test.ts
+```
 
-`python3 -m pytest tests/test_route_precedence.py -v`
+```
+ ✓ src/composables/useWorkflowExchange.test.ts (6 tests) 62ms
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+```
 
-Result: `19 passed, 1 warning`.
+## Implementation Notes
 
-Broader command:
+- Zip: `JSZip.loadAsync` → `workflow.json` + `media/*`; JSON: parse text.
+- Always remaps IDs via `remapWorkflowIds` (`createId` from CanvasPage `nodeCounter` style).
+- Zip media with `mediaIndex.path` → upload via `persistMediaUrl` (injectable `uploadMedia` in tests) → set remapped `data.url`.
+- Lightweight JSON: keep existing URLs; no re-upload.
+- Positions: root nodes only offset +80/+80; group children keep relative coords and get `extent: 'parent'` + `expandParent: true`.
+- `applyMerge` appends nodes/edges (including parent constraints) then `persistUserEdit`.
+- Invalid format: error toast「工作流格式无效，无法导入」, no `applyMerge`.
 
-`python3 -m pytest tests/test_route_features.py tests/test_route_precedence.py -q`
+## Self-review
 
-Result: `31 passed, 1 warning`.
+- No Task 4/5 Agent/Nest work.
+- Shared schema reused (`validateWorkflow` / `remapWorkflowIds`); no second schema.
+- Import entry is canvas chrome (always available); multi-select export menu unchanged.
 
-IDE diagnostics: no linter errors in the two modified files.
+## Concerns
 
-## Acceptance / Regression Results
+None blocking. Media upload requires auth token for server URL; unauthenticated falls back to blob URL via `persistMediaUrl`.
 
-- `请帮我生一个小女孩的图片` → `atomic_create`, rule `atomic_generate`.
-- `生活怎么样` → `chat`, rule `default_chat`.
-- `这个图片是什么？` with sidebar image → `clarify_route`, rule `suspected_vision_clarify`, using `ROUTE_CLARIFY_MEDIA`.
-- `帮我弄张图看看` does not enter `default_chat`.
-- Existing marketing/orchestration regression remains covered by `test_precedence_orch_ambiguous_ac04` and passes.
+## Review Fix (Important): group child offset + constraints
 
-## Build Note
+**Commit:** (see git log) `fix(web): import group children without absolute offset`
 
-The target worktree's `pnpm build` could not start because its dependencies were absent (`tsc: command not found`). A frozen-lockfile install was attempted, but the configured `registry.npmmirror.com` returned HTTP 403 for `esbuild`, so the TypeScript build could not be completed in this worktree. The Python runtime tests relevant to this task are green.
+### Fixes
 
-## Task 3 Review Fix Evidence (R-PREC-01)
+1. `toMergeNodes`: apply `(+80,+80)` only when node has no `parentNode` / remapped parent; children keep original relative position.
+2. Children with `parentNode` also set `extent: 'parent'` and `expandParent: true` (match `useCanvasGrouping`); `CanvasPage` `applyMerge` passes these through.
 
-Changed `suspected_vision_clarify` to depend on `suspected_vision_qa` alone, so sidebar media is optional.
+### Test command + output
 
-RED command:
+```bash
+pnpm --filter @lnkpi/web exec vitest run src/composables/useWorkflowExchange.test.ts
+```
 
-`python3 -m pytest tests/test_route_precedence.py::test_vision_qa_without_sidebar_routes_to_media_clarify -v`
+```
+ ✓ src/composables/useWorkflowExchange.test.ts (7 tests) 67ms
 
-Result: `1 failed, 1 warning`; `这个图片是什么？` returned `flow_mode="chat"` instead of `clarify_route`.
-
-GREEN command:
-
-`python3 -m pytest tests/test_route_precedence.py -v`
-
-Result: `20 passed, 1 warning`. This covers both no-sidebar utterances (`这个图片是什么？`, `看看这张图`), the existing with-sidebar case, and `生活怎么样` remaining `default_chat`.
-
-Build command:
-
-`pnpm build`
-
-Result: could not run because this worktree still has no dependencies (`packages/shared: tsc: command not found`, `node_modules missing`), consistent with the build note above.
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  09:46:19
+   Duration  4.70s (transform 604ms, setup 0ms, collect 902ms, tests 67ms, environment 2.19s, prepare 183ms)
+```

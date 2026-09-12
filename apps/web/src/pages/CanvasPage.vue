@@ -2199,7 +2199,13 @@ async function onWorkflowImportSelected(event: Event) {
             id: n.id,
             type: n.type,
             position: n.position,
-            ...(n.parentNode ? { parentNode: n.parentNode } : {}),
+            ...(n.parentNode
+              ? {
+                  parentNode: n.parentNode,
+                  ...(n.extent !== undefined ? { extent: n.extent } : {}),
+                  ...(n.expandParent !== undefined ? { expandParent: n.expandParent } : {}),
+                }
+              : {}),
             data: { createdAt: Date.now(), ...(n.data ?? {}) },
           })
         }

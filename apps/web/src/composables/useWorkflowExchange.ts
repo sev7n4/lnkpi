@@ -24,6 +24,8 @@ export interface WorkflowExportNode {
   position: { x: number; y: number }
   parentId?: string
   parentNode?: string
+  extent?: 'parent'
+  expandParent?: boolean
   data?: Record<string, unknown>
 }
 
@@ -132,14 +134,19 @@ async function uploadZipMedia(
 function toMergeNodes(doc: WorkflowDocument): WorkflowExportNode[] {
   return doc.graph.nodes.map((node) => {
     const parent = node.parentNode ?? node.parentId
+    const isChild = parent !== undefined && parent !== ''
     return {
       id: node.id,
       type: node.type,
-      position: {
-        x: node.position.x + IMPORT_POSITION_OFFSET,
-        y: node.position.y + IMPORT_POSITION_OFFSET,
-      },
-      ...(parent !== undefined ? { parentNode: parent } : {}),
+      position: isChild
+        ? { x: node.position.x, y: node.position.y }
+        : {
+            x: node.position.x + IMPORT_POSITION_OFFSET,
+            y: node.position.y + IMPORT_POSITION_OFFSET,
+          },
+      ...(isChild
+        ? { parentNode: parent, extent: 'parent' as const, expandParent: true }
+        : {}),
       data: { ...node.data },
     }
   })
