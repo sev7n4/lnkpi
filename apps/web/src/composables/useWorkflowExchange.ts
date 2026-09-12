@@ -3,7 +3,10 @@ import { ElMessage } from 'element-plus'
 import {
   buildWorkflowDocument,
   getGroupChildIds,
+  remapWorkflowIds,
+  validateWorkflow,
   type MediaIndexEntry,
+  type WorkflowDocument,
 } from '@lnkpi/shared'
 import {
   collectMediaFromNodes,
@@ -42,6 +45,104 @@ export interface ExportWorkflowPackageResult {
   ok: boolean
   mediaOk: number
   mediaFail: number
+}
+
+export interface ImportWorkflowPackageContext {
+  nodes: WorkflowExportNode[]
+  edges: WorkflowExportEdge[]
+  sessionId?: string
+  applyMerge: (
+    nodes: WorkflowExportNode[],
+    edges: WorkflowExportEdge[],
+  ) => void | Promise<void>
+  createId?: (type: string) => string
+  uploadMedia?: (file: File) => Promise<string>
+}
+
+export interface ImportWorkflowPackageResult {
+  addedNodes: number
+  idMap: Record<string, string>
+}
+
+const IMPORT_POSITION_OFFSET = 80
+
+function defaultCreateIdFactory(existingNodes: WorkflowExportNode[]): (type: string) => string {
+  const used = new Set(existingNodes.map((n) => n.id))
+  let counter = 0
+  const stamp = Date.now()
+  return (type: string) => {
+    let id: string
+    do {
+      counter += 1
+      id = `${type}-imp-${stamp}-${counter}`
+    } while (used.has(id))
+    used.add(id)
+    return id
+  }
+}
+
+async function parseWorkflowFile(file: File): Promise<{
+  doc: WorkflowDocument
+  zip: JSZip | null
+}> {
+  const name = file.name.toLowerCase()
+  const isZip =
+    name.endsWith('.zip') ||
+    file.type === 'application/zip' ||
+    file.type === 'application/x-zip-compressed'
+
+  if (isZip) {
+    const zip = await JSZip.loadAsync(file)
+    const workflowEntry = zip.file('workflow.json')
+    if (!workflowEntry) {
+      throw new Error('压缩包缺少 workflow.json')
+    }
+    const text = await workflowEntry.async('string')
+    const raw = JSON.parse(text) as unknown
+    return { doc: validateWorkflow(raw), zip }
+  }
+
+  const text = await file.text()
+  const raw = JSON.parse(text) as unknown
+  return { doc: validateWorkflow(raw), zip: null }
+}
+
+async function uploadZipMedia(
+  zip: JSZip,
+  remapped: WorkflowDocument,
+  uploadMedia: (file: File) => Promise<string>,
+): Promise<void> {
+  const byNodeId = new Map(remapped.graph.nodes.map((n) => [n.id, n]))
+  for (const entry of remapped.mediaIndex) {
+    if (!entry.path) continue
+    const zipFile = zip.file(entry.path)
+    if (!zipFile) continue
+    const blob = await zipFile.async('blob')
+    const file = new File([blob], entry.fileName || entry.path.split('/').pop() || 'media.bin', {
+      type: blob.type || 'application/octet-stream',
+    })
+    const url = await uploadMedia(file)
+    const node = byNodeId.get(entry.nodeId)
+    if (node) {
+      node.data = { ...node.data, url }
+    }
+  }
+}
+
+function toMergeNodes(doc: WorkflowDocument): WorkflowExportNode[] {
+  return doc.graph.nodes.map((node) => {
+    const parent = node.parentNode ?? node.parentId
+    return {
+      id: node.id,
+      type: node.type,
+      position: {
+        x: node.position.x + IMPORT_POSITION_OFFSET,
+        y: node.position.y + IMPORT_POSITION_OFFSET,
+      },
+      ...(parent !== undefined ? { parentNode: parent } : {}),
+      data: { ...node.data },
+    }
+  })
 }
 
 function expandExportNodeIds(nodes: WorkflowExportNode[], selectedIds: string[]): string[] {
@@ -186,4 +287,48 @@ export async function exportWorkflowPackage(
   triggerBlobDownload(zipBlob, `lnkpi-workflow-${stamp}.zip`)
   toastExportResult(mediaOk, mediaFail)
   return { ok: true, mediaOk, mediaFail }
+}
+
+export async function importWorkflowPackage(
+  file: File,
+  ctx: ImportWorkflowPackageContext,
+): Promise<ImportWorkflowPackageResult> {
+  try {
+    const { doc, zip } = await parseWorkflowFile(file)
+    const createId = ctx.createId ?? defaultCreateIdFactory(ctx.nodes)
+    const { document: remapped, idMap } = remapWorkflowIds(doc, createId)
+
+    const uploadMedia =
+      ctx.uploadMedia ??
+      (async (mediaFile: File) => {
+        const { persistMediaUrl } = await import('./useMediaUpload')
+        return persistMediaUrl(mediaFile, URL.createObjectURL(mediaFile))
+      })
+
+    if (zip) {
+      await uploadZipMedia(zip, remapped, uploadMedia)
+    }
+
+    const mergeNodes = toMergeNodes(remapped)
+    const mergeEdges: WorkflowExportEdge[] = remapped.graph.edges.map((e) => ({
+      id: e.id,
+      source: e.source,
+      target: e.target,
+    }))
+
+    await ctx.applyMerge(mergeNodes, mergeEdges)
+    ElMessage.success(`已导入工作流：${mergeNodes.length} 个节点`)
+    return { addedNodes: mergeNodes.length, idMap }
+  } catch (err) {
+    const isInvalidFormat =
+      err instanceof SyntaxError ||
+      (err !== null &&
+        typeof err === 'object' &&
+        ((err as { name?: string }).name === 'ZodError' ||
+          /format|version|Expected|Invalid/i.test(
+            err instanceof Error ? err.message : String(err),
+          )))
+    ElMessage.error(isInvalidFormat ? '工作流格式无效，无法导入' : err instanceof Error ? err.message : '导入失败')
+    throw err
+  }
 }

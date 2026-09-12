@@ -11,10 +11,12 @@ vi.mock('element-plus', () => ({
   ElMessage: {
     warning: vi.fn(),
     success: vi.fn(),
+    error: vi.fn(),
   },
 }))
 
 const fetchMediaBlobMock = vi.fn()
+const uploadMediaMock = vi.fn()
 
 vi.mock('./useCanvasMedia', async () => {
   const actual = await vi.importActual<typeof import('./useCanvasMedia')>('./useCanvasMedia')
@@ -25,8 +27,22 @@ vi.mock('./useCanvasMedia', async () => {
   }
 })
 
-import { exportWorkflowPackage } from './useWorkflowExchange'
+import { buildWorkflowDocument } from '@lnkpi/shared'
+import { exportWorkflowPackage, importWorkflowPackage } from './useWorkflowExchange'
 import { downloadMediaPackage } from './useCanvasMedia'
+
+async function zipWithWorkflow(
+  doc: ReturnType<typeof buildWorkflowDocument>,
+  mediaFiles: Array<{ path: string; content: string }> = [],
+): Promise<File> {
+  const zip = new JSZip()
+  zip.file('workflow.json', JSON.stringify(doc))
+  for (const m of mediaFiles) {
+    zip.file(m.path, m.content)
+  }
+  const blob = await zip.generateAsync({ type: 'blob' })
+  return new File([blob], 'workflow.zip', { type: 'application/zip' })
+}
 
 describe('exportWorkflowPackage', () => {
   beforeEach(() => {
@@ -151,5 +167,144 @@ describe('exportWorkflowPackage', () => {
     expect(result.ok).toBe(true)
     expect(downloadMediaPackage).toHaveBeenCalledOnce()
     expect(fetchMediaBlobMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('importWorkflowPackage', () => {
+  beforeEach(() => {
+    uploadMediaMock.mockReset()
+    uploadMediaMock.mockResolvedValue('https://cdn.example/uploaded.png')
+    vi.mocked(ElMessage.success).mockClear()
+    vi.mocked(ElMessage.warning).mockClear()
+    vi.mocked(ElMessage.error).mockClear()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('merges remapped zip nodes/edges without colliding with seed canvas ids', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 10, y: 20 },
+          data: { prompt: 'hello' },
+        },
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 100, y: 20 },
+          data: { url: 'https://cdn.example/old.png', title: 'hero' },
+        },
+      ],
+      edges: [{ id: 'e1', source: 'prompt-1', target: 'image-1' }],
+      mode: 'full',
+      exportMode: 'full_package',
+      mediaIndex: [
+        {
+          nodeId: 'image-1',
+          kind: 'image',
+          fileName: 'hero.png',
+          path: 'media/hero.png',
+        },
+      ],
+    })
+    const file = await zipWithWorkflow(doc, [{ path: 'media/hero.png', content: 'png-bytes' }])
+
+    const seedNodes = [
+      { id: 'prompt-1', type: 'prompt', position: { x: 0, y: 0 }, data: {} },
+      { id: 'image-1', type: 'image', position: { x: 50, y: 0 }, data: {} },
+    ]
+    const applyMerge = vi.fn()
+    let seq = 0
+    const createId = (type: string) => `${type}-imported-${++seq}`
+
+    const result = await importWorkflowPackage(file, {
+      nodes: seedNodes,
+      edges: [],
+      sessionId: 'sess-1',
+      applyMerge,
+      createId,
+      uploadMedia: uploadMediaMock,
+    })
+
+    expect(applyMerge).toHaveBeenCalledOnce()
+    const [mergedNodes, mergedEdges] = applyMerge.mock.calls[0] as [
+      Array<{ id: string; position: { x: number; y: number }; data?: Record<string, unknown> }>,
+      Array<{ id: string; source: string; target: string }>,
+    ]
+
+    expect(result.addedNodes).toBe(2)
+    expect(Object.keys(result.idMap)).toEqual(expect.arrayContaining(['prompt-1', 'image-1']))
+    expect(mergedNodes.map((n) => n.id)).toEqual(['prompt-imported-1', 'image-imported-2'])
+    expect(mergedNodes.every((n) => !seedNodes.some((s) => s.id === n.id))).toBe(true)
+    expect(mergedNodes[0].position).toEqual({ x: 90, y: 100 })
+    expect(mergedNodes[1].position).toEqual({ x: 180, y: 100 })
+    expect(mergedEdges).toHaveLength(1)
+    expect(mergedEdges[0].source).toBe('prompt-imported-1')
+    expect(mergedEdges[0].target).toBe('image-imported-2')
+    expect(uploadMediaMock).toHaveBeenCalledOnce()
+    expect(mergedNodes[1].data?.url).toBe('https://cdn.example/uploaded.png')
+  })
+
+  it('rejects invalid format without calling applyMerge', async () => {
+    const file = new File([JSON.stringify({ format: 'nope' })], 'bad.json', {
+      type: 'application/json',
+    })
+    const applyMerge = vi.fn()
+
+    await expect(
+      importWorkflowPackage(file, {
+        nodes: [],
+        edges: [],
+        applyMerge,
+      }),
+    ).rejects.toThrow()
+
+    expect(applyMerge).not.toHaveBeenCalled()
+    expect(ElMessage.error).toHaveBeenCalled()
+  })
+
+  it('lightweight json keeps existing urls without re-upload', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: { url: 'https://cdn.example/keep.png' },
+        },
+      ],
+      edges: [],
+      mode: 'subgraph',
+      exportMode: 'lightweight',
+      mediaIndex: [
+        {
+          nodeId: 'image-1',
+          kind: 'image',
+          fileName: 'keep.png',
+          url: 'https://cdn.example/keep.png',
+        },
+      ],
+    })
+    const file = new File([JSON.stringify(doc)], 'workflow.json', { type: 'application/json' })
+    const applyMerge = vi.fn()
+    let seq = 0
+
+    await importWorkflowPackage(file, {
+      nodes: [],
+      edges: [],
+      applyMerge,
+      createId: (type) => `${type}-lite-${++seq}`,
+      uploadMedia: uploadMediaMock,
+    })
+
+    expect(uploadMediaMock).not.toHaveBeenCalled()
+    const [mergedNodes] = applyMerge.mock.calls[0] as [
+      Array<{ data?: Record<string, unknown> }>,
+    ]
+    expect(mergedNodes[0].data?.url).toBe('https://cdn.example/keep.png')
   })
 })
