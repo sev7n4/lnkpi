@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { BadRequestException, ForbiddenException, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import type { CanvasData } from '@lnkpi/shared'
+import { IMPORT_PLACE_MARGIN, rectsOverlap, unionNodeBBox, type CanvasData } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
@@ -1785,6 +1785,179 @@ describe('AgentCanvasToolsService', () => {
           exportMode: 'full_package',
         },
       ])
+    })
+  })
+
+  describe('importWorkflow', () => {
+    const minimalWorkflow = {
+      format: 'lnkpi.workflow',
+      version: '1.0.0',
+      exportedAt: '2026-09-12T01:00:00.000Z',
+      mode: 'full',
+      exportMode: 'lightweight',
+      graph: {
+        nodes: [
+          {
+            id: 'prompt-golden-1',
+            type: 'prompt',
+            position: { x: 80, y: 120 },
+            data: {
+              title: 'Scene prompt',
+              prompt: 'A serene mountain lake at dawn, cinematic lighting',
+            },
+            mediaRole: 'none',
+          },
+          {
+            id: 'image-golden-1',
+            type: 'image',
+            position: { x: 400, y: 120 },
+            data: {
+              title: 'Hero frame',
+              prompt: 'A serene mountain lake at dawn, cinematic lighting',
+              url: 'https://cdn.example.com/workflows/golden-lake.png',
+              generationRecordId: 'gen-golden-001',
+            },
+            mediaRole: 'generated',
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-golden-1',
+            source: 'prompt-golden-1',
+            target: 'image-golden-1',
+          },
+        ],
+      },
+      mediaIndex: [
+        {
+          nodeId: 'image-golden-1',
+          kind: 'image',
+          fileName: 'golden-lake.png',
+          url: 'https://cdn.example.com/workflows/golden-lake.png',
+        },
+      ],
+    }
+
+    it('merges a minimal inline workflow with remapped ids and focus_nodes', async () => {
+      persistRemote.mockResolvedValue({
+        persistedUrl: 'https://cos.example/golden-lake.png',
+        assetId: 'asset-wf-1',
+        storageTier: 'persisted',
+      })
+
+      const result = await svc.importWorkflow({
+        sessionId: 's1',
+        userId: 'u1',
+        workflow: minimalWorkflow,
+      })
+
+      expect(canvas.nodes).toHaveLength(2)
+      expect(canvas.edges).toHaveLength(1)
+      expect(result.addedNodeIds).toHaveLength(2)
+      expect(result.addedNodeIds).not.toContain('prompt-golden-1')
+      expect(result.addedNodeIds).not.toContain('image-golden-1')
+      expect(result.idMap['prompt-golden-1']).toBeTruthy()
+      expect(result.idMap['prompt-golden-1']).not.toBe('prompt-golden-1')
+      expect(result.idMap['image-golden-1']).toBeTruthy()
+      expect(result.idMap['image-golden-1']).not.toBe('image-golden-1')
+      expect(canvas.nodes.map((n) => n.id).sort()).toEqual([...result.addedNodeIds].sort())
+      expect(canvas.edges[0].source).toBe(result.idMap['prompt-golden-1'])
+      expect(canvas.edges[0].target).toBe(result.idMap['image-golden-1'])
+      expect(result.actions.filter((a) => a.type === 'add_node')).toHaveLength(2)
+      expect(result.actions.filter((a) => a.type === 'add_edge')).toHaveLength(1)
+      expect(result.canvasCommands).toEqual([
+        { type: 'focus_nodes', nodeIds: result.addedNodeIds },
+      ])
+    })
+
+    it('rejects invalid workflow and leaves canvas unchanged', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'seed-keep',
+            type: 'prompt',
+            position: { x: 10, y: 10 },
+            data: { title: 'keep' },
+          },
+        ],
+        edges: [],
+      }
+
+      await expect(
+        svc.importWorkflow({
+          sessionId: 's1',
+          userId: 'u1',
+          workflow: { format: 'nope' },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(sessionUpdate).not.toHaveBeenCalled()
+      expect(canvas.nodes).toHaveLength(1)
+      expect(canvas.nodes[0].id).toBe('seed-keep')
+    })
+
+    it('places imported roots so union bboxes do not overlap with margin', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'seed-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { title: 'seed' },
+          },
+        ],
+        edges: [],
+      }
+
+      const overlapWorkflow = {
+        ...minimalWorkflow,
+        graph: {
+          nodes: [
+            {
+              id: 'prompt-overlap-1',
+              type: 'prompt',
+              position: { x: 0, y: 0 },
+              data: { title: 'Imported', prompt: 'hello' },
+              mediaRole: 'none',
+            },
+          ],
+          edges: [],
+        },
+        mediaIndex: [],
+      }
+
+      const result = await svc.importWorkflow({
+        sessionId: 's1',
+        userId: 'u1',
+        workflow: overlapWorkflow,
+      })
+
+      const seed = canvas.nodes.find((n) => n.id === 'seed-1')
+      const imported = canvas.nodes.filter((n) => n.id !== 'seed-1')
+      expect(seed).toBeTruthy()
+      expect(imported).toHaveLength(1)
+      expect(result.addedNodeIds).toEqual([imported[0].id])
+      const seedBBox = unionNodeBBox([seed!])
+      const importedBBox = unionNodeBBox(imported)
+      expect(seedBBox).toBeTruthy()
+      expect(importedBBox).toBeTruthy()
+      expect(rectsOverlap(seedBBox!, importedBBox!, IMPORT_PLACE_MARGIN)).toBe(false)
+    })
+
+    it('keeps original url and still merges when persistRemote rejects', async () => {
+      persistRemote.mockRejectedValue(new Error('persist failed'))
+
+      const result = await svc.importWorkflow({
+        sessionId: 's1',
+        userId: 'u1',
+        workflow: minimalWorkflow,
+      })
+
+      expect(canvas.nodes).toHaveLength(2)
+      expect(canvas.edges).toHaveLength(1)
+      const imageNode = canvas.nodes.find((n) => n.type === 'image')
+      expect(imageNode?.data.url).toBe('https://cdn.example.com/workflows/golden-lake.png')
+      expect(result.mediaFail).toBeGreaterThanOrEqual(1)
+      expect(result.addedNodeIds).toHaveLength(2)
     })
   })
 })
