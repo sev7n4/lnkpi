@@ -237,7 +237,7 @@ completed → 写回 url / content / coverUrl
 | `optimize-prompt` | ✅ Dock 内 Text/Shot 已接 | shot, text | 已完成 |
 | `material/upscale` | ❌ | image | 未开始 |
 | `material/lip-sync` | ❌ | video（可选） | 未开始 |
-| OSS upload / STS | 本地 `POST /api/upload` + 静态 `/api/uploads/`（非 OSS STS） | mediaInput | 部分完成 |
+| OSS upload / STS | Presigned PUT 直传（COS 就绪时）+ 本地 `POST /api/upload` 兜底 | mediaInput | 直传 Presigned PUT 已做 / 本地兜底 |
 | `capabilities/list` → UniversalModelSelector | 🟡 部分对接（`useCapabilities` 已接，fallback 硬编码） | 全部生成节点 | 进行中 |
 | `GET /studio/generations/:id` | ✅（Sprint A 提前落地，原 B-6） | video 轮询 | 已完成 |
 
@@ -530,14 +530,14 @@ interface DockStudioEntry {
 | B-1 | `POST /agent/chat/optimize-prompt`（Dock 已接） | shot, text | 已完成 |
 | B-2 | `POST /agent/canvas/material/upscale-image` | image | 未开始 |
 | B-3 | `POST /studio/audio/generate` 扩展 voice/emotion/speed/language | audio | 已完成 |
-| B-4 | OSS STS + `POST /upload` | mediaInput | 部分完成（本地磁盘 upload） |
+| B-4 | OSS STS + `POST /upload` | mediaInput | 直传 Presigned PUT 已做 / 本地兜底 |
 | B-5 | `POST /agent/canvas/material/lip-sync` | video（可选） | 未开始 |
 | B-6 | video 异步 job status 查询 | video, shot | 已完成（`GET /studio/generations/:id`） |
 
 - [x] B-1 — optimize-prompt（经 chat API）
 - [ ] B-2 — upscale-image
 - [x] B-3 — audio voice/emotion/speed/language
-- [x] B-4 — upload API（本地，非 OSS STS）
+- [x] B-4 — 直传 Presigned PUT 已做 / 本地兜底
 - [ ] B-5 — lip-sync（可选）
 - [x] B-6 — video job status（Sprint A 提前）
 
