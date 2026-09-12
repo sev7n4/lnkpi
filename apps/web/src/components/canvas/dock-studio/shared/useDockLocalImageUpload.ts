@@ -6,6 +6,8 @@ function createLocalRefId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
 }
 
+export { createLocalRefId }
+
 /** Shared Image/Video/Prompt/Text/Audio Dock local reference image upload. */
 export function useDockLocalImageUpload(options: {
   getExistingLocalRefs: () => LocalRefBinding[]

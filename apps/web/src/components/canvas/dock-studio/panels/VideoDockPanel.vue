@@ -29,7 +29,7 @@ import { catalogModelKeyFromValue, resolveGenerationModel } from '@/constants/st
 import { DEFAULT_VIDEO_SETTINGS, type VideoSettings } from '@lnkpi/shared'
 import { isNodeGenerating, NODE_GENERATION_STATUS } from '@/constants/dockStudio'
 import { estimateVideoCredits } from '@/constants/credits'
-import { useDockLocalImageUpload } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
+import { useDockLocalImageUpload, createLocalRefId } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
 import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
 import {
