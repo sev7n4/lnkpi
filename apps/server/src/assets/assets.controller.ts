@@ -11,6 +11,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common'
+import { Transform } from 'class-transformer'
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
 import { Request } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
@@ -43,6 +44,9 @@ class PersistRemoteDto {
   kind!: 'image' | 'video' | 'audio'
 
   @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.length > 128 ? value.slice(0, 128) : value,
+  )
   @IsString()
   @MaxLength(128)
   label?: string
@@ -81,6 +85,9 @@ class SaveUserAssetDto {
   url!: string
 
   @IsOptional()
+  @Transform(({ value }) =>
+    typeof value === 'string' && value.length > 128 ? value.slice(0, 128) : value,
+  )
   @IsString()
   @MaxLength(128)
   label?: string
