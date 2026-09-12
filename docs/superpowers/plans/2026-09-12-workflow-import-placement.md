@@ -70,7 +70,7 @@ export function computeImportTranslation(input: {
 }): Point // { x: dx, y: dy }
 ```
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```typescript
 import { describe, expect, it } from 'vitest'
@@ -119,17 +119,17 @@ describe('workflowImportPlacement', () => {
 })
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
+- [x] **Step 2: Run — expect FAIL**
 
 ```bash
 pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement.test.ts
 ```
 
-- [ ] **Step 3: Implement `workflowImportPlacement.ts`** per spec §3 (candidate order: viewport-right interior → below → step → viewport exterior right → canvas bottom-right fallback).
+- [x] **Step 3: Implement `workflowImportPlacement.ts`** per spec §3 (candidate order: viewport-right interior → below → step → viewport exterior right → canvas bottom-right fallback).
 
-- [ ] **Step 4: Run — expect PASS**
+- [x] **Step 4: Run — expect PASS**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/composables/workflowImportPlacement.ts apps/web/src/composables/workflowImportPlacement.test.ts
@@ -156,20 +156,20 @@ export interface ImportWorkflowPackageContext {
 }
 ```
 
-- [ ] **Step 1: Failing / extend import tests**
+- [x] **Step 1: Failing / extend import tests**
 
 - Seed canvas node at `(0,0)`; import json with root at `(0,0)` → `applyMerge` nodes’ root positions must not overlap seed bbox (± margin).
 - Parent+child import: child `position` unchanged relative to file; parent shifted by same dx/dy as translation.
 - `fitImportedNodes` mock called with remapped ids after merge.
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 1. Delete `IMPORT_POSITION_OFFSET`-only path (or keep unused constant removed).
 2. After remap + media upload, `const { x: dx, y: dy } = computeImportTranslation({ importNodes: remapped.graph.nodes, canvasNodes: ctx.nodes, viewport: ctx.getViewport?.(), containerSize: ctx.getContainerSize?.() })`.
 3. `toMergeNodes(doc, { dx, dy })` applies translation to roots only.
 4. `await ctx.applyMerge(...)` then `await ctx.fitImportedNodes?.(mergeNodes.map(n => n.id))`.
 
-- [ ] **Step 3: CanvasPage**
+- [x] **Step 3: CanvasPage**
 
 In `onWorkflowImportSelected`, add:
 
@@ -187,13 +187,13 @@ fitImportedNodes: async (ids) => {
 
 (Match existing `fitView` call sites around `CanvasPage.vue` ~1181/1194.)
 
-- [ ] **Step 4: Tests PASS**
+- [x] **Step 4: Tests PASS**
 
 ```bash
 pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement.test.ts src/composables/useWorkflowExchange.test.ts
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(web): place workflow imports in blank space and fit view"
@@ -214,3 +214,11 @@ git commit -m "feat(web): place workflow imports in blank space and fit view"
 
 **Placeholders:** none.  
 **Handoff:** After plan commit, execute via Subagent-Driven (recommended) or Inline.
+
+---
+
+## Status (2026-09-12)
+
+- Merged: PR #287 (placement + viewport free-axis clamp), PR #291 (`fitImportedViewport` / fitBounds fallback).
+- Prod verified by user: import places in blank space and viewport fits imported nodes.
+- Spec closed for implementation tasks; remaining polish is YAGNI (empty-canvas center-right, deeper candidate-path tests).

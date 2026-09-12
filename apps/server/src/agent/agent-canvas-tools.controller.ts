@@ -471,6 +471,21 @@ class ExportMediaPackageDto {
   nodeIds!: string[]
 }
 
+class ImportWorkflowDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsOptional()
+  workflow?: Record<string, unknown>
+
+  @IsOptional()
+  @IsString()
+  workflowUrl?: string
+}
+
 class GroupNodesDto {
   @IsString()
   sessionId!: string
@@ -914,6 +929,12 @@ export class AgentCanvasToolsController {
   @Post('export-media-package')
   async exportMediaPackage(@Body() dto: ExportMediaPackageDto) {
     const data = await this.tools.exportMediaPackage(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('import-workflow')
+  async importWorkflow(@Body() dto: ImportWorkflowDto) {
+    const data = await this.tools.importWorkflow(dto)
     return { code: 0, message: 'ok', data }
   }
 

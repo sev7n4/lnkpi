@@ -1,12 +1,16 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions, parseVisionQaJson } from '@lnkpi/agent'
 import {
+  computeImportTranslation,
   duplicateResultToCanvasActions,
   duplicateSubgraph,
+  isRootNode,
+  remapWorkflowIds,
   resolveDuplicateSourceIds,
   resolveNodeRefs,
   resolveCanonicalVideoRequest,
   summarizePromptCompletion,
+  validateWorkflow,
   type CanvasAction,
   type CanvasData,
   type CanvasNode,
@@ -117,6 +121,76 @@ function assetKindFromNodeType(type: string): 'image' | 'video' | 'audio' | null
   if (type === 'video') return 'video'
   if (type === 'audio') return 'audio'
   return null
+}
+
+const WORKFLOW_FETCH_TIMEOUT_MS = 15_000
+const WORKFLOW_MAX_BYTES = 2 * 1024 * 1024
+
+type ImportedCanvasNode = CanvasNode & {
+  parentNode?: string
+  extent?: 'parent'
+  expandParent?: boolean
+}
+
+function formatWorkflowValidationError(err: unknown): string {
+  if (err && typeof err === 'object' && 'issues' in err && Array.isArray((err as { issues: unknown }).issues)) {
+    const issues = (err as { issues: Array<{ path: Array<string | number>; message: string }> }).issues
+    if (issues.length) {
+      return issues
+        .map((issue) => {
+          const path = issue.path.length ? issue.path.join('.') : 'workflow'
+          return `${path}: ${issue.message}`
+        })
+        .join('; ')
+    }
+  }
+  return err instanceof Error ? err.message : '工作流格式无效'
+}
+
+function inferPersistKind(nodeType: string | undefined, mediaKind?: string): 'image' | 'video' | 'audio' {
+  const fromIndex = String(mediaKind ?? '').toLowerCase()
+  if (fromIndex === 'image' || fromIndex === 'video' || fromIndex === 'audio') {
+    return fromIndex
+  }
+  return assetKindFromNodeType(String(nodeType ?? '')) ?? 'image'
+}
+
+async function fetchWorkflowJson(workflowUrl: string): Promise<unknown> {
+  let parsed: URL
+  try {
+    parsed = new URL(workflowUrl)
+  } catch {
+    throw new BadRequestException('workflowUrl 无效')
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new BadRequestException('workflowUrl 仅支持 http/https')
+  }
+
+  let res: Response
+  try {
+    res = await fetch(parsed.href, { signal: AbortSignal.timeout(WORKFLOW_FETCH_TIMEOUT_MS) })
+  } catch (err) {
+    throw new BadRequestException(err instanceof Error ? `拉取工作流失败: ${err.message}` : '拉取工作流失败')
+  }
+  if (!res.ok) {
+    throw new BadRequestException(`拉取工作流失败: HTTP ${res.status}`)
+  }
+
+  const contentLength = Number(res.headers.get('content-length') ?? '')
+  if (Number.isFinite(contentLength) && contentLength > WORKFLOW_MAX_BYTES) {
+    throw new BadRequestException('工作流文件过大')
+  }
+
+  const buf = new Uint8Array(await res.arrayBuffer())
+  if (buf.byteLength > WORKFLOW_MAX_BYTES) {
+    throw new BadRequestException('工作流文件过大')
+  }
+
+  try {
+    return JSON.parse(new TextDecoder().decode(buf)) as unknown
+  } catch {
+    throw new BadRequestException('工作流 JSON 解析失败')
+  }
 }
 
 function toStudioRefs(node: CanvasNode, canvas: CanvasData): StudioRefInput[] {
@@ -1846,6 +1920,155 @@ export class AgentCanvasToolsService {
       canvasCommands: [
         { type: 'export_pack', nodeIds: scopedNodeIds, exportMode: 'full_package' },
       ],
+    }
+  }
+
+  async importWorkflow(input: {
+    sessionId: string
+    userId: string
+    workflow?: unknown
+    workflowUrl?: string
+  }): Promise<{
+    addedNodeIds: string[]
+    idMap: Record<string, string>
+    mediaOk: number
+    mediaFail: number
+    warnings?: string[]
+    actions: CanvasAction[]
+    canvasCommands: Array<{ type: 'focus_nodes'; nodeIds: string[] }>
+  }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+
+    let raw: unknown
+    if (input.workflow !== undefined && input.workflow !== null) {
+      raw = input.workflow
+    } else if (input.workflowUrl?.trim()) {
+      raw = await fetchWorkflowJson(input.workflowUrl.trim())
+    } else {
+      throw new BadRequestException('需要提供 workflow 或 workflowUrl')
+    }
+
+    let validated
+    try {
+      validated = validateWorkflow(raw)
+    } catch (err) {
+      throw new BadRequestException(formatWorkflowValidationError(err))
+    }
+
+    const { document: remapped, idMap } = remapWorkflowIds(validated, (type) => nextNodeId(type))
+    const remappedIdSet = new Set(remapped.graph.nodes.map((node) => node.id))
+    const { x: dx, y: dy } = computeImportTranslation({
+      importNodes: remapped.graph.nodes,
+      canvasNodes: canvas.nodes,
+    })
+
+    const urlByNodeId = new Map<string, { url: string; kind: 'image' | 'video' | 'audio' }>()
+    for (const node of remapped.graph.nodes) {
+      const url = String(node.data?.url ?? '').trim()
+      if (!url) continue
+      urlByNodeId.set(node.id, { url, kind: inferPersistKind(node.type) })
+    }
+    for (const entry of remapped.mediaIndex) {
+      const url = String(entry.url ?? entry.persistedUrl ?? '').trim()
+      if (!url) continue
+      const node = remapped.graph.nodes.find((n) => n.id === entry.nodeId)
+      if (!node) continue
+      if (!urlByNodeId.has(entry.nodeId)) {
+        urlByNodeId.set(entry.nodeId, { url, kind: inferPersistKind(node.type, entry.kind) })
+        if (!String(node.data?.url ?? '').trim()) {
+          node.data = { ...node.data, url }
+        }
+      }
+    }
+
+    let mediaOk = 0
+    let mediaFail = 0
+    const warnings: string[] = []
+    for (const [nodeId, { url, kind }] of urlByNodeId) {
+      const node = remapped.graph.nodes.find((n) => n.id === nodeId)
+      if (!node) continue
+      try {
+        const persisted = await this.persistRemote.persistRemote({
+          userId: input.userId,
+          url,
+          kind,
+          sessionId: input.sessionId,
+          sourceNodeId: nodeId,
+          replaceNodeUrl: false,
+        })
+        if (persisted?.persistedUrl) {
+          node.data = { ...node.data, url: persisted.persistedUrl }
+          mediaOk += 1
+        } else {
+          mediaFail += 1
+          warnings.push(`媒体持久化失败: ${nodeId}`)
+        }
+      } catch (err) {
+        mediaFail += 1
+        warnings.push(
+          `媒体持久化失败: ${nodeId}${err instanceof Error && err.message ? ` (${err.message})` : ''}`,
+        )
+      }
+    }
+
+    const mergeNodes: ImportedCanvasNode[] = remapped.graph.nodes.map((node) => {
+      const root = isRootNode(node, remappedIdSet)
+      const parent = node.parentNode ?? node.parentId
+      return {
+        id: node.id,
+        type: node.type as NodeType,
+        position: root
+          ? { x: node.position.x + dx, y: node.position.y + dy }
+          : { x: node.position.x, y: node.position.y },
+        data: { ...node.data },
+        ...(!root && parent
+          ? { parentNode: parent, extent: 'parent' as const, expandParent: true }
+          : {}),
+      }
+    })
+    const mergeEdges = remapped.graph.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+    }))
+
+    const updated: CanvasData = {
+      ...canvas,
+      nodes: [...canvas.nodes, ...(mergeNodes as CanvasNode[])],
+      edges: [...canvas.edges, ...mergeEdges],
+    }
+    await this.persistCanvasData(input.sessionId, updated)
+
+    const actions: CanvasAction[] = [
+      ...mergeNodes.map((node) => ({
+        type: 'add_node' as const,
+        payload: {
+          id: node.id,
+          nodeType: node.type,
+          position: node.position,
+          data: node.data ?? {},
+        },
+      })),
+      ...mergeEdges.map((edge) => ({
+        type: 'add_edge' as const,
+        payload: {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+        },
+      })),
+    ]
+
+    const addedNodeIds = mergeNodes.map((node) => node.id)
+    return {
+      addedNodeIds,
+      idMap,
+      mediaOk,
+      mediaFail,
+      ...(warnings.length ? { warnings } : {}),
+      actions,
+      canvasCommands: [{ type: 'focus_nodes', nodeIds: addedNodeIds }],
     }
   }
 

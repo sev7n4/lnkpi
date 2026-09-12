@@ -19,6 +19,7 @@ def test_explore_tools_exclude_generation():
     assert "open_image_editor" in names
     assert "run_image_generation" not in names
     assert "add_nodes_batch" not in names
+    assert "import_workflow" not in names
     assert "group_nodes" not in names
     assert "move_nodes" not in names
     assert "apply_layout_ops" not in names
@@ -31,4 +32,5 @@ def test_graph_only_includes_generation():
     assert "run_image_generation" in names
     assert "get_canvas_summary" not in names
     assert "add_nodes_batch" in names
+    assert "import_workflow" in names
     assert names <= GRAPH_ONLY_TOOL_NAMES
