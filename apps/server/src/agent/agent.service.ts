@@ -23,6 +23,7 @@ import {
 import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
+import { isObjectStorageConfigured } from '../storage/object-storage-env'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
@@ -79,6 +80,7 @@ export class AgentService {
       text: TEXT_MODELS,
       image: IMAGE_MODELS,
       video: VIDEO_MODELS,
+      stsDirectUpload: isObjectStorageConfigured(),
     }
   }
 
