@@ -12,6 +12,7 @@ import { FileInterceptor } from '@nestjs/platform-express'
 import { IsInt, IsOptional, IsString, Min } from 'class-validator'
 import { memoryStorage } from 'multer'
 import { AuthGuard } from '../auth/auth.guard'
+import { DirectUploadService } from './direct-upload.service'
 import { UploadService } from './upload.service'
 
 class InitChunkDto {
@@ -48,9 +49,25 @@ class CompleteChunkDto {
   uploadId!: string
 }
 
+class DirectCredentialDto {
+  @IsString()
+  fileName!: string
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string
+
+  @IsInt()
+  @Min(1)
+  size!: number
+}
+
 @Controller('upload')
 export class UploadController {
-  constructor(@Inject(UploadService) private readonly uploadService: UploadService) {}
+  constructor(
+    @Inject(UploadService) private readonly uploadService: UploadService,
+    @Inject(DirectUploadService) private readonly directUpload: DirectUploadService,
+  ) {}
 
   @Post()
   @UseGuards(AuthGuard)
@@ -100,6 +117,17 @@ export class UploadController {
   @UseGuards(AuthGuard)
   async completeChunk(@Req() req: { user: { sub: string } }, @Body() dto: CompleteChunkDto) {
     const data = await this.uploadService.completeChunkedUpload(req.user.sub, dto.uploadId)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('direct-credential')
+  @UseGuards(AuthGuard)
+  async directCredential(@Req() req: { user: { sub: string } }, @Body() dto: DirectCredentialDto) {
+    const data = await this.directUpload.createCredential(req.user.sub, {
+      fileName: dto.fileName,
+      mimeType: dto.mimeType || 'application/octet-stream',
+      size: dto.size,
+    })
     return { code: 0, message: 'ok', data }
   }
 }
