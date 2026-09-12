@@ -98,7 +98,12 @@ import {
   type CanvasSnapshot,
   type GenerationFieldsCache,
 } from '@/composables/useCanvasUndoStack'
-import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import { detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import {
+  exportWorkflowPackage,
+  importWorkflowPackage,
+  type WorkflowExportMode,
+} from '@/composables/useWorkflowExchange'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
@@ -377,6 +382,7 @@ const selectedEdgeId = ref<string | null>(null)
 const selectedEdgePos = ref({ x: 0, y: 0 })
 const batchConnectPicker = ref<{ sourceIds: string[]; x: number; y: number } | null>(null)
 const mediaInputRef = ref<HTMLInputElement | null>(null)
+const workflowImportInputRef = ref<HTMLInputElement | null>(null)
 const pendingMediaPos = ref<{ x: number; y: number } | null>(null)
 
 const { getConfig: getProviderConfig } = useModelProviderSettings()
@@ -2130,20 +2136,92 @@ function handleAssetAddToAgent(asset: CanvasAssetItem) {
   agentRailRef.value?.openPanel()
 }
 
-async function handlePackageDownload() {
-  await downloadMediaPackage(
-    nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
-    multiSelectedIds.value,
-    { sessionId: sessionId.value },
-  )
+async function handlePackageDownload(mode: WorkflowExportMode = 'full_package') {
+  await exportWorkflowPackage({
+    nodes: nodes.value.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      parentNode: n.parentNode,
+      data: n.data as Record<string, unknown>,
+    })),
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    selectedIds: [...multiSelectedIds.value],
+    sessionId: sessionId.value,
+    exportMode: mode,
+  })
 }
 
-async function handleExportPack(nodeIds: string[]) {
-  await downloadMediaPackage(
-    nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
-    nodeIds,
-    { sessionId: sessionId.value },
-  )
+async function handleExportPack(
+  nodeIds: string[],
+  exportMode: 'full_package' | 'lightweight' = 'full_package',
+) {
+  // Empty nodeIds = full canvas (exportWorkflowPackage expands selectedIds).
+  await exportWorkflowPackage({
+    nodes: nodes.value.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      parentNode: n.parentNode,
+      data: n.data as Record<string, unknown>,
+    })),
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    selectedIds: nodeIds,
+    sessionId: sessionId.value,
+    exportMode,
+  })
+}
+
+function openWorkflowImportPicker() {
+  workflowImportInputRef.value?.click()
+}
+
+async function onWorkflowImportSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    await importWorkflowPackage(file, {
+      nodes: nodes.value.map((n) => ({
+        id: n.id,
+        type: n.type,
+        position: n.position,
+        parentNode: n.parentNode,
+        data: n.data as Record<string, unknown>,
+      })),
+      edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+      sessionId: sessionId.value,
+      createId: (type) => {
+        nodeCounter++
+        return `${type}-${nodeCounter}`
+      },
+      applyMerge: (mergeNodes, mergeEdges) => {
+        for (const n of mergeNodes) {
+          nodes.value.push({
+            id: n.id,
+            type: n.type,
+            position: n.position,
+            ...(n.parentNode
+              ? {
+                  parentNode: n.parentNode,
+                  ...(n.extent !== undefined ? { extent: n.extent } : {}),
+                  ...(n.expandParent !== undefined ? { expandParent: n.expandParent } : {}),
+                }
+              : {}),
+            data: { createdAt: Date.now(), ...(n.data ?? {}) },
+          })
+        }
+        for (const e of mergeEdges) {
+          edges.value.push({ id: e.id, source: e.source, target: e.target })
+        }
+        persistUserEdit()
+      },
+    })
+  } catch {
+    // toast already shown inside importWorkflowPackage
+  }
 }
 
 function connectSelectionToTarget(targetId: string, sourceIds = multiSelectedIds.value) {
@@ -3312,6 +3390,22 @@ onUnmounted(() => {
         <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
           <button
             type="button"
+            class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 items-center justify-center rounded-xl px-3 text-xs transition"
+            title="导入工作流"
+            @click="openWorkflowImportPicker"
+          >
+            导入工作流
+          </button>
+          <button
+            type="button"
+            class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 items-center justify-center rounded-xl px-3 text-xs transition"
+            title="导出工作流"
+            @click="handleExportPack([], 'full_package')"
+          >
+            导出工作流
+          </button>
+          <button
+            type="button"
             class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl transition"
             :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
             @click="toggleCanvasTheme"
@@ -3335,6 +3429,14 @@ onUnmounted(() => {
           accept="image/*,video/*,audio/*,text/*,.txt,.md,.json,.csv"
           class="hidden"
           @change="onMediaFileSelected"
+        >
+
+        <input
+          ref="workflowImportInputRef"
+          type="file"
+          accept=".zip,.json,application/zip,application/json"
+          class="hidden"
+          @change="onWorkflowImportSelected"
         >
 
         <ConnectNodePicker

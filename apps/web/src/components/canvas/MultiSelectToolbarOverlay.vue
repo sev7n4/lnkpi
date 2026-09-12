@@ -16,7 +16,7 @@ const emit = defineEmits<{
   delete: []
   layout: []
   generateVideo: []
-  download: []
+  download: [mode: 'full_package' | 'lightweight' | 'media_list_only']
   addAgentRef: []
   duplicate: []
   duplicateUpstream: []
@@ -95,7 +95,7 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @delete="emit('delete')"
     @layout="emit('layout')"
     @generate-video="emit('generateVideo')"
-    @download="emit('download')"
+    @download="emit('download', $event)"
     @add-agent-ref="emit('addAgentRef')"
     @duplicate="emit('duplicate')"
     @duplicate-upstream="emit('duplicateUpstream')"

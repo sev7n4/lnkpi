@@ -1,0 +1,48 @@
+{
+  "format": "lnkpi.workflow",
+  "version": "1.0.0",
+  "exportedAt": "2026-09-12T01:00:00.000Z",
+  "mode": "full",
+  "exportMode": "lightweight",
+  "graph": {
+    "nodes": [
+      {
+        "id": "prompt-golden-1",
+        "type": "prompt",
+        "position": { "x": 80, "y": 120 },
+        "data": {
+          "title": "Scene prompt",
+          "prompt": "A serene mountain lake at dawn, cinematic lighting"
+        },
+        "mediaRole": "none"
+      },
+      {
+        "id": "image-golden-1",
+        "type": "image",
+        "position": { "x": 400, "y": 120 },
+        "data": {
+          "title": "Hero frame",
+          "prompt": "A serene mountain lake at dawn, cinematic lighting",
+          "url": "https://cdn.example.com/workflows/golden-lake.png",
+          "generationRecordId": "gen-golden-001"
+        },
+        "mediaRole": "generated"
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-golden-1",
+        "source": "prompt-golden-1",
+        "target": "image-golden-1"
+      }
+    ]
+  },
+  "mediaIndex": [
+    {
+      "nodeId": "image-golden-1",
+      "kind": "image",
+      "fileName": "golden-lake.png",
+      "url": "https://cdn.example.com/workflows/golden-lake.png"
+    }
+  ]
+}
