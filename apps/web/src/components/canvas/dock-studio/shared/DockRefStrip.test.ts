@@ -27,4 +27,28 @@ describe('DockRefStrip', () => {
     expect(wrapper.text()).toContain('首帧')
     expect(wrapper.text()).toContain('末帧')
   })
+
+  it('hides strip when empty and upload not enabled', () => {
+    const wrapper = mount(DockRefStrip, { props: { refs: [] } })
+    expect(wrapper.find('.dock-ref-strip').exists()).toBe(false)
+  })
+
+  it('shows muted + when upload enabled with no refs', () => {
+    const wrapper = mount(DockRefStrip, {
+      props: { refs: [], showAddUpload: true },
+    })
+    const add = wrapper.find('.dock-ref-strip__add')
+    expect(add.exists()).toBe(true)
+    expect(add.classes()).not.toContain('is-prominent')
+  })
+
+  it('makes + prominent when refs exist and emits addUpload', async () => {
+    const wrapper = mount(DockRefStrip, {
+      props: { refs: [imageRef('I1')], showAddUpload: true },
+    })
+    const add = wrapper.find('.dock-ref-strip__add')
+    expect(add.classes()).toContain('is-prominent')
+    await add.trigger('click')
+    expect(wrapper.emitted('addUpload')).toHaveLength(1)
+  })
 })

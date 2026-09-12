@@ -5,10 +5,21 @@ import type { VideoGenerationMode } from '@/composables/useUpstreamNodeContext'
 import DockRefChip from '@/components/canvas/dock-studio/shared/DockRefChip.vue'
 import { resolveRefRoleLabel } from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
 
-const props = defineProps<{
-  refs: NodeRef[]
-  videoMode?: VideoGenerationMode
-}>()
+const props = withDefaults(
+  defineProps<{
+    refs: NodeRef[]
+    videoMode?: VideoGenerationMode
+    /** Show trailing + for local image upload. */
+    showAddUpload?: boolean
+    addUploadDisabled?: boolean
+    addUploadBusy?: boolean
+  }>(),
+  {
+    showAddUpload: false,
+    addUploadDisabled: false,
+    addUploadBusy: false,
+  },
+)
 
 const roleLabels = computed(() => {
   const mode = props.videoMode ?? 'text_to_video'
@@ -20,10 +31,14 @@ const roleLabels = computed(() => {
   return map
 })
 
+const showStrip = computed(() => props.refs.length > 0 || props.showAddUpload)
+const addUploadProminent = computed(() => props.refs.length > 0)
+
 const emit = defineEmits<{
   reorder: [refIds: string[]]
   remove: [ref: NodeRef]
   mention: [refKey: string]
+  addUpload: []
 }>()
 
 const dragRefId = ref<string | null>(null)
@@ -75,7 +90,7 @@ function onDragEnd() {
 </script>
 
 <template>
-  <div v-if="refs.length" class="dock-ref-strip">
+  <div v-if="showStrip" class="dock-ref-strip">
     <div class="dock-ref-strip__scroll">
       <DockRefChip
         v-for="refItem in refs"
@@ -93,6 +108,19 @@ function onDragEnd() {
         @remove="emit('remove', refItem)"
         @mention="emit('mention', $event)"
       />
+      <button
+        v-if="showAddUpload"
+        type="button"
+        class="dock-ref-strip__add"
+        :class="{ 'is-prominent': addUploadProminent, 'is-busy': addUploadBusy }"
+        :disabled="addUploadDisabled || addUploadBusy"
+        :title="addUploadBusy ? '上传中…' : '上传参考图'"
+        aria-label="上传参考图"
+        @click="emit('addUpload')"
+      >
+        <span v-if="addUploadBusy" class="dock-ref-strip__add-busy">…</span>
+        <span v-else aria-hidden="true">+</span>
+      </button>
     </div>
   </div>
 </template>
@@ -123,5 +151,45 @@ function onDragEnd() {
 .dock-ref-strip__scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.18);
+}
+
+.dock-ref-strip__add {
+  display: inline-flex;
+  height: 28px;
+  width: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed color-mix(in srgb, var(--neo-border) 80%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neo-text-muted);
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.45;
+  cursor: pointer;
+  transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.dock-ref-strip__add.is-prominent {
+  opacity: 0.85;
+  border-style: solid;
+  border-color: var(--neo-border);
+}
+
+.dock-ref-strip__add:hover:not(:disabled) {
+  opacity: 1;
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
+}
+
+.dock-ref-strip__add:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.dock-ref-strip__add-busy {
+  font-size: 12px;
+  letter-spacing: 0.05em;
 }
 </style>
