@@ -45,17 +45,17 @@
 - Modify: `packages/shared/src/index.ts`
 - Modify/Delete: `apps/web/src/composables/workflowImportPlacement.ts` (+ tests import path)
 
-- [ ] **Step 1:** Copy current web placement module + tests into shared (adjust import paths).
-- [ ] **Step 2:** Export from `packages/shared/src/index.ts`.
-- [ ] **Step 3:** Point web `useWorkflowExchange` / tests at `@lnkpi/shared` (or thin re-export file).
-- [ ] **Step 4:** Run:
+- [x] **Step 1:** Copy current web placement module + tests into shared (adjust import paths).
+- [x] **Step 2:** Export from `packages/shared/src/index.ts`.
+- [x] **Step 3:** Point web `useWorkflowExchange` / tests at `@lnkpi/shared` (or thin re-export file).
+- [x] **Step 4:** Run:
 
 ```bash
 pnpm --filter @lnkpi/shared exec vitest run src/canvas/workflowImportPlacement.test.ts
 pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement.test.ts src/composables/useWorkflowExchange.test.ts src/composables/fitImportedViewport.test.ts
 ```
 
-- [ ] **Step 5:** Commit `refactor(shared): move workflow import placement into shared package`
+- [x] **Step 5:** Commit `refactor(shared): move workflow import placement into shared package`
 
 ---
 
@@ -79,10 +79,10 @@ pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement
 8. Build `actions` consistent with other merge tools (or return enough for proxy — mirror `duplicateNode` / batch patterns in this service).
 9. `canvasCommands: [{ type: 'focus_nodes', nodeIds: addedRootOrAllIds }]`.
 
-- [ ] **Step 1:** Failing tests — minimal doc merges; invalid rejected; overlap separation without viewport; persist fail keeps url.
-- [ ] **Step 2:** Implement service + `POST import-workflow`.
-- [ ] **Step 3:** Tests PASS.
-- [ ] **Step 4:** Commit `feat(server): import-workflow internal tool merges lnkpi.workflow JSON`
+- [x] **Step 1:** Failing tests — minimal doc merges; invalid rejected; overlap separation without viewport; persist fail keeps url.
+- [x] **Step 2:** Implement service + `POST import-workflow`.
+- [x] **Step 3:** Tests PASS.
+- [x] **Step 4:** Commit `feat(server): import-workflow internal tool merges lnkpi.workflow JSON`
 
 ---
 
@@ -93,10 +93,10 @@ pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement
 - Modify: `services/agent-runtime/app/tools/nest_client.py`
 - Modify: tool registry / explore allowlists if write tools need explicit registration (match `add_nodes_batch`)
 
-- [ ] **Step 1:** Add `ImportWorkflowInput` (`workflow: dict | None`, `workflow_url: str | None`).
-- [ ] **Step 2:** `NestCanvasClient.import_workflow(...)` → POST.
-- [ ] **Step 3:** Register `StructuredTool` `import_workflow` with description: merge workflow JSON into current canvas (remap ids; not zip).
-- [ ] **Step 4:** Commit `feat(agent-runtime): add import_workflow tool`
+- [x] **Step 1:** Add `ImportWorkflowInput` (`workflow: dict | None`, `workflow_url: str | None`).
+- [x] **Step 2:** `NestCanvasClient.import_workflow(...)` → POST.
+- [x] **Step 3:** Register `StructuredTool` `import_workflow` with description: merge workflow JSON into current canvas (remap ids; not zip).
+- [x] **Step 4:** Commit `feat(agent-runtime): add import_workflow tool`
 
 ---
 
@@ -106,8 +106,8 @@ pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement
 - Modify: `docs/workflow/README.md`
 - Modify: parent exchange design §6 status if needed
 
-- [ ] **Step 1:** Document Agent `import_workflow` (inline JSON / URL); point to Nest + shared validate.
-- [ ] **Step 2:** Commit `docs(workflow): agent import_workflow usage`
+- [x] **Step 1:** Document Agent `import_workflow` (inline JSON / URL); point to Nest + shared validate.
+- [x] **Step 2:** Commit `docs(workflow): agent import_workflow usage`
 
 ---
 
@@ -126,3 +126,9 @@ pnpm --filter @lnkpi/web exec vitest run src/composables/workflowImportPlacement
 
 **Placeholders:** none.  
 **Handoff:** Execute via Subagent-Driven Development after plan commit.
+
+---
+
+## Status
+
+Implemented on `feature/agent-import-workflow` (shared placement → Nest import-workflow → runtime tool → docs).
