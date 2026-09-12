@@ -43,6 +43,7 @@ describe('video generate controllers', () => {
       { generateVideo } as never,
       {} as never,
       {} as never,
+      {} as never,
     )
 
     await controller.generateVideo(

@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-07-19（§十 BYOK 渠道；§C2.1 Canvas T*/I* refs 验收）
+> **最后更新**：2026-09-13（B-2 / I-7 image upscale ✅；§十 BYOK 渠道；§C2.1 Canvas T*/I* refs 验收）
 
 ---
 
@@ -14,13 +14,13 @@
 | 阶段 | 完成度 | 说明 |
 |------|--------|------|
 | **Phase 0** 基础架构 | **100%** | P0-1 ~ P0-6 全部完成 |
-| **Phase 1** 核心生成节点 | **~92%** | text/image/video/audio/shot 主链路完成；T-5/I-6/I-7/V-6 待补 |
+| **Phase 1** 核心生成节点 | **~94%** | text/image/video/audio/shot 主链路完成；T-5/I-6/V-6 待补；I-7 upscale ✅ |
 | **Phase 2** 输入与编排 | **~90%** | mediaInput ✅；sceneComposer D-1~D-4 ✅（API 手测）；videoComposition C-1~C-4 ✅（export 生产）；worldModel 未开始 |
 | **Phase 3** Dock UX | **~88%** | UX-1~UX-5 ✅；UX-6 Capabilities **部分**（`useCapabilities` + `UniversalModelSelector` 已接，未全量替换硬编码） |
-| **Phase 4** 后端补齐 | **~67%** | B-1/B-3/B-4/B-6 ✅；B-2 upscale、B-5 lip-sync 未开始 |
+| **Phase 4** 后端补齐 | **~83%** | B-1/B-2/B-3/B-4/B-6 ✅；B-5 lip-sync 未开始 |
 | **里程碑 M1/M2** | **已完成** | 代码落地；**真实 AI 生成**待生产 API Key |
 | **里程碑 M3** | **~90%** | 编排 + export 生产 API ✅；sceneComposer/shot **浏览器 UI** 待验 |
-| **里程碑 M4** | **未开始** | OSS STS + upscale/lip-sync + worldModel |
+| **里程碑 M4** | **进行中** | OSS STS + upscale ✅；lip-sync / worldModel 未开始 |
 | **浏览器 E2E 手测** | **🟡 部分** | 2026-07-14 Dock 壳层 ✅；2026-07-16 export/sceneComposer **API** ✅；UI 闭环 ☐（见 §0.5） |
 
 ### 0.4 生产环境 E2E 手测记录（2026-07-14）
@@ -97,7 +97,7 @@
 | 节点 | Dock | 生成 E2E | 状态 | 待办 |
 |------|------|----------|------|------|
 | text | ✅ | ✅ | **已完成** | T-5 txt 拖入验收 |
-| image | ✅ | ✅ | **已完成** | I-6 编辑器联动、I-7 upscale |
+| image | ✅ | ✅ | **已完成** | I-6 编辑器联动；I-7 upscale ✅ |
 | video | ✅ | ✅ | **已完成** | V-6 多选批量一致 |
 | audio | ✅ | ✅ | **已完成** | — |
 | shot | ✅ | ✅ | **代码完成** | 生产 UI 手测（§0.5 U3） |
@@ -200,7 +200,7 @@ completed → 写回 url / content / coverUrl
 | 节点 type | Dock 是否出现 | Dock 能力完整度 | 生成 E2E | 上游连线消费 | 主要缺口 | 状态 |
 |-----------|--------------|----------------|----------|-------------|---------|------|
 | **text** | ✅ | 🟢 85% | ✅ studio | ✅ 出边供下游消费 | TextDockPanel 已拆 | 已完成 |
-| **image** | ✅ | 🟢 85% | ✅ 统一 composable | ✅ 入边 text/image 预填 | upscale 未做；比例仅存 metadata | 已完成 |
+| **image** | ✅ | 🟢 90% | ✅ 统一 composable | ✅ 入边 text/image 预填 | upscale ✅（fal Real-ESRGAN）；比例仅存 metadata | 已完成 |
 | **video** | ✅ | 🟢 80% | ✅ 异步轮询 | ✅ I2V + 入边参考图 | crop 已 UI 未传 provider | 已完成 |
 | **audio** | ✅ | 🟢 80% | ✅ voice+settings | ✅ 入边 text 预填 | 情感/语速存 metadata | 已完成 |
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
@@ -235,7 +235,7 @@ completed → 写回 url / content / coverUrl
 |-----|-----------|---------|------|
 | canvas CRUD + shot/material | ✅ | shot, image | 已完成 |
 | `optimize-prompt` | ✅ Dock 内 Text/Shot 已接 | shot, text | 已完成 |
-| `material/upscale` | ❌ | image | 未开始 |
+| `material/upscale` | ✅ `POST .../upscale-image`（fal Real-ESRGAN） | image | 已完成 |
 | `material/lip-sync` | ❌ | video（可选） | 未开始 |
 | OSS upload / STS | Presigned PUT 直传（COS 就绪时）+ 本地 `POST /api/upload` 兜底 | mediaInput | 直传 Presigned PUT 已做 / 本地兜底 |
 | `capabilities/list` → UniversalModelSelector | 🟡 部分对接（`useCapabilities` 已接，fallback 硬编码） | 全部生成节点 | 进行中 |
@@ -361,7 +361,7 @@ interface DockStudioEntry {
 | I-4 | 统一 generate 路径（去掉 shot/独立双轨分散） | P0-1 | 已完成 |
 | I-5 | 生成中 skeleton + 完成后节点预览 | P0-4 | 已完成 |
 | I-6 | 右键「编辑图像」→ AIImageEditor 与 Dock 数据同步 | — | 未开始 |
-| I-7 | 放大 `upscale`（可选） | 后端 B-2 | 未开始 |
+| I-7 | 放大 `upscale`（可选） | 后端 B-2 | 已完成（浮层/右键；fal；新节点落点） |
 
 **E2E 验收**：text→image 连线 → 选 image → Dock 有 prompt+比例 → 生成 → 预览图 → 保存画布。
 
@@ -371,7 +371,7 @@ interface DockStudioEntry {
 - [x] I-4 — 统一 generate 路径
 - [x] I-5 — skeleton + 预览
 - [ ] I-6 — AIImageEditor 联动
-- [ ] I-7 — upscale（可选）
+- [x] I-7 — upscale（可选）
 
 ---
 
@@ -528,14 +528,14 @@ interface DockStudioEntry {
 | ID | API | 服务节点 | 状态 |
 |----|-----|---------|------|
 | B-1 | `POST /agent/chat/optimize-prompt`（Dock 已接） | shot, text | 已完成 |
-| B-2 | `POST /agent/canvas/material/upscale-image` | image | 未开始 |
+| B-2 | `POST /agent/canvas/material/upscale-image` | image | 已完成（fal Real-ESRGAN；积分 image_upscale） |
 | B-3 | `POST /studio/audio/generate` 扩展 voice/emotion/speed/language | audio | 已完成 |
 | B-4 | OSS STS + `POST /upload` | mediaInput | 直传 Presigned PUT 已做 / 本地兜底 |
 | B-5 | `POST /agent/canvas/material/lip-sync` | video（可选） | 未开始 |
 | B-6 | video 异步 job status 查询 | video, shot | 已完成（`GET /studio/generations/:id`） |
 
 - [x] B-1 — optimize-prompt（经 chat API）
-- [ ] B-2 — upscale-image
+- [x] B-2 — upscale-image
 - [x] B-3 — audio voice/emotion/speed/language
 - [x] B-4 — 直传 Presigned PUT 已做 / 本地兜底
 - [ ] B-5 — lip-sync（可选）

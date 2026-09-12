@@ -8,6 +8,9 @@ const cache = ref<Record<GenerationType, AIModel[]>>({
   video: [...VIDEO_MODELS],
 })
 
+const imageUpscale = ref(false)
+const stsDirectUpload = ref(false)
+
 let loaded = false
 
 export function useCapabilities() {
@@ -23,6 +26,8 @@ export function useCapabilities() {
         image: data.data.image?.length ? data.data.image : IMAGE_MODELS,
         video: data.data.video?.length ? data.data.video : VIDEO_MODELS,
       }
+      imageUpscale.value = Boolean(data.data.imageUpscale)
+      stsDirectUpload.value = Boolean(data.data.stsDirectUpload)
       loaded = true
     } catch {
       // fallback to shared defaults
@@ -39,5 +44,5 @@ export function useCapabilities() {
     return cache.value[type]
   }
 
-  return { loading, modelsFor, reload: load }
+  return { loading, modelsFor, reload: load, imageUpscale, stsDirectUpload }
 }
