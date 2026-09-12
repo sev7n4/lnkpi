@@ -89,7 +89,8 @@ function saveToLibrary() {
   void saveAssetToLibrary({
     kind: 'audio',
     url,
-    label: props.data.label ?? props.data.prompt ?? '',
+    label: props.data.label,
+    prompt: props.data.prompt,
     sourceNodeId: props.id,
     sessionId: sessionId.value,
   })
