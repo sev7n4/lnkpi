@@ -68,6 +68,16 @@ export const canvasApi = {
       mentionedKeys: settings?.mentionedKeys,
       referenceImageUrl: settings?.referenceImageUrl,
     }),
+  upscaleImage: (body: {
+    sessionId: string
+    nodeId?: string
+    imageUrl?: string
+    scale?: 2 | 4
+    provider?: string
+  }) =>
+    api.post<{
+      data: { url: string; scale: 2 | 4; providerId: string; recordId?: string }
+    }>('/agent/canvas/material/upscale-image', body, { timeout: 300_000 }),
   statusBatch: (ids: string[]) =>
     api.get('/agent/canvas/shot/status/batch', { params: { ids: ids.join(',') } }),
   optimizePrompt: (prompt: string, style?: string) =>
