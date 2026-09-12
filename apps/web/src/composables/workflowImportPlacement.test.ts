@@ -5,6 +5,7 @@ import {
   unionNodeBBox,
   viewportToFlowRect,
   IMPORT_PLACE_MARGIN,
+  IMPORT_PLACE_STEP,
 } from './workflowImportPlacement'
 
 describe('workflowImportPlacement', () => {
@@ -29,6 +30,46 @@ describe('workflowImportPlacement', () => {
     const a = unionNodeBBox(canvasNodes)!
     const b = unionNodeBBox(placed)!
     expect(rectsOverlap(a, b, IMPORT_PLACE_MARGIN)).toBe(false)
+  })
+
+  it('clamps the free axis into the current viewport, not file coordinates', () => {
+    const canvasNodes = [{ id: 'existing', position: { x: 2000, y: 2000 } }]
+    const importNodes = [{ id: 'imported', position: { x: 0, y: 0 } }]
+    const viewport = { x: -2000, y: -2000, zoom: 1 }
+    const containerSize = { width: 1000, height: 800 }
+    const viewBBox = viewportToFlowRect(viewport, containerSize)
+    expect(viewBBox).toEqual({ x: 2000, y: 2000, width: 1000, height: 800 })
+
+    const { x: dx, y: dy } = computeImportTranslation({
+      importNodes,
+      canvasNodes,
+      viewport,
+      containerSize,
+    })
+    const placed = unionNodeBBox(
+      importNodes.map((n) => ({
+        ...n,
+        position: { x: n.position.x + dx, y: n.position.y + dy },
+      })),
+    )!
+
+    expect(placed.y).not.toBeCloseTo(0)
+    expect(placed.y).toBeGreaterThan(viewBBox.y - IMPORT_PLACE_MARGIN)
+
+    const viewRight = viewBBox.x + viewBBox.width
+    const viewBottom = viewBBox.y + viewBBox.height
+    const insideView =
+      placed.x >= viewBBox.x &&
+      placed.y >= viewBBox.y &&
+      placed.x + placed.width <= viewRight &&
+      placed.y + placed.height <= viewBottom
+    const tightlyRightExterior =
+      placed.x >= viewRight &&
+      placed.x <= viewRight + IMPORT_PLACE_MARGIN + IMPORT_PLACE_STEP &&
+      placed.y >= viewBBox.y &&
+      placed.y + placed.height <= viewBottom
+
+    expect(insideView || tightlyRightExterior).toBe(true)
   })
 
   it('keeps child relative coords out of translation input roots', () => {

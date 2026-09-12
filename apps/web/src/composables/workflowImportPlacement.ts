@@ -76,6 +76,13 @@ function isClear(placed: Rect, canvasBBox: Rect | null, margin: number): boolean
   return !rectsOverlap(placed, canvasBBox, margin)
 }
 
+function centerInView(view: Rect, size: Size): Point {
+  return {
+    x: view.x + view.width / 2 - size.width / 2,
+    y: view.y + view.height / 2 - size.height / 2,
+  }
+}
+
 function tryCandidate(
   importBBox: Rect,
   targetX: number,
@@ -119,20 +126,21 @@ export function computeImportTranslation(input: {
   }
 
   if (viewBBox) {
+    const viewCenter = centerInView(viewBBox, importBBox)
     const rightInteriorX = viewBBox.x + viewBBox.width - importBBox.width - margin
-    const rightInteriorY = importBBox.y
+    const rightInteriorY = viewCenter.y
     candidates.push({ x: rightInteriorX, y: rightInteriorY })
 
     if (canvasBBox) {
-      candidates.push({ x: canvasBBox.x + canvasBBox.width + margin, y: importBBox.y })
+      candidates.push({ x: canvasBBox.x + canvasBBox.width + margin, y: viewCenter.y })
     }
 
-    const belowInteriorX = importBBox.x
+    const belowInteriorX = viewCenter.x
     const belowInteriorY = viewBBox.y + viewBBox.height - importBBox.height - margin
     candidates.push({ x: belowInteriorX, y: belowInteriorY })
 
     if (canvasBBox) {
-      candidates.push({ x: importBBox.x, y: canvasBBox.y + canvasBBox.height + margin })
+      candidates.push({ x: viewCenter.x, y: canvasBBox.y + canvasBBox.height + margin })
     }
 
     const stepBases = [
@@ -148,9 +156,9 @@ export function computeImportTranslation(input: {
     }
 
     const exteriorRightX = viewBBox.x + viewBBox.width + margin
-    candidates.push({ x: exteriorRightX, y: importBBox.y })
+    candidates.push({ x: exteriorRightX, y: viewCenter.y })
     for (let i = 1; i <= MAX_STEP_ATTEMPTS; i++) {
-      candidates.push({ x: exteriorRightX, y: importBBox.y + i * step })
+      candidates.push({ x: exteriorRightX, y: viewCenter.y + i * step })
     }
   }
 
