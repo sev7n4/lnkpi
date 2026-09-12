@@ -15,6 +15,7 @@ import {
   triggerBlobDownload,
   type DownloadMediaOptions,
 } from './useCanvasMedia'
+import { computeImportTranslation } from './workflowImportPlacement'
 
 export type WorkflowExportMode = 'full_package' | 'lightweight' | 'media_list_only'
 
@@ -59,6 +60,9 @@ export interface ImportWorkflowPackageContext {
   ) => void | Promise<void>
   createId?: (type: string) => string
   uploadMedia?: (file: File) => Promise<string>
+  getViewport?: () => { x: number; y: number; zoom: number }
+  getContainerSize?: () => { width: number; height: number }
+  fitImportedNodes?: (nodeIds: string[]) => void | Promise<void>
 }
 
 export interface ImportWorkflowPackageResult {
@@ -67,8 +71,6 @@ export interface ImportWorkflowPackageResult {
   mediaOk: number
   mediaFail: number
 }
-
-const IMPORT_POSITION_OFFSET = 80
 
 function defaultCreateIdFactory(existingNodes: WorkflowExportNode[]): (type: string) => string {
   const used = new Set(existingNodes.map((n) => n.id))
@@ -144,7 +146,11 @@ async function uploadZipMedia(
   return { mediaOk, mediaFail }
 }
 
-function toMergeNodes(doc: WorkflowDocument): WorkflowExportNode[] {
+function toMergeNodes(
+  doc: WorkflowDocument,
+  translation: { dx: number; dy: number } = { dx: 0, dy: 0 },
+): WorkflowExportNode[] {
+  const { dx, dy } = translation
   return doc.graph.nodes.map((node) => {
     const parent = node.parentNode ?? node.parentId
     const isChild = parent !== undefined && parent !== ''
@@ -154,8 +160,8 @@ function toMergeNodes(doc: WorkflowDocument): WorkflowExportNode[] {
       position: isChild
         ? { x: node.position.x, y: node.position.y }
         : {
-            x: node.position.x + IMPORT_POSITION_OFFSET,
-            y: node.position.y + IMPORT_POSITION_OFFSET,
+            x: node.position.x + dx,
+            y: node.position.y + dy,
           },
       ...(isChild
         ? { parentNode: parent, extent: 'parent' as const, expandParent: true }
@@ -333,7 +339,13 @@ export async function importWorkflowPackage(
       mediaFail = mediaResult.mediaFail
     }
 
-    const mergeNodes = toMergeNodes(remapped)
+    const { x: dx, y: dy } = computeImportTranslation({
+      importNodes: remapped.graph.nodes,
+      canvasNodes: ctx.nodes,
+      viewport: ctx.getViewport?.(),
+      containerSize: ctx.getContainerSize?.(),
+    })
+    const mergeNodes = toMergeNodes(remapped, { dx, dy })
     const mergeEdges: WorkflowExportEdge[] = remapped.graph.edges.map((e) => ({
       id: e.id,
       source: e.source,
@@ -341,6 +353,7 @@ export async function importWorkflowPackage(
     }))
 
     await ctx.applyMerge(mergeNodes, mergeEdges)
+    await ctx.fitImportedNodes?.(mergeNodes.map((n) => n.id))
     if (mediaFail > 0) {
       ElMessage.warning(
         `已导入工作流：${mergeNodes.length} 个节点（媒体成功 ${mediaOk} / 失败 ${mediaFail}）`,

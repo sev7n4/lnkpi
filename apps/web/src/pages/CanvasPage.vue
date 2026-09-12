@@ -2197,6 +2197,20 @@ async function onWorkflowImportSelected(event: Event) {
         nodeCounter++
         return `${type}-${nodeCounter}`
       },
+      getViewport: () => vueFlowRef.value?.getViewport?.() ?? { x: 0, y: 0, zoom: 1 },
+      getContainerSize: () => {
+        const el = vueFlowRef.value?.$el as HTMLElement | undefined
+        const rect = el?.getBoundingClientRect?.()
+        return { width: rect?.width || 1000, height: rect?.height || 800 }
+      },
+      fitImportedNodes: async (ids) => {
+        await nextTick()
+        try {
+          await vueFlowRef.value?.fitView({ nodes: ids, padding: 0.2, duration: 300 })
+        } catch {
+          // ignore
+        }
+      },
       applyMerge: (mergeNodes, mergeEdges) => {
         for (const n of mergeNodes) {
           nodes.value.push({
