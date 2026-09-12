@@ -7,16 +7,21 @@ import { resolveMediaUrl } from '@/services/api-base'
 import type { DockNodeIconKind } from './dockIcons'
 import { anchorFromElement, type AnchorRect } from '@/utils/refPreviewPosition'
 
-const props = defineProps<{
-  refItem: NodeRef
-  draggable?: boolean
-  dragging?: boolean
-  dragOver?: boolean
-  /** When true, click inserts @refKey into prompt (agent-aligned). */
-  mentionable?: boolean
-  /** Role badge e.g. 首帧 / 末帧 / 参考 / 运镜 / 音频 */
-  roleLabel?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    refItem: NodeRef
+    draggable?: boolean
+    dragging?: boolean
+    dragOver?: boolean
+    /** When true, click inserts @refKey into prompt (agent-aligned). Default true. */
+    mentionable?: boolean
+    /** Role badge e.g. 首帧 / 末帧 / 参考 / 运镜 / 音频 */
+    roleLabel?: string
+  }>(),
+  {
+    mentionable: true,
+  },
+)
 
 const emit = defineEmits<{
   mention: [refKey: string]
