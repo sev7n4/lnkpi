@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
 
@@ -23,7 +23,12 @@ const phoneOk = computed(() => /^1\d{10}$/.test(phone.value.trim()))
 watch(
   () => auth.showLoginDialog,
   async (open) => {
-    if (!open) return
+    if (!open) {
+      clearCountdown()
+      countdown.value = 0
+      sending.value = false
+      return
+    }
     error.value = ''
     authHint.value = ''
     try {
@@ -59,6 +64,10 @@ function setSendError(message: string) {
   sending.value = false
 }
 
+function cancelSending() {
+  sending.value = false
+}
+
 function markSendSuccess() {
   sending.value = false
   startCountdown(60)
@@ -89,10 +98,15 @@ async function handleLogin() {
   }
 }
 
+onUnmounted(() => {
+  clearCountdown()
+})
+
 defineExpose({
   startCountdown,
   markSendSuccess,
   setSendError,
+  cancelSending,
 })
 </script>
 

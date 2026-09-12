@@ -3,10 +3,13 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import LoginVideoPanel from './LoginVideoPanel.vue'
 import LoginFormPanel from './LoginFormPanel.vue'
+import BlockCaptchaOverlay from './BlockCaptchaOverlay.vue'
 
 const auth = useAuthStore()
 const shellRef = ref<HTMLElement | null>(null)
 const formRef = ref<InstanceType<typeof LoginFormPanel> | null>(null)
+const showCaptcha = ref(false)
+const pendingPhone = ref('')
 
 const visible = computed({
   get: () => auth.showLoginDialog,
@@ -18,20 +21,38 @@ const visible = computed({
 watch(
   () => auth.showLoginDialog,
   async (open) => {
-    if (!open) return
+    if (!open) {
+      showCaptcha.value = false
+      pendingPhone.value = ''
+      return
+    }
     await nextTick()
     shellRef.value?.focus()
   },
 )
 
 function onEsc() {
-  // Task 5: if captcha overlay open, close it first
+  if (showCaptcha.value) {
+    onCaptchaClose()
+    return
+  }
   visible.value = false
 }
 
-async function onRequestSendCode(phone: string) {
+function onRequestSendCode(phone: string) {
+  pendingPhone.value = phone
+  showCaptcha.value = true
+}
+
+function onCaptchaClose() {
+  showCaptcha.value = false
+  formRef.value?.cancelSending()
+}
+
+async function onCaptchaVerified(ticket: string) {
+  showCaptcha.value = false
   try {
-    await auth.sendCode(phone)
+    await auth.sendCode(pendingPhone.value, ticket)
     formRef.value?.markSendSuccess()
   } catch (err) {
     const ax = err as { code?: string; response?: { status?: number } }
@@ -64,7 +85,7 @@ async function onRequestSendCode(phone: string) {
       >
         <button
           type="button"
-          class="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full text-2xl leading-none text-[var(--neo-text-secondary)] transition hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-primary)]"
+          class="absolute right-5 top-5 z-[105] flex h-9 w-9 items-center justify-center rounded-full text-2xl leading-none text-[var(--neo-text-secondary)] transition hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-primary)]"
           aria-label="关闭"
           @click="visible = false"
         >
@@ -74,6 +95,11 @@ async function onRequestSendCode(phone: string) {
           ref="formRef"
           class="w-full max-w-[360px]"
           @request-send-code="onRequestSendCode"
+        />
+        <BlockCaptchaOverlay
+          v-if="showCaptcha"
+          @verified="onCaptchaVerified"
+          @close="onCaptchaClose"
         />
       </div>
     </div>
