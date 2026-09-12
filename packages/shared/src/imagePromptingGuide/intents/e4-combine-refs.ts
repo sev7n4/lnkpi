@@ -9,9 +9,9 @@ export const e4CombineRefs: EditIntent = {
   groupId: 'ref_compose',
   groupLabel: '参考合成',
   fundamentalsRefs: ['separate_changes', 'assign_ref_roles', 'iterate'],
-  changePreserveTemplate: `Place the subject from image 2 into the setting of image 1.
-Use the same style of lighting, composition, and background as image 1.
-Change nothing else — preserve identity of the subject and the rest of the scene.`,
+  changePreserveTemplate: `将图 2 的主体放入图 1 的场景中。
+光线、构图与背景风格与图 1 一致。
+除此之外不要改动——保留主体身份与场景其余部分。`,
   refRoles: [
     { role: 'scene', required: true, hint: '图1：场景/背景' },
     { role: 'subject', required: true, hint: '图2：要放入场景的主体' },

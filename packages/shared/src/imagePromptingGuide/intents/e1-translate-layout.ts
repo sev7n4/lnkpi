@@ -9,11 +9,11 @@ export const e1TranslateLayout: EditIntent = {
   groupId: 'local_edit',
   groupLabel: '局部手术',
   fundamentalsRefs: ['exact_text', 'separate_changes', 'iterate'],
-  changePreserveTemplate: `Translate the visible text in the input image into {{TARGET_LANGUAGE}}.
-Replace only the original text and render the supplied translation exactly.
-Preserve layout, hierarchy, font character, colors, spacing, imagery, logos, and background.
-Fit translated copy naturally without clipping or overlap.
-Do not add, remove, or redesign any other element.`,
+  changePreserveTemplate: `将输入图中的可见文字翻译为 {{TARGET_LANGUAGE}}。
+仅替换原文，并精确呈现所给译文。
+保留版面、层级、字体气质、颜色、间距、图像、logo 与背景。
+译文自然嵌入，避免裁切或重叠。
+不要增删或重设计其他任何元素。`,
   refRoles: [{ role: 'source', required: true, hint: '待翻译的原版面' }],
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: { minRefImages: 1 },

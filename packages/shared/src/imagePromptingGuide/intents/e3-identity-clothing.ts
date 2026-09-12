@@ -9,11 +9,11 @@ export const e3IdentityClothing: EditIntent = {
   groupId: 'identity_product',
   groupLabel: '身份/产品',
   fundamentalsRefs: ['separate_changes', 'assign_ref_roles', 'iterate'],
-  changePreserveTemplate: `Edit the image to dress the person using the provided clothing reference(s).
-Change only the clothing. Do not change face, facial features, skin tone, body shape, pose, or identity.
-Preserve exact likeness, expression, hairstyle, and proportions.
-Fit garments naturally to the existing pose with realistic fabric behavior; match lighting and shadows.
-Do not change the background, camera angle, or framing. No accessories, text, logos, or watermarks.`,
+  changePreserveTemplate: `根据提供的服装参考编辑图像中的人物着装。
+只改服装。不要改变面部、五官、肤色、体型、姿态或身份。
+保留精确相貌、表情、发型与比例。
+服装贴合现有姿态，布料自然，光影匹配。
+不要改变背景、机位或取景。不要添加配饰、文字、logo 或水印。`,
   refRoles: [
     { role: 'subject', required: true, hint: '人物原图（身份/姿态）' },
     { role: 'clothing', required: true, hint: '服装参考图' },

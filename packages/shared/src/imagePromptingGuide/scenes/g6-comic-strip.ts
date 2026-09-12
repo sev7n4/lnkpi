@@ -9,11 +9,11 @@ export const g6ComicStrip: GenerationScene = {
   groupId: 'narrative',
   groupLabel: '叙事',
   fundamentalsRefs: ['define_result', 'maintainable_format', 'people_actions', 'exact_text'],
-  promptScaffold: `Create a {{PANEL_COUNT}}-panel comic strip about {{STORY}}.
-Keep characters, clothing, props, and setting visually consistent across panels.
-Give each panel a distinct story beat, clear action, and an obvious reading order.
-Render supplied dialogue exactly in readable speech balloons.
-Do not add extra panels, dialogue, logos, or watermarks.`,
+  promptScaffold: `创作一套 {{PANEL_COUNT}} 格漫画，讲述 {{STORY}}。
+人物、服装、道具与场景在各格保持视觉一致。
+每格有独立情节推进、清晰动作与明确阅读顺序。
+所给对白须精确写入可读气泡。
+不要额外分格、对白、logo 或水印。`,
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: {},
   expandViaPromptMode: 'storyboard',

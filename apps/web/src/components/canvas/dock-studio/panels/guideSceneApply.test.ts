@@ -5,7 +5,8 @@ describe('applyGuideSceneToPrompt', () => {
   it('prefills when prompt empty', () => {
     const r = applyGuideSceneToPrompt({ sceneId: 'g3_exact_text', currentPrompt: '' })
     expect(r.didPrefill).toBe(true)
-    expect(r.prompt.length).toBeGreaterThan(10)
+    expect(r.prompt).toContain('{{TAGLINE}}')
+    expect(r.prompt).toContain('标语')
     expect(r.guideSceneId).toBe('g3_exact_text')
   })
 

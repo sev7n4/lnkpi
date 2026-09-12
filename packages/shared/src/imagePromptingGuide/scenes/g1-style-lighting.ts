@@ -9,11 +9,11 @@ export const g1StyleLighting: GenerationScene = {
   groupId: 'photo_ad',
   groupLabel: '摄影/广告',
   fundamentalsRefs: ['define_result', 'visible_details', 'people_actions'],
-  promptScaffold: `Create a photorealistic candid photograph of {{SUBJECT}}.
-Describe framing (e.g. medium close-up at eye level), lens cues, and composition.
-Lighting: {{LIGHT}} — soft/natural balance, shallow depth of field if needed.
-Texture: real skin/material detail, subtle grain if film-like; honest and unposed.
-No glamorization, no heavy retouching.`,
+  promptScaffold: `创作一张关于 {{SUBJECT}} 的写实抓拍照片。
+写明取景（如平视中近景）、镜头感与构图。
+光线：{{LIGHT}} — 柔和自然、层次清楚，需要时可浅景深。
+质感：真实皮肤/材质细节，若偏胶片可带轻微颗粒；自然、不摆拍。
+不要过度美化，不要重度修图。`,
   systemOverlay:
     'Style & lighting scene: specify subject, framing, light, and texture. Prefer candid honesty; forbid heavy retouching and glamorization.',
   preferredParams: { size: '1024x1536', quality: 'medium' },

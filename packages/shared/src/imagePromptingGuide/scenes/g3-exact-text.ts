@@ -9,12 +9,12 @@ export const g3ExactText: GenerationScene = {
   groupId: 'photo_ad',
   groupLabel: '摄影/广告',
   fundamentalsRefs: ['define_result', 'exact_text', 'visible_details'],
-  promptScaffold: `Create a polished campaign / fashion ad for a brand.
-The ad features the subject with the tagline "{{TAGLINE}}".
-Make it feel stylish and contemporary for the intended audience.
-Use clean composition, strong color direction, and premium photography cues.
-Render the tagline exactly once, clearly and legibly, integrated into the layout.
-No extra text, no watermarks, no unrelated logos.`,
+  promptScaffold: `创作一张精致的品牌/时尚广告图。
+画面主体搭配标语「{{TAGLINE}}」。
+风格时尚、当代，面向目标受众。
+构图干净，色彩方向明确，摄影质感高级。
+标语只出现一次，清晰可读并融入版面。
+不要多余文字、水印或无关 logo。`,
   systemOverlay:
     'Exact text scene: put required wording in quotes; render the tagline exactly once; no extra text, watermarks, or unrelated logos. Check spelling and legibility.',
   preferredParams: { size: '1024x1536', quality: 'medium' },

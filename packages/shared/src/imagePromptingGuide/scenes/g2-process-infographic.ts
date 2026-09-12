@@ -9,11 +9,11 @@ export const g2ProcessInfographic: GenerationScene = {
   groupId: 'info_design',
   groupLabel: '信息设计',
   fundamentalsRefs: ['define_result', 'maintainable_format', 'exact_text'],
-  promptScaffold: `Create a clean process infographic explaining {{PROCESS}}.
-Show the steps in an obvious reading order with numbered stages and concise labels.
-Use consistent icons, spacing, connectors, and a restrained color palette.
-Render all supplied wording exactly and keep the hierarchy legible.
-Do not add unsupported steps, decorative copy, logos, or watermarks.`,
+  promptScaffold: `创作一张清晰的流程信息图，说明 {{PROCESS}}。
+按阅读顺序展示步骤，带编号阶段与简短标签。
+图标、间距、连接线风格统一，配色克制。
+所给文案须精确呈现，层级易读。
+不要添加未给出的步骤、装饰性废话、logo 或水印。`,
   preferredParams: { size: '1536x1024', quality: 'medium' },
   capability: {},
 }

@@ -23,6 +23,7 @@ import {
   buildPromptNodeCardPreview,
   countMarkdownTableDataRows,
   defaultGuideCapabilities,
+  getGenerationScene,
 } from '@lnkpi/shared'
 import { applyGuideSceneToPrompt, clearGuideScene } from './guideSceneApply'
 
@@ -86,6 +87,9 @@ const activeGuideSceneId = computed(() => {
   const id = props.node.data?.guideSceneId
   return typeof id === 'string' && id.trim() ? id.trim() : ''
 })
+const activeGuideScene = computed(() =>
+  activeGuideSceneId.value ? getGenerationScene(activeGuideSceneId.value) ?? null : null,
+)
 
 function onSelectGuideScene(sceneId: string) {
   if (readonly.value) return
@@ -192,22 +196,24 @@ function onRefMention(refKey: string) {
       <div class="relative">
         <button
           type="button"
-          class="bottom-toolbar-close relative"
-          :class="activeGuideSceneId ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'text-white/35'"
+          class="dock-guide-scene-btn relative"
+          :class="{ 'is-guide-active': activeGuideSceneId }"
           :disabled="readonly"
           aria-label="场景模板"
+          :title="activeGuideScene?.label ?? '场景模板'"
           :aria-expanded="guidePickerOpen"
           @click="guidePickerOpen = !guidePickerOpen"
         >
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
             <rect x="4" y="4" width="6" height="6" rx="1" />
             <rect x="14" y="4" width="6" height="6" rx="1" />
             <rect x="4" y="14" width="6" height="6" rx="1" />
             <rect x="14" y="14" width="6" height="6" rx="1" />
           </svg>
+          <span class="dock-guide-scene-btn__label">{{ activeGuideScene?.label ?? '场景模板' }}</span>
           <span
             v-if="activeGuideSceneId"
-            class="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-fuchsia-400"
+            class="dock-guide-scene-btn__dot"
             aria-hidden="true"
           />
         </button>

@@ -9,11 +9,11 @@ export const e8InsertPerson: EditIntent = {
   groupId: 'identity_product',
   groupLabel: '身份/产品',
   fundamentalsRefs: ['people_actions', 'separate_changes', 'assign_ref_roles'],
-  changePreserveTemplate: `Insert the person from image 2 naturally into the scene in image 1 at {{PLACEMENT}}.
-Preserve the person's exact identity, facial features, hairstyle, body proportions, and clothing.
-Match the scene's perspective, scale, lighting, color, focus, contact shadows, and occlusion.
-Preserve the existing background, people, objects, camera angle, and framing.
-Do not alter the person's identity or add text, logos, or watermarks.`,
+  changePreserveTemplate: `将图 2 中的人物自然放入图 1 场景的 {{PLACEMENT}}。
+保留人物精确身份、五官、发型、体型比例与服装。
+匹配场景的透视、尺度、光线、色彩、景深、接触阴影与遮挡。
+保留原有背景、人物、物体、机位与取景。
+不要改变人物身份，不要添加文字、logo 或水印。`,
   refRoles: [
     { role: 'scene', required: true, hint: '图1：目标场景' },
     { role: 'subject', required: true, hint: '图2：要放入场景的人物' },
