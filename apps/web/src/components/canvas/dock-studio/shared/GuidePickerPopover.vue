@@ -8,7 +8,7 @@ import {
   type GuideCapabilities,
   type GuideKind,
 } from '@lnkpi/shared'
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, watch, type CSSProperties } from 'vue'
 import { guidePickerDisabledReason } from './guidePickerDisable'
 import { filterGuideItems, groupGuideItems } from './guidePickerFilter'
 
@@ -22,10 +22,16 @@ const props = withDefaults(
     open: boolean
     refImageCount?: number
     placement?: 'below-start' | 'below-end' | 'above-end'
+    /** Escape overflow:auto ancestors (e.g. Refine side panel body). */
+    portal?: boolean
+    /** Required when portal=true — position relative to this element. */
+    anchorEl?: HTMLElement | null
   }>(),
   {
     refImageCount: 0,
     placement: 'below-start',
+    portal: false,
+    anchorEl: null,
   },
 )
 
@@ -37,6 +43,8 @@ const emit = defineEmits<{
 
 const query = ref('')
 const searchInput = ref<HTMLInputElement | null>(null)
+const panelRef = ref<HTMLElement | null>(null)
+const portalStyle = ref<CSSProperties>({})
 
 const items = computed<GuideItem[]>(() =>
   props.mode === 'generation_scene'
@@ -59,6 +67,55 @@ const clearLabel = computed(() =>
   props.mode === 'generation_scene' ? '清除场景' : '清除意图',
 )
 
+const POPOVER_WIDTH = 288
+const VIEW_MARGIN = 12
+const GAP = 8
+const EST_HEIGHT = 340
+
+function clamp(n: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, n))
+}
+
+function updatePortalPosition() {
+  if (!props.portal || !props.anchorEl || typeof window === 'undefined') return
+  const rect = props.anchorEl.getBoundingClientRect()
+  const width = Math.min(POPOVER_WIDTH, window.innerWidth - VIEW_MARGIN * 2)
+  const measured = panelRef.value?.getBoundingClientRect().height
+  const height = measured && measured > 0 ? measured : EST_HEIGHT
+
+  let top: number
+  const preferBelow = props.placement !== 'above-end'
+  const spaceBelow = window.innerHeight - rect.bottom - GAP - VIEW_MARGIN
+  const spaceAbove = rect.top - GAP - VIEW_MARGIN
+  const placeBelow = preferBelow
+    ? spaceBelow >= Math.min(height, 200) || spaceBelow >= spaceAbove
+    : spaceAbove < Math.min(height, 200) && spaceBelow > spaceAbove
+
+  if (placeBelow) {
+    top = rect.bottom + GAP
+  } else {
+    top = rect.top - height - GAP
+  }
+
+  let left =
+    props.placement === 'below-start'
+      ? rect.left
+      : rect.right - width
+
+  left = clamp(left, VIEW_MARGIN, window.innerWidth - width - VIEW_MARGIN)
+  top = clamp(top, VIEW_MARGIN, window.innerHeight - VIEW_MARGIN)
+
+  portalStyle.value = {
+    position: 'fixed',
+    top: `${top}px`,
+    left: `${left}px`,
+    width: `${width}px`,
+    zIndex: 120,
+    right: 'auto',
+    bottom: 'auto',
+  }
+}
+
 function handleWindowEscape(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   event.preventDefault()
@@ -67,22 +124,45 @@ function handleWindowEscape(event: KeyboardEvent) {
   emit('close')
 }
 
+function onViewportChange() {
+  updatePortalPosition()
+}
+
 watch(
   () => props.open,
   (open, _prev, onCleanup) => {
     if (!open) return
     query.value = ''
-    void nextTick(() => searchInput.value?.focus())
+    void nextTick(() => {
+      searchInput.value?.focus()
+      updatePortalPosition()
+      void nextTick(() => updatePortalPosition())
+    })
     window.addEventListener('keydown', handleWindowEscape, { capture: true })
+    if (props.portal) {
+      window.addEventListener('resize', onViewportChange)
+      window.addEventListener('scroll', onViewportChange, true)
+    }
     onCleanup(() => {
       window.removeEventListener('keydown', handleWindowEscape, { capture: true })
+      window.removeEventListener('resize', onViewportChange)
+      window.removeEventListener('scroll', onViewportChange, true)
     })
   },
   { immediate: true },
 )
 
+watch(
+  () => [props.anchorEl, props.placement, props.portal] as const,
+  () => {
+    if (props.open) updatePortalPosition()
+  },
+)
+
 onUnmounted(() => {
   window.removeEventListener('keydown', handleWindowEscape, { capture: true })
+  window.removeEventListener('resize', onViewportChange)
+  window.removeEventListener('scroll', onViewportChange, true)
 })
 
 function disabledReason(id: string): string | null {
@@ -102,84 +182,91 @@ function onEscape(event: KeyboardEvent) {
 </script>
 
 <template>
-  <section
-    v-if="open"
-    class="guide-picker-popover neo-popover"
-    :class="`guide-picker-popover--${placement}`"
-    role="dialog"
-    :aria-label="mode === 'generation_scene' ? '选择生成场景' : '选择编辑意图'"
-    @keydown.escape.prevent="onEscape"
-  >
-    <div class="guide-picker-popover__search">
-      <span aria-hidden="true" class="guide-picker-popover__search-icon">⌕</span>
-      <input
-        ref="searchInput"
-        v-model="query"
-        type="search"
-        class="guide-picker-popover__input"
-        :placeholder="searchPlaceholder"
-        autocomplete="off"
-      />
-    </div>
+  <Teleport to="body" :disabled="!portal">
+    <section
+      v-if="open"
+      ref="panelRef"
+      class="guide-picker-popover neo-popover"
+      :class="[
+        `guide-picker-popover--${placement}`,
+        { 'guide-picker-popover--portal': portal },
+      ]"
+      :style="portal ? portalStyle : undefined"
+      role="dialog"
+      :aria-label="mode === 'generation_scene' ? '选择生成场景' : '选择编辑意图'"
+      @keydown.escape.prevent="onEscape"
+    >
+      <div class="guide-picker-popover__search">
+        <span aria-hidden="true" class="guide-picker-popover__search-icon">⌕</span>
+        <input
+          ref="searchInput"
+          v-model="query"
+          type="search"
+          class="guide-picker-popover__input"
+          :placeholder="searchPlaceholder"
+          autocomplete="off"
+        />
+      </div>
 
-    <div class="guide-picker-popover__list">
-      <template v-if="groups.length">
-        <section
-          v-for="group in groups"
-          :key="group.groupId"
-          class="guide-picker-popover__group"
-        >
-          <h3 class="guide-picker-popover__group-label">
-            {{ group.groupLabel }}
-          </h3>
-          <button
-            v-for="item in group.items"
-            :key="item.id"
-            type="button"
-            class="guide-picker-popover__item neo-popover-item"
-            :class="{ 'is-active': activeId === item.id }"
-            :disabled="Boolean(disabledReason(item.id))"
-            :title="disabledReason(item.id) || item.description"
-            :aria-current="activeId === item.id ? 'true' : undefined"
-            @click="selectItem(item)"
+      <div class="guide-picker-popover__list">
+        <template v-if="groups.length">
+          <section
+            v-for="group in groups"
+            :key="group.groupId"
+            class="guide-picker-popover__group"
           >
-            <span class="guide-picker-popover__item-copy">
-              <span class="guide-picker-popover__item-label">
-                {{ item.label }}
-              </span>
-              <span class="guide-picker-popover__item-description">
-                {{ item.description }}
-              </span>
-            </span>
-            <span
-              v-if="disabledReason(item.id)"
-              class="guide-picker-popover__disabled"
+            <h3 class="guide-picker-popover__group-label">
+              {{ group.groupLabel }}
+            </h3>
+            <button
+              v-for="item in group.items"
+              :key="item.id"
+              type="button"
+              class="guide-picker-popover__item neo-popover-item"
+              :class="{ 'is-active': activeId === item.id }"
+              :disabled="Boolean(disabledReason(item.id))"
+              :title="disabledReason(item.id) || item.description"
+              :aria-current="activeId === item.id ? 'true' : undefined"
+              @click="selectItem(item)"
             >
-              不可用
-            </span>
-            <span
-              v-else-if="activeId === item.id"
-              class="guide-picker-popover__active-mark"
-              aria-hidden="true"
-            >
-              ✓
-            </span>
-          </button>
-        </section>
-      </template>
-      <p v-else class="guide-picker-popover__empty">没有匹配结果</p>
-    </div>
+              <span class="guide-picker-popover__item-copy">
+                <span class="guide-picker-popover__item-label">
+                  {{ item.label }}
+                </span>
+                <span class="guide-picker-popover__item-description">
+                  {{ item.description }}
+                </span>
+              </span>
+              <span
+                v-if="disabledReason(item.id)"
+                class="guide-picker-popover__disabled"
+              >
+                不可用
+              </span>
+              <span
+                v-else-if="activeId === item.id"
+                class="guide-picker-popover__active-mark"
+                aria-hidden="true"
+              >
+                ✓
+              </span>
+            </button>
+          </section>
+        </template>
+        <p v-else class="guide-picker-popover__empty">没有匹配结果</p>
+      </div>
 
-    <footer v-if="activeId" class="guide-picker-popover__footer">
-      <button
-        type="button"
-        class="guide-picker-popover__clear"
-        @click="emit('clear')"
-      >
-        {{ clearLabel }}
-      </button>
-    </footer>
-  </section>
+      <footer v-if="activeId" class="guide-picker-popover__footer">
+        <button
+          type="button"
+          class="guide-picker-popover__clear"
+          @click="emit('clear')"
+        >
+          {{ clearLabel }}
+        </button>
+      </footer>
+    </section>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -203,6 +290,14 @@ function onEscape(event: KeyboardEvent) {
   top: auto;
   right: 0;
   bottom: calc(100% + 8px);
+  left: auto;
+}
+
+.guide-picker-popover--portal {
+  /* Inline style supplies fixed top/left/width; reset absolute placement. */
+  top: auto;
+  right: auto;
+  bottom: auto;
   left: auto;
 }
 

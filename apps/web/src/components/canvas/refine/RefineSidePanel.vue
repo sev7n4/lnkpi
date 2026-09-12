@@ -57,6 +57,7 @@ const emit = defineEmits<{
 
 const editor = useCanvasEditorStore()
 const promptRef = ref<HTMLTextAreaElement | null>(null)
+const editIntentAnchorRef = ref<HTMLElement | null>(null)
 const prompt = ref('')
 const activeGuideEditIntentId = ref<string | null>(null)
 const editIntentPickerOpen = ref(false)
@@ -726,6 +727,7 @@ onBeforeUnmount(() => {
           <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">清除瑕疵</button>
           <div class="relative">
             <button
+              ref="editIntentAnchorRef"
               type="button"
               class="refine-dock__chip refine-dock__chip--intent"
               :class="{ 'is-guide-active': activeGuideEditIntentId }"
@@ -749,13 +751,14 @@ onBeforeUnmount(() => {
               />
             </button>
             <GuidePickerPopover
-              class="refine-side__guide-picker"
               mode="edit_intent"
               :active-id="activeGuideEditIntentId"
               :capabilities="guideCapabilities"
               :open="editIntentPickerOpen"
               :ref-image-count="refineRefImageCount"
               placement="below-end"
+              portal
+              :anchor-el="editIntentAnchorRef"
               @select="applyEditIntent"
               @clear="clearEditIntent"
               @close="editIntentPickerOpen = false"
@@ -945,11 +948,6 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, rgb(232 121 249) 25%, transparent);
   background: color-mix(in srgb, rgb(217 70 239) 15%, transparent);
   color: rgb(240 171 252);
-}
-
-.refine-side__guide-picker {
-  right: 0;
-  left: auto;
 }
 
 .refine-side__icon-btn:disabled {
