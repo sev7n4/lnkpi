@@ -114,7 +114,7 @@ export async function downloadMediaPackage(
     items: items.map((item) => ({ ...item })),
   }
   const manifestBlob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' })
-  triggerDownload(manifestBlob, `lnkpi-export-${Date.now()}.json`)
+  triggerBlobDownload(manifestBlob, `lnkpi-export-${Date.now()}.json`)
 
   for (const item of items) {
     try {
@@ -127,7 +127,7 @@ export async function downloadMediaPackage(
   return items.length
 }
 
-function triggerDownload(blob: Blob, filename: string) {
+export function triggerBlobDownload(blob: Blob, filename: string) {
   const objectUrl = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = objectUrl
@@ -136,25 +136,25 @@ function triggerDownload(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), REVOKE_OBJECT_URL_DELAY_MS)
 }
 
-/** 下载单个媒体文件；经鉴权 stream-download 代理，不再 window.open 假下载 */
-export async function downloadMediaFile(
+/** 拉取媒体 blob（不触发本机下载）；经鉴权 stream-download 代理 */
+export async function fetchMediaBlob(
   url: string,
   filename: string,
   opts?: DownloadMediaOptions,
-) {
+): Promise<Blob | null> {
   const resolved = resolveMediaUrl(url.trim())
-  if (!resolved) return
+  if (!resolved) return null
 
   if (/^(blob:|data:)/i.test(resolved)) {
     const res = await fetch(resolved)
-    triggerDownload(await res.blob(), filename)
-    return
+    if (!res.ok) return null
+    return res.blob()
   }
 
   const token = localStorage.getItem('token')
   if (!token) {
     ElMessage.warning('请先登录后再下载')
-    return
+    return null
   }
 
   const params = new URLSearchParams({ url: resolved, filename })
@@ -173,9 +173,19 @@ export async function downloadMediaFile(
     } else {
       ElMessage.warning('下载失败，链接可能已过期，请稍后重试')
     }
-    return
+    return null
   }
-  triggerDownload(await res.blob(), filename)
+  return res.blob()
+}
+
+/** 下载单个媒体文件；经鉴权 stream-download 代理，不再 window.open 假下载 */
+export async function downloadMediaFile(
+  url: string,
+  filename: string,
+  opts?: DownloadMediaOptions,
+) {
+  const blob = await fetchMediaBlob(url, filename, opts)
+  if (blob) triggerBlobDownload(blob, filename)
 }
 
 const EXT_BY_KIND: Record<string, string> = { image: 'png', video: 'mp4', audio: 'mp3' }

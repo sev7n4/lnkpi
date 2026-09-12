@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue'
+
 defineProps<{
   selectedIds: string[]
   screenPosition: { x: number; y: number } | null
@@ -12,11 +14,36 @@ const emit = defineEmits<{
   delete: []
   layout: []
   generateVideo: []
-  download: []
+  download: [mode: 'full_package' | 'lightweight' | 'media_list_only']
   addAgentRef: []
   duplicate: []
   duplicateUpstream: []
 }>()
+
+const exportMenuOpen = ref(false)
+
+function closeExportMenu() {
+  exportMenuOpen.value = false
+}
+
+function onExport(mode: 'full_package' | 'lightweight' | 'media_list_only') {
+  exportMenuOpen.value = false
+  emit('download', mode)
+}
+
+function onDocClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  if (!target?.closest('[data-export-menu]')) {
+    closeExportMenu()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+})
 </script>
 
 <template>
@@ -90,14 +117,45 @@ const emit = defineEmits<{
       >
         整理布局
       </button>
-      <button
+      <div
         v-if="selectedIds.length >= 2"
-        type="button"
-        class="toolbar-action"
-        @click="emit('download')"
+        class="relative"
+        data-export-menu
       >
-        打包下载
-      </button>
+        <button
+          type="button"
+          class="toolbar-action"
+          @click.stop="exportMenuOpen = !exportMenuOpen"
+        >
+          导出工作流
+        </button>
+        <div
+          v-if="exportMenuOpen"
+          class="export-menu neo-chrome absolute left-0 top-full z-50 mt-1 min-w-[11rem] rounded-lg py-1"
+        >
+          <button
+            type="button"
+            class="export-menu-item"
+            @click="onExport('full_package')"
+          >
+            导出工作流
+          </button>
+          <button
+            type="button"
+            class="export-menu-item"
+            @click="onExport('lightweight')"
+          >
+            导出工作流（仅 JSON）
+          </button>
+          <button
+            type="button"
+            class="export-menu-item"
+            @click="onExport('media_list_only')"
+          >
+            仅导出媒体清单
+          </button>
+        </div>
+      </div>
       <button type="button" class="toolbar-action danger" @click="emit('delete')">删除</button>
     </div>
   </div>
@@ -120,5 +178,23 @@ const emit = defineEmits<{
 }
 .toolbar-action.accent {
   color: var(--neo-accent-text);
+}
+.export-menu {
+  background: var(--neo-chrome-bg, rgba(20, 20, 24, 0.96));
+  border: 1px solid var(--neo-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+.export-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  font-size: 12px;
+  color: var(--neo-text-secondary);
+  background: transparent;
+}
+.export-menu-item:hover {
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-primary);
 }
 </style>

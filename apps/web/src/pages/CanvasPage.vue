@@ -98,7 +98,11 @@ import {
   type CanvasSnapshot,
   type GenerationFieldsCache,
 } from '@/composables/useCanvasUndoStack'
-import { downloadMediaPackage, detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import { detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import {
+  exportWorkflowPackage,
+  type WorkflowExportMode,
+} from '@/composables/useWorkflowExchange'
 import { fileToPersistedPayload, inferMediaInputKind } from '@/composables/useMediaUpload'
 import { useDebouncedNodePatch } from '@/composables/useDebouncedNodePatch'
 import {
@@ -2130,20 +2134,36 @@ function handleAssetAddToAgent(asset: CanvasAssetItem) {
   agentRailRef.value?.openPanel()
 }
 
-async function handlePackageDownload() {
-  await downloadMediaPackage(
-    nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
-    multiSelectedIds.value,
-    { sessionId: sessionId.value },
-  )
+async function handlePackageDownload(mode: WorkflowExportMode = 'full_package') {
+  await exportWorkflowPackage({
+    nodes: nodes.value.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      parentNode: n.parentNode,
+      data: n.data as Record<string, unknown>,
+    })),
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    selectedIds: [...multiSelectedIds.value],
+    sessionId: sessionId.value,
+    exportMode: mode,
+  })
 }
 
 async function handleExportPack(nodeIds: string[]) {
-  await downloadMediaPackage(
-    nodes.value.map((n) => ({ id: n.id, type: n.type, data: n.data as Record<string, unknown> })),
-    nodeIds,
-    { sessionId: sessionId.value },
-  )
+  await exportWorkflowPackage({
+    nodes: nodes.value.map((n) => ({
+      id: n.id,
+      type: n.type,
+      position: n.position,
+      parentNode: n.parentNode,
+      data: n.data as Record<string, unknown>,
+    })),
+    edges: edges.value.map((e) => ({ id: e.id, source: e.source, target: e.target })),
+    selectedIds: nodeIds,
+    sessionId: sessionId.value,
+    exportMode: 'full_package',
+  })
 }
 
 function connectSelectionToTarget(targetId: string, sourceIds = multiSelectedIds.value) {
