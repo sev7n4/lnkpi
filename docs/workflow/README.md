@@ -77,6 +77,17 @@ Agent 最小拓扑示例见 [`examples/minimal-workflow.json`](./examples/minima
 3. 应用校验 `format`/`version`，解析 graph 与媒体。
 4. 自动 `remapWorkflowIds` 后合并进当前画布（不覆盖已有节点 ID）。
 
+## Agent `import_workflow`
+
+画布会话内的 Agent 可将同一份 `lnkpi.workflow` schema 合并进**当前**画布（`validateWorkflow` → `remapWorkflowIds` → 落点）。入参二选一：
+
+| 参数 | 说明 |
+|------|------|
+| `workflow` | 内联 JSON 对象 |
+| `workflow_url` | 指向 JSON 的 HTTPS URL（同时提供时以 `workflow` 为准） |
+
+调用 `POST /agent/internal/import-workflow`；zip / base64 大包仍只走画布 UI，本 tool 不接受。非法 `format`/`version` 拒绝写库。
+
 ## 校验代码片段
 
 ```typescript
