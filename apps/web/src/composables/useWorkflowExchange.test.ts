@@ -30,6 +30,12 @@ vi.mock('./useCanvasMedia', async () => {
 import { buildWorkflowDocument } from '@lnkpi/shared'
 import { exportWorkflowPackage, importWorkflowPackage } from './useWorkflowExchange'
 import { downloadMediaPackage } from './useCanvasMedia'
+import {
+  IMPORT_NODE_ESTIMATE,
+  IMPORT_PLACE_MARGIN,
+  rectsOverlap,
+  unionNodeBBox,
+} from './workflowImportPlacement'
 
 async function zipWithWorkflow(
   doc: ReturnType<typeof buildWorkflowDocument>,
@@ -282,13 +288,95 @@ describe('importWorkflowPackage', () => {
     expect(Object.keys(result.idMap)).toEqual(expect.arrayContaining(['prompt-1', 'image-1']))
     expect(mergedNodes.map((n) => n.id)).toEqual(['prompt-imported-1', 'image-imported-2'])
     expect(mergedNodes.every((n) => !seedNodes.some((s) => s.id === n.id))).toBe(true)
-    expect(mergedNodes[0].position).toEqual({ x: 90, y: 100 })
-    expect(mergedNodes[1].position).toEqual({ x: 180, y: 100 })
+    // Uniform translation: relative delta between roots preserved from file (90px x)
+    expect(mergedNodes[1].position.x - mergedNodes[0].position.x).toBe(90)
+    expect(mergedNodes[1].position.y - mergedNodes[0].position.y).toBe(0)
     expect(mergedEdges).toHaveLength(1)
     expect(mergedEdges[0].source).toBe('prompt-imported-1')
     expect(mergedEdges[0].target).toBe('image-imported-2')
     expect(uploadMediaMock).toHaveBeenCalledOnce()
     expect(mergedNodes[1].data?.url).toBe('https://cdn.example/uploaded.png')
+  })
+
+  it('places import away from overlapping canvas seed with margin', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'hello' },
+        },
+      ],
+      edges: [],
+      mode: 'full',
+      exportMode: 'lightweight',
+      mediaIndex: [],
+    })
+    const file = new File([JSON.stringify(doc)], 'workflow.json', { type: 'application/json' })
+    const seedNodes = [{ id: 'seed-1', type: 'prompt', position: { x: 0, y: 0 }, data: {} }]
+    const applyMerge = vi.fn()
+    let seq = 0
+
+    await importWorkflowPackage(file, {
+      nodes: seedNodes,
+      edges: [],
+      applyMerge,
+      createId: (type) => `${type}-place-${++seq}`,
+      uploadMedia: uploadMediaMock,
+      getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+      getContainerSize: () => ({ width: 1000, height: 800 }),
+    })
+
+    expect(applyMerge).toHaveBeenCalledOnce()
+    const [mergedNodes] = applyMerge.mock.calls[0] as [
+      Array<{ id: string; position: { x: number; y: number } }>,
+    ]
+    const seedBBox = unionNodeBBox(seedNodes)!
+    const importBBox = unionNodeBBox(mergedNodes)!
+    expect(rectsOverlap(seedBBox, importBBox, IMPORT_PLACE_MARGIN)).toBe(false)
+    // Not the old fixed +80 path
+    expect(mergedNodes[0].position).not.toEqual({ x: 80, y: 80 })
+  })
+
+  it('calls fitImportedNodes with remapped ids after merge', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 0, y: 0 },
+          data: { prompt: 'hello' },
+        },
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 100, y: 0 },
+          data: { url: 'https://cdn.example/a.png' },
+        },
+      ],
+      edges: [],
+      mode: 'full',
+      exportMode: 'lightweight',
+      mediaIndex: [],
+    })
+    const file = new File([JSON.stringify(doc)], 'workflow.json', { type: 'application/json' })
+    const applyMerge = vi.fn()
+    const fitImportedNodes = vi.fn()
+    let seq = 0
+
+    await importWorkflowPackage(file, {
+      nodes: [],
+      edges: [],
+      applyMerge,
+      createId: (type) => `${type}-fit-${++seq}`,
+      uploadMedia: uploadMediaMock,
+      fitImportedNodes,
+    })
+
+    expect(applyMerge).toHaveBeenCalledOnce()
+    expect(fitImportedNodes).toHaveBeenCalledOnce()
+    expect(fitImportedNodes).toHaveBeenCalledWith(['prompt-fit-1', 'image-fit-2'])
   })
 
   it('rejects invalid format without calling applyMerge', async () => {
@@ -332,15 +420,18 @@ describe('importWorkflowPackage', () => {
       mediaIndex: [],
     })
     const file = new File([JSON.stringify(doc)], 'workflow.json', { type: 'application/json' })
+    const seedNodes = [{ id: 'seed-1', type: 'prompt', position: { x: 0, y: 0 }, data: {} }]
     const applyMerge = vi.fn()
     let seq = 0
 
     await importWorkflowPackage(file, {
-      nodes: [],
+      nodes: seedNodes,
       edges: [],
       applyMerge,
       createId: (type) => `${type}-grp-${++seq}`,
       uploadMedia: uploadMediaMock,
+      getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+      getContainerSize: () => ({ width: 1000, height: 800 }),
     })
 
     expect(applyMerge).toHaveBeenCalledOnce()
@@ -358,7 +449,10 @@ describe('importWorkflowPackage', () => {
     const child = mergedNodes.find((n) => n.id === 'prompt-grp-2')
     expect(parent).toBeDefined()
     expect(child).toBeDefined()
-    expect(parent!.position).toEqual({ x: 120, y: 130 })
+    // Same uniform translation applied to root only
+    const dx = parent!.position.x - 40
+    const dy = parent!.position.y - 50
+    expect(dx !== 0 || dy !== 0).toBe(true)
     expect(child!.position).toEqual({ x: 12, y: 18 })
     expect(child!.parentNode).toBe('group-grp-1')
     expect(child!.extent).toBe('parent')
@@ -366,6 +460,15 @@ describe('importWorkflowPackage', () => {
     expect(parent!.parentNode).toBeUndefined()
     expect(parent!.extent).toBeUndefined()
     expect(parent!.expandParent).toBeUndefined()
+    // Placed root clears seed with margin
+    const seedBBox = unionNodeBBox(seedNodes)!
+    const placedRoot = {
+      x: parent!.position.x,
+      y: parent!.position.y,
+      width: IMPORT_NODE_ESTIMATE.width,
+      height: IMPORT_NODE_ESTIMATE.height,
+    }
+    expect(rectsOverlap(seedBBox, placedRoot, IMPORT_PLACE_MARGIN)).toBe(false)
   })
 
   it('lightweight json keeps existing urls without re-upload', async () => {
