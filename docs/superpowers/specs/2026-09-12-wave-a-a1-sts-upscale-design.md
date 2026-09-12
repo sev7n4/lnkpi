@@ -192,8 +192,8 @@ interface UpscaleProvider {
 
 | providerId | 状态 | 探测结论 | 备注 |
 |------------|------|----------|------|
-| `agnes` | 待探测 | PR2 实现前填写：满足 / 不满足 + 依据 | 优先 |
-| （其它） | 仅当 agnes 不满足时追加 | … | 列明 model / baseUrl 特征 |
+| `agnes` | 未接入 | **不满足**（2026-09-12）：官方文档仅有 `POST /v1/images/generations` 文生图 / 图生图（`extra_body.image` + prompt），无独立超分端点、无 upscale 模型名；用 prompt「放大」冒充超分被本规格禁止 | 优先探测；不注册 |
+| `fal` | **已接入** | Agnes 不满足后接线现有 `FAL_KEY` 通道：`POST https://fal.run/fal-ai/esrgan`，body `{ image_url, scale: 2\|4 }`，返回 `image.url`（Real-ESRGAN，非文生图） | `modelId`: `fal-ai/esrgan`；与 Segment SAM 同凭证栈；支持 2× 与 4× |
 
 合并 PR2 时本表必须与代码注册表一致；建议单测断言注册 id 列表 ⊆ 本表「已接入」行。
 
