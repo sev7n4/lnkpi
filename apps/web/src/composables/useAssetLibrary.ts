@@ -83,7 +83,9 @@ export async function saveAssetToLibrary(payload: SaveAssetToLibraryInput) {
   } catch (e: unknown) {
     const status = (e as { response?: { status?: number } })?.response?.status
     if (status === 503) {
-      ElMessage.error('对象存储未配置，无法持久化收藏。请配置 OBJECT_STORAGE_* 或稍后重试')
+      ElMessage.error(
+        '媒体持久化不可用（存储未启用）。请检查服务端 uploads 或 OBJECT_STORAGE_* 配置后重试',
+      )
     } else {
       ElMessage.error('保存失败，请稍后重试')
     }
