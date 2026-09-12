@@ -64,6 +64,8 @@ export interface ImportWorkflowPackageContext {
 export interface ImportWorkflowPackageResult {
   addedNodes: number
   idMap: Record<string, string>
+  mediaOk: number
+  mediaFail: number
 }
 
 const IMPORT_POSITION_OFFSET = 80
@@ -113,22 +115,33 @@ async function uploadZipMedia(
   zip: JSZip,
   remapped: WorkflowDocument,
   uploadMedia: (file: File) => Promise<string>,
-): Promise<void> {
+): Promise<{ mediaOk: number; mediaFail: number }> {
   const byNodeId = new Map(remapped.graph.nodes.map((n) => [n.id, n]))
+  let mediaOk = 0
+  let mediaFail = 0
   for (const entry of remapped.mediaIndex) {
     if (!entry.path) continue
     const zipFile = zip.file(entry.path)
-    if (!zipFile) continue
-    const blob = await zipFile.async('blob')
-    const file = new File([blob], entry.fileName || entry.path.split('/').pop() || 'media.bin', {
-      type: blob.type || 'application/octet-stream',
-    })
-    const url = await uploadMedia(file)
-    const node = byNodeId.get(entry.nodeId)
-    if (node) {
-      node.data = { ...node.data, url }
+    if (!zipFile) {
+      mediaFail += 1
+      continue
+    }
+    try {
+      const blob = await zipFile.async('blob')
+      const file = new File([blob], entry.fileName || entry.path.split('/').pop() || 'media.bin', {
+        type: blob.type || 'application/octet-stream',
+      })
+      const url = await uploadMedia(file)
+      const node = byNodeId.get(entry.nodeId)
+      if (node) {
+        node.data = { ...node.data, url }
+      }
+      mediaOk += 1
+    } catch {
+      mediaFail += 1
     }
   }
+  return { mediaOk, mediaFail }
 }
 
 function toMergeNodes(doc: WorkflowDocument): WorkflowExportNode[] {
@@ -181,7 +194,7 @@ export async function exportWorkflowPackage(
   const { nodes, edges, selectedIds, sessionId, exportMode } = opts
 
   if (exportMode === 'media_list_only') {
-    const ids = selectedIds.length ? selectedIds : nodes.map((n) => n.id)
+    const ids = expandExportNodeIds(nodes, selectedIds)
     const count = await downloadMediaPackage(
       nodes.map((n) => ({ id: n.id, type: n.type, data: n.data ?? {} })),
       ids,
@@ -312,8 +325,12 @@ export async function importWorkflowPackage(
         return persistMediaUrl(mediaFile, URL.createObjectURL(mediaFile))
       })
 
+    let mediaOk = 0
+    let mediaFail = 0
     if (zip) {
-      await uploadZipMedia(zip, remapped, uploadMedia)
+      const mediaResult = await uploadZipMedia(zip, remapped, uploadMedia)
+      mediaOk = mediaResult.mediaOk
+      mediaFail = mediaResult.mediaFail
     }
 
     const mergeNodes = toMergeNodes(remapped)
@@ -324,8 +341,14 @@ export async function importWorkflowPackage(
     }))
 
     await ctx.applyMerge(mergeNodes, mergeEdges)
-    ElMessage.success(`已导入工作流：${mergeNodes.length} 个节点`)
-    return { addedNodes: mergeNodes.length, idMap }
+    if (mediaFail > 0) {
+      ElMessage.warning(
+        `已导入工作流：${mergeNodes.length} 个节点（媒体成功 ${mediaOk} / 失败 ${mediaFail}）`,
+      )
+    } else {
+      ElMessage.success(`已导入工作流：${mergeNodes.length} 个节点`)
+    }
+    return { addedNodes: mergeNodes.length, idMap, mediaOk, mediaFail }
   } catch (err) {
     const isInvalidFormat =
       err instanceof SyntaxError ||

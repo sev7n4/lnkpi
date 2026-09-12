@@ -3398,6 +3398,14 @@ onUnmounted(() => {
           </button>
           <button
             type="button"
+            class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 items-center justify-center rounded-xl px-3 text-xs transition"
+            title="导出工作流"
+            @click="handleExportPack([], 'full_package')"
+          >
+            导出工作流
+          </button>
+          <button
+            type="button"
             class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 w-9 items-center justify-center rounded-xl transition"
             :title="canvasTheme === 'dark' ? '切换白天模式' : '切换黑夜模式'"
             @click="toggleCanvasTheme"

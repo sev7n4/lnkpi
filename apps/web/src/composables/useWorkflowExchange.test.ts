@@ -168,6 +168,48 @@ describe('exportWorkflowPackage', () => {
     expect(downloadMediaPackage).toHaveBeenCalledOnce()
     expect(fetchMediaBlobMock).not.toHaveBeenCalled()
   })
+
+  it('media_list_only expands selected group to child ids', async () => {
+    await exportWorkflowPackage({
+      nodes: [
+        {
+          id: 'group-1',
+          type: 'group',
+          position: { x: 0, y: 0 },
+          data: { title: 'pack' },
+        },
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 10, y: 10 },
+          parentNode: 'group-1',
+          data: { url: 'https://cdn.example/a.png' },
+        },
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 20, y: 10 },
+          parentNode: 'group-1',
+          data: { prompt: 'hi' },
+        },
+        {
+          id: 'image-outside',
+          type: 'image',
+          position: { x: 200, y: 0 },
+          data: { url: 'https://cdn.example/b.png' },
+        },
+      ],
+      edges: [],
+      selectedIds: ['group-1'],
+      sessionId: 'sess-1',
+      exportMode: 'media_list_only',
+    })
+
+    expect(downloadMediaPackage).toHaveBeenCalledOnce()
+    const passedIds = vi.mocked(downloadMediaPackage).mock.calls[0][1] as string[]
+    expect(passedIds).toEqual(expect.arrayContaining(['group-1', 'image-1', 'prompt-1']))
+    expect(passedIds).not.toContain('image-outside')
+  })
 })
 
 describe('importWorkflowPackage', () => {
@@ -365,5 +407,58 @@ describe('importWorkflowPackage', () => {
       Array<{ data?: Record<string, unknown> }>,
     ]
     expect(mergedNodes[0].data?.url).toBe('https://cdn.example/keep.png')
+  })
+
+  it('warns when zip media path is missing but still merges nodes', async () => {
+    const doc = buildWorkflowDocument({
+      nodes: [
+        {
+          id: 'image-1',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: { url: 'https://cdn.example/old.png', title: 'hero' },
+        },
+        {
+          id: 'prompt-1',
+          type: 'prompt',
+          position: { x: 80, y: 0 },
+          data: { prompt: 'keep me' },
+        },
+      ],
+      edges: [],
+      mode: 'full',
+      exportMode: 'full_package',
+      mediaIndex: [
+        {
+          nodeId: 'image-1',
+          kind: 'image',
+          fileName: 'hero.png',
+          path: 'media/hero.png',
+        },
+      ],
+    })
+    // Zip has workflow.json but intentionally omits media/hero.png
+    const file = await zipWithWorkflow(doc, [])
+
+    const applyMerge = vi.fn()
+    let seq = 0
+
+    const result = await importWorkflowPackage(file, {
+      nodes: [],
+      edges: [],
+      applyMerge,
+      createId: (type) => `${type}-miss-${++seq}`,
+      uploadMedia: uploadMediaMock,
+    })
+
+    expect(applyMerge).toHaveBeenCalledOnce()
+    expect(result.addedNodes).toBe(2)
+    expect(result.mediaOk).toBe(0)
+    expect(result.mediaFail).toBe(1)
+    expect(uploadMediaMock).not.toHaveBeenCalled()
+    expect(ElMessage.warning).toHaveBeenCalledWith(
+      expect.stringMatching(/媒体成功 0 \/ 失败 1/),
+    )
+    expect(ElMessage.success).not.toHaveBeenCalled()
   })
 })

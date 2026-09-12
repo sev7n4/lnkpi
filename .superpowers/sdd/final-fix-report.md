@@ -22,3 +22,20 @@ Status: DONE — merge blockers C1、I2、I3 已修复；低成本项 I5 同步�
 
 Commit: `fix(web): guide picker placement, Esc nesting, taxonomy priority`
 PR: #279（同一分支更新）
+
+---
+
+# Canvas Workflow Exchange — Final Review Important Fixes
+
+Status: DONE — 三项 Important 全部修复。
+
+## Changes
+
+1. **Import missing zip media**：`uploadZipMedia` 对 zip 中缺失的 `mediaIndex.path` 计入失败；导入仍 merge 成功节点，并通过 `ElMessage.warning` 展示「媒体成功 x / 失败 y」；结果返回 `mediaOk` / `mediaFail`。
+2. **`media_list_only` group expand**：与 full/lightweight 一样走 `expandExportNodeIds`，选中 group 会展开子节点再交给 `downloadMediaPackage`。
+3. **Full-canvas export UI**：画布右上角「导入工作流」旁新增「导出工作流」，调用 `handleExportPack([], 'full_package')`（空选 = 全画布）；多选工具栏 scoped 导出不变。
+
+## Verification
+
+- `pnpm --filter @lnkpi/web exec vitest run src/composables/useWorkflowExchange.test.ts` — 9 passed（含缺失媒体 warning、group expand 回归）。
+
