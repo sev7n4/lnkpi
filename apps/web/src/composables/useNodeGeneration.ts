@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type { VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
-import { NODE_GENERATION_STATUS, isNodeGenerating } from '@/constants/dockStudio'
+import { NODE_GENERATION_STATUS, isDockGenerateBusy, isNodeGenerating } from '@/constants/dockStudio'
 import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
 import { DEFAULT_AUDIO_VOICE } from '@/constants/dockAudio'
 import {
@@ -323,15 +323,130 @@ function collectCancelTargets(nodeId: string): {
   return { recordIds: [...recordIds], materialIds: [...materialIds] }
 }
 
-async function cancelRemoteGeneration(nodeId: string) {
+async function cancelRemoteGeneration(
+  nodeId: string,
+  excludedRecordIds = new Set<string>(),
+  excludedMaterialIds = new Set<string>(),
+) {
   const { recordIds, materialIds } = collectCancelTargets(nodeId)
-  if (!recordIds.length && !materialIds.length) return
+  const cancellableRecordIds = recordIds.filter((id) => !excludedRecordIds.has(id))
+  const cancellableMaterialIds = materialIds.filter((id) => !excludedMaterialIds.has(id))
+  if (!cancellableRecordIds.length && !cancellableMaterialIds.length) return
   await Promise.all([
-    ...recordIds.map((id) => studioApi.cancelGeneration(id).catch(() => undefined)),
-    ...materialIds.map((id) => canvasApi.cancelMaterial(id).catch(() => undefined)),
+    ...cancellableRecordIds.map((id) => studioApi.cancelGeneration(id).catch(() => undefined)),
+    ...cancellableMaterialIds.map((id) => canvasApi.cancelMaterial(id).catch(() => undefined)),
   ])
   await refreshPointsAfterGeneration()
 }
+
+  async function cancelFallbackPendingNodes(nodes: EditableFlowNode[]) {
+    const targets = new Map<string, {
+      kind: 'studio' | 'material'
+      id: string
+      nodes: Array<{
+        nodeId: string
+        status: unknown
+        generationRecordId?: string
+        materialId?: string
+      }>
+    }>()
+
+    for (const node of nodes) {
+      const recordId = node.data?.generationRecordId
+      const materialId = resolveMaterialId(node)
+      const generationRecordId =
+        typeof recordId === 'string' && recordId.trim() ? recordId.trim() : undefined
+      const kind = generationRecordId ? 'studio' : 'material'
+      const id = kind === 'studio' ? generationRecordId : materialId
+      if (!id) {
+        if (node.data?.status === NODE_GENERATION_STATUS.fallback_pending) {
+          deps.patchNodeData(node.id, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage: '无法取消平台回退：缺少任务标识',
+          })
+        }
+        continue
+      }
+      const snapshot = {
+        nodeId: node.id,
+        status: node.data?.status,
+        generationRecordId,
+        materialId,
+      }
+      const key = `${kind}:${id}`
+      const target = targets.get(key)
+      if (target) target.nodes.push(snapshot)
+      else targets.set(key, { kind, id, nodes: [snapshot] })
+    }
+
+    function stillMatchesPendingTask(
+      target: { kind: 'studio' | 'material'; id: string },
+      snapshot: {
+        nodeId: string
+        status: unknown
+        generationRecordId?: string
+        materialId?: string
+      },
+    ): boolean {
+      if (snapshot.status !== NODE_GENERATION_STATUS.fallback_pending) return false
+      const current = findNodeById(deps.nodes.value, snapshot.nodeId)
+      if (current?.data?.status !== NODE_GENERATION_STATUS.fallback_pending) return false
+      const currentRecordId =
+        typeof current.data?.generationRecordId === 'string'
+          ? current.data.generationRecordId.trim() || undefined
+          : undefined
+      const currentMaterialId = resolveMaterialId(current)
+      return target.kind === 'studio'
+        ? currentRecordId === target.id && currentRecordId === snapshot.generationRecordId
+        : currentMaterialId === target.id && currentMaterialId === snapshot.materialId
+    }
+
+    await Promise.all([...targets.values()].map(async (target) => {
+      try {
+        if (target.kind === 'studio') {
+          await studioApi.cancelPlatformFallback(target.id)
+        } else {
+          await canvasApi.cancelMaterialPlatformFallback(target.id)
+        }
+        for (const snapshot of target.nodes) {
+          if (!stillMatchesPendingTask(target, snapshot)) continue
+          deps.patchNodeData(snapshot.nodeId, {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage: '已取消平台回退',
+          })
+        }
+      } catch (err) {
+        const short = parseShortGenerationError(err)
+        for (const snapshot of target.nodes) {
+          if (!stillMatchesPendingTask(target, snapshot)) continue
+          const patch: Record<string, unknown> = {
+            status: NODE_GENERATION_STATUS.error,
+            errorMessage: short.userMessage || '平台回退取消失败',
+          }
+          if (short.errorCode) patch.errorCode = short.errorCode
+          deps.patchNodeData(snapshot.nodeId, patch)
+        }
+      }
+    }))
+    refreshPointsAfterGeneration()
+    await deps.saveCanvas().catch(() => undefined)
+  }
+
+  async function cancelPendingFallbackBeforeGenerate(node: EditableFlowNode) {
+    if (node.data?.status !== NODE_GENERATION_STATUS.fallback_pending) return
+    const recordId = node.data?.generationRecordId
+    const materialId = resolveMaterialId(node)
+    const cancellations: Array<() => Promise<unknown>> = []
+    if (typeof recordId === 'string' && recordId.trim()) {
+      cancellations.push(() => studioApi.cancelPlatformFallback(recordId.trim()))
+    }
+    if (materialId) {
+      cancellations.push(() => canvasApi.cancelMaterialPlatformFallback(materialId))
+    }
+    // Best effort: a new generation must still be allowed to replace old tasks.
+    await Promise.allSettled(cancellations.map((cancel) => Promise.resolve().then(cancel)))
+    refreshPointsAfterGeneration()
+  }
 
   function cancelGeneration(nodeId: string) {
     const ac = abortByNodeId.get(nodeId)
@@ -342,16 +457,24 @@ async function cancelRemoteGeneration(nodeId: string) {
     deps.stopGenerationPolling?.(nodeId)
     deps.stopShotPolling?.(nodeId)
     const node = findNodeById(deps.nodes.value, nodeId)
+    const fallbackPendingNodes: EditableFlowNode[] = []
+    if (node?.data?.status === NODE_GENERATION_STATUS.fallback_pending) {
+      fallbackPendingNodes.push(node)
+    }
     if (node && (node.type === 'image' || node.type === 'video')) {
       const linkedShotEdge = findIncomingEdge(deps.edges.value, nodeId)
       const shotId = linkedShotEdge?.source
       const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
       if (shotNode?.type === 'shot' && shotId) {
         deps.stopShotPolling?.(shotId)
-        deps.patchNodeData(shotId, {
-          status: NODE_GENERATION_STATUS.draft,
-          errorMessage: formatCancelledMessage(),
-        })
+        if (shotNode.data?.status === NODE_GENERATION_STATUS.fallback_pending) {
+          fallbackPendingNodes.push(shotNode)
+        } else {
+          deps.patchNodeData(shotId, {
+            status: NODE_GENERATION_STATUS.draft,
+            errorMessage: formatCancelledMessage(),
+          })
+        }
         markIdle(shotId)
       }
     }
@@ -368,20 +491,39 @@ async function cancelRemoteGeneration(nodeId: string) {
           abortByNodeId.delete(child.id)
         }
         markIdle(child.id)
-        deps.patchNodeData(child.id, {
-          status: NODE_GENERATION_STATUS.draft,
-          errorMessage: formatCancelledMessage(),
-        })
+        if (child.data?.status === NODE_GENERATION_STATUS.fallback_pending) {
+          fallbackPendingNodes.push(child)
+        } else {
+          deps.patchNodeData(child.id, {
+            status: NODE_GENERATION_STATUS.draft,
+            errorMessage: formatCancelledMessage(),
+          })
+        }
       }
     }
     markIdle(nodeId)
     syncGeneratingFlag()
-    deps.patchNodeData(nodeId, {
-      status: NODE_GENERATION_STATUS.draft,
-      errorMessage: formatCancelledMessage(),
-    })
+    if (node?.data?.status !== NODE_GENERATION_STATUS.fallback_pending) {
+      deps.patchNodeData(nodeId, {
+        status: NODE_GENERATION_STATUS.draft,
+        errorMessage: formatCancelledMessage(),
+      })
+    }
     refreshPointsAfterGeneration()
-    void cancelRemoteGeneration(nodeId)
+    const excludedRecordIds = new Set<string>()
+    const excludedMaterialIds = new Set<string>()
+    for (const pendingNode of fallbackPendingNodes) {
+      const recordId = pendingNode.data?.generationRecordId
+      if (typeof recordId === 'string' && recordId.trim()) {
+        excludedRecordIds.add(recordId.trim())
+      }
+      const materialId = resolveMaterialId(pendingNode)
+      if (materialId) excludedMaterialIds.add(materialId)
+    }
+    if (fallbackPendingNodes.length) {
+      void cancelFallbackPendingNodes(fallbackPendingNodes)
+    }
+    void cancelRemoteGeneration(nodeId, excludedRecordIds, excludedMaterialIds)
   }
 
   function beginNodeWork(nodeId: string): AbortSignal {
@@ -546,7 +688,14 @@ async function cancelRemoteGeneration(nodeId: string) {
   }
 
   async function generateForNode(node: EditableFlowNode) {
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
+      cancelGeneration(node.id)
+      return
+    }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
       cancelGeneration(node.id)
       return
     }
@@ -584,6 +733,9 @@ async function cancelRemoteGeneration(nodeId: string) {
     const signal = beginNodeWork(node.id)
 
     try {
+      await cancelPendingFallbackBeforeGenerate(node)
+      if (signal.aborted) return
+
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
         const guideSceneId =
@@ -1012,10 +1164,18 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   async function batchGenerateSceneComposer(node: EditableFlowNode) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
       cancelGeneration(node.id)
       return
     }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
+      cancelGeneration(node.id)
+      return
+    }
+    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
     try {
       const payload = readSceneComposerFromNode(node)
@@ -1078,7 +1238,14 @@ async function cancelRemoteGeneration(nodeId: string) {
 
   async function exportVideoComposition(node: EditableFlowNode, tracks: CompositionTrack[]) {
     if (!deps.requireLogin()) return
-    if (isNodeBusy(node.id) || isNodeGenerating(node.data?.status)) {
+    if (isNodeBusy(node.id)) {
+      cancelGeneration(node.id)
+      return
+    }
+    if (
+      isDockGenerateBusy(node.data?.status)
+      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+    ) {
       cancelGeneration(node.id)
       return
     }
@@ -1086,6 +1253,7 @@ async function cancelRemoteGeneration(nodeId: string) {
     const exportTracks = ordered.filter((track) => track.url.trim())
     if (!exportTracks.length) return
 
+    await cancelPendingFallbackBeforeGenerate(node)
     const signal = beginNodeWork(node.id)
     try {
       deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.generating })

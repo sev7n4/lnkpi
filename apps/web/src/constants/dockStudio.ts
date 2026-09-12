@@ -48,3 +48,8 @@ export function isNodeGenerating(status: unknown): boolean {
     status === NODE_GENERATION_STATUS.fallback_pending
   )
 }
+
+/** Dock 生成按钮「停止方块」态：仅真正生成中（不含 fallback_pending）。 */
+export function isDockGenerateBusy(status: unknown): boolean {
+  return status === NODE_GENERATION_STATUS.generating
+}
