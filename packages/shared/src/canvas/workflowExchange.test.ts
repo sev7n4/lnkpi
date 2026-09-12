@@ -7,6 +7,11 @@ import {
 } from './workflowExchange'
 
 describe('workflowExchange', () => {
+  it('validateWorkflow throws on invalid input', () => {
+    expect(() => validateWorkflow({ format: 'wrong' })).toThrow()
+    expect(() => validateWorkflow(null)).toThrow()
+  })
+
   it('validateWorkflow accepts minimal doc', () => {
     const doc = buildWorkflowDocument({
       nodes: [
@@ -54,6 +59,7 @@ describe('workflowExchange', () => {
           type: 'image',
           position: { x: 1, y: 0 },
           parentId: 'image-1',
+          parentNode: 'image-1',
           data: { url: 'https://x/b.png' },
         },
       ],
@@ -75,6 +81,7 @@ describe('workflowExchange', () => {
     expect(document.graph.edges[0].source).toBe(idMap['image-2'])
     expect(document.graph.edges[0].target).toBe(idMap['image-1'])
     expect(document.graph.nodes[1].parentId).toBe(idMap['image-1'])
+    expect(document.graph.nodes[1].parentNode).toBe(idMap['image-1'])
     expect(document.mediaIndex[0].nodeId).toBe(idMap['image-1'])
     const node0Data = document.graph.nodes[0].data
     expect(node0Data.mentionedKeys).toEqual([idMap['image-2']])
