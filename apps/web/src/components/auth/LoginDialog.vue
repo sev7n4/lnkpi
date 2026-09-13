@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import BrandLogo from '@/components/brand/BrandLogo.vue'
+import LoginVideoPanel from './LoginVideoPanel.vue'
+import LoginFormPanel from './LoginFormPanel.vue'
+import BlockCaptchaOverlay from './BlockCaptchaOverlay.vue'
 
 const auth = useAuthStore()
-const phone = ref('')
-const code = ref('')
-const countdown = ref(0)
-const loading = ref(false)
-const error = ref('')
-const authHint = ref('')
+const shellRef = ref<HTMLElement | null>(null)
+const formRef = ref<InstanceType<typeof LoginFormPanel> | null>(null)
+const showCaptcha = ref(false)
+const pendingPhone = ref('')
 
 const visible = computed({
   get: () => auth.showLoginDialog,
@@ -21,101 +21,87 @@ const visible = computed({
 watch(
   () => auth.showLoginDialog,
   async (open) => {
-    if (!open) return
-    error.value = ''
-    authHint.value = ''
-    try {
-      const cfg = await auth.fetchAuthConfig()
-      if (cfg.fixedCodeHint) {
-        authHint.value = `临时验证码：${cfg.fixedCodeHint}（固定码模式，未发送真实短信）`
-      }
-    } catch {
-      authHint.value = '若收不到短信，可尝试验证码 123456'
+    if (!open) {
+      showCaptcha.value = false
+      pendingPhone.value = ''
+      return
     }
+    await nextTick()
+    shellRef.value?.focus()
   },
 )
 
-async function handleSendCode() {
-  if (!phone.value || countdown.value > 0) return
-  error.value = ''
-  try {
-    await auth.sendCode(phone.value)
-    countdown.value = 60
-    const timer = setInterval(() => {
-      countdown.value--
-      if (countdown.value <= 0) clearInterval(timer)
-    }, 1000)
-  } catch (err) {
-    const ax = err as { code?: string; response?: { status?: number } }
-    if (ax.code === 'ECONNABORTED' || ax.response?.status === 502) {
-      error.value = '网络超时，请稍后重试（跨境链路可能较慢）'
-    } else {
-      error.value = '验证码发送失败'
-    }
+function onEsc() {
+  if (showCaptcha.value) {
+    onCaptchaClose()
+    return
   }
+  visible.value = false
 }
 
-async function handleLogin() {
-  if (!phone.value || !code.value) return
-  loading.value = true
-  error.value = ''
+function onRequestSendCode(phone: string) {
+  pendingPhone.value = phone
+  showCaptcha.value = true
+}
+
+function onCaptchaClose() {
+  showCaptcha.value = false
+  formRef.value?.cancelSending()
+}
+
+async function onCaptchaVerified(ticket: string) {
+  showCaptcha.value = false
   try {
-    await auth.login(phone.value, code.value)
-    visible.value = false
+    await auth.sendCode(pendingPhone.value, ticket)
+    formRef.value?.markSendSuccess()
   } catch (err) {
     const ax = err as { code?: string; response?: { status?: number } }
     if (ax.code === 'ECONNABORTED' || ax.response?.status === 502) {
-      error.value = '登录超时，请重试（验证码仍为 123456）'
+      formRef.value?.setSendError('网络超时，请稍后重试（跨境链路可能较慢）')
     } else {
-      error.value = '登录失败，请检查验证码'
+      formRef.value?.setSendError('验证码发送失败')
     }
-  } finally {
-    loading.value = false
   }
 }
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="欢迎登录" width="420px" align-center>
-    <div class="mb-4 flex flex-col items-center gap-2">
-      <BrandLogo size="lg" />
-      <p class="text-sm text-[var(--neo-text-secondary)]">继续你的创作之旅</p>
-    </div>
-
-    <div class="space-y-4">
-      <div>
-        <label class="mb-1.5 block text-xs text-[var(--neo-text-muted)]">手机号</label>
-        <div class="flex gap-2">
-          <span class="input-field flex w-16 items-center justify-center !px-2">+86</span>
-          <input v-model="phone" class="input-field" placeholder="请输入手机号" type="tel" />
-        </div>
+  <Teleport to="body">
+    <div
+      v-if="visible"
+      ref="shellRef"
+      class="fixed inset-0 z-[100] flex flex-col bg-black outline-none md:flex-row"
+      role="dialog"
+      aria-modal="true"
+      aria-label="登录"
+      tabindex="-1"
+      @keydown.esc.prevent="onEsc"
+    >
+      <div class="h-[28vh] w-full shrink-0 md:h-auto md:w-[55vw]">
+        <LoginVideoPanel />
       </div>
-
-      <div>
-        <label class="mb-1.5 block text-xs text-[var(--neo-text-muted)]">验证码</label>
-        <div class="flex gap-2">
-          <input v-model="code" class="input-field" placeholder="请输入验证码" />
-          <button
-            class="btn-ghost shrink-0 whitespace-nowrap"
-            :disabled="countdown > 0"
-            @click="handleSendCode"
-          >
-            {{ countdown > 0 ? `${countdown}s` : '发送验证码' }}
-          </button>
-        </div>
+      <div
+        class="relative flex flex-1 items-start justify-center overflow-y-auto bg-[var(--neo-bg)] px-6 py-10 md:items-center"
+      >
+        <button
+          type="button"
+          class="absolute right-5 top-5 z-[105] flex h-9 w-9 items-center justify-center rounded-full text-2xl leading-none text-[var(--neo-text-secondary)] transition hover:bg-[var(--neo-hover-bg)] hover:text-[var(--neo-text-primary)]"
+          aria-label="关闭"
+          @click="visible = false"
+        >
+          ×
+        </button>
+        <LoginFormPanel
+          ref="formRef"
+          class="w-full max-w-[360px]"
+          @request-send-code="onRequestSendCode"
+        />
+        <BlockCaptchaOverlay
+          v-if="showCaptcha"
+          @verified="onCaptchaVerified"
+          @close="onCaptchaClose"
+        />
       </div>
-
-      <p v-if="authHint" class="text-xs text-amber-400/90">{{ authHint }}</p>
-
-      <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
-
-      <button class="btn-primary w-full" :disabled="loading" @click="handleLogin">
-        {{ loading ? '登录中...' : '开始你的旅程' }}
-      </button>
-
-      <p class="text-center text-xs text-[var(--neo-text-muted)]">
-        登录即表示同意《超创平台用户协议》与《隐私政策》
-      </p>
     </div>
-  </el-dialog>
+  </Teleport>
 </template>

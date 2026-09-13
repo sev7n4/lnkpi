@@ -1,12 +1,25 @@
 import { Body, Controller, Get, HttpCode, Post, Req, UseGuards, Inject } from '@nestjs/common'
-import { IsString, Length, Matches } from 'class-validator'
+import { IsArray, IsOptional, IsString, Length, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
 import { AuthGuard } from './auth.guard'
+import { CaptchaService } from './captcha.service'
 
 class SendCodeDto {
   @IsString()
   @Matches(/^1\d{10}$/, { message: '手机号格式不正确' })
   phone!: string
+
+  @IsOptional()
+  @IsString()
+  captchaTicket?: string
+}
+
+class CaptchaVerifyDto {
+  @IsString()
+  challengeId!: string
+
+  @IsArray()
+  placements!: { blockId: string; slotId: string }[]
 }
 
 class LoginDto {
@@ -21,7 +34,10 @@ class LoginDto {
 
 @Controller('auth')
 export class AuthController {
-  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+  constructor(
+    @Inject(AuthService) private readonly authService: AuthService,
+    @Inject(CaptchaService) private readonly captchaService: CaptchaService,
+  ) {}
 
   @Get('config')
   getConfig() {
@@ -29,10 +45,23 @@ export class AuthController {
     return { code: 0, message: 'ok', data }
   }
 
+  @Post('captcha/challenge')
+  @HttpCode(200)
+  createCaptcha() {
+    return { code: 0, message: 'ok', data: this.captchaService.createChallenge() }
+  }
+
+  @Post('captcha/verify')
+  @HttpCode(200)
+  verifyCaptcha(@Body() dto: CaptchaVerifyDto) {
+    const data = this.captchaService.verifyPlacement(dto.challengeId, dto.placements)
+    return { code: 0, message: 'ok', data }
+  }
+
   @Post('send-code')
   @HttpCode(200)
   async sendCode(@Body() dto: SendCodeDto) {
-    const data = await this.authService.sendCode(dto.phone)
+    const data = await this.authService.sendCode(dto.phone, dto.captchaTicket)
     return { code: 0, message: 'ok', data }
   }
 

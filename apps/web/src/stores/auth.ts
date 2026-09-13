@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@lnkpi/shared'
+import type { CaptchaChallenge, CaptchaPlacement } from '@/components/auth/captcha-types'
 import { api } from '@/services/api'
 import { membershipApi } from '@/services/users-api'
 
@@ -25,13 +26,35 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
   const token = ref<string | null>(localStorage.getItem('token'))
   const showLoginDialog = ref(false)
+  const captchaTicket = ref<string | null>(null)
 
   const isLoggedIn = computed(() => !!token.value && !!user.value)
 
-  async function sendCode(phone: string) {
-    await withAuthRetry(() =>
-      api.post('/auth/send-code', { phone }, { timeout: AUTH_TIMEOUT_MS }),
+  async function fetchCaptchaChallenge() {
+    const { data } = await withAuthRetry(() =>
+      api.post<{ data: CaptchaChallenge }>('/auth/captcha/challenge', {}, { timeout: AUTH_TIMEOUT_MS }),
     )
+    return data.data
+  }
+
+  async function verifyCaptcha(challengeId: string, placements: CaptchaPlacement[]) {
+    const { data } = await withAuthRetry(() =>
+      api.post<{ data: { captchaTicket: string; expiresAt: string } }>(
+        '/auth/captcha/verify',
+        { challengeId, placements },
+        { timeout: AUTH_TIMEOUT_MS },
+      ),
+    )
+    captchaTicket.value = data.data.captchaTicket
+    return data.data
+  }
+
+  async function sendCode(phone: string, ticket?: string) {
+    const captchaTicketToSend = ticket ?? captchaTicket.value ?? undefined
+    await withAuthRetry(() =>
+      api.post('/auth/send-code', { phone, captchaTicket: captchaTicketToSend }, { timeout: AUTH_TIMEOUT_MS }),
+    )
+    captchaTicket.value = null
   }
 
   async function fetchAuthConfig() {
@@ -107,6 +130,9 @@ export const useAuthStore = defineStore('auth', () => {
     token,
     isLoggedIn,
     showLoginDialog,
+    captchaTicket,
+    fetchCaptchaChallenge,
+    verifyCaptcha,
     sendCode,
     fetchAuthConfig,
     login,
