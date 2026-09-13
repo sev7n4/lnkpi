@@ -47,8 +47,9 @@ export class AuthController {
 
   @Post('captcha/challenge')
   @HttpCode(200)
-  createCaptcha() {
-    return { code: 0, message: 'ok', data: this.captchaService.createChallenge() }
+  async createCaptcha() {
+    const data = await this.captchaService.createChallenge()
+    return { code: 0, message: 'ok', data }
   }
 
   @Post('captcha/verify')

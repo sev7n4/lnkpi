@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 type Clip = { src: string; label: string }
 
@@ -61,11 +61,17 @@ function elForSlot(slot: 0 | 1) {
 async function playSlot(slot: 0 | 1) {
   const el = elForSlot(slot)
   if (!el) return
+  el.muted = true
+  el.playsInline = true
   try {
-    el.muted = true
     await el.play()
   } catch {
-    // Autoplay may be blocked; keep silent — form stays usable
+    try {
+      await new Promise((r) => setTimeout(r, 120))
+      await el.play()
+    } catch {
+      // Autoplay may be blocked; poster remains — form stays usable
+    }
   }
 }
 
@@ -77,33 +83,42 @@ function scheduleAdvance() {
   }, TIMER_FALLBACK_MS)
 }
 
-async function goNext(reason: 'ended' | 'timer' | 'error' = 'timer') {
-  if (fading.value) return
-  if (reduceMotion.value && reason !== 'error') return
+async function goNext(reason: 'ended' | 'timer' | 'error' | 'dot' = 'timer', forcedIndex?: number) {
+  if (fading.value && reason !== 'dot') return
 
   const from = currentIndex.value
-  const next = nextPlayableIndex(from)
-  if (next === null || next === from) {
-    scheduleAdvance()
+  const next =
+    typeof forcedIndex === 'number'
+      ? failed.value.has(forcedIndex)
+        ? null
+        : forcedIndex
+      : nextPlayableIndex(from)
+
+  if (next === null || (next === from && reason !== 'dot')) {
+    if (reason !== 'dot') scheduleAdvance()
     return
   }
 
-  // Reduced motion: hard-cut to next playable clip (error recovery only)
-  if (reduceMotion.value) {
+  if (reduceMotion.value || reason === 'dot') {
     clearAdvanceTimer()
+    clearFadeTimer()
+    fading.value = false
     activeSlot.value = 0
     slotIndex.value = [next, next]
+    await nextTick()
     const el = elForSlot(0)
     if (el) {
       el.currentTime = 0
       await playSlot(0)
     }
+    if (!reduceMotion.value) scheduleAdvance()
     return
   }
 
   const inactive: 0 | 1 = activeSlot.value === 0 ? 1 : 0
   slotIndex.value = activeSlot.value === 0 ? [from, next] : [next, from]
 
+  await nextTick()
   const incoming = elForSlot(inactive)
   if (incoming) {
     incoming.currentTime = 0
@@ -134,6 +149,18 @@ function onError(slot: 0 | 1) {
     fading.value = false
     void goNext('error')
   }
+}
+
+function onDotClick(i: number) {
+  if (i === currentIndex.value && !failed.value.has(i)) {
+    void playSlot(activeSlot.value)
+    return
+  }
+  void goNext('dot', i)
+}
+
+function onLoaded(slot: 0 | 1) {
+  if (slot === activeSlot.value) void playSlot(slot)
 }
 
 function onReduceMotionChange() {
@@ -167,33 +194,102 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative h-full w-full overflow-hidden bg-[var(--neo-bg)]">
-    <video
-      ref="videoA"
-      class="absolute inset-0 h-full w-full object-cover transition-opacity ease-in-out"
-      :class="activeSlot === 0 && !fading ? 'opacity-100' : activeSlot === 0 && fading ? 'opacity-0' : activeSlot === 1 && fading ? 'opacity-100' : 'opacity-0'"
-      :style="{ transitionDuration: `${CROSSFADE_MS}ms` }"
-      :src="clips[slotIndex[0]].src"
-      :poster="poster"
-      muted
-      playsinline
-      preload="auto"
-      @ended="onEnded(0)"
-      @error="onError(0)"
-    />
-    <video
-      ref="videoB"
-      class="absolute inset-0 h-full w-full object-cover transition-opacity ease-in-out"
-      :class="activeSlot === 1 && !fading ? 'opacity-100' : activeSlot === 1 && fading ? 'opacity-0' : activeSlot === 0 && fading ? 'opacity-100' : 'opacity-0'"
-      :style="{ transitionDuration: `${CROSSFADE_MS}ms` }"
-      :src="clips[slotIndex[1]].src"
-      muted
-      playsinline
-      preload="auto"
-      @ended="onEnded(1)"
-      @error="onError(1)"
-    />
-    <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent to-[var(--neo-bg)]/40" />
-    <p class="absolute bottom-6 left-1/2 -translate-x-1/2 text-xs text-white/50">{{ caption }}</p>
+  <div class="relative h-full w-full overflow-hidden bg-[var(--neo-bg)] p-3 md:p-4">
+    <div
+      class="video-stage relative h-full w-full overflow-hidden rounded-[16px] border border-[var(--neo-border-strong)] shadow-[0_24px_60px_rgba(0,0,0,0.45)] md:rounded-[20px]"
+    >
+      <video
+        ref="videoA"
+        class="absolute inset-0 h-full w-full object-cover transition-opacity ease-in-out"
+        :class="
+          activeSlot === 0 && !fading
+            ? 'opacity-100'
+            : activeSlot === 0 && fading
+              ? 'opacity-0'
+              : activeSlot === 1 && fading
+                ? 'opacity-100'
+                : 'opacity-0'
+        "
+        :style="{ transitionDuration: `${CROSSFADE_MS}ms` }"
+        :src="clips[slotIndex[0]].src"
+        :poster="poster"
+        autoplay
+        muted
+        playsinline
+        preload="auto"
+        @ended="onEnded(0)"
+        @error="onError(0)"
+        @loadeddata="onLoaded(0)"
+        @canplay="onLoaded(0)"
+      />
+      <video
+        ref="videoB"
+        class="absolute inset-0 h-full w-full object-cover transition-opacity ease-in-out"
+        :class="
+          activeSlot === 1 && !fading
+            ? 'opacity-100'
+            : activeSlot === 1 && fading
+              ? 'opacity-0'
+              : activeSlot === 0 && fading
+                ? 'opacity-100'
+                : 'opacity-0'
+        "
+        :style="{ transitionDuration: `${CROSSFADE_MS}ms` }"
+        :src="clips[slotIndex[1]].src"
+        muted
+        playsinline
+        preload="auto"
+        @ended="onEnded(1)"
+        @error="onError(1)"
+        @loadeddata="onLoaded(1)"
+        @canplay="onLoaded(1)"
+      />
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent to-[var(--neo-bg)]/35" />
+
+      <div
+        class="absolute left-3 top-1/2 z-[2] flex -translate-y-1/2 flex-col gap-2.5 md:left-4"
+        role="tablist"
+        aria-label="视频主题"
+      >
+        <button
+          v-for="(clip, i) in clips"
+          :key="clip.label"
+          type="button"
+          class="dot"
+          :class="{ 'dot--on': currentIndex === i }"
+          :title="clip.label"
+          :aria-label="clip.label"
+          :aria-selected="currentIndex === i"
+          role="tab"
+          @click="onDotClick(i)"
+        />
+      </div>
+
+      <p class="absolute bottom-5 left-1/2 z-[2] -translate-x-1/2 text-xs tracking-wide text-white/55">
+        {{ caption }}
+      </p>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  transition: height 0.2s ease, background 0.2s ease;
+}
+.dot--on {
+  height: 22px;
+  background: #fff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    transition: none;
+  }
+}
+</style>

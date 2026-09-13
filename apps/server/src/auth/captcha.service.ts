@@ -1,52 +1,73 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { join } from 'path'
+import sharp from 'sharp'
+import {
+  CAPTCHA_SHAPES,
+  buildHoleMaskSvg,
+  buildShapeMaskSvg,
+  shapePadding,
+  type CaptchaShapeId,
+} from './captcha.shapes'
 import type { SliderCaptchaChallengePublic, SliderPuzzleMeta } from './captcha.types'
 
 type TicketRecord = { expiresAt: number; consumed: boolean }
-
-type ChallengeRecord = {
-  targetX: number
-  puzzle: SliderPuzzleMeta
-}
+type ChallengeRecord = { targetX: number; puzzle: SliderPuzzleMeta }
 
 const WIDTH = 280
 const HEIGHT = 160
 const PIECE_SIZE = 44
 const TOLERANCE = 5
+const MAX_POOL = 10
 
 @Injectable()
 export class CaptchaService {
   private readonly challenges = new Map<string, ChallengeRecord>()
   private readonly tickets = new Map<string, TicketRecord>()
   private readonly ttlMs = 5 * 60 * 1000
+  private readonly pool: Buffer[]
+
+  constructor() {
+    this.pool = this.loadPool()
+  }
 
   private get secret(): string {
     return process.env.AUTH_CAPTCHA_SECRET?.trim() || 'dev-captcha-secret'
   }
 
-  createChallenge(): SliderCaptchaChallengePublic {
+  async createChallenge(): Promise<SliderCaptchaChallengePublic> {
     const challengeId = `ch_${randomBytes(8).toString('hex')}`
-    const minX = PIECE_SIZE
-    const maxX = WIDTH - 2 * PIECE_SIZE
-    const targetX = minX + (randomBytes(2).readUInt16BE(0) % (maxX - minX + 1))
-    const y =
-      Math.floor(HEIGHT * 0.2) +
-      (randomBytes(1)[0]! % Math.max(1, Math.floor(HEIGHT * 0.5) - PIECE_SIZE))
+    const shape = CAPTCHA_SHAPES[randomBytes(1)[0]! % CAPTCHA_SHAPES.length]!
+    const pad = shapePadding(shape)
+    const minX = PIECE_SIZE + pad
+    const maxX = WIDTH - 2 * PIECE_SIZE - pad
+    const targetX = minX + (randomBytes(2).readUInt16BE(0) % Math.max(1, maxX - minX + 1))
+    const minY = pad + 8
+    const maxY = HEIGHT - PIECE_SIZE - pad - 8
+    const y = minY + (randomBytes(1)[0]! % Math.max(1, maxY - minY + 1))
 
     const puzzle: SliderPuzzleMeta = {
       width: WIDTH,
       height: HEIGHT,
       pieceSize: PIECE_SIZE,
       y,
+      shape,
+      piecePad: pad,
     }
 
     this.challenges.set(challengeId, { targetX, puzzle })
 
-    return {
-      challengeId,
-      bgImage: this.buildBgSvg(targetX, y),
-      pieceImage: this.buildPieceSvg(targetX, y),
-      puzzle,
+    try {
+      const images = await this.cutImages(shape, targetX, y)
+      return { challengeId, ...images, puzzle }
+    } catch {
+      return {
+        challengeId,
+        bgImage: this.buildFallbackBgSvg(targetX, y, shape),
+        pieceImage: this.buildFallbackPieceSvg(targetX, y, shape),
+        puzzle,
+      }
     }
   }
 
@@ -74,39 +95,112 @@ export class CaptchaService {
     return 'ok'
   }
 
-  private buildBgSvg(holeX: number, holeY: number): string {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}" viewBox="0 0 ${WIDTH} ${HEIGHT}">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#5b8def"/>
-      <stop offset="100%" stop-color="#3d6fd9"/>
-    </linearGradient>
-    <mask id="hole">
-      <rect width="${WIDTH}" height="${HEIGHT}" fill="white"/>
-      <rect x="${holeX}" y="${holeY}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="4" fill="black"/>
-    </mask>
-  </defs>
-  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)" mask="url(#hole)"/>
-  <rect x="${holeX}" y="${holeY}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="4" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1"/>
+  private loadPool(): Buffer[] {
+    const dir = join(__dirname, '..', '..', 'assets', 'captcha')
+    if (!existsSync(dir)) return []
+    return readdirSync(dir)
+      .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+      .sort()
+      .slice(0, MAX_POOL)
+      .map((f) => readFileSync(join(dir, f)))
+  }
+
+  private pickBg(): Buffer {
+    if (this.pool.length === 0) {
+      return Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
+          <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#1a1d24"/><stop offset="100%" stop-color="#12141a"/>
+          </linearGradient></defs>
+          <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#g)"/>
+        </svg>`,
+      )
+    }
+    return this.pool[randomBytes(1)[0]! % this.pool.length]!
+  }
+
+  private async cutImages(shape: CaptchaShapeId, targetX: number, y: number) {
+    const base = await sharp(this.pickBg())
+      .resize(WIDTH, HEIGHT, { fit: 'cover' })
+      .ensureAlpha()
+      .png()
+      .toBuffer()
+
+    const holeSvg = Buffer.from(buildHoleMaskSvg(shape, WIDTH, HEIGHT, targetX, y, PIECE_SIZE))
+    let bgBuf = await sharp(base)
+      .composite([{ input: holeSvg, blend: 'dest-out' }])
+      .png()
+      .toBuffer()
+
+    if (shape !== 'puzzle') {
+      const ring =
+        shape === 'circle'
+          ? `<circle cx="${targetX + PIECE_SIZE / 2}" cy="${y + PIECE_SIZE / 2}" r="${PIECE_SIZE / 2}" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
+          : `<rect x="${targetX}" y="${y}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
+      const ringSvg = Buffer.from(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${ring}</svg>`,
+      )
+      bgBuf = await sharp(bgBuf).composite([{ input: ringSvg, blend: 'over' }]).png().toBuffer()
+    }
+
+    const pad = shapePadding(shape)
+    const left = Math.max(0, targetX - pad)
+    const top = Math.max(0, y - pad)
+    const width = Math.min(WIDTH - left, PIECE_SIZE + pad * 2)
+    const height = Math.min(HEIGHT - top, PIECE_SIZE + pad * 2)
+
+    const cropped = await sharp(base).extract({ left, top, width, height }).ensureAlpha().png().toBuffer()
+    const localMask = Buffer.from(buildShapeMaskSvg(shape, PIECE_SIZE, pad))
+    const maskLeft = targetX - left - pad
+    const maskTop = y - top - pad
+    const positionedMask = await sharp({
+      create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    })
+      .composite([{ input: localMask, left: maskLeft, top: maskTop }])
+      .png()
+      .toBuffer()
+
+    const pieceBuf = await sharp(cropped)
+      .composite([{ input: positionedMask, blend: 'dest-in' }])
+      .png()
+      .toBuffer()
+
+    return {
+      bgImage: `data:image/png;base64,${bgBuf.toString('base64')}`,
+      pieceImage: `data:image/png;base64,${pieceBuf.toString('base64')}`,
+    }
+  }
+
+  private buildFallbackBgSvg(holeX: number, holeY: number, shape: CaptchaShapeId): string {
+    const hole =
+      shape === 'circle'
+        ? `<circle cx="${holeX + PIECE_SIZE / 2}" cy="${holeY + PIECE_SIZE / 2}" r="${PIECE_SIZE / 2}" fill="black"/>`
+        : `<rect x="${holeX}" y="${holeY}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8" fill="black"/>`
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#1c1e26"/><stop offset="100%" stop-color="#12141a"/>
+  </linearGradient>
+  <mask id="m"><rect width="${WIDTH}" height="${HEIGHT}" fill="white"/>${hole}</mask></defs>
+  <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)" mask="url(#m)"/>
 </svg>`
     return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
   }
 
-  private buildPieceSvg(sourceX: number, sourceY: number): string {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${PIECE_SIZE}" height="${PIECE_SIZE}" viewBox="0 0 ${PIECE_SIZE} ${PIECE_SIZE}">
+  private buildFallbackPieceSvg(sourceX: number, sourceY: number, shape: CaptchaShapeId): string {
+    const pad = shapePadding(shape)
+    const w = PIECE_SIZE + pad * 2
+    const h = PIECE_SIZE + pad * 2
+    const clipInner = buildShapeMaskSvg(shape, PIECE_SIZE, pad).replace(/<\/?svg[^>]*>/g, '')
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#5b8def"/>
-      <stop offset="100%" stop-color="#3d6fd9"/>
+      <stop offset="0%" stop-color="#1c1e26"/><stop offset="100%" stop-color="#12141a"/>
     </linearGradient>
-    <clipPath id="piece">
-      <rect width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="4"/>
-    </clipPath>
+    <clipPath id="c">${clipInner}</clipPath>
   </defs>
-  <g clip-path="url(#piece)">
-    <rect x="${-sourceX}" y="${-sourceY}" width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
+  <g clip-path="url(#c)">
+    <rect x="${-sourceX + pad}" y="${-sourceY + pad}" width="${WIDTH}" height="${HEIGHT}" fill="url(#bg)"/>
   </g>
-  <rect width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="4" fill="none" stroke="rgba(0,0,0,0.25)" stroke-width="1"/>
 </svg>`
     return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
   }

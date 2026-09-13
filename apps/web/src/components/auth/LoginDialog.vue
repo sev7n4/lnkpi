@@ -77,11 +77,11 @@ async function onCaptchaVerified(ticket: string) {
       tabindex="-1"
       @keydown.esc.prevent="onEsc"
     >
-      <div class="h-[28vh] w-full shrink-0 md:h-auto md:w-[55vw]">
+      <div class="h-[28vh] w-full shrink-0 md:h-auto md:w-[65%] md:flex-none">
         <LoginVideoPanel />
       </div>
       <div
-        class="relative flex flex-1 items-start justify-center overflow-y-auto bg-[var(--neo-bg)] px-6 py-10 md:items-center"
+        class="relative flex flex-1 items-start justify-center overflow-y-auto bg-[var(--neo-bg)] px-6 py-10 md:w-[35%] md:items-center"
       >
         <button
           type="button"
