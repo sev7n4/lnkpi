@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_APIMART_BASE_URL,
+  DEFAULT_FAL_BASE_URL,
+  isFalH3MaxPlatformModel,
   resolveApimartPlatformCredentials,
+  resolveFalH3MaxPlatformCredentials,
   resolvePlatformImageProviderOpts,
   usesApimartImageGateway,
   type PlatformCredentialEnv,
@@ -20,6 +23,8 @@ describe('platformCredentials', () => {
     openaiBase: process.env.OPENAI_BASE_URL,
     apimartKey: process.env.APIMART_API_KEY,
     apimartBase: process.env.APIMART_BASE_URL,
+    falKey: process.env.FAL_KEY,
+    falBase: process.env.FAL_BASE_URL,
   }
 
   beforeEach(() => {
@@ -27,18 +32,21 @@ describe('platformCredentials', () => {
     delete process.env.OPENAI_BASE_URL
     delete process.env.APIMART_API_KEY
     delete process.env.APIMART_BASE_URL
+    delete process.env.FAL_KEY
+    delete process.env.FAL_BASE_URL
   })
 
   afterEach(() => {
-    for (const [k, v] of Object.entries(original)) {
-      const envKey =
-        k === 'openaiKey'
-          ? 'OPENAI_API_KEY'
-          : k === 'openaiBase'
-            ? 'OPENAI_BASE_URL'
-            : k === 'apimartKey'
-              ? 'APIMART_API_KEY'
-              : 'APIMART_BASE_URL'
+    const envMap = {
+      openaiKey: 'OPENAI_API_KEY',
+      openaiBase: 'OPENAI_BASE_URL',
+      apimartKey: 'APIMART_API_KEY',
+      apimartBase: 'APIMART_BASE_URL',
+      falKey: 'FAL_KEY',
+      falBase: 'FAL_BASE_URL',
+    } as const
+    for (const [k, envKey] of Object.entries(envMap)) {
+      const v = original[k as keyof typeof original]
       if (v === undefined) delete process.env[envKey]
       else process.env[envKey] = v
     }
@@ -83,6 +91,37 @@ describe('platformCredentials', () => {
     expect(resolvePlatformImageProviderOpts('agnes-image-2.1-flash', testEnv)).toEqual({
       apiKey: 'agnes-key',
       baseUrl: 'https://apihub.agnes-ai.cn/v1',
+    })
+  })
+
+  it('detects H3 Max family model names', () => {
+    expect(isFalH3MaxPlatformModel('h3-max-turbo')).toBe(true)
+    expect(isFalH3MaxPlatformModel('h3-max')).toBe(true)
+    expect(isFalH3MaxPlatformModel('H3-MAX')).toBe(true)
+    expect(isFalH3MaxPlatformModel('agnes-2.0-flash')).toBe(false)
+    expect(isFalH3MaxPlatformModel('seedance-2.0')).toBe(false)
+  })
+
+  it('returns FAL credentials for H3 Max and never falls back to OPENAI_API_KEY', () => {
+    expect(resolveFalH3MaxPlatformCredentials('agnes-2.0-flash', testEnv)).toBeNull()
+    expect(
+      resolveFalH3MaxPlatformCredentials('h3-max-turbo', {
+        ...testEnv,
+        falApiKey: 'fal-key',
+      }),
+    ).toEqual({
+      apiKey: 'fal-key',
+      baseUrl: DEFAULT_FAL_BASE_URL,
+    })
+    expect(
+      resolveFalH3MaxPlatformCredentials('h3-max', {
+        ...testEnv,
+        falApiKey: '',
+        falBaseUrl: 'https://fal.custom.example',
+      }),
+    ).toEqual({
+      apiKey: '',
+      baseUrl: 'https://fal.custom.example',
     })
   })
 

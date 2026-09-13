@@ -4,11 +4,12 @@ export type VideoRefWire =
   | 'agnes_keyframes'
   | 'apimart_multimodal'
   | 'apimart_first_last'
+  | 'fal_h3_max'
   | 'legacy_prompt_tags'
 
 export type VideoSizeWire = 'pixel_frames' | 'ratio_duration'
 export type VideoResponseMode = 'agnes_poll' | 'async_task'
-export type VideoResolutionTier = '480p' | '720p' | '1080p' | '4k'
+export type VideoResolutionTier = '480p' | '720p' | '768p' | '1080p' | '4k'
 export type SeedanceVariantTag = 'mini' | 'standard' | 'fast' | 'face'
 
 export const SEEDANCE_20_GATEWAYS = {
@@ -28,8 +29,9 @@ const GATEWAY_TO_VARIANT: Record<string, SeedanceVariantTag> = {
 const RESOLUTION_RANK: Record<VideoResolutionTier, number> = {
   '480p': 1,
   '720p': 2,
-  '1080p': 3,
-  '4k': 4,
+  '768p': 3,
+  '1080p': 4,
+  '4k': 5,
 }
 
 export interface VideoModelProfile {
@@ -54,6 +56,17 @@ export interface VideoModelProfile {
 
 function isAgnesVideoModel(modelKey: string, gatewayModelId: string): boolean {
   return /^agnes-video-/i.test(modelKey) || /^agnes-video-/i.test(gatewayModelId)
+}
+
+function isFalH3MaxVideoModel(modelKey: string, gatewayModelId: string): boolean {
+  return /h3-max/i.test(modelKey) || /h3-max/i.test(gatewayModelId)
+}
+
+function resolveFalH3MaxGatewayModelId(modelKey: string, gatewayModelId: string): string {
+  if (/^h3-max-turbo$/i.test(modelKey)) return 'minimax/h3-max-turbo'
+  if (/^h3-max$/i.test(modelKey)) return 'minimax/h3-max'
+  if (/h3-max/i.test(gatewayModelId)) return gatewayModelId
+  return modelKey
 }
 
 export function isSeedance1x(gatewayModelId: string): boolean {
@@ -135,6 +148,23 @@ export function buildSeedance20Profile(gatewayModelId: string): VideoModelProfil
   }
 }
 
+const FAL_H3_MAX_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
+  refWire: 'fal_h3_max',
+  sizeWire: 'ratio_duration',
+  responseMode: 'async_task',
+  maxImageRefs: 2,
+  maxVideoRefs: 0,
+  maxAudioRefs: 0,
+  minDuration: 5,
+  maxDuration: 15,
+  allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+  allowedResolutions: ['480p', '768p'],
+  defaultGenerateAudio: true,
+  pollIntervalMs: 2_000,
+  maxPollMs: 600_000,
+  maxResolution: '768p',
+}
+
 const APIMART_GENERIC_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
   refWire: 'apimart_multimodal',
   sizeWire: 'ratio_duration',
@@ -156,6 +186,13 @@ export function resolveVideoModelProfile(
   gatewayModelId: string,
   opts?: { channelBaseUrl?: string },
 ): VideoModelProfile {
+  if (isFalH3MaxVideoModel(modelKey, gatewayModelId)) {
+    return {
+      ...FAL_H3_MAX_VIDEO_PROFILE,
+      gatewayModelId: resolveFalH3MaxGatewayModelId(modelKey, gatewayModelId),
+    }
+  }
+
   const seedanceGw = resolveSeedance20Gateway(modelKey, gatewayModelId)
   if (seedanceGw) {
     const profile = buildSeedance20Profile(seedanceGw)
@@ -212,6 +249,26 @@ export function resolveVideoModelProfile(
   }
 }
 
+function nearestAllowedResolution(
+  resolution: string,
+  profile: VideoModelProfile,
+): string {
+  const currentRank = RESOLUTION_RANK[resolution as VideoResolutionTier] ?? 0
+  let best = profile.allowedResolutions[0] ?? resolution
+  let bestDist = Number.POSITIVE_INFINITY
+  let bestRank = RESOLUTION_RANK[best as VideoResolutionTier] ?? 0
+  for (const candidate of profile.allowedResolutions) {
+    const rank = RESOLUTION_RANK[candidate as VideoResolutionTier] ?? 0
+    const dist = Math.abs(rank - currentRank)
+    if (dist < bestDist || (dist === bestDist && rank > bestRank)) {
+      best = candidate
+      bestDist = dist
+      bestRank = rank
+    }
+  }
+  return best
+}
+
 function clampResolution(
   resolution: string,
   profile: VideoModelProfile,
@@ -226,6 +283,14 @@ function clampResolution(
       reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${cap}`,
     })
     return cap
+  }
+  if (!profile.allowedResolutions.includes(resolution)) {
+    const nearest = nearestAllowedResolution(resolution, profile)
+    droppedFields.push({
+      field: 'resolution',
+      reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${nearest}`,
+    })
+    return nearest
   }
   return resolution
 }

@@ -6,6 +6,7 @@ import {
   createImageProvider,
   createTextProvider,
   createVideoProvider,
+  FAL_H3_MAX_ENDPOINTS,
   generateTextForRefs,
   mergeRefsToPrompt,
 } from '@lnkpi/agent'
@@ -185,6 +186,56 @@ describe('StudioService integration (provider params)', () => {
     await vi.waitFor(() => expect(prisma.generationRecord.updateMany).toHaveBeenCalled())
     expect(JSON.parse(String(stored.metadata))).toMatchObject({
       lastFrameUrl: 'https://example.com/v-last.png',
+    })
+    expect(JSON.parse(String(stored.metadata)).providerId).not.toBe('fal')
+  })
+
+  it('charges H3 Max by resolution factor and records fal metadata', async () => {
+    const prisma = (
+      svc as unknown as {
+        prisma: {
+          generationRecord: {
+            create: ReturnType<typeof vi.fn>
+          }
+        }
+        points: { consume: ReturnType<typeof vi.fn> }
+      }
+    )
+    let stored: Record<string, unknown> = {}
+    prisma.prisma.generationRecord.create = vi.fn(
+      async ({ data }: { data: Record<string, unknown> }) => {
+        stored = { id: 'g-h3', ...data }
+        return stored
+      },
+    )
+    const consume = vi.spyOn(prisma.points, 'consume')
+
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'h3-max',
+      5,
+      '16:9',
+      [{ refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' }],
+      [],
+      '768p',
+    )
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalledWith(
+      'u1',
+      45,
+      '视频生成',
+      expect.objectContaining({ category: 'video' }),
+    )
+    expect(createVideoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'h3-max' }),
+    )
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      chargedPoints: 45,
+      providerId: 'fal',
+      credentialSource: 'platform',
+      falEndpoint: FAL_H3_MAX_ENDPOINTS['h3-max'].i2v,
     })
   })
 

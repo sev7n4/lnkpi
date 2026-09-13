@@ -2,6 +2,7 @@ import { Inject, Injectable, NotFoundException } from '@nestjs/common'
 import {
   decodeChannelModel,
   resolveApimartPlatformCredentials,
+  resolveFalH3MaxPlatformCredentials,
   type ApiCallFormat,
   type ModelCapability,
 } from '@lnkpi/shared'
@@ -46,7 +47,11 @@ export class ProviderResolverService {
       let baseUrl =
         process.env.OPENAI_BASE_URL?.trim() || channel?.baseUrl || ''
       let apiKey = process.env.OPENAI_API_KEY || undefined
-      if (modality === 'image') {
+      const fal = resolveFalH3MaxPlatformCredentials(modelName)
+      if (fal) {
+        baseUrl = fal.baseUrl
+        apiKey = fal.apiKey || undefined
+      } else if (modality === 'image') {
         const apimart = resolveApimartPlatformCredentials(modelName)
         if (apimart) {
           baseUrl = apimart.baseUrl

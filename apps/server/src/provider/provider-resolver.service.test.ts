@@ -41,6 +41,8 @@ describe('ProviderResolverService', () => {
   const originalOpenAiBase = process.env.OPENAI_BASE_URL
   const originalApimartKey = process.env.APIMART_API_KEY
   const originalApimartBase = process.env.APIMART_BASE_URL
+  const originalFalKey = process.env.FAL_KEY
+  const originalFalBase = process.env.FAL_BASE_URL
   let resolver: ProviderResolverService
   let crypto: CryptoService
   let prisma: ReturnType<typeof createMemoryPrisma>
@@ -51,6 +53,8 @@ describe('ProviderResolverService', () => {
     process.env.OPENAI_BASE_URL = 'https://platform.example.com/v1'
     process.env.APIMART_API_KEY = 'apimart-env-key'
     process.env.APIMART_BASE_URL = 'https://api.apimart.ai/v1'
+    delete process.env.FAL_KEY
+    delete process.env.FAL_BASE_URL
     prisma = createMemoryPrisma([
       {
         id: PLATFORM_CHANNEL_ID,
@@ -89,6 +93,10 @@ describe('ProviderResolverService', () => {
     else process.env.APIMART_API_KEY = originalApimartKey
     if (originalApimartBase === undefined) delete process.env.APIMART_BASE_URL
     else process.env.APIMART_BASE_URL = originalApimartBase
+    if (originalFalKey === undefined) delete process.env.FAL_KEY
+    else process.env.FAL_KEY = originalFalKey
+    if (originalFalBase === undefined) delete process.env.FAL_BASE_URL
+    else process.env.FAL_BASE_URL = originalFalBase
   })
 
   it('decrypts user channel credentials', async () => {
@@ -190,6 +198,67 @@ describe('ProviderResolverService', () => {
     expect(result.source).toBe('user')
     expect(result.credentials.apiKey).toBeUndefined()
     expect(result.credentials.baseUrl).toBe('https://user.example.com/v1')
+  })
+
+  it('routes platform h3-max-turbo to FAL credentials', async () => {
+    process.env.FAL_KEY = 'fal-env-key'
+
+    const result = await resolver.resolveForGeneration('u1', 'platform::h3-max-turbo', 'video')
+    expect(result).toEqual({
+      channelId: 'platform',
+      modelName: 'h3-max-turbo',
+      apiFormat: 'openai',
+      credentials: {
+        apiKey: 'fal-env-key',
+        baseUrl: 'https://fal.run',
+      },
+      source: 'platform',
+    })
+  })
+
+  it('honors FAL_BASE_URL override for platform H3 Max', async () => {
+    process.env.FAL_KEY = 'fal-env-key'
+    process.env.FAL_BASE_URL = 'https://fal.custom.example'
+
+    const result = await resolver.resolveForGeneration('u1', 'platform::h3-max', 'video')
+    expect(result.credentials).toEqual({
+      apiKey: 'fal-env-key',
+      baseUrl: 'https://fal.custom.example',
+    })
+  })
+
+  it('does not fall back to OPENAI_API_KEY when FAL_KEY is missing', async () => {
+    const result = await resolver.resolveForGeneration('u1', 'platform::h3-max-turbo', 'video')
+    expect(result.credentials.apiKey).not.toBe('platform-env-key')
+    expect(result.credentials.apiKey).toBeFalsy()
+    expect(result.credentials.baseUrl).toBe('https://fal.run')
+  })
+
+  it('keeps user BYOK credentials for h3-max-turbo', async () => {
+    const enc = crypto.encrypt('sk-user-fal')
+    prisma._channels.set('ch_user', {
+      id: 'ch_user',
+      userId: 'u1',
+      name: 'mine',
+      apiFormat: 'openai',
+      baseUrl: 'https://user-fal.example.com',
+      encryptedApiKey: enc.ciphertext,
+      iv: enc.iv,
+      authTag: enc.authTag,
+      keyVersion: enc.keyVersion,
+      models: '[]',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    const result = await resolver.resolveForGeneration('u1', 'ch_user::h3-max-turbo', 'video')
+    expect(result).toEqual({
+      channelId: 'ch_user',
+      modelName: 'h3-max-turbo',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'sk-user-fal', baseUrl: 'https://user-fal.example.com' },
+      source: 'user',
+    })
   })
 
   it('returns 404 for cross-user channel access', async () => {

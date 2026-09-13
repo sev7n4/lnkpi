@@ -2,10 +2,13 @@ import { isApimartBackedImageModel } from './imageModelProfiles'
 import { resolveModelKey } from './studioModelCatalog'
 
 export const DEFAULT_APIMART_BASE_URL = 'https://api.apimart.ai/v1'
+export const DEFAULT_FAL_BASE_URL = 'https://fal.run'
 
 export type PlatformCredentialEnv = {
   apimartApiKey?: string
   apimartBaseUrl?: string
+  falApiKey?: string
+  falBaseUrl?: string
   openaiApiKey?: string
   openaiBaseUrl?: string
 }
@@ -27,6 +30,8 @@ export function readPlatformCredentialEnv(
     apimartApiKey: env.apimartApiKey ?? readEnv('APIMART_API_KEY') ?? '',
     apimartBaseUrl:
       env.apimartBaseUrl ?? readEnv('APIMART_BASE_URL') ?? DEFAULT_APIMART_BASE_URL,
+    falApiKey: env.falApiKey ?? readEnv('FAL_KEY') ?? '',
+    falBaseUrl: env.falBaseUrl ?? readEnv('FAL_BASE_URL') ?? DEFAULT_FAL_BASE_URL,
     openaiApiKey: env.openaiApiKey ?? readEnv('OPENAI_API_KEY') ?? '',
     openaiBaseUrl: env.openaiBaseUrl ?? readEnv('OPENAI_BASE_URL') ?? '',
   }
@@ -38,6 +43,22 @@ export function usesApimartImageGateway(modelKey: string): boolean {
   if (isApimartBackedImageModel(trimmed)) return true
   const { modelKey: resolvedKey, entry } = resolveModelKey('image', trimmed)
   return isApimartBackedImageModel(resolvedKey, entry.gatewayModelId)
+}
+
+export function isFalH3MaxPlatformModel(modelName: string): boolean {
+  return /h3-max/i.test(modelName)
+}
+
+export function resolveFalH3MaxPlatformCredentials(
+  modelName: string,
+  env?: PlatformCredentialEnv,
+): { apiKey: string; baseUrl: string } | null {
+  if (!isFalH3MaxPlatformModel(modelName)) return null
+  const vars = readPlatformCredentialEnv(env)
+  return {
+    apiKey: vars.falApiKey,
+    baseUrl: vars.falBaseUrl || DEFAULT_FAL_BASE_URL,
+  }
 }
 
 export function resolveApimartPlatformCredentials(

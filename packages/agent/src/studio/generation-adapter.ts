@@ -832,6 +832,37 @@ export function buildVideoProviderOptions(input: {
         refAudioMode = 'native'
       }
     }
+  } else if (profile.refWire === 'fal_h3_max') {
+    if (imageCount) {
+      const imageUrls = clamped.referenceImages.slice(0, 2)
+      image = imageUrls[0]
+      providerOptions.image = image
+      providerOptions.referenceImages = imageUrls
+      nativeParams.image = image
+      nativeParams.reference_images = imageUrls
+      refImageMode = 'native'
+      if (imageUrls.length === 2) {
+        providerOptions.imageWithRoles = [
+          { url: imageUrls[0], role: 'first_frame' },
+          { url: imageUrls[1], role: 'last_frame' },
+        ]
+        nativeParams.image_with_roles = providerOptions.imageWithRoles
+      }
+    }
+    if (sourceBundle.videos.length) {
+      refVideoMode = 'metadata_only'
+      droppedFields.push({
+        field: 'referenceVideos',
+        reason: `referenceVideos not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
+    if (sourceBundle.audios.length) {
+      refAudioMode = 'metadata_only'
+      droppedFields.push({
+        field: 'referenceAudios',
+        reason: `referenceAudios not supported natively by ${catalog.entry.modelKey}`,
+      })
+    }
   } else if (imageCount) {
     image = clamped.referenceImages[0]
     providerOptions.image = image
