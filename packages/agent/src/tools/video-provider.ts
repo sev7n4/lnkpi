@@ -1,4 +1,5 @@
 import type { VideoRefWire } from '@lnkpi/shared'
+import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
 
 export interface VideoGenerateOptions {
   model?: string
@@ -315,10 +316,22 @@ function isAgnesBaseUrl(baseUrl?: string): boolean {
   return Boolean(hostname && isGatewayHost(hostname, ['agnes-ai.com', 'agnes-ai.cn']))
 }
 
+export function isFalVideoModel(model?: string): boolean {
+  return Boolean(model?.toLowerCase().includes('h3-max'))
+}
+
+export function isFalBaseUrl(baseUrl?: string): boolean {
+  const hostname = hostnameFromBaseUrl(baseUrl)
+  return Boolean(hostname && isGatewayHost(hostname, ['fal.ai', 'fal.run']))
+}
+
 export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
 
 export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvider {
   if (opts?.apiKey) {
+    if (isFalVideoModel(opts.model) || isFalBaseUrl(opts.baseUrl)) {
+      return new FalH3MaxVideoProvider(opts.apiKey, opts.baseUrl, opts.model)
+    }
     if (isAgnesBaseUrl(opts.baseUrl)) {
       return new AgnesVideoProvider(
         opts.apiKey,

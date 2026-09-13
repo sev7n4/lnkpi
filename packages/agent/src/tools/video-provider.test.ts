@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
 import {
   AgnesVideoProvider,
   ApimartVideoProvider,
   createVideoProvider,
+  isFalBaseUrl,
+  isFalVideoModel,
   resolveVideoParams,
 } from './video-provider'
 
@@ -84,6 +87,77 @@ describe('createVideoProvider apimart', () => {
       baseUrl: 'https://unknown.example.com/v1',
     })
     await expect(p.generate('test')).rejects.toThrow(/unsupported video gateway/i)
+  })
+})
+
+describe('isFalVideoModel / isFalBaseUrl', () => {
+  it('detects h3-max model keys and gateways case-insensitively', () => {
+    expect(isFalVideoModel('h3-max-turbo')).toBe(true)
+    expect(isFalVideoModel('h3-max')).toBe(true)
+    expect(isFalVideoModel('minimax/h3-max-turbo')).toBe(true)
+    expect(isFalVideoModel('MINIMAX/H3-MAX')).toBe(true)
+    expect(isFalVideoModel('agnes-video-v2.0')).toBe(false)
+    expect(isFalVideoModel(undefined)).toBe(false)
+  })
+
+  it('detects fal.ai and fal.run hosts including queue.fal.run', () => {
+    expect(isFalBaseUrl('https://fal.run')).toBe(true)
+    expect(isFalBaseUrl('https://queue.fal.run')).toBe(true)
+    expect(isFalBaseUrl('https://fal.ai')).toBe(true)
+    expect(isFalBaseUrl('https://www.fal.ai/models')).toBe(true)
+    expect(isFalBaseUrl('https://apihub.agnes-ai.com/v1')).toBe(false)
+    expect(isFalBaseUrl('https://fal.run.attacker.example/v1')).toBe(false)
+    expect(isFalBaseUrl(undefined)).toBe(false)
+  })
+})
+
+describe('createVideoProvider fal routing', () => {
+  const env = { ...process.env }
+
+  beforeEach(() => {
+    process.env = { ...env }
+    process.env.FAL_KEY = 'env-fal-key-must-not-be-read'
+  })
+
+  afterEach(() => {
+    process.env = env
+  })
+
+  it('returns FalH3MaxVideoProvider for fal model even when baseUrl looks like Agnes', () => {
+    const p = createVideoProvider({
+      apiKey: 'opts-fal-key',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'h3-max-turbo',
+    })
+    expect(p).toBeInstanceOf(FalH3MaxVideoProvider)
+  })
+
+  it('returns FalH3MaxVideoProvider for fal baseUrl', () => {
+    const p = createVideoProvider({
+      apiKey: 'opts-fal-key',
+      baseUrl: 'https://fal.run',
+      model: 'agnes-video-v2.0',
+    })
+    expect(p).toBeInstanceOf(FalH3MaxVideoProvider)
+  })
+
+  it('still routes Agnes when apiKey + agnes host + non-fal model', () => {
+    const p = createVideoProvider({
+      apiKey: 'opts-key',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'agnes-video-v2.0',
+    })
+    expect(p).toBeInstanceOf(AgnesVideoProvider)
+  })
+
+  it('does not read process.env.FAL_KEY for routing', () => {
+    const p = createVideoProvider({
+      apiKey: 'opts-fal-key',
+      baseUrl: 'https://queue.fal.run',
+      model: 'minimax/h3-max',
+    })
+    expect(p).toBeInstanceOf(FalH3MaxVideoProvider)
+    expect(p).not.toBeInstanceOf(AgnesVideoProvider)
   })
 })
 

@@ -15,7 +15,15 @@ export {
   buildDeepSeekThinkingFields,
 } from './tools/text-provider'
 
-export { createVideoProvider, PlaceholderVideoProvider, AgnesVideoProvider, resolveVideoParams } from './tools/video-provider'
+export {
+  createVideoProvider,
+  PlaceholderVideoProvider,
+  AgnesVideoProvider,
+  resolveVideoParams,
+  isFalVideoModel,
+  isFalBaseUrl,
+} from './tools/video-provider'
+export { FalH3MaxVideoProvider, FAL_H3_MAX_ENDPOINTS } from './tools/fal-h3-max-video-provider'
 export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, FallbackAudioProvider } from './tools/audio-provider'
 export type { ImageProvider, ProviderCredentialOpts, ImageGenerateOptions } from './tools/image-provider'
 export type { ImageEditProvider, ImageEditInput } from './tools/image-edit-provider'
