@@ -328,10 +328,13 @@ export function isFalBaseUrl(baseUrl?: string): boolean {
 export type ProviderCredentialOpts = { apiKey?: string; baseUrl?: string; model?: string }
 
 export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvider {
-  if (opts?.apiKey) {
-    if (isFalVideoModel(opts.model) || isFalBaseUrl(opts.baseUrl)) {
-      return new FalH3MaxVideoProvider(opts.apiKey, opts.baseUrl, opts.model)
+  if (isFalVideoModel(opts?.model) || isFalBaseUrl(opts?.baseUrl)) {
+    if (!opts?.apiKey) {
+      throw new Error('视频加速通道未配置')
     }
+    return new FalH3MaxVideoProvider(opts.apiKey, opts.baseUrl, opts.model)
+  }
+  if (opts?.apiKey) {
     if (isAgnesBaseUrl(opts.baseUrl)) {
       return new AgnesVideoProvider(
         opts.apiKey,

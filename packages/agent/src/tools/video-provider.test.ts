@@ -159,6 +159,20 @@ describe('createVideoProvider fal routing', () => {
     expect(p).toBeInstanceOf(FalH3MaxVideoProvider)
     expect(p).not.toBeInstanceOf(AgnesVideoProvider)
   })
+
+  it('throws 视频加速通道未配置 for fal baseUrl without apiKey even when OPENAI_API_KEY is set', () => {
+    process.env.OPENAI_API_KEY = 'env-openai-must-not-be-used'
+    process.env.OPENAI_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+    expect(() =>
+      createVideoProvider({ model: 'h3-max-turbo', baseUrl: 'https://fal.run' }),
+    ).toThrow('视频加速通道未配置')
+  })
+
+  it('throws 视频加速通道未配置 for h3-max model without apiKey or baseUrl', () => {
+    process.env.OPENAI_API_KEY = 'env-openai-must-not-be-used'
+    process.env.OPENAI_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+    expect(() => createVideoProvider({ model: 'h3-max' })).toThrow('视频加速通道未配置')
+  })
 })
 
 describe('ApimartVideoProvider', () => {
