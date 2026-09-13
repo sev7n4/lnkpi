@@ -9,6 +9,7 @@ import type {
 } from '@lnkpi/shared'
 import { AuthGuard } from '../auth/auth.guard'
 import { createCancelFlag } from '../points/charge-session'
+import { UpscaleService } from '../studio/upscale.service'
 import { CanvasService } from './canvas.service'
 import { MaterialService } from './material.service'
 import { SceneComposerService } from './scene-composer.service'
@@ -99,6 +100,27 @@ class GenerateImageDto {
   @IsArray()
   @IsString({ each: true })
   mentionedKeys?: string[]
+}
+
+class UpscaleImageDto {
+  @IsString()
+  sessionId!: string
+
+  @IsOptional()
+  @IsString()
+  nodeId?: string
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string
+
+  @IsOptional()
+  @IsIn([2, 4])
+  scale?: 2 | 4
+
+  @IsOptional()
+  @IsString()
+  provider?: string
 }
 
 class GenerateVideoDto {
@@ -360,6 +382,7 @@ export class CanvasController {
     @Inject(MaterialService) private readonly materialService: MaterialService,
     @Inject(SceneComposerService) private readonly sceneComposerService: SceneComposerService,
     @Inject(VideoCompositionService) private readonly videoCompositionService: VideoCompositionService,
+    @Inject(UpscaleService) private readonly upscaleService: UpscaleService,
   ) {}
 
   @Get('list')
@@ -430,6 +453,20 @@ export class CanvasController {
       count: dto.count,
       refs: dto.refs,
       mentionedKeys: dto.mentionedKeys,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('material/upscale-image')
+  @UseGuards(AuthGuard)
+  async upscaleImage(@Req() req: { user: { sub: string } }, @Body() dto: UpscaleImageDto) {
+    const data = await this.upscaleService.upscale({
+      userId: req.user.sub,
+      sessionId: dto.sessionId,
+      nodeId: dto.nodeId,
+      imageUrl: dto.imageUrl,
+      scale: dto.scale,
+      providerId: dto.provider,
     })
     return { code: 0, message: 'ok', data }
   }

@@ -5,6 +5,7 @@ import type { CanvasData, SidebarAttachment } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
+import { UpscaleService } from '../studio/upscale.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
@@ -76,6 +77,10 @@ describe('AgentCanvasToolsService.applySidebarAttachments', () => {
         {
           provide: PersistRemoteService,
           useValue: { persistRemote: vi.fn() },
+        },
+        {
+          provide: UpscaleService,
+          useValue: { upscale: vi.fn() },
         },
         VideoGenerationOrchestrator,
       ],

@@ -177,7 +177,7 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
 
 function studioPointCategory(type: string): PointCategory {
   if (type === 'text' || type === 'prompt') return 'text'
-  if (type === 'image' || type === 'image_edit') return 'image'
+  if (type === 'image' || type === 'image_edit' || type === 'image_upscale') return 'image'
   if (type === 'audio' || type === 'video') return type
   return 'other'
 }
@@ -2110,7 +2110,9 @@ export class StudioService {
           ? '图像生成'
           : record.type === 'image_edit'
             ? '图像精修'
-            : '生成'
+            : record.type === 'image_upscale'
+              ? '图像放大'
+              : '生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
       await this.points.refund(

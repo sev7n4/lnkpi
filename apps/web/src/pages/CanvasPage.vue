@@ -126,6 +126,11 @@ import RefineWorkViewport from '@/components/canvas/refine/RefineWorkViewport.vu
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
+import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
+import { useImageUpscale } from '@/composables/useImageUpscale'
+import { useCapabilities } from '@/composables/useCapabilities'
+import { canUpscaleNode } from '@/utils/upscaleNode'
+import { apiErrorMessage } from '@/utils/apiError'
 import {
   duplicateSubgraph,
   resolveDuplicateSourceIds,
@@ -726,11 +731,34 @@ const editorNode = computed((): EditableFlowNode | null => {
   return null
 })
 
+const { imageUpscale: imageUpscaleCapability } = useCapabilities()
+const { loading: upscaleLoading, runUpscale } = useImageUpscale()
+
 const refinePanelNode = computed((): EditableFlowNode | null => {
   if (!CX_IMAGE_EDIT_ENABLED) return null
   const target = canvasEditor.imageTarget
   if (!target) return null
   return findNodeById(target.nodeId)
+})
+
+/** 单选 + 可放大图像节点时显示选中浮层（多选不出现） */
+const selectionUpscaleNode = computed((): EditableFlowNode | null => {
+  if (refinePanelNode.value) return null
+  if (multiSelectedIds.value.length !== 1) return null
+  const node = findNodeById(multiSelectedIds.value[0])
+  if (!node) return null
+  const data = (node.data ?? {}) as Record<string, unknown>
+  if (!String(data.url ?? '').trim()) return null
+  if (
+    !canUpscaleNode({
+      type: String(node.type ?? ''),
+      mediaKind: typeof data.mediaKind === 'string' ? data.mediaKind : null,
+      mimeType: typeof data.mimeType === 'string' ? data.mimeType : null,
+    })
+  ) {
+    return null
+  }
+  return node as EditableFlowNode
 })
 
 const refineBeforeUrl = computed(() => {
@@ -2456,6 +2484,56 @@ function openRefineForSelected() {
   openRefineForNode(editorNode.value)
 }
 
+async function handleUpscaleForNode(nodeId: string) {
+  if (!imageUpscaleCapability.value || upscaleLoading.value) return
+  const node = findNodeById(nodeId)
+  if (!node) return
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const imageUrl = String(data.url ?? '').trim()
+  if (!imageUrl) return
+
+  try {
+    await runUpscale({
+      sessionId: sessionId.value,
+      nodeId: node.id,
+      imageUrl,
+      scale: 2,
+      onSuccess: ({ url }) => {
+        const { w } = getNodeSize(node as FlowNode)
+        const childId = addNode(
+          'image',
+          {
+            url,
+            status: 'completed',
+            title: '放大 2×',
+            prompt: '',
+            imageModel: getProviderConfig('image').model,
+          },
+          {
+            position: { x: node.position.x + w + 36, y: node.position.y },
+          },
+        )
+        addEdge({
+          id: `e-${node.id}-${childId}`,
+          source: node.id,
+          target: childId,
+        })
+        selectOnlyNode(childId)
+        void persistUserEditAsync()
+        void focusNodeById(childId)
+      },
+    })
+  } catch (err) {
+    ElMessage.error(apiErrorMessage(err, '放大失败'))
+  }
+}
+
+function handleSelectionUpscale() {
+  const node = selectionUpscaleNode.value
+  if (!node) return
+  void handleUpscaleForNode(node.id)
+}
+
 function closeRefineWorkbench() {
   canvasEditor.closeImageEditor()
 }
@@ -2752,6 +2830,11 @@ function handleContextAction(action: string) {
 
   if (action === 'edit-image' && menu.nodeId) {
     openRefineForNode(findNodeById(menu.nodeId))
+    return
+  }
+
+  if (action === 'upscale-image' && menu.nodeId) {
+    void handleUpscaleForNode(menu.nodeId)
     return
   }
 
@@ -3330,6 +3413,15 @@ onUnmounted(() => {
             @duplicate-upstream="handleToolbarDuplicateUpstream"
           />
 
+          <SelectionActionBar
+            v-if="selectionUpscaleNode"
+            :node="selectionUpscaleNode as FlowNode"
+            :image-upscale="imageUpscaleCapability"
+            :loading="upscaleLoading"
+            @upscale="handleSelectionUpscale"
+            @edit="openRefineForSelected"
+          />
+
           <MultiSelectConnectOverlay
             :selected-ids="multiSelectedIds"
             @connect-target="handleMultiConnectTarget"
@@ -3555,6 +3647,7 @@ onUnmounted(() => {
       :has-url="contextMenu.hasUrl"
       :media-kind="contextMenu.mediaKind"
       :mime-type="contextMenu.mimeType"
+      :image-upscale="imageUpscaleCapability"
       :multi-selected-count="
         contextMenu.nodeId &&
         multiSelectedIds.includes(contextMenu.nodeId) &&

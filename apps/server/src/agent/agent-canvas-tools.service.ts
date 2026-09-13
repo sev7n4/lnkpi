@@ -26,6 +26,7 @@ import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { MaterialService } from '../canvas/material.service'
 import { sanitizeAgentMessageContent } from './agentMessageSanitize'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
+import { UpscaleService } from '../studio/upscale.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import {
   applyLayoutOps,
@@ -381,6 +382,7 @@ export class AgentCanvasToolsService {
     @Inject(MaterialService) private readonly material: MaterialService,
     @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
     @Inject(PersistRemoteService) private readonly persistRemote: PersistRemoteService,
+    @Inject(UpscaleService) private readonly upscaleService: UpscaleService,
   ) {}
 
   private async loadAccountGenPrefs(userId: string): Promise<AccountGenPrefs> {
@@ -2177,6 +2179,24 @@ export class AgentCanvasToolsService {
       hasUrl: Boolean(url),
       supportedModes: canEdit ? ['inpaint'] : [],
     }
+  }
+
+  async upscaleImage(input: {
+    sessionId: string
+    userId: string
+    nodeId?: string
+    imageUrl?: string
+    scale?: 2 | 4
+    provider?: string
+  }) {
+    return this.upscaleService.upscale({
+      userId: input.userId,
+      sessionId: input.sessionId,
+      nodeId: input.nodeId,
+      imageUrl: input.imageUrl,
+      scale: input.scale,
+      providerId: input.provider,
+    })
   }
 
   async getAgentMessages(input: {
