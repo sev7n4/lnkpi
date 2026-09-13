@@ -82,6 +82,8 @@ Response `data`:
 - Nest client method → internal route
 - Register as **write** tool（非 export 式纯 canvasCommand）；确保 explore/通用路径能转发 `actions`（与 `add_nodes_batch` 同档）
 
+**对话路径（2026-09-13）：** `import_workflow` 已列入 explore 白名单与路由/窄绑定；见 [2026-09-13-explore-import-workflow-placement-design.md](./2026-09-13-explore-import-workflow-placement-design.md)。
+
 ### 4.3 Shared 迁移
 
 | 现位置 | 目标 |

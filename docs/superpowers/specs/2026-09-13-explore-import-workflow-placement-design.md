@@ -149,3 +149,7 @@ placement: explore | graph_node | ui_command
 3. 更新 / 新增 explore 与 orphan 不变量测试。  
 4. 文档：本规格 + 上级 agent-import 规格交叉引用「对话路径已接通 explore」。  
 5. 生产：带 `defaultTextModel` 的对话复测导入 + 导出回归。
+
+---
+
+**状态（2026-09-13）：** T1–T3 已实现（registry / route / narrow-bind）；T4 文档交叉引用 + pytest 门禁；生产对话复测见 task-4-report。
