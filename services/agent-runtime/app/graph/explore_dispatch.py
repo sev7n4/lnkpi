@@ -67,6 +67,32 @@ _MUTATE_VERBS = (
     "attach",
 )
 _READ_VERBS = _QUERY_VERBS + ("诊断", "layout", "坐标", "位置", "详细信息")
+_WORKFLOW_IMPORT_ANCHORS = (
+    "工作流",
+    "workflow",
+    "lnkpi.workflow",
+    "import_workflow",
+)
+_UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
+
+
+def _is_workflow_import_utterance(u: str) -> bool:
+    """True only when import is anchored to workflow/tool markers.
+
+    「导入」+「画布」 alone is not enough. Upload markers (URL / 上传)
+    prefer the media-upload branch over workflow import.
+    """
+    text = u or ""
+    low = text.lower()
+    if any(k in low for k in _UPLOAD_MARKERS):
+        return False
+    if any(k in low for k in ("import_workflow", "lnkpi.workflow")):
+        return True
+    if "导入工作流" in text:
+        return True
+    return "导入" in text and any(
+        k in text or k in low for k in _WORKFLOW_IMPORT_ANCHORS
+    )
 
 
 @dataclass
@@ -81,24 +107,13 @@ def select_narrow_write_tools(user_text: str) -> frozenset[str]:
     """Pick ≤5 write tools from user_text keywords (Phase 2b narrow bind)."""
     u = user_text or ""
     low = u.lower()
-    if any(
-        k in u or k in low
-        for k in (
-            "import_workflow",
-            "lnkpi.workflow",
-            "导入工作流",
-            "导入",
-        )
-    ) and any(
-        k in u or k in low
-        for k in ("工作流", "workflow", "lnkpi.workflow", "import_workflow", "画布")
-    ):
+    if _is_workflow_import_utterance(u):
         return frozenset({"import_workflow", "get_canvas_summary"})
     if "prompt" in low or "prompt-" in low:
         return frozenset({"set_node_prompt", "upsert_prompt_node"})
     if "复制" in u:
         return frozenset({"duplicate_node"})
-    if any(k in low for k in ("上传", "url", "picsum", "http")):
+    if any(k in low for k in _UPLOAD_MARKERS):
         return frozenset({"upload_media_to_canvas"})
     if any(k in low for k in ("attach", "参考", "侧栏", "localrefs")):
         return frozenset({"attach_refs", "apply_sidebar_attachments"})
@@ -128,9 +143,7 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     if not u:
         return "open_query"
 
-    if any(k in u for k in ("import_workflow", "lnkpi.workflow", "导入工作流")) or (
-        "导入" in u and any(k in u for k in ("工作流", "workflow"))
-    ):
+    if _is_workflow_import_utterance(u):
         return "node_write"
 
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):

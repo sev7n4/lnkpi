@@ -68,3 +68,11 @@ def test_bare_import_without_workflow_does_not_steal_upload():
     names = select_narrow_write_tools("上传 https://picsum.photos/512 到画布")
     assert names == frozenset({"upload_media_to_canvas"})
     assert "import_workflow" not in names
+
+
+def test_import_image_url_to_canvas_binds_upload_not_workflow():
+    utterance = "导入图片 URL 到画布 image-16"
+    names = select_narrow_write_tools(utterance)
+    assert "upload_media_to_canvas" in names
+    assert names != frozenset({"import_workflow", "get_canvas_summary"})
+    assert classify_explore_intent(utterance) == "node_write"
