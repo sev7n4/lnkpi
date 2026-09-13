@@ -86,4 +86,48 @@ describe('runFalVideoQueue', () => {
     )
     expect(statusInit.headers).toMatchObject({ Authorization: 'Key fal-key' })
   })
+
+  it('polls COMPLETED status then GETs response_url when status body has no video url', async () => {
+    const responseUrl =
+      'https://queue.fal.run/minimax/h3-max-turbo/text-to-video/requests/req-2/response'
+
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          request_id: 'req-2',
+          status_url:
+            'https://queue.fal.run/minimax/h3-max-turbo/text-to-video/requests/req-2/status',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'COMPLETED',
+          response_url: responseUrl,
+          metrics: { inference_time: 1.2 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          video: { url: 'https://cdn.fal.ai/from-response-url.mp4' },
+        }),
+      })
+
+    const result = await runFalVideoQueue({
+      apiKey: 'fal-key',
+      baseUrl: 'https://fal.run',
+      endpointId: 'minimax/h3-max-turbo/text-to-video',
+      input: { prompt: 'a dog' },
+      pollIntervalMs: 0,
+      maxPollMs: 30_000,
+    })
+
+    expect(result.url).toBe('https://cdn.fal.ai/from-response-url.mp4')
+
+    const [resultFetchUrl, resultFetchInit] = fetchMock.mock.calls[2] as [string, RequestInit]
+    expect(resultFetchUrl).toBe(responseUrl)
+    expect(resultFetchInit.headers).toMatchObject({ Authorization: 'Key fal-key' })
+  })
 })
