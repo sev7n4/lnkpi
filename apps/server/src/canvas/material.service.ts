@@ -56,7 +56,7 @@ import {
   refundMeta,
   type PointCategory,
 } from '../points/point-tx.types'
-import { videoCredits } from '../points/video-credits'
+import { falH3MaxVideoRecordMeta, videoCreditsForModel } from '../points/video-credits'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
 import {
@@ -323,8 +323,14 @@ export class MaterialService {
   private platformFallbackCost(type: string, meta: Record<string, unknown>): number {
     if (type === 'image') return 10
     if (type === 'video') {
-      const duration = Number(meta.duration ?? 5)
-      return videoCredits(duration)
+      return videoCreditsForModel({
+        duration: Number(meta.duration ?? 5),
+        modelKey:
+          (typeof meta.modelKey === 'string' && meta.modelKey) ||
+          (typeof meta.model === 'string' && meta.model) ||
+          undefined,
+        resolution: typeof meta.resolution === 'string' ? meta.resolution : undefined,
+      })
     }
     throw new BadRequestException('不支持的素材类型')
   }
@@ -449,7 +455,7 @@ export class MaterialService {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
 
-    const cost = videoCredits(duration)
+    const cost = videoCreditsForModel({ duration, modelKey: model, resolution })
     const chargeReason = '视频生成'
     if (!skipCharge) {
       await this.points.consume(
@@ -477,6 +483,11 @@ export class MaterialService {
               crop,
               channelId: resolved.channelId,
               providerSource: resolved.source,
+              ...falH3MaxVideoRecordMeta({
+                modelKey: resolved.modelName || model,
+                hasStartImage: referenceBundle.images.length > 0,
+                credentialSource: resolved.source,
+              }),
             },
             skipCharge ? 0 : cost,
           ),
@@ -1146,7 +1157,10 @@ export class MaterialService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url, lastFrameUrl } = await createVideoProvider(providerOpts(resolved)).generate(
+      const { url, lastFrameUrl } = await createVideoProvider({
+        ...providerOpts(resolved),
+        model: resolved.modelName,
+      }).generate(
         effectivePrompt,
         providerOptions,
       )
@@ -1189,6 +1203,11 @@ export class MaterialService {
                 effectivePrompt,
                 ...(lastFrameUrl ? { lastFrameUrl } : {}),
                 mediaInfo,
+                ...falH3MaxVideoRecordMeta({
+                  modelKey: resolved.modelName || model,
+                  hasStartImage: Boolean(built.image || effectiveBundle.images[0]),
+                  credentialSource: resolved.source,
+                }),
               },
               skipCharge ? 0 : cost,
             ),
@@ -1237,6 +1256,11 @@ export class MaterialService {
                 skippedMerge,
                 effectivePrompt,
                 userId,
+                ...falH3MaxVideoRecordMeta({
+                  modelKey: resolved.modelName || model,
+                  hasStartImage: Boolean(built.image || effectiveBundle.images[0]),
+                  credentialSource: resolved.source,
+                }),
               }),
             ),
           },

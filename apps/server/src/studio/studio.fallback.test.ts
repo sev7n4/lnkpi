@@ -238,6 +238,7 @@ describe('StudioService BYOK fallback_pending', () => {
     expect(createVideoProvider).toHaveBeenCalledWith({
       apiKey: 'user-key',
       baseUrl: 'https://user.example.com/v1',
+      model: 'custom-model',
     })
   })
 

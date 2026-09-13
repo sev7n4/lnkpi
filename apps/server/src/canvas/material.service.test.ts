@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { BadRequestException, NotFoundException } from '@nestjs/common'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import { createImageProvider, createVideoProvider, mergeRefsToPrompt } from '@lnkpi/agent'
+import { createImageProvider, createVideoProvider, FAL_H3_MAX_ENDPOINTS, mergeRefsToPrompt } from '@lnkpi/agent'
 import { MaterialService } from './material.service'
 import { PointsService } from '../points/points.service'
 import { PrismaService } from '../prisma/prisma.service'
@@ -262,6 +262,47 @@ describe('MaterialService video', () => {
         resolution: '720p',
       }),
     )
+    expect(createVideoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'seedance-2.0-min' }),
+    )
+    const createdMeta = JSON.parse(String(materialCreate.mock.calls[0][0].data.metadata))
+    expect(createdMeta.providerId).not.toBe('fal')
+  })
+
+  it('charges H3 Max by resolution factor and records fal metadata', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'h3-max-turbo',
+      duration: 5,
+      resolution: '768p',
+      refs: [{ refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' }],
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalledWith('u1', 36, '视频生成', {
+      kind: 'consume',
+      category: 'video',
+      status: 'success',
+      model: 'h3-max-turbo',
+      generationId: null,
+    })
+    expect(createVideoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'h3-max-turbo' }),
+    )
+    expect(videoGenerate).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        image: 'https://cdn/first.png',
+        referenceImages: ['https://cdn/first.png'],
+      }),
+    )
+    const createdMeta = JSON.parse(String(materialCreate.mock.calls[0][0].data.metadata))
+    expect(createdMeta).toMatchObject({
+      providerId: 'fal',
+      credentialSource: 'platform',
+      falEndpoint: FAL_H3_MAX_ENDPOINTS['h3-max-turbo'].i2v,
+    })
   })
 
   it('rejects foreign shot without charging', async () => {

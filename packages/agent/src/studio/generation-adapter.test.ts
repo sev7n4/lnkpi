@@ -337,6 +337,59 @@ describe('buildVideoProviderOptions', () => {
       expect.objectContaining({ field: 'negativePrompt' }),
     )
   })
+
+  it('wires fal_h3_max first image into image and referenceImages', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'h3-max-turbo',
+      referenceImages: ['https://cdn/first.png'],
+    })
+    expect(r.meta.refWire).toBe('fal_h3_max')
+    expect(r.meta.refImageMode).toBe('native')
+    expect(r.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.referenceImages).toEqual(['https://cdn/first.png'])
+    expect(r.providerOptions.imageWithRoles).toBeUndefined()
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('wires fal_h3_max first+last frames without prompt suffix', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/last.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'h3-max',
+      videoMode: 'first_last_frame',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refWire).toBe('fal_h3_max')
+    expect(r.providerOptions.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.referenceImages).toEqual([
+      'https://cdn/first.png',
+      'https://cdn/last.png',
+    ])
+    expect(r.providerOptions.imageWithRoles).toEqual([
+      { url: 'https://cdn/first.png', role: 'first_frame' },
+      { url: 'https://cdn/last.png', role: 'last_frame' },
+    ])
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('wires fal_h3_max two refs as first/last even without first_last_frame mode', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'h3-max-turbo',
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png', 'https://cdn/c.png'],
+    })
+    expect(r.providerOptions.referenceImages).toEqual([
+      'https://cdn/a.png',
+      'https://cdn/b.png',
+    ])
+    expect(r.providerOptions.imageWithRoles).toEqual([
+      { url: 'https://cdn/a.png', role: 'first_frame' },
+      { url: 'https://cdn/b.png', role: 'last_frame' },
+    ])
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
 })
 
 describe('buildImageProviderOptions', () => {

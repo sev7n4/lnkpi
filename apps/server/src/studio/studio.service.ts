@@ -67,6 +67,7 @@ import {
   refundMeta,
   type PointCategory,
 } from '../points/point-tx.types'
+import { falH3MaxVideoRecordMeta, videoCreditsForModel } from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
@@ -382,14 +383,16 @@ export class StudioService {
     if (type === 'text' || type === 'prompt' || type === 'audio') return 5
     if (type === 'image') return 10 * (Number(meta.count ?? 1) || 1)
     if (type === 'video') {
-      const duration = Number(meta.duration ?? 5)
-      return duration >= 15 ? 70 : duration >= 10 ? 50 : 30
+      return videoCreditsForModel({
+        duration: Number(meta.duration ?? 5),
+        modelKey:
+          (typeof meta.modelKey === 'string' && meta.modelKey) ||
+          (typeof meta.originalModel === 'string' && meta.originalModel) ||
+          undefined,
+        resolution: typeof meta.resolution === 'string' ? meta.resolution : undefined,
+      })
     }
     throw new BadRequestException('不支持的生成类型')
-  }
-
-  private videoDurationCredits(duration: number): number {
-    return duration >= 15 ? 70 : duration >= 10 ? 50 : 30
   }
 
   /** Catalog gateway id for platform confirm — never reuse user-channel modelName. */
@@ -1445,7 +1448,7 @@ export class StudioService {
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
-    const durationCredits = this.videoDurationCredits(duration)
+    const durationCredits = videoCreditsForModel({ duration, modelKey: model, resolution })
     const chargeReason = '视频生成'
     await this.points.consume(
       userId,
@@ -1562,6 +1565,11 @@ export class StudioService {
               providerSource: resolved.source,
               ...(refDownscaled ? { refDownscaled: true } : {}),
               ...(refPreflight && refPreflight.level === 'warn' ? { refPreflight } : {}),
+              ...falH3MaxVideoRecordMeta({
+                modelKey: resolved.modelName || model,
+                hasStartImage: upstreamImageRefs.length > 0,
+                credentialSource: resolved.source,
+              }),
             },
             durationCredits,
           ),
@@ -2152,7 +2160,10 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url, lastFrameUrl } = await createVideoProvider(providerOpts(resolved)).generate(
+      const { url, lastFrameUrl } = await createVideoProvider({
+        ...providerOpts(resolved),
+        model: resolved.modelName,
+      }).generate(
         prompt,
         options,
       )
