@@ -32,3 +32,18 @@ def test_cancel_generation_lifecycle():
 def test_upload_media_explore_only():
     u = "查询画布，把图片 URL 上传到画布加一个 image 节点（仅上传，不要出图）"
     assert explore_explicit_intent(u) is True
+
+
+def test_import_workflow_phrase_routes_explore():
+    u = "请调用 import_workflow 工具，把 lnkpi.workflow JSON 合并进当前画布"
+    assert explore_canvas_signal(u, blocked_by_atomic=False) is True
+
+
+def test_import_chinese_workflow_routes_explore():
+    u = "把这份工作流导入到画布"
+    assert explore_canvas_signal(u, blocked_by_atomic=False) is True
+
+
+def test_export_still_routes_explore():
+    u = "请调用 export_media_package 导出当前画布工作流"
+    assert explore_canvas_signal(u, blocked_by_atomic=False) is True

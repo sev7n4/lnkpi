@@ -32,6 +32,7 @@ _WRITE_VERBS = (
     "上传",
     "添加",
     "保存",
+    "导入",
     "应用",
     "attach",
     "挂",
@@ -55,6 +56,7 @@ _MUTATE_VERBS = (
     "添加",
     "保存",
     "导出",
+    "导入",
     "引入",
     "定位",
     "撤销",
@@ -65,6 +67,40 @@ _MUTATE_VERBS = (
     "attach",
 )
 _READ_VERBS = _QUERY_VERBS + ("诊断", "layout", "坐标", "位置", "详细信息")
+_WORKFLOW_IMPORT_ANCHORS = (
+    "工作流",
+    "workflow",
+    "lnkpi.workflow",
+    "import_workflow",
+)
+_UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
+
+
+def _has_strong_workflow_import_anchor(text: str, low: str) -> bool:
+    """Workflow/tool anchors that win even when workflow_url (http) is present."""
+    if any(k in low for k in ("import_workflow", "lnkpi.workflow")):
+        return True
+    if "导入工作流" in text:
+        return True
+    return "导入" in text and any(k in text or k in low for k in ("工作流", "workflow"))
+
+
+def _is_workflow_import_utterance(u: str) -> bool:
+    """True only when import is anchored to workflow/tool markers.
+
+    Strong anchors (import_workflow, lnkpi.workflow, 导入+工作流/workflow) win
+    even with URL/http — workflow_url is valid input. Upload-steal protection
+    applies only to weak cases (e.g. 导入+画布+URL without workflow anchors).
+    """
+    text = u or ""
+    low = text.lower()
+    if _has_strong_workflow_import_anchor(text, low):
+        return True
+    if any(k in low for k in _UPLOAD_MARKERS):
+        return False
+    return "导入" in text and any(
+        k in text or k in low for k in _WORKFLOW_IMPORT_ANCHORS
+    )
 
 
 @dataclass
@@ -79,11 +115,13 @@ def select_narrow_write_tools(user_text: str) -> frozenset[str]:
     """Pick ≤5 write tools from user_text keywords (Phase 2b narrow bind)."""
     u = user_text or ""
     low = u.lower()
+    if _is_workflow_import_utterance(u):
+        return frozenset({"import_workflow", "get_canvas_summary"})
     if "prompt" in low or "prompt-" in low:
         return frozenset({"set_node_prompt", "upsert_prompt_node"})
     if "复制" in u:
         return frozenset({"duplicate_node"})
-    if any(k in low for k in ("上传", "url", "picsum", "http")):
+    if any(k in low for k in _UPLOAD_MARKERS):
         return frozenset({"upload_media_to_canvas"})
     if any(k in low for k in ("attach", "参考", "侧栏", "localrefs")):
         return frozenset({"attach_refs", "apply_sidebar_attachments"})
@@ -112,6 +150,9 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     u = (user_text or "").strip()
     if not u:
         return "open_query"
+
+    if _is_workflow_import_utterance(u):
+        return "node_write"
 
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):
         return "ui_command"

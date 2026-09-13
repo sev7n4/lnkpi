@@ -29,6 +29,7 @@ _EXPLORE_MUTATE_VERBS = (
     "添加",
     "保存",
     "导出",
+    "导入",
     "引入",
     "定位",
     "撤销",
@@ -37,6 +38,15 @@ _EXPLORE_MUTATE_VERBS = (
     "挂",
     "应用",
     "attach",
+)
+
+_WORKFLOW_IO_MARKERS = (
+    "导入",
+    "工作流",
+    "workflow",
+    "lnkpi.workflow",
+    "import_workflow",
+    "export_media_package",
 )
 
 _EXPLORE_LIFECYCLE_MARKERS = (
@@ -110,6 +120,23 @@ def explore_canvas_signal(
     if explore_explicit_intent(u):
         return True
 
+    if any(m in u for m in _WORKFLOW_IO_MARKERS) and any(
+        x in u
+        for x in (
+            "画布",
+            "canvas",
+            "节点",
+            "工作流",
+            "workflow",
+            "lnkpi.workflow",
+            "导出",
+            "导入",
+            "import_workflow",
+            "export_media_package",
+        )
+    ):
+        return True
+
     if blocked_by_atomic:
         return False
 
@@ -118,6 +145,9 @@ def explore_canvas_signal(
         "节点",
         "分镜",
         "canvas",
+        "工作流",
+        "workflow",
+        "lnkpi.workflow",
         "生成状态",
         "生成任务",
         "任务状态",
