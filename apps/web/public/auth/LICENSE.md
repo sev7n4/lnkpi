@@ -17,15 +17,9 @@ Free for commercial and personal use in end products without attribution (attrib
 
 CDN source pattern: `https://assets.mixkit.co/videos/{id}/{id}-720.mp4`
 
-## Legacy (unused by carousel)
+## Poster
 
 | Field | Value |
 | --- | --- |
-| File | `login-loop.mp4` |
-| Poster | `login-loop-poster.jpg` |
-| Title | Going through a space tunnel with fractal shapes |
-| Source | [Mixkit](https://mixkit.co/) |
-| Work ID | `31562` |
-| Page | https://mixkit.co/free-stock-video/going-through-a-space-tunnel-with-fractal-shapes-31562/ |
-| Downloaded | 2026-09-13 |
-| Note | Kept for fallback/poster; Mixkit page now marks 720p as Restricted — carousel does not use this mp4. Task 6 may remove. |
+| File | `login-loop-poster.jpg` |
+| Note | Still frame used as `<video poster>` while the first clip loads. |
