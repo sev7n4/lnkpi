@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import LoginVideoPanel from './LoginVideoPanel.vue'
 import LoginFormPanel from './LoginFormPanel.vue'
-import BlockCaptchaOverlay from './BlockCaptchaOverlay.vue'
+import SliderCaptchaOverlay from './SliderCaptchaOverlay.vue'
 
 const auth = useAuthStore()
 const shellRef = ref<HTMLElement | null>(null)
@@ -96,7 +96,7 @@ async function onCaptchaVerified(ticket: string) {
           class="w-full max-w-[360px]"
           @request-send-code="onRequestSendCode"
         />
-        <BlockCaptchaOverlay
+        <SliderCaptchaOverlay
           v-if="showCaptcha"
           @verified="onCaptchaVerified"
           @close="onCaptchaClose"

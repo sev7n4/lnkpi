@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { User } from '@lnkpi/shared'
-import type { CaptchaChallenge, CaptchaPlacement } from '@/components/auth/captcha-types'
+import type { SliderCaptchaChallengePublic } from '@/components/auth/captcha-types'
 import { api } from '@/services/api'
 import { membershipApi } from '@/services/users-api'
 
@@ -32,16 +32,20 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function fetchCaptchaChallenge() {
     const { data } = await withAuthRetry(() =>
-      api.post<{ data: CaptchaChallenge }>('/auth/captcha/challenge', {}, { timeout: AUTH_TIMEOUT_MS }),
+      api.post<{ data: SliderCaptchaChallengePublic }>(
+        '/auth/captcha/challenge',
+        {},
+        { timeout: AUTH_TIMEOUT_MS },
+      ),
     )
     return data.data
   }
 
-  async function verifyCaptcha(challengeId: string, placements: CaptchaPlacement[]) {
+  async function verifyCaptcha(challengeId: string, offsetX: number) {
     const { data } = await withAuthRetry(() =>
       api.post<{ data: { captchaTicket: string; expiresAt: string } }>(
         '/auth/captcha/verify',
-        { challengeId, placements },
+        { challengeId, offsetX },
         { timeout: AUTH_TIMEOUT_MS },
       ),
     )
