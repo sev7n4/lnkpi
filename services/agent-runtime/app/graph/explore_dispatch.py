@@ -81,6 +81,19 @@ def select_narrow_write_tools(user_text: str) -> frozenset[str]:
     """Pick ≤5 write tools from user_text keywords (Phase 2b narrow bind)."""
     u = user_text or ""
     low = u.lower()
+    if any(
+        k in u or k in low
+        for k in (
+            "import_workflow",
+            "lnkpi.workflow",
+            "导入工作流",
+            "导入",
+        )
+    ) and any(
+        k in u or k in low
+        for k in ("工作流", "workflow", "lnkpi.workflow", "import_workflow", "画布")
+    ):
+        return frozenset({"import_workflow", "get_canvas_summary"})
     if "prompt" in low or "prompt-" in low:
         return frozenset({"set_node_prompt", "upsert_prompt_node"})
     if "复制" in u:
@@ -114,6 +127,11 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     u = (user_text or "").strip()
     if not u:
         return "open_query"
+
+    if any(k in u for k in ("import_workflow", "lnkpi.workflow", "导入工作流")) or (
+        "导入" in u and any(k in u for k in ("工作流", "workflow"))
+    ):
+        return "node_write"
 
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):
         return "ui_command"

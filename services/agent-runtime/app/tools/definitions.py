@@ -35,6 +35,7 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "apply_sidebar_attachments",
     "save_node_to_asset_library",
     "apply_asset_to_node",
+    "import_workflow",
 })
 
 DEFAULT_WRITE_BIND = frozenset({
