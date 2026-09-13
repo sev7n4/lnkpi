@@ -24,6 +24,46 @@ describe('resolveVideoModelProfile', () => {
     expect(p.sizeWire).toBe('pixel_frames')
     expect(p.maxImageRefs).toBe(8)
   })
+
+  it('resolves h3-max-turbo profile', () => {
+    const p = resolveVideoModelProfile('h3-max-turbo', 'minimax/h3-max-turbo')
+    expect(p.refWire).toBe('fal_h3_max')
+    expect(p.sizeWire).toBe('ratio_duration')
+    expect(p.responseMode).toBe('async_task')
+    expect(p.gatewayModelId).toBe('minimax/h3-max-turbo')
+    expect(p.minDuration).toBe(5)
+    expect(p.maxDuration).toBe(15)
+    expect(p.maxImageRefs).toBe(2)
+    expect(p.maxVideoRefs).toBe(0)
+    expect(p.maxAudioRefs).toBe(0)
+    expect(p.allowedResolutions).toEqual(expect.arrayContaining(['480p', '768p']))
+    expect(p.maxResolution).toBe('768p')
+    expect(p.defaultGenerateAudio).toBe(true)
+    expect(p.pollIntervalMs).toBe(2000)
+    expect(p.maxPollMs).toBe(600_000)
+  })
+
+  it('resolves h3-max profile', () => {
+    const p = resolveVideoModelProfile('h3-max', 'minimax/h3-max')
+    expect(p.refWire).toBe('fal_h3_max')
+    expect(p.sizeWire).toBe('ratio_duration')
+    expect(p.responseMode).toBe('async_task')
+    expect(p.gatewayModelId).toBe('minimax/h3-max')
+    expect(p.maxImageRefs).toBe(2)
+    expect(p.maxVideoRefs).toBe(0)
+    expect(p.maxAudioRefs).toBe(0)
+    expect(p.defaultGenerateAudio).toBe(true)
+    expect(p.pollIntervalMs).toBe(2000)
+    expect(p.maxPollMs).toBe(600_000)
+    expect(p.allowedResolutions).toEqual(['480p', '768p'])
+    expect(p.allowedAspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'])
+    expect(p.maxResolution).toBe('768p')
+  })
+
+  it('detects fal h3 max by modelKey or gateway before Agnes/Seedance fallbacks', () => {
+    expect(resolveVideoModelProfile('h3-max-turbo', 'agnes-video-v2.0').refWire).toBe('fal_h3_max')
+    expect(resolveVideoModelProfile('custom-key', 'minimax/h3-max').refWire).toBe('fal_h3_max')
+  })
 })
 
 describe('clampVideoGenerationInput', () => {
@@ -82,6 +122,28 @@ describe('clampVideoGenerationInput', () => {
     })
     expect(r.resolution).toBe('1080p')
     expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(false)
+  })
+
+  it('downgrades fal h3 max 1080p and 4k to 768p', () => {
+    const profile = resolveVideoModelProfile('h3-max-turbo', 'minimax/h3-max-turbo')
+    const r1080 = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '1080p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r1080.resolution).toBe('768p')
+    expect(r1080.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+
+    const r4k = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '4k',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r4k.resolution).toBe('768p')
   })
 })
 

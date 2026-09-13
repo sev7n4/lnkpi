@@ -22,4 +22,18 @@ describe('resolveVideoModelCapabilities', () => {
     expect(c.allowedResolutions).toContain('4k')
     expect(c.firstLastFrameLabel).toBe('严格首尾帧')
   })
+
+  it('capabilities hide video/audio refs for fal h3 max', () => {
+    const c = resolveVideoModelCapabilities('h3-max-turbo')
+    expect(c.supportsVideoRef).toBe(false)
+    expect(c.supportsAudioRef).toBe(false)
+    expect(c.supportsFirstLastFrame).toBe(true)
+    expect(c.supportsKeyframes).toBe(false)
+    expect(c.supportsGenerateAudio).toBe(true)
+    expect(c.supports4K).toBe(false)
+    expect(c.allowedResolutions).toEqual(['480p', '768p'])
+    expect(c.minDuration).toBe(5)
+    expect(c.firstLastFrameLabel).toBe('严格首尾帧')
+    expect(c.keyframesLabel).not.toBe('关键帧过渡')
+  })
 })

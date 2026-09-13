@@ -26,9 +26,10 @@ export function resolveVideoModelCapabilities(
   const isAgnes = profile.refWire === 'agnes_single_image' || profile.refWire === 'agnes_keyframes'
   const isSeedance =
     profile.refWire === 'apimart_multimodal' || profile.refWire === 'apimart_first_last'
+  const isFalH3Max = profile.refWire === 'fal_h3_max'
 
   return {
-    supportsFirstLastFrame: isSeedance,
+    supportsFirstLastFrame: isSeedance || isFalH3Max,
     supportsKeyframes: isAgnes || isSeedance,
     supportsVideoRef: profile.maxVideoRefs > 0,
     supportsAudioRef: profile.maxAudioRefs > 0,
@@ -41,7 +42,7 @@ export function resolveVideoModelCapabilities(
     maxImageRefs: profile.maxImageRefs,
     maxVideoRefs: profile.maxVideoRefs,
     maxAudioRefs: profile.maxAudioRefs,
-    firstLastFrameLabel: isSeedance ? '严格首尾帧' : '关键帧过渡',
+    firstLastFrameLabel: isSeedance || isFalH3Max ? '严格首尾帧' : '关键帧过渡',
     keyframesLabel: isAgnes ? '关键帧过渡' : '多图参考',
   }
 }

@@ -11,7 +11,7 @@ export interface StudioModelEntry {
   displayName: string
   gatewayModelId: string
   modality: StudioModality
-  providerBinding: 'gateway-openai-compat'
+  providerBinding: 'gateway-openai-compat' | 'fal-http'
   voices?: StudioVoiceOption[]
   /** 字段名 → 处置；未列出的生成参数默认 metadataOnly */
   params: Record<string, ParamDisposition>
@@ -239,6 +239,22 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
     gatewayModelId: 'wan-2.7',
     modality: 'video',
     providerBinding: 'gateway-openai-compat',
+    params: VIDEO_PARAMS,
+  },
+  {
+    modelKey: 'h3-max-turbo',
+    displayName: 'H3 Max Turbo (fal)',
+    gatewayModelId: 'minimax/h3-max-turbo',
+    modality: 'video',
+    providerBinding: 'fal-http',
+    params: VIDEO_PARAMS,
+  },
+  {
+    modelKey: 'h3-max',
+    displayName: 'H3 Max (fal)',
+    gatewayModelId: 'minimax/h3-max',
+    modality: 'video',
+    providerBinding: 'fal-http',
     params: VIDEO_PARAMS,
   },
 
