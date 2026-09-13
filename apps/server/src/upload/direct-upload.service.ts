@@ -20,14 +20,9 @@ export type DirectUploadCredential =
 
 @Injectable()
 export class DirectUploadService {
-  private readonly isConfigured: () => boolean
-
   constructor(
     @Inject(STORAGE_ADAPTER) private readonly adapter: StorageAdapter,
-    isConfigured?: () => boolean,
-  ) {
-    this.isConfigured = isConfigured ?? isObjectStorageConfigured
-  }
+  ) {}
 
   async createCredential(
     userId: string,
@@ -40,7 +35,7 @@ export class DirectUploadService {
       )
     }
 
-    if (!this.isConfigured() || !this.adapter.presignPut) {
+    if (!isObjectStorageConfigured() || !this.adapter.presignPut) {
       return { mode: 'local' }
     }
 

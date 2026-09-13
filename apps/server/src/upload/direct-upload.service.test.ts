@@ -2,16 +2,20 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { BadRequestException } from '@nestjs/common'
 import { DirectUploadService } from './direct-upload.service'
 
+vi.mock('../storage/object-storage-env', () => ({
+  isObjectStorageConfigured: vi.fn(() => true),
+}))
+
+import { isObjectStorageConfigured } from '../storage/object-storage-env'
+
 describe('DirectUploadService', () => {
   const presignPut = vi.fn()
   let svc: DirectUploadService
 
   beforeEach(() => {
     presignPut.mockReset()
-    svc = new DirectUploadService(
-      { presignPut } as any,
-      () => true, // isConfigured
-    )
+    vi.mocked(isObjectStorageConfigured).mockReturnValue(true)
+    svc = new DirectUploadService({ presignPut } as any)
   })
 
   it('rejects oversize', async () => {
@@ -25,7 +29,8 @@ describe('DirectUploadService', () => {
   })
 
   it('returns local when storage not configured', async () => {
-    svc = new DirectUploadService({} as any, () => false)
+    vi.mocked(isObjectStorageConfigured).mockReturnValue(false)
+    svc = new DirectUploadService({} as any)
     await expect(
       svc.createCredential('u1', { fileName: 'a.png', mimeType: 'image/png', size: 10 }),
     ).resolves.toEqual({ mode: 'local' })
