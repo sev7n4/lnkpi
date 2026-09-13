@@ -76,3 +76,17 @@ def test_import_image_url_to_canvas_binds_upload_not_workflow():
     assert "upload_media_to_canvas" in names
     assert names != frozenset({"import_workflow", "get_canvas_summary"})
     assert classify_explore_intent(utterance) == "node_write"
+
+
+def test_import_workflow_with_http_url_narrow_bind():
+    utterance = "用 import_workflow 从 https://example.com/wf.json 导入工作流"
+    names = select_narrow_write_tools(utterance)
+    assert "import_workflow" in names
+    assert "upload_media_to_canvas" not in names
+
+
+def test_import_workflow_chinese_with_cdn_url():
+    utterance = "导入工作流 https://cdn.example/wf.json"
+    names = select_narrow_write_tools(utterance)
+    assert "import_workflow" in names
+    assert classify_explore_intent(utterance) == "node_write"

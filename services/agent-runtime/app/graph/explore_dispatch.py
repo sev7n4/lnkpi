@@ -76,20 +76,28 @@ _WORKFLOW_IMPORT_ANCHORS = (
 _UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
 
 
-def _is_workflow_import_utterance(u: str) -> bool:
-    """True only when import is anchored to workflow/tool markers.
-
-    「导入」+「画布」 alone is not enough. Upload markers (URL / 上传)
-    prefer the media-upload branch over workflow import.
-    """
-    text = u or ""
-    low = text.lower()
-    if any(k in low for k in _UPLOAD_MARKERS):
-        return False
+def _has_strong_workflow_import_anchor(text: str, low: str) -> bool:
+    """Workflow/tool anchors that win even when workflow_url (http) is present."""
     if any(k in low for k in ("import_workflow", "lnkpi.workflow")):
         return True
     if "导入工作流" in text:
         return True
+    return "导入" in text and any(k in text or k in low for k in ("工作流", "workflow"))
+
+
+def _is_workflow_import_utterance(u: str) -> bool:
+    """True only when import is anchored to workflow/tool markers.
+
+    Strong anchors (import_workflow, lnkpi.workflow, 导入+工作流/workflow) win
+    even with URL/http — workflow_url is valid input. Upload-steal protection
+    applies only to weak cases (e.g. 导入+画布+URL without workflow anchors).
+    """
+    text = u or ""
+    low = text.lower()
+    if _has_strong_workflow_import_anchor(text, low):
+        return True
+    if any(k in low for k in _UPLOAD_MARKERS):
+        return False
     return "导入" in text and any(
         k in text or k in low for k in _WORKFLOW_IMPORT_ANCHORS
     )
