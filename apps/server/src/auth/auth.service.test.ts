@@ -36,7 +36,7 @@ describe('AuthService.sendCode captcha modes', () => {
 
   it('strict mode accepts valid ticket', async () => {
     process.env.AUTH_CAPTCHA_MODE = 'strict'
-    const c = captcha.createChallenge()
+    const c = await captcha.createChallenge()
     const max = c.puzzle.width - c.puzzle.pieceSize
     let ticket = ''
     for (let x = 0; x <= max; x++) {

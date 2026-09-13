@@ -13,18 +13,27 @@ describe('CaptchaService slider', () => {
     process.env.AUTH_CAPTCHA_SECRET = prev
   })
 
-  it('createChallenge returns images and puzzle meta without targetX', () => {
-    const c = service.createChallenge()
+  it('createChallenge returns raster data URLs with shape and no targetX', async () => {
+    const c = await service.createChallenge()
     expect(c.challengeId).toMatch(/^ch_/)
-    expect(c.bgImage.startsWith('data:image/svg+xml')).toBe(true)
-    expect(c.pieceImage.startsWith('data:image/svg+xml')).toBe(true)
+    expect(c.bgImage.startsWith('data:image/')).toBe(true)
+    expect(c.pieceImage.startsWith('data:image/')).toBe(true)
     expect(c.puzzle.width).toBeGreaterThan(100)
     expect(c.puzzle.pieceSize).toBeGreaterThan(20)
+    expect(['rect', 'circle', 'puzzle']).toContain(c.puzzle.shape)
     expect((c as { targetX?: number }).targetX).toBeUndefined()
   })
 
-  it('verifySlide issues ticket within 5px and rejects far offset', () => {
-    const c = service.createChallenge()
+  it('createChallenge varies shapes across many calls', async () => {
+    const shapes = new Set<string | undefined>()
+    for (let i = 0; i < 24; i++) {
+      shapes.add((await service.createChallenge()).puzzle.shape)
+    }
+    expect(shapes.size).toBeGreaterThanOrEqual(3)
+  })
+
+  it('verifySlide issues ticket within 5px and rejects far offset', async () => {
+    const c = await service.createChallenge()
     expect(() => service.verifySlide(c.challengeId, -9999)).toThrow()
     const max = c.puzzle.width - c.puzzle.pieceSize
     let ticket: string | null = null
@@ -39,15 +48,17 @@ describe('CaptchaService slider', () => {
     expect(ticket).toMatch(/^cpt_/)
   })
 
-  it('consumeTicket still one-shot', () => {
-    const c = service.createChallenge()
+  it('consumeTicket still one-shot', async () => {
+    const c = await service.createChallenge()
     const max = c.puzzle.width - c.puzzle.pieceSize
     let t = ''
     for (let x = 0; x <= max; x++) {
       try {
         t = service.verifySlide(c.challengeId, x).captchaTicket
         break
-      } catch { /* */ }
+      } catch {
+        /* */
+      }
     }
     expect(service.consumeTicket(t)).toBe('ok')
     expect(service.consumeTicket(t)).toBe('invalid')

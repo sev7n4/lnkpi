@@ -44,11 +44,12 @@ const trackFillPct = computed(() => {
 const pieceStyle = computed(() => {
   const c = challenge.value
   if (!c) return {}
+  const pad = c.puzzle.piecePad ?? (c.puzzle.shape === 'puzzle' ? 12 : 2)
   return {
-    left: `${offsetX.value}px`,
-    top: `${c.puzzle.y}px`,
-    width: `${c.puzzle.pieceSize}px`,
-    height: `${c.puzzle.pieceSize}px`,
+    left: `${offsetX.value - pad}px`,
+    top: `${c.puzzle.y - pad}px`,
+    width: `${c.puzzle.pieceSize + pad * 2}px`,
+    height: `${c.puzzle.pieceSize + pad * 2}px`,
   }
 })
 
@@ -172,11 +173,14 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="captcha-overlay z-[110] flex flex-col bg-[var(--neo-surface-elevated)]/95 backdrop-blur-md max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:h-[60vh] max-md:rounded-t-2xl max-md:border-t max-md:border-[var(--neo-border)] md:absolute md:inset-0"
+    class="captcha-overlay z-[110] flex flex-col max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:h-[60vh] max-md:rounded-t-2xl md:absolute md:inset-0 md:items-center md:justify-center md:bg-black/40 md:backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
     aria-label="滑块验证"
   >
+    <div
+      class="captcha-card flex h-full w-full flex-col overflow-hidden border border-[var(--neo-border-strong)] bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(18,18,24,0.92))] shadow-[0_24px_64px_rgba(0,0,0,0.55)] backdrop-blur-xl max-md:rounded-t-2xl md:h-auto md:max-h-[90%] md:w-[min(400px,92%)] md:rounded-2xl"
+    >
     <div class="flex items-center justify-between border-b border-[var(--neo-border)] px-4 py-3">
       <p class="text-sm font-medium text-[var(--neo-text-primary)]">拖动滑块完成验证</p>
       <div class="flex items-center gap-2">
@@ -261,24 +265,27 @@ onUnmounted(() => {
       <p v-else-if="verifying" class="text-sm text-[var(--neo-electric)]">验证中…</p>
       <p v-else class="text-xs text-[var(--neo-text-muted)]">将滑块拖动到正确位置</p>
     </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .captcha-board {
-  background: color-mix(in srgb, var(--neo-bg) 88%, transparent);
+  background: #0c0c10;
   border: 1px solid var(--neo-border);
   border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .captcha-board--flash {
-  box-shadow: 0 0 0 2px var(--neo-electric), 0 0 24px var(--neo-electric-glow);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--neo-electric) 55%, transparent),
+    0 0 28px color-mix(in srgb, var(--neo-electric) 28%, transparent);
   transition: box-shadow 0.2s ease;
 }
 
 .captcha-piece {
   box-sizing: border-box;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
   will-change: left;
 }
 
@@ -303,14 +310,18 @@ onUnmounted(() => {
   position: absolute;
   inset: 10px 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--neo-bg) 70%, transparent);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--neo-border);
   overflow: hidden;
 }
 
 .captcha-track__fill {
   height: 100%;
-  background: color-mix(in srgb, var(--neo-electric) 28%, transparent);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--neo-electric) 8%, transparent),
+    color-mix(in srgb, var(--neo-electric) 22%, transparent)
+  );
   transition: none;
 }
 
@@ -320,17 +331,17 @@ onUnmounted(() => {
   transform: translateY(-50%);
   box-sizing: border-box;
   border-radius: 10px;
-  border: 1px solid var(--neo-border-strong);
-  background: linear-gradient(145deg, #3a3a4a 0%, #2a2a36 100%);
-  color: var(--neo-electric);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: linear-gradient(180deg, #f2f3f7 0%, #d7dae3 100%);
+  color: #1a1a21;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -2px;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4), 0 0 0 1px color-mix(in srgb, var(--neo-electric) 15%, transparent);
   touch-action: none;
   cursor: grab;
   padding: 0;
@@ -340,7 +351,6 @@ onUnmounted(() => {
   cursor: grabbing;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   transform: translateY(-50%) scale(1.04);
-  border-color: color-mix(in srgb, var(--neo-electric) 60%, transparent);
 }
 
 .captcha-track__thumb:disabled {
