@@ -37,14 +37,15 @@ describe('AuthService.sendCode captcha modes', () => {
   it('strict mode accepts valid ticket', async () => {
     process.env.AUTH_CAPTCHA_MODE = 'strict'
     const c = captcha.createChallenge()
-    const used = new Set<string>()
-    const placements = c.slots.map((slot) => {
-      const block = c.blocks.find((b) => b.shape === slot.shape && !used.has(b.id))!
-      used.add(block.id)
-      return { blockId: block.id, slotId: slot.id }
-    })
-    const { captchaTicket } = captcha.verifyPlacement(c.challengeId, placements)
-    await auth.sendCode('13800138000', captchaTicket)
+    const max = c.puzzle.width - c.puzzle.pieceSize
+    let ticket = ''
+    for (let x = 0; x <= max; x++) {
+      try {
+        ticket = captcha.verifySlide(c.challengeId, x).captchaTicket
+        break
+      } catch { /* keep scanning */ }
+    }
+    await auth.sendCode('13800138000', ticket)
     expect(create).toHaveBeenCalled()
   })
 })

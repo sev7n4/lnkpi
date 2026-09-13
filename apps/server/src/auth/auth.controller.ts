@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, UseGuards, Inject } from '@nestjs/common'
-import { IsArray, IsOptional, IsString, Length, Matches } from 'class-validator'
+import { IsNumber, IsOptional, IsString, Length, Matches } from 'class-validator'
 import { AuthService } from './auth.service'
 import { AuthGuard } from './auth.guard'
 import { CaptchaService } from './captcha.service'
@@ -18,8 +18,8 @@ class CaptchaVerifyDto {
   @IsString()
   challengeId!: string
 
-  @IsArray()
-  placements!: { blockId: string; slotId: string }[]
+  @IsNumber()
+  offsetX!: number
 }
 
 class LoginDto {
@@ -54,7 +54,7 @@ export class AuthController {
   @Post('captcha/verify')
   @HttpCode(200)
   verifyCaptcha(@Body() dto: CaptchaVerifyDto) {
-    const data = this.captchaService.verifyPlacement(dto.challengeId, dto.placements)
+    const data = this.captchaService.verifySlide(dto.challengeId, dto.offsetX)
     return { code: 0, message: 'ok', data }
   }
 
