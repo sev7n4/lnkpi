@@ -26,11 +26,11 @@
 
 网上「效率质变 / AI 直播」主要对应 **fal 后训练的 H3 Max 族**，不是裸 `MiniMax-H3`。本规格目标：在 lnkpi Dock **最快可选、可计费、可失败诊断**地接入 Max/Turbo，验证延迟与成本；不把直播写进一期。
 
-成功标准：
+成功标准（代码/单测；未打 live fal）：
 
-- Dock 视频模型列表出现 H3 Max / Turbo；选中后可 T2V / I2V 出片。  
-- 无 `FAL_KEY` 或 fal `TOP_UP` 锁定时，错误可读、积分退款。  
-- 积分流水可区分模型（metadata 含 `providerId` / `modelKey` / `falEndpoint`）。
+- [x] Dock 视频模型列表出现 H3 Max / Turbo；选中后可走 T2V / I2V Provider 路径。
+- [x] fal `TOP_UP` / locked 时错误可读（「视频服务账户异常，请稍后重试或联系管理员」）；失败走现网视频退款。
+- [x] 积分流水可区分模型（metadata 含 `providerId` / `modelKey` / `falEndpoint`）。
 
 ## 2. 范围
 
