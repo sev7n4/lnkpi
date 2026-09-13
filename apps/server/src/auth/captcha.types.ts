@@ -1,28 +1,13 @@
-export type CaptchaBlockShape = 'rect' | 'l'
-
-export type CaptchaPoint = { x: number; y: number }
-
-export type CaptchaBlock = {
-  id: string
-  shape: CaptchaBlockShape
-  home: CaptchaPoint
-}
-
-export type CaptchaSlot = {
-  id: string
-  shape: CaptchaBlockShape
-  x: number
+export type SliderPuzzleMeta = {
+  width: number
+  height: number
+  pieceSize: number
   y: number
 }
 
-export type CaptchaChallenge = {
+export type SliderCaptchaChallengePublic = {
   challengeId: string
-  canvas: { w: number; h: number }
-  blocks: CaptchaBlock[]
-  slots: CaptchaSlot[]
-}
-
-export type CaptchaPlacement = {
-  blockId: string
-  slotId: string
+  bgImage: string
+  pieceImage: string
+  puzzle: SliderPuzzleMeta
 }

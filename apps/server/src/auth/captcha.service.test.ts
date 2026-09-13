@@ -1,56 +1,55 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
 import { CaptchaService } from './captcha.service'
 
-describe('CaptchaService', () => {
+describe('CaptchaService slider', () => {
   let service: CaptchaService
-  const prevSecret = process.env.AUTH_CAPTCHA_SECRET
+  const prev = process.env.AUTH_CAPTCHA_SECRET
 
   beforeEach(() => {
     process.env.AUTH_CAPTCHA_SECRET = 'test-secret'
     service = new CaptchaService()
   })
-
   afterEach(() => {
-    process.env.AUTH_CAPTCHA_SECRET = prevSecret
+    process.env.AUTH_CAPTCHA_SECRET = prev
   })
 
-  it('createChallenge returns 3–4 blocks matching slot shapes', () => {
+  it('createChallenge returns images and puzzle meta without targetX', () => {
     const c = service.createChallenge()
-    expect(c.challengeId).toBeTruthy()
-    expect(c.blocks.length).toBeGreaterThanOrEqual(3)
-    expect(c.blocks.length).toBeLessThanOrEqual(4)
-    expect(c.slots).toHaveLength(c.blocks.length)
-    for (const slot of c.slots) {
-      expect(c.blocks.some((b) => b.shape === slot.shape)).toBe(true)
+    expect(c.challengeId).toMatch(/^ch_/)
+    expect(c.bgImage.startsWith('data:image/svg+xml')).toBe(true)
+    expect(c.pieceImage.startsWith('data:image/svg+xml')).toBe(true)
+    expect(c.puzzle.width).toBeGreaterThan(100)
+    expect(c.puzzle.pieceSize).toBeGreaterThan(20)
+    expect((c as { targetX?: number }).targetX).toBeUndefined()
+  })
+
+  it('verifySlide issues ticket within 5px and rejects far offset', () => {
+    const c = service.createChallenge()
+    expect(() => service.verifySlide(c.challengeId, -9999)).toThrow()
+    const max = c.puzzle.width - c.puzzle.pieceSize
+    let ticket: string | null = null
+    for (let x = 0; x <= max; x++) {
+      try {
+        ticket = service.verifySlide(c.challengeId, x).captchaTicket
+        break
+      } catch {
+        /* keep scanning; challenge must survive failures */
+      }
     }
+    expect(ticket).toMatch(/^cpt_/)
   })
 
-  it('verifyPlacement issues ticket only when each block maps to a matching-shape slot once', () => {
+  it('consumeTicket still one-shot', () => {
     const c = service.createChallenge()
-    expect(() => service.verifyPlacement(c.challengeId, [])).toThrow()
-
-    const used = new Set<string>()
-    const placements = c.slots.map((slot) => {
-      const block = c.blocks.find((b) => b.shape === slot.shape && !used.has(b.id))!
-      used.add(block.id)
-      return { blockId: block.id, slotId: slot.id }
-    })
-    const out = service.verifyPlacement(c.challengeId, placements)
-    expect(out.captchaTicket).toMatch(/^cpt_/)
-    expect(Date.parse(out.expiresAt)).toBeGreaterThan(Date.now())
-  })
-
-  it('consumeTicket validates once then invalidates', () => {
-    const c = service.createChallenge()
-    const used = new Set<string>()
-    const placements = c.slots.map((slot) => {
-      const block = c.blocks.find((b) => b.shape === slot.shape && !used.has(b.id))!
-      used.add(block.id)
-      return { blockId: block.id, slotId: slot.id }
-    })
-    const { captchaTicket } = service.verifyPlacement(c.challengeId, placements)
-    expect(service.consumeTicket(captchaTicket)).toBe('ok')
-    expect(service.consumeTicket(captchaTicket)).toBe('invalid')
-    expect(service.consumeTicket(null)).toBe('missing')
+    const max = c.puzzle.width - c.puzzle.pieceSize
+    let t = ''
+    for (let x = 0; x <= max; x++) {
+      try {
+        t = service.verifySlide(c.challengeId, x).captchaTicket
+        break
+      } catch { /* */ }
+    }
+    expect(service.consumeTicket(t)).toBe('ok')
+    expect(service.consumeTicket(t)).toBe('invalid')
   })
 })
