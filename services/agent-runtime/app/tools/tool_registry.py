@@ -1,8 +1,14 @@
-"""Tool tier registry — SSOT for explore vs graph-only tools (Hybrid A)."""
+"""Tool tier + placement registry — SSOT for explore vs graph-only tools (Hybrid A)."""
 
 from __future__ import annotations
 
 from enum import Enum
+
+
+class ToolPlacement(str, Enum):
+    EXPLORE = "explore"
+    GRAPH_NODE = "graph_node"
+    UI_COMMAND = "ui_command"
 
 
 class ToolTier(str, Enum):
@@ -13,40 +19,56 @@ class ToolTier(str, Enum):
     DESTRUCTIVE = "destructive"
     GRAPH_BATCH = "graph_batch"
     EXPORT = "export"
+    WORKFLOW_IO = "workflow_io"  # export/import style canvas IO
     # ui_command: focus_node, undo — not in TOOL_TIERS; see design spec §1.3
 
 
-# Explore sub-graph explicit allowlist (CS-4: no gen, no batch topology).
-EXPLORE_TOOL_NAMES = frozenset({
-    "get_canvas_summary",
-    "get_node",
-    "get_generation_status",
-    "get_generation_diagnostic",
-    "set_node_prompt",
-    "set_node_content",
-    "attach_refs",
-    "upsert_prompt_node",
-    "cancel_generation",
-    "confirm_platform_fallback",
-    "cancel_platform_fallback",
-    "list_generation_tasks",
-    "list_user_assets",
-    "list_public_assets",
-    "save_node_to_asset_library",
-    "introduce_nodes_to_agent",
-    "apply_asset_to_node",
-    "apply_sidebar_attachments",
-    "focus_node",
-    "focus_nodes",
-    "get_canvas_layout",
-    "duplicate_node",
-    "upload_media_to_canvas",
-    "export_media_package",
-    "get_image_edit_capabilities",
-    "undo",
-    "redo",
-    "open_image_editor",
-})
+# Placement SSOT: every build_canvas_tools name + explore-bound UI commands.
+TOOL_PLACEMENTS: dict[str, ToolPlacement] = {
+    "get_canvas_summary": ToolPlacement.EXPLORE,
+    "get_node": ToolPlacement.EXPLORE,
+    "get_generation_status": ToolPlacement.EXPLORE,
+    "get_generation_diagnostic": ToolPlacement.EXPLORE,
+    "set_node_prompt": ToolPlacement.EXPLORE,
+    "set_node_content": ToolPlacement.EXPLORE,
+    "attach_refs": ToolPlacement.EXPLORE,
+    "upsert_prompt_node": ToolPlacement.EXPLORE,
+    "cancel_generation": ToolPlacement.EXPLORE,
+    "confirm_platform_fallback": ToolPlacement.EXPLORE,
+    "cancel_platform_fallback": ToolPlacement.EXPLORE,
+    "list_generation_tasks": ToolPlacement.EXPLORE,
+    "list_user_assets": ToolPlacement.EXPLORE,
+    "list_public_assets": ToolPlacement.EXPLORE,
+    "save_node_to_asset_library": ToolPlacement.EXPLORE,
+    "introduce_nodes_to_agent": ToolPlacement.EXPLORE,
+    "apply_asset_to_node": ToolPlacement.EXPLORE,
+    "apply_sidebar_attachments": ToolPlacement.EXPLORE,
+    "get_canvas_layout": ToolPlacement.EXPLORE,
+    "duplicate_node": ToolPlacement.EXPLORE,
+    "upload_media_to_canvas": ToolPlacement.EXPLORE,
+    "export_media_package": ToolPlacement.EXPLORE,
+    "get_image_edit_capabilities": ToolPlacement.EXPLORE,
+    "import_workflow": ToolPlacement.EXPLORE,
+    "focus_node": ToolPlacement.UI_COMMAND,
+    "focus_nodes": ToolPlacement.UI_COMMAND,
+    "undo": ToolPlacement.UI_COMMAND,
+    "redo": ToolPlacement.UI_COMMAND,
+    "open_image_editor": ToolPlacement.UI_COMMAND,
+    "add_nodes_batch": ToolPlacement.GRAPH_NODE,
+    "connect_nodes": ToolPlacement.GRAPH_NODE,
+    "run_image_generation": ToolPlacement.GRAPH_NODE,
+    "group_nodes": ToolPlacement.GRAPH_NODE,
+    "ungroup_node": ToolPlacement.GRAPH_NODE,
+    "arrange_nodes_grid": ToolPlacement.GRAPH_NODE,
+    "move_nodes": ToolPlacement.GRAPH_NODE,
+    "apply_layout_ops": ToolPlacement.GRAPH_NODE,
+}
+
+# Explore whitelist: EXPLORE + UI_COMMAND (ui cmds are explore-bound today).
+EXPLORE_TOOL_NAMES = frozenset(
+    n for n, p in TOOL_PLACEMENTS.items()
+    if p in (ToolPlacement.EXPLORE, ToolPlacement.UI_COMMAND)
+)
 
 TOOL_TIERS: dict[str, ToolTier] = {
     "get_canvas_summary": ToolTier.READ,
@@ -71,6 +93,7 @@ TOOL_TIERS: dict[str, ToolTier] = {
     "duplicate_node": ToolTier.WRITE_LIGHT,
     "upload_media_to_canvas": ToolTier.WRITE_LIGHT,
     "export_media_package": ToolTier.EXPORT,
+    "import_workflow": ToolTier.WORKFLOW_IO,
     "optimize_prompt": ToolTier.READ,
     "group_nodes": ToolTier.GRAPH_BATCH,
     "ungroup_node": ToolTier.GRAPH_BATCH,
@@ -80,7 +103,6 @@ TOOL_TIERS: dict[str, ToolTier] = {
     "run_icon_refine": ToolTier.GEN,
     "get_image_edit_capabilities": ToolTier.READ,
     "add_nodes_batch": ToolTier.GRAPH_BATCH,
-    "import_workflow": ToolTier.GRAPH_BATCH,
     "connect_nodes": ToolTier.GRAPH_BATCH,
     "update_nodes_batch": ToolTier.GRAPH_BATCH,
     "run_image_generation": ToolTier.GEN,
@@ -94,7 +116,33 @@ TOOL_TIERS: dict[str, ToolTier] = {
     "remove_edges": ToolTier.DESTRUCTIVE,
 }
 
-GRAPH_ONLY_TOOL_NAMES = frozenset(TOOL_TIERS.keys()) - EXPLORE_TOOL_NAMES
+GRAPH_ONLY_TOOL_NAMES = frozenset(
+    n for n, p in TOOL_PLACEMENTS.items() if p == ToolPlacement.GRAPH_NODE
+)
+
+# Seeds for I3 — names expected to appear under app/graph (rg nest./getattr(nest)).
+GRAPH_NODE_CALL_SITES = frozenset({
+    "add_nodes_batch",
+    "connect_nodes",
+    "run_image_generation",
+    "run_video_generation",
+    "run_text_generation",
+    "run_prompt_generation",
+    "run_audio_generation",
+    "start_image_generation",
+    "wait_image_generation",
+    "remove_nodes",
+})
+
+# graph_node specs not yet invoked from nodes (pre-existing debt).
+# Do NOT put import_workflow here.
+DEFERRED_GRAPH_NODE_TOOLS = frozenset({
+    "group_nodes",  # layout batch spec; no graph node invokes it yet
+    "ungroup_node",  # layout batch spec; no graph node invokes it yet
+    "arrange_nodes_grid",  # layout batch spec; no graph node invokes it yet
+    "move_nodes",  # layout batch spec; no graph node invokes it yet
+    "apply_layout_ops",  # layout batch spec; no graph node invokes it yet
+})
 
 
 def is_explore_tool(name: str) -> bool:
