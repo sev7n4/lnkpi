@@ -249,6 +249,26 @@ export function resolveVideoModelProfile(
   }
 }
 
+function nearestAllowedResolution(
+  resolution: string,
+  profile: VideoModelProfile,
+): string {
+  const currentRank = RESOLUTION_RANK[resolution as VideoResolutionTier] ?? 0
+  let best = profile.allowedResolutions[0] ?? resolution
+  let bestDist = Number.POSITIVE_INFINITY
+  let bestRank = RESOLUTION_RANK[best as VideoResolutionTier] ?? 0
+  for (const candidate of profile.allowedResolutions) {
+    const rank = RESOLUTION_RANK[candidate as VideoResolutionTier] ?? 0
+    const dist = Math.abs(rank - currentRank)
+    if (dist < bestDist || (dist === bestDist && rank > bestRank)) {
+      best = candidate
+      bestDist = dist
+      bestRank = rank
+    }
+  }
+  return best
+}
+
 function clampResolution(
   resolution: string,
   profile: VideoModelProfile,
@@ -263,6 +283,14 @@ function clampResolution(
       reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${cap}`,
     })
     return cap
+  }
+  if (!profile.allowedResolutions.includes(resolution)) {
+    const nearest = nearestAllowedResolution(resolution, profile)
+    droppedFields.push({
+      field: 'resolution',
+      reason: `${resolution} not on ${profile.variantTag ?? 'model'}; use ${nearest}`,
+    })
+    return nearest
   }
   return resolution
 }

@@ -145,6 +145,31 @@ describe('clampVideoGenerationInput', () => {
     })
     expect(r4k.resolution).toBe('768p')
   })
+
+  it('snaps omitted fal h3 max resolution from default 720p to 768p', () => {
+    const profile = resolveVideoModelProfile('h3-max-turbo', 'minimax/h3-max-turbo')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(['480p', '768p']).toContain(r.resolution)
+    expect(r.resolution).toBe('768p')
+  })
+
+  it('snaps explicit fal h3 max 720p to nearest allowed 768p', () => {
+    const profile = resolveVideoModelProfile('h3-max', 'minimax/h3-max')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '720p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('768p')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
 })
 
 describe('resolveVideoGatewayModelId', () => {
