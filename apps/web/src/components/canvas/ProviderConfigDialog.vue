@@ -3,8 +3,11 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   encodeChannelModel,
-  decodeChannelModel,
   inferModelCapability,
+  modelOptionName,
+  modelOptionsForCapability,
+  filterModelNames,
+  windowedRange,
   DEFAULT_VIDEO_SETTINGS,
   VIDEO_ASPECT_RATIO_OPTIONS,
   VIDEO_CROP_OPTIONS,
@@ -143,6 +146,19 @@ const MODEL_GROUPS = [
   },
 ]
 
+const CHANNEL_MODEL_ROW_H = 36
+const CHANNEL_MODEL_VIEW_H = 240
+
+const includeOtherByok = reactive<Record<ModelCapability, boolean>>({
+  image: false,
+  video: false,
+  text: false,
+  audio: false,
+})
+const channelModelQuery = reactive<Record<string, string>>({})
+const channelModelScroll = reactive<Record<string, number>>({})
+const addModelDraft = reactive<Record<string, string>>({})
+
 function toDraft(ch: ProviderChannelPublic): ChannelDraft {
   const meta: Record<string, ModelCapability> = {}
   for (const m of ch.models) meta[m.name] = m.capability
@@ -236,19 +252,40 @@ const modelOptionPool = computed(() => {
   return options
 })
 
-function optionsForCapability(capability: ModelCapability) {
-  // User channels may list OpenAI-compatible ids without reliable modality;
-  // include every non-platform model in all groups so they can be opted-in.
-  // Platform models stay filtered by capability.
-  return modelOptionPool.value.filter((o) => {
-    if (o.capability === capability) return true
-    const decoded = decodeChannelModel(o.value)
-    return Boolean(decoded && decoded.channelId !== 'platform')
-  })
-}
+const modelLabelByValue = computed(() => {
+  const map = new Map<string, string>()
+  for (const opt of modelOptionPool.value) map.set(opt.value, opt.label)
+  return map
+})
+
+const selectableOptionsByCapability = computed(() => {
+  const out = {} as Record<ModelCapability, ReturnType<typeof modelOptionsForCapability>>
+  for (const group of MODEL_GROUPS) {
+    out[group.capability] = modelOptionsForCapability(modelOptionPool.value, group.capability, {
+      includeOtherByok: includeOtherByok[group.capability],
+      selectedValues: prefsDraft[group.selectableKey],
+    })
+  }
+  return out
+})
+
+const channelModelWindows = computed(() => {
+  const out: Record<string, { start: number; names: string[]; total: number }> = {}
+  for (const draft of channelDrafts.value) {
+    const names = filterModelNames(draft.modelNames, channelModelQuery[draft.id] ?? '')
+    const { start, end } = windowedRange(
+      names.length,
+      channelModelScroll[draft.id] ?? 0,
+      CHANNEL_MODEL_ROW_H,
+      CHANNEL_MODEL_VIEW_H,
+    )
+    out[draft.id] = { start, names: names.slice(start, end), total: names.length }
+  }
+  return out
+})
 
 function setModelCapability(draft: ChannelDraft, name: string, capability: ModelCapability) {
-  draft.modelMeta[name] = capability
+  draft.modelMeta = { ...draft.modelMeta, [name]: capability }
 }
 
 function onModelNamesChange(draft: ChannelDraft, names: string[]) {
@@ -265,7 +302,41 @@ function onModelNamesChange(draft: ChannelDraft, names: string[]) {
 }
 
 function labelForModelValue(value: string) {
-  return modelOptionPool.value.find((o) => o.value === value)?.label ?? value
+  return modelLabelByValue.value.get(value) ?? modelOptionName(value)
+}
+
+function onChannelModelScroll(id: string, event: Event) {
+  const el = event.target as HTMLElement | null
+  if (!el) return
+  channelModelScroll[id] = el.scrollTop
+}
+
+function onChannelModelQuery(id: string, query: string | undefined) {
+  channelModelQuery[id] = query ?? ''
+  channelModelScroll[id] = 0
+}
+
+function addChannelModel(draft: ChannelDraft) {
+  const name = (addModelDraft[draft.id] ?? '').trim()
+  if (!name) return
+  if (!draft.modelNames.includes(name)) {
+    onModelNamesChange(draft, [...draft.modelNames, name])
+  }
+  addModelDraft[draft.id] = ''
+}
+
+function removeChannelModel(draft: ChannelDraft, name: string) {
+  onModelNamesChange(
+    draft,
+    draft.modelNames.filter((item) => item !== name),
+  )
+}
+
+function onChannelModelCapability(draft: ChannelDraft, name: string, event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  if (value === 'text' || value === 'image' || value === 'video' || value === 'audio') {
+    setModelCapability(draft, name, value)
+  }
 }
 
 function modelsFromDraft(draft: ChannelDraft): ChannelModelEntry[] {
@@ -393,11 +464,12 @@ function goToModelsTab() {
 function onSelectableChange(
   key: (typeof MODEL_GROUPS)[number]['selectableKey'],
   defaultKey: (typeof MODEL_GROUPS)[number]['defaultKey'],
-  values: string[],
+  values: string[] | string | undefined,
 ) {
-  prefsDraft[key] = values
-  if (!values.includes(prefsDraft[defaultKey])) {
-    prefsDraft[defaultKey] = values[0] || ''
+  const next = Array.isArray(values) ? values.map(String) : values ? [String(values)] : []
+  prefsDraft[key] = next
+  if (!next.includes(prefsDraft[defaultKey])) {
+    prefsDraft[defaultKey] = next[0] || ''
   }
 }
 
@@ -537,7 +609,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
     <div v-loading="loading" class="provider-config-body">
       <el-tabs v-model="activeTab">
         <!-- 渠道 -->
-        <el-tab-pane label="渠道" name="channels">
+        <el-tab-pane label="渠道" name="channels" lazy>
           <div class="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5">
             <div class="min-w-0 text-xs leading-5 text-[var(--neo-text-secondary)]">
               <span class="font-medium text-[var(--neo-warm)]">重要提示：</span>
@@ -638,82 +710,108 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
                     清除已保存密钥
                   </button>
                 </label>
-                <label class="block md:col-span-2">
+                <div class="block md:col-span-2">
                   <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">模型列表</span>
-                  <el-select
-                    :model-value="draft.modelNames"
-                    class="w-full"
-                    multiple
-                    filterable
-                    allow-create
-                    default-first-option
+                  <el-input
+                    :model-value="addModelDraft[draft.id] ?? ''"
                     :disabled="draft.readOnly"
-                    placeholder="输入模型名后按 Enter 确认，或点击「保存」"
-                    @update:model-value="onModelNamesChange(draft, $event)"
+                    placeholder="输入模型名后按 Enter 添加"
+                    @update:model-value="addModelDraft[draft.id] = $event"
+                    @keyup.enter="addChannelModel(draft)"
+                  />
+                  <el-input
+                    v-if="draft.modelNames.length"
+                    :model-value="channelModelQuery[draft.id] ?? ''"
+                    class="mt-2"
+                    size="small"
+                    clearable
+                    placeholder="筛选已保存模型"
+                    @update:model-value="onChannelModelQuery(draft.id, $event)"
                   />
                   <div
-                    v-if="draft.modelNames.length && !draft.readOnly"
-                    class="mt-2 flex flex-wrap gap-2"
+                    v-if="(channelModelWindows[draft.id]?.total ?? 0) > 0"
+                    :key="`${draft.id}:${channelModelQuery[draft.id] ?? ''}`"
+                    class="channel-model-scroller mt-2"
+                    :style="{ height: `${Math.min(CHANNEL_MODEL_VIEW_H, (channelModelWindows[draft.id]?.total ?? 0) * CHANNEL_MODEL_ROW_H)}px` }"
+                    @scroll="onChannelModelScroll(draft.id, $event)"
                   >
                     <div
-                      v-for="name in draft.modelNames"
-                      :key="name"
-                      class="flex items-center gap-1.5 rounded-md border border-[var(--neo-border)] bg-[var(--neo-hover-bg)] px-2 py-1"
+                      class="relative w-full"
+                      :style="{ height: `${(channelModelWindows[draft.id]?.total ?? 0) * CHANNEL_MODEL_ROW_H}px` }"
                     >
-                      <span class="max-w-[140px] truncate text-[11px] text-[var(--neo-text-secondary)]">{{ name }}</span>
-                      <el-select
-                        :model-value="draft.modelMeta[name] ?? 'text'"
-                        size="small"
-                        class="!w-[88px]"
-                        @update:model-value="setModelCapability(draft, name, $event)"
+                      <div
+                        v-for="(name, i) in channelModelWindows[draft.id]?.names ?? []"
+                        :key="name"
+                        class="channel-model-row"
+                        :style="{ top: `${((channelModelWindows[draft.id]?.start ?? 0) + i) * CHANNEL_MODEL_ROW_H}px` }"
                       >
-                        <el-option label="文本" value="text" />
-                        <el-option label="图像" value="image" />
-                        <el-option label="视频" value="video" />
-                        <el-option label="音频" value="audio" />
-                      </el-select>
+                        <span class="min-w-0 flex-1 truncate text-[11px] text-[var(--neo-text-secondary)]">{{ name }}</span>
+                        <select
+                          class="channel-model-cap"
+                          :disabled="draft.readOnly"
+                          :value="draft.modelMeta[name] ?? 'text'"
+                          @change="onChannelModelCapability(draft, name, $event)"
+                        >
+                          <option value="text">文本</option>
+                          <option value="image">图像</option>
+                          <option value="video">视频</option>
+                          <option value="audio">音频</option>
+                        </select>
+                        <button
+                          v-if="!draft.readOnly"
+                          type="button"
+                          class="text-[10px] text-[var(--neo-text-muted)] hover:text-[var(--neo-text-secondary)]"
+                          @click="removeChannelModel(draft, name)"
+                        >
+                          移除
+                        </button>
+                      </div>
                     </div>
                   </div>
-                  <p class="mt-1.5 text-[10px] leading-4 text-[var(--neo-text-muted)]">
-                    能力标签决定模型优先出现在哪一类可选项；自定义渠道模型也可在任意类型中勾选。填写后请点击「保存」或底部「完成」，再到「模型」Tab 勾选可选项。
+                  <p
+                    v-else-if="draft.modelNames.length"
+                    class="mt-2 text-[10px] text-[var(--neo-text-muted)]"
+                  >
+                    无匹配模型
                   </p>
-                </label>
+                  <p class="mt-1.5 text-[10px] leading-4 text-[var(--neo-text-muted)]">
+                    已保存 {{ draft.modelNames.length }} 个。能力标签决定模型优先出现在哪一类可选项；自定义渠道模型也可在「模型」Tab 勾选「显示其他渠道模型」后跨类型使用。填写后请点击「保存」或底部「完成」。
+                  </p>
+                </div>
               </div>
             </section>
           </div>
         </el-tab-pane>
 
         <!-- 模型 -->
-        <el-tab-pane label="模型" name="models">
+        <el-tab-pane label="模型" name="models" lazy>
           <div class="mb-4 rounded-lg border border-[var(--neo-border)] p-3">
             <div class="text-sm font-semibold text-[var(--neo-text-primary)]">默认模型和可选项</div>
             <div class="mt-1 text-xs leading-5 text-[var(--neo-text-muted)]">
-              可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。
-              自定义渠道模型会出现在全部类型的候选列表中，便于勾选到图像/视频/音频。
+              可选项默认只列出对应能力的模型，并决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。
+              若拉取后类型不准，可勾选「显示其他渠道模型」再搜索勾选。
             </div>
           </div>
 
           <div class="grid gap-4 md:grid-cols-2">
-            <label v-for="group in MODEL_GROUPS" :key="group.selectableKey" class="block">
+            <div v-for="group in MODEL_GROUPS" :key="group.selectableKey" class="block">
               <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">{{ group.optionsLabel }}</span>
-              <el-select
+              <el-select-v2
                 :model-value="prefsDraft[group.selectableKey]"
                 class="w-full"
                 multiple
                 filterable
+                clearable
                 collapse-tags
                 collapse-tags-tooltip
+                :options="selectableOptionsByCapability[group.capability]"
                 :placeholder="modelOptionPool.length ? `请选择${group.optionsLabel}` : '先到渠道里填写或拉取模型'"
                 @update:model-value="onSelectableChange(group.selectableKey, group.defaultKey, $event)"
-              >
-                <el-option
-                  v-for="opt in optionsForCapability(group.capability)"
-                  :key="opt.value"
-                  :label="opt.label"
-                  :value="opt.value"
-                />
-              </el-select>
-            </label>
+              />
+              <el-checkbox v-model="includeOtherByok[group.capability]" class="mt-1.5">
+                <span class="text-[11px] text-[var(--neo-text-muted)]">显示其他渠道模型</span>
+              </el-checkbox>
+            </div>
           </div>
 
           <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -732,7 +830,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
         </el-tab-pane>
 
         <!-- 生成偏好 -->
-        <el-tab-pane label="生成偏好" name="preferences">
+        <el-tab-pane label="生成偏好" name="preferences" lazy>
           <div class="grid gap-4 md:grid-cols-4">
             <label class="block opacity-80">
               <span class="mb-1 block text-[11px] text-[var(--neo-text-muted)]">画布默认生图张数</span>
@@ -861,7 +959,7 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
         </el-tab-pane>
 
         <!-- WebDAV -->
-        <el-tab-pane label="WebDAV" name="webdav">
+        <el-tab-pane label="WebDAV" name="webdav" lazy>
           <section class="rounded-lg border border-[var(--neo-border)] p-3">
             <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -973,5 +1071,34 @@ function apiKeyPlaceholder(draft: ChannelDraft) {
 }
 .provider-config-body {
   min-height: 240px;
+}
+.provider-config-dialog .el-select-v2 {
+  width: 100%;
+}
+.channel-model-scroller {
+  overflow: auto;
+  border: 1px solid var(--neo-border);
+  border-radius: 8px;
+}
+.channel-model-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--neo-border);
+}
+.channel-model-cap {
+  height: 24px;
+  width: 72px;
+  flex-shrink: 0;
+  border: 1px solid var(--neo-border);
+  border-radius: 6px;
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
+  font-size: 11px;
 }
 </style>
