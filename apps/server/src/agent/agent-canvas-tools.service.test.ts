@@ -2048,6 +2048,30 @@ describe('AgentCanvasToolsService', () => {
         }),
       ).rejects.toBeInstanceOf(BadRequestException)
     })
+
+    it('rejects illegal recipe with 400 and does not call importWorkflow', async () => {
+      const importSpy = vi.spyOn(svc, 'importWorkflow')
+      const illegal = {
+        id: 'bad-edges',
+        version: '1.0.0',
+        title: '边',
+        graftedRecipeIds: [],
+        invariants: { seedChains: [] },
+        nodes: [
+          { key: 'copy', title: '文案', type: 'text', dependsOn: [], autoGenerate: false },
+          { key: 'hero', title: '主图', type: 'image', dependsOn: ['copy'], autoGenerate: false },
+        ],
+      }
+      await expect(
+        svc.instantiateRecipe({
+          sessionId: 's1',
+          userId: 'u1',
+          recipe: illegal,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(importSpy).not.toHaveBeenCalled()
+      importSpy.mockRestore()
+    })
   })
 
   describe('Phase 2b upsertMediaNode + proposeGeneration', () => {

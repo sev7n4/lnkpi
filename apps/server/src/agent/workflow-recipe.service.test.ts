@@ -291,6 +291,151 @@ describe('WorkflowRecipeService', () => {
         true,
       )
       expect(loaded?.nodes).toHaveLength(2)
+      const hero = loaded?.nodes.find((node) => node.key === 'hero_frame')
+      expect(hero?.dependsOn ?? []).not.toContain('scene_prompt')
+    })
+
+    it('rejects new_template when lint fails and does not persist', async () => {
+      const illegalWorkflow = {
+        format: 'lnkpi.workflow',
+        version: '1.0.0',
+        exportedAt: '2026-09-12T01:00:00.000Z',
+        mode: 'full',
+        exportMode: 'lightweight',
+        graph: {
+          nodes: [
+            {
+              id: 'text-copy-1',
+              type: 'text',
+              position: { x: 80, y: 120 },
+              data: { title: 'Slogan copy', prompt: 'Buy now' },
+              mediaRole: 'none',
+            },
+            {
+              id: 'video-hero-1',
+              type: 'video',
+              position: { x: 400, y: 120 },
+              data: { title: 'Hero clip' },
+              mediaRole: 'none',
+            },
+            {
+              id: 'image-hero-1',
+              type: 'image',
+              position: { x: 720, y: 120 },
+              data: { title: 'Hero still' },
+              mediaRole: 'none',
+            },
+          ],
+          edges: [
+            { id: 'e-text-image', source: 'text-copy-1', target: 'image-hero-1' },
+            { id: 'e-video-image', source: 'video-hero-1', target: 'image-hero-1' },
+          ],
+        },
+        mediaIndex: [],
+      }
+      const before = rows.length
+      try {
+        await svc.promoteRecipe({
+          sessionId: 's1',
+          userId: 'u-lint',
+          workflow: illegalWorkflow,
+          mode: 'new_template',
+          confirmedSeedKeys: ['hero_still'],
+          title: '非法连线',
+        })
+        throw new Error('expected reject')
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException)
+        const body = (err as BadRequestException).getResponse() as {
+          userMessage?: string
+          message?: string
+        }
+        const shown = body.userMessage ?? body.message ?? ''
+        expect(shown.length).toBeGreaterThan(0)
+        expect(JSON.stringify(body)).not.toMatch(FORBIDDEN)
+      }
+      expect(rows).toHaveLength(before)
+    })
+
+    it('rejects new_template when node keys collide with platform ecommerce', async () => {
+      const parent = getPlatformRecipe('ecommerce-product-visual', '1.0.0')
+      expect(parent).toBeTruthy()
+      const workflow = compileRecipeToWorkflow(parent!)
+      const before = rows.length
+      try {
+        await svc.promoteRecipe({
+          sessionId: 's1',
+          userId: 'u-collide',
+          workflow,
+          mode: 'new_template',
+          confirmedSeedKeys: ['white_bg', 'product_turnaround'],
+          title: '撞名套图',
+        })
+        throw new Error('expected reject')
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException)
+        const body = (err as BadRequestException).getResponse() as {
+          userMessage?: string
+          message?: string
+        }
+        const shown = `${body.userMessage ?? ''} ${body.message ?? ''}`
+        expect(shown).toMatch(/改/)
+        expect(JSON.stringify(body)).not.toMatch(FORBIDDEN)
+      }
+      expect(rows).toHaveLength(before)
+    })
+  })
+
+  describe('previewRecipeDelta user graft', () => {
+    it('grafts a stored user recipe onto ecommerce', async () => {
+      const userSource = {
+        id: 'draft',
+        version: '1.0.0',
+        title: '我的定妆',
+        graftedRecipeIds: [],
+        invariants: { seedChains: [{ id: 'user_look', keys: ['look_seed', 'look_turn'] }] },
+        nodes: [
+          {
+            key: 'look_seed',
+            title: '我的定妆',
+            type: 'image' as const,
+            chain: 'user_look',
+            role: 'seed' as const,
+            dependsOn: [],
+            genMode: 't2i' as const,
+            autoGenerate: true,
+          },
+          {
+            key: 'look_turn',
+            title: '我的四视',
+            type: 'image' as const,
+            chain: 'user_look',
+            role: 'turnaround' as const,
+            dependsOn: ['look_seed'],
+            genMode: 'i2i' as const,
+            autoGenerate: true,
+          },
+        ],
+      }
+      const workflow = compileRecipeToWorkflow(userSource)
+      const saved = await svc.promoteRecipe({
+        sessionId: 's1',
+        userId: 'u-graft',
+        workflow,
+        mode: 'new_template',
+        confirmedSeedKeys: ['look_seed', 'look_turn'],
+        title: '我的定妆',
+      })
+      const result = await svc.previewRecipeDelta({
+        userId: 'u-graft',
+        parentId: 'ecommerce-product-visual',
+        parentVersion: '1.0.0',
+        delta: { graft: { recipeId: saved.recipeId, version: saved.version } },
+      })
+      expect(result.stripped.some((item) => item.code === 'graft_conflict')).toBe(false)
+      expect(result.recipe.nodes.some((node) => node.key === 'look_seed')).toBe(true)
+      expect(result.recipe.nodes.some((node) => node.key === 'look_turn')).toBe(true)
+      expect(result.recipe.graftedRecipeIds).toContain(saved.recipeId)
     })
   })
 })

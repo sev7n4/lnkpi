@@ -11,6 +11,7 @@ import {
   RecipeInferError,
   slugRecipeKey,
   validateRecipe,
+  PLATFORM_RECIPES,
   type CanvasData,
   type LintIssue,
   type RecipeDelta,
@@ -25,10 +26,16 @@ const FORBIDDEN_USER_TEXT = /parentId|delta|种子链|嫁接|\blint\b/i
 const UNCONFIRMED_SEED = '还没确认核心步骤，没法存成一套新模板。'
 const UNRECOGNIZED_WORKFLOW = '这份工作流文件无法识别。'
 const TOO_MANY_NODES = '节点太多，没法存成模板。'
+const RECIPE_NOT_READY = '这份工作流还不能存成模板，请先调整步骤和连线。'
+const KEY_CHAIN_CONFLICT = '步骤名称和已有模板重复，请改个名字再保存。'
 
 const USER_MESSAGE_BY_CODE: Record<string, string> = {
   seed_frozen: '主图仍需跟着四视图，那一步没改。',
   graft_conflict: '没法把「角色三视图」整段接上来，和当前模板的步骤冲突。',
+  text_in_visual: '文案不能作为图片或视频的上游。',
+  invalid_edge: '图片只能接在图片后面。',
+  dag_cycle: '步骤连线成环了，请先改连线。',
+  seed_order: '核心步骤的顺序对不上，请先调整。',
 }
 
 export type MatchRecipeItem = {
@@ -125,18 +132,14 @@ export class WorkflowRecipeService {
     }
     validateRecipe(parent)
     const delta = this.parseDelta(input.delta)
-    const graftSource = this.loadGraftSource(delta)
+    const graftSource = await this.loadGraftSource(input.userId, delta)
     const { recipe, stripped } = applyDelta(parent, delta, {
       graftSource,
       alreadyGrafted: parent.graftedRecipeIds.length,
     })
-    const extra = lintRecipe(recipe).filter(
-      (issue) => !stripped.some((item) => item.code === issue.code && item.key === issue.key),
-    )
-    const allStripped = [...stripped, ...extra]
     const diffLines = diffRecipeLines(parent, recipe).filter((line) => !FORBIDDEN_USER_TEXT.test(line))
-    const userMessages = this.userMessagesFor(allStripped)
-    return { recipe, stripped: allStripped, diffLines, userMessages }
+    const userMessages = this.userMessagesFor(stripped)
+    return { recipe, stripped, diffLines, userMessages }
   }
 
   async getUserRecipe(
@@ -303,7 +306,7 @@ export class WorkflowRecipeService {
       throw new BadRequestException('找不到这套模板')
     }
     const delta = this.deltaFromDraft(parent, draft)
-    const graftSource = this.loadGraftSource(delta)
+    const graftSource = await this.loadGraftSource(input.userId, delta)
     const { recipe } = applyDelta(parent, delta, {
       graftSource,
       alreadyGrafted: parent.graftedRecipeIds.length,
@@ -337,6 +340,12 @@ export class WorkflowRecipeService {
     sourceSessionId: string
     sourceHash: string
   }): Promise<PromoteRecipeResult> {
+    const issues = lintRecipe(input.recipe)
+    if (issues.length > 0) {
+      const userMessage = this.userMessagesFor(issues)[0] ?? RECIPE_NOT_READY
+      throw new BadRequestException({ message: userMessage, userMessage })
+    }
+    await this.assertNoCatalogCollision(input.userId, input.recipe, input.parentId)
     const body = JSON.stringify(input.recipe)
     await this.prisma.userWorkflowRecipe.create({
       data: {
@@ -443,9 +452,62 @@ export class WorkflowRecipeService {
     return input as RecipeDelta
   }
 
-  private loadGraftSource(delta: RecipeDelta): RecipeDocument | undefined {
+  private catalogIdentity(recipe: RecipeDocument): { keys: Set<string>; chains: Set<string> } {
+    return {
+      keys: new Set(recipe.nodes.map((node) => node.key)),
+      chains: new Set([
+        ...recipe.invariants.seedChains.map((chain) => chain.id),
+        ...recipe.nodes.map((node) => node.chain).filter((chain): chain is string => Boolean(chain)),
+      ]),
+    }
+  }
+
+  private overlapsCatalog(left: RecipeDocument, right: RecipeDocument): boolean {
+    const a = this.catalogIdentity(left)
+    const b = this.catalogIdentity(right)
+    for (const key of a.keys) {
+      if (b.keys.has(key)) return true
+    }
+    for (const chain of a.chains) {
+      if (b.chains.has(chain)) return true
+    }
+    return false
+  }
+
+  private async assertNoCatalogCollision(
+    userId: string,
+    recipe: RecipeDocument,
+    parentId: string | null,
+  ): Promise<void> {
+    const skipIds = new Set<string>(recipe.graftedRecipeIds)
+    if (parentId) skipIds.add(parentId)
+    const userRows = await this.prisma.userWorkflowRecipe.findMany({ where: { userId } })
+    const others: RecipeDocument[] = [...PLATFORM_RECIPES]
+    for (const row of userRows) {
+      try {
+        others.push(validateRecipe(JSON.parse(row.body)))
+      } catch {
+        continue
+      }
+    }
+    const conflict = others.some((item) => !skipIds.has(item.id) && this.overlapsCatalog(recipe, item))
+    if (conflict) {
+      throw new BadRequestException({
+        message: KEY_CHAIN_CONFLICT,
+        userMessage: KEY_CHAIN_CONFLICT,
+      })
+    }
+  }
+
+  private async loadGraftSource(
+    userId: string,
+    delta: RecipeDelta,
+  ): Promise<RecipeDocument | undefined> {
     if (!delta.graft) return undefined
-    return getPlatformRecipe(delta.graft.recipeId, delta.graft.version)
+    return (
+      getPlatformRecipe(delta.graft.recipeId, delta.graft.version) ??
+      (await this.getUserRecipe(userId, delta.graft.recipeId, delta.graft.version))
+    )
   }
 
   private userMessagesFor(stripped: LintIssue[]): string[] {

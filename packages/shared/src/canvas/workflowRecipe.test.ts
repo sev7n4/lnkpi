@@ -62,6 +62,51 @@ describe('workflowRecipe', () => {
     expect(recipe.nodes.find((n) => n.key === 'banner')?.dependsOn).toContain('product_turnaround')
   })
 
+  it('strips cyclic rewire even when turnaround hooks remain', () => {
+    const parent = validateRecipe({
+      ...productParent,
+      nodes: [
+        ...productParent.nodes,
+        {
+          key: 'pack',
+          title: '包装',
+          type: 'image',
+          chain: 'product',
+          role: 'downstream',
+          dependsOn: ['product_turnaround'],
+          genMode: 'i2i',
+          autoGenerate: false,
+        },
+      ],
+    })
+    const { recipe, stripped } = applyDelta(parent, {
+      rewire: [
+        { key: 'banner', dependsOn: ['product_turnaround', 'pack'] },
+        { key: 'pack', dependsOn: ['product_turnaround', 'banner'] },
+      ],
+    })
+    expect(stripped.some((s) => s.code === 'dag_cycle')).toBe(true)
+    expect(recipe.nodes.find((n) => n.key === 'banner')?.dependsOn).toEqual(['product_turnaround'])
+    expect(recipe.nodes.find((n) => n.key === 'pack')?.dependsOn).toEqual(['product_turnaround'])
+  })
+
+  it('strips rewire that puts text into visual dependsOn', () => {
+    const { recipe, stripped } = applyDelta(productParent, {
+      add: [{
+        key: 'copy',
+        title: '文案',
+        type: 'text',
+        role: 'downstream',
+        dependsOn: [],
+        autoGenerate: false,
+      }],
+      rewire: [{ key: 'banner', dependsOn: ['product_turnaround', 'copy'] }],
+    })
+    expect(stripped.some((s) => s.code === 'text_in_visual' && s.key === 'banner')).toBe(true)
+    expect(recipe.nodes.find((n) => n.key === 'banner')?.dependsOn).toEqual(['product_turnaround'])
+    expect(recipe.nodes.find((n) => n.key === 'copy')?.dependsOn).toEqual([])
+  })
+
   it('grafts only seed chain and merges invariants', () => {
     const { recipe, stripped } = applyDelta(productParent, {
       graft: { recipeId: 'model-turnaround', version: '1.0.0' },
@@ -521,9 +566,11 @@ describe('inferRecipeDraftFromWorkflow', () => {
     const image = draft.nodes.find((node) => node.key === 'hero_frame')
     expect(prompt?.type).toBe('prompt')
     expect(image?.type).toBe('image')
-    expect(image?.dependsOn).toEqual(['scene_prompt'])
+    expect(image?.dependsOn).not.toContain('scene_prompt')
+    expect(image?.dependsOn).toEqual([])
     expect(prompt?.dependsOn).toEqual([])
     expect(image?.promptHintTemplate).toContain('mountain lake')
+    expect(prompt?.promptHintTemplate).toContain('mountain lake')
     expect(JSON.stringify(draft)).not.toContain('cdn.example.com')
   })
 

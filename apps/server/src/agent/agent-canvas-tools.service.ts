@@ -6,6 +6,7 @@ import {
   duplicateResultToCanvasActions,
   duplicateSubgraph,
   isRootNode,
+  lintRecipe,
   remapWorkflowIds,
   resolveDuplicateSourceIds,
   resolveNodeRefs,
@@ -2253,6 +2254,10 @@ export class AgentCanvasToolsService {
       throw new BadRequestException(
         err instanceof Error ? err.message : '配方格式无效',
       )
+    }
+    const issues = lintRecipe(recipe)
+    if (issues.length > 0) {
+      throw new BadRequestException('这套模板有不合法的步骤或连线，没法放到画布上。')
     }
     const workflow = compileRecipeToWorkflow(recipe, input.slots)
     return this.importWorkflow({

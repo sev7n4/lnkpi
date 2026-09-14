@@ -192,10 +192,23 @@ export function inferRecipeDraftFromWorkflow(input: unknown): RecipeDocument {
     return written
   })
 
+  const typeByNodeId = new Map(doc.graph.nodes.map((node) => [node.id, node.type]))
+  const textualTypes = new Set(['prompt', 'text'])
+  const visualTypes = new Set(['image', 'video'])
   for (const edge of doc.graph.edges) {
     const targetKey = keyByNodeId.get(edge.target)
     const sourceKey = keyByNodeId.get(edge.source)
     if (!targetKey || !sourceKey) continue
+    const sourceType = typeByNodeId.get(edge.source)
+    const targetType = typeByNodeId.get(edge.target)
+    if (
+      sourceType &&
+      targetType &&
+      textualTypes.has(sourceType) &&
+      visualTypes.has(targetType)
+    ) {
+      continue
+    }
     const target = nodes.find((node) => node.key === targetKey)
     if (!target || target.dependsOn.includes(sourceKey)) continue
     target.dependsOn.push(sourceKey)
@@ -476,6 +489,7 @@ export function applyDelta(
     addedKeys.add(written.key)
   }
 
+  const appliedRewires: Array<{ key: string; previous: string[] }> = []
   for (const rw of delta.rewire ?? []) {
     const node = recipe.nodes.find((n) => n.key === rw.key)
     if (!node) {
@@ -496,6 +510,8 @@ export function applyDelta(
     ) {
       node.dependsOn = previous
       stripped.push({ code: 'downstream_unhooked', message: '下游必须挂回核心步骤', key: rw.key })
+    } else {
+      appliedRewires.push({ key: rw.key, previous })
     }
   }
 
@@ -510,6 +526,35 @@ export function applyDelta(
     const issue = finalIssues.find((item) => item.key === key)
     if (issue) stripped.push(issue)
     removeNode(recipe, key)
+  }
+
+  const revertRewire = (entry: { key: string; previous: string[] }, issue: LintIssue) => {
+    const node = recipe.nodes.find((n) => n.key === entry.key)
+    if (!node) return
+    node.dependsOn = entry.previous
+    stripped.push(issue)
+  }
+
+  const remainingRewires = [...appliedRewires]
+  const keyedIssues = lintRecipe(recipe).filter((issue) =>
+    remainingRewires.some((rw) => rw.key === issue.key),
+  )
+  const revertedKeys = new Set<string>()
+  for (const issue of keyedIssues) {
+    if (!issue.key || revertedKeys.has(issue.key)) continue
+    const entry = remainingRewires.find((rw) => rw.key === issue.key)
+    if (!entry) continue
+    revertRewire(entry, issue)
+    revertedKeys.add(issue.key)
+  }
+
+  if (lintRecipe(recipe).some((issue) => issue.code === 'dag_cycle')) {
+    for (const entry of remainingRewires) {
+      if (revertedKeys.has(entry.key)) continue
+      const node = recipe.nodes.find((n) => n.key === entry.key)
+      if (node) node.dependsOn = entry.previous
+    }
+    stripped.push({ code: 'dag_cycle', message: '依赖成环' })
   }
 
   return { recipe, stripped }
