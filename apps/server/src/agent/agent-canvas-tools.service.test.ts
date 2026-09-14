@@ -1997,4 +1997,137 @@ describe('AgentCanvasToolsService', () => {
       expect(result.addedNodeIds).toHaveLength(2)
     })
   })
+
+  describe('Phase 2b upsertMediaNode + proposeGeneration', () => {
+    it('upsertMediaNode creates image node and returns nodeId + add_node', async () => {
+      const result = await svc.upsertMediaNode({
+        sessionId: 's1',
+        userId: 'u1',
+        targetType: 'image',
+        prompt: '蓝色天空产品主图',
+        title: '产品主图',
+      })
+      expect(result.nodeId).toBeTruthy()
+      expect(result.actions.some((a) => a.type === 'add_node')).toBe(true)
+      expect(canvas.nodes).toHaveLength(1)
+      expect(canvas.nodes[0].type).toBe('image')
+      expect(canvas.nodes[0].id).toBe(result.nodeId)
+      expect(canvas.nodes[0].data.prompt).toBe('蓝色天空产品主图')
+      expect(canvas.nodes[0].data.title).toBe('产品主图')
+      expect(canvas.nodes[0].data.status).toBe('draft')
+    })
+
+    it('upsertMediaNode updates existing media node prompt', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '旧标题',
+              prompt: 'old prompt',
+              status: 'draft',
+              imageModel: 'platform::user-default-image',
+            },
+          },
+        ],
+        edges: [],
+      }
+      const result = await svc.upsertMediaNode({
+        sessionId: 's1',
+        userId: 'u1',
+        targetType: 'image',
+        nodeId: 'img-1',
+        prompt: 'new prompt',
+        title: '新标题',
+      })
+      expect(result.nodeId).toBe('img-1')
+      expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
+      expect(canvas.nodes).toHaveLength(1)
+      expect(canvas.nodes[0].data.prompt).toBe('new prompt')
+      expect(canvas.nodes[0].data.title).toBe('新标题')
+    })
+
+    it('proposeGeneration sets pending_confirm without calling generate*', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '产品主图',
+              prompt: '蓝色天空产品主图',
+              status: 'draft',
+              imageModel: 'platform::user-default-image',
+              imageAspect: '9:16',
+            },
+          },
+        ],
+        edges: [],
+      }
+      const orchStart = vi.spyOn(
+        (svc as unknown as { videoOrchestrator: { start: (...args: unknown[]) => unknown } }).videoOrchestrator,
+        'start',
+      )
+
+      const result = await svc.proposeGeneration({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+
+      expect(result.nodeId).toBe('img-1')
+      expect(result.status).toBe('pending_confirm')
+      expect(result.summary).toMatchObject({
+        type: 'image',
+        promptPreview: expect.stringContaining('蓝色天空'),
+        title: '产品主图',
+        imageModel: 'platform::user-default-image',
+      })
+      expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
+      expect(canvas.nodes[0].data.status).toBe('pending_confirm')
+      expect(generateImage).not.toHaveBeenCalled()
+      expect(generateVideo).not.toHaveBeenCalled()
+      expect(orchStart).not.toHaveBeenCalled()
+    })
+
+    it('proposeGeneration rejects empty prompt without pending or generate*', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '仅有标题',
+              prompt: '   ',
+              status: 'draft',
+              imageModel: 'platform::user-default-image',
+            },
+          },
+        ],
+        edges: [],
+      }
+      const orchStart = vi.spyOn(
+        (svc as unknown as { videoOrchestrator: { start: (...args: unknown[]) => unknown } }).videoOrchestrator,
+        'start',
+      )
+
+      await expect(
+        svc.proposeGeneration({
+          sessionId: 's1',
+          userId: 'u1',
+          nodeId: 'img-1',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+
+      expect(canvas.nodes[0].data.status).toBe('draft')
+      expect(sessionUpdate).not.toHaveBeenCalled()
+      expect(generateImage).not.toHaveBeenCalled()
+      expect(generateVideo).not.toHaveBeenCalled()
+      expect(orchStart).not.toHaveBeenCalled()
+    })
+  })
 })

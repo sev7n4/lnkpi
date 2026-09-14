@@ -29,6 +29,46 @@ class UpsertPromptNodeDto {
   stage?: boolean
 }
 
+class UpsertMediaNodeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsIn(['image', 'video', 'text', 'audio'])
+  targetType!: 'image' | 'video' | 'text' | 'audio'
+
+  @IsString()
+  prompt!: string
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  nodeId?: string
+
+  @IsOptional()
+  position?: { x: number; y: number }
+
+  @IsOptional()
+  @IsBoolean()
+  stage?: boolean
+}
+
+class ProposeGenerationDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+}
+
 class SessionNodeDto {
   @IsString()
   sessionId!: string
@@ -723,6 +763,18 @@ export class AgentCanvasToolsController {
   @Post('upsert-prompt-node')
   async upsertPromptNode(@Body() dto: UpsertPromptNodeDto) {
     const data = await this.tools.upsertPromptNode(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('upsert-media-node')
+  async upsertMediaNode(@Body() dto: UpsertMediaNodeDto) {
+    const data = await this.tools.upsertMediaNode(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('propose-generation')
+  async proposeGeneration(@Body() dto: ProposeGenerationDto) {
+    const data = await this.tools.proposeGeneration(dto)
     return { code: 0, message: 'ok', data }
   }
 
