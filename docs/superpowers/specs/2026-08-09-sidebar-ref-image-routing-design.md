@@ -1,5 +1,7 @@
 # Agent 侧栏引用生图路由与澄清续接 — 设计规格
 
+> **L0 修订（2026-09-14）：** 部分条款由 [2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md) 修订——L0 允许 `decide_lane` LLM；`explore`/`chat` 合并为 `canvas_agent` + ToolPlan。CS-4（禁止 explore bind gen/destructive）**仍然有效**。
+
 > 状态：**Implemented P0–P2**（2026-08-09）  
 > 范围：**Phase 0（P0 止血）** — 修复 `@T1 请按风格3出图` 类 utterance 的 L1 路由误判、route 澄清回复断裂、侧栏与 Dock 引用语义不对齐、执行过程 UX 误导  
 > **Phase 1（P1 架构收敛）** — 见本文 §9 [Route Unification ADR]；**禁止**在 P0 之后继续堆 hint 表，新 case 应推动 P1 落地  

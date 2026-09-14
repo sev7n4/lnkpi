@@ -1,5 +1,7 @@
 # Agent 画布控制面 — Hybrid 设计规格
 
+> **L0 修订（2026-09-14）：** 部分条款由 [2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md) 修订——L0 允许 `decide_lane` LLM；`explore`/`chat` 合并为 `canvas_agent` + ToolPlan。CS-4（禁止 explore bind gen/destructive）**仍然有效**。
+
 > 状态：**Accepted**（2026-08-08，v1.2 增补 LangGraph Command 边界）  
 > 方案：**A — Hybrid**（延续 ADR-003 / P5）  
 > 目标：Agent 可驱动画布 **Tool 级原语 + 原子能力 + 编排**，不将高成本生成 ReAct 化
