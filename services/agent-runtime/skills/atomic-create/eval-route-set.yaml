@@ -28,7 +28,8 @@ cases:
   - id: rt-preserve-01
     state:
       messages: [{ role: user, content: "保持主图风格、背景、构图不变，生成换装图" }]
-    gold: { flow_mode: atomic_create }
+    # Phase 2a: no atomic_generate; canvas_agent until propose (2b)
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-preserve-02
     state:
@@ -39,17 +40,17 @@ cases:
   - id: rt-atomic-01
     state:
       messages: [{ role: user, content: "帮我生成一张蓝牙耳机主图" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-atomic-02
     state:
       messages: [{ role: user, content: "帮我生成一个模特人物图" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-atomic-03
     state:
       messages: [{ role: user, content: "生成一张白底产品图" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-clarify-01
     state:
@@ -159,7 +160,7 @@ cases:
   - id: rt-video-plain-01
     state:
       messages: [{ role: user, content: "帮我做一个15秒产品展示视频" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-ref-i1-image
     state:
@@ -177,17 +178,18 @@ cases:
       messages: [{ role: user, content: "按刚才那个风格再生成一张" }]
       atomic_node_id: node-1
       atomic_spec: { target_type: image, prompt: x, title: x }
-    gold: { flow_mode: atomic_create }
+    # Phase 2a: variant-via-atomic_generate retired; canvas_agent until 2b/2d
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-01
     state:
       messages: [{ role: user, content: "请帮我生一个小女孩的图片" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-02
     state:
       messages: [{ role: user, content: "请帮我生成一张图" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-03
     state:
@@ -237,12 +239,12 @@ cases:
             role: user,
             content: "生成一只东北虎图片，卡通版，戴着红围巾、正在笑、或者背景是雪地",
           }
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-11
     state:
       messages: [{ role: user, content: "生成东北虎图片" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-sidebar-edit-01
     state:

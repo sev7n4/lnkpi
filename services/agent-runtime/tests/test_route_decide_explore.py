@@ -29,12 +29,13 @@ def test_canvas_query_routes_canvas_agent():
 
 
 def test_explore_not_when_atomic_create():
+    """Phase 2a: bare 生成一张… → canvas_agent (atomic_generate retired)."""
     ctx = assemble_route_context({
         "messages": [{"role": "user", "content": "帮我在画布上生成一张产品主图"}],
     })
     d = decide_route(ctx)
-    assert d["flow_mode"] == "atomic_create"
-    assert d["flow_mode"] != "canvas_agent"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 def test_lifecycle_diagnostic_canvas_agent():
@@ -72,14 +73,14 @@ def test_canvas_copy_node_query_not_atomic_via_wenan():
         assert d["precedence_rule_id"] == "default_chat", content
 
 
-def test_generate_wenan_still_atomic_or_clarify():
-    """Create-ish 文案 utterances stay atomic/clarify, not silent canvas_agent-only."""
+def test_generate_wenan_phase_2a_canvas_agent():
+    """Phase 2a: 生成文案 → canvas_agent until propose tools land in 2b."""
     ctx = assemble_route_context({
         "messages": [{"role": "user", "content": "帮我生成一段耳机卖点文案"}],
     })
     d = decide_route(ctx)
-    assert d["flow_mode"] in ("atomic_create", "clarify_route")
-    assert d["flow_mode"] != "canvas_agent"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 def test_list_user_assets_canvas_agent():

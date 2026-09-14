@@ -184,10 +184,11 @@ def test_precedence_explore_retired_to_canvas_agent():
     assert d["precedence_rule_id"] != "explore"
 
 
-def test_precedence_atomic_generate():
+def test_precedence_atomic_generate_retired_to_canvas_agent():
+    """Phase 2a: bare gen no longer wins via atomic_generate."""
     d = _decide({"messages": [{"role": "user", "content": "帮我生成一张蓝牙耳机主图"}]})
-    assert d["flow_mode"] == "atomic_create"
-    assert d["precedence_rule_id"] == "atomic_generate"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 def test_precedence_empty():
@@ -220,20 +221,22 @@ def test_precedence_clarify_resume():
 
 
 def test_sheng_xiao_girl_not_default_chat():
+    """Phase 2a: colloquial 生一个…图片 may soft-signal; routing is canvas_agent."""
     d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
-    assert d["flow_mode"] != "canvas_agent"
-    assert d["precedence_rule_id"] != "default_chat"
-    assert d["flow_mode"] in ("atomic_create", "clarify_route")
+    # Soft suspected_media_create may clarify; must not be atomic_generate.
+    assert d.get("precedence_rule_id") != "atomic_generate"
+    assert d["flow_mode"] in ("canvas_agent", "clarify_route")
 
 
 def test_sheng_xiao_girl_prefers_atomic_when_high():
     d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
-    assert d["flow_mode"] == "atomic_create"
-    assert d["precedence_rule_id"] in ("atomic_generate", "media_create_high")
+    # Phase 2a: media_create_high may still be soft-true; flow is not atomic_generate.
+    assert d.get("precedence_rule_id") != "atomic_generate"
+    assert d["flow_mode"] in ("canvas_agent", "clarify_route")
 
 
 def test_generate_zhi_dongbei_hu_atomic():
-    """Prod case: 生成一只…图片 must not fall to chat (classifier 只 ≠ 张/个)."""
+    """Phase 2a: 生成一只…图片 lands on canvas_agent (propose is 2b)."""
     d = _decide(
         {
             "messages": [
@@ -244,14 +247,14 @@ def test_generate_zhi_dongbei_hu_atomic():
             ]
         }
     )
-    assert d["flow_mode"] == "atomic_create"
-    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 def test_generate_dongbei_hu_without_classifier_atomic():
     d = _decide({"messages": [{"role": "user", "content": "生成东北虎图片"}]})
-    assert d["flow_mode"] == "atomic_create"
-    assert d["precedence_rule_id"] != "default_chat"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 @pytest.mark.parametrize(
@@ -285,10 +288,11 @@ def test_canvas_copy_node_query_not_atomic_via_wenan():
         assert d["precedence_rule_id"] == "default_chat", utterance
 
 
-def test_generate_wenan_still_atomic_or_clarify():
+def test_generate_wenan_phase_2a_canvas_agent():
+    """Phase 2a: bare 生成文案 no longer atomic_generate; agent path (propose in 2b)."""
     d = _decide({"messages": [{"role": "user", "content": "帮我生成一段耳机卖点文案"}]})
-    assert d["flow_mode"] in ("atomic_create", "clarify_route")
-    assert d["flow_mode"] != "canvas_agent"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
 
 
 def test_vision_qa_with_sidebar_not_chat():
