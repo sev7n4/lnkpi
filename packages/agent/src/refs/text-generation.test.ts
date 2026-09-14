@@ -13,10 +13,18 @@ describe('supportsVisionTextModel', () => {
     expect(supportsVisionTextModel('agnes-2.0-flash')).toBe(true)
   })
 
-  it('rejects deepseek and reasoning-only models', () => {
+  it('rejects non-flash deepseek and reasoning-only models', () => {
     expect(supportsVisionTextModel('deepseek-v4-pro')).toBe(false)
     expect(supportsVisionTextModel('ch_x::deepseek-v3.2')).toBe(false)
     expect(supportsVisionTextModel('o3-mini')).toBe(false)
+  })
+
+  it('allows DeepSeek V4.1 Flash multimodal ids', () => {
+    expect(supportsVisionTextModel('deepseek-flash')).toBe(true)
+    expect(supportsVisionTextModel('ch_x::deepseek-flash')).toBe(true)
+    expect(supportsVisionTextModel('deepseek-v4-flash')).toBe(true)
+    expect(supportsVisionTextModel('deepseek-v4.1-flash')).toBe(true)
+    expect(supportsVisionTextModel('deepseek-v4-flash-vision-exp')).toBe(true)
   })
 })
 
@@ -50,6 +58,27 @@ describe('generateTextForRefs', () => {
     expect(result).toEqual({ text: 'vision ok', visionUsed: true })
     const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
     expect(body.stream).toBe(false)
+    expect(body.messages[1].content[1]).toEqual({
+      type: 'image_url',
+      image_url: { url: 'https://cdn.example/a.png' },
+    })
+  })
+
+  it('uses vision chat for deepseek-flash when refs present', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'flash vision' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await generateTextForRefs('describe', ['https://cdn.example/a.png'], {
+      apiKey: 'k',
+      model: 'ch_x::deepseek-flash',
+    })
+
+    expect(result).toEqual({ text: 'flash vision', visionUsed: true })
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.model).toBe('deepseek-flash')
     expect(body.messages[1].content[1]).toEqual({
       type: 'image_url',
       image_url: { url: 'https://cdn.example/a.png' },

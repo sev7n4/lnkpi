@@ -12,6 +12,8 @@ describe('isDeepSeekV4Model', () => {
     expect(isDeepSeekV4Model('deepseek-v4-pro')).toBe(true)
     expect(isDeepSeekV4Model('ch_x::deepseek-v4-flash')).toBe(true)
     expect(isDeepSeekV4Model('deepseek/deepseek-v4-pro')).toBe(true)
+    expect(isDeepSeekV4Model('deepseek-flash')).toBe(true)
+    expect(isDeepSeekV4Model('ch_x::deepseek-flash')).toBe(true)
     expect(isDeepSeekV4Model('gpt-4o')).toBe(false)
   })
 })

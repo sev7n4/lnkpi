@@ -67,6 +67,7 @@ export {
   appendImageRefsForTextOnlyPrompt,
   generateTextForRefs,
   supportsVisionTextModel,
+  isDeepSeekFlashVisionModel,
 } from './refs/text-generation'
 export type { TextGenerationWithRefsOptions } from './refs/text-generation'
 export {
