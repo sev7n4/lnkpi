@@ -40,6 +40,11 @@ describe('normalizeMiniMaxBaseUrl', () => {
     expect(normalizeMiniMaxBaseUrl('https://api.minimax.io/v2')).toBe('https://api.minimax.io/v2')
     expect(normalizeMiniMaxBaseUrl('https://api.minimax.io/v2/')).toBe('https://api.minimax.io/v2')
   })
+
+  it('strips official OpenAI-compat /v1 so video origin is not /v1/v2', () => {
+    expect(normalizeMiniMaxBaseUrl('https://api.minimax.io/v1')).toBe('https://api.minimax.io')
+    expect(normalizeMiniMaxBaseUrl('https://api.minimax.io/v1/')).toBe('https://api.minimax.io')
+  })
 })
 
 describe('MiniMaxH3VideoProvider', () => {
@@ -103,6 +108,17 @@ describe('MiniMaxH3VideoProvider', () => {
     expect(fetchMock.mock.calls[1][0]).toBe('https://api.minimax.io/v2/query/video_generation/t1')
     expect(String(fetchMock.mock.calls[0][0])).not.toContain('/v2/v2/')
     expect(String(fetchMock.mock.calls[1][0])).not.toContain('/v2/v2/')
+  })
+
+  it('maps official OpenAI /v1 BYOK base to /v2 video endpoints', async () => {
+    mockCreateAndSucceed()
+    const p = new MiniMaxH3VideoProvider('mm-key', 'https://api.minimax.io/v1', 'minimax-h3')
+    await p.generate('a cat walks', { duration: 5, pollIntervalMs: 0 })
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.minimax.io/v2/video_generation')
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.minimax.io/v2/query/video_generation/t1')
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('/v1/v2/')
+    expect(String(fetchMock.mock.calls[1][0])).not.toContain('/v1/v2/')
   })
 
   it('I2V sends first_frame and omits ratio', async () => {

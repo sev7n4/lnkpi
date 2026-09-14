@@ -30,7 +30,7 @@ export function modelOptionName(value: string): string {
 const IMAGE_MODEL_RE =
   /(dall-?e|flux|seedream|imagen|midjourney|stable-?diffusion|sdxl|gpt-image|ideogram|recraft|banana)/i
 const VIDEO_MODEL_RE =
-  /(kling|seedance|sora|runway|luma|pika|hailuo|vidu|veo|wan2|cogvideo|happyhose)/i
+  /(kling|seedance|sora|runway|luma|pika|hailuo|vidu|veo|wan2|cogvideo|happyhose|minimax-h3)/i
 const AUDIO_MODEL_RE = /(whisper|tts|audio|suno|fish-speech|cosyvoice|speech|voice)/i
 
 /** Best-effort modality guess from OpenAI-compatible model ids (no modality in /models). */

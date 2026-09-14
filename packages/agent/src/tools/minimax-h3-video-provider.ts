@@ -32,8 +32,9 @@ export function isMiniMaxBaseUrl(baseUrl?: string): boolean {
 }
 
 export function normalizeMiniMaxBaseUrl(baseUrl?: string): string {
-  const raw = baseUrl?.trim() || DEFAULT_BASE_URL
-  return raw.replace(/\/+$/, '')
+  const raw = (baseUrl?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, '')
+  // Official OpenAI-compat origin is /v1; video create/query live under /v2.
+  return raw.replace(/\/v1$/i, '')
 }
 
 function joinV2Path(normalized: string, pathAfterV2: string): string {

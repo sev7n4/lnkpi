@@ -379,6 +379,56 @@ describe('ProviderService', () => {
     expect(byName['kling-v2']).toBe('video')
   })
 
+  it('pullModels from MiniMax /v1 keeps official models URL and injects minimax-h3 video', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'minimax-byok',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.minimax.io/v1',
+      apiKey: 'sk-mm',
+      models: [{ name: 'minimax-h3', capability: 'video' }],
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        data: [{ id: 'minimax-M3' }],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const updated = await svc.pullModels('u1', ch.id)
+    const calledUrl = String(fetchMock.mock.calls[0][0])
+    expect(calledUrl).toBe('https://api.minimax.io/v1/models')
+    const byName = Object.fromEntries(updated.models.map((m) => [m.name, m.capability]))
+    expect(byName['minimax-M3']).toBe('text')
+    expect(byName['minimax-h3']).toBe('video')
+  })
+
+  it('pullModels from MiniMax /v1 injects minimax-h3 when the catalog was empty', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'minimax-fresh',
+      apiFormat: 'openai',
+      baseUrl: 'https://api.minimax.io/v1',
+      apiKey: 'sk-mm',
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: 200,
+        ok: true,
+        json: async () => ({ data: [{ id: 'minimax-M3' }] }),
+      }),
+    )
+    const updated = await svc.pullModels('u1', ch.id)
+    expect(updated.models).toEqual(
+      expect.arrayContaining([
+        { name: 'minimax-M3', capability: 'text' },
+        { name: 'minimax-h3', capability: 'video' },
+      ]),
+    )
+  })
+
   it('pullModels maps fetch failures to BadRequestException with host hint', async () => {
     const ch = await svc.createChannel('u1', {
       name: 'pull-timeout',
