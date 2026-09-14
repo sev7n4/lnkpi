@@ -1,7 +1,7 @@
 # Agent 原子创作工具化（Canvas Operator + Propose/Confirm）
 
 > 日期：2026-09-14  
-> 状态：**已批准**（2026-09-14；终局 B；执行令开至 **Phase 2c.1**；2c.2/2c.3/2d/3 另开 plan 门禁）  
+> 状态：**已批准**（2026-09-14；终局 B；执行令开至 **Phase 2c.2**；2c.3/2d/3 另开 plan 门禁）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 上级：Hybrid A / CS（[2026-08-08-agent-canvas-control-surface-design.md](./2026-08-08-agent-canvas-control-surface-design.md)）  
 > 相关：[2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md)、[2026-08-09-sidebar-ref-image-routing-design.md](./2026-08-09-sidebar-ref-image-routing-design.md)  
@@ -21,7 +21,7 @@
 | **D6** | Phase 3（规格原则）：`campaign` / `product_visual` 等大编排逐步工具化 / skill 多步任务；本文件 **不** 钉死 Phase 3 工具 API |
 | **D7** | 不回到 A 终局（永久保留 atomic 子图与 agent 双宇宙）；A 仅可作为 2a 过渡形态 |
 | **D8** | 相对 harness：**修订 CS-4 表述**——禁止的是 **计费执行工具**（`run_*` / destructive），允许 **propose / 画布突变** 工具进 visible |
-| **D9** | **执行令：** Phase 2a/2b **已完成**；**Phase 2c.1 已授权**（[2c 规格](./2026-09-14-agent-atomic-phase-2c-design.md) + [2c.1 plan](../plans/2026-09-14-agent-atomic-phase-2c1.md)）。2c.2/2c.3/2d/3 另开 plan |
+| **D9** | **执行令：** Phase 2a/2b/2c.1 **已完成**；**Phase 2c.2 已授权**（[2c 规格](./2026-09-14-agent-atomic-phase-2c-design.md) §2 + [2c.2 plan](../plans/2026-09-14-agent-atomic-phase-2c2.md)）。2c.3/2d/3 另开 plan |
 
 ### 0.1 与 2026-09-14 Tool Plan Harness 的关系
 
@@ -199,6 +199,7 @@ RouteDecide（收紧后）
 | **2a** | 见下方 **§6.0.1 硬表**（无 `or`、无「迹象」） |
 | **2b+** | 见 **§6.0.2**（本阶段合入门禁）；完整 V1–V4 在 2b+2c 后宣称 |
 | **2c.1** | 见 [2c 规格 §6.0.3](./2026-09-14-agent-atomic-phase-2c-design.md)（pending SSOT 恢复 / Nest 取消） |
+| **2c.2** | 见 [2c 规格 §6.0.4](./2026-09-14-agent-atomic-phase-2c-design.md)（generation_propose presentation；积分可选） |
 | **2d** | V6 双路径关门 |
 
 #### 6.0.2 Phase 2b 验收硬表（合入门禁）
