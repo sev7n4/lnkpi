@@ -1,5 +1,10 @@
 import type { VideoRefWire } from '@lnkpi/shared'
 import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
+import {
+  MiniMaxH3VideoProvider,
+  isMiniMaxBaseUrl,
+  isMiniMaxH3Model,
+} from './minimax-h3-video-provider'
 
 export interface VideoGenerateOptions {
   model?: string
@@ -333,6 +338,12 @@ export function createVideoProvider(opts?: ProviderCredentialOpts): VideoProvide
       throw new Error('视频加速通道未配置')
     }
     return new FalH3MaxVideoProvider(opts.apiKey, opts.baseUrl, opts.model)
+  }
+  if (isMiniMaxH3Model(opts?.model) || isMiniMaxBaseUrl(opts?.baseUrl)) {
+    if (!opts?.apiKey) {
+      throw new Error('未配置 MiniMax API Key')
+    }
+    return new MiniMaxH3VideoProvider(opts.apiKey, opts.baseUrl, opts.model)
   }
   if (opts?.apiKey) {
     if (isAgnesBaseUrl(opts.baseUrl)) {
