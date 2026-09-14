@@ -68,8 +68,11 @@ type UserRecipeRow = {
   sourceHash: string | null
 }
 
+type SessionRow = { id: string; userId: string; canvasData: string }
+
 function createPrisma() {
   const rows: UserRecipeRow[] = []
+  const sessions = new Map<string, SessionRow>()
   const prisma = {
     userWorkflowRecipe: {
       findMany: async ({ where }: { where: { userId: string } }) =>
@@ -100,12 +103,19 @@ function createPrisma() {
         return data
       },
     },
+    session: {
+      findUnique: async ({ where }: { where: { id: string } }) => sessions.get(where.id) ?? null,
+    },
   }
-  return { rows, prisma: prisma as unknown as PrismaService }
+  return {
+    rows,
+    sessions,
+    prisma: prisma as unknown as PrismaService,
+  }
 }
 
 describe('WorkflowRecipeService', () => {
-  const { rows, prisma } = createPrisma()
+  const { rows, sessions, prisma } = createPrisma()
   const svc = new WorkflowRecipeService(prisma)
 
   describe('matchRecipes', () => {
@@ -237,6 +247,51 @@ describe('WorkflowRecipeService', () => {
       expect(saved.parentId).toBe('ecommerce-product-visual')
       expect(saved.parentVersion).toBe('1.0.0')
     })
+
+    it('promotes from session canvas when workflow is omitted', async () => {
+      sessions.set('s-canvas', {
+        id: 's-canvas',
+        userId: 'u3',
+        canvasData: JSON.stringify({
+          nodes: [
+            {
+              id: 'prompt-session-1',
+              type: 'prompt',
+              position: { x: 80, y: 120 },
+              data: {
+                title: 'Scene prompt',
+                prompt: 'A serene mountain lake at dawn, cinematic lighting',
+              },
+            },
+            {
+              id: 'image-session-1',
+              type: 'image',
+              position: { x: 400, y: 120 },
+              data: {
+                title: 'Hero frame',
+                prompt: 'A serene mountain lake at dawn, cinematic lighting',
+              },
+            },
+          ],
+          edges: [{ id: 'e-session-1', source: 'prompt-session-1', target: 'image-session-1' }],
+        }),
+      })
+      const before = rows.filter((row) => row.userId === 'u3').length
+      const saved = await svc.promoteRecipe({
+        sessionId: 's-canvas',
+        userId: 'u3',
+        mode: 'new_template',
+        confirmedSeedKeys: ['scene_prompt'],
+        title: '湖景',
+      })
+      expect(rows.filter((row) => row.userId === 'u3')).toHaveLength(before + 1)
+      expect(saved.recipeId).toMatch(/^node-[a-z0-9]{6}$/)
+      const loaded = await svc.getUserRecipe('u3', saved.recipeId)
+      expect(loaded?.invariants.seedChains.some((chain) => chain.keys.includes('scene_prompt'))).toBe(
+        true,
+      )
+      expect(loaded?.nodes).toHaveLength(2)
+    })
   })
 })
 
@@ -283,5 +338,21 @@ describe('recipe planner DTOs', () => {
     expect(result.mode).toBe('new_template')
     expect(result.workflow).toBeTruthy()
     expect(result.title).toBe('湖景')
+  })
+
+  it('keeps sessionId and allows omitting workflow', async () => {
+    const result = (await pipe.transform(
+      {
+        sessionId: 's1',
+        userId: 'u1',
+        mode: 'new_template',
+        confirmedSeedKeys: ['scene_prompt'],
+      },
+      { type: 'body', metatype: PromoteRecipeDto },
+    )) as PromoteRecipeDto
+    expect(result.sessionId).toBe('s1')
+    expect(result.userId).toBe('u1')
+    expect(result.workflow).toBeUndefined()
+    expect(result.confirmedSeedKeys).toEqual(['scene_prompt'])
   })
 })

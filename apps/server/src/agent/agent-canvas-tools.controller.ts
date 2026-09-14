@@ -585,6 +585,7 @@ export class PromoteRecipeDto {
   mode!: 'variant' | 'new_template'
 
   @IsOptional()
+  @IsObject()
   workflow?: unknown
 
   @IsOptional()

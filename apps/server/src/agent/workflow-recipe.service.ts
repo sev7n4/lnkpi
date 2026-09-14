@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { BadRequestException, Inject, Injectable } from '@nestjs/common'
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import {
   applyDelta,
+  buildWorkflowDocument,
   diffRecipeLines,
   getPlatformRecipe,
   inferRecipeDraftFromWorkflow,
@@ -10,6 +11,7 @@ import {
   RecipeInferError,
   slugRecipeKey,
   validateRecipe,
+  type CanvasData,
   type LintIssue,
   type RecipeDelta,
   type RecipeDocument,
@@ -168,11 +170,73 @@ export class WorkflowRecipeService {
   }
 
   async promoteRecipe(input: PromoteRecipeInput): Promise<PromoteRecipeResult> {
-    const draft = this.inferDraft(input.workflow)
+    const workflow = await this.resolveWorkflow(input)
+    const draft = this.inferDraft(workflow)
     if (input.mode === 'new_template') {
-      return this.promoteNewTemplate(input, draft)
+      return this.promoteNewTemplate({ ...input, workflow }, draft)
     }
-    return this.promoteVariant(input, draft)
+    return this.promoteVariant({ ...input, workflow }, draft)
+  }
+
+  private async resolveWorkflow(input: PromoteRecipeInput): Promise<unknown> {
+    if (input.workflow !== undefined && input.workflow !== null) {
+      return input.workflow
+    }
+    const session = await this.loadOwnedSession(input.sessionId, input.userId)
+    return buildWorkflowDocument({
+      nodes: session.canvas.nodes.map((node) => ({
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: node.data ?? {},
+      })),
+      edges: session.canvas.edges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+      })),
+      mode: 'full',
+      exportMode: 'lightweight',
+      sourceSessionId: session.id,
+      mediaIndex: [],
+    })
+  }
+
+  private parseCanvas(raw: string | null | undefined): CanvasData {
+    if (!raw) return { nodes: [], edges: [] }
+    try {
+      const parsed = JSON.parse(raw) as CanvasData
+      return {
+        nodes: Array.isArray(parsed.nodes) ? parsed.nodes : [],
+        edges: Array.isArray(parsed.edges) ? parsed.edges : [],
+        viewport: parsed.viewport,
+      }
+    } catch {
+      return { nodes: [], edges: [] }
+    }
+  }
+
+  private async loadSession(sessionId: string): Promise<{
+    id: string
+    userId: string
+    canvas: CanvasData
+  }> {
+    const session = await this.prisma.session.findUnique({ where: { id: sessionId } })
+    if (!session) throw new NotFoundException('会话不存在')
+    return {
+      id: session.id,
+      userId: session.userId,
+      canvas: this.parseCanvas(session.canvasData),
+    }
+  }
+
+  private async loadOwnedSession(
+    sessionId: string,
+    userId: string,
+  ): Promise<{ id: string; userId: string; canvas: CanvasData }> {
+    const session = await this.loadSession(sessionId)
+    if (session.userId !== userId) throw new ForbiddenException()
+    return session
   }
 
   private inferDraft(workflow: unknown): RecipeDocument {
