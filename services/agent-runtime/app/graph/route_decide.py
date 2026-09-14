@@ -18,7 +18,8 @@ RouteFlowMode = Literal[
     "campaign",
     "product_visual",
     "explore_canvas",
-    "chat",
+    "canvas_agent",
+    "chat",  # compat alias → canvas_agent / explore node
     "clarify_route",
 ]
 

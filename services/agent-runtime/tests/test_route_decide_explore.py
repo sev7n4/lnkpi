@@ -1,5 +1,21 @@
+from app.graph.builder import route_after_intake
 from app.graph.route_context import assemble_route_context
 from app.graph.route_decide import decide_route
+
+
+def test_greeting_defaults_to_canvas_agent():
+    ctx = assemble_route_context({
+        "messages": [{"role": "user", "content": "你好"}],
+    })
+    d = decide_route(ctx)
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["flow_mode"] in ("canvas_agent", "explore_canvas")
+    assert d["precedence_rule_id"] == "default_chat"
+    # Default / alias lanes share the tool-bearing explore node (no zero-tool chat).
+    assert route_after_intake({"flow_mode": d["flow_mode"]}) == "explore"
+    assert route_after_intake({"flow_mode": "chat"}) == "explore"
+    assert route_after_intake({"flow_mode": "explore_canvas"}) == "explore"
+    assert route_after_intake({"flow_mode": "canvas_agent"}) == "explore"
 
 
 def test_explore_canvas_intent():

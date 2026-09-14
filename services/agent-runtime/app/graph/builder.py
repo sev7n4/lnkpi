@@ -1,4 +1,4 @@
-"""W6: Agent graph — intake + 3 gate regions + split + chat + done."""
+"""W6: Agent graph — intake + 3 gate regions + split + explore (canvas_agent) + done."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from app.graph.nodes.apply_sidebar_refs import make_apply_sidebar_refs_node
-from app.graph.nodes.chat import make_chat_node
 from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
@@ -23,6 +22,9 @@ from app.graph.subgraphs.copy_gate import register_copy_gate
 from app.graph.subgraphs.single_node_gate import register_single_node_gate
 from app.graph.subgraphs.topo_gate import register_topo_gate
 from app.graph.product_visual_v2.routing import shot_confirm_gate_name
+
+# chat / explore_canvas / canvas_agent share the tool-bearing explore node (M2a).
+_AGENT_FLOW_MODES = frozenset({"explore_canvas", "chat", "canvas_agent"})
 
 
 def route_after_intake(state: AgentRuntimeState) -> str:
@@ -40,9 +42,10 @@ def route_after_intake(state: AgentRuntimeState) -> str:
         return "image_qa_check"
     if state.get("skill_id"):
         return "decide_plan_mode"
-    if state.get("flow_mode") == "explore_canvas":
+    if state.get("flow_mode") in _AGENT_FLOW_MODES:
         return "explore"
-    return "chat"
+    # Never fall back to zero-tool chat; unknown → tool-bearing agent.
+    return "explore"
 
 
 def route_after_split(state: AgentRuntimeState) -> str:
@@ -68,7 +71,7 @@ def build_agent_graph(
 
     graph.add_node("intake", make_intake_node(skills_path))
     graph.add_node("clarify_gate", make_clarify_gate_node())
-    graph.add_node("chat", make_chat_node(llm=llm))
+    # chat node retired (M2a): chat|explore_canvas|canvas_agent → explore
     graph.add_node("explore", make_explore_node(llm=llm, nest=nest))
     graph.add_node("split", make_split_node(nest=nest, skills_dir=skills_path))
     graph.add_node("apply_sidebar_refs", make_apply_sidebar_refs_node(nest=nest))
@@ -92,11 +95,9 @@ def build_agent_graph(
             "image_qa_check": "image_qa_check",
             "clarify_gate": "clarify_gate",
             "decide_plan_mode": "decide_plan_mode",
-            "chat": "chat",
             "explore": "explore",
         },
     )
-    graph.add_edge("chat", END)
     graph.add_edge("explore", END)
     graph.add_edge("clarify_gate", END)
     graph.add_edge("write_plan_node", "split")

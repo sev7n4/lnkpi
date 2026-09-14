@@ -136,9 +136,19 @@ class AgentRuntimeState(TypedDict, total=False):
     user_id: str
     prompt_version: str | None  # W19: active skill prompt template version
     flow_mode: Literal[
-        "campaign", "single_node", "atomic_create", "atomic_regenerate", "product_visual"
-    ] | None  # W28/W29/P4
+        "campaign",
+        "single_node",
+        "atomic_create",
+        "atomic_regenerate",
+        "product_visual",
+        "explore_canvas",
+        "canvas_agent",
+        "chat",  # compat alias → canvas_agent
+        "clarify_route",
+    ] | None  # W28/W29/P4 / M2a
     focus_node_id: str | None  # W28: canvas node for single-node gen
+    tool_plan_loaded: list[str] | None  # M1/M2: deferred tools loaded this thread
+    previous_lane: str | None  # M2: last resolved lane for multi-turn / decide_lane
     atomic_spec: dict | None  # P4: parsed atomic create intent
     atomic_items: list[dict] | None  # P4: multi-item atomic create (spec + node_id)
     atomic_node_id: str | None  # P4: created canvas node id

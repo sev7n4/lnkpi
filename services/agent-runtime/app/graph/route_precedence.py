@@ -523,7 +523,7 @@ def _rule_empty(
     if not intent.utterance.strip():
         return _base_decision(
             ctx,
-            flow_mode="chat",
+            flow_mode="canvas_agent",
             reason="empty_utterance",
             confidence=0.50,
             precedence_rule_id="empty",
@@ -539,7 +539,7 @@ def _rule_default_chat(
 ) -> dict[str, Any] | None:
     return _base_decision(
         ctx,
-        flow_mode="chat",
+        flow_mode="canvas_agent",
         reason="default_chat",
         confidence=0.80,
         precedence_rule_id="default_chat",
