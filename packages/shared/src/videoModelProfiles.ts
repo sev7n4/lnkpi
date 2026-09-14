@@ -168,6 +168,7 @@ const MINIMAX_H3_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
   defaultGenerateAudio: true,
   pollIntervalMs: 10_000,
   maxPollMs: 1_200_000,
+  maxResolution: '2k',
 }
 
 const FAL_H3_MAX_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {

@@ -81,7 +81,7 @@ describe('resolveVideoModelProfile', () => {
     expect(p.defaultGenerateAudio).toBe(true)
     expect(p.pollIntervalMs).toBe(10_000)
     expect(p.maxPollMs).toBe(1_200_000)
-    expect(p.maxResolution).toBeUndefined()
+    expect(p.maxResolution).toBe('2k')
   })
 
   it('detects official MiniMax H3 by modelKey or gateway before Agnes/Seedance/legacy', () => {
@@ -201,6 +201,33 @@ describe('clampVideoGenerationInput', () => {
       referenceVideos: [],
       referenceAudios: [],
     })
+    expect(r.resolution).toBe('768p')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('clamps official MiniMax H3 4k to 2k', () => {
+    const profile = resolveVideoModelProfile('minimax-h3', 'MiniMax-H3')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '4k',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(r.resolution).toBe('2k')
+    expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
+  })
+
+  it('snaps official MiniMax H3 720p to nearest allowed 768p', () => {
+    const profile = resolveVideoModelProfile('minimax-h3', 'MiniMax-H3')
+    const r = clampVideoGenerationInput(profile, {
+      duration: 5,
+      resolution: '720p',
+      referenceImages: [],
+      referenceVideos: [],
+      referenceAudios: [],
+    })
+    expect(['768p', '2k']).toContain(r.resolution)
     expect(r.resolution).toBe('768p')
     expect(r.droppedFields.some((d) => d.field === 'resolution')).toBe(true)
   })
