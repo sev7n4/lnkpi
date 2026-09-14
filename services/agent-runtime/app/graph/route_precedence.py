@@ -13,7 +13,6 @@ from app.graph.atomic_intent import (
 )
 from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create, is_ref_media_generation
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
-from app.graph.explore_route import explore_canvas_signal
 from app.graph.intent import modify_intent, single_node_gen_intent
 from app.graph.l0_action import (
     SIDEBAR_SINGLE_EDIT_VERBS,
@@ -204,14 +203,6 @@ def _ref_backed_generate_match(intent: AtomicIntent, features: RouteFeatures) ->
         ):
             return True
     return intent.action == "generate" and intent.output_modality in ("image", "video") and has_ref
-
-
-def _explore_match(intent: AtomicIntent, features: RouteFeatures) -> bool:
-    utterance = intent.utterance
-    if not utterance:
-        return False
-    blocked = bool(features.get("explore_blocked"))
-    return explore_canvas_signal(utterance, blocked_by_atomic=blocked)
 
 
 def _rule_modify_existing_plan(
@@ -406,23 +397,6 @@ def _rule_orch_ambiguous(
     return None
 
 
-def _rule_explore(
-    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
-) -> dict[str, Any] | None:
-    if _explore_match(intent, features):
-        return _base_decision(
-            ctx,
-            flow_mode="explore_canvas",
-            reason="explore_canvas_intent",
-            confidence=0.88,
-            precedence_rule_id="explore",
-            guard_veto=_guard_veto(ctx),
-            intent=intent,
-            features=features,
-        )
-    return None
-
-
 def _rule_atomic_generate(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
@@ -560,7 +534,8 @@ PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("focus_gen", _rule_focus_gen),
     ("explicit_skill_orch", _rule_explicit_skill),
     ("orch_ambiguous", _rule_orch_ambiguous),
-    ("explore", _rule_explore),
+    # M4: explore noun/verb gate retired — canvas ops fall through to
+    # canvas_agent (default_chat / empty) or decide_lane when primary=1.
     ("atomic_generate", _rule_atomic_generate),
     ("suspected_vision_clarify", _rule_suspected_vision_clarify),
     ("suspected_media_clarify", _rule_suspected_media_clarify),

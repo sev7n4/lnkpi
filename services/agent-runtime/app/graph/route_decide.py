@@ -173,7 +173,7 @@ def decide_route_unified(
     )
     shadow = settings.route_llm_shadow if route_llm_shadow is None else route_llm_shadow
 
-    # Flag off: preserve legacy precedence (includes explore until Task 8).
+    # Flag off: precedence table (explore noun rule retired in M4 → canvas_agent).
     if not primary:
         raw = apply_route_precedence(
             intent,

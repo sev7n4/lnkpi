@@ -1,4 +1,11 @@
-"""Explore canvas routing signals — existing-node ops vs atomic create."""
+"""Explore canvas routing signals — existing-node ops vs atomic create.
+
+M4 (2026-09-14): ``explore_canvas_signal`` is **deprecated / test-only**.
+Production L0 no longer uses the noun∧verb gate; canvas ops route via
+``canvas_agent`` (hard short-circuit + optional ``decide_lane``). Keep this
+module for fixture/unit coverage and for ``explore_explicit_intent`` /
+``has_canvas_node_id_reference`` helpers still used by explore dispatch.
+"""
 
 from __future__ import annotations
 
@@ -112,7 +119,11 @@ def explore_canvas_signal(
     *,
     blocked_by_atomic: bool,
 ) -> bool:
-    """Shared noun/verb table for explore_canvas routing."""
+    """Deprecated noun/verb table — **test/fixture only** (M4).
+
+    Do not call from production ``PRECEDENCE_RULES`` / ``decide_route``.
+    Canvas-agent turns no longer require noun∧verb to bind tools.
+    """
     u = (utterance or "").strip()
     if not u:
         return False

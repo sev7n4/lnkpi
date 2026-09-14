@@ -342,8 +342,8 @@ tool_search(query: string, limit: int = 5) -> {
 
 | 项 | 动作 | 阶段 |
 |----|------|------|
-| `explore_canvas_signal` 名词∧动词门槛 | 删生产路径 | M4（M3 shadow 期可双跑） |
-| `select_narrow_write_tools` / ≤5 关键词窄绑（含 import 词绑） | 删除 | M1 |
+| `explore_canvas_signal` 名词∧动词门槛 | **Retired** — 生产路径已删（可留 test fixture） | M4 |
+| `select_narrow_write_tools` / ≤5 关键词窄绑（含 import 词绑） | **Retired** | M1 |
 | `test_explore_narrow_bind` 等词表单测 | 改为 plan/exposure / 同 turn search 测 | M1 |
 | `classify_explore_intent` 作为 **bind 裁剪** 的词表路径 | 退役；默认全 visible / open_query | M1 |
 | 零工具 `chat` 节点语义 | 合并入 `canvas_agent` | M2 |
@@ -356,7 +356,7 @@ tool_search(query: string, limit: int = 5) -> {
 ## 8. 文档与命名债（P2）
 
 - 更新 CS-3：`explore_canvas` → `canvas_agent` + ToolPlan；**CS-4 不变**。  
-- 标注 Phase 2b narrow-bind / explore noun 表为 **Retired**。  
+- 标注 Phase 2b narrow-bind / explore noun 表为 **Retired**（已落地 M1/M4）。  
 - `flow_mode` 三名合一：兼容期（M2–M4）→ 删除期（M4+1 版本可清别名）。  
 - `AgentRuntimeState`：补 `canvas_agent`（及过渡别名）、`tool_plan_loaded`、`previous_lane`（或等价 RouteContext 字段）。  
 - 与 intent-planning-guard Phase C：**`decide_lane` = L1 主路径落地**，关闭「另一套 LLM 路由」分叉。  

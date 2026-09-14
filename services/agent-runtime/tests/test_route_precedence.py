@@ -174,12 +174,14 @@ def test_precedence_orch_ambiguous_ac04():
     assert d["clarify_question"] == ROUTE_CLARIFY_ORCHESTRATION
 
 
-def test_precedence_explore():
+def test_precedence_explore_retired_to_canvas_agent():
+    """M4: explore noun∧verb no longer wins; canvas ops → canvas_agent."""
     d = _decide(
         {"messages": [{"role": "user", "content": "看看画布上有哪些节点，状态怎么样？"}]}
     )
-    assert d["flow_mode"] == "explore_canvas"
-    assert d["precedence_rule_id"] == "explore"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
+    assert d["precedence_rule_id"] != "explore"
 
 
 def test_precedence_atomic_generate():

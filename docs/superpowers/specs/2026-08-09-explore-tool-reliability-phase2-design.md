@@ -1,6 +1,7 @@
 # Explore Tool 可靠性 Phase 2 — Mandatory Dispatch 设计规格
 
 > 状态：**Draft**（2026-08-09）  
+> **Retired（M4 / 2026-09-14）：** Phase 2b **关键词 narrow-bind（≤5）** 与生产路径上的 explore noun 表已退役——见 [2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md)。可见工具改由 ToolPlan / `tool_search` 决定；本文历史方案仍可作背景阅读。  
 > 前置：[2026-08-08-agent-canvas-control-surface-design.md](./2026-08-08-agent-canvas-control-surface-design.md)（CS-3 explore_canvas）、[2026-08-04-loop-engineering-design.md](./2026-08-04-loop-engineering-design.md)（L-P7 不双栈 ReAct）  
 > Phase 1（已合并 #188）：路由词表 + prompt nudge + UI 确定性兜底 + harness coercion
 
@@ -76,7 +77,7 @@ intake → route_decide → explore_dispatch (新)
 | `lifecycle` | 取消/确认 + 生成/fallback | **Mandatory** after resolve_node_ref | cancel_*, confirm/cancel_platform_fallback |
 | `asset_read` | 资产库/素材库 + 查询 | **Mandatory** | list_user_assets, list_public_assets |
 | `node_read` | node_id/节点 + 查询 | LLM optional；可 mandatory get_* | get_node, get_canvas_summary, get_canvas_layout, ... |
-| `node_write` | node_id + 更新/attach/复制/上传 | LLM with **narrow bind**（≤5 tools） | set_*, attach_refs, duplicate_node, upload_media_to_canvas, upsert_prompt_node |
+| `node_write` | node_id + 更新/attach/复制/上传 | LLM with **narrow bind**（≤5 tools） **[Retired M1/M4]** | set_*, attach_refs, duplicate_node, upload_media_to_canvas, upsert_prompt_node |
 | `open_query` | 兜底 | LLM + full explore bind | 现有 28 whitelist |
 
 分类器 Phase 2a：**规则 + summary**（复用 `explore_route.explore_explicit_intent` 扩展）；Phase 2b：可选 lightweight classifier。
@@ -204,7 +205,7 @@ SSE 可选：`step.detail` 增加 `dispatch=intent/strategy`（debug 用）。
 | Wave | 内容 | 验收 |
 |------|------|------|
 | **2a** | `node_ref.py` + mandatory UI + lifecycle + asset | UI/lifecycle demo ≥90% tool |
-| **2b** | narrow bind node_write + loop gate | set_node_* 不再 atomic |
+| **2b** | narrow bind node_write + loop gate **[Retired：narrow-bind → ToolPlan]** | set_node_* 不再 atomic |
 | **2c** | CI 28-tool gate + metrics | PR 回归 |
 | **2d** | 删除 nudge/确定性兜底双轨 | 代码单轨 |
 
