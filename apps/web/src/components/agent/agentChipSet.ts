@@ -22,12 +22,8 @@ export type AgentToolCallLike = {
 /** Minimal canvas node shape for pending_confirm SSOT recover (Phase 2c.1). */
 export type CanvasNodeLike = {
   id: string
-  data?: {
-    status?: string
-    createdAt?: string | number
-    updatedAt?: string | number
-    [key: string]: unknown
-  }
+  /** Align with taskProgressReconcile.CanvasNodeLike (null allowed). */
+  data?: Record<string, unknown> | null
 }
 
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"

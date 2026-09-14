@@ -50,7 +50,6 @@ import {
   detectAgentChipSet,
   extractProposeGenerationNodeId,
   resolvePendingConfirmNodeId,
-  type CanvasNodeLike,
 } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
