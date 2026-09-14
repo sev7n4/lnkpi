@@ -1,5 +1,9 @@
 """Pure helpers for sidebar media parse prepass (no I/O)."""
 
+from __future__ import annotations
+
+from app.graph.product_visual_v2.vision_qa import VisionQAResult
+
 MAX_PARSE_IMAGE_URLS = 4
 
 NON_VISION_PARSE_ERROR = (
@@ -52,6 +56,38 @@ def merge_parse_records(urls: list[str], cache: dict) -> dict:
         "fields": fields,
         "unknown": sorted(unknown),
     }
+
+
+def _qa_source(parse: dict) -> dict:
+    qa = parse.get("qa")
+    return qa if isinstance(qa, dict) else {}
+
+
+def parse_as_vision_qa_result(parse: dict) -> VisionQAResult:
+    """Map sidebar_media_parse state/cache dict → VisionQAResult (no HTTP)."""
+    qa = _qa_source(parse)
+    is_white_bg = qa.get("is_white_bg", parse.get("is_white_bg"))
+    is_sharp_enough = qa.get("is_sharp_enough", parse.get("is_sharp_enough"))
+    product_identifiable = qa.get("product_identifiable", parse.get("product_identifiable"))
+    raw_summary = (
+        qa.get("product_summary")
+        or parse.get("product_summary")
+        or parse.get("user_facing_summary")
+    )
+    summary = str(raw_summary).strip() if raw_summary else None
+    pass_ = bool(is_white_bg and is_sharp_enough and product_identifiable)
+    reason = str(qa.get("reason") or parse.get("error") or "").strip()
+    if not reason:
+        reason = "图源审核完成" if pass_ else "图源未通过识图审核"
+    return VisionQAResult(
+        pass_=pass_,
+        reason=reason,
+        vision_used=bool(parse.get("vision_used")),
+        product_summary=summary or None,
+        is_white_bg=is_white_bg,
+        is_sharp_enough=is_sharp_enough,
+        product_identifiable=product_identifiable,
+    )
 
 
 def format_parse_context_block(parse: dict) -> str:

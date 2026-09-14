@@ -29,6 +29,7 @@ from app.graph.atomic_parse_util import (
 from app.graph.atomic_intent import is_regenerate_new_variant
 from app.graph.atomic_clarify import is_img2img_utterance, pending_atomic_clarify
 from app.graph.sidebar_attachments import resolve_sidebar_mentioned_keys
+from app.graph.sidebar_media_parse import format_parse_context_block
 from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.intent_parse_llm import LLM_PARSE_TIMEOUT_SEC, llm_parse_intent
 from app.graph.intent_parse_schema import IntentParseResult, intent_result_to_parse_outcome
@@ -230,6 +231,10 @@ def make_parse_atomic_intent_node(*, nest: Any | None = None, llm: Any | None = 
         mentioned_keys = _mentioned_keys_from_state(state)
         context_packet = build_atomic_parse_packet(state, canvas_summary=canvas_summary)
         parse_ctx = build_atomic_parse_context(state, canvas_summary=canvas_summary)
+        sidebar_parse = state.get("sidebar_media_parse")
+        if isinstance(sidebar_parse, dict) and sidebar_parse:
+            block = format_parse_context_block(sidebar_parse)
+            parse_ctx = f"{parse_ctx}\n\n{block}" if parse_ctx else block
         prior_atomic = state.get("atomic_spec")
         prior_spec = prior_atomic if isinstance(prior_atomic, dict) else None
         checkpoint = {
