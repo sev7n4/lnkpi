@@ -366,7 +366,11 @@ export function applyDelta(
     const previous = [...node.dependsOn]
     node.dependsOn = [...rw.dependsOn]
     const issues = lintRecipe(recipe)
-    if (issues.some((issue) => issue.code === 'downstream_unhooked')) {
+    if (
+      issues.some(
+        (issue) => issue.code === 'downstream_unhooked' && issue.key === rw.key,
+      )
+    ) {
       node.dependsOn = previous
       stripped.push({ code: 'downstream_unhooked', message: '下游必须挂回核心步骤', key: rw.key })
     }
@@ -420,6 +424,14 @@ export function diffRecipeLines(parent: unknown, recipe: unknown): string[] {
     if (!afterKeys.has(node.key)) {
       lines.push(`去掉 ${node.title}`)
     }
+  }
+
+  const beforeByKey = new Map(before.nodes.map((n) => [n.key, n]))
+  for (const node of after.nodes) {
+    const prev = beforeByKey.get(node.key)
+    if (!prev) continue
+    if (prev.dependsOn.join('\0') === node.dependsOn.join('\0')) continue
+    lines.push(`调整「${node.title}」的连接`)
   }
 
   return lines

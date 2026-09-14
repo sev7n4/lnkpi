@@ -325,6 +325,44 @@ describe('applyDelta extras', () => {
     expect(recipe.nodes.find((n) => n.key === 'product_turnaround')?.dependsOn).toEqual(['white_bg'])
   })
 
+  it('keeps a legal rewire when remove unhooks a different node', () => {
+    const parent = validateRecipe({
+      ...productParent,
+      nodes: [
+        ...productParent.nodes,
+        {
+          key: 'pack',
+          title: '包装',
+          type: 'image',
+          chain: 'product',
+          role: 'downstream',
+          dependsOn: ['banner'],
+          genMode: 'i2i',
+          autoGenerate: false,
+        },
+        {
+          key: 'detail',
+          title: '细节',
+          type: 'image',
+          chain: 'product',
+          role: 'downstream',
+          dependsOn: ['product_turnaround'],
+          genMode: 'i2i',
+          autoGenerate: false,
+        },
+      ],
+    })
+    const { recipe, stripped } = applyDelta(parent, {
+      remove: ['banner'],
+      rewire: [{ key: 'detail', dependsOn: ['product_turnaround', 'white_bg'] }],
+    })
+    expect(recipe.nodes.find((n) => n.key === 'detail')?.dependsOn).toEqual([
+      'product_turnaround',
+      'white_bg',
+    ])
+    expect(stripped.some((s) => s.code === 'downstream_unhooked' && s.key === 'detail')).toBe(false)
+  })
+
   it('strips added nodes that still fail lint', () => {
     const { recipe, stripped } = applyDelta(productParent, {
       add: [{
@@ -369,7 +407,16 @@ describe('diffRecipeLines', () => {
     expect(lines).toContain('接上「角色三视图」的核心步骤')
     expect(lines).toContain('增加「包装细节」')
     expect(lines).toContain('去掉 Banner')
-    expect(lines.join('\n')).not.toMatch(/graft|delta|seedChains/i)
+    expect(lines.join('\n')).not.toMatch(/graft|delta|seedChains|parentId|种子链|嫁接|\blint\b/i)
+  })
+
+  it('describes rewire in user language', () => {
+    const { recipe } = applyDelta(productParent, {
+      rewire: [{ key: 'banner', dependsOn: ['product_turnaround', 'white_bg'] }],
+    })
+    const lines = diffRecipeLines(productParent, recipe)
+    expect(lines.some((line) => line.includes('Banner') && line.includes('连接'))).toBe(true)
+    expect(lines.join('\n')).not.toMatch(/graft|delta|parentId|种子链|嫁接|\blint\b/i)
   })
 })
 
