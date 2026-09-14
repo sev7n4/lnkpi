@@ -21,6 +21,10 @@ _VISION_MODEL = re.compile(
     r"(?:^|[/:])(?:gemini|gpt-4o|gpt-4-turbo|gpt-4-vision|gpt-5|claude-(?:opus|sonnet|haiku|3)|agnes)(?:[-./]|$)",
     re.I,
 )
+_DEEPSEEK_FLASH = re.compile(
+    r"(?:^|[/:])deepseek(?:-v4(?:\.1)?)?-flash(?:-vision-exp)?(?:[-./]|$)",
+    re.I,
+)
 _NON_VISION = re.compile(
     r"(?:^|[/:])(?:deepseek|o[134](?:-|$|-mini|-pro)|text-embedding|whisper|tts|dall-e)(?:[-./]|$)",
     re.I,
@@ -33,6 +37,8 @@ def supports_vision_model(model: str | None) -> bool:
     if not model or not str(model).strip():
         return False
     m = str(model).strip()
+    if _DEEPSEEK_FLASH.search(m):
+        return True
     if _NON_VISION.search(m):
         return False
     return bool(_VISION_MODEL.search(m))

@@ -52,4 +52,21 @@ describe('generateVisionQaJson', () => {
     expect(result.visionUsed).toBe(true)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('decodes channel-prefixed Flash before posting model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"pass":true,"reason":"ok","product_summary":"桶"}' } }],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await generateVisionQaJson('sys', 'user', ['https://example.com/a.jpg'], {
+      apiKey: 'k',
+      model: 'ch_x::deepseek-flash',
+    })
+    expect(result.visionUsed).toBe(true)
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)
+    expect(body.model).toBe('deepseek-flash')
+  })
 })

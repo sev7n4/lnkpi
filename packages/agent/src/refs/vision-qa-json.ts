@@ -1,5 +1,5 @@
 import { extractJsonObject } from './json-extract'
-import { supportsVisionTextModel } from './text-generation'
+import { supportsVisionTextModel, upstreamChatModel } from './text-generation'
 
 export interface VisionQaJsonOptions {
   apiKey?: string
@@ -92,12 +92,12 @@ export async function generateVisionQaJson(
     }
   }
 
-  const model = opts.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
-  if (!supportsVisionTextModel(model)) {
+  const rawModel = opts.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
+  if (!supportsVisionTextModel(rawModel)) {
     return {
       text: JSON.stringify({
         pass: false,
-        reason: `当前文本模型（${model}）不支持识图`,
+        reason: `当前文本模型（${rawModel}）不支持识图`,
         product_summary: '',
       }),
       visionUsed: false,
@@ -111,6 +111,7 @@ export async function generateVisionQaJson(
   const endpoint = `${baseUrl}/chat/completions`
   const maxRetries = opts.maxRetries ?? 2
 
+  const model = upstreamChatModel(rawModel)
   const baseBody = {
     model,
     stream: false,
