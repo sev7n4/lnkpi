@@ -67,7 +67,11 @@ import {
   refundMeta,
   type PointCategory,
 } from '../points/point-tx.types'
-import { falH3MaxVideoRecordMeta, videoCreditsForModel } from '../points/video-credits'
+import {
+  falH3MaxVideoRecordMeta,
+  minimaxH3VideoRecordMeta,
+  videoCreditsForModel,
+} from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
@@ -1568,6 +1572,10 @@ export class StudioService {
               ...falH3MaxVideoRecordMeta({
                 modelKey: resolved.modelName || model,
                 hasStartImage: upstreamImageRefs.length > 0,
+                credentialSource: resolved.source,
+              }),
+              ...minimaxH3VideoRecordMeta({
+                modelKey: resolved.modelName || model,
                 credentialSource: resolved.source,
               }),
             },
