@@ -14,6 +14,7 @@ from app.graph.explore_dispatch import (
     classify_explore_intent,
     run_mandatory_explore,
 )
+from app.graph.recent_turns import compress_recent_turns
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
 from app.tools.tool_plan import META_TOOL_NAME, build_tool_plan
@@ -22,12 +23,17 @@ from app.tools.tool_search import make_tool_search_tool
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
 
+# Unified canvas_agent system prompt (spec §3.6) — also re-exported as chat._SYSTEM.
 _EXPLORE_SYSTEM = (
-    "你是 lnkpi 画布探索助手。用简洁中文回答。\n"
+    "你是 lnkpi 无限画布助手。用简洁中文回答。\n"
     "规则：\n"
     "1. 必须通过工具完成读写操作，禁止假装已执行。\n"
-    "2. 不要调用 run_*_generation；用户要出图/生成视频时，提示其直接描述创作需求。\n"
-    "3. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
+    "2. 平台支持在画布上生成图片/视频等媒体；不得否认平台的图片生成能力，"
+    "也不要引导用户使用第三方作图工具。\n"
+    "3. 不要声称「正在生成」「马上生成」「已开始出图」；不要调用 run_*_generation。"
+    "若用户像要出图/生成视频，请引导他们清晰描述创作需求（如「帮我生成一张…图」），"
+    "或说明要解读侧栏图片；创作流程由后续路由进入，本通道未进入创作时勿假装已出图。\n"
+    "4. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
     "\n当前画布摘要：\n{summary}"
 )
 
@@ -42,6 +48,10 @@ def _latest_user_text(messages: list[Any]) -> str:
             return str(content)
     return ""
 
+
+def _msg_is_human(msg: Any) -> bool:
+    role = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
+    return role in ("human", "user")
 
 def _serialize_tool_result(result: Any) -> str:
     if isinstance(result, str):
@@ -110,11 +120,15 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
+        messages = list(state.get("messages") or [])
+        # Prior turns only — current user utterance is seeded separately (D7).
+        prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
+        recent = compress_recent_turns(prior)
 
-        convo: list[Any] = [
-            SystemMessage(content=system_content),
-            HumanMessage(content=user_text),
-        ]
+        convo: list[Any] = [SystemMessage(content=system_content)]
+        if recent.strip():
+            convo.append(SystemMessage(content=f"近期对话摘要：\n{recent}"))
+        convo.append(HumanMessage(content=user_text))
 
         final_reply = ""
         canvas_commands: list[dict[str, Any]] = []

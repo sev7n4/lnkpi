@@ -4,11 +4,15 @@ Default / empty / greeting lanes now emit ``canvas_agent`` and the builder maps
 ``chat`` | ``explore_canvas`` | ``canvas_agent`` → the tool-bearing ``explore``
 node. This module is kept only so historical imports do not break; do not re-add
 a zero-tool chat graph edge.
+
+System prompt lives on explore (spec §3.6); re-exported here for legacy tests.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable
+
+from app.graph.nodes.explore import _EXPLORE_SYSTEM as _SYSTEM  # noqa: F401
 
 
 def make_chat_node(*, llm: Any) -> Callable:
