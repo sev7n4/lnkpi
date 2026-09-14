@@ -239,6 +239,56 @@ describe('StudioService integration (provider params)', () => {
     })
   })
 
+  it('charges official H3 by resolution factor and records minimax metadata', async () => {
+    const prisma = (
+      svc as unknown as {
+        prisma: {
+          generationRecord: {
+            create: ReturnType<typeof vi.fn>
+          }
+        }
+        points: { consume: ReturnType<typeof vi.fn> }
+      }
+    )
+    let stored: Record<string, unknown> = {}
+    prisma.prisma.generationRecord.create = vi.fn(
+      async ({ data }: { data: Record<string, unknown> }) => {
+        stored = { id: 'g-official-h3', ...data }
+        return stored
+      },
+    )
+    const consume = vi.spyOn(prisma.points, 'consume')
+
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'minimax-h3',
+      5,
+      '16:9',
+      [{ refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' }],
+      [],
+      '768p',
+    )
+
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalledWith(
+      'u1',
+      36,
+      '视频生成',
+      expect.objectContaining({ category: 'video' }),
+    )
+    expect(createVideoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'minimax-h3' }),
+    )
+    expect(JSON.parse(String(stored.metadata))).toMatchObject({
+      chargedPoints: 36,
+      providerId: 'minimax',
+      credentialSource: 'platform',
+      minimaxModel: 'MiniMax-H3',
+    })
+    expect(JSON.parse(String(stored.metadata)).falEndpoint).toBeUndefined()
+  })
+
   it('forwards seed and negativePrompt to Agnes video provider', async () => {
     await svc.generateVideo(
       'u1',

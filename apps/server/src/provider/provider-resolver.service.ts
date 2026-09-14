@@ -3,6 +3,7 @@ import {
   decodeChannelModel,
   resolveApimartPlatformCredentials,
   resolveFalH3MaxPlatformCredentials,
+  resolveMiniMaxH3PlatformCredentials,
   type ApiCallFormat,
   type ModelCapability,
 } from '@lnkpi/shared'
@@ -48,9 +49,13 @@ export class ProviderResolverService {
         process.env.OPENAI_BASE_URL?.trim() || channel?.baseUrl || ''
       let apiKey = process.env.OPENAI_API_KEY || undefined
       const fal = resolveFalH3MaxPlatformCredentials(modelName)
+      const minimax = resolveMiniMaxH3PlatformCredentials(modelName)
       if (fal) {
         baseUrl = fal.baseUrl
         apiKey = fal.apiKey || undefined
+      } else if (minimax) {
+        baseUrl = minimax.baseUrl
+        apiKey = minimax.apiKey || undefined
       } else if (modality === 'image') {
         const apimart = resolveApimartPlatformCredentials(modelName)
         if (apimart) {

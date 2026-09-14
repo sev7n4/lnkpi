@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FAL_H3_MAX_ENDPOINTS } from '@lnkpi/agent'
 import {
   falH3MaxVideoRecordMeta,
+  minimaxH3VideoRecordMeta,
   videoCredits,
   videoCreditsForModel,
 } from './video-credits'
@@ -77,9 +78,39 @@ describe('videoCreditsForModel', () => {
       resolution: '480P',
       expected: 84,
     },
+    {
+      name: 'official H3 768p uses ×1.2 for 5s',
+      duration: 5,
+      modelKey: 'minimax-h3',
+      resolution: '768p',
+      expected: 36,
+    },
+    {
+      name: 'official H3 2k uses ×1.8 for 5s',
+      duration: 5,
+      modelKey: 'minimax-h3',
+      resolution: '2k',
+      expected: 54,
+    },
+    {
+      name: 'official H3 omitted resolution defaults to 768p ×1.2 for 5s',
+      duration: 5,
+      modelKey: 'minimax-h3',
+      expected: 36,
+    },
+    {
+      name: 'official H3 gateway id 768p uses ×1.2 for 5s',
+      duration: 5,
+      modelKey: 'MiniMax-H3',
+      resolution: '768p',
+      expected: 36,
+    },
   ])('$name', ({ duration, modelKey, resolution, expected }) => {
     expect(videoCreditsForModel({ duration, modelKey, resolution })).toBe(expected)
-    if (!modelKey.toLowerCase().includes('h3-max')) {
+    const key = modelKey.toLowerCase()
+    const isOfficialH3 =
+      key === 'minimax-h3' || (key.includes('minimax-h3') && !key.includes('h3-max'))
+    if (!key.includes('h3-max') && !isOfficialH3) {
       expect(videoCredits(duration)).toBe(expected)
     }
   })
@@ -117,6 +148,52 @@ describe('falH3MaxVideoRecordMeta', () => {
       providerId: 'fal',
       credentialSource: 'user',
       falEndpoint: FAL_H3_MAX_ENDPOINTS['h3-max'].i2v,
+    })
+  })
+})
+
+describe('minimaxH3VideoRecordMeta', () => {
+  it('omits minimax providerId for non-family models', () => {
+    expect(
+      minimaxH3VideoRecordMeta({
+        modelKey: 'agnes-video-v2.0',
+        credentialSource: 'platform',
+      }),
+    ).toEqual({})
+    expect(
+      minimaxH3VideoRecordMeta({
+        modelKey: 'seedance-2.0-min',
+        credentialSource: 'platform',
+      }),
+    ).toEqual({})
+    expect(
+      minimaxH3VideoRecordMeta({
+        modelKey: 'h3-max-turbo',
+        credentialSource: 'platform',
+      }),
+    ).toEqual({})
+  })
+
+  it('records official H3 provider metadata', () => {
+    expect(
+      minimaxH3VideoRecordMeta({
+        modelKey: 'minimax-h3',
+        credentialSource: 'platform',
+      }),
+    ).toEqual({
+      providerId: 'minimax',
+      credentialSource: 'platform',
+      minimaxModel: 'MiniMax-H3',
+    })
+    expect(
+      minimaxH3VideoRecordMeta({
+        modelKey: 'MiniMax-H3',
+        credentialSource: 'user',
+      }),
+    ).toEqual({
+      providerId: 'minimax',
+      credentialSource: 'user',
+      minimaxModel: 'MiniMax-H3',
     })
   })
 })

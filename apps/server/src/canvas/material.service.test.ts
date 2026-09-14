@@ -305,6 +305,36 @@ describe('MaterialService video', () => {
     })
   })
 
+  it('charges official H3 by resolution factor and records minimax metadata', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'minimax-h3',
+      duration: 5,
+      resolution: '768p',
+      refs: [{ refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' }],
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalledWith('u1', 36, '视频生成', {
+      kind: 'consume',
+      category: 'video',
+      status: 'success',
+      model: 'minimax-h3',
+      generationId: null,
+    })
+    expect(createVideoProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'minimax-h3' }),
+    )
+    const createdMeta = JSON.parse(String(materialCreate.mock.calls[0][0].data.metadata))
+    expect(createdMeta).toMatchObject({
+      providerId: 'minimax',
+      credentialSource: 'platform',
+      minimaxModel: 'MiniMax-H3',
+    })
+    expect(createdMeta.falEndpoint).toBeUndefined()
+  })
+
   it('rejects foreign shot without charging', async () => {
     shotFindUnique.mockResolvedValueOnce({
       id: 'shot-1',

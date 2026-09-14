@@ -110,6 +110,32 @@ describe('SceneComposerService batchGenerate', () => {
     })
   })
 
+  it('charges official H3 video items with 768p factor', async () => {
+    await svc.batchGenerate('u1', {
+      sessionId: 'sess-1',
+      composerNodeId: 'composer-1',
+      items: [
+        {
+          shotNodeId: 'shot-vid',
+          prompt: 'walk',
+          mediaType: 'video',
+          model: 'minimax-h3',
+          duration: 5,
+          aspectRatio: '16:9',
+          resolution: '768p',
+        },
+      ],
+    })
+
+    expect(consume).toHaveBeenCalledTimes(1)
+    expect(consume).toHaveBeenCalledWith('u1', 36, '导演台批量生成 ×1', {
+      kind: 'consume',
+      category: 'other',
+      status: 'success',
+      generationId: null,
+    })
+  })
+
   it('rejects foreign session with zero side effects', async () => {
     sessionFindFirst.mockResolvedValueOnce(null)
 

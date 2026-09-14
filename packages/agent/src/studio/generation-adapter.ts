@@ -832,7 +832,7 @@ export function buildVideoProviderOptions(input: {
         refAudioMode = 'native'
       }
     }
-  } else if (profile.refWire === 'fal_h3_max') {
+  } else if (profile.refWire === 'fal_h3_max' || profile.refWire === 'minimax_h3_content') {
     if (imageCount) {
       const imageUrls = clamped.referenceImages.slice(0, 2)
       image = imageUrls[0]

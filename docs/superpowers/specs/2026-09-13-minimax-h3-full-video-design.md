@@ -1,7 +1,7 @@
 # MiniMax 官方 H3 全能力视频接入设计
 
 > 日期：2026-09-13  
-> 状态：已批准（含 BYOK §3.7；实现计划待 fal 最小接入落地后另开）  
+> 状态：已批准（含 BYOK §3.7；P0 实现计划见 `../plans/2026-09-14-minimax-h3-p0-video.md`）  
 > 范围：经 **MiniMax Open Platform** 接入 **`MiniMax-H3` 全能力**（T2V / I2V / 首尾帧 / Reference / Context-IR / 768P→2K Regeneration）  
 > 非目标：fal H3 Max 最小接入（见姊妹规格）、H3 Max Director / fal.live、自托管开源权重部署  
 > 前置：`VideoProvider`、`videoModelProfiles`、Seedance 多模态 refs 先例（`2026-08-08-seedance-agnes-video-adapter-design.md`）  
@@ -269,6 +269,15 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 | P1 | Reference 含 1 视频+2 图；超限 400 |
 | P2 | IR 回填；768 片 Regen 得 2K 新节点 |
 | 回归 | Agnes / Seedance 路径无破坏 |
+
+### P0 M1 实现状态
+
+- [x] catalog / profile / caps / Dock 三模式（单测）
+- [x] T2V / I2V / 首尾帧请求契约（mock fetch，非 live）
+- [x] 无 MiniMax Key 可读错误（单测）
+- [x] 积分 768P×1.2 / 2K×1.8 与导演台 forModel（单测）
+- [x] platform MINIMAX_API_KEY；BYOK 通道不改（单测）
+- [ ] live 出片（平台 Key / BYOK 各一条）— 未打
 
 ## 8. PR 拆分
 

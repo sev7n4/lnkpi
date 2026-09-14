@@ -22,10 +22,11 @@ describe('studioModelCatalog', () => {
       'seedream-5.0-pro',
       'midjourney-8.1',
     ])
-    expect(listModels('video')).toHaveLength(9)
+    expect(listModels('video')).toHaveLength(10)
     expect(listModels('video').map((m) => m.modelKey)).toEqual(expect.arrayContaining([
       'h3-max-turbo',
       'h3-max',
+      'minimax-h3',
     ]))
     expect(defaultModelKey('video')).toBe('agnes-video-v2.0')
     expect(getModelEntry('h3-max-turbo')).toMatchObject({
@@ -37,6 +38,11 @@ describe('studioModelCatalog', () => {
       displayName: 'H3 Max (fal)',
       gatewayModelId: 'minimax/h3-max',
       providerBinding: 'fal-http',
+    })
+    expect(getModelEntry('minimax-h3')).toMatchObject({
+      displayName: 'MiniMax H3',
+      gatewayModelId: 'MiniMax-H3',
+      providerBinding: 'minimax-http',
     })
     expect(getModelEntry('seedance-2.0')?.gatewayModelId).toBe('doubao-seedance-2.0')
     expect(getModelEntry('seedance-2.0-fast')?.gatewayModelId).toBe('doubao-seedance-2.0-fast')

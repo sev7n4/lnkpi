@@ -390,6 +390,83 @@ describe('buildVideoProviderOptions', () => {
     ])
     expect(r.effectivePromptSuffix).toBeUndefined()
   })
+
+  it('wires minimax_h3_content first image into image and referenceImages', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'minimax-h3',
+      referenceImages: ['https://cdn/first.png'],
+    })
+    expect(r.meta.refWire).toBe('minimax_h3_content')
+    expect(r.meta.refImageMode).toBe('native')
+    expect(r.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.referenceImages).toEqual(['https://cdn/first.png'])
+    expect(r.providerOptions.imageWithRoles).toBeUndefined()
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('wires minimax_h3_content first+last frames without prompt suffix', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/last.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'minimax-h3',
+      videoMode: 'first_last_frame',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refWire).toBe('minimax_h3_content')
+    expect(r.providerOptions.image).toBe('https://cdn/first.png')
+    expect(r.providerOptions.referenceImages).toEqual([
+      'https://cdn/first.png',
+      'https://cdn/last.png',
+    ])
+    expect(r.providerOptions.imageWithRoles).toEqual([
+      { url: 'https://cdn/first.png', role: 'first_frame' },
+      { url: 'https://cdn/last.png', role: 'last_frame' },
+    ])
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('wires minimax_h3_content two refs as first/last even without first_last_frame mode', () => {
+    const r = buildVideoProviderOptions({
+      modelKey: 'minimax-h3',
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png', 'https://cdn/c.png'],
+    })
+    expect(r.providerOptions.referenceImages).toEqual([
+      'https://cdn/a.png',
+      'https://cdn/b.png',
+    ])
+    expect(r.providerOptions.imageWithRoles).toEqual([
+      { url: 'https://cdn/a.png', role: 'first_frame' },
+      { url: 'https://cdn/b.png', role: 'last_frame' },
+    ])
+    expect(r.effectivePromptSuffix).toBeUndefined()
+  })
+
+  it('drops video and audio refs as metadata_only for minimax_h3_content', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/style.mp4' },
+      { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/music.mp3' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'minimax-h3',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refWire).toBe('minimax_h3_content')
+    expect(r.meta.refVideoMode).toBe('metadata_only')
+    expect(r.meta.refAudioMode).toBe('metadata_only')
+    expect(r.providerOptions.referenceVideos).toBeUndefined()
+    expect(r.providerOptions.referenceAudios).toBeUndefined()
+    expect(r.effectivePromptSuffix).toBeUndefined()
+    expect(r.meta.droppedFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'referenceVideos' }),
+        expect.objectContaining({ field: 'referenceAudios' }),
+      ]),
+    )
+  })
 })
 
 describe('buildImageProviderOptions', () => {

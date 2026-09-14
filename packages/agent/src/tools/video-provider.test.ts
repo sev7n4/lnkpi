@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
+import { MiniMaxH3VideoProvider } from './minimax-h3-video-provider'
 import {
   AgnesVideoProvider,
   ApimartVideoProvider,
@@ -172,6 +173,63 @@ describe('createVideoProvider fal routing', () => {
     process.env.OPENAI_API_KEY = 'env-openai-must-not-be-used'
     process.env.OPENAI_BASE_URL = 'https://apihub.agnes-ai.com/v1'
     expect(() => createVideoProvider({ model: 'h3-max' })).toThrow('视频加速通道未配置')
+  })
+})
+
+describe('createVideoProvider MiniMax routing', () => {
+  const env = { ...process.env }
+
+  beforeEach(() => {
+    process.env = { ...env }
+  })
+
+  afterEach(() => {
+    process.env = env
+  })
+
+  it('createVideoProvider routes MiniMax-H3 with Bearer provider before Agnes', () => {
+    const p = createVideoProvider({
+      apiKey: 'mm-key',
+      baseUrl: 'https://apihub.agnes-ai.com/v1',
+      model: 'minimax-h3',
+    })
+    expect(p).toBeInstanceOf(MiniMaxH3VideoProvider)
+    expect(p).not.toBeInstanceOf(AgnesVideoProvider)
+    expect(p).not.toBeInstanceOf(FalH3MaxVideoProvider)
+  })
+
+  it('routes MiniMax-H3 gateway id and official baseUrl to MiniMax provider', () => {
+    expect(
+      createVideoProvider({
+        apiKey: 'mm-key',
+        baseUrl: 'https://api.minimax.io',
+        model: 'MiniMax-H3',
+      }),
+    ).toBeInstanceOf(MiniMaxH3VideoProvider)
+    expect(
+      createVideoProvider({
+        apiKey: 'mm-key',
+        baseUrl: 'https://api.minimax.io',
+        model: 'agnes-video-v2.0',
+      }),
+    ).toBeInstanceOf(MiniMaxH3VideoProvider)
+  })
+
+  it('keeps fal first for h3-max-turbo even with MiniMax baseUrl', () => {
+    const p = createVideoProvider({
+      apiKey: 'fal-key',
+      baseUrl: 'https://api.minimax.io',
+      model: 'h3-max-turbo',
+    })
+    expect(p).toBeInstanceOf(FalH3MaxVideoProvider)
+  })
+
+  it('refuses MiniMax model without apiKey even if OPENAI_API_KEY set', () => {
+    process.env.OPENAI_API_KEY = 'sk-openai'
+    process.env.OPENAI_BASE_URL = 'https://apihub.agnes-ai.com/v1'
+    expect(() =>
+      createVideoProvider({ model: 'minimax-h3', baseUrl: 'https://api.minimax.io' }),
+    ).toThrow('未配置 MiniMax API Key')
   })
 })
 

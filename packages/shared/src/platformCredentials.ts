@@ -3,6 +3,7 @@ import { resolveModelKey } from './studioModelCatalog'
 
 export const DEFAULT_APIMART_BASE_URL = 'https://api.apimart.ai/v1'
 export const DEFAULT_FAL_BASE_URL = 'https://fal.run'
+export const DEFAULT_MINIMAX_BASE_URL = 'https://api.minimax.io'
 
 export type PlatformCredentialEnv = {
   apimartApiKey?: string
@@ -11,6 +12,8 @@ export type PlatformCredentialEnv = {
   falBaseUrl?: string
   openaiApiKey?: string
   openaiBaseUrl?: string
+  minimaxApiKey?: string
+  minimaxBaseUrl?: string
 }
 
 function readEnv(name: string): string | undefined {
@@ -34,6 +37,9 @@ export function readPlatformCredentialEnv(
     falBaseUrl: env.falBaseUrl ?? readEnv('FAL_BASE_URL') ?? DEFAULT_FAL_BASE_URL,
     openaiApiKey: env.openaiApiKey ?? readEnv('OPENAI_API_KEY') ?? '',
     openaiBaseUrl: env.openaiBaseUrl ?? readEnv('OPENAI_BASE_URL') ?? '',
+    minimaxApiKey: env.minimaxApiKey ?? readEnv('MINIMAX_API_KEY') ?? '',
+    minimaxBaseUrl:
+      env.minimaxBaseUrl ?? readEnv('MINIMAX_BASE_URL') ?? DEFAULT_MINIMAX_BASE_URL,
   }
 }
 
@@ -58,6 +64,22 @@ export function resolveFalH3MaxPlatformCredentials(
   return {
     apiKey: vars.falApiKey,
     baseUrl: vars.falBaseUrl || DEFAULT_FAL_BASE_URL,
+  }
+}
+
+export function isMiniMaxH3PlatformModel(modelName: string): boolean {
+  return /^minimax-h3$/i.test(modelName)
+}
+
+export function resolveMiniMaxH3PlatformCredentials(
+  modelName: string,
+  env?: PlatformCredentialEnv,
+): { apiKey: string; baseUrl: string } | null {
+  if (!isMiniMaxH3PlatformModel(modelName)) return null
+  const vars = readPlatformCredentialEnv(env)
+  return {
+    apiKey: vars.minimaxApiKey,
+    baseUrl: vars.minimaxBaseUrl || DEFAULT_MINIMAX_BASE_URL,
   }
 }
 

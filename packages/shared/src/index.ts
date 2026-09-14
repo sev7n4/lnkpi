@@ -169,7 +169,7 @@ export const VIDEO_MODELS: AIModel[] = [
 
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive'
 export type VideoCropMode = 'none' | 'center' | 'fill'
-export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
+export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 
 export interface VideoSettings {
   aspectRatio: VideoAspectRatio
