@@ -486,7 +486,7 @@ export class MaterialService {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
     if (resolvedVideoMode === 'reference_to_video') {
-      const profile = resolveVideoModelProfile(model ?? '')
+      const profile = resolveVideoModelProfile(model ?? '', model ?? '')
       if (profile.refWire === 'minimax_h3_content') {
         try {
           assertMiniMaxH3ReferenceLimits({
