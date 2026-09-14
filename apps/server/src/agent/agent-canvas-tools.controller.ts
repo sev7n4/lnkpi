@@ -537,13 +537,14 @@ class ImportWorkflowDto {
   workflowUrl?: string
 }
 
-class InstantiateRecipeDto {
+export class InstantiateRecipeDto {
   @IsString()
   sessionId!: string
 
   @IsString()
   userId!: string
 
+  @IsOptional()
   recipe!: unknown
 
   @IsOptional()
