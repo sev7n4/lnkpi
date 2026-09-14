@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common'
+import { Injectable, OnModuleInit, UnauthorizedException } from '@nestjs/common'
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
@@ -20,16 +20,23 @@ const HEIGHT = 160
 const PIECE_SIZE = 44
 const TOLERANCE = 5
 const MAX_POOL = 10
+const WEBP_QUALITY = 68
 
 @Injectable()
-export class CaptchaService {
+export class CaptchaService implements OnModuleInit {
   private readonly challenges = new Map<string, ChallengeRecord>()
   private readonly tickets = new Map<string, TicketRecord>()
   private readonly ttlMs = 5 * 60 * 1000
-  private readonly pool: Buffer[]
+  /** Pre-resized 280×160 RGBA PNG buffers */
+  private pool: Buffer[] = []
+  private poolReady: Promise<void>
 
   constructor() {
-    this.pool = this.loadPool()
+    this.poolReady = this.warmPool()
+  }
+
+  async onModuleInit() {
+    await this.poolReady
   }
 
   private get secret(): string {
@@ -37,6 +44,7 @@ export class CaptchaService {
   }
 
   async createChallenge(): Promise<SliderCaptchaChallengePublic> {
+    await this.poolReady
     const challengeId = `ch_${randomBytes(8).toString('hex')}`
     const shape = CAPTCHA_SHAPES[randomBytes(1)[0]! % CAPTCHA_SHAPES.length]!
     const pad = shapePadding(shape)
@@ -95,7 +103,7 @@ export class CaptchaService {
     return 'ok'
   }
 
-  private loadPool(): Buffer[] {
+  private loadPoolFiles(): Buffer[] {
     const dir = join(__dirname, '..', '..', 'assets', 'captcha')
     if (!existsSync(dir)) return []
     return readdirSync(dir)
@@ -105,8 +113,22 @@ export class CaptchaService {
       .map((f) => readFileSync(join(dir, f)))
   }
 
+  private async warmPool() {
+    const files = this.loadPoolFiles()
+    if (files.length === 0) {
+      this.pool = []
+      return
+    }
+    this.pool = await Promise.all(
+      files.map((buf) =>
+        sharp(buf).resize(WIDTH, HEIGHT, { fit: 'cover' }).ensureAlpha().png().toBuffer(),
+      ),
+    )
+  }
+
   private pickBg(): Buffer {
     if (this.pool.length === 0) {
+      // Sync SVG fallback — rare when assets missing
       return Buffer.from(
         `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">
           <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -119,29 +141,47 @@ export class CaptchaService {
     return this.pool[randomBytes(1)[0]! % this.pool.length]!
   }
 
+  private async toDataUrl(buf: Buffer, preferWebp = true): Promise<string> {
+    if (preferWebp) {
+      try {
+        const webp = await sharp(buf).webp({ quality: WEBP_QUALITY, alphaQuality: 80 }).toBuffer()
+        return `data:image/webp;base64,${webp.toString('base64')}`
+      } catch {
+        /* fall through */
+      }
+    }
+    const png = await sharp(buf).png({ compressionLevel: 8 }).toBuffer()
+    return `data:image/png;base64,${png.toString('base64')}`
+  }
+
   private async cutImages(shape: CaptchaShapeId, targetX: number, y: number) {
-    const base = await sharp(this.pickBg())
-      .resize(WIDTH, HEIGHT, { fit: 'cover' })
-      .ensureAlpha()
-      .png()
-      .toBuffer()
+    let base = this.pickBg()
+    // If SVG fallback (no warm pool), rasterize once
+    if (base[0] === 0x3c /* '<' */) {
+      base = await sharp(base).resize(WIDTH, HEIGHT).ensureAlpha().png().toBuffer()
+    }
 
     const holeSvg = Buffer.from(buildHoleMaskSvg(shape, WIDTH, HEIGHT, targetX, y, PIECE_SIZE))
-    let bgBuf = await sharp(base)
-      .composite([{ input: holeSvg, blend: 'dest-out' }])
-      .png()
-      .toBuffer()
+    const ring =
+      shape === 'circle'
+        ? `<circle cx="${targetX + PIECE_SIZE / 2}" cy="${y + PIECE_SIZE / 2}" r="${PIECE_SIZE / 2}" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
+        : shape === 'rect'
+          ? `<rect x="${targetX}" y="${y}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
+          : ''
+    const ringSvg = ring
+      ? Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${ring}</svg>`)
+      : null
 
-    if (shape !== 'puzzle') {
-      const ring =
-        shape === 'circle'
-          ? `<circle cx="${targetX + PIECE_SIZE / 2}" cy="${y + PIECE_SIZE / 2}" r="${PIECE_SIZE / 2}" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
-          : `<rect x="${targetX}" y="${y}" width="${PIECE_SIZE}" height="${PIECE_SIZE}" rx="8" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1"/>`
-      const ringSvg = Buffer.from(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${HEIGHT}">${ring}</svg>`,
-      )
-      bgBuf = await sharp(bgBuf).composite([{ input: ringSvg, blend: 'over' }]).png().toBuffer()
-    }
+    const bgPromise = (async () => {
+      let bgBuf = await sharp(base)
+        .composite([{ input: holeSvg, blend: 'dest-out' }])
+        .png()
+        .toBuffer()
+      if (ringSvg) {
+        bgBuf = await sharp(bgBuf).composite([{ input: ringSvg, blend: 'over' }]).png().toBuffer()
+      }
+      return this.toDataUrl(bgBuf)
+    })()
 
     const pad = shapePadding(shape)
     const left = Math.max(0, targetX - pad)
@@ -149,26 +189,26 @@ export class CaptchaService {
     const width = Math.min(WIDTH - left, PIECE_SIZE + pad * 2)
     const height = Math.min(HEIGHT - top, PIECE_SIZE + pad * 2)
 
-    const cropped = await sharp(base).extract({ left, top, width, height }).ensureAlpha().png().toBuffer()
-    const localMask = Buffer.from(buildShapeMaskSvg(shape, PIECE_SIZE, pad))
-    const maskLeft = targetX - left - pad
-    const maskTop = y - top - pad
-    const positionedMask = await sharp({
-      create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
-    })
-      .composite([{ input: localMask, left: maskLeft, top: maskTop }])
-      .png()
-      .toBuffer()
+    const piecePromise = (async () => {
+      const cropped = await sharp(base).extract({ left, top, width, height }).ensureAlpha().png().toBuffer()
+      const localMask = Buffer.from(buildShapeMaskSvg(shape, PIECE_SIZE, pad))
+      const maskLeft = targetX - left - pad
+      const maskTop = y - top - pad
+      const positionedMask = await sharp({
+        create: { width, height, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+      })
+        .composite([{ input: localMask, left: maskLeft, top: maskTop }])
+        .png()
+        .toBuffer()
+      const pieceBuf = await sharp(cropped)
+        .composite([{ input: positionedMask, blend: 'dest-in' }])
+        .png()
+        .toBuffer()
+      return this.toDataUrl(pieceBuf)
+    })()
 
-    const pieceBuf = await sharp(cropped)
-      .composite([{ input: positionedMask, blend: 'dest-in' }])
-      .png()
-      .toBuffer()
-
-    return {
-      bgImage: `data:image/png;base64,${bgBuf.toString('base64')}`,
-      pieceImage: `data:image/png;base64,${pieceBuf.toString('base64')}`,
-    }
+    const [bgImage, pieceImage] = await Promise.all([bgPromise, piecePromise])
+    return { bgImage, pieceImage }
   }
 
   private buildFallbackBgSvg(holeX: number, holeY: number, shape: CaptchaShapeId): string {

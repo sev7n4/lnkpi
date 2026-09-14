@@ -30,7 +30,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => !!token.value && !!user.value)
 
-  async function fetchCaptchaChallenge() {
+  let captchaPrefetch: Promise<SliderCaptchaChallengePublic> | null = null
+  let captchaCached: SliderCaptchaChallengePublic | null = null
+
+  async function requestCaptchaChallenge() {
     const { data } = await withAuthRetry(() =>
       api.post<{ data: SliderCaptchaChallengePublic }>(
         '/auth/captcha/challenge',
@@ -39,6 +42,51 @@ export const useAuthStore = defineStore('auth', () => {
       ),
     )
     return data.data
+  }
+
+  /** Warm a challenge while the login shell is open so send-code feels instant. */
+  function prefetchCaptchaChallenge() {
+    if (captchaCached || captchaPrefetch) return
+    const p = requestCaptchaChallenge()
+      .then((c) => {
+        captchaCached = c
+        return c
+      })
+      .catch((err) => {
+        throw err
+      })
+    captchaPrefetch = p
+    void p.finally(() => {
+      if (captchaPrefetch === p) captchaPrefetch = null
+    }).catch(() => undefined)
+  }
+
+  function clearCaptchaPrefetch() {
+    captchaCached = null
+    captchaPrefetch = null
+  }
+
+  async function fetchCaptchaChallenge() {
+    if (captchaCached) {
+      const c = captchaCached
+      captchaCached = null
+      // Warm the next one in background
+      prefetchCaptchaChallenge()
+      return c
+    }
+    if (captchaPrefetch) {
+      try {
+        const c = await captchaPrefetch
+        if (captchaCached === c) captchaCached = null
+        prefetchCaptchaChallenge()
+        return c
+      } catch {
+        /* fall through to fresh request */
+      }
+    }
+    const c = await requestCaptchaChallenge()
+    prefetchCaptchaChallenge()
+    return c
   }
 
   async function verifyCaptcha(challengeId: string, offsetX: number) {
@@ -136,6 +184,8 @@ export const useAuthStore = defineStore('auth', () => {
     showLoginDialog,
     captchaTicket,
     fetchCaptchaChallenge,
+    prefetchCaptchaChallenge,
+    clearCaptchaPrefetch,
     verifyCaptcha,
     sendCode,
     fetchAuthConfig,
