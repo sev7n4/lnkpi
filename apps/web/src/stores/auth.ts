@@ -118,6 +118,13 @@ export const useAuthStore = defineStore('auth', () => {
     return data.data
   }
 
+  function applySession(payload: { token: string; user: User }) {
+    token.value = payload.token
+    user.value = payload.user
+    localStorage.setItem('token', payload.token)
+    showLoginDialog.value = false
+  }
+
   async function login(phone: string, code: string) {
     const res = await withAuthRetry(() =>
       api.post<{ code?: number; data: { token: string; user: User } }>(
@@ -130,10 +137,23 @@ export const useAuthStore = defineStore('auth', () => {
     if (!payload?.token || !payload?.user) {
       throw new Error('登录响应格式异常')
     }
-    token.value = payload.token
-    user.value = payload.user
-    localStorage.setItem('token', payload.token)
-    showLoginDialog.value = false
+    applySession(payload)
+  }
+
+  async function register(phone: string, code: string, inviteCode?: string) {
+    const trimmedInvite = inviteCode?.trim()
+    const res = await withAuthRetry(() =>
+      api.post<{ code?: number; data: { token: string; user: User } }>(
+        '/auth/register',
+        { phone, code, ...(trimmedInvite ? { inviteCode: trimmedInvite } : {}) },
+        { timeout: AUTH_TIMEOUT_MS },
+      ),
+    )
+    const payload = res.data?.data
+    if (!payload?.token || !payload?.user) {
+      throw new Error('注册响应格式异常')
+    }
+    applySession(payload)
   }
 
   function logout() {
@@ -190,6 +210,7 @@ export const useAuthStore = defineStore('auth', () => {
     sendCode,
     fetchAuthConfig,
     login,
+    register,
     logout,
     openLogin,
     restoreSession,

@@ -39,6 +39,10 @@ export function mapReasonToPointFields(
     return { kind: 'grant', category: 'other', status: null }
   }
 
+  if (reason.startsWith('邀请奖励')) {
+    return { kind: 'grant', category: 'other', status: null }
+  }
+
   if (isRefundReason(reason)) {
     return {
       kind: 'refund',

@@ -1,10 +1,43 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  Inject,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
 import { CaptchaService } from './captcha.service'
+import { InviteService } from './invite.service'
+import { generateInviteCode } from './invite-code'
 
 /** fixed = 固定验证码（开发/生产临时）；real = 真实短信（未接入时 sendCode 会报错） */
 type AuthSmsMode = 'fixed' | 'real'
+
+const ENSURE_CODE_RETRIES = 8
+
+type SessionUser = {
+  id: string
+  phone: string
+  nickname: string
+  avatar: string | null
+  points: number
+  membership: string
+  createdAt: Date
+  inviteCode: string | null
+  invitedByUserId: string | null
+  _count?: { invitees: number }
+}
+
+function isUniqueConstraint(err: unknown, field: string): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { code?: string; meta?: { target?: string[] | string } }
+  if (e.code !== 'P2002') return false
+  const target = e.meta?.target
+  if (Array.isArray(target)) return target.includes(field)
+  if (typeof target === 'string') return target.includes(field)
+  return false
+}
 
 @Injectable()
 export class AuthService {
@@ -12,6 +45,7 @@ export class AuthService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(JwtService) private readonly jwt: JwtService,
     @Inject(CaptchaService) private readonly captcha: CaptchaService,
+    @Inject(InviteService) private readonly invite: InviteService,
   ) {}
 
   private get smsMode(): AuthSmsMode {
@@ -66,6 +100,44 @@ export class AuthService {
   }
 
   async login(phone: string, code: string) {
+    await this.assertValidCode(phone, code)
+    let user = await this.loadUser({ phone })
+    if (!user) throw new BadRequestException('账号不存在，请先注册')
+    await this.invite.ensureInviteCode(user.id)
+    user = (await this.loadUser({ id: user.id }))!
+    return this.issueSession(user)
+  }
+
+  async register(phone: string, code: string, inviteCode?: string) {
+    await this.assertValidCode(phone, code)
+    const existing = await this.prisma.user.findUnique({ where: { phone } })
+    if (existing) throw new ConflictException('账号已存在，请直接登录')
+
+    const trimmed = inviteCode?.trim()
+    if (trimmed) {
+      const inviter = await this.invite.findInviterByCode(trimmed)
+      if (!inviter) throw new BadRequestException('邀请码无效')
+    }
+
+    let user = await this.createRegisteredUser(phone)
+    if (trimmed) {
+      await this.invite.redeemOnRegister({ inviteeId: user.id, inviteCode: trimmed })
+      user = (await this.loadUser({ id: user.id }))!
+    } else {
+      await this.invite.ensureInviteCode(user.id)
+      user = (await this.loadUser({ id: user.id })) ?? user
+    }
+    return this.issueSession(user)
+  }
+
+  async getProfile(userId: string) {
+    await this.invite.ensureInviteCode(userId)
+    const user = await this.loadUser({ id: userId })
+    if (!user) throw new UnauthorizedException()
+    return this.toProfile(user)
+  }
+
+  private async assertValidCode(phone: string, code: string) {
     const record = await this.prisma.verificationCode.findFirst({
       where: { phone, code, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'desc' },
@@ -75,32 +147,40 @@ export class AuthService {
     if (!record && code !== bypass) {
       throw new UnauthorizedException('验证码无效或已过期')
     }
-
-    let user = await this.prisma.user.findUnique({ where: { phone } })
-    if (!user) {
-      user = await this.prisma.user.create({
-        data: { phone, nickname: `用户${phone.slice(-4)}` },
-      })
-    }
-
-    const token = await this.jwt.signAsync({ sub: user.id, phone: user.phone })
-    return {
-      token,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        nickname: user.nickname,
-        avatar: user.avatar ?? undefined,
-        points: user.points,
-        membership: user.membership,
-        createdAt: user.createdAt.toISOString(),
-      },
-    }
   }
 
-  async getProfile(userId: string) {
-    const user = await this.prisma.user.findUnique({ where: { id: userId } })
-    if (!user) throw new UnauthorizedException()
+  private async loadUser(where: { id: string } | { phone: string }): Promise<SessionUser | null> {
+    return this.prisma.user.findUnique({
+      where,
+      include: { _count: { select: { invitees: true } } },
+    })
+  }
+
+  private async createRegisteredUser(phone: string): Promise<SessionUser> {
+    const nickname = `用户${phone.slice(-4)}`
+    for (let i = 0; i < ENSURE_CODE_RETRIES; i++) {
+      try {
+        return await this.prisma.user.create({
+          data: { phone, nickname, inviteCode: generateInviteCode() },
+          include: { _count: { select: { invitees: true } } },
+        })
+      } catch (err) {
+        if (isUniqueConstraint(err, 'phone')) {
+          throw new ConflictException('账号已存在，请直接登录')
+        }
+        if (!isUniqueConstraint(err, 'inviteCode')) throw err
+      }
+    }
+
+    const user = await this.prisma.user.create({
+      data: { phone, nickname },
+      include: { _count: { select: { invitees: true } } },
+    })
+    await this.invite.ensureInviteCode(user.id)
+    return (await this.loadUser({ id: user.id })) ?? user
+  }
+
+  private toProfile(user: SessionUser) {
     return {
       id: user.id,
       phone: user.phone,
@@ -109,6 +189,14 @@ export class AuthService {
       points: user.points,
       membership: user.membership,
       createdAt: user.createdAt.toISOString(),
+      inviteCode: user.inviteCode!,
+      invitedByUserId: user.invitedByUserId ?? undefined,
+      inviteeCount: user._count?.invitees ?? 0,
     }
+  }
+
+  private async issueSession(user: SessionUser) {
+    const token = await this.jwt.signAsync({ sub: user.id, phone: user.phone })
+    return { token, user: this.toProfile(user) }
   }
 }

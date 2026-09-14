@@ -16,6 +16,12 @@ model User {
   points     Int                @default(1000)
   membership String             @default("free")
   createdAt  DateTime           @default(now())
+  inviteCode       String?  @unique
+  invitedByUserId  String?
+  invitedBy        User?    @relation("UserInvites", fields: [invitedByUserId], references: [id])
+  invitees         User[]   @relation("UserInvites")
+  inviteRedemptionsAsInvitee InviteRedemption? @relation("RedemptionInvitee")
+  inviteRedemptionsAsInviter InviteRedemption[] @relation("RedemptionInviter")
   sessions   Session[]
   works      Work[]
   stories    Story[]
@@ -25,6 +31,21 @@ model User {
   aiPreferences    UserAiPreferences?
   webdavConfig     UserWebdavConfig?
   assets           UserAsset[]
+}
+
+model InviteRedemption {
+  id                         String   @id @default(cuid())
+  inviteeId                  String   @unique
+  invitee                    User     @relation("RedemptionInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  inviterId                  String
+  inviter                    User     @relation("RedemptionInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviteCode                 String
+  inviteePoints              Int
+  inviterPoints              Int
+  inviterRewardSkippedReason String?
+  createdAt                  DateTime @default(now())
+
+  @@index([inviterId, createdAt])
 }
 
 // 用户全局资产库：跨画布可用，用户在节点上主动保存或面板上传入库

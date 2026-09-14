@@ -5,6 +5,7 @@ import MembershipModal from '@/components/membership/MembershipModal.vue'
 import { useAuthStore } from '@/stores/auth'
 import { membershipApi } from '@/services/users-api'
 import { api } from '@/services/api'
+import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import type { User } from '@lnkpi/shared'
 import type {
   PointCategory,
@@ -28,6 +29,7 @@ const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const loadError = ref('')
 const showMembership = ref(false)
+const inviteCopied = ref(false)
 
 type BillKindTab = 'all' | 'consume' | 'grant'
 
@@ -126,6 +128,20 @@ function formatCreatedAt(value: string) {
 
 function shortGenerationId(id: string) {
   return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
+}
+
+async function copyInvite() {
+  const code = profile.value?.inviteCode
+  if (!code) return
+  try {
+    await copyTextToClipboard(code)
+    inviteCopied.value = true
+    setTimeout(() => {
+      inviteCopied.value = false
+    }, 1500)
+  } catch {
+    // ignore clipboard failures
+  }
 }
 
 async function reload() {
@@ -231,6 +247,22 @@ onMounted(async () => {
             {{ isFreeMembership ? '升级会员' : '管理会员' }}
           </button>
         </div>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-white/8 bg-[#242424] p-5">
+        <p class="text-xs text-white/40">我的邀请码</p>
+        <div class="mt-2 flex items-center gap-3">
+          <code class="text-lg tracking-widest text-white">{{ profile.inviteCode ?? '—' }}</code>
+          <button
+            type="button"
+            class="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/[0.06] hover:text-white disabled:opacity-40"
+            :disabled="!profile.inviteCode"
+            @click="copyInvite"
+          >
+            {{ inviteCopied ? '已复制' : '复制' }}
+          </button>
+        </div>
+        <p class="mt-3 text-sm text-white/50">已邀请 {{ profile.inviteeCount ?? 0 }} 人</p>
       </div>
 
       <MembershipModal v-model="showMembership" />

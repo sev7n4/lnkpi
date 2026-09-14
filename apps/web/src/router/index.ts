@@ -82,6 +82,16 @@ const router = createRouter({
       name: 'generation-records',
       component: () => import('@/pages/studios/GenerationRecordsPage.vue'),
     },
+    {
+      path: '/terms',
+      name: 'terms',
+      component: () => import('../pages/TermsPage.vue'),
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../pages/PrivacyPage.vue'),
+    },
   ],
 })
 

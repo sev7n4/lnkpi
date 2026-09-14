@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, Post, Req, UseGuards, Inject } from '@nestjs/common'
-import { IsNumber, IsOptional, IsString, Length, Matches } from 'class-validator'
+import { IsNumber, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator'
 import { AuthService } from './auth.service'
 import { AuthGuard } from './auth.guard'
 import { CaptchaService } from './captcha.service'
@@ -30,6 +30,21 @@ class LoginDto {
   @IsString()
   @Length(4, 6)
   code!: string
+}
+
+class RegisterDto {
+  @IsString()
+  @Matches(/^1\d{10}$/)
+  phone!: string
+
+  @IsString()
+  @Length(4, 6)
+  code!: string
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  inviteCode?: string
 }
 
 @Controller('auth')
@@ -70,6 +85,13 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() dto: LoginDto) {
     const data = await this.authService.login(dto.phone, dto.code)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('register')
+  @HttpCode(200)
+  async register(@Body() dto: RegisterDto) {
+    const data = await this.authService.register(dto.phone, dto.code, dto.inviteCode)
     return { code: 0, message: 'ok', data }
   }
 

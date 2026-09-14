@@ -50,6 +50,9 @@ export interface User {
   points?: number
   membership?: string
   createdAt: string
+  inviteCode?: string
+  invitedByUserId?: string
+  inviteeCount?: number
 }
 
 export interface Session {

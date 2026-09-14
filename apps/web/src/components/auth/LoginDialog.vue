@@ -75,7 +75,7 @@ async function onCaptchaVerified(ticket: string) {
       class="fixed inset-0 z-[100] flex flex-col bg-black outline-none md:flex-row"
       role="dialog"
       aria-modal="true"
-      aria-label="登录"
+      aria-label="登录或注册"
       tabindex="-1"
       @keydown.esc.prevent="onEsc"
     >
