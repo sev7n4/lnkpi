@@ -1,8 +1,83 @@
 /** @vitest-environment node */
 import { describe, expect, it } from 'vitest'
-import { detectAgentChipSet } from './agentChipSet'
+import { detectAgentChipSet, extractProposeGenerationNodeId } from './agentChipSet'
+
+describe('extractProposeGenerationNodeId', () => {
+  it('extracts nodeId from last successful propose_generation dict result', () => {
+    expect(
+      extractProposeGenerationNodeId([
+        { name: 'upsert_media_node', result: { nodeId: 'other' } },
+        {
+          name: 'propose_generation',
+          result: { nodeId: 'img-1', status: 'pending_confirm' },
+        },
+      ]),
+    ).toBe('img-1')
+  })
+
+  it('parses JSON string results and accepts node_id', () => {
+    expect(
+      extractProposeGenerationNodeId([
+        {
+          name: 'propose_generation',
+          result: JSON.stringify({ node_id: 'vid-9', status: 'pending_confirm' }),
+        },
+      ]),
+    ).toBe('vid-9')
+  })
+
+  it('ignores propose results that are not pending_confirm', () => {
+    expect(
+      extractProposeGenerationNodeId([
+        { name: 'propose_generation', result: { nodeId: 'img-1', status: 'draft' } },
+        { name: 'propose_generation' },
+      ]),
+    ).toBe(null)
+  })
+
+  it('prefers the last successful propose_generation', () => {
+    expect(
+      extractProposeGenerationNodeId([
+        {
+          name: 'propose_generation',
+          result: { nodeId: 'old', status: 'pending_confirm' },
+        },
+        {
+          name: 'propose_generation',
+          result: { nodeId: 'new', status: 'pending_confirm' },
+        },
+      ]),
+    ).toBe('new')
+  })
+})
 
 describe('detectAgentChipSet', () => {
+  it('detects generation_propose from toolCalls even without atomic text', () => {
+    expect(
+      detectAgentChipSet('已为你准备好节点，请确认后开始生成。', {
+        toolCalls: [
+          {
+            name: 'propose_generation',
+            result: { nodeId: 'img-1', status: 'pending_confirm' },
+          },
+        ],
+      }),
+    ).toBe('generation_propose')
+  })
+
+  it('prefers generation_propose over atomic text snippets', () => {
+    expect(
+      detectAgentChipSet('视频/音频生成将消耗积分。回复「确认生成」开始，或「取消」放弃。', {
+        toolCalls: [
+          {
+            name: 'propose_generation',
+            result: { nodeId: 'img-2', status: 'pending_confirm' },
+          },
+        ],
+      }),
+    ).toBe('generation_propose')
+  })
+
   it('detects plan structured options (new format)', () => {
     expect(
       detectAgentChipSet(
