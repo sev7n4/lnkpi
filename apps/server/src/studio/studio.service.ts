@@ -394,6 +394,17 @@ export class StudioService {
           (typeof meta.originalModel === 'string' && meta.originalModel) ||
           undefined,
         resolution: typeof meta.resolution === 'string' ? meta.resolution : undefined,
+        videoMode: typeof meta.videoMode === 'string' ? meta.videoMode : undefined,
+        referenceImageCount: typeof meta.referenceImageCount === 'number'
+          ? meta.referenceImageCount
+          : Array.isArray(meta.referenceImages)
+            ? meta.referenceImages.length
+            : undefined,
+        referenceVideoCount: typeof meta.referenceVideoCount === 'number'
+          ? meta.referenceVideoCount
+          : Array.isArray(meta.referenceVideos)
+            ? meta.referenceVideos.length
+            : undefined,
       })
     }
     throw new BadRequestException('不支持的生成类型')
@@ -1452,7 +1463,14 @@ export class StudioService {
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
-    const durationCredits = videoCreditsForModel({ duration, modelKey: model, resolution })
+    const durationCredits = videoCreditsForModel({
+      duration,
+      modelKey: model,
+      resolution,
+      videoMode,
+      referenceImageCount: referenceBundle.images.length,
+      referenceVideoCount: referenceBundle.videos.length,
+    })
     const chargeReason = '视频生成'
     await this.points.consume(
       userId,
@@ -1559,6 +1577,9 @@ export class StudioService {
               aspectRatio,
               resolution,
               crop,
+              ...(videoMode ? { videoMode } : {}),
+              referenceImageCount: referenceBundle.images.length,
+              referenceVideoCount: referenceBundle.videos.length,
               referenceImages: upstreamImageRefs.map(({ url }) => url),
               referenceVideos: effectiveBundle.videos.map(({ url }) => url),
               referenceAudios: effectiveBundle.audios.map(({ url }) => url),

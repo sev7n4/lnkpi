@@ -334,6 +334,17 @@ export class MaterialService {
           (typeof meta.model === 'string' && meta.model) ||
           undefined,
         resolution: typeof meta.resolution === 'string' ? meta.resolution : undefined,
+        videoMode: typeof meta.videoMode === 'string' ? meta.videoMode : undefined,
+        referenceImageCount: typeof meta.referenceImageCount === 'number'
+          ? meta.referenceImageCount
+          : Array.isArray(meta.referenceImages)
+            ? meta.referenceImages.length
+            : undefined,
+        referenceVideoCount: typeof meta.referenceVideoCount === 'number'
+          ? meta.referenceVideoCount
+          : Array.isArray(meta.referenceVideos)
+            ? meta.referenceVideos.length
+            : undefined,
       })
     }
     throw new BadRequestException('不支持的素材类型')
@@ -459,7 +470,14 @@ export class MaterialService {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
 
-    const cost = videoCreditsForModel({ duration, modelKey: model, resolution })
+    const cost = videoCreditsForModel({
+      duration,
+      modelKey: model,
+      resolution,
+      videoMode,
+      referenceImageCount: referenceBundle.images.length,
+      referenceVideoCount: referenceBundle.videos.length,
+    })
     const chargeReason = '视频生成'
     if (!skipCharge) {
       await this.points.consume(
@@ -485,6 +503,9 @@ export class MaterialService {
               aspectRatio,
               resolution,
               crop,
+              ...(videoMode ? { videoMode } : {}),
+              referenceImageCount: referenceBundle.images.length,
+              referenceVideoCount: referenceBundle.videos.length,
               channelId: resolved.channelId,
               providerSource: resolved.source,
               ...falH3MaxVideoRecordMeta({
@@ -1262,6 +1283,9 @@ export class MaterialService {
                 resolution,
                 crop,
                 image: built.image,
+                ...(videoMode ? { videoMode } : {}),
+                referenceImageCount: referenceBundle.images.length,
+                referenceVideoCount: referenceBundle.videos.length,
                 referenceImages: effectiveBundle.images.map(({ url: refUrl }) => refUrl),
                 referenceVideos: effectiveBundle.videos.map(({ url: refUrl }) => refUrl),
                 referenceAudios: effectiveBundle.audios.map(({ url: refUrl }) => refUrl),
