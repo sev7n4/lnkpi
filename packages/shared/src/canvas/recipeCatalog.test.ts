@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { validateRecipe } from './workflowRecipe'
 import {
@@ -21,6 +24,9 @@ describe('recipeCatalog', () => {
     const keys = recipe!.nodes.map((n) => n.key)
     expect(keys).toEqual(expect.arrayContaining(['white_bg', 'product_turnaround']))
     expect(keys.some((key) => key === 'banner' || key === 'hero_main')).toBe(true)
+    expect(keys).not.toContain('copy_main')
+    expect(keys).not.toContain('model_portrait')
+    expect(keys).not.toContain('video_product')
     expect(validateRecipe(recipe)).toEqual(recipe)
   })
 
@@ -34,6 +40,16 @@ describe('recipeCatalog', () => {
       'ecommerce-product-visual',
       'model-turnaround',
     ])
+    expect(summaries.map((s) => s.title).sort()).toEqual(['电商套图', '角色三视图'])
     expect(summaries.every((s) => s.version === '1.0.0' && s.title.length > 0)).toBe(true)
+  })
+
+  it('does not import node filesystem APIs in production catalog', () => {
+    const src = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'recipeCatalog.ts'),
+      'utf-8',
+    )
+    expect(src).not.toMatch(/node:fs/)
+    expect(src).not.toMatch(/readFileSync/)
   })
 })

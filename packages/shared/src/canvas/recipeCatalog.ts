@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import ecommerceProductVisual from './recipes/ecommerce-product-visual.json'
+import modelTurnaround from './recipes/model-turnaround.json'
 import { validateRecipe, type RecipeDocument } from './workflowRecipe'
 
 export type PlatformRecipeSummary = {
@@ -9,14 +8,9 @@ export type PlatformRecipeSummary = {
   title: string
 }
 
-function loadRecipe(filename: string): RecipeDocument {
-  const path = join(dirname(fileURLToPath(import.meta.url)), 'recipes', filename)
-  return validateRecipe(JSON.parse(readFileSync(path, 'utf-8')))
-}
-
 export const PLATFORM_RECIPES: RecipeDocument[] = [
-  loadRecipe('ecommerce-product-visual.json'),
-  loadRecipe('model-turnaround.json'),
+  validateRecipe(ecommerceProductVisual),
+  validateRecipe(modelTurnaround),
 ]
 
 export function getPlatformRecipe(id: string, version: string): RecipeDocument | undefined {
