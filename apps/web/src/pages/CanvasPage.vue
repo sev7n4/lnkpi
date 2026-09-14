@@ -56,6 +56,7 @@ import NodePanelDock from '@/components/canvas/NodePanelDock.vue'
 import DockStudioToolbar from '@/components/canvas/DockStudioToolbar.vue'
 import CanvasFloatingChrome from '@/components/canvas/CanvasFloatingChrome.vue'
 import CanvasAccountChrome from '@/components/canvas/CanvasAccountChrome.vue'
+import MembershipModal from '@/components/membership/MembershipModal.vue'
 import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftControls.vue'
 import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
@@ -3548,7 +3549,7 @@ onUnmounted(() => {
               <path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
-          <CanvasAccountChrome v-model:show-membership="showMembership" />
+          <CanvasAccountChrome />
         </div>
 
         <input
@@ -3615,6 +3616,7 @@ onUnmounted(() => {
       />
     </div>
 
+    <MembershipModal v-model="showMembership" />
     <ProviderConfigDialog v-model="showModelSettings" />
     <ByokFallbackConfirmDialog
       v-model="fallbackDialog.open"
