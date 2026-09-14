@@ -46,8 +46,11 @@ import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSch
 import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
 import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 import {
+  confirmProposeGeneration as runConfirmProposeGeneration,
   detectAgentChipSet,
   extractProposeGenerationNodeId,
+  resolvePendingConfirmNodeId,
+  type CanvasNodeLike,
 } from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
@@ -136,6 +139,8 @@ const props = defineProps<{
   selectedNodeId?: string | null
   /** M2: 选中节点数据，发送时升格为 canvasNode attachment */
   selectedNode?: { id: string; type?: string; data?: Record<string, unknown> } | null
+  /** Phase 2c.1: canvas nodes for pending_confirm SSOT chip recover */
+  canvasNodes?: CanvasNodeLike[] | null
   canOpen?: () => boolean
 }>()
 
@@ -467,26 +472,36 @@ const lastAssistantMessage = computed(() =>
   [...agent.messages].reverse().find((m) => m.role === 'assistant'),
 )
 
-const proposeGenerationNodeId = computed(() =>
-  extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls),
-)
+const proposeGenerationNodeId = computed(() => {
+  const fromTools = extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls)
+  if (fromTools) return fromTools
+  return resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
+})
 
 function proposeChipKey(msgId: string, nodeId: string): string {
   return `${msgId}:${nodeId}`
 }
 
+function proposeLatchKey(nodeId: string): string {
+  const last = lastAssistantMessage.value
+  return last ? proposeChipKey(last.id, nodeId) : `node:${nodeId}`
+}
+
 const chipSet = computed(() => {
+  // Interrupt overrides propose (and all text chips).
   const fromInterrupt = chipSetFromInterrupt(interruptGate.value)
   if (fromInterrupt) return fromInterrupt
   if (agent.isStreaming) return null
   const last = lastAssistantMessage.value
-  const proposeId = extractProposeGenerationNodeId(last?.toolCalls)
-  if (last && proposeId) {
-    const key = proposeChipKey(last.id, proposeId)
+  const proposeId =
+    extractProposeGenerationNodeId(last?.toolCalls) ??
+    resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
+  if (proposeId) {
+    const key = proposeLatchKey(proposeId)
     if (clearedProposeKey.value !== key) return 'generation_propose'
   }
   // 修复 P1-4：把"最近用户消息"传入 detectAgentChipSet，避免 modify 阶段误显示 plan 按钮
-  // Propose path is handled above (with dismiss latch); omit toolCalls here so latch sticks.
+  // Propose path is handled above (with dismiss latch); omit toolCalls/canvas here so latch sticks.
   const lastUser = [...agent.messages].reverse().find((m) => m.role === 'user')
   return detectAgentChipSet(last?.content || '', {
     latestUserText: lastUser?.content,
@@ -1365,20 +1380,21 @@ function fillExampleUtterance(text: string) {
 }
 
 function latchProposeChip(nodeId: string) {
-  const last = lastAssistantMessage.value
-  if (!last) return
-  clearedProposeKey.value = proposeChipKey(last.id, nodeId)
+  clearedProposeKey.value = proposeLatchKey(nodeId)
 }
 
-/** Phase 2b: confirm → CanvasPage generateForNode (never atomic sendPreset). */
+/** Phase 2b/2c.1: confirm → CanvasPage generateForNode (never atomic sendPreset). */
 function confirmProposeGeneration() {
   const nodeId = proposeGenerationNodeId.value
   if (!nodeId || agent.isStreaming) return
   latchProposeChip(nodeId)
-  emit('generateNode', nodeId)
+  void runConfirmProposeGeneration(nodeId, {
+    generateForNode: (id) => emit('generateNode', id),
+    sendPreset,
+  })
 }
 
-/** Phase 2b: cancel → clear pending_confirm on canvas node. */
+/** Phase 2b/2c.1: cancel → Nest clear via CanvasPage. */
 function cancelProposeGeneration() {
   const nodeId = proposeGenerationNodeId.value
   if (!nodeId || agent.isStreaming) return

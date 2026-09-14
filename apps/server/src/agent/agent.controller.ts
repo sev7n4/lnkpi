@@ -15,6 +15,7 @@ import { Type } from 'class-transformer'
 import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
 import { SessionsService } from '../sessions/sessions.service'
+import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentService } from './agent.service'
 import { CancelRunDto } from './dto/cancel-run.dto'
 
@@ -114,6 +115,15 @@ class OptimizePromptDto {
   style?: string
 }
 
+/** Phase 2c.1: browser-facing cancel for pending_confirm (Jwt; not AgentInternalGuard). */
+class ClearProposeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  nodeId!: string
+}
+
 class ListAgentThreadsQueryDto {
   @IsString()
   sessionId!: string
@@ -132,6 +142,7 @@ export class AgentController {
   constructor(
     @Inject(AgentService) private readonly agentService: AgentService,
     @Inject(SessionsService) private readonly sessionsService: SessionsService,
+    @Inject(AgentCanvasToolsService) private readonly canvasTools: AgentCanvasToolsService,
   ) {}
 
   @Get('capabilities/list')
@@ -167,6 +178,25 @@ export class AgentController {
   ) {
     await this.sessionsService.findOne(dto.sessionId, req.user.sub)
     const data = await this.agentService.cancelRun(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  /**
+   * Phase 2c.1: clear propose pending_confirm → draft.
+   * Browser uses Jwt session ownership; runtime keeps POST /agent/internal/clear-propose-generation.
+   */
+  @Post('clear-propose')
+  @UseGuards(AuthGuard)
+  async clearPropose(
+    @Body() dto: ClearProposeDto,
+    @Req() req: Request & { user: { sub: string } },
+  ) {
+    await this.sessionsService.findOne(dto.sessionId, req.user.sub)
+    const data = await this.canvasTools.clearProposeGeneration({
+      sessionId: dto.sessionId,
+      userId: req.user.sub,
+      nodeId: dto.nodeId,
+    })
     return { code: 0, message: 'ok', data }
   }
 

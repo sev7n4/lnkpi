@@ -36,6 +36,7 @@ import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
+import { canvasApi } from '@/services/canvas-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
 import { resolveUpstreamContext } from '@/composables/useUpstreamNodeContext'
 import { resolveNodeRefs, type LocalRefBinding, type NodeRef } from '@/composables/useNodeRefs'
@@ -2644,17 +2645,25 @@ async function handleNodeGenerate() {
   await generateForNode(fresh)
 }
 
-/** Phase 2b: agent propose confirm → same path as dock / retry by nodeId. */
+/** Phase 2b/2c.1: agent propose confirm → same path as dock / retry by nodeId. */
 async function handleAgentGenerateNode(nodeId: string) {
   const node = nodes.value.find((n) => n.id === nodeId)
   if (!node) return
+  // Phase 2c.1: leave pending_confirm as soon as confirm/dock generate starts.
+  if ((node.data as Record<string, unknown> | undefined)?.status === 'pending_confirm') {
+    patchNodeData(nodeId, { status: NODE_GENERATION_STATUS.draft })
+  }
   await generateForNode(node as EditableFlowNode)
 }
 
-/** Phase 2b: cancel propose → clear pending_confirm so Nest SoT can match after persist. */
-function handleClearProposeGeneration(nodeId: string) {
-  patchNodeData(nodeId, { status: 'draft' })
-  persistUserEdit()
+/** Phase 2c.1: cancel propose → Nest Jwt clear-propose, then local draft patch. */
+async function handleClearProposeGeneration(nodeId: string) {
+  try {
+    await canvasApi.clearProposeGeneration(sessionId.value, nodeId)
+    patchNodeData(nodeId, { status: 'draft' })
+  } catch (err) {
+    ElMessage.error(apiErrorMessage(err, '取消生成确认失败，请重试'))
+  }
 }
 
 async function handleSceneComposerSave() {
@@ -3614,6 +3623,7 @@ onUnmounted(() => {
         :read-only="agentReadOnly"
         :selected-node-id="selectedNodeId"
         :selected-node="selectedNode"
+        :canvas-nodes="nodes"
         @canvas-actions="handleAgentActions"
         @turn-complete="handleAgentTurnComplete"
         @focus-node="focusNodeById"

@@ -19,6 +19,17 @@ export type AgentToolCallLike = {
   result?: unknown
 }
 
+/** Minimal canvas node shape for pending_confirm SSOT recover (Phase 2c.1). */
+export type CanvasNodeLike = {
+  id: string
+  data?: {
+    status?: string
+    createdAt?: string | number
+    updatedAt?: string | number
+    [key: string]: unknown
+  }
+}
+
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"
 const PLAN_SNIPPETS = ['1. 采纳推荐', '1 / A', '确认方案', '请选择：'] as const
 const COPY_SNIPPETS = ['【主文案草稿】', '写入主文案'] as const
@@ -38,6 +49,10 @@ export interface ChipSetContext {
   latestUserText?: string
   /** 最近一条 assistant 的 toolCalls（用于 Phase 2b propose_generation） */
   toolCalls?: AgentToolCallLike[] | null
+  /** Phase 2c.1: canvas nodes for pending_confirm SSOT recover */
+  canvasNodes?: CanvasNodeLike[] | null
+  /** Phase 2c.1: selected node id (selected pending wins) */
+  selectedNodeId?: string | null
 }
 
 function userJustRequestedModify(latestUserText: string | undefined): boolean {
@@ -92,6 +107,62 @@ export function extractProposeGenerationNodeId(
   return null
 }
 
+function timestampMs(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const asNum = Number(value)
+    if (Number.isFinite(asNum) && value.trim() === String(asNum)) return asNum
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return Number.NEGATIVE_INFINITY
+}
+
+/**
+ * Phase 2c.1 §1.2: which pending_confirm node drives the side-rail chip.
+ * Selected pending wins; else newest by updatedAt → createdAt; tie-break by id.
+ */
+export function resolvePendingConfirmNodeId(
+  nodes: CanvasNodeLike[] | null | undefined,
+  selectedNodeId?: string | null,
+): string | null {
+  if (!nodes?.length) return null
+  const pending = nodes.filter((n) => n?.data?.status === 'pending_confirm')
+  if (!pending.length) return null
+
+  const selected = String(selectedNodeId ?? '').trim()
+  if (selected && pending.some((n) => n.id === selected)) return selected
+
+  pending.sort((a, b) => {
+    const aUpdated = timestampMs(a.data?.updatedAt)
+    const bUpdated = timestampMs(b.data?.updatedAt)
+    const aCreated = timestampMs(a.data?.createdAt)
+    const bCreated = timestampMs(b.data?.createdAt)
+    const aTs = aUpdated > Number.NEGATIVE_INFINITY ? aUpdated : aCreated
+    const bTs = bUpdated > Number.NEGATIVE_INFINITY ? bUpdated : bCreated
+    if (bTs !== aTs) return bTs - aTs
+    return String(b.id).localeCompare(String(a.id))
+  })
+  return pending[0]?.id ?? null
+}
+
+export type ConfirmProposeDeps = {
+  generateForNode: (nodeId: string) => void | Promise<void>
+  sendPreset?: (text: string) => void | Promise<void>
+}
+
+/**
+ * Phase 2c.1 C2: confirm propose → dock generateForNode only (never sendPreset / atomic).
+ */
+export async function confirmProposeGeneration(
+  nodeId: string,
+  deps: ConfirmProposeDeps,
+): Promise<void> {
+  const id = String(nodeId ?? '').trim()
+  if (!id) return
+  await deps.generateForNode(id)
+}
+
 /** Which confirm chip row to show under the agent input. */
 export function detectAgentChipSet(
   assistantText: string,
@@ -99,6 +170,11 @@ export function detectAgentChipSet(
 ): AgentChipSet {
   // Phase 2b: dock-equivalent confirm (never atomic_create resume)
   if (extractProposeGenerationNodeId(ctx?.toolCalls)) {
+    return 'generation_propose'
+  }
+
+  // Phase 2c.1 C1: recover generation_propose from canvas pending_confirm SSOT
+  if (resolvePendingConfirmNodeId(ctx?.canvasNodes, ctx?.selectedNodeId)) {
     return 'generation_propose'
   }
 
