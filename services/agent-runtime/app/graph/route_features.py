@@ -136,6 +136,8 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
     suspected_create = suspected_media_create(utterance)
     suspected_vision = suspected_vision_qa(utterance)
     normalized = normalize_colloquial_create_verbs(utterance)
+    # Soft signal only (Phase 2a): must NOT alone set flow_mode=atomic_create.
+    # Routing uses hard/precedence without atomic_generate; propose tools are Phase 2b.
     media_high = bool(
         utterance_suggests_atomic_create(normalized)
         or strong_generate_media(utterance)

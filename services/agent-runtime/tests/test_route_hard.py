@@ -20,7 +20,6 @@ _APPENDIX_A_HARD_IDS = (
     "focus_gen",
     "explicit_skill_orch",
     "orch_ambiguous",
-    "atomic_generate",
     "suspected_vision_clarify",
     "suspected_media_clarify",
     "sidebar_media_question",
@@ -31,7 +30,7 @@ def test_explore_not_in_hard_ids():
     assert "explore" not in HARD_SHORTCIRCUIT_RULE_IDS
     assert "empty" not in HARD_SHORTCIRCUIT_RULE_IDS
     assert "default_chat" not in HARD_SHORTCIRCUIT_RULE_IDS
-    assert "atomic_generate" in HARD_SHORTCIRCUIT_RULE_IDS
+    assert "atomic_generate" not in HARD_SHORTCIRCUIT_RULE_IDS
 
 
 def test_hard_ids_match_appendix_a_order():
@@ -59,11 +58,9 @@ def _hard(state: dict, *, valid_skill_ids: set[str] | None = None):
     )
 
 
-def test_hard_hits_atomic_generate():
+def test_hard_skips_former_atomic_generate():
     d = _hard({"messages": [{"role": "user", "content": "帮我生成一张蓝牙耳机主图"}]})
-    assert d is not None
-    assert d["precedence_rule_id"] == "atomic_generate"
-    assert d["flow_mode"] == "atomic_create"
+    assert d is None
 
 
 def test_hard_skips_explore_noun_signal():

@@ -400,35 +400,11 @@ def _rule_orch_ambiguous(
 def _rule_atomic_generate(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if features.get("media_create_high"):
-        return _base_decision(
-            ctx,
-            flow_mode="atomic_create",
-            reason="media_create_normalized",
-            confidence=0.90,
-            precedence_rule_id="atomic_generate",
-            guard_veto=_guard_veto(ctx),
-            intent=intent,
-            features=features,
-        )
-    utterance = intent.utterance
-    l0 = detect_l0_action(utterance)
-    route = resolve_intake_route(utterance, focus_node_id=ctx.get("focus_node_id"))
-    is_variant = bool(features.get("has_atomic_checkpoint")) and is_regenerate_new_variant(utterance)
-    is_atomic = route == "atomic_create" or intent_suggests_atomic_create(intent)
-    if is_atomic or is_variant or (
-        has_preserve_intent(utterance) and l0 in ("preserve", "generate", "unknown")
-    ):
-        return _base_decision(
-            ctx,
-            flow_mode="atomic_create",
-            reason="atomic_create_intent",
-            confidence=0.88,
-            precedence_rule_id="atomic_generate",
-            guard_veto=_guard_veto(ctx),
-            intent=intent,
-            features=features,
-        )
+    """Deprecated Phase 2a: no longer registered in PRECEDENCE_RULES / HARD.
+
+    Bare media / workflow utterances must fall through to canvas_agent.
+    Kept for reference until Phase 2d cleanup.
+    """
     return None
 
 
@@ -536,7 +512,7 @@ PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("orch_ambiguous", _rule_orch_ambiguous),
     # M4: explore noun/verb gate retired — canvas ops fall through to
     # canvas_agent (default_chat / empty) or decide_lane when primary=1.
-    ("atomic_generate", _rule_atomic_generate),
+    # Phase 2a: atomic_generate unregistered (see _rule_atomic_generate docstring).
     ("suspected_vision_clarify", _rule_suspected_vision_clarify),
     ("suspected_media_clarify", _rule_suspected_media_clarify),
     ("sidebar_media_question", _rule_sidebar_media_question),

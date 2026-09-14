@@ -46,13 +46,13 @@ def test_route_llm_flags_default_off():
     assert settings.route_llm_shadow is False
 
 
-def test_hard_skips_llm(primary_on):
+def test_explicit_gen_no_longer_hard_skips_llm(primary_on):
     llm = FakeLLM(
         json.dumps(
             {
                 "lane": "canvas_agent",
-                "confidence": 0.99,
-                "reason": "should_not_run",
+                "confidence": 0.9,
+                "reason": "agent_will_place_nodes",
                 "clarify_question": None,
             }
         )
@@ -61,9 +61,9 @@ def test_hard_skips_llm(primary_on):
         {"messages": [{"role": "user", "content": "帮我生成一张蓝牙耳机主图"}]}
     )
     d = decide_route(ctx, llm=llm)
-    assert d["flow_mode"] == "atomic_create"
-    assert d.get("precedence_rule_id") == "atomic_generate"
-    assert llm.calls == 0
+    assert d.get("precedence_rule_id") != "atomic_generate"
+    assert llm.calls >= 1
+    assert d["flow_mode"] == "canvas_agent"
 
 
 def test_llm_failure_falls_back_to_canvas_agent(primary_on):

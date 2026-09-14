@@ -27,7 +27,7 @@ HARD_SHORTCIRCUIT_RULE_IDS: tuple[str, ...] = (
     "focus_gen",
     "explicit_skill_orch",
     "orch_ambiguous",
-    "atomic_generate",
+    # Phase 2a: atomic_generate retired — bare media/workflow → canvas_agent.
     "suspected_vision_clarify",
     "suspected_media_clarify",
     "sidebar_media_question",

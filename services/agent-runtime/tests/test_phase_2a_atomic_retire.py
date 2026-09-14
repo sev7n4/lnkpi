@@ -65,3 +65,21 @@ def test_a8_greeting_is_canvas_agent():
     ctx = assemble_route_context({"messages": [{"role": "user", "content": "你好"}]})
     d = decide_route(ctx, route_llm_primary=False)
     assert d["flow_mode"] == "canvas_agent"
+
+
+def test_a9_run_gen_not_in_tool_plan_visible():
+    from app.tools.tool_plan import build_tool_plan
+
+    plan = build_tool_plan()
+    assert "run_image_generation" not in plan.visible_names
+    assert "run_video_generation" not in plan.visible_names
+
+
+def test_media_create_high_soft_does_not_force_atomic_route():
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": WORKFLOW}]})
+    intent = resolve_atomic_intent(WORKFLOW)
+    features = extract_route_features(ctx, intent)
+    # Soft bit may remain True; route must still be canvas_agent.
+    assert features.get("media_create_high") is True
+    d = decide_route(ctx, route_llm_primary=False)
+    assert d["flow_mode"] == "canvas_agent"
