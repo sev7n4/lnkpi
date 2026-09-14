@@ -1,7 +1,7 @@
 # MiniMax 官方 H3 全能力视频接入设计
 
 > 日期：2026-09-13  
-> 状态：已批准（含 BYOK §3.7；实现计划待 fal 最小接入落地后另开）  
+> 状态：已批准（含 BYOK §3.7；P0 实现计划见 `../plans/2026-09-14-minimax-h3-p0-video.md`）  
 > 范围：经 **MiniMax Open Platform** 接入 **`MiniMax-H3` 全能力**（T2V / I2V / 首尾帧 / Reference / Context-IR / 768P→2K Regeneration）  
 > 非目标：fal H3 Max 最小接入（见姊妹规格）、H3 Max Director / fal.live、自托管开源权重部署  
 > 前置：`VideoProvider`、`videoModelProfiles`、Seedance 多模态 refs 先例（`2026-08-08-seedance-agnes-video-adapter-design.md`）  
