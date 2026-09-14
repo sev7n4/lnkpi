@@ -92,9 +92,7 @@ function buildContent(
   }
   const startImage = resolveStartImage(options)
   const endImage =
-    options?.videoMode === 'image_to_video' || options?.videoMode === 'reference_to_video'
-      ? undefined
-      : resolveEndImage(options)
+    options?.videoMode === 'first_last_frame' ? resolveEndImage(options) : undefined
   if (startImage) {
     content.push({ type: 'image_url', image_url: { url: startImage }, role: 'first_frame' })
   }
