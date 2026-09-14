@@ -77,7 +77,7 @@ function resetSlider(animate = false) {
 async function loadChallenge() {
   loading.value = true
   error.value = ''
-  challenge.value = null
+  // Keep previous board visible while refreshing — avoid empty「加载中…」flash
   offsetX.value = 0
   successFlash.value = false
   verifying.value = false
@@ -87,6 +87,9 @@ async function loadChallenge() {
     resetSlider(false)
   } catch {
     error.value = '验证加载失败，请重试'
+    if (!challenge.value) {
+      // first load failed — leave board empty with skeleton
+    }
   } finally {
     loading.value = false
   }
@@ -205,14 +208,15 @@ onUnmounted(() => {
     </div>
 
     <div class="flex flex-1 flex-col items-center justify-center gap-4 overflow-auto px-4 py-5">
-      <p v-if="loading" class="text-sm text-[var(--neo-text-secondary)]">加载中…</p>
-
-      <template v-else-if="challenge">
-        <div
-          class="captcha-board relative touch-none select-none overflow-hidden"
-          :class="{ 'captcha-board--flash': successFlash }"
-          :style="boardStyle"
-        >
+      <div
+        class="captcha-board relative touch-none select-none overflow-hidden"
+        :class="{
+          'captcha-board--flash': successFlash,
+          'captcha-board--loading': loading,
+        }"
+        :style="boardStyle"
+      >
+        <template v-if="challenge">
           <img
             class="pointer-events-none absolute inset-0 h-full w-full"
             :src="challenge.bgImage"
@@ -227,42 +231,50 @@ onUnmounted(() => {
             draggable="false"
             :style="pieceStyle"
           />
-        </div>
-
-        <div
-          class="captcha-track relative touch-none select-none"
-          :style="{ width: boardStyle.width }"
-          @pointerdown="onPointerDown"
-          @pointermove="onPointerMove"
-          @pointerup="onPointerUp"
-          @pointercancel="onPointerUp"
+        </template>
+        <div v-if="loading" class="captcha-skeleton" aria-hidden="true" />
+        <p
+          v-if="loading && !challenge"
+          class="absolute inset-0 z-[2] flex items-center justify-center text-sm text-[var(--neo-text-secondary)]"
         >
-          <div class="captcha-track__rail" aria-hidden="true">
-            <div class="captcha-track__fill" :style="{ width: `${trackFillPct}%` }" />
-          </div>
-          <button
-            type="button"
-            class="captcha-track__thumb"
-            :class="{
-              'captcha-track__thumb--dragging': dragging,
-              'captcha-track__thumb--snap': snapping,
-            }"
-            :style="{
-              left: `${offsetX}px`,
-              width: `${challenge.puzzle.pieceSize}px`,
-              height: `${challenge.puzzle.pieceSize}px`,
-            }"
-            :disabled="verifying || loading"
-            aria-label="拖动滑块"
-            tabindex="-1"
-          >
-            ››
-          </button>
+          加载中…
+        </p>
+      </div>
+
+      <div
+        class="captcha-track relative touch-none select-none"
+        :style="{ width: boardStyle.width }"
+        @pointerdown="onPointerDown"
+        @pointermove="onPointerMove"
+        @pointerup="onPointerUp"
+        @pointercancel="onPointerUp"
+      >
+        <div class="captcha-track__rail" aria-hidden="true">
+          <div class="captcha-track__fill" :style="{ width: `${trackFillPct}%` }" />
         </div>
-      </template>
+        <button
+          type="button"
+          class="captcha-track__thumb"
+          :class="{
+            'captcha-track__thumb--dragging': dragging,
+            'captcha-track__thumb--snap': snapping,
+          }"
+          :style="{
+            left: `${offsetX}px`,
+            width: `${challenge?.puzzle.pieceSize ?? 44}px`,
+            height: `${challenge?.puzzle.pieceSize ?? 44}px`,
+          }"
+          :disabled="verifying || loading || !challenge"
+          aria-label="拖动滑块"
+          tabindex="-1"
+        >
+          ››
+        </button>
+      </div>
 
       <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
       <p v-else-if="verifying" class="text-sm text-[var(--neo-electric)]">验证中…</p>
+      <p v-else-if="loading" class="text-xs text-[var(--neo-text-muted)]">正在准备验证…</p>
       <p v-else class="text-xs text-[var(--neo-text-muted)]">将滑块拖动到正确位置</p>
     </div>
     </div>
@@ -275,6 +287,34 @@ onUnmounted(() => {
   border: 1px solid var(--neo-border);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.captcha-board--loading {
+  opacity: 0.92;
+}
+
+.captcha-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0.03) 25%,
+    rgba(255, 255, 255, 0.1) 37%,
+    rgba(255, 255, 255, 0.03) 63%
+  );
+  background-size: 200% 100%;
+  animation: captcha-shimmer 1.1s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes captcha-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
 }
 
 .captcha-board--flash {
@@ -359,6 +399,10 @@ onUnmounted(() => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .captcha-skeleton {
+    animation: none;
+  }
+
   .captcha-board--flash {
     transition: none;
   }

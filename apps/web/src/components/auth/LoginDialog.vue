@@ -24,8 +24,10 @@ watch(
     if (!open) {
       showCaptcha.value = false
       pendingPhone.value = ''
+      auth.clearCaptchaPrefetch()
       return
     }
+    auth.prefetchCaptchaChallenge()
     await nextTick()
     shellRef.value?.focus()
   },
