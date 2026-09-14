@@ -459,12 +459,20 @@ export class StudioService {
       throw new BadRequestException('imageUrls 不能为空')
     }
     const providerRefs = await inlineUpstreamReferenceImages(urls)
-    return generateVisionQaJson(params.systemPrompt, params.userContent, providerRefs, {
-      model: gatewayModelId,
-      apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-      baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
-      maxRetries: 2,
-    })
+    try {
+      return await generateVisionQaJson(params.systemPrompt, params.userContent, providerRefs, {
+        model: gatewayModelId,
+        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        maxRetries: 2,
+      })
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err)
+      return {
+        text: JSON.stringify({ pass: false, reason, product_summary: '' }),
+        visionUsed: false,
+      }
+    }
   }
 
   async generateText(
