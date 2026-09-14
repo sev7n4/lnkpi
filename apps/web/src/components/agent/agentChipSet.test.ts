@@ -1,9 +1,12 @@
 /** @vitest-environment node */
 import { describe, expect, it, vi } from 'vitest'
 import {
+  applyAtomicProposeChipPriority,
+  confirmAtomicGeneration,
   confirmProposeGeneration,
   detectAgentChipSet,
   extractProposeGenerationNodeId,
+  resolveAtomicConfirmNodeId,
   resolvePendingConfirmNodeId,
 } from './agentChipSet'
 
@@ -255,6 +258,82 @@ describe('detectAgentChipSet', () => {
       expect(generateForNode).toHaveBeenCalledTimes(1)
       expect(generateForNode).toHaveBeenCalledWith('img-1')
       expect(sendPreset).not.toHaveBeenCalled()
+    })
+  })
+
+  // Phase 2c.3 E1–E3: weaken atomic confirm UX
+  describe('Phase 2c.3: atomic confirm → dock + propose priority', () => {
+    it('E1: pending beats atomic interrupt chip', () => {
+      expect(applyAtomicProposeChipPriority('atomic', 'img-pending')).toBe('generation_propose')
+      expect(applyAtomicProposeChipPriority('atomic', null)).toBe('atomic')
+      expect(applyAtomicProposeChipPriority('plan', 'img-pending')).toBe('plan')
+      expect(applyAtomicProposeChipPriority('image_qa', 'img-pending')).toBe('image_qa')
+    })
+
+    it('resolveAtomicConfirmNodeId: pending → atomicNodeId → selected media', () => {
+      const nodes = [
+        { id: 'img-pending', data: { status: 'pending_confirm' } },
+        { id: 'img-selected', data: { status: 'draft', type: 'image' } },
+      ]
+      expect(
+        resolveAtomicConfirmNodeId({
+          canvasNodes: nodes,
+          selectedNodeId: 'img-selected',
+          atomicNodeId: 'atomic-1',
+          selectedNodeType: 'image',
+        }),
+      ).toBe('img-pending')
+      expect(
+        resolveAtomicConfirmNodeId({
+          canvasNodes: [{ id: 'x', data: { status: 'draft' } }],
+          selectedNodeId: 'img-selected',
+          atomicNodeId: 'atomic-1',
+          selectedNodeType: 'image',
+        }),
+      ).toBe('atomic-1')
+      expect(
+        resolveAtomicConfirmNodeId({
+          canvasNodes: nodes.filter((n) => n.id !== 'img-pending'),
+          selectedNodeId: 'img-selected',
+          atomicNodeId: null,
+          selectedNodeType: 'image',
+        }),
+      ).toBe('img-selected')
+      expect(
+        resolveAtomicConfirmNodeId({
+          canvasNodes: [],
+          selectedNodeId: null,
+          atomicNodeId: null,
+        }),
+      ).toBe(null)
+    })
+
+    it('E2: confirmAtomicGeneration with nodeId → generateForNode + unwind, no sendPreset confirm', async () => {
+      const generateForNode = vi.fn(async () => undefined)
+      const sendPreset = vi.fn()
+      const unwindAtomicInterrupt = vi.fn(async () => undefined)
+
+      const path = await confirmAtomicGeneration('vid-1', {
+        generateForNode,
+        sendPreset,
+        unwindAtomicInterrupt,
+      })
+
+      expect(path).toBe('dock')
+      expect(unwindAtomicInterrupt).toHaveBeenCalledTimes(1)
+      expect(generateForNode).toHaveBeenCalledWith('vid-1')
+      expect(sendPreset).not.toHaveBeenCalledWith('确认生成')
+    })
+
+    it('E3: confirmAtomicGeneration without nodeId → sendPreset fallback', async () => {
+      const generateForNode = vi.fn()
+      const sendPreset = vi.fn(async () => undefined)
+
+      const path = await confirmAtomicGeneration(null, { generateForNode, sendPreset })
+
+      expect(path).toBe('preset')
+      expect(generateForNode).not.toHaveBeenCalled()
+      expect(sendPreset).toHaveBeenCalledWith('确认生成')
     })
   })
 

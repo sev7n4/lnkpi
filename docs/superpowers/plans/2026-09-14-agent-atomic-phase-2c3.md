@@ -48,21 +48,21 @@
 
 ### Task 0: Docs authorize
 
-- [ ] Update 2c design §3 + parent D9; commit with this plan
+- [x] Update 2c design §3 + parent D9; commit with this plan
 
 ### Task 1: Failing tests E1–E3
 
-- [ ] Chip precedence: pending beats `await_atomic_confirm`
-- [ ] `confirmAtomicGeneration` with nodeId → generateForNode + unwind callback; no sendPreset confirm
-- [ ] without nodeId → sendPreset('确认生成')
-- [ ] Commit failing tests
+- [x] Chip precedence: pending beats `await_atomic_confirm`
+- [x] `confirmAtomicGeneration` with nodeId → generateForNode + unwind callback; no sendPreset confirm
+- [x] without nodeId → sendPreset('确认生成')
+- [x] Commit failing tests
 
 ### Task 2: Implement helpers + SideRail
 
-- [ ] `resolveChipSetWithAtomicProposePriority(...)`
-- [ ] `confirmAtomicGeneration` / `resolveAtomicConfirmNodeId`
-- [ ] SideRail: store `atomicNodeId` from thread-state; wire confirm/cancel; unwind via clear gate + sendPreset('取消') or dedicated resume revise **without** starting atomic gen after dock confirm
-- [ ] Tests green; commit
+- [x] `resolveChipSetWithAtomicProposePriority(...)`
+- [x] `confirmAtomicGeneration` / `resolveAtomicConfirmNodeId`
+- [x] SideRail: store `atomicNodeId` from thread-state; wire confirm/cancel; unwind via clear gate + sendPreset('取消') or dedicated resume revise **without** starting atomic gen after dock confirm
+- [x] Tests green; commit
 
 ### Task 3: PR + E6 smoke
 
@@ -72,4 +72,4 @@
 ## Done when
 
 - [ ] E1–E5 CI green; E6 prod after deploy
-- [ ] 2d not started
+- [x] 2d not started
