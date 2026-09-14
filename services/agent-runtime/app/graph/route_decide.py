@@ -18,7 +18,12 @@ from app.graph.recent_turns import compress_recent_turns
 from app.graph.route_context import RouteContext
 from app.graph.route_features import RouteFeatures, extract_route_features
 from app.graph.route_hard import apply_hard_shortcircuit
-from app.graph.route_precedence import ROUTE_CLARIFY_ORCHESTRATION, apply_route_precedence
+from app.graph.route_precedence import (
+    ROUTE_CLARIFY_ORCHESTRATION,
+    _guard_veto,
+    _valid_skill_id,
+    apply_route_precedence,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +104,7 @@ def _from_decide_lane(
     confidence: float,
     reason: str,
     clarify_question: str | None,
+    guard_veto: str | None = None,
 ) -> RouteDecision:
     utterance = str(ctx.get("utterance") or "")
     return RouteDecision(
@@ -107,11 +113,77 @@ def _from_decide_lane(
         confidence=confidence,
         reason=reason,
         clarify_question=clarify_question,
-        guard_veto=None,
+        guard_veto=guard_veto,
         is_modify=False,
         precedence_rule_id="decide_lane",
         atomic_intent=intent,
         route_features=features,
+    )
+
+
+_SKILL_REQUIRED_LANES = frozenset({"campaign", "product_visual"})
+
+
+def _apply_primary_soft_guards(
+    ctx: RouteContext,
+    *,
+    intent: AtomicIntent,
+    features: RouteFeatures,
+    lane: str,
+    confidence: float,
+    reason: str,
+    clarify_question: str | None,
+    valid_skill_ids: set[str] | None,
+) -> RouteDecision:
+    """Apply planning_guard + skill-required checks before accepting decide_lane lanes."""
+    guard = _guard_veto(ctx)
+    skill = _valid_skill_id(ctx, valid_skill_ids)
+
+    if guard and lane not in ("clarify_route", "canvas_agent"):
+        return _from_decide_lane(
+            ctx,
+            intent=intent,
+            features=features,
+            lane="clarify_route",
+            confidence=min(confidence, 0.75),
+            reason="planning_guard_veto",
+            clarify_question=clarify_question or ROUTE_CLARIFY_ORCHESTRATION,
+            guard_veto=guard,
+        )
+
+    if lane in _SKILL_REQUIRED_LANES and not skill:
+        return _from_decide_lane(
+            ctx,
+            intent=intent,
+            features=features,
+            lane="clarify_route",
+            confidence=min(confidence, 0.75),
+            reason="skill_required_without_skill",
+            clarify_question=clarify_question or ROUTE_CLARIFY_ORCHESTRATION,
+            guard_veto=guard,
+        )
+
+    if guard and lane == "clarify_route":
+        return _from_decide_lane(
+            ctx,
+            intent=intent,
+            features=features,
+            lane=lane,
+            confidence=confidence,
+            reason=reason,
+            clarify_question=clarify_question or ROUTE_CLARIFY_ORCHESTRATION,
+            guard_veto=guard,
+        )
+
+    return _from_decide_lane(
+        ctx,
+        intent=intent,
+        features=features,
+        lane=lane,
+        confidence=confidence,
+        reason=reason,
+        clarify_question=clarify_question,
+        guard_veto=guard,
     )
 
 
@@ -230,7 +302,7 @@ def decide_route_unified(
 
     processed = apply_decide_lane_postprocess(parsed)
     lane = processed.get("lane") or "canvas_agent"
-    return _from_decide_lane(
+    return _apply_primary_soft_guards(
         ctx,
         intent=intent,
         features=features,
@@ -238,6 +310,7 @@ def decide_route_unified(
         confidence=float(processed.get("confidence") or 0.0),
         reason=str(processed.get("reason") or "decide_lane"),
         clarify_question=processed.get("clarify_question"),
+        valid_skill_ids=valid_skill_ids,
     )
 
 

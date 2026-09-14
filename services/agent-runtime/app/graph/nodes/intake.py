@@ -133,6 +133,24 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
             if prev_skill and prev_skill in by_id:
                 skill_id = prev_skill
 
+        # Campaign / product_visual without a resolvable skill must clarify —
+        # never fall through builder to explore with a silent skill-less campaign.
+        skill_required_missing = (
+            skill_id is None
+            and flow_mode in ("campaign", "product_visual")
+            and not needs_regen_clarify
+            and not needs_route_clarify
+        )
+        if skill_required_missing:
+            flow_mode = "clarify_route"
+            needs_route_clarify = True
+            decision = {
+                **decision,
+                "flow_mode": "clarify_route",
+                "reason": "skill_required_without_skill",
+                "clarify_question": SKILL_REQUIRED_CLARIFY,
+            }
+
         resolved_flow = flow_mode if flow_mode != "clarify_route" else "chat"
 
         pending_atomic = pending_atomic_clarify(state)

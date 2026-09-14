@@ -38,9 +38,10 @@ class Settings(BaseSettings):
     # Phase C: LLM structured intent parse (default off until C4)
     intent_llm_parse: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE")
     intent_llm_parse_shadow: bool = Field(default=False, validation_alias="INTENT_LLM_PARSE_SHADOW")
-    # M3b: LLM decide_lane primary / shadow (env LNKPI_ROUTE_LLM_PRIMARY / LNKPI_ROUTE_LLM_SHADOW)
-    route_llm_primary: bool = Field(default=False, validation_alias="ROUTE_LLM_PRIMARY")
-    route_llm_shadow: bool = Field(default=False, validation_alias="ROUTE_LLM_SHADOW")
+    # M3b: LLM decide_lane primary / shadow — no validation_alias so env_prefix applies
+    # (LNKPI_ROUTE_LLM_PRIMARY / LNKPI_ROUTE_LLM_SHADOW), same pattern as product_visual_scheme_v2.
+    route_llm_primary: bool = False
+    route_llm_shadow: bool = False
     agent_thinking_ui: bool = Field(default=False, validation_alias="AGENT_THINKING_UI")
     # Product visual scheme v2: prose SSOT + macro/shot decomposition (spec 2026-08-11)
     # Env: LNKPI_PRODUCT_VISUAL_SCHEME_V2 (no validation_alias — prefix applies correctly)

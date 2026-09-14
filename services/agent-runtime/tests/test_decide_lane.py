@@ -158,3 +158,121 @@ async def test_intake_wires_llm_on_soft_path(primary_on):
     assert out["flow_mode"] == "canvas_agent"
     assert out.get("previous_lane") == "canvas_agent"
     assert (out.get("route_decision") or {}).get("reason") == "intake_wired_llm"
+
+
+def test_primary_soft_campaign_without_skill_clarifies(primary_on):
+    """decide_lane campaign with no resolvable skill must not fall through to explore."""
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "lane": "campaign",
+                "confidence": 0.9,
+                "reason": "llm_wants_campaign",
+                "clarify_question": None,
+            }
+        )
+    )
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": "你好"}]})
+    d = decide_route(ctx, llm=llm, valid_skill_ids=set())
+    assert d["flow_mode"] == "clarify_route"
+    assert d.get("reason") == "skill_required_without_skill"
+    assert d.get("clarify_question")
+
+
+def test_primary_soft_sets_guard_veto_on_canvas_agent(primary_on, monkeypatch):
+    """Soft path must populate guard_veto (not always None)."""
+    from app.graph import route_decide as rd
+
+    monkeypatch.setattr(rd, "_guard_veto", lambda _ctx: "planning_image_conflict")
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "lane": "canvas_agent",
+                "confidence": 0.9,
+                "reason": "safe_agent",
+                "clarify_question": None,
+            }
+        )
+    )
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": "你好"}]})
+    d = decide_route(ctx, llm=llm)
+    assert d["flow_mode"] == "canvas_agent"
+    assert d.get("guard_veto") == "planning_image_conflict"
+
+
+def test_primary_soft_guard_vetoes_graph_lane(primary_on, monkeypatch):
+    """Guard veto on a graph lane → clarify_route (precedence orch_ambiguous semantics)."""
+    from app.graph import route_decide as rd
+
+    monkeypatch.setattr(rd, "_guard_veto", lambda _ctx: "planning_image_conflict")
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "lane": "atomic_create",
+                "confidence": 0.9,
+                "reason": "llm_atomic",
+                "clarify_question": None,
+            }
+        )
+    )
+    ctx = assemble_route_context({"messages": [{"role": "user", "content": "你好"}]})
+    d = decide_route(ctx, llm=llm)
+    assert d["flow_mode"] == "clarify_route"
+    assert d.get("guard_veto") == "planning_image_conflict"
+    assert d.get("reason") == "planning_guard_veto"
+
+
+@pytest.mark.asyncio
+async def test_intake_campaign_without_skill_clarifies_not_explore(primary_on):
+    """Skill-less campaign (LLM soft path) → clarify, never explore sink."""
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "lane": "campaign",
+                "confidence": 0.92,
+                "reason": "llm_campaign",
+                "clarify_question": None,
+            }
+        )
+    )
+    intake = make_intake_node(SKILLS, llm=llm)
+    out = await intake({"messages": [HumanMessage(content="你好")]})
+    assert out.get("skill_id") is None
+    assert out.get("phase") == "clarify"
+    assert out.get("route_clarify") is True
+    assert out["flow_mode"] != "campaign"
+    assert out.get("clarify_question")
+
+
+@pytest.mark.asyncio
+async def test_intake_safety_net_skill_required_clarify(monkeypatch):
+    """Intake safety: campaign without skill_id → SKILL_REQUIRED_CLARIFY."""
+    from app.graph.nodes import intake as intake_mod
+    from app.graph.nodes.intake import SKILL_REQUIRED_CLARIFY
+
+    monkeypatch.setattr(
+        intake_mod,
+        "decide_route",
+        lambda *a, **k: {
+            "flow_mode": "campaign",
+            "l0_action": "unknown",
+            "confidence": 0.9,
+            "reason": "forced_campaign",
+            "clarify_question": None,
+            "guard_veto": None,
+            "is_modify": False,
+            "precedence_rule_id": "test",
+        },
+    )
+    monkeypatch.setattr(
+        intake_mod,
+        "serialize_route_decision",
+        lambda d: d,
+    )
+    intake = make_intake_node(SKILLS, llm=None)
+    out = await intake({"messages": [HumanMessage(content="做个详情页方案")]})
+    assert out.get("phase") == "clarify"
+    assert out.get("route_clarify") is True
+    assert out.get("skill_id") is None
+    assert out["flow_mode"] != "campaign"
+    assert out.get("clarify_question") == SKILL_REQUIRED_CLARIFY
