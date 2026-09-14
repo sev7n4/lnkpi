@@ -86,6 +86,48 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/match-recipes"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "items": [
+                            {
+                                "id": "ecommerce-product-visual",
+                                "version": "1.0.0",
+                                "title": "电商套图",
+                                "score": 2,
+                            }
+                        ],
+                        "graftHint": {"recipeId": "model-turnaround", "version": "1.0.0"},
+                    }
+                ),
+            )
+        if path.endswith("/preview-recipe-delta"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "recipe": {"id": "ecommerce-product-visual", "nodes": []},
+                        "stripped": [],
+                        "diffLines": ["去掉 Banner"],
+                        "userMessages": [],
+                    }
+                ),
+            )
+        if path.endswith("/instantiate-recipe"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "addedNodeIds": ["image-white_bg"],
+                        "idMap": {},
+                        "mediaOk": 0,
+                        "mediaFail": 0,
+                        "actions": [],
+                    }
+                ),
+            )
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -162,6 +204,53 @@ async def test_import_workflow_url(nest_client, captured):
         "sessionId": SESSION_ID,
         "userId": USER_ID,
         "workflowUrl": "https://example.com/wf.json",
+    }
+
+
+@pytest.mark.asyncio
+async def test_match_recipes(nest_client, captured):
+    result = await nest_client.match_recipes(utterance="套图并且要模特三视图")
+    assert result["items"][0]["id"] == "ecommerce-product-visual"
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/match-recipes"
+    assert req["json"] == {"userId": USER_ID, "utterance": "套图并且要模特三视图"}
+    assert "sessionId" not in req["json"]
+
+
+@pytest.mark.asyncio
+async def test_preview_recipe_delta_does_not_import(nest_client, captured):
+    delta = {"remove": ["banner"], "graft": {"recipeId": "model-turnaround", "version": "1.0.0"}}
+    result = await nest_client.preview_recipe_delta(
+        parent_id="ecommerce-product-visual",
+        parent_version="1.0.0",
+        delta=delta,
+    )
+    assert result["diffLines"] == ["去掉 Banner"]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/preview-recipe-delta"
+    assert req["json"] == {
+        "userId": USER_ID,
+        "parentId": "ecommerce-product-visual",
+        "parentVersion": "1.0.0",
+        "delta": delta,
+    }
+    assert "graftSource" not in req["json"]
+    assert "sessionId" not in req["json"]
+    assert all("/import-workflow" not in item["url"] for item in captured["requests"])
+
+
+@pytest.mark.asyncio
+async def test_instantiate_recipe(nest_client, captured):
+    recipe = {"id": "ecommerce-product-visual", "version": "1.0.0"}
+    result = await nest_client.instantiate_recipe(recipe=recipe, slots={"white_bg": "mug"})
+    assert result["addedNodeIds"] == ["image-white_bg"]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/instantiate-recipe"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "recipe": recipe,
+        "slots": {"white_bg": "mug"},
     }
 
 

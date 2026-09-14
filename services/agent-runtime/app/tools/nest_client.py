@@ -634,6 +634,47 @@ class NestCanvasClient:
             body["workflowUrl"] = workflow_url
         return await self._post("/agent/internal/import-workflow", body)
 
+    async def match_recipes(self, *, utterance: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/match-recipes",
+            {
+                "userId": self._user_id,
+                "utterance": utterance,
+            },
+        )
+
+    async def preview_recipe_delta(
+        self,
+        *,
+        parent_id: str,
+        parent_version: str,
+        delta: dict[str, Any],
+    ) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/preview-recipe-delta",
+            {
+                "userId": self._user_id,
+                "parentId": parent_id,
+                "parentVersion": parent_version,
+                "delta": delta,
+            },
+        )
+
+    async def instantiate_recipe(
+        self,
+        *,
+        recipe: dict[str, Any],
+        slots: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "recipe": recipe,
+        }
+        if slots is not None:
+            body["slots"] = slots
+        return await self._post("/agent/internal/instantiate-recipe", body)
+
     async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,

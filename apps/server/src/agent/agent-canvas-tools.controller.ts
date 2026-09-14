@@ -1,8 +1,9 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
+import { WorkflowRecipeService } from './workflow-recipe.service'
 
 class UpsertPromptNodeDto {
   @IsString()
@@ -551,6 +552,28 @@ export class InstantiateRecipeDto {
   slots?: Record<string, string>
 }
 
+export class MatchRecipesDto {
+  @IsString()
+  userId!: string
+
+  @IsString()
+  utterance!: string
+}
+
+export class PreviewRecipeDeltaDto {
+  @IsString()
+  userId!: string
+
+  @IsString()
+  parentId!: string
+
+  @IsString()
+  parentVersion!: string
+
+  @IsObject()
+  delta!: Record<string, unknown>
+}
+
 class GroupNodesDto {
   @IsString()
   sessionId!: string
@@ -783,6 +806,7 @@ class SaveContextSnapshotDto {
 export class AgentCanvasToolsController {
   constructor(
     @Inject(AgentCanvasToolsService) private readonly tools: AgentCanvasToolsService,
+    @Inject(WorkflowRecipeService) private readonly recipes: WorkflowRecipeService,
   ) {}
 
   @Post('upsert-prompt-node')
@@ -1048,6 +1072,18 @@ export class AgentCanvasToolsController {
   @Post('instantiate-recipe')
   async instantiateRecipe(@Body() dto: InstantiateRecipeDto) {
     const data = await this.tools.instantiateRecipe(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('match-recipes')
+  async matchRecipes(@Body() dto: MatchRecipesDto) {
+    const data = this.recipes.matchRecipes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('preview-recipe-delta')
+  async previewRecipeDelta(@Body() dto: PreviewRecipeDeltaDto) {
+    const data = this.recipes.previewRecipeDelta(dto)
     return { code: 0, message: 'ok', data }
   }
 

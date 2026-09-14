@@ -40,6 +40,9 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "save_node_to_asset_library",
     "apply_asset_to_node",
     "import_workflow",
+    "match_workflow_templates",
+    "preview_workflow_template",
+    "instantiate_workflow_template",
 })
 
 CONNECT_NODES_MAX_EDGES = 20
@@ -104,6 +107,23 @@ class ImportWorkflowInput(BaseModel):
         if self.workflow is None and not (self.workflow_url or "").strip():
             raise ValueError("workflow or workflow_url is required")
         return self
+
+
+class MatchWorkflowTemplatesInput(BaseModel):
+    utterance: str = Field(description="用户原话，用来认亲最接近的工作流模板")
+
+
+class PreviewWorkflowTemplateInput(BaseModel):
+    parent_id: str = Field(description="主模板 id")
+    parent_version: str = Field(description="主模板版本")
+    delta: dict[str, Any] = Field(
+        description="相对主模板的结构改动：增删节点、改连线，可选接到另一套模板",
+    )
+
+
+class InstantiateWorkflowTemplateInput(BaseModel):
+    recipe: dict[str, Any] = Field(description="确认后的完整模板")
+    slots: dict[str, str] | None = Field(default=None, description="可选槽位填入，如节点提示词")
 
 
 class ConnectNodesInput(BaseModel):
@@ -241,6 +261,26 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
         if workflow is None and not (workflow_url or "").strip():
             raise ValueError("workflow or workflow_url is required")
         return await client.import_workflow(workflow=workflow, workflow_url=workflow_url)
+
+    async def match_workflow_templates(utterance: str) -> dict:
+        return await client.match_recipes(utterance=utterance)
+
+    async def preview_workflow_template(
+        parent_id: str,
+        parent_version: str,
+        delta: dict[str, Any],
+    ) -> dict:
+        return await client.preview_recipe_delta(
+            parent_id=parent_id,
+            parent_version=parent_version,
+            delta=delta,
+        )
+
+    async def instantiate_workflow_template(
+        recipe: dict[str, Any],
+        slots: dict[str, str] | None = None,
+    ) -> dict:
+        return await client.instantiate_recipe(recipe=recipe, slots=slots)
 
     async def upsert_media_node(
         target_type: str,
@@ -473,6 +513,43 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                     "workflow object or workflow_url."
                 ),
                 args_schema=ImportWorkflowInput,
+            ),
+        ),
+        (
+            "match_workflow_templates",
+            StructuredTool.from_function(
+                coroutine=match_workflow_templates,
+                name="match_workflow_templates",
+                description=(
+                    "根据用户原话认亲最接近的工作流模板（最多 3 条摘要）。"
+                    "只读目录，不改画布。跨套模板时可提示接到另一套。"
+                ),
+                args_schema=MatchWorkflowTemplatesInput,
+            ),
+        ),
+        (
+            "preview_workflow_template",
+            StructuredTool.from_function(
+                coroutine=preview_workflow_template,
+                name="preview_workflow_template",
+                description=(
+                    "预览相对主模板的改版：增删节点、改连线，或接到另一套模板的核心步骤。"
+                    "返回用户可读变化列表；非法改动会被剥掉并说明。"
+                    "不写画布。确认结构后再调用 instantiate_workflow_template。"
+                ),
+                args_schema=PreviewWorkflowTemplateInput,
+            ),
+        ),
+        (
+            "instantiate_workflow_template",
+            StructuredTool.from_function(
+                coroutine=instantiate_workflow_template,
+                name="instantiate_workflow_template",
+                description=(
+                    "把确认后的工作流模板实例化到当前画布（编译为 lnkpi.workflow 再导入）。"
+                    "仅在用户确认结构之后调用；本步不出图。"
+                ),
+                args_schema=InstantiateWorkflowTemplateInput,
             ),
         ),
         (

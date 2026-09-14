@@ -45,6 +45,12 @@ def test_import_chinese_workflow_routes_explore():
     assert explore_canvas_signal(u, blocked_by_atomic=False) is True
 
 
+def test_planner_utterance_routes_explore():
+    u = "帮我规划一个电商套图工作流，接到角色三视图"
+    assert explore_explicit_intent(u) is True
+    assert explore_canvas_signal(u, blocked_by_atomic=False) is True
+
+
 def test_export_still_routes_explore():
     u = "请调用 export_media_package 导出当前画布工作流"
     assert explore_canvas_signal(u, blocked_by_atomic=False) is True

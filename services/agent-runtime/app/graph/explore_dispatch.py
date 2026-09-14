@@ -71,6 +71,20 @@ _WORKFLOW_IMPORT_ANCHORS = (
     "import_workflow",
 )
 _UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
+_PLANNER_ANCHORS = ("规划工作流", "接到", "改版", "新模板", "存成一套")
+_PLANNER_WRITE_TOOLS = frozenset({
+    "preview_workflow_template",
+    "instantiate_workflow_template",
+    "match_workflow_templates",
+})
+_IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
+_DEFAULT_NARROW_WRITE = frozenset({
+    "set_node_prompt",
+    "set_node_content",
+    "attach_refs",
+    "duplicate_node",
+    "upsert_prompt_node",
+})
 
 
 def _has_strong_workflow_import_anchor(text: str, low: str) -> bool:
@@ -108,6 +122,23 @@ class MandatoryExploreResult:
     tools_called: list[str] = field(default_factory=list)
 
 
+def select_narrow_write_tools(utterance: str) -> frozenset[str]:
+    """Keyword bind for workflow import vs recipe planner (≤5 write tools).
+
+    Strong import anchors win so planner keywords never steal
+    ``请用 import_workflow 导入`` / ``导入工作流``.
+    """
+    text = utterance or ""
+    low = text.lower()
+    if "import_workflow" in low or "导入工作流" in text:
+        return _IMPORT_WRITE_TOOLS
+    if any(anchor in text for anchor in _PLANNER_ANCHORS):
+        return _PLANNER_WRITE_TOOLS
+    if _is_workflow_import_utterance(text):
+        return _IMPORT_WRITE_TOOLS
+    return _DEFAULT_NARROW_WRITE
+
+
 def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> ExploreIntent:
     """Rule-based intent for explore dispatch (Phase 2a)."""
     u = (user_text or "").strip()
@@ -115,6 +146,9 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
         return "open_query"
 
     if _is_workflow_import_utterance(u):
+        return "node_write"
+
+    if any(anchor in u for anchor in _PLANNER_ANCHORS):
         return "node_write"
 
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):

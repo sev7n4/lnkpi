@@ -28,3 +28,12 @@ def test_write_default_subset_at_most_five():
     tools = build_explore_tools_subset(MagicMock(), subset)
     assert len(tools) <= 5
     assert {t.name for t in tools} <= EXPLORE_WRITE_TOOLS
+
+
+def test_explore_whitelist_includes_planner_tools():
+    for name in (
+        "match_workflow_templates",
+        "preview_workflow_template",
+        "instantiate_workflow_template",
+    ):
+        assert name in EXPLORE_TOOL_NAMES
