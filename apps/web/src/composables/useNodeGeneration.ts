@@ -736,6 +736,11 @@ async function cancelRemoteGeneration(
       await cancelPendingFallbackBeforeGenerate(node)
       if (signal.aborted) return
 
+      // Phase 2c.1: dock / confirm generate start clears pending_confirm SSOT.
+      if (String(data.status ?? '') === 'pending_confirm') {
+        deps.patchNodeData(node.id, { status: NODE_GENERATION_STATUS.draft })
+      }
+
       if (nodeType === 'prompt') {
         deps.patchNodeData(node.id, { ...startedAtPatch(), status: NODE_GENERATION_STATUS.generating })
         const guideSceneId =

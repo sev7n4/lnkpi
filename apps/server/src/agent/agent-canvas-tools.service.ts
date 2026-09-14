@@ -696,6 +696,33 @@ export class AgentCanvasToolsService {
     return { nodeId: node.id, status: 'pending_confirm', summary, actions }
   }
 
+  /**
+   * Phase 2c.1: clear pending_confirm back to draft. Never calls studio generate / run_*.
+   * Idempotent when the node is already draft (or any non-pending status).
+   */
+  async clearProposeGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{
+    nodeId: string
+    status: 'draft'
+    actions: CanvasAction[]
+  }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const actions: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: { id: node.id, data: { status: 'draft' } },
+      },
+    ]
+    await this.applyOrStage(input.sessionId, actions, false)
+    return { nodeId: node.id, status: 'draft', actions }
+  }
+
   async connectNodes(input: {
     sessionId: string
     edges: Array<{ source: string; target: string }>

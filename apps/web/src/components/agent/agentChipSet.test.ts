@@ -1,6 +1,21 @@
 /** @vitest-environment node */
-import { describe, expect, it } from 'vitest'
-import { detectAgentChipSet, extractProposeGenerationNodeId } from './agentChipSet'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  confirmProposeGeneration,
+  detectAgentChipSet,
+  extractProposeGenerationNodeId,
+  resolvePendingConfirmNodeId,
+} from './agentChipSet'
+
+type CanvasNodeLike = {
+  id: string
+  data?: {
+    status?: string
+    createdAt?: string
+    updatedAt?: string
+    [key: string]: unknown
+  }
+}
 
 describe('extractProposeGenerationNodeId', () => {
   it('extracts nodeId from last successful propose_generation dict result', () => {
@@ -145,6 +160,104 @@ describe('detectAgentChipSet', () => {
   })
 
   // 修复 P1-4 + P2-1：modify intent 检测的新优先级逻辑
+  // Phase 2c.1 C1: recover generation_propose from canvas pending_confirm SSOT
+  describe('Phase 2c.1 C1: pending_confirm SSOT without toolCalls', () => {
+    /**
+     * Newest heuristic (documented for implementers):
+     * prefer data.updatedAt, else data.createdAt (ISO), else lexicographic id.
+     */
+    it('resolvePendingConfirmNodeId: selected pending wins over older pending', () => {
+      const nodes: CanvasNodeLike[] = [
+        {
+          id: 'img-new',
+          data: {
+            status: 'pending_confirm',
+            createdAt: '2026-09-14T12:00:00.000Z',
+            updatedAt: '2026-09-14T12:00:00.000Z',
+          },
+        },
+        {
+          id: 'img-selected',
+          data: {
+            status: 'pending_confirm',
+            createdAt: '2026-09-14T10:00:00.000Z',
+            updatedAt: '2026-09-14T10:00:00.000Z',
+          },
+        },
+      ]
+      expect(resolvePendingConfirmNodeId(nodes, 'img-selected')).toBe('img-selected')
+    })
+
+    it('resolvePendingConfirmNodeId: no selected → newest pending by updatedAt/createdAt', () => {
+      const nodes: CanvasNodeLike[] = [
+        {
+          id: 'img-old',
+          data: {
+            status: 'pending_confirm',
+            createdAt: '2026-09-14T09:00:00.000Z',
+            updatedAt: '2026-09-14T09:00:00.000Z',
+          },
+        },
+        {
+          id: 'img-new',
+          data: {
+            status: 'pending_confirm',
+            createdAt: '2026-09-14T11:00:00.000Z',
+            updatedAt: '2026-09-14T11:00:00.000Z',
+          },
+        },
+        {
+          id: 'img-draft',
+          data: { status: 'draft', createdAt: '2026-09-14T12:00:00.000Z' },
+        },
+      ]
+      expect(resolvePendingConfirmNodeId(nodes, null)).toBe('img-new')
+      expect(resolvePendingConfirmNodeId(nodes, undefined)).toBe('img-new')
+      expect(resolvePendingConfirmNodeId(nodes, 'missing')).toBe('img-new')
+    })
+
+    it('resolvePendingConfirmNodeId: no pending → null', () => {
+      const nodes: CanvasNodeLike[] = [
+        { id: 'img-1', data: { status: 'draft' } },
+        { id: 'img-2', data: { status: 'completed' } },
+      ]
+      expect(resolvePendingConfirmNodeId(nodes, 'img-1')).toBe(null)
+      expect(resolvePendingConfirmNodeId([], null)).toBe(null)
+    })
+
+    it('detectAgentChipSet: generation_propose from canvas nodes alone (empty toolCalls)', () => {
+      expect(
+        detectAgentChipSet('刷新后仍可确认生成。', {
+          toolCalls: [],
+          canvasNodes: [
+            {
+              id: 'img-recover',
+              data: {
+                status: 'pending_confirm',
+                createdAt: '2026-09-14T12:00:00.000Z',
+              },
+            },
+          ],
+          selectedNodeId: 'img-recover',
+        }),
+      ).toBe('generation_propose')
+    })
+  })
+
+  // Phase 2c.1 C2: confirm must call generateForNode, never sendPreset
+  describe('Phase 2c.1 C2: confirmProposeGeneration uses dock generate', () => {
+    it('calls generateForNode(nodeId) and never sendPreset', async () => {
+      const generateForNode = vi.fn(async () => undefined)
+      const sendPreset = vi.fn()
+
+      await confirmProposeGeneration('img-1', { generateForNode, sendPreset })
+
+      expect(generateForNode).toHaveBeenCalledTimes(1)
+      expect(generateForNode).toHaveBeenCalledWith('img-1')
+      expect(sendPreset).not.toHaveBeenCalled()
+    })
+  })
+
   describe('P1-4 + P2-1: modify intent 与 confirm 选项的优先级', () => {
     it('shows plan chip when agent replies with new confirm after modify', () => {
       // 用户输入"3" → agent 重新生成 → 回复新 confirm 选项

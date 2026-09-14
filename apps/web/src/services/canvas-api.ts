@@ -97,4 +97,10 @@ export const canvasApi = {
     api
       .get<{ data: GenerationDiagnostic }>(`/agent/canvas/material/${id}/diagnostic`)
       .then((r) => r.data.data),
+  /** Phase 2c.1: Nest Jwt clear pending_confirm → draft (browser path). */
+  clearProposeGeneration: (sessionId: string, nodeId: string) =>
+    api.post<{ data: { nodeId: string; status: 'draft' } }>('/agent/clear-propose', {
+      sessionId,
+      nodeId,
+    }),
 }
