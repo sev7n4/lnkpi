@@ -115,3 +115,4 @@ console.log(doc.graph.nodes.length) // 2
 
 - 设计规格：`docs/superpowers/specs/2026-09-12-canvas-workflow-exchange-design.md`
 - Schema 源码：`packages/shared/src/canvas/workflowExchange.ts`
+- 内部工作流配方规划器：见 `docs/superpowers/specs/2026-09-15-workflow-recipe-planner-design.md`。外部 Agent 仍只生成 `lnkpi.workflow` 实例；规划器不是对外交换契约。

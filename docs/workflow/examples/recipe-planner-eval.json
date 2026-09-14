@@ -1,0 +1,112 @@
+[
+  {
+    "id": "recognize-ecommerce",
+    "utterance": "蓝牙耳机详情页套图",
+    "parentId": "ecommerce-product-visual",
+    "expect": {
+      "parentId": "ecommerce-product-visual"
+    }
+  },
+  {
+    "id": "recognize-graft-hint",
+    "utterance": "套图并且要模特三视图",
+    "parentId": "ecommerce-product-visual",
+    "expect": {
+      "parentId": "ecommerce-product-visual",
+      "graftHintRecipeId": "model-turnaround"
+    }
+  },
+  {
+    "id": "illegal-remove-seed",
+    "parentId": "ecommerce-product-visual",
+    "delta": { "remove": ["white_bg"] },
+    "expect": {
+      "strippedCodes": ["seed_frozen"],
+      "seedUnchanged": true
+    }
+  },
+  {
+    "id": "legal-remove-banner",
+    "parentId": "ecommerce-product-visual",
+    "delta": { "remove": ["banner"] },
+    "expect": {
+      "strippedCodes": [],
+      "missingKeys": ["banner"]
+    }
+  },
+  {
+    "id": "graft-without-lifestyle",
+    "parentId": "ecommerce-product-visual",
+    "delta": { "graft": { "recipeId": "model-turnaround", "version": "1.0.0" } },
+    "expect": {
+      "strippedCodes": [],
+      "graftKeysPresent": ["model_portrait", "model_turnaround"],
+      "graftLifestyleAbsent": true
+    }
+  },
+  {
+    "id": "graft-twice",
+    "parentId": "ecommerce-product-visual",
+    "delta": { "graft": { "recipeId": "model-turnaround", "version": "1.0.0" } },
+    "alreadyGrafted": 1,
+    "expect": {
+      "strippedCodes": ["graft_once"]
+    }
+  },
+  {
+    "id": "infer-missing-seed",
+    "parentId": "",
+    "workflow": {
+      "format": "lnkpi.workflow",
+      "version": "1.0.0",
+      "exportedAt": "2026-09-12T01:00:00.000Z",
+      "mode": "full",
+      "exportMode": "lightweight",
+      "graph": {
+        "nodes": [
+          {
+            "id": "prompt-golden-1",
+            "type": "prompt",
+            "position": { "x": 80, "y": 120 },
+            "data": {
+              "title": "Scene prompt",
+              "prompt": "A serene mountain lake at dawn, cinematic lighting"
+            },
+            "mediaRole": "none"
+          },
+          {
+            "id": "image-golden-1",
+            "type": "image",
+            "position": { "x": 400, "y": 120 },
+            "data": {
+              "title": "Hero frame",
+              "prompt": "A serene mountain lake at dawn, cinematic lighting"
+            },
+            "mediaRole": "none"
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-golden-1",
+            "source": "prompt-golden-1",
+            "target": "image-golden-1"
+          }
+        ]
+      },
+      "mediaIndex": []
+    },
+    "expect": {
+      "seedChainsEmpty": true
+    }
+  },
+  {
+    "id": "second-derive-frozen-graft-seed",
+    "parentId": "ecommerce-product-visual",
+    "setupDelta": { "graft": { "recipeId": "model-turnaround", "version": "1.0.0" } },
+    "delta": { "remove": ["model_portrait"] },
+    "expect": {
+      "strippedCodes": ["seed_frozen"],
+      "seedUnchanged": true
+    }
+  }
+]

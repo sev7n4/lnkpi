@@ -7,7 +7,7 @@ import {
   getPlatformRecipe,
   inferRecipeDraftFromWorkflow,
   lintRecipe,
-  listPlatformRecipeSummaries,
+  matchPlatformRecipes,
   RecipeInferError,
   slugRecipeKey,
   validateRecipe,
@@ -19,8 +19,6 @@ import {
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 
-const ECOMMERCE_HINTS = ['套图', '详情', '主图', '电商'] as const
-const MODEL_HINTS = ['三视图', '定妆', '模特', '角色'] as const
 const ECOMMERCE_ID = 'ecommerce-product-visual'
 const MODEL_ID = 'model-turnaround'
 const FORBIDDEN_USER_TEXT = /parentId|delta|种子链|嫁接|\blint\b/i
@@ -79,47 +77,37 @@ export class WorkflowRecipeService {
 
   async matchRecipes(input: { userId: string; utterance: string }): Promise<MatchRecipesResult> {
     const utterance = input.utterance ?? ''
+    const platform = matchPlatformRecipes(utterance)
     const userRows = await this.prisma.userWorkflowRecipe.findMany({
       where: { userId: input.userId },
     })
-    const summaries = [
-      ...listPlatformRecipeSummaries(),
-      ...userRows.map((row) => ({ id: row.recipeId, version: row.version, title: row.title })),
-    ]
-    const ecommerce = summaries.find((item) => item.id === ECOMMERCE_ID)
-    const model = summaries.find((item) => item.id === MODEL_ID)
-    const ecommerceHit = this.hitsEcommerce(utterance, ecommerce)
-    const modelHit = this.hitsModel(utterance, model)
+    const userItems = userRows.map((row) => ({
+      id: row.recipeId,
+      version: row.version,
+      title: row.title,
+      score: this.scoreUserSummary(utterance, { id: row.recipeId, title: row.title }),
+    }))
 
-    if (ecommerceHit && modelHit && ecommerce && model) {
+    if (platform.graftHint) {
       return {
-        items: [
-          { ...ecommerce, score: 2 },
-          { ...model, score: 1 },
-        ].slice(0, 3),
-        graftHint: { recipeId: MODEL_ID, version: model.version },
+        items: platform.items.slice(0, 3),
+        graftHint: platform.graftHint,
       }
     }
 
-    if (!ecommerceHit && !modelHit) {
-      const scoredEmpty = summaries
-        .map((item) => ({ ...item, score: this.scoreSummary(utterance, item) }))
-        .sort((a, b) => b.score - a.score)
+    if (platform.needsClarify) {
+      const scoredEmpty = [...userItems, ...platform.items].sort((a, b) => b.score - a.score)
       const anyUserHit = scoredEmpty.some((item) => item.score > 0 && !this.isPlatformId(item.id))
       if (anyUserHit) {
         return { items: scoredEmpty.slice(0, 3) }
       }
       return {
-        items: summaries.slice(0, 2).map((item) => ({ ...item, score: 0 })),
+        items: platform.items.slice(0, 2),
         needsClarify: true,
       }
     }
 
-    const scored = summaries
-      .map((item) => ({
-        ...item,
-        score: this.scoreSummary(utterance, item),
-      }))
+    const scored = [...platform.items, ...userItems]
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
     return { items: scored }
@@ -439,37 +427,13 @@ export class WorkflowRecipeService {
     return createHash('sha256').update(JSON.stringify(workflow ?? {})).digest('hex')
   }
 
-  private hitsEcommerce(
-    utterance: string,
-    summary?: { id: string; title: string },
-  ): boolean {
-    if (ECOMMERCE_HINTS.some((hint) => utterance.includes(hint))) return true
-    return Boolean(summary && this.titleOrIdHit(utterance, summary))
-  }
-
-  private hitsModel(
-    utterance: string,
-    summary?: { id: string; title: string },
-  ): boolean {
-    if (MODEL_HINTS.some((hint) => utterance.includes(hint))) return true
-    return Boolean(summary && this.titleOrIdHit(utterance, summary))
-  }
-
   private titleOrIdHit(utterance: string, summary: { id: string; title: string }): boolean {
     const low = utterance.toLowerCase()
     return utterance.includes(summary.title) || low.includes(summary.id.toLowerCase())
   }
 
-  private scoreSummary(utterance: string, summary: { id: string; title: string }): number {
-    let score = 0
-    if (this.titleOrIdHit(utterance, summary)) score += 3
-    if (summary.id === ECOMMERCE_ID && ECOMMERCE_HINTS.some((hint) => utterance.includes(hint))) {
-      score += 2
-    }
-    if (summary.id === MODEL_ID && MODEL_HINTS.some((hint) => utterance.includes(hint))) {
-      score += 2
-    }
-    return score
+  private scoreUserSummary(utterance: string, summary: { id: string; title: string }): number {
+    return this.titleOrIdHit(utterance, summary) ? 3 : 0
   }
 
   private parseDelta(input: unknown): RecipeDelta {
