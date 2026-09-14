@@ -1998,6 +1998,55 @@ describe('AgentCanvasToolsService', () => {
     })
   })
 
+  describe('instantiateRecipe', () => {
+    const productParent = {
+      id: 'ecommerce-product-visual',
+      version: '1.0.0',
+      title: '电商套图',
+      invariants: { seedChains: [{ id: 'product', keys: ['white_bg', 'product_turnaround'] }] },
+      nodes: [
+        { key: 'white_bg', title: '白底', type: 'image', chain: 'product', role: 'seed', dependsOn: [], genMode: 't2i', autoGenerate: true },
+        { key: 'product_turnaround', title: '四视图', type: 'image', chain: 'product', role: 'turnaround', dependsOn: ['white_bg'], genMode: 'i2i', autoGenerate: true },
+        { key: 'banner', title: 'Banner', type: 'image', chain: 'product', role: 'downstream', dependsOn: ['product_turnaround'], genMode: 'i2i', autoGenerate: true },
+      ],
+    }
+
+    it('compiles recipe and calls importWorkflow with recipeKey', async () => {
+      const importSpy = vi.spyOn(svc, 'importWorkflow').mockResolvedValue({
+        addedNodeIds: ['image-1'],
+        idMap: {},
+        mediaOk: 0,
+        mediaFail: 0,
+        actions: [],
+        canvasCommands: [{ type: 'focus_nodes', nodeIds: ['image-1'] }],
+      })
+
+      await svc.instantiateRecipe({
+        sessionId: 's1',
+        userId: 'u1',
+        recipe: productParent,
+        slots: { white_bg: 'a white mug' },
+      })
+
+      expect(importSpy).toHaveBeenCalledTimes(1)
+      const arg = importSpy.mock.calls[0]![0] as {
+        workflow: { graph: { nodes: Array<{ data: { recipeKey?: unknown } }> } }
+      }
+      expect(arg.workflow.graph.nodes[0]?.data.recipeKey).toBeTruthy()
+      importSpy.mockRestore()
+    })
+
+    it('rejects invalid recipe with 400', async () => {
+      await expect(
+        svc.instantiateRecipe({
+          sessionId: 's1',
+          userId: 'u1',
+          recipe: { id: 'x' },
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+    })
+  })
+
   describe('Phase 2b upsertMediaNode + proposeGeneration', () => {
     it('upsertMediaNode creates image node and returns nodeId + add_node', async () => {
       const result = await svc.upsertMediaNode({

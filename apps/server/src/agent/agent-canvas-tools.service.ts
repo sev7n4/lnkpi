@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions, parseVisionQaJson } from '@lnkpi/agent'
 import {
+  compileRecipeToWorkflow,
   computeImportTranslation,
   duplicateResultToCanvasActions,
   duplicateSubgraph,
@@ -10,6 +11,7 @@ import {
   resolveNodeRefs,
   resolveCanonicalVideoRequest,
   summarizePromptCompletion,
+  validateRecipe,
   validateWorkflow,
   type CanvasAction,
   type CanvasData,
@@ -2236,6 +2238,28 @@ export class AgentCanvasToolsService {
       actions,
       canvasCommands: [{ type: 'focus_nodes', nodeIds: addedNodeIds }],
     }
+  }
+
+  async instantiateRecipe(input: {
+    sessionId: string
+    userId: string
+    recipe: unknown
+    slots?: Record<string, string>
+  }) {
+    let recipe
+    try {
+      recipe = validateRecipe(input.recipe)
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : '配方格式无效',
+      )
+    }
+    const workflow = compileRecipeToWorkflow(recipe, input.slots)
+    return this.importWorkflow({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      workflow,
+    })
   }
 
   async groupNodes(input: {

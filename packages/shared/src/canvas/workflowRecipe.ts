@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { buildWorkflowDocument, type WorkflowDocument } from './workflowExchange'
 
 export const RECIPE_DATA_KEYS = [
   'recipeId',
@@ -435,4 +436,101 @@ export function diffRecipeLines(parent: unknown, recipe: unknown): string[] {
   }
 
   return lines
+}
+
+function recipeNodeId(node: RecipeNode): string {
+  return `${node.type}-${node.key}`
+}
+
+function topologicalLayers(nodes: RecipeNode[]): Map<string, number> {
+  const byKey = new Map(nodes.map((node) => [node.key, node]))
+  const memo = new Map<string, number>()
+
+  const layerOf = (key: string, visiting: Set<string>): number => {
+    const cached = memo.get(key)
+    if (cached !== undefined) return cached
+    if (visiting.has(key)) return 0
+    visiting.add(key)
+    const node = byKey.get(key)
+    let layer = 0
+    if (node) {
+      for (const dep of node.dependsOn) {
+        if (!byKey.has(dep)) continue
+        layer = Math.max(layer, layerOf(dep, visiting) + 1)
+      }
+    }
+    visiting.delete(key)
+    memo.set(key, layer)
+    return layer
+  }
+
+  for (const node of nodes) layerOf(node.key, new Set())
+  return memo
+}
+
+export function compileRecipeToWorkflow(
+  recipeInput: unknown,
+  slots?: Record<string, string>,
+): WorkflowDocument {
+  const recipe = parseRecipeLoose(recipeInput)
+  const layers = topologicalLayers(recipe.nodes)
+  const indexInLayer = new Map<string, number>()
+  const layerCounts = new Map<number, number>()
+  for (const node of recipe.nodes) {
+    const layer = layers.get(node.key) ?? 0
+    const index = layerCounts.get(layer) ?? 0
+    indexInLayer.set(node.key, index)
+    layerCounts.set(layer, index + 1)
+  }
+
+  const nodes = recipe.nodes.map((node) => {
+    const layer = layers.get(node.key) ?? 0
+    const index = indexInLayer.get(node.key) ?? 0
+    const prompt = slots?.[node.key] ?? node.promptHintTemplate ?? ''
+    const data: Record<string, unknown> = {
+      title: node.title,
+      prompt,
+      recipeId: recipe.id,
+      recipeVersion: recipe.version,
+      recipeKey: node.key,
+    }
+    if (node.chain !== undefined) data.chain = node.chain
+    if (node.role !== undefined) data.role = node.role
+    if (node.genMode !== undefined) data.genMode = node.genMode
+    if (recipe.parentId !== undefined) data.parentRecipeId = recipe.parentId
+    if (node.dependsOn.length > 0) data.mentionedKeys = [...node.dependsOn]
+    if (!node.autoGenerate) data.status = 'draft'
+    return {
+      id: recipeNodeId(node),
+      type: node.type,
+      position: {
+        x: 80 + layer * 360,
+        y: 120 + index * 220,
+      },
+      data,
+    }
+  })
+
+  const idByKey = new Map(recipe.nodes.map((node) => [node.key, recipeNodeId(node)]))
+  const edges: Array<{ id: string; source: string; target: string }> = []
+  for (const node of recipe.nodes) {
+    const target = idByKey.get(node.key)!
+    for (const dep of node.dependsOn) {
+      const source = idByKey.get(dep)
+      if (!source) continue
+      edges.push({
+        id: `e-${source}-${target}`,
+        source,
+        target,
+      })
+    }
+  }
+
+  return buildWorkflowDocument({
+    nodes,
+    edges,
+    mode: 'subgraph',
+    exportMode: 'lightweight',
+    mediaIndex: [],
+  })
 }

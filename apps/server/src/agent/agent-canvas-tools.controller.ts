@@ -537,6 +537,19 @@ class ImportWorkflowDto {
   workflowUrl?: string
 }
 
+class InstantiateRecipeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  recipe!: unknown
+
+  @IsOptional()
+  slots?: Record<string, string>
+}
+
 class GroupNodesDto {
   @IsString()
   sessionId!: string
@@ -1028,6 +1041,12 @@ export class AgentCanvasToolsController {
   @Post('import-workflow')
   async importWorkflow(@Body() dto: ImportWorkflowDto) {
     const data = await this.tools.importWorkflow(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('instantiate-recipe')
+  async instantiateRecipe(@Body() dto: InstantiateRecipeDto) {
+    const data = await this.tools.instantiateRecipe(dto)
     return { code: 0, message: 'ok', data }
   }
 

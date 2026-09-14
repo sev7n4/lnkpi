@@ -5,6 +5,7 @@ import {
   validateRecipe,
   slugRecipeKey,
   diffRecipeLines,
+  compileRecipeToWorkflow,
   RECIPE_DATA_KEYS,
 } from './workflowRecipe'
 
@@ -431,5 +432,68 @@ describe('RECIPE_DATA_KEYS', () => {
       'genMode',
       'parentRecipeId',
     ])
+  })
+})
+
+describe('compileRecipeToWorkflow', () => {
+  it('compileRecipeToWorkflow writes identity data and layered positions', () => {
+    const doc = compileRecipeToWorkflow(productParent, { white_bg: 'a white mug' })
+    expect(doc.format).toBe('lnkpi.workflow')
+    const bg = doc.graph.nodes.find((n) => n.data.recipeKey === 'white_bg')
+    expect(bg?.data.recipeId).toBe('ecommerce-product-visual')
+    expect(bg?.data.role).toBe('seed')
+    expect(bg?.data.prompt).toBe('a white mug')
+    const ta = doc.graph.nodes.find((n) => n.data.recipeKey === 'product_turnaround')
+    expect(ta!.position.x).toBeGreaterThan(bg!.position.x)
+    expect(doc.graph.edges.some((e) => e.source === bg!.id && e.target === ta!.id)).toBe(true)
+  })
+
+  it('uses type-key ids, hint prompts, mentionedKeys, and layered grid', () => {
+    const withHint = {
+      ...productParent,
+      nodes: productParent.nodes.map((n) =>
+        n.key === 'banner' ? { ...n, promptHintTemplate: 'banner hint' } : n,
+      ),
+    }
+    const doc = compileRecipeToWorkflow(withHint, { white_bg: 'a white mug' })
+    expect(doc.mode).toBe('subgraph')
+    expect(doc.exportMode).toBe('lightweight')
+    expect(doc.mediaIndex).toEqual([])
+    const bg = doc.graph.nodes.find((n) => n.data.recipeKey === 'white_bg')
+    const ta = doc.graph.nodes.find((n) => n.data.recipeKey === 'product_turnaround')
+    const banner = doc.graph.nodes.find((n) => n.data.recipeKey === 'banner')
+    expect(bg?.id).toBe('image-white_bg')
+    expect(ta?.id).toBe('image-product_turnaround')
+    expect(bg?.position).toEqual({ x: 80, y: 120 })
+    expect(ta?.position).toEqual({ x: 440, y: 120 })
+    expect(banner?.position).toEqual({ x: 800, y: 120 })
+    expect(bg?.mediaRole).toBe('none')
+    expect(bg?.data.recipeVersion).toBe('1.0.0')
+    expect(bg?.data.chain).toBe('product')
+    expect(bg?.data.genMode).toBe('t2i')
+    expect(banner?.data.prompt).toBe('banner hint')
+    expect(ta?.data.mentionedKeys).toEqual(['white_bg'])
+    expect(banner?.data.mentionedKeys).toEqual(['product_turnaround'])
+  })
+
+  it('does not queue autoGenerate false nodes and still writes identity', () => {
+    const { recipe } = applyDelta(productParent, {
+      add: [{
+        key: 'pack_detail',
+        title: '包装细节',
+        type: 'image',
+        chain: 'product',
+        role: 'downstream',
+        dependsOn: ['product_turnaround'],
+        genMode: 'i2i',
+        autoGenerate: true,
+      }],
+    })
+    const doc = compileRecipeToWorkflow(recipe)
+    const added = doc.graph.nodes.find((n) => n.data.recipeKey === 'pack_detail')
+    expect(added?.data.status).not.toBe('queued')
+    expect(added?.data.recipeId).toBe('ecommerce-product-visual')
+    expect(added?.data.recipeKey).toBe('pack_detail')
+    expect(added?.data.parentRecipeId).toBe('ecommerce-product-visual')
   })
 })
