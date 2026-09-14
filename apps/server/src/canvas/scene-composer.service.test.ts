@@ -24,6 +24,9 @@ describe('SceneComposerService batchGenerate', () => {
     if (args.where.id === 'shot-vid') {
       return { id: 'shot-vid', sessionId: 'sess-1' }
     }
+    if (args.where.id === 'shot-h3') {
+      return { id: 'shot-h3', sessionId: 'sess-1' }
+    }
     return null
   })
   const shotUpdate = vi.fn(async () => ({}))
@@ -107,6 +110,31 @@ describe('SceneComposerService batchGenerate', () => {
       resolution: '720p',
       crop: 'none',
       skipCharge: true,
+    })
+  })
+
+  it('bills fal H3 Max video with resolution credit factors', async () => {
+    await svc.batchGenerate('u1', {
+      sessionId: 'sess-1',
+      composerNodeId: 'composer-1',
+      items: [
+        {
+          shotNodeId: 'shot-h3',
+          prompt: 'turbo clip',
+          mediaType: 'video',
+          model: 'h3-max-turbo',
+          duration: 5,
+          aspectRatio: '16:9',
+          resolution: '768p',
+        },
+      ],
+    })
+
+    expect(consume).toHaveBeenCalledWith('u1', 36, '导演台批量生成 ×1', {
+      kind: 'consume',
+      category: 'other',
+      status: 'success',
+      generationId: null,
     })
   })
 

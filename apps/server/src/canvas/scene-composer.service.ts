@@ -9,7 +9,7 @@ import { MaterialService } from './material.service'
 import { ShotService } from './shot.service'
 import { PointsService } from '../points/points.service'
 import { consumeMeta } from '../points/point-tx.types'
-import { videoCredits } from '../points/video-credits'
+import { videoCreditsForModel } from '../points/video-credits'
 import { PrismaService } from '../prisma/prisma.service'
 
 @Injectable()
@@ -31,7 +31,11 @@ export class SceneComposerService {
 
   private itemCredits(item: SceneComposerBatchItem): number {
     if (item.mediaType === 'video') {
-      return videoCredits(item.duration ?? 5)
+      return videoCreditsForModel({
+        duration: item.duration ?? 5,
+        modelKey: item.model,
+        resolution: item.resolution,
+      })
     }
     return 10
   }
