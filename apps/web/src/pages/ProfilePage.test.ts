@@ -1,11 +1,21 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import ProfilePage from './ProfilePage.vue'
 
+const { routerMocks, routeQuery } = vi.hoisted(() => ({
+  routerMocks: {
+    push: vi.fn(),
+    back: vi.fn(),
+    replace: vi.fn(),
+  },
+  routeQuery: {} as Record<string, string>,
+}))
+
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => routerMocks,
+  useRoute: () => ({ query: routeQuery }),
 }))
 
 vi.mock('@/services/api', () => ({
@@ -48,20 +58,49 @@ vi.mock('@/components/membership/MembershipModal.vue', () => ({
   default: { template: '<div class="membership-modal-stub" />' },
 }))
 
+async function mountProfile() {
+  setActivePinia(createPinia())
+  const auth = useAuthStore()
+  auth.token = 'tok'
+  auth.user = { id: '1', phone: '17200008608', nickname: '测', points: 34, membership: 'free' } as never
+  const wrapper = mount(ProfilePage)
+  await flushPromises()
+  return wrapper
+}
+
 describe('ProfilePage', () => {
-  it('renders insight KPI labels and recharge CTA', async () => {
-    setActivePinia(createPinia())
-    const auth = useAuthStore()
-    auth.token = 'tok'
-    auth.user = { id: '1', phone: '17200008608', nickname: '测', points: 34, membership: 'free' } as never
+  beforeEach(() => {
+    Object.keys(routeQuery).forEach((key) => {
+      delete routeQuery[key]
+    })
+    routerMocks.push.mockClear()
+    routerMocks.back.mockClear()
+    routerMocks.replace.mockClear()
+  })
 
-    const wrapper = mount(ProfilePage)
-    await flushPromises()
+  it('defaults to the account tab with identity copy', async () => {
+    const wrapper = await mountProfile()
 
+    expect(wrapper.text()).toContain('账户')
+    expect(wrapper.text()).toContain('创作能量')
+    expect(wrapper.text()).toContain('我的邀请码')
+    expect(wrapper.text()).toContain('充值')
+  })
+
+  it('renders insight KPI labels on the billing tab', async () => {
+    routeQuery.tab = 'billing'
+    const wrapper = await mountProfile()
+
+    expect(wrapper.text()).toContain('积分账单')
     expect(wrapper.text()).toContain('净消耗')
     expect(wrapper.text()).toContain('单日峰值')
-    expect(wrapper.text()).toContain('充值')
     expect(wrapper.text()).toContain('全部')
     expect(wrapper.text()).toContain('消耗')
+  })
+
+  it('exposes a close control with aria-label 关闭', async () => {
+    const wrapper = await mountProfile()
+
+    expect(wrapper.find('[aria-label="关闭"]').exists()).toBe(true)
   })
 })
