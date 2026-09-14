@@ -126,7 +126,11 @@ export function mergeReferenceImageUrl(
   return upstream.referenceImageUrl.trim()
 }
 
-export type VideoGenerationMode = 'text_to_video' | 'image_to_video' | 'first_last_frame'
+export type VideoGenerationMode =
+  | 'text_to_video'
+  | 'image_to_video'
+  | 'first_last_frame'
+  | 'reference_to_video'
 
 export function resolveVideoMode(
   nodeData: Record<string, unknown>,
@@ -137,6 +141,7 @@ export function resolveVideoMode(
     explicit === 'text_to_video'
     || explicit === 'image_to_video'
     || explicit === 'first_last_frame'
+    || explicit === 'reference_to_video'
   ) {
     return explicit
   }

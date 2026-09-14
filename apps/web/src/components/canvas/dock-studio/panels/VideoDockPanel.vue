@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElAlert, ElMessage } from 'element-plus'
 import {
+  assertMiniMaxH3ReferenceLimits,
   evaluateMediaRefPreflight,
   type MediaRefPreflight,
   type ProbedMediaFile,
@@ -112,6 +113,28 @@ const generateDisabled = computed(() => {
   if (!prompt.value.trim()) return true
   if (videoMode.value === 'image_to_video' && !effectiveRefUrl.value) return true
   if (firstLastFrameInvalid.value) return true
+  if (videoMode.value === 'reference_to_video') {
+    const refs = props.refs ?? []
+    let imageCount = 0
+    let videoCount = 0
+    let audioCount = 0
+    for (const ref of refs) {
+      if (ref.stale || !ref.payload.url?.trim()) continue
+      if (ref.mediaType === 'image') imageCount++
+      else if (ref.mediaType === 'video') videoCount++
+      else if (ref.mediaType === 'audio') audioCount++
+    }
+    try {
+      assertMiniMaxH3ReferenceLimits({
+        imageCount,
+        videoCount,
+        audioCount,
+        promptLength: prompt.value.length,
+      })
+    } catch {
+      return true
+    }
+  }
   return false
 })
 
@@ -287,6 +310,11 @@ watch(
       ElMessage.warning('当前模型不支持严格首尾帧，已切换为图生视频')
       setVideoMode('image_to_video')
     }
+    if (!caps.supportsReferenceToVideo && videoMode.value === 'reference_to_video') {
+      setVideoMode(
+        effectiveRefUrl.value || imageRefCount.value > 0 ? 'image_to_video' : 'text_to_video',
+      )
+    }
   },
   { immediate: true },
 )
@@ -400,7 +428,14 @@ function onRefMention(refKey: string) {
     <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
     <p
-      v-if="unsupportedMediaRefs.showWarning"
+      v-if="capabilities.supportsReferenceToVideo && (unsupportedMediaRefs.hasVideo || unsupportedMediaRefs.hasAudio) && videoMode !== 'reference_to_video'"
+      class="dock-ref-warning"
+      role="status"
+    >
+      请切到参考生成
+    </p>
+    <p
+      v-else-if="unsupportedMediaRefs.showWarning"
       class="dock-ref-warning"
       role="status"
     >
@@ -477,6 +512,17 @@ function onRefMention(refKey: string) {
           @click="setVideoMode('first_last_frame')"
         >
           {{ capabilities.firstLastFrameLabel }}
+        </button>
+        <button
+          v-if="capabilities.supportsReferenceToVideo"
+          type="button"
+          class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
+          :class="{ 'is-on': videoMode === 'reference_to_video' }"
+          :disabled="readonly"
+          title="参考生成"
+          @click="setVideoMode('reference_to_video')"
+        >
+          参考生成
         </button>
       </div>
 
