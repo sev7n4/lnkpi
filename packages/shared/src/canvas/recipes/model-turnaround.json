@@ -1,0 +1,32 @@
+{
+  "id": "model-turnaround",
+  "version": "1.0.0",
+  "title": "角色三视图",
+  "invariants": {
+    "seedChains": [{ "id": "model", "keys": ["model_portrait", "model_turnaround"] }]
+  },
+  "nodes": [
+    {
+      "key": "model_portrait",
+      "title": "模特定妆",
+      "type": "image",
+      "chain": "model",
+      "role": "seed",
+      "dependsOn": [],
+      "genMode": "t2i",
+      "promptHintTemplate": "模特定妆半身或全身肖像，清晰五官发型服装，干净背景，商业摄影…",
+      "autoGenerate": true
+    },
+    {
+      "key": "model_turnaround",
+      "title": "模特四视图",
+      "type": "image",
+      "chain": "model",
+      "role": "turnaround",
+      "dependsOn": ["model_portrait"],
+      "genMode": "i2i",
+      "promptHintTemplate": "单张横排四格拼图（一次出图）：最左近景面部/妆容特写，后接正/侧/背全身；同一模特锁定脸、发型、服装，禁止每格换人换装；干净背景…",
+      "autoGenerate": true
+    }
+  ]
+}
