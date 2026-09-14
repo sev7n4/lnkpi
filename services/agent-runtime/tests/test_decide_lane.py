@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import settings
+from app.graph.decide_lane import _invoke_llm
+from app.graph.nodes.intake import make_intake_node
 from app.graph.route_context import assemble_route_context
 from app.graph.route_decide import decide_route
+
+SKILLS = Path(__file__).resolve().parents[1] / "skills"
 
 
 class FakeLLM:
@@ -24,6 +29,11 @@ class FakeLLM:
         if isinstance(self._content, BaseException):
             raise self._content
         return AIMessage(content=self._content)
+
+
+class AinvokeOnlyLLM:
+    async def ainvoke(self, messages):  # noqa: ANN001, ARG002
+        return AIMessage(content="{}")
 
 
 @pytest.fixture
@@ -117,3 +127,34 @@ def test_low_confidence_goes_to_clarify(primary_on):
     d = decide_route(ctx, llm=llm)
     assert d["flow_mode"] == "clarify_route"
     assert llm.calls == 1
+
+
+def test_ainvoke_only_raises():
+    with pytest.raises(TypeError, match="sync invoke"):
+        _invoke_llm(AinvokeOnlyLLM(), [{"role": "user", "content": "x"}])
+
+
+@pytest.mark.asyncio
+async def test_intake_wires_llm_on_soft_path(primary_on):
+    """Production intake must pass llm so primary soft path actually calls decide_lane."""
+    llm = FakeLLM(
+        json.dumps(
+            {
+                "lane": "canvas_agent",
+                "confidence": 0.88,
+                "reason": "intake_wired_llm",
+                "clarify_question": None,
+            }
+        )
+    )
+    intake = make_intake_node(SKILLS, llm=llm)
+    out = await intake(
+        {
+            "messages": [HumanMessage(content="你好")],
+            "previous_lane": "canvas_agent",
+        }
+    )
+    assert llm.calls == 1
+    assert out["flow_mode"] == "canvas_agent"
+    assert out.get("previous_lane") == "canvas_agent"
+    assert (out.get("route_decision") or {}).get("reason") == "intake_wired_llm"

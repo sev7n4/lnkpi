@@ -28,7 +28,7 @@ SKILL_REQUIRED_CLARIFY = (
 )
 
 
-def make_intake_node(skills_dir: Path) -> Callable:
+def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
     async def intake(state: dict) -> dict:
         entries = discover_skills(skills_dir)
         by_id = {e.skill_id: e for e in entries}
@@ -58,6 +58,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
                             "clarify_question": None,
                             "route_clarify": False,
                             "user_brief": original or text,
+                            "previous_lane": "campaign",
                         }
                     return {
                         "phase": "clarify",
@@ -79,6 +80,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
                         "route_clarify": False,
                         "pre_parsed_intent": classified,
                         "split_manifest": [],
+                        "previous_lane": "atomic_create",
                     }
                     mk = list(pending.get("mentioned_keys") or [])
                     if mk:
@@ -95,7 +97,13 @@ def make_intake_node(skills_dir: Path) -> Callable:
 
         ctx = assemble_route_context(state)
         decision = serialize_route_decision(
-            decide_route(ctx, valid_skill_ids=set(by_id.keys()))
+            decide_route(
+                ctx,
+                valid_skill_ids=set(by_id.keys()),
+                llm=llm,
+                messages=state.get("messages"),
+                previous_lane=state.get("previous_lane") or state.get("flow_mode"),
+            )
         )
 
         requested = str(ctx.get("requested_skill_id") or "").strip()
@@ -148,6 +156,8 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "route_context": ctx,
             "route_decision": decision,
             "route_clarify": False,
+            # Persist decided lane for multi-turn decide_lane (D7).
+            "previous_lane": decision.get("flow_mode") or resolved_flow,
         }
         if resolved_flow in ("atomic_create", "atomic_regenerate"):
             out["split_manifest"] = []

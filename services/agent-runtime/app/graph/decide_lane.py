@@ -117,14 +117,14 @@ def build_decide_lane_user_block(
 
 
 def _invoke_llm(llm: Any, messages: list[dict[str, str]]) -> str:
-    if hasattr(llm, "invoke"):
-        resp = llm.invoke(messages)
-    elif hasattr(llm, "ainvoke"):
-        import asyncio
+    """Sync invoke only — safe to call from async intake (LangChain Chat models).
 
-        resp = asyncio.get_event_loop().run_until_complete(llm.ainvoke(messages))
-    else:
-        raise TypeError("llm must provide invoke or ainvoke")
+    Models that only expose ``ainvoke`` must not be used here; nest a sync
+    ``.invoke`` wrapper or call from an async helper that awaits ``ainvoke``.
+    """
+    if not hasattr(llm, "invoke"):
+        raise TypeError("llm must provide sync invoke (ainvoke-only is not supported)")
+    resp = llm.invoke(messages)
     return str(getattr(resp, "content", None) or "")
 
 

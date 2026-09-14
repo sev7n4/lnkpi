@@ -69,7 +69,7 @@ def build_agent_graph(
     skills_path = Path(skills_dir)
     graph = StateGraph(AgentRuntimeState)
 
-    graph.add_node("intake", make_intake_node(skills_path))
+    graph.add_node("intake", make_intake_node(skills_path, llm=llm))
     graph.add_node("clarify_gate", make_clarify_gate_node())
     # chat node retired (M2a): chat|explore_canvas|canvas_agent → explore
     graph.add_node("explore", make_explore_node(llm=llm, nest=nest))
