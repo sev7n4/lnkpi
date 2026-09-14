@@ -26,7 +26,7 @@ def test_resolve_turn_input_new_task_after_cancel():
 
     input_state = resolve_turn_input(pre, [], "__new_task__", None, turn_update)
 
-    assert input_state.goto == "intake"
+    assert input_state.goto == "parse_sidebar_media"
     assert input_state.update["shot_manifest"] is None
     assert input_state.update["run_cancelled"] is None
     assert input_state.update["cancelled_from_phase"] is None
@@ -123,7 +123,7 @@ def test_resolve_turn_input_preserves_non_cancelled_paths():
         None,
         turn_update,
     )
-    assert fresh.goto == "intake"
+    assert fresh.goto == "parse_sidebar_media"
 
 
 def test_resolve_turn_input_defers_gate_resume_to_async_path():

@@ -24,7 +24,8 @@ PARSE_FAIL = {
 
 USER_TEXT = "这个产品是什么？"
 EMPTY_LISTING_RULE = (
-    "4. 参考图未能识别。禁止 add_nodes / 更新 prompt 写出空品类、空规格的上架方案框架；"
+    "4. 参考图未能识别。禁止 upsert_media_node / upsert_prompt_node / set_node_prompt "
+    "写出空品类、空规格的上架方案框架；"
     "用文字说明失败并询问用户。"
 )
 

@@ -36,7 +36,13 @@ def _qa_fields_complete(parse: dict) -> bool:
 def _cache_covers(urls: list[str], cache: dict | None) -> bool:
     if not urls or not isinstance(cache, dict):
         return False
-    return set(urls) <= set(cache.keys())
+    for url in urls:
+        rec = cache.get(url)
+        if not isinstance(rec, dict) or not rec.get("vision_used"):
+            return False
+        if not _qa_fields_complete(rec):
+            return False
+    return True
 
 REMEDIATE_PROGRESS_MSG = "正在生成标准白底图与四视图…"
 REMEDIATE_DONE_MSG = "已生成标准白底图与四视图，继续策划视觉方案…"

@@ -123,7 +123,7 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
     async def parse_sidebar_media(state: dict) -> dict:
         urls = image_urls_for_parse(list(state.get("sidebar_attachments") or []))
         if not urls:
-            return {}
+            return {"sidebar_media_parse": None}
 
         cache = dict(state.get("sidebar_media_parse_cache") or {})
         need = uncached_urls(urls, cache)

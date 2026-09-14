@@ -66,6 +66,27 @@ async def test_no_image_does_not_call_nest():
 
 
 @pytest.mark.asyncio
+async def test_clears_parse_when_turn_has_no_image_urls():
+    nest = _Nest()
+    node = make_parse_sidebar_media_node(nest=nest, vision_creds={}, skills_dir=".")
+    prev = {
+        "vision_used": True,
+        "user_facing_summary": "一只不锈钢水杯",
+        "fields": {"category": "水杯"},
+    }
+    out = await node(
+        {
+            "sidebar_attachments": [{"mediaType": "text", "text": "hi"}],
+            "sidebar_media_parse": prev,
+            "sidebar_media_parse_cache": {"https://cdn.example/p.jpg": prev},
+        }
+    )
+    assert nest.calls == []
+    assert out["sidebar_media_parse"] is None
+    assert "sidebar_media_parse_cache" not in out
+
+
+@pytest.mark.asyncio
 async def test_nest_error_becomes_vision_false(monkeypatch):
     class Boom:
         async def run_vision_qa(self, **kwargs):

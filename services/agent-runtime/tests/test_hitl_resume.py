@@ -7,7 +7,9 @@ from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import MemorySaver
 
 from app.graph.hitl_resume import (
+    FRESH_TURN_STATE_CLEAR,
     GATE_DECISION_CLEAR,
+    build_fresh_turn_command,
     build_interrupt_resume_command,
     build_interrupt_state_update,
     interrupt_event_payload,
@@ -182,6 +184,14 @@ def test_build_interrupt_resume_command_atomic_confirm():
     cmd = build_interrupt_resume_command("await_atomic_confirm", "取消", user_decision="revise")
     assert cmd.goto == "await_atomic_confirm"
     assert cmd.update["user_decision"] == "revise"
+
+
+def test_build_fresh_turn_command_goes_to_parse_sidebar_media():
+    cmd = build_fresh_turn_command(update={})
+    assert cmd.goto == "parse_sidebar_media"
+    assert FRESH_TURN_STATE_CLEAR["sidebar_media_parse"] is None
+    assert cmd.update["sidebar_media_parse"] is None
+    assert "sidebar_media_parse_cache" not in FRESH_TURN_STATE_CLEAR
 
 
 def test_should_resume_interrupt_atomic_exit_phrase():

@@ -70,6 +70,40 @@ async def test_image_qa_skips_vision_http_when_cache_covers_complete_qa():
 
 
 @pytest.mark.asyncio
+async def test_image_qa_reruns_vision_when_second_url_cache_is_not_success():
+    nest = FakeNest()
+    url_a = "https://cdn.example/a.jpg"
+    url_b = "https://cdn.example/b.jpg"
+    parse = {
+        "vision_used": True,
+        "user_facing_summary": "不锈钢水杯",
+        "fields": {"category": "水杯"},
+        "image_urls": [url_a],
+        "qa": dict(COMPLETE_QA),
+    }
+    state = {
+        "product_visual_scheme_v2": True,
+        "sidebar_attachments": [
+            {"mediaType": "image", "url": url_a},
+            {"mediaType": "image", "url": url_b},
+        ],
+        "sidebar_media_parse": parse,
+        "sidebar_media_parse_cache": {
+            url_a: {"vision_used": True, "qa": dict(COMPLETE_QA)},
+            url_b: {"vision_used": False},
+        },
+    }
+    out = await _run_qa_check(
+        state,
+        nest=nest,
+        skills_dir=SKILLS,
+        vision_creds=None,
+    )
+    assert nest.calls == 1
+    assert out.get("product_summary") == "from-http"
+
+
+@pytest.mark.asyncio
 async def test_image_qa_reruns_vision_when_is_white_bg_missing():
     nest = FakeNest()
     parse = {
