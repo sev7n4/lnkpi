@@ -184,18 +184,8 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
         for url in need:
             cache[url] = rec
 
-        parse = {
-            "vision_used": vision_used,
-            "model": model,
-            "image_urls": list(need),
-            **merge_parse_records(urls, cache),
-        }
-        if qa:
-            parse["qa"] = qa
-        if error:
-            parse["error"] = error
         return {
-            "sidebar_media_parse": parse,
+            "sidebar_media_parse": _parse_from_cache(urls, cache, model),
             "sidebar_media_parse_cache": cache,
         }
 
