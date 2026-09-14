@@ -164,6 +164,23 @@ describe('MiniMaxH3VideoProvider', () => {
     expect(body).not.toHaveProperty('ratio')
   })
 
+  it('returns url from official nested task wrapper on poll', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ task_id: 't-nested' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          task: { status: 'succeeded', content: { url: 'https://cdn/nested.mp4' } },
+        }),
+      })
+    const p = new MiniMaxH3VideoProvider('mm-key')
+    const r = await p.generate('nested task', { pollIntervalMs: 0 })
+    expect(r.url).toBe('https://cdn/nested.mp4')
+  })
+
   it('throws when poll status is failed or cancelled', async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, json: async () => ({ task_id: 't-fail' }) })
@@ -186,6 +203,18 @@ describe('MiniMaxH3VideoProvider', () => {
     })
     const p = new MiniMaxH3VideoProvider('mm-key')
     await expect(p.generate('blocked', { pollIntervalMs: 0 })).rejects.toThrow(
+      '视频服务账户异常，请稍后重试或联系管理员',
+    )
+  })
+
+  it('maps HTTP 402 insufficient_balance_error to readable account error', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 402,
+      text: async () => JSON.stringify({ error: { type: 'insufficient_balance_error' } }),
+    })
+    const p = new MiniMaxH3VideoProvider('mm-key')
+    await expect(p.generate('no credits', { pollIntervalMs: 0 })).rejects.toThrow(
       '视频服务账户异常，请稍后重试或联系管理员',
     )
   })

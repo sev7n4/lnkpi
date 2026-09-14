@@ -89,7 +89,7 @@ function sleep(ms: number) {
 }
 
 function throwMiniMaxHttpError(status: number, body: string): never {
-  if (status === 401 || status === 403) {
+  if (status === 401 || status === 402 || status === 403) {
     throw new Error(ACCOUNT_ERROR_MESSAGE)
   }
   throw new Error(`MiniMax video request ${status}: ${body}`)
@@ -157,20 +157,31 @@ export class MiniMaxH3VideoProvider implements VideoProvider {
         headers: { Authorization: `Bearer ${this.apiKey}` },
       })
       if (!pollRes.ok) {
-        if (pollRes.status === 401 || pollRes.status === 403) {
+        if (pollRes.status === 401 || pollRes.status === 402 || pollRes.status === 403) {
           throw new Error(ACCOUNT_ERROR_MESSAGE)
         }
         continue
       }
 
       const statusJson = (await pollRes.json()) as {
+        task?: {
+          status?: string
+          content?: { url?: string }
+          file?: { file_url?: string }
+        }
         status?: string
         content?: { url?: string }
         file?: { file_url?: string }
       }
-      const status = statusJson.status
+      const nestedTask = statusJson.task
+      const task =
+        nestedTask && typeof nestedTask === 'object' ? nestedTask : statusJson
+      const status = task.status
       if (status === 'succeeded') {
-        const url = statusJson.content?.url?.trim() || statusJson.file?.file_url?.trim()
+        const url =
+          task.content?.url?.trim() ||
+          task.file?.file_url?.trim() ||
+          statusJson.file?.file_url?.trim()
         if (!url) {
           throw new Error(`MiniMax video succeeded without url: ${JSON.stringify(statusJson)}`)
         }
