@@ -56,6 +56,7 @@ TOOL_PLACEMENTS: dict[str, ToolPlacement] = {
     "export_media_package": ToolPlacement.EXPLORE,
     "get_image_edit_capabilities": ToolPlacement.EXPLORE,
     "import_workflow": ToolPlacement.EXPLORE,
+    "tool_search": ToolPlacement.EXPLORE,
     "focus_node": ToolPlacement.UI_COMMAND,
     "focus_nodes": ToolPlacement.UI_COMMAND,
     "undo": ToolPlacement.UI_COMMAND,
@@ -79,7 +80,9 @@ DEFERRED_TOOL_NAMES = frozenset({
 
 TOOL_EXPOSURES: dict[str, ToolExposure] = {
     name: (
-        ToolExposure.GRAPH_ONLY
+        ToolExposure.META
+        if name == "tool_search"
+        else ToolExposure.GRAPH_ONLY
         if placement == ToolPlacement.GRAPH_NODE
         else ToolExposure.DEFERRED
         if name in DEFERRED_TOOL_NAMES

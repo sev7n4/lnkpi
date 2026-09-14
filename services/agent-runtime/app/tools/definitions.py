@@ -13,6 +13,7 @@ from app.tools.prompt_templates import (
     upsert_prompt_node_tool_description,
 )
 from app.tools.tool_registry import EXPLORE_TOOL_NAMES, is_explore_tool
+from app.tools.tool_search import make_tool_search_tool
 
 EXPLORE_READ_TOOLS = frozenset({
     "get_canvas_summary",
@@ -741,24 +742,36 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
     return specs
 
 
+def _meta_tool_search() -> StructuredTool:
+    """Default meta tool (no-op load); explore replaces with same-turn callback."""
+    return make_tool_search_tool(on_loaded=lambda _names: None)
+
+
 def build_explore_tools(client: NestCanvasClient) -> list[StructuredTool]:
-    """Tools bindable in explore sub-graph (read + light write + lifecycle)."""
-    return [tool for name, tool in _all_tool_specs(client) if name in EXPLORE_TOOL_NAMES]
+    """Tools bindable in explore sub-graph (read + light write + lifecycle + meta)."""
+    tools = [tool for name, tool in _all_tool_specs(client) if name in EXPLORE_TOOL_NAMES]
+    tools.append(_meta_tool_search())
+    return tools
 
 
 def build_explore_tools_subset(
     client: NestCanvasClient,
     names: frozenset[str],
 ) -> list[StructuredTool]:
-    """Build a filtered explore tool list (narrow bind)."""
+    """Build a filtered explore tool list (plan / test helper)."""
     allowed = names & EXPLORE_TOOL_NAMES
     by_name = {name: tool for name, tool in _all_tool_specs(client) if name in allowed}
-    return [by_name[n] for n in sorted(by_name)]
+    tools = [by_name[n] for n in sorted(by_name)]
+    if "tool_search" in allowed:
+        tools.append(_meta_tool_search())
+    return tools
 
 
 def build_canvas_tools(client: NestCanvasClient) -> list[StructuredTool]:
     """All canvas tools — used by tests and future graph tool nodes."""
-    return [tool for _, tool in _all_tool_specs(client)]
+    tools = [tool for _, tool in _all_tool_specs(client)]
+    tools.append(_meta_tool_search())
+    return tools
 
 
 def build_graph_only_tools(client: NestCanvasClient) -> list[StructuredTool]:
