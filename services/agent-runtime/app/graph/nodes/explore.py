@@ -15,6 +15,7 @@ from app.graph.explore_dispatch import (
     run_mandatory_explore,
 )
 from app.graph.recent_turns import compress_recent_turns
+from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
 from app.tools.tool_plan import META_TOOL_NAME, build_tool_plan
@@ -38,7 +39,13 @@ _EXPLORE_SYSTEM = (
     "5. 工作流类请求（骨架 + 生成 + 填 dock）：优先摆多个节点并用连线（connect_nodes）"
     "串起来，不要压成单个 atomic 式节点。\n"
     "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
+    "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。\n"
     "\n当前画布摘要：\n{summary}"
+)
+
+_PARSE_FAIL_NO_EMPTY_LISTING = (
+    "4. 参考图未能识别。禁止 add_nodes / 更新 prompt 写出空品类、空规格的上架方案框架；"
+    "用文字说明失败并询问用户。"
 )
 
 _NODE_WRITE_CLARIFY = "未能更新节点，请提供节点 id（如 prompt-1）。"
@@ -98,6 +105,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             summary = {"error": "无法拉取画布摘要"}
 
         user_text = _latest_user_text(state.get("messages") or []) or "看看画布状态"
+        parse = state.get("sidebar_media_parse")
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:
@@ -112,7 +120,13 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 "phase": "done",
                 "skill_id": None,
                 "user_decision": "none",
-                "messages": [AIMessage(content=mandatory.reply_text or "已完成操作。")],
+                "messages": [
+                    AIMessage(
+                        content=prefix_assistant_reply(
+                            mandatory.reply_text or "已完成操作。", parse
+                        )
+                    )
+                ],
                 "explore_summary": summary if isinstance(summary, dict) else None,
                 "tool_plan_loaded": list(loaded),
             }
@@ -124,6 +138,10 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
+        if parse:
+            system_content = system_content + "\n\n" + format_parse_context_block(parse)
+            if not parse.get("vision_used"):
+                system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
         messages = list(state.get("messages") or [])
         # Prior turns only — current user utterance is seeded separately (D7).
         prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
@@ -218,7 +236,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             "phase": "done",
             "skill_id": None,
             "user_decision": "none",
-            "messages": [AIMessage(content=final_reply)],
+            "messages": [AIMessage(content=prefix_assistant_reply(final_reply, parse))],
             "explore_summary": summary if isinstance(summary, dict) else None,
             "tool_plan_loaded": list(loaded),
         }

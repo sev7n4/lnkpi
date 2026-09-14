@@ -27,4 +27,8 @@ def test_chat_system_not_legacy_no_image_promise():
 
 def test_chat_system_forbids_fake_in_progress_generation():
     assert "马上生成" in _SYSTEM or "正在生成" in _SYSTEM
-    assert "闲聊" in _SYSTEM or "未进入创作" in _SYSTEM or "尚未进入创作" in _SYSTEM
+
+
+def test_chat_system_forbids_filename_copout_when_parse_present():
+    assert "若已提供【侧栏参考图解析】" in _SYSTEM
+    assert "不得声称只能看到文件名或画布节点标题" in _SYSTEM

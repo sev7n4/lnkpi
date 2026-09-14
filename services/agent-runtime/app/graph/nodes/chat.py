@@ -6,6 +6,8 @@ node. This module is kept only so historical imports do not break; do not re-add
 a zero-tool chat graph edge.
 
 System prompt lives on explore (spec §3.6); re-exported here for legacy tests.
+Sidebar parse is injected on explore's SystemMessage (HumanMessage stays
+latest user text; no image_url). R-UX-03 prefixes the first AIMessage there.
 """
 
 from __future__ import annotations
