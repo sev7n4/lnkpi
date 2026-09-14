@@ -5,11 +5,12 @@ export type VideoRefWire =
   | 'apimart_multimodal'
   | 'apimart_first_last'
   | 'fal_h3_max'
+  | 'minimax_h3_content'
   | 'legacy_prompt_tags'
 
 export type VideoSizeWire = 'pixel_frames' | 'ratio_duration'
 export type VideoResponseMode = 'agnes_poll' | 'async_task'
-export type VideoResolutionTier = '480p' | '720p' | '768p' | '1080p' | '4k'
+export type VideoResolutionTier = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type SeedanceVariantTag = 'mini' | 'standard' | 'fast' | 'face'
 
 export const SEEDANCE_20_GATEWAYS = {
@@ -31,6 +32,7 @@ const RESOLUTION_RANK: Record<VideoResolutionTier, number> = {
   '720p': 2,
   '768p': 3,
   '1080p': 4,
+  '2k': 4,
   '4k': 5,
 }
 
@@ -56,6 +58,10 @@ export interface VideoModelProfile {
 
 function isAgnesVideoModel(modelKey: string, gatewayModelId: string): boolean {
   return /^agnes-video-/i.test(modelKey) || /^agnes-video-/i.test(gatewayModelId)
+}
+
+function isOfficialMiniMaxH3VideoModel(modelKey: string, gatewayModelId: string): boolean {
+  return /^minimax-h3$/i.test(modelKey) || /^minimax-h3$/i.test(gatewayModelId)
 }
 
 function isFalH3MaxVideoModel(modelKey: string, gatewayModelId: string): boolean {
@@ -148,6 +154,22 @@ export function buildSeedance20Profile(gatewayModelId: string): VideoModelProfil
   }
 }
 
+const MINIMAX_H3_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
+  refWire: 'minimax_h3_content',
+  sizeWire: 'ratio_duration',
+  responseMode: 'async_task',
+  maxImageRefs: 2,
+  maxVideoRefs: 0,
+  maxAudioRefs: 0,
+  minDuration: 4,
+  maxDuration: 15,
+  allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+  allowedResolutions: ['768p', '2k'],
+  defaultGenerateAudio: true,
+  pollIntervalMs: 10_000,
+  maxPollMs: 1_200_000,
+}
+
 const FAL_H3_MAX_VIDEO_PROFILE: Omit<VideoModelProfile, 'gatewayModelId'> = {
   refWire: 'fal_h3_max',
   sizeWire: 'ratio_duration',
@@ -186,6 +208,13 @@ export function resolveVideoModelProfile(
   gatewayModelId: string,
   opts?: { channelBaseUrl?: string },
 ): VideoModelProfile {
+  if (isOfficialMiniMaxH3VideoModel(modelKey, gatewayModelId)) {
+    return {
+      ...MINIMAX_H3_VIDEO_PROFILE,
+      gatewayModelId: 'MiniMax-H3',
+    }
+  }
+
   if (isFalH3MaxVideoModel(modelKey, gatewayModelId)) {
     return {
       ...FAL_H3_MAX_VIDEO_PROFILE,

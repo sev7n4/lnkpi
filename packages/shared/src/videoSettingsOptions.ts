@@ -33,6 +33,8 @@ const BASE_RESOLUTION_OPTIONS: VideoResolutionOption[] = [
 ]
 
 const EXTRA_RESOLUTION_OPTIONS: VideoResolutionOption[] = [
+  { value: '768p', label: '768p' },
+  { value: '2k', label: '2K' },
   { value: '4k', label: '4K' },
 ]
 

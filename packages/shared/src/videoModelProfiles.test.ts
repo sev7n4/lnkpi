@@ -64,6 +64,40 @@ describe('resolveVideoModelProfile', () => {
     expect(resolveVideoModelProfile('h3-max-turbo', 'agnes-video-v2.0').refWire).toBe('fal_h3_max')
     expect(resolveVideoModelProfile('custom-key', 'minimax/h3-max').refWire).toBe('fal_h3_max')
   })
+
+  it('resolves minimax-h3 profile', () => {
+    const p = resolveVideoModelProfile('minimax-h3', 'MiniMax-H3')
+    expect(p.refWire).toBe('minimax_h3_content')
+    expect(p.sizeWire).toBe('ratio_duration')
+    expect(p.responseMode).toBe('async_task')
+    expect(p.minDuration).toBe(4)
+    expect(p.maxDuration).toBe(15)
+    expect(p.maxImageRefs).toBe(2)
+    expect(p.maxVideoRefs).toBe(0)
+    expect(p.maxAudioRefs).toBe(0)
+    expect(p.allowedResolutions).toEqual(['768p', '2k'])
+    expect(p.allowedAspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'])
+    expect(p.gatewayModelId).toBe('MiniMax-H3')
+    expect(p.defaultGenerateAudio).toBe(true)
+    expect(p.pollIntervalMs).toBe(10_000)
+    expect(p.maxPollMs).toBe(1_200_000)
+    expect(p.maxResolution).toBeUndefined()
+  })
+
+  it('detects official MiniMax H3 by modelKey or gateway before Agnes/Seedance/legacy', () => {
+    expect(resolveVideoModelProfile('minimax-h3', 'agnes-video-v2.0').refWire).toBe('minimax_h3_content')
+    expect(resolveVideoModelProfile('MINIMAX-H3', 'doubao-seedance-2.0').refWire).toBe('minimax_h3_content')
+    expect(resolveVideoModelProfile('custom-key', 'MiniMax-H3').refWire).toBe('minimax_h3_content')
+    expect(resolveVideoModelProfile('custom-key', 'minimax-h3').refWire).toBe('minimax_h3_content')
+  })
+
+  it('does not treat fal h3-max models as official MiniMax H3', () => {
+    expect(resolveVideoModelProfile('h3-max', 'minimax/h3-max').refWire).toBe('fal_h3_max')
+    expect(resolveVideoModelProfile('h3-max-turbo', 'minimax/h3-max-turbo').refWire).toBe('fal_h3_max')
+    expect(resolveVideoModelProfile('minimax-h3-max', 'MiniMax-H3-Max').refWire).not.toBe(
+      'minimax_h3_content',
+    )
+  })
 })
 
 describe('clampVideoGenerationInput', () => {

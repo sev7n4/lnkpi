@@ -48,4 +48,14 @@ describe('videoResolutionOptionsForCapabilities', () => {
     const opts = videoResolutionOptionsForCapabilities(c)
     expect(opts.map((o) => o.value)).toEqual(['480p', '720p', '1080p'])
   })
+
+  it('labels official H3 2k as 2K', () => {
+    const opts = videoResolutionOptionsForCapabilities(resolveVideoModelCapabilities('minimax-h3'))
+    expect(opts).toEqual(
+      expect.arrayContaining([
+        { value: '768p', label: '768p' },
+        { value: '2k', label: '2K' },
+      ]),
+    )
+  })
 })
