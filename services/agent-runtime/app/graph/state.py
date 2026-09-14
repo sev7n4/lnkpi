@@ -196,6 +196,8 @@ class AgentRuntimeState(TypedDict, total=False):
     sidebar_attachments: list[dict] | None
     sidebar_ref_order: list[str] | None
     sidebar_mentioned_keys: list[str] | None
+    sidebar_media_parse: dict | None
+    sidebar_media_parse_cache: Annotated[dict | None, reset_or_merge]
 
     # W14: user_brief uses brief_reducer — immutable after first write unless BRIEF_RESET_PREFIX
     user_brief: Annotated[str | None, brief_reducer]
