@@ -76,6 +76,7 @@ _PLANNER_WRITE_TOOLS = frozenset({
     "preview_workflow_template",
     "instantiate_workflow_template",
     "match_workflow_templates",
+    "promote_workflow_template",
 })
 _IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
 _DEFAULT_NARROW_WRITE = frozenset({

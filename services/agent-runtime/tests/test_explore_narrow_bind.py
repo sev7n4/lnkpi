@@ -7,6 +7,7 @@ _PLANNER_TOOLS = frozenset({
     "preview_workflow_template",
     "instantiate_workflow_template",
     "match_workflow_templates",
+    "promote_workflow_template",
 })
 _IMPORT_ONLY = frozenset({"import_workflow"})
 
@@ -60,3 +61,13 @@ def test_planner_keywords_bind_planner_tools():
 
 def test_import_workflow_chinese_still_binds_only_import():
     assert select_narrow_write_tools("请导入工作流到画布") == _IMPORT_ONLY
+    assert select_narrow_write_tools("导入工作流") == _IMPORT_ONLY
+
+
+def test_promote_phrases_bind_promote_not_only_import():
+    for phrase in ("存成一套新模板", "保存为当前模板的改版"):
+        tools = select_narrow_write_tools(phrase)
+        assert "promote_workflow_template" in tools
+        assert tools != _IMPORT_ONLY
+        assert len(tools) <= 5
+        assert tools == _PLANNER_TOOLS

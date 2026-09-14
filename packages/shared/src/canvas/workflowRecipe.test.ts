@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { validateWorkflow } from './workflowExchange'
 import {
   applyDelta,
   lintRecipe,
@@ -6,8 +10,18 @@ import {
   slugRecipeKey,
   diffRecipeLines,
   compileRecipeToWorkflow,
+  inferRecipeDraftFromWorkflow,
   RECIPE_DATA_KEYS,
 } from './workflowRecipe'
+
+const goldenWorkflow = validateWorkflow(
+  JSON.parse(
+    readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), '../../../../docs/workflow/examples/minimal-workflow.json'),
+      'utf8',
+    ),
+  ),
+)
 
 const productParent = {
   id: 'ecommerce-product-visual',
@@ -495,5 +509,51 @@ describe('compileRecipeToWorkflow', () => {
     expect(added?.data.recipeId).toBe('ecommerce-product-visual')
     expect(added?.data.recipeKey).toBe('pack_detail')
     expect(added?.data.parentRecipeId).toBe('ecommerce-product-visual')
+  })
+})
+
+describe('inferRecipeDraftFromWorkflow', () => {
+  it('infers two nodes from the golden minimal workflow', () => {
+    const draft = inferRecipeDraftFromWorkflow(goldenWorkflow)
+    expect(draft.nodes).toHaveLength(2)
+    expect(draft.nodes.map((node) => node.key).sort()).toEqual(['hero_frame', 'scene_prompt'])
+    const prompt = draft.nodes.find((node) => node.key === 'scene_prompt')
+    const image = draft.nodes.find((node) => node.key === 'hero_frame')
+    expect(prompt?.type).toBe('prompt')
+    expect(image?.type).toBe('image')
+    expect(image?.dependsOn).toEqual(['scene_prompt'])
+    expect(prompt?.dependsOn).toEqual([])
+    expect(image?.promptHintTemplate).toContain('mountain lake')
+    expect(JSON.stringify(draft)).not.toContain('cdn.example.com')
+  })
+
+  it('prefers data.recipeKey and keeps role/chain annotations', () => {
+    const doc = compileRecipeToWorkflow(productParent)
+    const draft = inferRecipeDraftFromWorkflow(doc)
+    expect(draft.nodes.map((node) => node.key)).toEqual(
+      expect.arrayContaining(['white_bg', 'product_turnaround', 'banner']),
+    )
+    expect(draft.nodes.find((node) => node.key === 'white_bg')?.role).toBe('seed')
+    expect(draft.nodes.find((node) => node.key === 'white_bg')?.chain).toBe('product')
+  })
+
+  it('throws too_many_nodes when the graph has more than 24 nodes', () => {
+    const extra = Array.from({ length: 23 }, (_, i) => ({
+      id: `image-extra-${i}`,
+      type: 'image',
+      position: { x: 0, y: i * 10 },
+      data: { title: `Extra ${i}` },
+      mediaRole: 'none' as const,
+    }))
+    const oversized = {
+      ...goldenWorkflow,
+      graph: {
+        ...goldenWorkflow.graph,
+        nodes: [...goldenWorkflow.graph.nodes, ...extra],
+      },
+    }
+    expect(() => inferRecipeDraftFromWorkflow(oversized)).toThrow(
+      expect.objectContaining({ code: 'too_many_nodes' }),
+    )
   })
 })

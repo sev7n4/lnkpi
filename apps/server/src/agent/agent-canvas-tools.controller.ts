@@ -574,6 +574,37 @@ export class PreviewRecipeDeltaDto {
   delta!: Record<string, unknown>
 }
 
+export class PromoteRecipeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsIn(['variant', 'new_template'])
+  mode!: 'variant' | 'new_template'
+
+  @IsOptional()
+  workflow?: unknown
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  confirmedSeedKeys?: string[]
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  parentId?: string
+
+  @IsOptional()
+  @IsString()
+  parentVersion?: string
+}
+
 class GroupNodesDto {
   @IsString()
   sessionId!: string
@@ -1077,13 +1108,19 @@ export class AgentCanvasToolsController {
 
   @Post('match-recipes')
   async matchRecipes(@Body() dto: MatchRecipesDto) {
-    const data = this.recipes.matchRecipes(dto)
+    const data = await this.recipes.matchRecipes(dto)
     return { code: 0, message: 'ok', data }
   }
 
   @Post('preview-recipe-delta')
   async previewRecipeDelta(@Body() dto: PreviewRecipeDeltaDto) {
-    const data = this.recipes.previewRecipeDelta(dto)
+    const data = await this.recipes.previewRecipeDelta(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('promote-recipe')
+  async promoteRecipe(@Body() dto: PromoteRecipeDto) {
+    const data = await this.recipes.promoteRecipe(dto)
     return { code: 0, message: 'ok', data }
   }
 

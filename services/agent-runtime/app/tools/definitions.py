@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field, model_validator
@@ -43,6 +43,7 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "match_workflow_templates",
     "preview_workflow_template",
     "instantiate_workflow_template",
+    "promote_workflow_template",
 })
 
 CONNECT_NODES_MAX_EDGES = 20
@@ -124,6 +125,26 @@ class PreviewWorkflowTemplateInput(BaseModel):
 class InstantiateWorkflowTemplateInput(BaseModel):
     recipe: dict[str, Any] = Field(description="确认后的完整模板")
     slots: dict[str, str] | None = Field(default=None, description="可选槽位填入，如节点提示词")
+
+
+class PromoteWorkflowTemplateInput(BaseModel):
+    mode: Literal["variant", "new_template"] = Field(
+        description=(
+            "variant=保存为当前模板的改版；new_template=存成一套新模板。"
+            "必须先在对话里让用户选择；认不到父模板时只能 new_template。"
+        ),
+    )
+    workflow: dict[str, Any] | None = Field(
+        default=None,
+        description="lnkpi.workflow JSON；省略则由服务端从当前画布导出",
+    )
+    confirmed_seed_keys: list[str] | None = Field(
+        default=None,
+        description="new_template 必须带上用户确认的核心步骤 key",
+    )
+    title: str | None = Field(default=None, description="可选模板标题")
+    parent_id: str | None = Field(default=None, description="改版时的父模板 id")
+    parent_version: str | None = Field(default=None, description="改版时的父模板版本")
 
 
 class ConnectNodesInput(BaseModel):
@@ -281,6 +302,23 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
         slots: dict[str, str] | None = None,
     ) -> dict:
         return await client.instantiate_recipe(recipe=recipe, slots=slots)
+
+    async def promote_workflow_template(
+        mode: Literal["variant", "new_template"],
+        workflow: dict[str, Any] | None = None,
+        confirmed_seed_keys: list[str] | None = None,
+        title: str | None = None,
+        parent_id: str | None = None,
+        parent_version: str | None = None,
+    ) -> dict:
+        return await client.promote_recipe(
+            mode=mode,
+            workflow=workflow,
+            confirmed_seed_keys=confirmed_seed_keys,
+            title=title,
+            parent_id=parent_id,
+            parent_version=parent_version,
+        )
 
     async def upsert_media_node(
         target_type: str,
@@ -550,6 +588,20 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                     "仅在用户确认结构之后调用；本步不出图。"
                 ),
                 args_schema=InstantiateWorkflowTemplateInput,
+            ),
+        ),
+        (
+            "promote_workflow_template",
+            StructuredTool.from_function(
+                coroutine=promote_workflow_template,
+                name="promote_workflow_template",
+                description=(
+                    "两步确认后再调用：先问「保存为当前模板的改版」还是「存成一套新模板」"
+                    "（认不到父模板则只问新模板）。用户选出后再调用，禁止一条 tool 静默入库。"
+                    "mode=new_template 必须带 confirmed_seed_keys。"
+                    "把导出的工作流晋升到当前用户的模板目录。"
+                ),
+                args_schema=PromoteWorkflowTemplateInput,
             ),
         ),
         (

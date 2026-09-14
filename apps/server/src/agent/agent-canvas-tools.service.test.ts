@@ -38,6 +38,7 @@ describe('AgentCanvasToolsService', () => {
   const materialFindFirst = vi.fn()
   const persistRemote = vi.fn()
   const upscale = vi.fn()
+  const userWorkflowRecipeCreate = vi.fn()
 
   const defaultPrefs = {
     userId: 'u1',
@@ -175,6 +176,7 @@ describe('AgentCanvasToolsService', () => {
             session: { findUnique: sessionFindUnique, update: sessionUpdate },
             userAiPreferences: { findUnique: prefsFindUnique },
             material: { findFirst: materialFindFirst },
+            userWorkflowRecipe: { create: userWorkflowRecipeCreate },
             $transaction,
           },
         },
@@ -1905,6 +1907,7 @@ describe('AgentCanvasToolsService', () => {
       expect(result.canvasCommands).toEqual([
         { type: 'focus_nodes', nodeIds: result.addedNodeIds },
       ])
+      expect(userWorkflowRecipeCreate).not.toHaveBeenCalled()
     })
 
     it('rejects invalid workflow and leaves canvas unchanged', async () => {

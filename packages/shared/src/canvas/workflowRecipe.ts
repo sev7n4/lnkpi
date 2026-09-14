@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { buildWorkflowDocument, type WorkflowDocument } from './workflowExchange'
+import { buildWorkflowDocument, validateWorkflow, type WorkflowDocument } from './workflowExchange'
 
 export const RECIPE_DATA_KEYS = [
   'recipeId',
@@ -90,6 +90,128 @@ export function slugRecipeKey(title: string): string {
     .replace(/_+/g, '_')
     .replace(/^_|_$/g, '')
   return slug || 'node'
+}
+
+export class RecipeInferError extends Error {
+  readonly code: string
+  constructor(code: string, message = code) {
+    super(message)
+    this.name = 'RecipeInferError'
+    this.code = code
+  }
+}
+
+const MAX_PROMOTE_NODES = 24
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+  return {}
+}
+
+function uniqueDraftKey(preferred: string, used: Set<string>): string {
+  if (!used.has(preferred)) {
+    used.add(preferred)
+    return preferred
+  }
+  let i = 2
+  while (used.has(`${preferred}_${i}`)) i += 1
+  const next = `${preferred}_${i}`
+  used.add(next)
+  return next
+}
+
+function inferGenMode(value: unknown): RecipeGenMode | undefined {
+  const parsed = recipeGenModeSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
+function inferRole(value: unknown): RecipeRole | undefined {
+  const parsed = recipeRoleSchema.safeParse(value)
+  return parsed.success ? parsed.data : undefined
+}
+
+function inferNodeType(value: unknown): RecipeNode['type'] {
+  const parsed = recipeNodeTypeSchema.safeParse(value)
+  return parsed.success ? parsed.data : 'image'
+}
+
+function seedChainsFromNodes(nodes: RecipeNode[]): RecipeDocument['invariants']['seedChains'] {
+  const grouped = new Map<string, RecipeNode[]>()
+  for (const node of nodes) {
+    if (node.role !== 'seed' && node.role !== 'turnaround') continue
+    const chainId = node.chain ?? 'seed'
+    const list = grouped.get(chainId) ?? []
+    list.push(node)
+    grouped.set(chainId, list)
+  }
+  const chains: RecipeDocument['invariants']['seedChains'] = []
+  for (const [id, chainNodes] of grouped) {
+    const seeds = chainNodes.filter((node) => node.role === 'seed')
+    const turns = chainNodes.filter((node) => node.role === 'turnaround')
+    const keys = [...seeds, ...turns].map((node) => node.key)
+    if (keys.length === 0) continue
+    chains.push({ id, keys })
+  }
+  return chains
+}
+
+export function inferRecipeDraftFromWorkflow(input: unknown): RecipeDocument {
+  const doc = validateWorkflow(input)
+  if (doc.graph.nodes.length > MAX_PROMOTE_NODES) {
+    throw new RecipeInferError('too_many_nodes', 'too_many_nodes')
+  }
+
+  const usedKeys = new Set<string>()
+  const keyByNodeId = new Map<string, string>()
+  const nodes: RecipeNode[] = doc.graph.nodes.map((node) => {
+    const data = asRecord(node.data)
+    const title = typeof data.title === 'string' && data.title.trim() ? data.title : '未命名'
+    const preferred =
+      typeof data.recipeKey === 'string' && data.recipeKey.trim()
+        ? data.recipeKey
+        : slugRecipeKey(title)
+    const key = uniqueDraftKey(preferred, usedKeys)
+    keyByNodeId.set(node.id, key)
+    const prompt = typeof data.prompt === 'string' ? data.prompt : undefined
+    const written: RecipeNode = {
+      key,
+      title,
+      type: inferNodeType(node.type),
+      dependsOn: [],
+      autoGenerate: false,
+    }
+    const chain = typeof data.chain === 'string' && data.chain.trim() ? data.chain : undefined
+    const role = inferRole(data.role)
+    const genMode = inferGenMode(data.genMode)
+    if (chain) written.chain = chain
+    if (role) written.role = role
+    if (genMode) written.genMode = genMode
+    if (prompt) written.promptHintTemplate = prompt
+    return written
+  })
+
+  for (const edge of doc.graph.edges) {
+    const targetKey = keyByNodeId.get(edge.target)
+    const sourceKey = keyByNodeId.get(edge.source)
+    if (!targetKey || !sourceKey) continue
+    const target = nodes.find((node) => node.key === targetKey)
+    if (!target || target.dependsOn.includes(sourceKey)) continue
+    target.dependsOn.push(sourceKey)
+  }
+
+  const identityNode = doc.graph.nodes.find((node) => typeof asRecord(node.data).recipeId === 'string')
+  const identity = identityNode ? asRecord(identityNode.data) : {}
+  const titleNode = nodes[0]
+  return {
+    id: typeof identity.recipeId === 'string' ? identity.recipeId : 'draft',
+    version: typeof identity.recipeVersion === 'string' ? identity.recipeVersion : '1.0.0',
+    title: titleNode?.title ?? '未命名模板',
+    graftedRecipeIds: [],
+    invariants: { seedChains: seedChainsFromNodes(nodes) },
+    nodes,
+  }
 }
 
 function seedKeySet(recipe: RecipeDocument): Set<string> {

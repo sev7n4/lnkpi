@@ -35,5 +35,6 @@ def test_explore_whitelist_includes_planner_tools():
         "match_workflow_templates",
         "preview_workflow_template",
         "instantiate_workflow_template",
+        "promote_workflow_template",
     ):
         assert name in EXPLORE_TOOL_NAMES

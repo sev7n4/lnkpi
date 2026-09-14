@@ -675,6 +675,33 @@ class NestCanvasClient:
             body["slots"] = slots
         return await self._post("/agent/internal/instantiate-recipe", body)
 
+    async def promote_recipe(
+        self,
+        *,
+        mode: str,
+        workflow: dict[str, Any] | None = None,
+        confirmed_seed_keys: list[str] | None = None,
+        title: str | None = None,
+        parent_id: str | None = None,
+        parent_version: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "mode": mode,
+        }
+        if workflow is not None:
+            body["workflow"] = workflow
+        if confirmed_seed_keys is not None:
+            body["confirmedSeedKeys"] = confirmed_seed_keys
+        if title is not None:
+            body["title"] = title
+        if parent_id is not None:
+            body["parentId"] = parent_id
+        if parent_version is not None:
+            body["parentVersion"] = parent_version
+        return await self._post("/agent/internal/promote-recipe", body)
+
     async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,

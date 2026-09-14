@@ -31,6 +31,7 @@ model User {
   aiPreferences    UserAiPreferences?
   webdavConfig     UserWebdavConfig?
   assets           UserAsset[]
+  workflowRecipes  UserWorkflowRecipe[]
 }
 
 model InviteRedemption {
@@ -61,6 +62,25 @@ model UserAsset {
   createdAt    DateTime @default(now())
 
   @@unique([userId, url])
+  @@index([userId, createdAt])
+}
+
+model UserWorkflowRecipe {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipeId        String
+  version         String
+  title           String
+  parentId        String?
+  parentVersion   String?
+  body            String
+  sourceSessionId String?
+  sourceHash      String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, recipeId])
   @@index([userId, createdAt])
 }
 
