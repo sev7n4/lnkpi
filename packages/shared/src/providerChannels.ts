@@ -54,3 +54,82 @@ export function resolvePulledModelCapability(
   if (prev === 'text' || prev === 'image' || prev === 'video' || prev === 'audio') return prev
   return inferModelCapability(modelName)
 }
+
+export const PLATFORM_CHANNEL_ID = 'platform'
+
+export type ChannelModelSelectOption = {
+  value: string
+  label: string
+  capability: ModelCapability
+}
+
+function isPlatformModelValue(value: string): boolean {
+  return decodeChannelModel(value)?.channelId === PLATFORM_CHANNEL_ID
+}
+
+/** Candidate list for a modality picker: match capability, optionally other BYOK, always keep selected. */
+export function modelOptionsForCapability(
+  pool: readonly ChannelModelSelectOption[],
+  capability: ModelCapability,
+  opts: { includeOtherByok?: boolean; selectedValues?: readonly string[] } = {},
+): ChannelModelSelectOption[] {
+  const seen = new Set<string>()
+  const result: ChannelModelSelectOption[] = []
+
+  const push = (opt: ChannelModelSelectOption) => {
+    if (seen.has(opt.value)) return
+    seen.add(opt.value)
+    result.push(opt)
+  }
+
+  for (const opt of pool) {
+    if (opt.capability === capability) push(opt)
+  }
+
+  if (opts.includeOtherByok) {
+    for (const opt of pool) {
+      if (opt.capability === capability) continue
+      if (isPlatformModelValue(opt.value)) continue
+      push(opt)
+    }
+  }
+
+  const byValue = new Map(pool.map((opt) => [opt.value, opt]))
+  for (const value of opts.selectedValues ?? []) {
+    if (!value || seen.has(value)) continue
+    const existing = byValue.get(value)
+    if (existing) {
+      push(existing)
+      continue
+    }
+    const name = modelOptionName(value)
+    push({
+      value,
+      label: name,
+      capability: inferModelCapability(name),
+    })
+  }
+
+  return result
+}
+
+export function filterModelNames(names: readonly string[], query: string): string[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return [...names]
+  return names.filter((name) => name.toLowerCase().includes(q))
+}
+
+/** Inclusive-start exclusive-end range for a virtualized list window. */
+export function windowedRange(
+  length: number,
+  scrollTop: number,
+  rowHeight: number,
+  viewportHeight: number,
+  overscan = 8,
+): { start: number; end: number } {
+  if (length <= 0 || rowHeight <= 0) return { start: 0, end: 0 }
+  const visible = Math.ceil(Math.max(0, viewportHeight) / rowHeight) + overscan * 2
+  let start = Math.max(0, Math.floor(Math.max(0, scrollTop) / rowHeight) - overscan)
+  if (start >= length) start = Math.max(0, length - visible)
+  return { start, end: Math.min(length, start + visible) }
+}
