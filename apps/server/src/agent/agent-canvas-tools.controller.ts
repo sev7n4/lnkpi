@@ -69,6 +69,17 @@ class ProposeGenerationDto {
   nodeId!: string
 }
 
+class ClearProposeGenerationDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  nodeId!: string
+}
+
 class SessionNodeDto {
   @IsString()
   sessionId!: string
@@ -775,6 +786,12 @@ export class AgentCanvasToolsController {
   @Post('propose-generation')
   async proposeGeneration(@Body() dto: ProposeGenerationDto) {
     const data = await this.tools.proposeGeneration(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('clear-propose-generation')
+  async clearProposeGeneration(@Body() dto: ClearProposeGenerationDto) {
+    const data = await this.tools.clearProposeGeneration(dto)
     return { code: 0, message: 'ok', data }
   }
 
