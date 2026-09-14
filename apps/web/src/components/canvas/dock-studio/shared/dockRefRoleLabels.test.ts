@@ -62,6 +62,17 @@ describe('resolveRefRoleLabel', () => {
     expect(resolveRefRoleLabel(refs[2], refs, 'image_to_video')).toBe('音频')
   })
 
+  it('reference_to_video labels image/video/audio as 参考图/参考视频/参考音频', () => {
+    const refs = [
+      { mediaType: 'image', stale: false, payload: { url: 'https://a' }, refId: '1' },
+      { mediaType: 'video', stale: false, payload: { url: 'https://v' }, refId: '2' },
+      { mediaType: 'audio', stale: false, payload: { url: 'https://a2' }, refId: '3' },
+    ] as NodeRef[]
+    expect(resolveRefRoleLabel(refs[0], refs, 'reference_to_video')).toBe('参考图')
+    expect(resolveRefRoleLabel(refs[1], refs, 'reference_to_video')).toBe('参考视频')
+    expect(resolveRefRoleLabel(refs[2], refs, 'reference_to_video')).toBe('参考音频')
+  })
+
   it('skips stale or url-less image refs for first_last_frame ordering', () => {
     const stale: NodeRef = { ...imageRef('I0'), stale: true }
     const refs = [stale, imageRef('I1'), imageRef('I2')]

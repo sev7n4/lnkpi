@@ -1,4 +1,9 @@
 import { FAL_H3_MAX_ENDPOINTS } from '@lnkpi/agent'
+import {
+  MINIMAX_H3_REF_IMAGE_EXTRA_POINTS,
+  MINIMAX_H3_REF_IMAGE_FREE,
+  MINIMAX_H3_REF_VIDEO_POINTS,
+} from '@lnkpi/shared'
 
 export function videoCredits(duration: number): number {
   if (duration >= 15) return 70
@@ -10,6 +15,9 @@ export function videoCreditsForModel(input: {
   duration: number
   modelKey?: string
   resolution?: string
+  videoMode?: string
+  referenceImageCount?: number
+  referenceVideoCount?: number
 }): number {
   const base = videoCredits(input.duration)
   const key = (input.modelKey || '').toLowerCase()
@@ -28,7 +36,13 @@ export function videoCreditsForModel(input: {
     key === 'minimax-h3' || (key.includes('minimax-h3') && !key.includes('h3-max'))
   if (isOfficialH3) {
     const factor = res.includes('2k') ? 1.8 : 1.2 // 768P default
-    return Math.ceil(base * factor)
+    let points = Math.ceil(base * factor)
+    if (input.videoMode === 'reference_to_video' && isOfficialH3) {
+      const extraImages = Math.max(0, (input.referenceImageCount ?? 0) - MINIMAX_H3_REF_IMAGE_FREE)
+      points += extraImages * MINIMAX_H3_REF_IMAGE_EXTRA_POINTS
+      points += (input.referenceVideoCount ?? 0) * MINIMAX_H3_REF_VIDEO_POINTS
+    }
+    return points
   }
   return base
 }

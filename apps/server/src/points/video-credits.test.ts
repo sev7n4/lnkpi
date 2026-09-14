@@ -114,6 +114,55 @@ describe('videoCreditsForModel', () => {
       expect(videoCredits(duration)).toBe(expected)
     }
   })
+
+  it('reference_to_video adds +5 per image after 5 and +15 per ref video', () => {
+    // 5s 768P base×1.2 = 36
+    expect(
+      videoCreditsForModel({
+        duration: 5,
+        modelKey: 'minimax-h3',
+        resolution: '768p',
+        videoMode: 'reference_to_video',
+        referenceImageCount: 2,
+        referenceVideoCount: 1,
+      }),
+    ).toBe(36 + 15) // 2 张图未超过 5
+
+    expect(
+      videoCreditsForModel({
+        duration: 5,
+        modelKey: 'minimax-h3',
+        resolution: '768p',
+        videoMode: 'reference_to_video',
+        referenceImageCount: 7,
+        referenceVideoCount: 0,
+      }),
+    ).toBe(36 + 5 * 2) // 第 6、7 张
+
+    expect(
+      videoCreditsForModel({
+        duration: 5,
+        modelKey: 'minimax-h3',
+        resolution: '768p',
+        videoMode: 'image_to_video',
+        referenceImageCount: 7,
+        referenceVideoCount: 1,
+      }),
+    ).toBe(36) // 非参考模式不加
+  })
+
+  it('fal h3-max ignores reference add-on fields', () => {
+    expect(
+      videoCreditsForModel({
+        duration: 5,
+        modelKey: 'h3-max-turbo',
+        resolution: '768p',
+        videoMode: 'reference_to_video',
+        referenceImageCount: 9,
+        referenceVideoCount: 3,
+      }),
+    ).toBe(36)
+  })
 })
 
 describe('falH3MaxVideoRecordMeta', () => {

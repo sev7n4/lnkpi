@@ -12,6 +12,13 @@ export function resolveRefRoleLabel(
 ): string | undefined {
   if (ref.stale) return undefined
 
+  if (videoMode === 'reference_to_video') {
+    if (ref.mediaType === 'image' && ref.payload.url?.trim()) return '参考图'
+    if (ref.mediaType === 'video') return '参考视频'
+    if (ref.mediaType === 'audio') return '参考音频'
+    return undefined
+  }
+
   if (ref.mediaType === 'video') return '运镜'
   if (ref.mediaType === 'audio') return '音频'
 

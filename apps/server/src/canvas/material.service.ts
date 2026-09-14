@@ -29,11 +29,14 @@ import {
   resolveModelKey,
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
+  resolveVideoModelProfile,
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
   type ImageRefWire,
   type ImageResolutionTier,
+  type VideoGenerationMode,
+  assertMiniMaxH3ReferenceLimits,
 } from '@lnkpi/shared'
 import {
   alreadyRefunded,
@@ -111,15 +114,26 @@ function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
 function resolveVideoModeForProvider(
   explicit: string | undefined,
   referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
-): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+): VideoGenerationMode {
   if (
     explicit === 'first_last_frame'
     || explicit === 'image_to_video'
     || explicit === 'text_to_video'
+    || explicit === 'reference_to_video'
   ) {
     return explicit
   }
   return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
+}
+
+function isOfficialMiniMaxH3ReferenceToVideo(
+  model: string | undefined,
+  videoMode: VideoGenerationMode,
+): boolean {
+  if (videoMode !== 'reference_to_video') return false
+  const modelKey = model ?? ''
+  const profile = resolveVideoModelProfile(modelKey, modelKey)
+  return profile.refWire === 'minimax_h3_content' || /^minimax-h3$/i.test(modelKey)
 }
 
 function extractTextSources(refs?: GenerationRefPayload[]): MergeTextSource[] {
@@ -334,6 +348,17 @@ export class MaterialService {
           (typeof meta.model === 'string' && meta.model) ||
           undefined,
         resolution: typeof meta.resolution === 'string' ? meta.resolution : undefined,
+        videoMode: typeof meta.videoMode === 'string' ? meta.videoMode : undefined,
+        referenceImageCount: typeof meta.referenceImageCount === 'number'
+          ? meta.referenceImageCount
+          : Array.isArray(meta.referenceImages)
+            ? meta.referenceImages.length
+            : undefined,
+        referenceVideoCount: typeof meta.referenceVideoCount === 'number'
+          ? meta.referenceVideoCount
+          : Array.isArray(meta.referenceVideos)
+            ? meta.referenceVideos.length
+            : undefined,
       })
     }
     throw new BadRequestException('不支持的素材类型')
@@ -451,15 +476,39 @@ export class MaterialService {
 
     assertNoBlobRefs(refs)
     const referenceBundle = buildVideoReferenceBundle(refs ?? [], referenceImageUrl)
+    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
     if (
       referenceBundle.audios.length
       && !referenceBundle.images.length
       && !referenceBundle.videos.length
+      && !isOfficialMiniMaxH3ReferenceToVideo(model, resolvedVideoMode)
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
+    if (resolvedVideoMode === 'reference_to_video') {
+      const profile = resolveVideoModelProfile(model ?? '', model ?? '')
+      if (profile.refWire === 'minimax_h3_content') {
+        try {
+          assertMiniMaxH3ReferenceLimits({
+            imageCount: referenceBundle.images.length,
+            videoCount: referenceBundle.videos.length,
+            audioCount: referenceBundle.audios.length,
+            promptLength: prompt.length,
+          })
+        } catch (err) {
+          throw new BadRequestException((err as Error).message)
+        }
+      }
+    }
 
-    const cost = videoCreditsForModel({ duration, modelKey: model, resolution })
+    const cost = videoCreditsForModel({
+      duration,
+      modelKey: model,
+      resolution,
+      videoMode: resolvedVideoMode,
+      referenceImageCount: referenceBundle.images.length,
+      referenceVideoCount: referenceBundle.videos.length,
+    })
     const chargeReason = '视频生成'
     if (!skipCharge) {
       await this.points.consume(
@@ -485,6 +534,9 @@ export class MaterialService {
               aspectRatio,
               resolution,
               crop,
+              ...(resolvedVideoMode ? { videoMode: resolvedVideoMode } : {}),
+              referenceImageCount: referenceBundle.images.length,
+              referenceVideoCount: referenceBundle.videos.length,
               channelId: resolved.channelId,
               providerSource: resolved.source,
               ...falH3MaxVideoRecordMeta({
@@ -518,7 +570,7 @@ export class MaterialService {
       referenceImageUrl,
       resolved,
       skipCharge,
-      videoMode,
+      resolvedVideoMode,
       generateAudio,
     ).catch(console.error)
     return material
@@ -1108,10 +1160,12 @@ export class MaterialService {
         ref.url = resolvePublicMediaUrls([ref.url])[0] ?? ref.url
       }
     }
+    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
     if (
       referenceBundle.audios.length
       && !referenceBundle.images.length
       && !referenceBundle.videos.length
+      && !isOfficialMiniMaxH3ReferenceToVideo(model, resolvedVideoMode)
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
@@ -1143,7 +1197,7 @@ export class MaterialService {
         resolution,
         crop,
         referenceBundle,
-        videoMode: resolveVideoModeForProvider(videoMode, referenceBundle),
+        videoMode: resolvedVideoMode,
         gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
         channelBaseUrl: resolved.credentials.baseUrl,
         generateAudio,
@@ -1262,6 +1316,9 @@ export class MaterialService {
                 resolution,
                 crop,
                 image: built.image,
+                ...(videoMode ? { videoMode } : {}),
+                referenceImageCount: referenceBundle.images.length,
+                referenceVideoCount: referenceBundle.videos.length,
                 referenceImages: effectiveBundle.images.map(({ url: refUrl }) => refUrl),
                 referenceVideos: effectiveBundle.videos.map(({ url: refUrl }) => refUrl),
                 referenceAudios: effectiveBundle.audios.map(({ url: refUrl }) => refUrl),

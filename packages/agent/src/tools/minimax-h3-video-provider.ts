@@ -72,10 +72,27 @@ function resolveEndImage(options?: VideoGenerateOptions): string | undefined {
 
 function buildContent(
   prompt: string,
-  startImage?: string,
-  endImage?: string,
+  options?: VideoGenerateOptions,
 ): Array<Record<string, unknown>> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
+  if (options?.videoMode === 'reference_to_video') {
+    for (const url of options.referenceImages ?? []) {
+      const u = url.trim()
+      if (u) content.push({ type: 'image_url', image_url: { url: u }, role: 'reference_image' })
+    }
+    for (const url of options.referenceVideos ?? []) {
+      const u = url.trim()
+      if (u) content.push({ type: 'video_url', video_url: { url: u }, role: 'reference_video' })
+    }
+    for (const url of options.referenceAudios ?? []) {
+      const u = url.trim()
+      if (u) content.push({ type: 'audio_url', audio_url: { url: u }, role: 'reference_audio' })
+    }
+    return content
+  }
+  const startImage = resolveStartImage(options)
+  const endImage =
+    options?.videoMode === 'first_last_frame' ? resolveEndImage(options) : undefined
   if (startImage) {
     content.push({ type: 'image_url', image_url: { url: startImage }, role: 'first_frame' })
   }
@@ -110,11 +127,13 @@ export class MiniMaxH3VideoProvider implements VideoProvider {
     const base = normalizeMiniMaxBaseUrl(this.baseUrl)
     const createUrl = joinV2Path(base, 'video_generation')
     const startImage = resolveStartImage(options)
-    const endImage = resolveEndImage(options)
-    const isImageMode = Boolean(startImage || endImage)
+    const isImageMode =
+      options?.videoMode === 'image_to_video' ||
+      options?.videoMode === 'first_last_frame' ||
+      (!options?.videoMode && Boolean(startImage))
     const body: Record<string, unknown> = {
       model: 'MiniMax-H3',
-      content: buildContent(prompt, startImage, endImage),
+      content: buildContent(prompt, options),
     }
     if (!isImageMode) {
       const ratio = options?.aspectRatio?.trim()

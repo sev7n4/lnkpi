@@ -1,4 +1,5 @@
 import {
+  assertMiniMaxH3ReferenceLimits,
   clampImageGenerationInput,
   clampVideoGenerationInput,
   formatImageResolutionForProvider,
@@ -554,6 +555,7 @@ export interface VideoProviderGenerateOptions {
   referenceVideos?: string[]
   referenceAudios?: string[]
   imageWithRoles?: Array<{ url: string; role: string }>
+  videoMode?: VideoMode
   returnLastFrame?: boolean
   pollIntervalMs?: number
   maxPollMs?: number
@@ -661,6 +663,14 @@ export function buildVideoProviderOptions(input: {
         url,
       })),
     )
+  if (profile.refWire === 'minimax_h3_content' && videoMode === 'reference_to_video') {
+    assertMiniMaxH3ReferenceLimits({
+      imageCount: sourceBundle.images.length,
+      videoCount: sourceBundle.videos.length,
+      audioCount: sourceBundle.audios.length,
+      promptLength: 0,
+    })
+  }
   const clamped = clampVideoGenerationInput(profile, {
     duration,
     aspectRatio,
@@ -832,7 +842,7 @@ export function buildVideoProviderOptions(input: {
         refAudioMode = 'native'
       }
     }
-  } else if (profile.refWire === 'fal_h3_max' || profile.refWire === 'minimax_h3_content') {
+  } else if (profile.refWire === 'fal_h3_max') {
     if (imageCount) {
       const imageUrls = clamped.referenceImages.slice(0, 2)
       image = imageUrls[0]
@@ -862,6 +872,71 @@ export function buildVideoProviderOptions(input: {
         field: 'referenceAudios',
         reason: `referenceAudios not supported natively by ${catalog.entry.modelKey}`,
       })
+    }
+  } else if (profile.refWire === 'minimax_h3_content') {
+    providerOptions.videoMode = videoMode
+    const dropVideoAudioAsMetadata = (reasonKind: 'first_last_frame' | 'unsupported') => {
+      const videoReason =
+        reasonKind === 'first_last_frame'
+          ? 'referenceVideos omitted in first_last_frame mode'
+          : `referenceVideos not supported natively by ${catalog.entry.modelKey}`
+      const audioReason =
+        reasonKind === 'first_last_frame'
+          ? 'referenceAudios omitted in first_last_frame mode'
+          : `referenceAudios not supported natively by ${catalog.entry.modelKey}`
+      if (sourceBundle.videos.length) {
+        refVideoMode = 'metadata_only'
+        droppedFields.push({
+          field: 'referenceVideos',
+          reason: videoReason,
+        })
+      }
+      if (sourceBundle.audios.length) {
+        refAudioMode = 'metadata_only'
+        droppedFields.push({
+          field: 'referenceAudios',
+          reason: audioReason,
+        })
+      }
+    }
+    if (videoMode === 'reference_to_video') {
+      if (imageCount) {
+        providerOptions.referenceImages = bundle.images.map((ref) => ref.url)
+        nativeParams.reference_images = providerOptions.referenceImages
+        refImageMode = 'native'
+      }
+      if (videoCount) {
+        providerOptions.referenceVideos = bundle.videos.map((ref) => ref.url)
+        nativeParams.reference_videos = providerOptions.referenceVideos
+        refVideoMode = 'native'
+      }
+      if (audioCount) {
+        providerOptions.referenceAudios = bundle.audios.map((ref) => ref.url)
+        nativeParams.reference_audios = providerOptions.referenceAudios
+        refAudioMode = 'native'
+      }
+    } else if (videoMode === 'first_last_frame' && imageCount >= 2) {
+      const imageUrls = clamped.referenceImages.slice(0, 2)
+      image = imageUrls[0]
+      providerOptions.image = image
+      providerOptions.referenceImages = imageUrls
+      providerOptions.imageWithRoles = [
+        { url: imageUrls[0], role: 'first_frame' },
+        { url: imageUrls[1], role: 'last_frame' },
+      ]
+      nativeParams.image_with_roles = providerOptions.imageWithRoles
+      refImageMode = 'native'
+      dropVideoAudioAsMetadata('first_last_frame')
+    } else if (imageCount) {
+      image = clamped.referenceImages[0]
+      providerOptions.image = image
+      providerOptions.referenceImages = [image]
+      providerOptions.imageWithRoles = [{ url: image, role: 'first_frame' }]
+      nativeParams.image = image
+      refImageMode = 'native'
+      dropVideoAudioAsMetadata('unsupported')
+    } else {
+      dropVideoAudioAsMetadata('unsupported')
     }
   } else if (imageCount) {
     image = clamped.referenceImages[0]

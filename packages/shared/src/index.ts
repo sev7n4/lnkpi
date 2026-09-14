@@ -31,6 +31,7 @@ export * from './journeyTrace'
 export * from './mediaInfo'
 export * from './videoGeneration/types'
 export { resolveCanonicalVideoRequest } from './videoGeneration/resolveCanonicalVideoRequest'
+export * from './videoGeneration/minimaxH3Reference'
 export * from './imagePromptingGuide'
 
 export type GenerationType = 'text' | 'image' | 'video'

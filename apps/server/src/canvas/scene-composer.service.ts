@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common'
+import { buildVideoReferenceBundle } from '@lnkpi/agent'
 import type {
   SceneComposerBatchGenerateRequest,
   SceneComposerBatchItem,
@@ -31,10 +32,13 @@ export class SceneComposerService {
 
   private itemCredits(item: SceneComposerBatchItem): number {
     if (item.mediaType === 'video') {
+      const bundle = buildVideoReferenceBundle(item.refs ?? [])
       return videoCreditsForModel({
         duration: item.duration ?? 5,
         modelKey: item.model,
         resolution: item.resolution,
+        referenceImageCount: bundle.images.length,
+        referenceVideoCount: bundle.videos.length,
       })
     }
     return 10

@@ -419,6 +419,28 @@ describe('StudioService integration (provider params)', () => {
     expect(videoGenerate).not.toHaveBeenCalled()
   })
 
+  it('allows MiniMax H3 audio-only reference_to_video', async () => {
+    await svc.generateVideo(
+      'u1',
+      'a prompt',
+      'minimax-h3',
+      5,
+      '16:9',
+      [{ refKey: 'A1', mediaType: 'audio', url: 'https://example.com/ref.mp3' }],
+      [],
+      '768p',
+      'none',
+      undefined,
+      undefined,
+      'reference_to_video',
+    )
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls.at(-1)?.[1]).toMatchObject({
+      videoMode: 'reference_to_video',
+      referenceAudios: ['https://example.com/ref.mp3'],
+    })
+  })
+
   it('passes built audio options (model, voice, speed) to audio provider', async () => {
     await svc.generateAudio('u1', 'say hello', {
       model: 'minimax-speech-2.8-hd',
