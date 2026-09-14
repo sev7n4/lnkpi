@@ -71,6 +71,28 @@ describe('AgentStepper', () => {
 })
 
 describe('AgentPresentationHost', () => {
+  it('renders generation_propose card from body fields (Phase 2c.2)', () => {
+    const envelope: AgentPresentationEnvelope = {
+      kind: 'generation_propose',
+      title: '礼盒主视觉',
+      stepper: { current: 'generating', completed: [] },
+      body: {
+        text: '红金礼盒正面特写',
+        hint: '模型 nano-banana · 比例 16:9',
+        credits_hint: '约 12 积分',
+      },
+    }
+    const wrapper = mount(AgentPresentationHost, {
+      props: { presentation: envelope },
+    })
+    expect(wrapper.find('[data-testid="generation-propose-card"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="generation-propose-title"]').text()).toBe('礼盒主视觉')
+    expect(wrapper.find('[data-testid="generation-propose-prompt"]').text()).toContain('红金礼盒')
+    expect(wrapper.find('[data-testid="generation-propose-params"]').text()).toContain('16:9')
+    expect(wrapper.find('[data-testid="generation-propose-credits"]').text()).toContain('12 积分')
+    expect(wrapper.find('[data-testid="agent-stepper"]').exists()).toBe(false)
+  })
+
   it('renders stepper, recap, shot table, and primary button label', () => {
     const wrapper = mount(AgentPresentationHost, {
       props: { presentation: shotEnvelope },

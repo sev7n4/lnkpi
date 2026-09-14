@@ -49,24 +49,24 @@
 
 ### Task 0: Docs authorize
 
-- [ ] Update 2c design §2 + parent D9; commit with this plan
+- [x] Update 2c design §2 + parent D9; commit with this plan
 
 ### Task 1: Failing tests D1–D4
 
-- [ ] Create `generationProposePresentation.test.ts` asserting D1–D4
-- [ ] Commit failing tests
+- [x] Create `generationProposePresentation.test.ts` asserting D1–D4
+- [x] Commit failing tests
 
 ### Task 2: Builder + Host render
 
-- [ ] Implement `buildGenerationProposePresentation`
-- [ ] Host: `kind === 'generation_propose'` shows title, prompt preview, key params, optional credits_hint
-- [ ] Tests pass; commit
+- [x] Implement `buildGenerationProposePresentation`
+- [x] Host: `kind === 'generation_propose'` shows title, prompt preview, key params, optional credits_hint
+- [x] Tests pass; commit
 
 ### Task 3: Wire AgentSideRail
 
-- [ ] When `awaitingGenerationPropose`, compute presentation from resolved pending node (canvasNodes)
-- [ ] Render `AgentPresentationHost` above chips; primary chips unchanged
-- [ ] D5/D6 regression green; commit
+- [x] When `awaitingGenerationPropose`, compute presentation from resolved pending node (canvasNodes)
+- [x] Render `AgentPresentationHost` above chips; primary chips unchanged
+- [x] D5/D6 regression green; commit
 
 ### Task 4: PR + D7 smoke after deploy
 
@@ -76,4 +76,4 @@
 ## Done when
 
 - [ ] D1–D6 CI green; D7 prod after deploy
-- [ ] 2c.3 not started
+- [x] 2c.3 not started
