@@ -168,6 +168,41 @@ class NestCanvasClient:
             body["stage"] = True
         return await self._post("/agent/internal/upsert-prompt-node", body)
 
+    async def upsert_media_node(
+        self,
+        *,
+        target_type: str,
+        prompt: str,
+        title: str | None = None,
+        node_id: str | None = None,
+        stage: bool = False,
+    ) -> dict[str, Any]:
+        """Phase 2b: create/update a single media node (image|video|text|audio)."""
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "targetType": target_type,
+            "prompt": prompt,
+        }
+        if title is not None:
+            body["title"] = title
+        if node_id is not None:
+            body["nodeId"] = node_id
+        if stage:
+            body["stage"] = True
+        return await self._post("/agent/internal/upsert-media-node", body)
+
+    async def propose_generation(self, node_id: str) -> dict[str, Any]:
+        """Phase 2b: mark node pending_confirm; never starts studio generation."""
+        return await self._post(
+            "/agent/internal/propose-generation",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "nodeId": node_id,
+            },
+        )
+
     async def get_node(self, node_id: str) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/get-node",

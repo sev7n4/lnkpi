@@ -31,6 +31,9 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "set_node_content",
     "attach_refs",
     "upsert_prompt_node",
+    "upsert_media_node",
+    "propose_generation",
+    "connect_nodes",
     "duplicate_node",
     "upload_media_to_canvas",
     "apply_sidebar_attachments",
@@ -38,6 +41,8 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "apply_asset_to_node",
     "import_workflow",
 })
+
+CONNECT_NODES_MAX_EDGES = 20
 
 DEFAULT_WRITE_BIND = frozenset({
     "set_node_prompt",
@@ -52,6 +57,13 @@ class UpsertPromptNodeInput(BaseModel):
     prompt: str = Field(description=UPSERT_PROMPT_NODE_PROMPT_FIELD)
     content: str = Field(description=UPSERT_PROMPT_NODE_CONTENT_FIELD)
     node_id: str | None = Field(default=None, description="Existing node id to update")
+
+
+class UpsertMediaNodeInput(BaseModel):
+    target_type: str = Field(description="Media node type: image, video, text, or audio")
+    prompt: str = Field(description="Generation prompt to store on the media node")
+    title: str | None = Field(default=None, description="Optional node title")
+    node_id: str | None = Field(default=None, description="Existing media node id to update")
 
 
 class NodeIdInput(BaseModel):
@@ -230,7 +242,28 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             raise ValueError("workflow or workflow_url is required")
         return await client.import_workflow(workflow=workflow, workflow_url=workflow_url)
 
+    async def upsert_media_node(
+        target_type: str,
+        prompt: str,
+        title: str | None = None,
+        node_id: str | None = None,
+    ) -> dict:
+        return await client.upsert_media_node(
+            target_type=target_type,
+            prompt=prompt,
+            title=title,
+            node_id=node_id,
+        )
+
+    async def propose_generation(node_id: str) -> dict:
+        return await client.propose_generation(node_id)
+
     async def connect_nodes(edges: list[dict[str, str]]) -> dict:
+        if len(edges) > CONNECT_NODES_MAX_EDGES:
+            raise ValueError(
+                f"connect_nodes accepts at most {CONNECT_NODES_MAX_EDGES} edges per call "
+                f"(got {len(edges)})"
+            )
         return await client.connect_nodes(edges)
 
     async def set_node_prompt(node_id: str, prompt: str) -> dict:
@@ -443,11 +476,38 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             ),
         ),
         (
+            "upsert_media_node",
+            StructuredTool.from_function(
+                coroutine=upsert_media_node,
+                name="upsert_media_node",
+                description=(
+                    "Create or update a single media node (image|video|text|audio) with a prompt. "
+                    "Does not start generation — use propose_generation after the node is ready."
+                ),
+                args_schema=UpsertMediaNodeInput,
+            ),
+        ),
+        (
+            "propose_generation",
+            StructuredTool.from_function(
+                coroutine=propose_generation,
+                name="propose_generation",
+                description=(
+                    "Mark a media node pending user confirm for generation. "
+                    "Never calls run_*; wait for the user to confirm in the UI."
+                ),
+                args_schema=NodeIdInput,
+            ),
+        ),
+        (
             "connect_nodes",
             StructuredTool.from_function(
                 coroutine=connect_nodes,
                 name="connect_nodes",
-                description="Connect canvas nodes with directed edges",
+                description=(
+                    "Connect canvas nodes with directed edges "
+                    f"(max {CONNECT_NODES_MAX_EDGES} edges per call)"
+                ),
                 args_schema=ConnectNodesInput,
             ),
         ),

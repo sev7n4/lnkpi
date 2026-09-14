@@ -120,3 +120,46 @@ async def test_b8_propose_missing_prompt_errors_no_pending_no_run():
     assert result.get("status") != "pending_confirm"
     assert "n-empty" not in nest.pending_nodes
     assert _run_star_calls(nest) == []
+
+
+class _FakeNestUpsert:
+    """Records upsert_media_node calls for B4."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, ...]] = []
+
+    async def upsert_media_node(
+        self,
+        *,
+        target_type: str,
+        prompt: str,
+        title: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.calls.append(("upsert_media_node", target_type, prompt, title, node_id))
+        return {
+            "nodeId": node_id or "media-new-1",
+            "actions": [{"type": "add_node", "payload": {"id": node_id or "media-new-1"}}],
+        }
+
+
+@pytest.mark.asyncio
+async def test_b4_upsert_media_node_returns_node_id():
+    """B4: upsert_media_node(image, prompt=…) returns nodeId."""
+    from app.tools.definitions import build_explore_tools
+    from app.tools.nest_client import NestCanvasClient
+
+    assert hasattr(NestCanvasClient, "upsert_media_node"), (
+        "NestCanvasClient.upsert_media_node missing until Task 3"
+    )
+
+    nest = _FakeNestUpsert()
+    by_name = {t.name: t for t in build_explore_tools(nest)}  # type: ignore[arg-type]
+    assert "upsert_media_node" in by_name
+
+    raw = await by_name["upsert_media_node"].ainvoke(
+        {"target_type": "image", "prompt": "blue sky product hero"}
+    )
+    result = _as_dict(raw)
+    assert result.get("nodeId")
+    assert nest.calls and nest.calls[0][0] == "upsert_media_node"
