@@ -29,11 +29,14 @@ import {
   resolveModelKey,
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
+  resolveVideoModelProfile,
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
   type ImageRefWire,
   type ImageResolutionTier,
+  type VideoGenerationMode,
+  assertMiniMaxH3ReferenceLimits,
 } from '@lnkpi/shared'
 import {
   alreadyRefunded,
@@ -111,11 +114,12 @@ function assertNoBlobRefs(refs?: GenerationRefPayload[]): void {
 function resolveVideoModeForProvider(
   explicit: string | undefined,
   referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
-): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+): VideoGenerationMode {
   if (
     explicit === 'first_last_frame'
     || explicit === 'image_to_video'
     || explicit === 'text_to_video'
+    || explicit === 'reference_to_video'
   ) {
     return explicit
   }
@@ -470,11 +474,28 @@ export class MaterialService {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
 
+    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
+    if (resolvedVideoMode === 'reference_to_video') {
+      const profile = resolveVideoModelProfile(model ?? '')
+      if (profile.refWire === 'minimax_h3_content') {
+        try {
+          assertMiniMaxH3ReferenceLimits({
+            imageCount: referenceBundle.images.length,
+            videoCount: referenceBundle.videos.length,
+            audioCount: referenceBundle.audios.length,
+            promptLength: prompt.length,
+          })
+        } catch (err) {
+          throw new BadRequestException((err as Error).message)
+        }
+      }
+    }
+
     const cost = videoCreditsForModel({
       duration,
       modelKey: model,
       resolution,
-      videoMode,
+      videoMode: resolvedVideoMode,
       referenceImageCount: referenceBundle.images.length,
       referenceVideoCount: referenceBundle.videos.length,
     })
@@ -503,7 +524,7 @@ export class MaterialService {
               aspectRatio,
               resolution,
               crop,
-              ...(videoMode ? { videoMode } : {}),
+              ...(resolvedVideoMode ? { videoMode: resolvedVideoMode } : {}),
               referenceImageCount: referenceBundle.images.length,
               referenceVideoCount: referenceBundle.videos.length,
               channelId: resolved.channelId,
@@ -539,7 +560,7 @@ export class MaterialService {
       referenceImageUrl,
       resolved,
       skipCharge,
-      videoMode,
+      resolvedVideoMode,
       generateAudio,
     ).catch(console.error)
     return material

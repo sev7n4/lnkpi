@@ -43,6 +43,7 @@ import {
   resolveModelKey,
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
+  resolveVideoModelProfile,
   type ErrorCode,
   type GenerationRefPayload,
   type GenerationDiagnostic,
@@ -51,6 +52,8 @@ import {
   type MediaInfo,
   type MediaRefPreflight,
   type StudioModality,
+  type VideoGenerationMode,
+  assertMiniMaxH3ReferenceLimits,
 } from '@lnkpi/shared'
 import {
   alreadyRefunded,
@@ -151,11 +154,12 @@ function extractReferenceImages(refs?: StudioRefInput[]): string[] {
 function resolveStudioVideoMode(
   explicit: string | undefined,
   referenceBundle: ReturnType<typeof buildVideoReferenceBundle>,
-): 'text_to_video' | 'image_to_video' | 'first_last_frame' {
+): VideoGenerationMode {
   if (
     explicit === 'first_last_frame'
     || explicit === 'image_to_video'
     || explicit === 'text_to_video'
+    || explicit === 'reference_to_video'
   ) {
     return explicit
   }
@@ -1463,11 +1467,27 @@ export class StudioService {
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
+    const resolvedVideoMode = resolveStudioVideoMode(videoMode, referenceBundle)
+    if (resolvedVideoMode === 'reference_to_video') {
+      const profile = resolveVideoModelProfile(model ?? '')
+      if (profile.refWire === 'minimax_h3_content') {
+        try {
+          assertMiniMaxH3ReferenceLimits({
+            imageCount: referenceBundle.images.length,
+            videoCount: referenceBundle.videos.length,
+            audioCount: referenceBundle.audios.length,
+            promptLength: prompt.length,
+          })
+        } catch (err) {
+          throw new BadRequestException((err as Error).message)
+        }
+      }
+    }
     const durationCredits = videoCreditsForModel({
       duration,
       modelKey: model,
       resolution,
-      videoMode,
+      videoMode: resolvedVideoMode,
       referenceImageCount: referenceBundle.images.length,
       referenceVideoCount: referenceBundle.videos.length,
     })
@@ -1497,7 +1517,7 @@ export class StudioService {
           resolution,
           crop,
           referenceBundle,
-          videoMode: resolveStudioVideoMode(videoMode, referenceBundle),
+          videoMode: resolvedVideoMode,
           gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
           channelBaseUrl: resolved.credentials.baseUrl,
           generateAudio,
@@ -1577,7 +1597,7 @@ export class StudioService {
               aspectRatio,
               resolution,
               crop,
-              ...(videoMode ? { videoMode } : {}),
+              ...(resolvedVideoMode ? { videoMode: resolvedVideoMode } : {}),
               referenceImageCount: referenceBundle.images.length,
               referenceVideoCount: referenceBundle.videos.length,
               referenceImages: upstreamImageRefs.map(({ url }) => url),

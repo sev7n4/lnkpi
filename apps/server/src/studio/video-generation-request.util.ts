@@ -26,7 +26,12 @@ export type VideoStartBody = {
 
 function inferVideoMode(explicit: unknown, refs: GenerationRefPayload[]): VideoGenerationMode {
   const mode = String(explicit ?? '').trim()
-  if (mode === 'text_to_video' || mode === 'image_to_video' || mode === 'first_last_frame') {
+  if (
+    mode === 'text_to_video'
+    || mode === 'image_to_video'
+    || mode === 'first_last_frame'
+    || mode === 'reference_to_video'
+  ) {
     return mode
   }
   return refs.some((r) => r.mediaType === 'image') ? 'image_to_video' : 'text_to_video'

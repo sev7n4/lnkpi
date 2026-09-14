@@ -419,4 +419,24 @@ describe('MaterialService video', () => {
     expect(materialCreate).not.toHaveBeenCalled()
     expect(videoGenerate).not.toHaveBeenCalled()
   })
+
+  it('rejects over-limit MiniMax H3 reference payloads with 400 before charging', async () => {
+    await expect(
+      svc.generateVideo({
+        userId: 'u1',
+        shotId: 'shot-1',
+        prompt: 'walk',
+        model: 'minimax-h3',
+        videoMode: 'reference_to_video',
+        refs: Array.from({ length: 10 }, (_, i) => ({
+          refKey: `I${i + 1}`,
+          mediaType: 'image' as const,
+          url: `https://cdn.example/i${i + 1}.png`,
+        })),
+      }),
+    ).rejects.toThrow(/图最多 9 张/)
+    expect(consume).not.toHaveBeenCalled()
+    expect(materialCreate).not.toHaveBeenCalled()
+    expect(videoGenerate).not.toHaveBeenCalled()
+  })
 })
