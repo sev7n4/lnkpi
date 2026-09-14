@@ -2130,4 +2130,108 @@ describe('AgentCanvasToolsService', () => {
       expect(orchStart).not.toHaveBeenCalled()
     })
   })
+
+  // Phase 2c.1 C3: clearProposeGeneration cancels pending without generating
+  describe('Phase 2c.1 C3: clearProposeGeneration', () => {
+    type ClearProposeFn = (input: {
+      sessionId: string
+      userId: string
+      nodeId: string
+    }) => Promise<{
+      nodeId: string
+      status: 'draft'
+      actions: Array<{ type: string }>
+    }>
+
+    function clearProposeGeneration(): ClearProposeFn {
+      const fn = (svc as unknown as { clearProposeGeneration?: ClearProposeFn }).clearProposeGeneration
+      expect(typeof fn).toBe('function')
+      if (typeof fn !== 'function') {
+        throw new Error('clearProposeGeneration is not implemented yet')
+      }
+      return fn.bind(svc)
+    }
+
+    it('propose then clear → draft; generateImage not called', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '产品主图',
+              prompt: '蓝色天空产品主图',
+              status: 'draft',
+              imageModel: 'platform::user-default-image',
+            },
+          },
+        ],
+        edges: [],
+      }
+
+      await svc.proposeGeneration({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+      expect(canvas.nodes[0].data.status).toBe('pending_confirm')
+
+      const result = await clearProposeGeneration()({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+
+      expect(result.nodeId).toBe('img-1')
+      expect(result.status).toBe('draft')
+      expect(result.actions.some((a) => a.type === 'update_node')).toBe(true)
+      expect(canvas.nodes[0].data.status).toBe('draft')
+      expect(generateImage).not.toHaveBeenCalled()
+    })
+
+    it('clear missing node → NotFound', async () => {
+      canvas = emptyCanvas()
+
+      await expect(
+        clearProposeGeneration()({
+          sessionId: 's1',
+          userId: 'u1',
+          nodeId: 'missing-node',
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException)
+
+      expect(generateImage).not.toHaveBeenCalled()
+    })
+
+    it('clear non-pending → idempotent draft OK', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: {
+              title: '已是草稿',
+              prompt: 'prompt',
+              status: 'draft',
+              imageModel: 'platform::user-default-image',
+            },
+          },
+        ],
+        edges: [],
+      }
+
+      const result = await clearProposeGeneration()({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+      })
+
+      expect(result.nodeId).toBe('img-1')
+      expect(result.status).toBe('draft')
+      expect(canvas.nodes[0].data.status).toBe('draft')
+      expect(generateImage).not.toHaveBeenCalled()
+    })
+  })
 })
