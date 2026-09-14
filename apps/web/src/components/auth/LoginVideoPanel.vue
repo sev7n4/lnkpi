@@ -29,7 +29,7 @@ let fadeTimer: ReturnType<typeof setTimeout> | null = null
 let mq: MediaQueryList | null = null
 
 const currentIndex = computed(() => slotIndex.value[activeSlot.value])
-const caption = computed(() => `超创 · ${clips[currentIndex.value]?.label ?? ''}`)
+const caption = computed(() => `lnk π · ${clips[currentIndex.value]?.label ?? ''}`)
 
 function clearAdvanceTimer() {
   if (advanceTimer) {
@@ -194,10 +194,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative h-full w-full overflow-hidden bg-[var(--neo-bg)] p-3 md:p-4">
-    <div
-      class="video-stage relative h-full w-full overflow-hidden rounded-[16px] border border-[var(--neo-border-strong)] shadow-[0_24px_60px_rgba(0,0,0,0.45)] md:rounded-[20px]"
-    >
+  <div class="relative h-full w-full overflow-hidden bg-black">
+    <div class="video-stage relative h-full w-full overflow-hidden">
       <video
         ref="videoA"
         class="absolute inset-0 h-full w-full object-cover transition-opacity ease-in-out"
