@@ -30,7 +30,7 @@ def build_chain_ref_order(
 
     chain = item.get("chain")
     role = item.get("role")
-    if chain in ("product", "model") and role in ("seed", "turnaround", "downstream"):
+    if chain and role in ("seed", "turnaround", "downstream"):
         seed = _find_role(by_key, str(chain), "seed")
         turn = _find_role(by_key, str(chain), "turnaround")
         if role == "turnaround":

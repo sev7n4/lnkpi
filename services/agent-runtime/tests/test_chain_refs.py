@@ -94,3 +94,13 @@ def test_turnaround_includes_seed_only():
         item=by_key["product_turnaround"], by_key=by_key, plan_node_id="n-plan"
     )
     assert order == ["n-plan", "n-seed"]
+
+
+def test_custom_chain_not_just_product_model():
+    by_key = {
+        "seed": {"key": "seed", "role": "seed", "chain": "outfit", "node_id": "n1"},
+        "ta": {"key": "ta", "role": "turnaround", "chain": "outfit", "node_id": "n2"},
+        "down": {"key": "down", "role": "downstream", "chain": "outfit", "node_id": "n3", "depends_on": ["ta"]},
+    }
+    order = build_chain_ref_order(item=by_key["down"], by_key=by_key, plan_node_id=None)
+    assert order == ["n1", "n2"]

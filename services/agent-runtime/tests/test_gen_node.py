@@ -231,3 +231,75 @@ async def test_gen_node_attaches_chain_refs_in_correct_order():
     hero_ref = [r for r in nest.ref_calls if r[0] == "n-hero"][-1]
     # order: plan → seed → turnaround (deps already covered by turnaround)
     assert hero_ref[1] == ["n-plan", "n-w", "n-ta"]
+
+
+@pytest.mark.asyncio
+async def test_gen_node_hydrates_canvas_when_item_missing_node_id():
+    """Imported canvas identity fills node_id and same-chain turnaround refs."""
+    nest = FakeNest()
+    node = make_gen_node(nest=nest)
+    canvas_nodes = [
+        {
+            "id": "image-seed",
+            "data": {"recipeKey": "seed", "chain": "outfit", "role": "seed", "title": "定妆"},
+        },
+        {
+            "id": "image-ta",
+            "data": {
+                "recipeKey": "ta",
+                "chain": "outfit",
+                "role": "turnaround",
+                "title": "四视图",
+                "mentionedKeys": ["seed"],
+            },
+        },
+        {
+            "id": "image-down",
+            "data": {
+                "recipeKey": "down",
+                "chain": "outfit",
+                "role": "downstream",
+                "title": "穿搭",
+                "mentionedKeys": ["ta"],
+            },
+        },
+    ]
+    by_key = {
+        "down": {
+            "key": "down",
+            "node_id": None,
+            "title": "穿搭",
+            "target_type": "image",
+            "depends_on": [],
+        }
+    }
+    state = {
+        "key": "down",
+        "gen_by_key": by_key,
+        "canvas_nodes": canvas_nodes,
+    }
+    out = await node(state)
+    assert out.get("gen_completed_keys") == ["down"]
+    assert nest.image_calls
+    down_ref = [r for r in nest.ref_calls if r[0] == "image-down"][-1]
+    assert down_ref[1] == ["image-seed", "image-ta"]
+
+
+@pytest.mark.asyncio
+async def test_gen_node_keeps_existing_node_id_without_canvas_hydrate():
+    nest = FakeNest()
+    node = make_gen_node(nest=nest)
+    by_key = {"k": _item("k", node_id="node-k")}
+    state = {
+        **_state("k", by_key),
+        "canvas_nodes": [
+            {
+                "id": "image-other",
+                "data": {"recipeKey": "k", "chain": "outfit", "role": "downstream", "title": "other"},
+            }
+        ],
+    }
+    out = await node(state)
+    assert out["gen_completed_keys"] == ["k"]
+    assert nest.image_calls == ["k"]
+    assert all(r[0] != "image-other" for r in nest.ref_calls)
