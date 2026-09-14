@@ -275,6 +275,22 @@ def test_casual_chat_not_hijacked_by_media_create(utterance: str):
     assert d["precedence_rule_id"] == "default_chat"
 
 
+def test_canvas_copy_node_query_not_atomic_via_wenan():
+    for utterance in (
+        "看看画布文案节点",
+        "查询 text-40 文案节点，把内容更新为 explore-set-content-测试",
+    ):
+        d = _decide({"messages": [{"role": "user", "content": utterance}]})
+        assert d["flow_mode"] == "canvas_agent", utterance
+        assert d["precedence_rule_id"] == "default_chat", utterance
+
+
+def test_generate_wenan_still_atomic_or_clarify():
+    d = _decide({"messages": [{"role": "user", "content": "帮我生成一段耳机卖点文案"}]})
+    assert d["flow_mode"] in ("atomic_create", "clarify_route")
+    assert d["flow_mode"] != "canvas_agent"
+
+
 def test_vision_qa_with_sidebar_not_chat():
     d = _decide(
         {

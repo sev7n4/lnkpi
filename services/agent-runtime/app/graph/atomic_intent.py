@@ -52,13 +52,16 @@ ATOMIC_CREATE_HINTS = tuple(_TAXONOMY.get("atomic_create_hints") or (
     "来一段",
     "写一段",
     "配一段",
+    "生成文案",
+    "写一段文案",
+    "输出文案",
 ))
 
 TEXT_DEFAULT_KEYWORDS = tuple(_TAXONOMY.get("text_default_keywords") or (
     "分镜脚本",
     "脚本",
     "广告词",
-    "文案",
+    # No bare 「文案」— see intent-taxonomy.yaml (canvas 文案节点 edits).
     "口播稿",
 ))
 
