@@ -1,5 +1,7 @@
 # Codex 风格会话 Tool Plan Harness（方案 1 / R1）
 
+> **出图路径修订（2026-09-14 Phase 2a）：** 「出图 / `media_create_high` → atomic 子图主路径」及本文件 **V7** 硬约束，由 [2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md) **废止并替换**：默认 `canvas_agent` 摆盘；计费 `run_*` 仍禁止 bind。`atomic_generate` 退出 hard/precedence 竞争。
+
 > 日期：2026-09-14  
 > 状态：**已批准**（2026-09-14；方案 1 / R1；终审通过，开 implementation plan）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
