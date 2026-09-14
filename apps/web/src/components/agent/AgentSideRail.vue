@@ -51,6 +51,7 @@ import {
   extractProposeGenerationNodeId,
   resolvePendingConfirmNodeId,
 } from '@/components/agent/agentChipSet'
+import { buildGenerationProposePresentation } from '@/components/agent/generationProposePresentation'
 import {
   chipSetFromInterrupt,
   interruptPayloadFromThreadState,
@@ -511,6 +512,21 @@ const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
+const generationProposePresentation = computed(() => {
+  if (!awaitingGenerationPropose.value) return null
+  const nodeId = proposeGenerationNodeId.value
+  if (!nodeId) return null
+  const fromCanvas = props.canvasNodes?.find((n) => n.id === nodeId)
+  const node =
+    fromCanvas ??
+    (props.selectedNode?.id === nodeId ? props.selectedNode : null)
+  if (!node) return null
+  return buildGenerationProposePresentation({
+    id: node.id,
+    type: 'type' in node ? (node as { type?: string | null }).type : undefined,
+    data: node.data ?? null,
+  })
+})
 const awaitingImageQa = computed(() => chipSet.value === 'image_qa' && !isRetakePending.value)
 const isRetakePending = computed(() =>
   isRetakePendingPhase({
@@ -628,7 +644,8 @@ const hasDockPresentation = computed(
     || awaitingShotConfirm.value
     || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)
     || isRetakePending.value
-    || showCancelledCallout.value,
+    || showCancelledCallout.value
+    || (awaitingGenerationPropose.value && Boolean(generationProposePresentation.value)),
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
@@ -2465,25 +2482,34 @@ defineExpose({
                 自己说明修改
               </button>
             </div>
-            <div v-else-if="awaitingGenerationPropose" class="mb-2 flex flex-wrap gap-2 px-0.5">
-              <button
-                type="button"
-                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
-                data-testid="generation-propose-confirm"
+            <div v-else-if="awaitingGenerationPropose" class="mb-2 px-0.5">
+              <AgentPresentationHost
+                v-if="generationProposePresentation"
+                class="mb-2"
+                :presentation="generationProposePresentation"
                 :disabled="agent.isStreaming"
-                @click="confirmProposeGeneration()"
-              >
-                确认生成
-              </button>
-              <button
-                type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
-                data-testid="generation-propose-cancel"
-                :disabled="agent.isStreaming"
-                @click="cancelProposeGeneration()"
-              >
-                取消
-              </button>
+                @focus-node="onFocusNode($event)"
+              />
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  data-testid="generation-propose-confirm"
+                  :disabled="agent.isStreaming"
+                  @click="confirmProposeGeneration()"
+                >
+                  确认生成
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  data-testid="generation-propose-cancel"
+                  :disabled="agent.isStreaming"
+                  @click="cancelProposeGeneration()"
+                >
+                  取消
+                </button>
+              </div>
             </div>
             <div v-else-if="awaitingAtomicConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
