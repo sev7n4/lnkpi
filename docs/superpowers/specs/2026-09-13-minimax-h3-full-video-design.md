@@ -211,6 +211,33 @@ Agent：同 service；tool 名建议 `generate_video` 已存在则扩参数，�
 - 「生成 2K」：仅当当前节点 metadata `resolution=768P` 且 `provider=minimax-h3` 时可用。  
 - Reference 模式：复用 Dock refs 芯片（I*/V*/A*），校验数量上限。
 
+### 4.6 P1 Dock 锁定（A + C）
+
+产品形态 **A**：新增第四模式 `videoMode: 'reference_to_video'`（Dock 文案「参考生成」），与 `first_last_frame` **互斥**。  
+实现 **C**：不新做一套芯片，复用 `DockRefStrip` / caps / 本地上传；H3 只换 `content[].role`。
+
+| `videoMode` | `content[]` roles | 图芯片文案 |
+|-------------|-------------------|------------|
+| `text_to_video` | 仅 text；`ratio` 必填且非 adaptive | （无图角色） |
+| `image_to_video` | text + **仅首张** `first_frame`；忽略第 2+ 张图与 V/A | 参考（语义仍是首帧） |
+| `first_last_frame` | text + `first_frame` + `last_frame`；丢弃 V/A | 首帧 / 末帧 |
+| `reference_to_video` | text + `reference_image` / `reference_video` / `reference_audio`；**禁止**混入 first/last_frame；`ratio` 必填且非 adaptive（无首帧可推导画幅） | 参考图 / 参考视频 / 参考音频 |
+
+能力门禁：
+
+- 新增 `supportsReferenceToVideo`：**仅** `refWire === 'minimax_h3_content'` 且 `maxVideoRefs > 0`。  
+- **不要**用 `supportsVideoRef` 单独作为第四按钮条件（Seedance 也有 V/A 参考，但仍走图生 S4/S6/S7，不出现「参考生成」）。  
+- fal H3 Max：`supportsReferenceToVideo=false`，无第四模式。
+
+数量（实现校验，失败 **400**，Dock 禁用生成）：
+
+- 图 ≤9、视 ≤3、音 ≤3、合计文件 ≤12；`reference_to_video` 至少 1 个文件。  
+- prompt ≤7000 字符。
+
+H3 选中且存在 V/A 参考、但模式不是 `reference_to_video`：Dock 提示「请切到参考生成」，**不要**再写「请换 Seedance」。
+
+P0 adapter 曾把「两张图、未选手尾帧」也打成 first+last；P1 **废止**：仅 `first_last_frame` 才发 `last_frame`。
+
 ## 5. 积分档位
 
 ### 5.1 主生成（`视频生成`）
@@ -231,10 +258,12 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 | 768P | `base × 1.2` |
 | 2K | `base × 1.8` |
 
-另加参考材料附加（P1）：
+另加参考材料附加（**仅** `videoMode === 'reference_to_video'` 且官方 `minimax-h3`；图生/首尾帧不加）：
 
-- 参考图超过 5：每张 +`N` 点（建议 N=5，对齐 $0.04 量级）  
-- 参考视频：按输入秒数加 `base` 同分辨率系数的一部分（规格实现时写死 `refVideoPointsPerSec`）
+- 参考图前 5 张免附加；第 6 张起每张 **+5** 点（`MINIMAX_H3_REF_IMAGE_EXTRA_POINTS`）  
+- 参考视频：P1 **拿不到输入时长**，每段固定 **15** 点（`MINIMAX_H3_REF_VIDEO_POINTS`）；不做按秒估算  
+- 参考音频：P1 **不加价**（官方价目未单列；YAGNI）  
+- BYOK（`source === 'user'`）：仍走现网视频 BYOK，不另加第三套附加规则
 
 ### 5.2 Context-IR（`视频提示增强`）
 
@@ -266,7 +295,7 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 | 期 | 验收 |
 |----|------|
 | P0 | T2V 5s 768P；I2V；首尾帧；无 key 错误；扣退款；**BYOK 通道 Key 优先于平台 env** |
-| P1 | Reference 含 1 视频+2 图；超限 400 |
+| P1 | Reference 含 1 视频+2 图；超限 400。**实现状态：** 单测已证明（见下）；**live 参考出片未打** |
 | P2 | IR 回填；768 片 Regen 得 2K 新节点 |
 | 回归 | Agnes / Seedance 路径无破坏 |
 
@@ -278,6 +307,15 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 - [x] 积分 768P×1.2 / 2K×1.8 与导演台 forModel（单测）
 - [x] platform MINIMAX_API_KEY；BYOK 通道不改（单测）
 - [ ] live 出片（平台 Key / BYOK 各一条）— 未打
+
+### P1 M2 实现状态
+
+- [x] `reference_to_video` 第四模式；`supportsReferenceToVideo` 仅官网 H3（单测）
+- [x] `content[]` `reference_*`；图生只 `first_frame`；严格首尾帧 first+last（单测）
+- [x] ≤9/3/3/12 超限 400；Dock「参考生成」仅 H3，fal Max / Seedance 不出（单测）
+- [x] 参考附加积分：2 图 1 视 5s 768P = 51（单测）
+- [x] 官网 H3 `reference_to_video` 允许仅音频参考（单测）
+- [ ] live 参考出片（1 视 + 2 图）— 未打
 
 ## 8. PR 拆分
 
@@ -309,3 +347,5 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 |------|------|
 | 2026-09-13 | 初稿：官方 H3 全能力分期；积分与 content[] 映射锁定 |
 | 2026-09-13 | 锁定 BYOK：用户通道可配 apiKey + baseUrl，与平台 MINIMAX_* 双轨 |
+| 2026-09-14 | P1 Dock 锁定 A+C：第四模式 `reference_to_video`；复用芯片；`supportsReferenceToVideo` 仅官网 H3；附加积分锁表 |
+| 2026-09-15 | P1 M2 实现状态：单测已证明；live 参考出片未打 |
