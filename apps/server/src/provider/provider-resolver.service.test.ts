@@ -43,6 +43,8 @@ describe('ProviderResolverService', () => {
   const originalApimartBase = process.env.APIMART_BASE_URL
   const originalFalKey = process.env.FAL_KEY
   const originalFalBase = process.env.FAL_BASE_URL
+  const originalMinimaxKey = process.env.MINIMAX_API_KEY
+  const originalMinimaxBase = process.env.MINIMAX_BASE_URL
   let resolver: ProviderResolverService
   let crypto: CryptoService
   let prisma: ReturnType<typeof createMemoryPrisma>
@@ -55,6 +57,8 @@ describe('ProviderResolverService', () => {
     process.env.APIMART_BASE_URL = 'https://api.apimart.ai/v1'
     delete process.env.FAL_KEY
     delete process.env.FAL_BASE_URL
+    delete process.env.MINIMAX_API_KEY
+    delete process.env.MINIMAX_BASE_URL
     prisma = createMemoryPrisma([
       {
         id: PLATFORM_CHANNEL_ID,
@@ -97,6 +101,10 @@ describe('ProviderResolverService', () => {
     else process.env.FAL_KEY = originalFalKey
     if (originalFalBase === undefined) delete process.env.FAL_BASE_URL
     else process.env.FAL_BASE_URL = originalFalBase
+    if (originalMinimaxKey === undefined) delete process.env.MINIMAX_API_KEY
+    else process.env.MINIMAX_API_KEY = originalMinimaxKey
+    if (originalMinimaxBase === undefined) delete process.env.MINIMAX_BASE_URL
+    else process.env.MINIMAX_BASE_URL = originalMinimaxBase
   })
 
   it('decrypts user channel credentials', async () => {
@@ -257,6 +265,67 @@ describe('ProviderResolverService', () => {
       modelName: 'h3-max-turbo',
       apiFormat: 'openai',
       credentials: { apiKey: 'sk-user-fal', baseUrl: 'https://user-fal.example.com' },
+      source: 'user',
+    })
+  })
+
+  it('routes platform minimax-h3 to MiniMax credentials', async () => {
+    process.env.MINIMAX_API_KEY = 'minimax-env-key'
+
+    const result = await resolver.resolveForGeneration('u1', 'platform::minimax-h3', 'video')
+    expect(result).toEqual({
+      channelId: 'platform',
+      modelName: 'minimax-h3',
+      apiFormat: 'openai',
+      credentials: {
+        apiKey: 'minimax-env-key',
+        baseUrl: 'https://api.minimax.io',
+      },
+      source: 'platform',
+    })
+  })
+
+  it('does not fall back to OPENAI_API_KEY when MINIMAX_API_KEY is missing', async () => {
+    const result = await resolver.resolveForGeneration('u1', 'platform::minimax-h3', 'video')
+    expect(result.credentials.apiKey).not.toBe('platform-env-key')
+    expect(result.credentials.apiKey).toBeFalsy()
+    expect(result.credentials.baseUrl).toBe('https://api.minimax.io')
+  })
+
+  it('keeps platform h3-max-turbo on FAL_KEY instead of MiniMax', async () => {
+    process.env.FAL_KEY = 'fal-env-key'
+    process.env.MINIMAX_API_KEY = 'minimax-env-key'
+
+    const result = await resolver.resolveForGeneration('u1', 'platform::h3-max-turbo', 'video')
+    expect(result.credentials).toEqual({
+      apiKey: 'fal-env-key',
+      baseUrl: 'https://fal.run',
+    })
+  })
+
+  it('keeps user BYOK credentials for minimax-h3', async () => {
+    const enc = crypto.encrypt('sk-user-minimax')
+    prisma._channels.set('ch_user', {
+      id: 'ch_user',
+      userId: 'u1',
+      name: 'mine',
+      apiFormat: 'openai',
+      baseUrl: 'https://user-minimax.example.com',
+      encryptedApiKey: enc.ciphertext,
+      iv: enc.iv,
+      authTag: enc.authTag,
+      keyVersion: enc.keyVersion,
+      models: '[]',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+
+    const result = await resolver.resolveForGeneration('u1', 'ch_user::minimax-h3', 'video')
+    expect(result).toEqual({
+      channelId: 'ch_user',
+      modelName: 'minimax-h3',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'sk-user-minimax', baseUrl: 'https://user-minimax.example.com' },
       source: 'user',
     })
   })

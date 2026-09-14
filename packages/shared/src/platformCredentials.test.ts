@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_APIMART_BASE_URL,
   DEFAULT_FAL_BASE_URL,
+  DEFAULT_MINIMAX_BASE_URL,
   isFalH3MaxPlatformModel,
+  isMiniMaxH3PlatformModel,
   resolveApimartPlatformCredentials,
   resolveFalH3MaxPlatformCredentials,
+  resolveMiniMaxH3PlatformCredentials,
   resolvePlatformImageProviderOpts,
   usesApimartImageGateway,
   type PlatformCredentialEnv,
@@ -25,6 +28,8 @@ describe('platformCredentials', () => {
     apimartBase: process.env.APIMART_BASE_URL,
     falKey: process.env.FAL_KEY,
     falBase: process.env.FAL_BASE_URL,
+    minimaxKey: process.env.MINIMAX_API_KEY,
+    minimaxBase: process.env.MINIMAX_BASE_URL,
   }
 
   beforeEach(() => {
@@ -34,6 +39,8 @@ describe('platformCredentials', () => {
     delete process.env.APIMART_BASE_URL
     delete process.env.FAL_KEY
     delete process.env.FAL_BASE_URL
+    delete process.env.MINIMAX_API_KEY
+    delete process.env.MINIMAX_BASE_URL
   })
 
   afterEach(() => {
@@ -44,6 +51,8 @@ describe('platformCredentials', () => {
       apimartBase: 'APIMART_BASE_URL',
       falKey: 'FAL_KEY',
       falBase: 'FAL_BASE_URL',
+      minimaxKey: 'MINIMAX_API_KEY',
+      minimaxBase: 'MINIMAX_BASE_URL',
     } as const
     for (const [k, envKey] of Object.entries(envMap)) {
       const v = original[k as keyof typeof original]
@@ -131,6 +140,42 @@ describe('platformCredentials', () => {
     expect(resolveApimartPlatformCredentials('image2')).toEqual({
       apiKey: 'runtime-apimart',
       baseUrl: 'https://api.apimart.ai/v1',
+    })
+  })
+
+  it('detects official MiniMax H3 catalog and gateway names only', () => {
+    expect(isMiniMaxH3PlatformModel('minimax-h3')).toBe(true)
+    expect(isMiniMaxH3PlatformModel('MiniMax-H3')).toBe(true)
+    expect(isMiniMaxH3PlatformModel('MINIMAX-H3')).toBe(true)
+    expect(isMiniMaxH3PlatformModel('h3-max')).toBe(false)
+    expect(isMiniMaxH3PlatformModel('h3-max-turbo')).toBe(false)
+    expect(isMiniMaxH3PlatformModel('minimax/h3-max-turbo')).toBe(false)
+    expect(isMiniMaxH3PlatformModel('MiniMax-H3-Max')).toBe(false)
+    expect(isMiniMaxH3PlatformModel('agnes-2.0-flash')).toBe(false)
+    expect(isMiniMaxH3PlatformModel('seedance-2.0')).toBe(false)
+  })
+
+  it('returns MiniMax credentials for official H3 and never falls back to OPENAI_API_KEY', () => {
+    expect(resolveMiniMaxH3PlatformCredentials('h3-max-turbo', testEnv)).toBeNull()
+    expect(resolveMiniMaxH3PlatformCredentials('MiniMax-H3-Max', testEnv)).toBeNull()
+    expect(
+      resolveMiniMaxH3PlatformCredentials('minimax-h3', {
+        ...testEnv,
+        minimaxApiKey: 'minimax-key',
+      }),
+    ).toEqual({
+      apiKey: 'minimax-key',
+      baseUrl: DEFAULT_MINIMAX_BASE_URL,
+    })
+    expect(
+      resolveMiniMaxH3PlatformCredentials('MiniMax-H3', {
+        ...testEnv,
+        minimaxApiKey: '',
+        minimaxBaseUrl: 'https://minimax.custom.example',
+      }),
+    ).toEqual({
+      apiKey: '',
+      baseUrl: 'https://minimax.custom.example',
     })
   })
 })
