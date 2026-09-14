@@ -5,7 +5,11 @@ export type CanvasAction = {
   payload: Record<string, unknown>
 }
 
-export type VideoGenerationMode = 'text_to_video' | 'image_to_video' | 'first_last_frame'
+export type VideoGenerationMode =
+  | 'text_to_video'
+  | 'image_to_video'
+  | 'first_last_frame'
+  | 'reference_to_video'
 
 export interface CanonicalVideoSettings {
   duration: number

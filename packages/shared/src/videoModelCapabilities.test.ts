@@ -23,16 +23,22 @@ describe('resolveVideoModelCapabilities', () => {
     expect(c.firstLastFrameLabel).toBe('严格首尾帧')
   })
 
-  it('capabilities hide video/audio refs for official H3 P0', () => {
-    const c = resolveVideoModelCapabilities('minimax-h3')
-    expect(c.supportsVideoRef).toBe(false)
-    expect(c.supportsAudioRef).toBe(false)
-    expect(c.supportsFirstLastFrame).toBe(true)
-    expect(c.supportsKeyframes).toBe(false)
-    expect(c.supports4K).toBe(false)
-    expect(c.allowedResolutions).toEqual(['768p', '2k'])
-    expect(c.minDuration).toBe(4)
-    expect(c.firstLastFrameLabel).toBe('严格首尾帧')
+  it('official H3 P1 exposes reference-to-video and Seedance does not', () => {
+    const h3 = resolveVideoModelCapabilities('minimax-h3')
+    expect(h3.supportsVideoRef).toBe(true)
+    expect(h3.supportsAudioRef).toBe(true)
+    expect(h3.supportsReferenceToVideo).toBe(true)
+    expect(h3.maxImageRefs).toBe(9)
+    expect(h3.maxVideoRefs).toBe(3)
+    expect(h3.maxAudioRefs).toBe(3)
+
+    const seedance = resolveVideoModelCapabilities('seedance-2.0-min')
+    expect(seedance.supportsVideoRef).toBe(true)
+    expect(seedance.supportsReferenceToVideo).toBe(false)
+
+    const fal = resolveVideoModelCapabilities('h3-max-turbo')
+    expect(fal.supportsReferenceToVideo).toBe(false)
+    expect(fal.supportsVideoRef).toBe(false)
   })
 
   it('capabilities hide video/audio refs for fal h3 max', () => {

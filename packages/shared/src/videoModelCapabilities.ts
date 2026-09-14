@@ -5,6 +5,7 @@ export interface VideoModelCapabilities {
   supportsKeyframes: boolean
   supportsVideoRef: boolean
   supportsAudioRef: boolean
+  supportsReferenceToVideo: boolean
   supportsGenerateAudio: boolean
   supportsReturnLastFrame: boolean
   supports4K: boolean
@@ -35,6 +36,7 @@ export function resolveVideoModelCapabilities(
     supportsKeyframes: isAgnes || isSeedance,
     supportsVideoRef: profile.maxVideoRefs > 0,
     supportsAudioRef: profile.maxAudioRefs > 0,
+    supportsReferenceToVideo: isOfficialH3 && profile.maxVideoRefs > 0,
     supportsGenerateAudio: profile.defaultGenerateAudio,
     supportsReturnLastFrame: isSeedance,
     supports4K: profile.maxResolution === '4k',

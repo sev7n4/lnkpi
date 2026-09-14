@@ -168,6 +168,20 @@ describe('resolveCanonicalVideoRequest', () => {
     expect(req.videoMode).toBe('text_to_video')
   })
 
+  it('preserves explicit videoMode reference_to_video', () => {
+    const req = resolveCanonicalVideoRequest({
+      node: {
+        ...baseVideoNode,
+        data: {
+          ...baseVideoNode.data,
+          videoMode: 'reference_to_video',
+        },
+      },
+      canvas: { nodes: [baseVideoNode], edges: [] },
+    })
+    expect(req.videoMode).toBe('reference_to_video')
+  })
+
   it('reads seed and negativePrompt from node data', () => {
     const req = resolveCanonicalVideoRequest({
       node: {

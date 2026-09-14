@@ -14,7 +14,11 @@ export interface VideoReferenceBundle {
 
 export type VideoScenario = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8'
 
-export type VideoMode = 'text_to_video' | 'image_to_video' | 'first_last_frame'
+export type VideoMode =
+  | 'text_to_video'
+  | 'image_to_video'
+  | 'first_last_frame'
+  | 'reference_to_video'
 
 function toVideoReferenceItem(ref: GenerationRefPayload): VideoReferenceItem {
   return {
