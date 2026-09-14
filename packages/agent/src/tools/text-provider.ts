@@ -9,10 +9,10 @@ export interface TextProvider {
   generate(prompt: string, model?: string, options?: TextGenerateOptions): Promise<{ text: string }>
 }
 
-/** Match deepseek-v4 / deepseek-v4-pro / channel::deepseek-v4-flash / provider/deepseek-v4-pro */
+/** Match deepseek-v4 family plus official V4.1 Flash id `deepseek-flash`. */
 export function isDeepSeekV4Model(model?: string | null): boolean {
   if (!model) return false
-  return /deepseek-v4/i.test(model)
+  return /deepseek-v4/i.test(model) || /(?:^|[/:])deepseek-flash(?:[-./]|$)/i.test(model)
 }
 
 /** Extra chat.completions fields for DeepSeek V4 thinking control. */

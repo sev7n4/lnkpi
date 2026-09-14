@@ -1,3 +1,4 @@
+import { decodeChannelModel } from '@lnkpi/shared'
 import { createTextProvider } from '../tools/text-provider'
 import type { TextGenerateOptions } from '../tools/text-provider'
 import { generateTextWithImages } from './vision-text'
@@ -8,10 +9,25 @@ const VISION_MODEL_PATTERN =
 const NON_VISION_MODEL_PATTERN =
   /(?:^|[/:])(?:deepseek|o[134](?:-|$|-mini|-pro)|text-embedding|whisper|tts|dall-e|babbage|davinci|curie|ada|moderation|flowmusic|suno)(?:[-./]|$)/i
 
+/** Official V4.1 Flash id plus retired aliases that now route to it. */
+const DEEPSEEK_FLASH_VISION_PATTERN =
+  /(?:^|[/:])deepseek(?:-v4(?:\.1)?)?-flash(?:-vision-exp)?(?:[-./]|$)/i
+
+export function isDeepSeekFlashVisionModel(model?: string | null): boolean {
+  if (!model?.trim()) return false
+  return DEEPSEEK_FLASH_VISION_PATTERN.test(model.trim())
+}
+
+function upstreamChatModel(model?: string): string | undefined {
+  if (!model) return model
+  return decodeChannelModel(model)?.modelName ?? model
+}
+
 /** Whether chat/completions accepts OpenAI-style image_url message parts for this model id. */
 export function supportsVisionTextModel(model?: string | null): boolean {
   if (!model?.trim()) return false
   const normalized = model.trim()
+  if (isDeepSeekFlashVisionModel(normalized)) return true
   if (NON_VISION_MODEL_PATTERN.test(normalized)) return false
   return VISION_MODEL_PATTERN.test(normalized)
 }
@@ -50,7 +66,7 @@ export async function generateTextForRefs(
 
   if (supportsVisionTextModel(opts.model)) {
     const { text } = await generateTextWithImages(prompt, refs, {
-      model: opts.model,
+      model: upstreamChatModel(opts.model),
       apiKey: opts.apiKey,
       baseUrl: opts.baseUrl,
     })
