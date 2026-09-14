@@ -1,6 +1,6 @@
-"""Phase 2b §6.0.2: propose/upsert media tools gates (B1 / B2 / B3 / B8).
+"""Phase 2b §6.0.2: propose/upsert media tools gates (B1–B5 / B8).
 
-Failing until Task 2–3 wire registry + Nest/runtime handlers.
+Failing until Task 2–4 wire registry + Nest/runtime handlers + explore prompt.
 """
 
 from __future__ import annotations
@@ -163,3 +163,18 @@ async def test_b4_upsert_media_node_returns_node_id():
     result = _as_dict(raw)
     assert result.get("nodeId")
     assert nest.calls and nest.calls[0][0] == "upsert_media_node"
+
+
+def test_b5_explore_system_guides_upsert_propose_not_run():
+    """B5: explore system text forbids run_*; guides upsert → propose; multi-node workflow."""
+    from app.graph.nodes.explore import _EXPLORE_SYSTEM
+
+    text = _EXPLORE_SYSTEM.format(summary="{}")
+    assert "propose_generation" in text
+    assert "upsert_media_node" in text
+    assert "不要调用 run" in text or "禁止调用任何 run_" in text
+    assert "run_*" in text
+    assert "等待用户确认" in text or "等用户" in text
+    assert "多个节点" in text
+    assert "连线" in text or "connect_nodes" in text
+    assert "创作流程由后续路由进入" not in text
