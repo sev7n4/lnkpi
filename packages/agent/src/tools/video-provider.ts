@@ -1,4 +1,4 @@
-import type { VideoRefWire } from '@lnkpi/shared'
+import type { VideoGenerationMode, VideoRefWire } from '@lnkpi/shared'
 import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
 import {
   MiniMaxH3VideoProvider,
@@ -8,6 +8,7 @@ import {
 
 export interface VideoGenerateOptions {
   model?: string
+  videoMode?: VideoGenerationMode
   duration?: number
   aspectRatio?: string
   resolution?: string

@@ -234,4 +234,68 @@ describe('MiniMaxH3VideoProvider', () => {
       '视频服务账户异常，请稍后重试或联系管理员',
     )
   })
+
+  it('reference_to_video posts reference_* roles and required ratio', async () => {
+    mockCreateAndSucceed()
+    const p = new MiniMaxH3VideoProvider('mm-key', 'https://api.minimax.io', 'minimax-h3')
+    await p.generate('keep identity', {
+      videoMode: 'reference_to_video',
+      duration: 5,
+      aspectRatio: '16:9',
+      resolution: '768p',
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png'],
+      referenceVideos: ['https://cdn/v.mp4'],
+      referenceAudios: ['https://cdn/a.mp3'],
+      pollIntervalMs: 0,
+    })
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body.ratio).toBe('16:9')
+    expect(body.ratio).not.toBe('adaptive')
+    expect(body.content).toEqual([
+      { type: 'text', text: 'keep identity' },
+      { type: 'image_url', image_url: { url: 'https://cdn/a.png' }, role: 'reference_image' },
+      { type: 'image_url', image_url: { url: 'https://cdn/b.png' }, role: 'reference_image' },
+      { type: 'video_url', video_url: { url: 'https://cdn/v.mp4' }, role: 'reference_video' },
+      { type: 'audio_url', audio_url: { url: 'https://cdn/a.mp3' }, role: 'reference_audio' },
+    ])
+    const roles = (body.content as Array<{ role?: string }>).map((c) => c.role).filter(Boolean)
+    expect(roles).not.toContain('first_frame')
+    expect(roles).not.toContain('last_frame')
+  })
+
+  it('I2V still uses first_frame only (not reference_image)', async () => {
+    mockCreateAndSucceed()
+    const p = new MiniMaxH3VideoProvider('mm-key')
+    await p.generate('walk', {
+      videoMode: 'image_to_video',
+      image: 'https://cdn/first.png',
+      referenceImages: ['https://cdn/first.png', 'https://cdn/extra.png'],
+      pollIntervalMs: 0,
+    })
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body.content).toEqual([
+      { type: 'text', text: 'walk' },
+      { type: 'image_url', image_url: { url: 'https://cdn/first.png' }, role: 'first_frame' },
+    ])
+    expect(body.ratio).toBeUndefined()
+  })
+
+  it('first_last_frame uses first_frame + last_frame', async () => {
+    mockCreateAndSucceed()
+    const p = new MiniMaxH3VideoProvider('mm-key')
+    await p.generate('walk', {
+      videoMode: 'first_last_frame',
+      imageWithRoles: [
+        { url: 'https://cdn/a.png', role: 'first_frame' },
+        { url: 'https://cdn/b.png', role: 'last_frame' },
+      ],
+      pollIntervalMs: 0,
+    })
+    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))
+    expect(body.content).toEqual([
+      { type: 'text', text: 'walk' },
+      { type: 'image_url', image_url: { url: 'https://cdn/a.png' }, role: 'first_frame' },
+      { type: 'image_url', image_url: { url: 'https://cdn/b.png' }, role: 'last_frame' },
+    ])
+  })
 })
