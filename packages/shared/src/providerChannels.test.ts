@@ -30,6 +30,9 @@ describe('providerChannels', () => {
     expect(inferModelCapability('whisper-1')).toBe('audio')
     expect(inferModelCapability('tts-1-hd')).toBe('audio')
     expect(inferModelCapability('gpt-4o')).toBe('text')
+    expect(inferModelCapability('minimax-h3')).toBe('video')
+    expect(inferModelCapability('MiniMax-H3')).toBe('video')
+    expect(inferModelCapability('minimax-M3')).toBe('text')
   })
 
   it('preserves previously tagged capability when re-pulling models', () => {

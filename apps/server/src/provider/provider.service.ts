@@ -5,6 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common'
+import { isMiniMaxBaseUrl } from '@lnkpi/agent'
 import {
   STUDIO_MODEL_CATALOG,
   defaultModelKey,
@@ -403,6 +404,24 @@ export class ProviderService {
         name,
         capability: resolvePulledModelCapability(name, previousByName),
       }))
+
+    if (isMiniMaxBaseUrl(channel.baseUrl)) {
+      const names = new Set(models.map((entry) => entry.name))
+      for (const [name, capability] of Object.entries(previousByName)) {
+        if (!names.has(name)) {
+          models.push({ name, capability })
+          names.add(name)
+        }
+      }
+      const hasOfficialH3 = [...names].some((name) => /^minimax-h3$/i.test(name))
+      if (!hasOfficialH3) {
+        models.push({ name: 'minimax-h3', capability: 'video' })
+      } else {
+        for (const entry of models) {
+          if (/^minimax-h3$/i.test(entry.name)) entry.capability = 'video'
+        }
+      }
+    }
 
     const row = await this.prisma.providerChannel.update({
       where: { id: channel.id },
