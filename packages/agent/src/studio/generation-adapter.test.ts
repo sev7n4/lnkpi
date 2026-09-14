@@ -401,7 +401,9 @@ describe('buildVideoProviderOptions', () => {
     expect(r.image).toBe('https://cdn/first.png')
     expect(r.providerOptions.image).toBe('https://cdn/first.png')
     expect(r.providerOptions.referenceImages).toEqual(['https://cdn/first.png'])
-    expect(r.providerOptions.imageWithRoles).toBeUndefined()
+    expect(r.providerOptions.imageWithRoles).toEqual([
+      { url: 'https://cdn/first.png', role: 'first_frame' },
+    ])
     expect(r.effectivePromptSuffix).toBeUndefined()
   })
 
@@ -428,44 +430,88 @@ describe('buildVideoProviderOptions', () => {
     expect(r.effectivePromptSuffix).toBeUndefined()
   })
 
-  it('wires minimax_h3_content two refs as first/last even without first_last_frame mode', () => {
+  it('image_to_video uses only the first image as first_frame', () => {
     const r = buildVideoProviderOptions({
       modelKey: 'minimax-h3',
+      videoMode: 'image_to_video',
       referenceImages: ['https://cdn/a.png', 'https://cdn/b.png', 'https://cdn/c.png'],
     })
-    expect(r.providerOptions.referenceImages).toEqual([
-      'https://cdn/a.png',
-      'https://cdn/b.png',
-    ])
+    expect(r.providerOptions.image).toBe('https://cdn/a.png')
+    expect(r.providerOptions.referenceImages).toEqual(['https://cdn/a.png'])
     expect(r.providerOptions.imageWithRoles).toEqual([
       { url: 'https://cdn/a.png', role: 'first_frame' },
-      { url: 'https://cdn/b.png', role: 'last_frame' },
     ])
-    expect(r.effectivePromptSuffix).toBeUndefined()
   })
 
-  it('drops video and audio refs as metadata_only for minimax_h3_content', () => {
+  it.each([undefined, 'image_to_video'] as const)(
+    'drops video and audio refs as metadata_only when videoMode is %s',
+    (videoMode) => {
+      const bundle = buildVideoReferenceBundle([
+        { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
+        { refKey: 'V1', mediaType: 'video', url: 'https://cdn/style.mp4' },
+        { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/music.mp3' },
+      ])
+      const r = buildVideoProviderOptions({
+        modelKey: 'minimax-h3',
+        videoMode,
+        referenceBundle: bundle,
+      })
+      expect(r.meta.refWire).toBe('minimax_h3_content')
+      expect(r.meta.refVideoMode).toBe('metadata_only')
+      expect(r.meta.refAudioMode).toBe('metadata_only')
+      expect(r.providerOptions.referenceVideos).toBeUndefined()
+      expect(r.providerOptions.referenceAudios).toBeUndefined()
+      expect(r.effectivePromptSuffix).toBeUndefined()
+      expect(r.meta.droppedFields).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ field: 'referenceVideos' }),
+          expect.objectContaining({ field: 'referenceAudios' }),
+        ]),
+      )
+    },
+  )
+
+  it('reference_to_video passes image/video/audio refs natively', () => {
     const bundle = buildVideoReferenceBundle([
-      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/first.png' },
-      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/style.mp4' },
-      { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/music.mp3' },
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/b.png' },
+      { refKey: 'V1', mediaType: 'video', url: 'https://cdn/v.mp4' },
+      { refKey: 'A1', mediaType: 'audio', url: 'https://cdn/a.mp3' },
     ])
     const r = buildVideoProviderOptions({
       modelKey: 'minimax-h3',
+      videoMode: 'reference_to_video',
       referenceBundle: bundle,
     })
-    expect(r.meta.refWire).toBe('minimax_h3_content')
-    expect(r.meta.refVideoMode).toBe('metadata_only')
-    expect(r.meta.refAudioMode).toBe('metadata_only')
-    expect(r.providerOptions.referenceVideos).toBeUndefined()
-    expect(r.providerOptions.referenceAudios).toBeUndefined()
-    expect(r.effectivePromptSuffix).toBeUndefined()
-    expect(r.meta.droppedFields).toEqual(
+    expect(r.providerOptions.videoMode).toBe('reference_to_video')
+    expect(r.providerOptions.referenceImages).toEqual(['https://cdn/a.png', 'https://cdn/b.png'])
+    expect(r.providerOptions.referenceVideos).toEqual(['https://cdn/v.mp4'])
+    expect(r.providerOptions.referenceAudios).toEqual(['https://cdn/a.mp3'])
+    expect(r.providerOptions.imageWithRoles).toBeUndefined()
+    expect(r.meta.refVideoMode).toBe('native')
+    expect(r.meta.refAudioMode).toBe('native')
+    expect(r.meta.droppedFields).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ field: 'referenceVideos' }),
-        expect.objectContaining({ field: 'referenceAudios' }),
       ]),
     )
+  })
+
+  it('reference_to_video throws when image refs exceed MiniMax H3 limit', () => {
+    const bundle = buildVideoReferenceBundle(
+      Array.from({ length: 10 }, (_, i) => ({
+        refKey: `I${i + 1}`,
+        mediaType: 'image' as const,
+        url: `https://cdn/${i + 1}.png`,
+      })),
+    )
+    expect(() =>
+      buildVideoProviderOptions({
+        modelKey: 'minimax-h3',
+        videoMode: 'reference_to_video',
+        referenceBundle: bundle,
+      }),
+    ).toThrow('图最多 9 张')
   })
 })
 
