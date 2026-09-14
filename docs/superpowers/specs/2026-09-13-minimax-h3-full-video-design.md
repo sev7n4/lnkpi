@@ -270,6 +270,15 @@ points = ceil(durationSeconds * POINTS_PER_USD * usdPerSecond(resolution))
 | P2 | IR 回填；768 片 Regen 得 2K 新节点 |
 | 回归 | Agnes / Seedance 路径无破坏 |
 
+### P0 M1 实现状态
+
+- [x] catalog / profile / caps / Dock 三模式（单测）
+- [x] T2V / I2V / 首尾帧请求契约（mock fetch，非 live）
+- [x] 无 MiniMax Key 可读错误（单测）
+- [x] 积分 768P×1.2 / 2K×1.8 与导演台 forModel（单测）
+- [x] platform MINIMAX_API_KEY；BYOK 通道不改（单测）
+- [ ] live 出片（平台 Key / BYOK 各一条）— 未打
+
 ## 8. PR 拆分
 
 | PR | 内容 |
