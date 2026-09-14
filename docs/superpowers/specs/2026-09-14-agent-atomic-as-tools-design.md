@@ -1,7 +1,7 @@
 # Agent 原子创作工具化（Canvas Operator + Propose/Confirm）
 
 > 日期：2026-09-14  
-> 状态：**已批准**（2026-09-14；终局 B；执行令仅开至 **Phase 2a**；2b+ 另开 plan 门禁）  
+> 状态：**已批准**（2026-09-14；终局 B；执行令开至 **Phase 2b**；2c/2d/3 另开 plan 门禁）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 上级：Hybrid A / CS（[2026-08-08-agent-canvas-control-surface-design.md](./2026-08-08-agent-canvas-control-surface-design.md)）  
 > 相关：[2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md)、[2026-08-09-sidebar-ref-image-routing-design.md](./2026-08-09-sidebar-ref-image-routing-design.md)  
@@ -21,7 +21,7 @@
 | **D6** | Phase 3（规格原则）：`campaign` / `product_visual` 等大编排逐步工具化 / skill 多步任务；本文件 **不** 钉死 Phase 3 工具 API |
 | **D7** | 不回到 A 终局（永久保留 atomic 子图与 agent 双宇宙）；A 仅可作为 2a 过渡形态 |
 | **D8** | 相对 harness：**修订 CS-4 表述**——禁止的是 **计费执行工具**（`run_*` / destructive），允许 **propose / 画布突变** 工具进 visible |
-| **D9** | **执行令：** 本批准仅授权 **Phase 2a**（见 [plan](../plans/2026-09-14-agent-atomic-phase-2a.md)）。2b/2c/2d/3 须各自 plan + 金标门禁后再开 |
+| **D9** | **执行令：** Phase 2a **已完成**；**Phase 2b 已授权开工**（本分支按 [plan](../plans/2026-09-14-agent-atomic-phase-2b.md)）。2c/2d/3 另开 plan |
 
 ### 0.1 与 2026-09-14 Tool Plan Harness 的关系
 
@@ -196,8 +196,24 @@ RouteDecide（收紧后）
 | 子阶段 | 最低金标 |
 |--------|----------|
 | **2a** | 见下方 **§6.0.1 硬表**（无 `or`、无「迹象」） |
-| **2b+** | 多节点/填参/propose；完整 V1–V4（另开 plan 再钉断言） |
+| **2b+** | 见 **§6.0.2**（本阶段合入门禁）；完整 V1–V4 在 2b+2c 后宣称 |
 | **2d** | V6 双路径关门 |
+
+#### 6.0.2 Phase 2b 验收硬表（合入门禁）
+
+| ID | 检查 | 唯一期望 |
+|----|------|----------|
+| **B1** | `build_tool_plan().visible_names` | 含 `propose_generation`、`upsert_media_node`；**不含** `run_image_generation` / `run_video_generation` |
+| **B2** | `connect_nodes` | agent-visible（CORE）；单次 ≤20 edges |
+| **B3** | `propose_generation`（单测/mock） | 节点进入 pending；**零** `run_*` 调用 |
+| **B4** | `upsert_media_node` | 返回 `nodeId`；图像/视频节点可建 |
+| **B5** | tool/system 文案 | 禁止模型调 `run_*`；先 propose 再等人确认 |
+| **B6** | 路由回归 | WORKFLOW / 「帮我生成一张…」仍 `canvas_agent` |
+| **B7** | 确认执行 | 确认卡触发与 **dock 相同** Nest 生成入口（按 `nodeId`），不走 `atomic_create` 路由 |
+| **B8** | 无 prompt propose | 报错；不 pending；不 run_* |
+| **B9** | 生产冒烟 | 显式出图句 → agent 摆盘/propose 证据；无原子「基于引用内容…」卡 |
+
+**2b 钉死项：** 工具名 `propose_generation`；单 `node_id`；`upsert_media_node`；`connect_nodes` 可见且封顶 20；积分预估可选。
 
 #### 6.0.1 Phase 2a 验收硬表（合入门禁）
 

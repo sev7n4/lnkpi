@@ -2644,6 +2644,19 @@ async function handleNodeGenerate() {
   await generateForNode(fresh)
 }
 
+/** Phase 2b: agent propose confirm → same path as dock / retry by nodeId. */
+async function handleAgentGenerateNode(nodeId: string) {
+  const node = nodes.value.find((n) => n.id === nodeId)
+  if (!node) return
+  await generateForNode(node as EditableFlowNode)
+}
+
+/** Phase 2b: cancel propose → clear pending_confirm so Nest SoT can match after persist. */
+function handleClearProposeGeneration(nodeId: string) {
+  patchNodeData(nodeId, { status: 'draft' })
+  persistUserEdit()
+}
+
 async function handleSceneComposerSave() {
   await debouncedNodePatch.flush()
   const node = editorNode.value
@@ -3611,6 +3624,8 @@ onUnmounted(() => {
         @open-image-editor="handleAgentOpenImageEditor"
         @canvas-ref-pick-toggle="handleCanvasRefPickToggle"
         @expanded-change="onAgentExpandedChange"
+        @generate-node="handleAgentGenerateNode"
+        @clear-propose-generation="handleClearProposeGeneration"
         :can-open="canOpenAgentPanel"
       />
     </div>

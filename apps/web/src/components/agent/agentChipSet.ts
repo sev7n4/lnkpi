@@ -7,11 +7,17 @@ export type AgentChipSet =
   | 'copy'
   | 'topo'
   | 'atomic'
+  | 'generation_propose'
   | 'image_qa'
   | 'scheme_select'
   | 'macro_scheme_select'
   | 'delivery_confirm'
   | null
+
+export type AgentToolCallLike = {
+  name?: string | null
+  result?: unknown
+}
 
 // 修复 P2-1 + UX 文案：PLAN_SNIPPETS 兼容新格式 "1. 采纳推荐" 和旧格式 "1 / A"
 const PLAN_SNIPPETS = ['1. 采纳推荐', '1 / A', '确认方案', '请选择：'] as const
@@ -30,10 +36,60 @@ const TOPO_SNIPPETS = ['确认出图', '当前资产拓扑', '要改拓扑'] as 
 export interface ChipSetContext {
   /** 最近一条用户消息（用于判断用户是否在表达 modify intent） */
   latestUserText?: string
+  /** 最近一条 assistant 的 toolCalls（用于 Phase 2b propose_generation） */
+  toolCalls?: AgentToolCallLike[] | null
 }
 
 function userJustRequestedModify(latestUserText: string | undefined): boolean {
   return hasModifyIntent(latestUserText)
+}
+
+function parseToolResult(result: unknown): Record<string, unknown> | null {
+  if (result == null) return null
+  if (typeof result === 'object' && !Array.isArray(result)) {
+    return result as Record<string, unknown>
+  }
+  if (typeof result === 'string') {
+    const trimmed = result.trim()
+    if (!trimmed) return null
+    try {
+      const parsed = JSON.parse(trimmed) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>
+      }
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+function nodeIdFromProposePayload(payload: Record<string, unknown>): string | null {
+  const status = payload.status
+  if (status !== 'pending_confirm') return null
+  const raw = payload.nodeId ?? payload.node_id
+  if (typeof raw !== 'string') return null
+  const nodeId = raw.trim()
+  return nodeId || null
+}
+
+/**
+ * Last successful `propose_generation` with `status: pending_confirm` → nodeId.
+ * Accepts dict or JSON-string tool results; prefers camelCase `nodeId`, falls back to `node_id`.
+ */
+export function extractProposeGenerationNodeId(
+  toolCalls: AgentToolCallLike[] | null | undefined,
+): string | null {
+  if (!toolCalls?.length) return null
+  for (let i = toolCalls.length - 1; i >= 0; i -= 1) {
+    const tc = toolCalls[i]
+    if (String(tc?.name ?? '').trim() !== 'propose_generation') continue
+    const payload = parseToolResult(tc.result)
+    if (!payload) continue
+    const nodeId = nodeIdFromProposePayload(payload)
+    if (nodeId) return nodeId
+  }
+  return null
 }
 
 /** Which confirm chip row to show under the agent input. */
@@ -41,6 +97,11 @@ export function detectAgentChipSet(
   assistantText: string,
   ctx?: ChipSetContext,
 ): AgentChipSet {
+  // Phase 2b: dock-equivalent confirm (never atomic_create resume)
+  if (extractProposeGenerationNodeId(ctx?.toolCalls)) {
+    return 'generation_propose'
+  }
+
   const t = (assistantText || '').trim()
   if (!t) return null
 

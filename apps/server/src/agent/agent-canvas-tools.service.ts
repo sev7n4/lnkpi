@@ -559,6 +559,143 @@ export class AgentCanvasToolsService {
     return { nodes: mapping, actions }
   }
 
+  /**
+   * Phase 2b: single media-node upsert (image|video|text|audio).
+   * Create path wraps addNodesBatch so account modality defaults are stamped.
+   */
+  async upsertMediaNode(input: {
+    sessionId: string
+    userId: string
+    targetType: 'image' | 'video' | 'text' | 'audio' | string
+    prompt: string
+    title?: string
+    nodeId?: string
+    position?: { x: number; y: number }
+    stage?: boolean
+  }): Promise<{ nodeId: string; actions: CanvasAction[] }> {
+    const allowed = new Set(['image', 'video', 'text', 'audio'])
+    const targetType = String(input.targetType || '').trim()
+    if (!allowed.has(targetType)) {
+      throw new BadRequestException('targetType 必须是 image|video|text|audio')
+    }
+
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const existing = input.nodeId
+      ? canvas.nodes.find((n) => n.id === input.nodeId)
+      : undefined
+
+    if (existing) {
+      const data: Record<string, unknown> = { prompt: input.prompt }
+      if (typeof input.title === 'string' && input.title.trim()) {
+        data.title = input.title.trim()
+      }
+      const actions: CanvasAction[] = [
+        {
+          type: 'update_node',
+          payload: { id: existing.id, data },
+        },
+      ]
+      await this.applyOrStage(input.sessionId, actions, input.stage)
+      return { nodeId: existing.id, actions }
+    }
+
+    const title =
+      (typeof input.title === 'string' && input.title.trim()) ||
+      input.prompt.trim() ||
+      targetType
+    const batch = await this.addNodesBatch({
+      sessionId: input.sessionId,
+      userId: input.userId,
+      items: [
+        {
+          key: `upsert_media_${targetType}`,
+          title,
+          targetType,
+          prompt: input.prompt,
+          position: input.position,
+        },
+      ],
+      stage: input.stage,
+    })
+    const nodeId = batch.nodes[0]?.nodeId
+    if (!nodeId) throw new BadRequestException('创建媒体节点失败')
+    return { nodeId, actions: batch.actions }
+  }
+
+  /**
+   * Phase 2b: mark a single node pending_confirm. Never calls studio generate / run_*.
+   */
+  async proposeGeneration(input: {
+    sessionId: string
+    userId: string
+    nodeId: string
+  }): Promise<{
+    nodeId: string
+    status: 'pending_confirm'
+    summary: {
+      type: string
+      promptPreview: string
+      title?: string
+      imageModel?: string
+      videoModel?: string
+      textModel?: string
+      audioModel?: string
+      imageAspect?: string
+      imageResolution?: string
+      videoSettings?: unknown
+    }
+    actions: CanvasAction[]
+  }> {
+    const { canvas } = await this.loadOwnedSession(input.sessionId, input.userId)
+    const node = canvas.nodes.find((n) => n.id === input.nodeId)
+    if (!node) throw new NotFoundException('节点不存在')
+
+    const prompt = String(node.data?.prompt ?? '').trim()
+    if (!prompt) {
+      throw new BadRequestException('节点缺少 prompt，无法提出生成确认')
+    }
+
+    const title = nodeTitle(node) || undefined
+    const data = node.data ?? {}
+    const promptPreview = prompt.length > 120 ? `${prompt.slice(0, 120)}…` : prompt
+    const summary: {
+      type: string
+      promptPreview: string
+      title?: string
+      imageModel?: string
+      videoModel?: string
+      textModel?: string
+      audioModel?: string
+      imageAspect?: string
+      imageResolution?: string
+      videoSettings?: unknown
+    } = {
+      type: String(node.type),
+      promptPreview,
+      ...(title ? { title } : {}),
+    }
+    if (typeof data.imageModel === 'string' && data.imageModel) summary.imageModel = data.imageModel
+    if (typeof data.videoModel === 'string' && data.videoModel) summary.videoModel = data.videoModel
+    if (typeof data.textModel === 'string' && data.textModel) summary.textModel = data.textModel
+    if (typeof data.audioModel === 'string' && data.audioModel) summary.audioModel = data.audioModel
+    if (typeof data.imageAspect === 'string' && data.imageAspect) summary.imageAspect = data.imageAspect
+    if (typeof data.imageResolution === 'string' && data.imageResolution) {
+      summary.imageResolution = data.imageResolution
+    }
+    if (data.videoSettings && typeof data.videoSettings === 'object') {
+      summary.videoSettings = data.videoSettings
+    }
+
+    const actions: CanvasAction[] = [
+      {
+        type: 'update_node',
+        payload: { id: node.id, data: { status: 'pending_confirm' } },
+      },
+    ]
+    await this.applyOrStage(input.sessionId, actions, false)
+    return { nodeId: node.id, status: 'pending_confirm', summary, actions }
+  }
+
   async connectNodes(input: {
     sessionId: string
     edges: Array<{ source: string; target: string }>

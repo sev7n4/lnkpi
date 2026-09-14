@@ -45,7 +45,10 @@ import AgentProseBlock from '@/components/agent/presentation/AgentProseBlock.vue
 import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSchemeCards.vue'
 import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
 import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
-import { detectAgentChipSet } from '@/components/agent/agentChipSet'
+import {
+  detectAgentChipSet,
+  extractProposeGenerationNodeId,
+} from '@/components/agent/agentChipSet'
 import {
   chipSetFromInterrupt,
   interruptPayloadFromThreadState,
@@ -149,6 +152,10 @@ const emit = defineEmits<{
   expandedChange: [expanded: boolean]
   /** 切换画布引用 Pick 模式（由 CanvasPage 处理选中 seed） */
   canvasRefPickToggle: []
+  /** Phase 2b: confirm propose_generation → dock generateForNode(nodeId) */
+  generateNode: [nodeId: string]
+  /** Phase 2b: cancel propose → clear pending_confirm on canvas node */
+  clearProposeGeneration: [nodeId: string]
 }>()
 
 const pickMode = useCanvasRefPickMode()
@@ -453,19 +460,43 @@ const agentStream = useAgentStream({
 })
 
 /** 方案确认门 / 主文案确认门：侧栏快捷钮 */
+/** Dismissed propose chip key (`msgId:nodeId`) so confirm/cancel hide chips without sendPreset */
+const clearedProposeKey = ref<string | null>(null)
+
+const lastAssistantMessage = computed(() =>
+  [...agent.messages].reverse().find((m) => m.role === 'assistant'),
+)
+
+const proposeGenerationNodeId = computed(() =>
+  extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls),
+)
+
+function proposeChipKey(msgId: string, nodeId: string): string {
+  return `${msgId}:${nodeId}`
+}
+
 const chipSet = computed(() => {
   const fromInterrupt = chipSetFromInterrupt(interruptGate.value)
   if (fromInterrupt) return fromInterrupt
   if (agent.isStreaming) return null
-  const last = [...agent.messages].reverse().find((m) => m.role === 'assistant')
+  const last = lastAssistantMessage.value
+  const proposeId = extractProposeGenerationNodeId(last?.toolCalls)
+  if (last && proposeId) {
+    const key = proposeChipKey(last.id, proposeId)
+    if (clearedProposeKey.value !== key) return 'generation_propose'
+  }
   // 修复 P1-4：把"最近用户消息"传入 detectAgentChipSet，避免 modify 阶段误显示 plan 按钮
+  // Propose path is handled above (with dismiss latch); omit toolCalls here so latch sticks.
   const lastUser = [...agent.messages].reverse().find((m) => m.role === 'user')
-  return detectAgentChipSet(last?.content || '', { latestUserText: lastUser?.content })
+  return detectAgentChipSet(last?.content || '', {
+    latestUserText: lastUser?.content,
+  })
 })
 const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
+const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
 const awaitingImageQa = computed(() => chipSet.value === 'image_qa' && !isRetakePending.value)
 const isRetakePending = computed(() =>
   isRetakePendingPhase({
@@ -1331,6 +1362,28 @@ function fillExampleUtterance(text: string) {
   if (props.readOnly || agent.isStreaming) return
   input.value = text
   nextTick(() => composerRef.value?.focus())
+}
+
+function latchProposeChip(nodeId: string) {
+  const last = lastAssistantMessage.value
+  if (!last) return
+  clearedProposeKey.value = proposeChipKey(last.id, nodeId)
+}
+
+/** Phase 2b: confirm → CanvasPage generateForNode (never atomic sendPreset). */
+function confirmProposeGeneration() {
+  const nodeId = proposeGenerationNodeId.value
+  if (!nodeId || agent.isStreaming) return
+  latchProposeChip(nodeId)
+  emit('generateNode', nodeId)
+}
+
+/** Phase 2b: cancel → clear pending_confirm on canvas node. */
+function cancelProposeGeneration() {
+  const nodeId = proposeGenerationNodeId.value
+  if (!nodeId || agent.isStreaming) return
+  latchProposeChip(nodeId)
+  emit('clearProposeGeneration', nodeId)
 }
 
 async function sendPreset(text: string) {
@@ -2395,6 +2448,26 @@ defineExpose({
                 @click="sendPreset('3')"
               >
                 自己说明修改
+              </button>
+            </div>
+            <div v-else-if="awaitingGenerationPropose" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="generation-propose-confirm"
+                :disabled="agent.isStreaming"
+                @click="confirmProposeGeneration()"
+              >
+                确认生成
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                data-testid="generation-propose-cancel"
+                :disabled="agent.isStreaming"
+                @click="cancelProposeGeneration()"
+              >
+                取消
               </button>
             </div>
             <div v-else-if="awaitingAtomicConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
