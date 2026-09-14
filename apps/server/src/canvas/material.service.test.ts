@@ -420,6 +420,30 @@ describe('MaterialService video', () => {
     expect(videoGenerate).not.toHaveBeenCalled()
   })
 
+  it('allows MiniMax H3 audio-only reference_to_video', async () => {
+    await svc.generateVideo({
+      userId: 'u1',
+      shotId: 'shot-1',
+      prompt: 'walk',
+      model: 'minimax-h3',
+      videoMode: 'reference_to_video',
+      refs: [
+        {
+          refKey: 'A1',
+          mediaType: 'audio',
+          url: 'https://example.com/ref.mp3',
+        },
+      ],
+    })
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(consume).toHaveBeenCalled()
+    expect(materialCreate).toHaveBeenCalled()
+    expect(videoGenerate.mock.calls[0]?.[1]).toMatchObject({
+      videoMode: 'reference_to_video',
+      referenceAudios: ['https://example.com/ref.mp3'],
+    })
+  })
+
   it('rejects over-limit MiniMax H3 reference payloads with 400 before charging', async () => {
     await expect(
       svc.generateVideo({

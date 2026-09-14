@@ -126,6 +126,16 @@ function resolveVideoModeForProvider(
   return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
 }
 
+function isOfficialMiniMaxH3ReferenceToVideo(
+  model: string | undefined,
+  videoMode: VideoGenerationMode,
+): boolean {
+  if (videoMode !== 'reference_to_video') return false
+  const modelKey = model ?? ''
+  const profile = resolveVideoModelProfile(modelKey, modelKey)
+  return profile.refWire === 'minimax_h3_content' || /^minimax-h3$/i.test(modelKey)
+}
+
 function extractTextSources(refs?: GenerationRefPayload[]): MergeTextSource[] {
   return (refs ?? [])
     .filter((r) => r.mediaType === 'text' && r.text?.trim())
@@ -466,15 +476,15 @@ export class MaterialService {
 
     assertNoBlobRefs(refs)
     const referenceBundle = buildVideoReferenceBundle(refs ?? [], referenceImageUrl)
+    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
     if (
       referenceBundle.audios.length
       && !referenceBundle.images.length
       && !referenceBundle.videos.length
+      && !isOfficialMiniMaxH3ReferenceToVideo(model, resolvedVideoMode)
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
-
-    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
     if (resolvedVideoMode === 'reference_to_video') {
       const profile = resolveVideoModelProfile(model ?? '')
       if (profile.refWire === 'minimax_h3_content') {
@@ -1150,10 +1160,12 @@ export class MaterialService {
         ref.url = resolvePublicMediaUrls([ref.url])[0] ?? ref.url
       }
     }
+    const resolvedVideoMode = resolveVideoModeForProvider(videoMode, referenceBundle)
     if (
       referenceBundle.audios.length
       && !referenceBundle.images.length
       && !referenceBundle.videos.length
+      && !isOfficialMiniMaxH3ReferenceToVideo(model, resolvedVideoMode)
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
@@ -1185,7 +1197,7 @@ export class MaterialService {
         resolution,
         crop,
         referenceBundle,
-        videoMode: resolveVideoModeForProvider(videoMode, referenceBundle),
+        videoMode: resolvedVideoMode,
         gatewayModelHint: resolved.source === 'user' ? resolved.modelName : undefined,
         channelBaseUrl: resolved.credentials.baseUrl,
         generateAudio,

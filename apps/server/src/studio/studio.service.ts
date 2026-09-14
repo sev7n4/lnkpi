@@ -166,6 +166,16 @@ function resolveStudioVideoMode(
   return referenceBundle.images.length ? 'image_to_video' : 'text_to_video'
 }
 
+function isOfficialMiniMaxH3ReferenceToVideo(
+  model: string | undefined,
+  videoMode: VideoGenerationMode,
+): boolean {
+  if (videoMode !== 'reference_to_video') return false
+  const modelKey = model ?? ''
+  const profile = resolveVideoModelProfile(modelKey, modelKey)
+  return profile.refWire === 'minimax_h3_content' || /^minimax-h3$/i.test(modelKey)
+}
+
 function providerOpts(resolved: ResolvedGenerationProvider) {
   const { apiKey, baseUrl } = resolved.credentials
   if (resolved.source === 'user' && !apiKey) return undefined
@@ -1460,14 +1470,15 @@ export class StudioService {
         ref.url = resolvePublicMediaUrls([ref.url])[0] ?? ref.url
       }
     }
+    const resolvedVideoMode = resolveStudioVideoMode(videoMode, referenceBundle)
     if (
       referenceBundle.audios.length
       && !referenceBundle.images.length
       && !referenceBundle.videos.length
+      && !isOfficialMiniMaxH3ReferenceToVideo(model, resolvedVideoMode)
     ) {
       throw new BadRequestException('参考音频须配合参考图或视频')
     }
-    const resolvedVideoMode = resolveStudioVideoMode(videoMode, referenceBundle)
     if (resolvedVideoMode === 'reference_to_video') {
       const profile = resolveVideoModelProfile(model ?? '')
       if (profile.refWire === 'minimax_h3_content') {
