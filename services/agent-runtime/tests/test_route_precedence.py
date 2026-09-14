@@ -98,7 +98,7 @@ def test_sidebar_single_tiger_edit_not_chat():
     assert d["precedence_rule_id"] != "default_chat"
 
 
-def test_sidebar_open_without_edit_verb_stays_chat():
+def test_sidebar_open_without_edit_verb_stays_canvas_agent():
     d = _decide(
         {
             "messages": [{"role": "user", "content": "这只老虎看起来不错"}],
@@ -107,7 +107,7 @@ def test_sidebar_open_without_edit_verb_stays_chat():
             ],
         }
     )
-    assert d["flow_mode"] == "chat"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "default_chat"
 
 
@@ -174,12 +174,14 @@ def test_precedence_orch_ambiguous_ac04():
     assert d["clarify_question"] == ROUTE_CLARIFY_ORCHESTRATION
 
 
-def test_precedence_explore():
+def test_precedence_explore_retired_to_canvas_agent():
+    """M4: explore noun∧verb no longer wins; canvas ops → canvas_agent."""
     d = _decide(
         {"messages": [{"role": "user", "content": "看看画布上有哪些节点，状态怎么样？"}]}
     )
-    assert d["flow_mode"] == "explore_canvas"
-    assert d["precedence_rule_id"] == "explore"
+    assert d["flow_mode"] == "canvas_agent"
+    assert d["precedence_rule_id"] == "default_chat"
+    assert d["precedence_rule_id"] != "explore"
 
 
 def test_precedence_atomic_generate():
@@ -190,13 +192,13 @@ def test_precedence_atomic_generate():
 
 def test_precedence_empty():
     d = _decide({"messages": [{"role": "user", "content": "   "}]})
-    assert d["flow_mode"] == "chat"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "empty"
 
 
-def test_precedence_default_chat():
+def test_precedence_default_canvas_agent():
     d = _decide({"messages": [{"role": "user", "content": "你好"}]})
-    assert d["flow_mode"] == "chat"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "default_chat"
 
 
@@ -219,7 +221,7 @@ def test_precedence_clarify_resume():
 
 def test_sheng_xiao_girl_not_default_chat():
     d = _decide({"messages": [{"role": "user", "content": "请帮我生一个小女孩的图片"}]})
-    assert d["flow_mode"] != "chat"
+    assert d["flow_mode"] != "canvas_agent"
     assert d["precedence_rule_id"] != "default_chat"
     assert d["flow_mode"] in ("atomic_create", "clarify_route")
 
@@ -269,8 +271,24 @@ def test_generate_dongbei_hu_without_classifier_atomic():
 )
 def test_casual_chat_not_hijacked_by_media_create(utterance: str):
     d = _decide({"messages": [{"role": "user", "content": utterance}]})
-    assert d["flow_mode"] == "chat"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "default_chat"
+
+
+def test_canvas_copy_node_query_not_atomic_via_wenan():
+    for utterance in (
+        "看看画布文案节点",
+        "查询 text-40 文案节点，把内容更新为 explore-set-content-测试",
+    ):
+        d = _decide({"messages": [{"role": "user", "content": utterance}]})
+        assert d["flow_mode"] == "canvas_agent", utterance
+        assert d["precedence_rule_id"] == "default_chat", utterance
+
+
+def test_generate_wenan_still_atomic_or_clarify():
+    d = _decide({"messages": [{"role": "user", "content": "帮我生成一段耳机卖点文案"}]})
+    assert d["flow_mode"] in ("atomic_create", "clarify_route")
+    assert d["flow_mode"] != "canvas_agent"
 
 
 def test_vision_qa_with_sidebar_not_chat():
@@ -282,7 +300,7 @@ def test_vision_qa_with_sidebar_not_chat():
             ],
         }
     )
-    assert d["flow_mode"] != "chat"
+    assert d["flow_mode"] != "canvas_agent"
     assert d["precedence_rule_id"] != "default_chat"
     assert d["flow_mode"] in ("clarify_route", "atomic_create")
     if d["flow_mode"] == "clarify_route":
@@ -313,9 +331,9 @@ def test_sidebar_media_question_not_chat():
     assert "解读侧栏图片" in d["clarify_question"]
 
 
-def test_bare_question_without_sidebar_media_stays_chat():
+def test_bare_question_without_sidebar_media_stays_canvas_agent():
     d = _decide({"messages": [{"role": "user", "content": "这是什么？"}]})
-    assert d["flow_mode"] == "chat"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "default_chat"
 
 

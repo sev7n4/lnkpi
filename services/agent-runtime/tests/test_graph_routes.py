@@ -12,6 +12,11 @@ from app.graph.product_visual_v2.routing import (
 )
 
 
+def test_route_after_intake_agent_lanes_go_to_explore():
+    for mode in ("canvas_agent", "chat", "explore_canvas"):
+        assert route_after_intake({"flow_mode": mode}) == "explore"
+
+
 def test_route_after_intake_route_clarify():
     assert (
         route_after_intake({"phase": "clarify", "route_clarify": True, "clarify_question": "q"})

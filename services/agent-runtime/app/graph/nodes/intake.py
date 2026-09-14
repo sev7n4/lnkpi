@@ -28,7 +28,7 @@ SKILL_REQUIRED_CLARIFY = (
 )
 
 
-def make_intake_node(skills_dir: Path) -> Callable:
+def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
     async def intake(state: dict) -> dict:
         entries = discover_skills(skills_dir)
         by_id = {e.skill_id: e for e in entries}
@@ -58,6 +58,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
                             "clarify_question": None,
                             "route_clarify": False,
                             "user_brief": original or text,
+                            "previous_lane": "campaign",
                         }
                     return {
                         "phase": "clarify",
@@ -79,6 +80,7 @@ def make_intake_node(skills_dir: Path) -> Callable:
                         "route_clarify": False,
                         "pre_parsed_intent": classified,
                         "split_manifest": [],
+                        "previous_lane": "atomic_create",
                     }
                     mk = list(pending.get("mentioned_keys") or [])
                     if mk:
@@ -95,7 +97,13 @@ def make_intake_node(skills_dir: Path) -> Callable:
 
         ctx = assemble_route_context(state)
         decision = serialize_route_decision(
-            decide_route(ctx, valid_skill_ids=set(by_id.keys()))
+            decide_route(
+                ctx,
+                valid_skill_ids=set(by_id.keys()),
+                llm=llm,
+                messages=state.get("messages"),
+                previous_lane=state.get("previous_lane") or state.get("flow_mode"),
+            )
         )
 
         requested = str(ctx.get("requested_skill_id") or "").strip()
@@ -125,6 +133,24 @@ def make_intake_node(skills_dir: Path) -> Callable:
             if prev_skill and prev_skill in by_id:
                 skill_id = prev_skill
 
+        # Campaign / product_visual without a resolvable skill must clarify —
+        # never fall through builder to explore with a silent skill-less campaign.
+        skill_required_missing = (
+            skill_id is None
+            and flow_mode in ("campaign", "product_visual")
+            and not needs_regen_clarify
+            and not needs_route_clarify
+        )
+        if skill_required_missing:
+            flow_mode = "clarify_route"
+            needs_route_clarify = True
+            decision = {
+                **decision,
+                "flow_mode": "clarify_route",
+                "reason": "skill_required_without_skill",
+                "clarify_question": SKILL_REQUIRED_CLARIFY,
+            }
+
         resolved_flow = flow_mode if flow_mode != "clarify_route" else "chat"
 
         pending_atomic = pending_atomic_clarify(state)
@@ -148,6 +174,8 @@ def make_intake_node(skills_dir: Path) -> Callable:
             "route_context": ctx,
             "route_decision": decision,
             "route_clarify": False,
+            # Persist decided lane for multi-turn decide_lane (D7).
+            "previous_lane": decision.get("flow_mode") or resolved_flow,
         }
         if resolved_flow in ("atomic_create", "atomic_regenerate"):
             out["split_manifest"] = []

@@ -13,18 +13,27 @@ from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
     run_mandatory_explore,
-    select_explore_tool_names,
 )
+from app.graph.recent_turns import compress_recent_turns
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
+from app.tools.tool_plan import META_TOOL_NAME, build_tool_plan
+from app.tools.tool_registry import DEFERRED_TOOL_NAMES
+from app.tools.tool_search import make_tool_search_tool
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
 
+# Unified canvas_agent system prompt (spec §3.6) — also re-exported as chat._SYSTEM.
 _EXPLORE_SYSTEM = (
-    "你是 lnkpi 画布探索助手。用简洁中文回答。\n"
+    "你是 lnkpi 无限画布助手。用简洁中文回答。\n"
     "规则：\n"
     "1. 必须通过工具完成读写操作，禁止假装已执行。\n"
-    "2. 不要调用 run_*_generation；用户要出图/生成视频时，提示其直接描述创作需求。\n"
+    "2. 平台支持在画布上生成图片/视频等媒体；不得否认平台的图片生成能力，"
+    "也不要引导用户使用第三方作图工具。\n"
+    "3. 不要声称「正在生成」「马上生成」「已开始出图」；不要调用 run_*_generation。"
+    "若用户像要出图/生成视频，请引导他们清晰描述创作需求（如「帮我生成一张…图」），"
+    "或说明要解读侧栏图片；创作流程由后续路由进入，本通道未进入创作时勿假装已出图。\n"
+    "4. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
     "\n当前画布摘要：\n{summary}"
 )
 
@@ -40,6 +49,10 @@ def _latest_user_text(messages: list[Any]) -> str:
     return ""
 
 
+def _msg_is_human(msg: Any) -> bool:
+    role = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
+    return role in ("human", "user")
+
 def _serialize_tool_result(result: Any) -> str:
     if isinstance(result, str):
         return result
@@ -49,10 +62,31 @@ def _serialize_tool_result(result: Any) -> str:
         return str(result)
 
 
+def _bind_plan_tools(
+    llm: Any,
+    tools_by_name: dict[str, Any],
+    loaded: list[str],
+) -> tuple[Any, frozenset[str]]:
+    plan = build_tool_plan(loaded=loaded)
+    bound_tools = [tools_by_name[n] for n in plan.ordered_visible if n in tools_by_name]
+    return llm.bind_tools(bound_tools), plan.visible_names
+
+
 def make_explore_node(*, llm: Any, nest: Any) -> Callable:
     async def explore(state: dict) -> dict:
         all_tools = build_explore_tools(nest)
         tools_by_name = {t.name: t for t in all_tools}
+
+        loaded: list[str] = [
+            n for n in (state.get("tool_plan_loaded") or []) if n in DEFERRED_TOOL_NAMES
+        ]
+
+        def on_loaded(names: list[str]) -> None:
+            for name in names:
+                if name in DEFERRED_TOOL_NAMES and name not in loaded:
+                    loaded.append(name)
+
+        tools_by_name[META_TOOL_NAME] = make_tool_search_tool(on_loaded=on_loaded)
 
         try:
             summary = await nest.get_canvas_summary()
@@ -76,25 +110,25 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 "user_decision": "none",
                 "messages": [AIMessage(content=mandatory.reply_text or "已完成操作。")],
                 "explore_summary": summary if isinstance(summary, dict) else None,
+                "tool_plan_loaded": list(loaded),
             }
             if mandatory.canvas_commands:
                 out["canvas_commands"] = mandatory.canvas_commands
             return out
 
         record_explore_dispatch(intent, "llm")
-        tool_names = select_explore_tool_names(intent, user_text)
-        bound_tools = [tools_by_name[n] for n in sorted(tool_names) if n in tools_by_name]
-        llm_bound = llm.bind_tools(bound_tools)
+        llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
-        if intent == "node_write":
-            allowed = ", ".join(sorted(tool_names))
-            system_content += f"\n3. 本轮只允许调用下列工具之一：{allowed}。"
+        messages = list(state.get("messages") or [])
+        # Prior turns only — current user utterance is seeded separately (D7).
+        prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
+        recent = compress_recent_turns(prior)
 
-        convo: list[Any] = [
-            SystemMessage(content=system_content),
-            HumanMessage(content=user_text),
-        ]
+        convo: list[Any] = [SystemMessage(content=system_content)]
+        if recent.strip():
+            convo.append(SystemMessage(content=f"近期对话摘要：\n{recent}"))
+        convo.append(HumanMessage(content=user_text))
 
         final_reply = ""
         canvas_commands: list[dict[str, Any]] = []
@@ -112,14 +146,14 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and not write_retry_done
                 ):
                     write_retry_done = True
-                    tool_names = select_explore_tool_names("node_write", user_text)
-                    bound_tools = [tools_by_name[n] for n in sorted(tool_names) if n in tools_by_name]
-                    llm_bound = llm.bind_tools(bound_tools)
-                    allowed = ", ".join(sorted(tool_names))
+                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
                     convo.append(ai)
                     convo.append(
                         SystemMessage(
-                            content=f"必须调用下列写入工具之一完成操作：{allowed}。"
+                            content=(
+                                "必须调用写入类工具完成操作（如 set_node_prompt、"
+                                "import_workflow、upload_media_to_canvas 等）。"
+                            )
                         )
                     )
                     continue
@@ -160,6 +194,13 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                         tool_call_id=str(tool_call_id or name),
                     )
                 )
+                # Same-turn rebind after successful tool_search load.
+                if (
+                    str(name) == META_TOOL_NAME
+                    and isinstance(result, dict)
+                    and result.get("loaded")
+                ):
+                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
         else:
             final_reply = str(getattr(convo[-1], "content", "") or "").strip()
 
@@ -169,12 +210,13 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
 
-        out: dict[str, Any] = {
+        out = {
             "phase": "done",
             "skill_id": None,
             "user_decision": "none",
             "messages": [AIMessage(content=final_reply)],
             "explore_summary": summary if isinstance(summary, dict) else None,
+            "tool_plan_loaded": list(loaded),
         }
         if canvas_commands:
             out["canvas_commands"] = canvas_commands

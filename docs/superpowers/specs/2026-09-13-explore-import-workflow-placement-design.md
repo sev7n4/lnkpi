@@ -2,6 +2,7 @@
 
 > 日期：2026-09-13  
 > 状态：已批准（对话确认方案 **2** + §1–§4）  
+> **Retired（M4 / 2026-09-14）：** 生产路径不再依赖 `explore_canvas_signal` 名词∧动词门槛进 explore；画布 IO 走 `canvas_agent` + ToolPlan。本规格的 placement / 孤儿不变量仍有效。见 [2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md)。  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 相关：[2026-09-12-agent-import-workflow-design.md](./2026-09-12-agent-import-workflow-design.md)  
 > 上级：Hybrid A（explore LLM 白名单 vs graph 确定性路径）

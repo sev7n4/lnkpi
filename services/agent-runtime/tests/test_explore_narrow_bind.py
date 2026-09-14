@@ -1,62 +1,13 @@
-"""Tests for narrow bind tool selection (Phase 2b)."""
+"""Tests for plan-based explore bind (narrow-bind keyword cull removed)."""
 
-from app.graph.explore_dispatch import (
-    classify_explore_intent,
-    select_explore_tool_names,
-    select_narrow_write_tools,
-)
-from app.tools.definitions import EXPLORE_READ_TOOLS
-from app.tools.tool_registry import EXPLORE_TOOL_NAMES
+from app.graph.explore_dispatch import classify_explore_intent
+from app.tools.tool_plan import build_tool_plan
 
 
-def test_node_read_binds_read_subset():
-    names = select_explore_tool_names("node_read", "查询 image-16 状态")
-    assert names == EXPLORE_READ_TOOLS
-    assert len(names) <= 10
-
-
-def test_node_write_narrow_by_prompt_keyword():
-    names = select_narrow_write_tools("查询 prompt-1 节点，更新 prompt 字段")
-    assert names == frozenset({"set_node_prompt", "upsert_prompt_node"})
-    assert len(names) <= 5
-
-
-def test_node_write_narrow_by_upload_keyword():
-    names = select_narrow_write_tools("上传 https://picsum.photos/512 到画布")
-    assert names == frozenset({"upload_media_to_canvas"})
-
-
-def test_open_query_binds_full_whitelist():
-    names = select_explore_tool_names("open_query", "查询画布上有哪些节点")
-    assert names == EXPLORE_TOOL_NAMES
-
-
-def test_import_keywords_narrow_bind_import_workflow():
-    names = select_narrow_write_tools(
-        "请调用 import_workflow 把 lnkpi.workflow 导入画布"
-    )
-    assert "import_workflow" in names
-    assert len(names) <= 5
-
-
-def test_import_chinese_narrow_bind():
-    names = select_narrow_write_tools("把工作流导入当前画布")
-    assert "import_workflow" in names
-    assert len(names) <= 5
-
-
-def test_open_query_still_includes_import_after_whitelist():
-    names = select_explore_tool_names("open_query", "查询画布上有哪些节点")
-    assert "import_workflow" in names  # full whitelist includes it after Task 1
-    assert names == EXPLORE_TOOL_NAMES
-
-
-def test_node_write_import_utterance_binds_import_tool():
-    names = select_explore_tool_names(
-        "node_write",
-        "请用 import_workflow 导入工作流到画布",
-    )
-    assert "import_workflow" in names
+def test_plan_always_includes_import_workflow_in_core():
+    plan = build_tool_plan(loaded=[])
+    assert "import_workflow" in plan.visible_names
+    assert "export_media_package" in plan.visible_names
 
 
 def test_import_utterance_classifies_as_node_write():
@@ -64,29 +15,14 @@ def test_import_utterance_classifies_as_node_write():
     assert classify_explore_intent("把工作流导入当前画布") == "node_write"
 
 
-def test_bare_import_without_workflow_does_not_steal_upload():
-    names = select_narrow_write_tools("上传 https://picsum.photos/512 到画布")
-    assert names == frozenset({"upload_media_to_canvas"})
-    assert "import_workflow" not in names
-
-
-def test_import_image_url_to_canvas_binds_upload_not_workflow():
-    utterance = "导入图片 URL 到画布 image-16"
-    names = select_narrow_write_tools(utterance)
-    assert "upload_media_to_canvas" in names
-    assert names != frozenset({"import_workflow", "get_canvas_summary"})
-    assert classify_explore_intent(utterance) == "node_write"
-
-
-def test_import_workflow_with_http_url_narrow_bind():
-    utterance = "用 import_workflow 从 https://example.com/wf.json 导入工作流"
-    names = select_narrow_write_tools(utterance)
-    assert "import_workflow" in names
-    assert "upload_media_to_canvas" not in names
-
-
-def test_import_workflow_chinese_with_cdn_url():
+def test_import_workflow_chinese_with_cdn_url_classifies_node_write():
     utterance = "导入工作流 https://cdn.example/wf.json"
-    names = select_narrow_write_tools(utterance)
-    assert "import_workflow" in names
     assert classify_explore_intent(utterance) == "node_write"
+
+
+def test_plan_visible_ignores_utterance_keywords():
+    """Classify may still label intent; bind set must not shrink by keywords."""
+    plan = build_tool_plan(loaded=[])
+    assert "upload_media_to_canvas" in plan.visible_names
+    assert "import_workflow" in plan.visible_names
+    assert "set_node_prompt" in plan.visible_names

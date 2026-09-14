@@ -81,12 +81,12 @@ cases:
   - id: rt-chat-01
     state:
       messages: [{ role: user, content: "你好" }]
-    gold: { flow_mode: chat }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-chat-02
     state:
       messages: [{ role: user, content: "这个音箱怎么样" }]
-    gold: { flow_mode: chat }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-regen-01
     state:
@@ -138,17 +138,17 @@ cases:
   - id: rt-explore-01
     state:
       messages: [{ role: user, content: "看看画布上有哪些节点，状态怎么样？" }]
-    gold: { flow_mode: explore_canvas, reason: explore_canvas_intent }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-explore-02
     state:
       messages: [{ role: user, content: "查询我的资产库有哪些素材" }]
-    gold: { flow_mode: explore_canvas }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-explore-cancel-01
     state:
       messages: [{ role: user, content: "取消 image-16 节点上正在进行的生成任务" }]
-    gold: { flow_mode: explore_canvas }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-video-ref-t1
     state:
@@ -199,7 +199,7 @@ cases:
   - id: rt-chat-sink-04
     state:
       messages: [{ role: user, content: "生活怎么样" }]
-    gold: { flow_mode: chat }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-chat-sink-05
     state:
@@ -223,12 +223,12 @@ cases:
   - id: rt-chat-sink-08
     state:
       messages: [{ role: user, content: "先生这张图不错" }]
-    gold: { flow_mode: chat, reason: default_chat }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-09
     state:
       messages: [{ role: user, content: "整个图表看起来不错" }]
-    gold: { flow_mode: chat, reason: default_chat }
+    gold: { flow_mode: canvas_agent, reason: default_chat }
 
   - id: rt-chat-sink-10
     state:

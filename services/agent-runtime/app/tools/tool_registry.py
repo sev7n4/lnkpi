@@ -11,6 +11,13 @@ class ToolPlacement(str, Enum):
     UI_COMMAND = "ui_command"
 
 
+class ToolExposure(str, Enum):
+    CORE = "core"
+    DEFERRED = "deferred"
+    GRAPH_ONLY = "graph_only"
+    META = "meta"
+
+
 class ToolTier(str, Enum):
     READ = "read"
     WRITE_LIGHT = "write_light"
@@ -49,6 +56,7 @@ TOOL_PLACEMENTS: dict[str, ToolPlacement] = {
     "export_media_package": ToolPlacement.EXPLORE,
     "get_image_edit_capabilities": ToolPlacement.EXPLORE,
     "import_workflow": ToolPlacement.EXPLORE,
+    "tool_search": ToolPlacement.EXPLORE,
     "focus_node": ToolPlacement.UI_COMMAND,
     "focus_nodes": ToolPlacement.UI_COMMAND,
     "undo": ToolPlacement.UI_COMMAND,
@@ -62,6 +70,25 @@ TOOL_PLACEMENTS: dict[str, ToolPlacement] = {
     "arrange_nodes_grid": ToolPlacement.GRAPH_NODE,
     "move_nodes": ToolPlacement.GRAPH_NODE,
     "apply_layout_ops": ToolPlacement.GRAPH_NODE,
+}
+
+DEFERRED_TOOL_NAMES = frozenset({
+    "get_image_edit_capabilities",
+    "list_public_assets",
+    "introduce_nodes_to_agent",
+})
+
+TOOL_EXPOSURES: dict[str, ToolExposure] = {
+    name: (
+        ToolExposure.META
+        if name == "tool_search"
+        else ToolExposure.GRAPH_ONLY
+        if placement == ToolPlacement.GRAPH_NODE
+        else ToolExposure.DEFERRED
+        if name in DEFERRED_TOOL_NAMES
+        else ToolExposure.CORE
+    )
+    for name, placement in TOOL_PLACEMENTS.items()
 }
 
 # Explore whitelist: EXPLORE + UI_COMMAND (ui cmds are explore-bound today).

@@ -82,12 +82,16 @@ atomic_create_hints:
   - 来一段
   - 写一段
   - 配一段
+  # Longer copy-create phrases only — bare 「文案」must not force atomic (canvas 文案节点 edits).
+  - 生成文案
+  - 写一段文案
+  - 输出文案
 
 text_default_keywords:
   - 分镜脚本
   - 脚本
   - 广告词
-  - 文案
+  # No bare 「文案」— substring matches canvas-edit utterances like 「看看画布文案节点」.
   - 口播稿
 
 prompt_explicit_keywords:

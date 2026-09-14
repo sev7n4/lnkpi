@@ -1,4 +1,4 @@
-"""Tests for explore routing signals."""
+"""Tests for explore routing signals (fixture / deprecated explore_canvas_signal)."""
 
 from app.graph.explore_route import explore_canvas_signal, explore_explicit_intent
 
@@ -35,6 +35,7 @@ def test_upload_media_explore_only():
 
 
 def test_import_workflow_phrase_routes_explore():
+    """Deprecated signal fixture — production no longer gates on this."""
     u = "请调用 import_workflow 工具，把 lnkpi.workflow JSON 合并进当前画布"
     assert explore_canvas_signal(u, blocked_by_atomic=False) is True
 

@@ -1,5 +1,7 @@
 # Agent 画布控制面 — Hybrid 设计规格
 
+> **L0 修订（2026-09-14）：** 部分条款由 [2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md) 修订——L0 允许 `decide_lane` LLM；`explore`/`chat` 合并为 `canvas_agent` + ToolPlan。CS-4（禁止 explore bind gen/destructive）**仍然有效**。
+
 > 状态：**Accepted**（2026-08-08，v1.2 增补 LangGraph Command 边界）  
 > 方案：**A — Hybrid**（延续 ADR-003 / P5）  
 > 目标：Agent 可驱动画布 **Tool 级原语 + 原子能力 + 编排**，不将高成本生成 ReAct 化
@@ -17,7 +19,7 @@
 |---|------|
 | **CS-1** | Harness SSOT：`NestCanvasClient` + `/agent/internal/*`；StructuredTool 为可选 LLM 绑定层 |
 | **CS-2** | **atomic / campaign / single_node** 保持 LangGraph 确定性子图，不 bind 生成类 tools |
-| **CS-3** | 新增 **`explore_canvas` 流**：`bind_tools` 仅 **读 + 轻写 + 生成生命周期** |
+| **CS-3** | **`canvas_agent` 流**（兼容别名 `explore_canvas` / `chat`）：`bind_tools(ToolPlan.visible)` 仅 **读 + 轻写 + 生成生命周期** |
 | **CS-4** | **禁止** explore 调用 `run_*_generation`、destructive `remove_*`、批量拓扑 |
 | **CS-5** | TS `CANVAS_TOOLS` 标记 deprecated；runtime 降级改调 Nest API（P4） |
 | **CS-6** | Tool 分层见 §0.4 |

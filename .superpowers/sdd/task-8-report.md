@@ -1,158 +1,73 @@
-# Task 8 Report: End-to-end verification + PR
+# Task 8 Report: M4 — Retire production `explore_canvas_signal` + docs
 
-**Branch:** `feature/image-prompting-guide-catalog-spec`  
-**Date:** 2026-09-11  
-**Status:** Automated verification PASS; PR opened; Manual Dock checklist deferred
+## Status
 
----
+**DONE.** Production `_rule_explore` removed from `PRECEDENCE_RULES`. `explore_canvas_signal` marked deprecated / test-only. Former explore noun utterances fall through to `canvas_agent` (`default_chat`) under flag=off; hard short-circuit + gen lanes unchanged. Docs: Phase 2b narrow-bind / explore noun **Retired**; CS-3 updated to `canvas_agent` + ToolPlan. Merge does **not** require `LNKPI_ROUTE_LLM_PRIMARY=1`.
 
-## Step 1: Verification matrix
-
-### 1. `pnpm --filter @lnkpi/shared test`
+## Commit
 
 ```
-Test Files  23 passed (23)
-Tests       135 passed (135)
-Duration    18.58s
-Exit code   0
+refactor(agent-runtime): retire explore noun-verb production routing
 ```
 
-Includes guide-related: `imagePromptingGuide/resolveGuideRequest.test.ts` (4), `imagePromptingGuide/catalog.test.ts` (5).
+Hash: `52e51cf6` — on `feature/codex-style-tool-plan-harness` (base HEAD was `2a44b02e`).
 
-### 2. `pnpm --filter @lnkpi/agent test`
+## Files Changed
 
-```
-Test Files  21 passed (21)
-Tests       130 passed (130)
-Duration    18.70s
-Exit code   0
-```
+| File | Action |
+|------|--------|
+| `services/agent-runtime/app/graph/route_precedence.py` | Drop `_rule_explore` / `_explore_match` from production list |
+| `services/agent-runtime/app/graph/explore_route.py` | Deprecate `explore_canvas_signal` (test/fixture only) |
+| `services/agent-runtime/app/graph/route_decide.py` | Comment: explore retired → canvas_agent |
+| `services/agent-runtime/skills/atomic-create/eval-route-set.yaml` | rt-explore-* gold → `canvas_agent` |
+| `services/agent-runtime/tests/test_route_precedence.py` | Explore → canvas_agent assertion |
+| `services/agent-runtime/tests/test_route_decide_explore.py` | Soft canvas ops → `canvas_agent` |
+| `services/agent-runtime/tests/test_explore_route.py` | Fixture-only note on signal tests |
+| `docs/.../2026-08-08-agent-canvas-control-surface-design.md` | CS-3 → canvas_agent + ToolPlan |
+| `docs/.../2026-08-09-explore-tool-reliability-phase2-design.md` | Phase 2b narrow-bind **Retired** |
+| `docs/.../2026-09-13-explore-import-workflow-placement-design.md` | explore_canvas_signal production gate **Retired** |
+| `docs/.../2026-09-14-codex-style-tool-plan-harness-design.md` | §7 Retired status for noun gate / narrow-bind |
 
-Includes `prompt-modes/generate-guide-overlay.test.ts` (2).
-
-### 3. Web guide unit tests
+## Test Results
 
 ```bash
-pnpm --filter @lnkpi/web exec vitest run \
-  src/components/canvas/dock-studio/panels/guideSceneApply.test.ts \
-  src/components/canvas/refine/guideEditIntentApply.test.ts
+# Gate (brief) — primary=1; soft paths fall back to canvas_agent without live LLM
+LNKPI_ROUTE_LLM_PRIMARY=1 python -m pytest tests/test_eval_route_set.py \
+  tests/test_decide_lane.py tests/test_canvas_agent_multiturn_export.py \
+  tests/test_tool_plan.py tests/test_tool_search_rebind.py \
+  tests/test_tool_placement_invariants.py -v
+# → 22 passed
+
+# Default flag=off regression
+python -m pytest tests/test_route_precedence.py tests/test_route_decide_explore.py \
+  tests/test_explore_route.py tests/test_route_hard.py tests/test_eval_route_set.py \
+  tests/test_graph_routes.py tests/test_decide_lane.py -v
+# → 82 passed
 ```
 
-```
-Test Files  2 passed (2)
-Tests       12 passed (12)
-Duration    7.76s
-Exit code   0
-```
+(Used main-repo `.venv` at `lnkpi/services/agent-runtime/.venv`.)
 
-- `guideSceneApply.test.ts`: 3 passed  
-- `guideEditIntentApply.test.ts`: 9 passed  
+## Concerns / Notes
 
-### 4. `python -m pytest tests/test_guide_taxonomy.py -v`
+1. **~~False-positive `media_create_high`~~ (fixed follow-up):** bare `文案` in `text_default_keywords` / `TEXT_DEFAULT_KEYWORDS` forced `utterance_suggests_atomic_create` → `atomic_generate`. Removed bare keyword; added longer create hints (`生成文案` / `写一段文案` / `输出文案`). Canvas edits like `看看画布文案节点` / `查询 text-40 文案节点…` → `canvas_agent`. Did **not** re-add `_rule_explore`. IR modality may still see `文案` for create classification.
+2. **`explore_explicit_intent` / node-id helpers** remain for explore dispatch / features — only the production precedence rule + noun∧verb gate were retired.
+3. Default `LNKPI_ROUTE_LLM_PRIMARY=0` is OK for merge: hard + `canvas_agent` default work without explore noun gate; primary-on is optional and does not need live LLM for this gate (fallback = agent).
 
-Used venv: `services/agent-runtime/.venv/bin/python` (system `python` / `python3` lacked pytest).
+## Follow-up fix (bare 文案)
 
-```
-collected 4 items
-test_g3_exact_text PASSED
-test_e5_cutout PASSED
-test_no_false_positive_on_hello PASSED
-test_prefer_edit_intent_when_both_match PASSED
-4 passed, 1 warning in 0.60s
-Exit code   0
-```
+**Commit:** `fix(agent-runtime): stop bare 文案 hint forcing atomic after explore retirement`
 
-Warning: Pydantic V2 `class Config` deprecation in `app/config.py` (pre-existing, unrelated).
-
-### 5. `pnpm build`
-
-```
-Scope: 4 of 5 workspace projects
-packages/shared build: Done
-packages/agent build: Done
-apps/web build: Done (vue-tsc -b && vite build; ~58.83s)
-apps/server build: Done
-Exit code   0
-```
-
-Vite noted Rollup `#__PURE__` annotation warnings from `@vueuse/core` and chunk-size warnings (>500 kB) — pre-existing / non-blocking.
-
-**Automated matrix result: ALL PASS**
-
----
-
-## Step 2: Manual checklist
-
-| Item | Result |
+| File | Change |
 |------|--------|
-| Prompt Dock G3/G1: empty prefill; non-empty keep text | **Manual follow-up** — no browser UI available in this verification session |
-| Refine E3/E4 templates; E5 disabled tooltip | **Manual follow-up** |
-| Stain preset still works | **Manual follow-up** |
-| Prompt generate works without `guideSceneId` | Covered by unit tests (`generate-guide-overlay`); UI path still **manual follow-up** |
+| `skills/atomic-create/intent-taxonomy.yaml` | Drop bare `文案` from `text_default_keywords`; add longer create hints |
+| `app/graph/atomic_intent.py` | Align fallbacks with taxonomy |
+| `tests/test_route_decide_explore.py` | Regression: canvas 文案节点 → canvas_agent; 生成文案 still create-ish |
+| `tests/test_route_precedence.py` | Same via `apply_route_precedence` |
 
-Unit coverage already asserts empty vs non-empty Dock prefill and Refine intent/E5 gating; interactive Dock/Refine UX still needs a human pass in the running app.
-
----
-
-## Step 3: PR
-
-- Pushed `feature/image-prompting-guide-catalog-spec` to origin (via `gh` token HTTPS; plain HTTPS hit HTTP2/connect failures)  
-- **PR:** https://github.com/sev7n4/lnkpi/pull/278  
-- Body adapted: automated test-plan items checked; Manual Dock checklist left unchecked
-
----
-
-## Commits on branch (vs main)
-
-```
-ef22a5a feat(runtime): image prompting guide taxonomy hooks
-436c61d fix(web): gate refine guide intents on real ref count
-531a184 feat(web): Refine edit intent chips with capability gates
-7abd824 feat(web): Prompt/Image Dock guide scene chips
-a0dc0ae feat(agent): overlay guide scene rules on prompt generate
-8b9243a feat(shared): add P0 image prompting guide scenes and intents
-0274460 feat(shared): resolveGuideRequest and profile capabilities
-6c23e14 feat(shared): scaffold imagePromptingGuide catalog types
-2b28e61 docs: add Image Prompting Guide Catalog implementation plan
-7e63a13 docs: add Image Prompting Guide Catalog design
+```bash
+python -m pytest tests/test_route_decide_explore.py tests/test_route_precedence.py \
+  tests/test_route_hard.py tests/test_decide_lane.py -v
+# → 60 passed
 ```
 
----
-
-## Concerns / follow-ups
-
-1. **Manual Dock + Refine checklist** not executed in-browser — please verify before merge.  
-2. Image 2.5 model wiring remains deferred (design appendix A) — intentional.  
-3. Unrelated local dirty files (`.pnpm-store/`, deploy scripts, task-3/7 report edits) were **not** included in the PR.
-
----
-
-## Final review fixes
-
-**Date:** 2026-09-11  
-**Status:** Done — one fix pass for whole-branch review findings
-
-### Changes
-
-1. **Chinese refine gate messages** — `resolveGuideRequest` blocked reasons are now Chinese and include missing ref roles when present (e.g. `需要至少 2 张参考图：人物 + 服装`; E5: `当前模型不支持透明背景`).
-2. **`refRoles` hints in RefineSidePanel** — when an edit intent chip is active, show `参考图：{hints}` under the chip row.
-3. **Non-empty scene apply feedback** — Prompt Dock + Image Dock toast when `didPrefill === false`: `已套用「…」场景约束（未改写现有提示词）`.
-4. **`preferredParams` P0** — Image Dock maps unambiguous `size` (e.g. `1024x1536` → `2:3`) via `mapPreferredSizeToAspect`; resolution/quality/background not mapped. Code comment + PR note: full merge deferred to Image 2.5 specialty.
-5. **Manual checklist** — Browser spot-check **not run** (no local/dev app tab or authenticated preview available in this session). Covered by unit tests instead:
-   - empty vs non-empty prefill (`guideSceneApply.test.ts`)
-   - E5 disabled Chinese tooltip (`guideEditIntentApply.test.ts` / `editIntentDisabledReason`)
-   - Chinese min-ref block with roles (`resolveGuideRequest.test.ts`)
-
-### Tests re-run (PASS)
-
-| Suite | Result |
-|-------|--------|
-| `@lnkpi/shared` resolveGuideRequest + catalog | 10 passed |
-| web: guideSceneApply + mapPreferredSizeToAspect + guideEditIntentApply | 15 passed |
-| `@lnkpi/agent` generate-guide-overlay | 2 passed |
-| `services/agent-runtime` test_guide_taxonomy.py | 4 passed |
-
-### Commit / push
-
-- Commit: `0f9a973` `fix(web): localize guide gates and scene apply UX`
-- Pushed to origin (no force); PR https://github.com/sev7n4/lnkpi/pull/278 (+ deferred preferredParams note comment)
+Explore contract utterances containing `文案` (`set_node_prompt`, `set_node_content`) route to `canvas_agent`.
