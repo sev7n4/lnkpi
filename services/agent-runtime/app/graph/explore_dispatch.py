@@ -71,7 +71,16 @@ _WORKFLOW_IMPORT_ANCHORS = (
     "import_workflow",
 )
 _UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
-_PLANNER_ANCHORS = ("规划工作流", "接到", "改版", "新模板", "存成一套")
+_PLANNER_ANCHORS = (
+    "规划工作流",
+    "接到",
+    "改版",
+    "新模板",
+    "存成一套",
+    "将锁定这些核心步骤",
+    "确认锁定这些核心步骤",
+    "这份工作流更像哪一种",
+)
 _PLANNER_CONFIRM = "确认落到画布"
 _PLANNER_WRITE_TOOLS = frozenset({
     "preview_workflow_template",

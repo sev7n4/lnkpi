@@ -27,6 +27,7 @@ const REQUIRED_IDS = [
   'second-derive-frozen-graft-seed',
   'recognize-storyboard',
   'recognize-i2v',
+  'graft-conflict-same-catalog',
 ] as const
 
 type EvalExpect = {
@@ -158,7 +159,7 @@ describe('recipe planner gold eval', () => {
     expect(existsSync(FIXTURE_PATH)).toBe(true)
   })
 
-  it('covers the eight spec §10.6 cases', () => {
+  it('covers spec §10.6 gold eval cases', () => {
     const fixtures = JSON.parse(readFileSync(FIXTURE_PATH, 'utf8')) as EvalCase[]
     expect(fixtures.map((item) => item.id)).toEqual([...REQUIRED_IDS])
   })

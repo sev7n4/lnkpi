@@ -146,11 +146,15 @@ class PromoteWorkflowTemplateInput(BaseModel):
     )
     confirmed_seed_keys: list[str] | None = Field(
         default=None,
-        description="new_template 必须带上用户确认的核心步骤 key",
+        description="新模板二次确认后带上用户确认的核心步骤 key；第一步预览不要带",
     )
     title: str | None = Field(default=None, description="可选模板标题")
     parent_id: str | None = Field(default=None, description="改版时的父模板 id")
     parent_version: str | None = Field(default=None, description="改版时的父模板版本")
+    confirmed: bool | None = Field(
+        default=None,
+        description="改版二次确认后为 true；第一步预览不要带",
+    )
 
 
 class ConnectNodesInput(BaseModel):
@@ -325,6 +329,7 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
         title: str | None = None,
         parent_id: str | None = None,
         parent_version: str | None = None,
+        confirmed: bool | None = None,
     ) -> dict:
         return await client.promote_recipe(
             mode=mode,
@@ -333,6 +338,7 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             title=title,
             parent_id=parent_id,
             parent_version=parent_version,
+            confirmed=confirmed,
         )
 
     async def upsert_media_node(
@@ -612,9 +618,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 coroutine=promote_workflow_template,
                 name="promote_workflow_template",
                 description=(
-                    "两步确认后再调用：先问「保存为当前模板的改版」还是「存成一套新模板」"
-                    "（认不到父模板则只问新模板）。用户选出后再调用，禁止一条 tool 静默入库。"
-                    "mode=new_template 必须带 confirmed_seed_keys。"
+                    "两步确认后再入库。第一步：用户选出改版或新模板后立刻调用，"
+                    "改版不要带 confirmed，新模板不要带 confirmed_seed_keys；"
+                    "会返回 needs_variant_confirm 或 needs_seed_confirm 与用户文案。"
+                    "第二步：用户点头后再调用，改版带 confirmed=true，"
+                    "新模板带 confirmed_seed_keys。禁止一条 tool 静默入库。"
                     "把导出的工作流晋升到当前用户的模板目录。"
                 ),
                 args_schema=PromoteWorkflowTemplateInput,

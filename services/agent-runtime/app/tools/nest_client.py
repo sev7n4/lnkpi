@@ -694,6 +694,7 @@ class NestCanvasClient:
         title: str | None = None,
         parent_id: str | None = None,
         parent_version: str | None = None,
+        confirmed: bool | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -710,6 +711,8 @@ class NestCanvasClient:
             body["parentId"] = parent_id
         if parent_version is not None:
             body["parentVersion"] = parent_version
+        if confirmed is not None:
+            body["confirmed"] = confirmed
         return await self._post("/agent/internal/promote-recipe", body)
 
     async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:

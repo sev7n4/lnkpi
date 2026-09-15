@@ -124,5 +124,13 @@
     "expect": {
       "parentId": "image-to-video"
     }
+  },
+  {
+    "id": "graft-conflict-same-catalog",
+    "parentId": "ecommerce-product-visual",
+    "delta": { "graft": { "recipeId": "ecommerce-product-visual", "version": "1.0.0" } },
+    "expect": {
+      "strippedCodes": ["graft_conflict"]
+    }
   }
 ]
