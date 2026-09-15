@@ -21,18 +21,18 @@ CONFIDENCE_TAU = 0.55
 
 ALLOWED_LANES: tuple[str, ...] = (
     "canvas_agent",
-    "atomic_regenerate",
-    "single_node",
     "campaign",
     "product_visual",
     "clarify_route",
 )
 
+_RETIRED_LANES_TO_AGENT = frozenset({"atomic_create", "atomic_regenerate", "single_node"})
+
 _DECIDE_LANE_SYSTEM = """你是 Lnkpi 画布会话的 lane 路由器。根据用户 utterance、压缩多轮上下文与路由特征，输出 JSON（不要 markdown 代码块）。
 
 输出 schema：
 {
-  "lane": "canvas_agent | atomic_regenerate | single_node | campaign | product_visual | clarify_route",
+  "lane": "canvas_agent | campaign | product_visual | clarify_route",
   "confidence": 0.0,
   "reason": "short",
   "clarify_question": null
@@ -40,11 +40,12 @@ _DECIDE_LANE_SYSTEM = """你是 Lnkpi 画布会话的 lane 路由器。根据用
 
 硬约束：
 - 无明确编排 hard 信号时偏向 canvas_agent（有工具控制面；闲聊也可）
-- 明确「生成一张/来一张」类单点创作 → canvas_agent（由 agent 工具摆盘 + propose，禁止 atomic_create）
+- 明确「生成一张/来一张」类单点创作 → canvas_agent（由 agent 工具摆盘 + propose）
+- 「重新生成/再试一次」或焦点节点快速生成 → canvas_agent（禁止 atomic_regenerate / single_node）
 - 营销/详情页多节点编排 → campaign 或 clarify_route
 - 歧义且无法安全偏向 agent → clarify_route，并给出 clarify_question
 - confidence 为 0–1；不确定时降低 confidence
-- 禁止输出 lane=atomic_create（已退役）
+- 禁止输出 lane=atomic_create / atomic_regenerate / single_node（已退役）
 """
 
 
@@ -70,9 +71,9 @@ def parse_decide_lane_json(raw: str) -> DecideLaneResult | None:
     lane = str(data.get("lane") or "").strip()
     if lane == "chat" or lane == "explore_canvas":
         lane = "canvas_agent"
-    # Phase 2d: map retired atomic_create before ALLOWED check
-    if lane == "atomic_create":
-        logger.info("decide_lane mapped atomic_create → canvas_agent (phase 2d)")
+    # Phase 2d / 2d.2: map retired lanes before ALLOWED check
+    if lane in _RETIRED_LANES_TO_AGENT:
+        logger.info("decide_lane mapped %s → canvas_agent (phase 2d.2)", lane)
         lane = "canvas_agent"
     if lane not in ALLOWED_LANES:
         return None
@@ -170,8 +171,8 @@ def apply_decide_lane_postprocess(result: DecideLaneResult) -> DecideLaneResult:
     """Low confidence into a graph lane → clarify_route (τ = 0.55)."""
     lane = result.get("lane") or "canvas_agent"
     conf = _clamp_confidence(result.get("confidence"))
-    # Treat retired atomic_create as a graph lane for low-confidence clarify,
-    # then map any surviving atomic_create → canvas_agent (Phase 2d).
+    # Treat retired lanes as graph lanes for low-confidence clarify,
+    # then map any surviving retired lane → canvas_agent (Phase 2d / 2d.2).
     if conf < CONFIDENCE_TAU and lane not in ("canvas_agent", "clarify_route"):
         return DecideLaneResult(
             lane="clarify_route",
@@ -180,8 +181,8 @@ def apply_decide_lane_postprocess(result: DecideLaneResult) -> DecideLaneResult:
             clarify_question=result.get("clarify_question")
             or "请确认：出图创作，还是画布控制面操作？",
         )
-    if lane == "atomic_create":
-        logger.info("decide_lane postprocess mapped atomic_create → canvas_agent")
+    if lane in _RETIRED_LANES_TO_AGENT:
+        logger.info("decide_lane postprocess mapped %s → canvas_agent", lane)
         return DecideLaneResult(
             lane="canvas_agent",
             confidence=conf,

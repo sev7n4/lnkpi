@@ -110,6 +110,11 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
         requested = str(ctx.get("requested_skill_id") or "").strip()
         skill_id: str | None = requested if requested in by_id else None
         flow_mode = decision["flow_mode"]
+        # Phase 2d.2: never write live atomic_create / atomic_regenerate / single_node.
+        if flow_mode in ("atomic_create", "atomic_regenerate", "single_node"):
+            skill_id = None
+            flow_mode = "canvas_agent"
+            decision = {**decision, "flow_mode": "canvas_agent"}
         mode = "modify" if decision.get("is_modify") else "create"
         proposed_brief: str | None = None
         needs_regen_clarify = decision.get("reason") == "regen_no_checkpoint"
@@ -126,8 +131,6 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
                 proposed_brief = BRIEF_RESET_PREFIX + text
             else:
                 proposed_brief = text
-        elif flow_mode in ("atomic_create", "atomic_regenerate", "single_node"):
-            skill_id = None
 
         if skill_id is None and flow_mode == "campaign":
             prev_skill = str(state.get("skill_id") or "").strip()
