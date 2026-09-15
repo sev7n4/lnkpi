@@ -352,9 +352,20 @@ class RunVisionQaDto {
   @IsString()
   sceneKind?: string
 
-  @IsOptional()
   @IsString()
-  model?: string
+  providerRef!: string
+
+  @IsString()
+  model!: string
+
+  @IsString()
+  apiKey!: string
+
+  @IsString()
+  baseUrl!: string
+
+  @IsIn(['user', 'platform'])
+  source!: 'user' | 'platform'
 }
 
 class WaitImageGenerationDto {

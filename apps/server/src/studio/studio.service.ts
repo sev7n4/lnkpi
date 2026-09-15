@@ -32,6 +32,7 @@ import {
   resolvePromptGenerateText,
   Seedance1xUnsupportedError,
   stripRefImagePromptTags,
+  supportsVisionTextModel,
   type MergeTextSource,
 } from '@lnkpi/agent'
 import {
@@ -79,6 +80,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
+import type { ProviderContext } from '../provider/provider-context'
 import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
@@ -439,22 +441,60 @@ export class StudioService {
 
   /** Internal agent path: vision QA for product_visual — no points charge. */
   async runVisionQaInternal(
-    userId: string,
+    _userId: string,
     params: {
       systemPrompt: string
       userContent: string
       imageUrls: string[]
-      model?: string
+      provider: ProviderContext
     },
   ): Promise<{ text: string; visionUsed: boolean }> {
-    const resolved = await this.resolver.resolveForGeneration(userId, params.model, 'text')
-    const { entry } = resolveModelKey('text', resolved.modelName)
-    const gatewayModelId =
-      resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
-    if (resolved.source === 'user' && !resolved.credentials.apiKey) {
-      throw new Error('missing api key')
+    const provider = params.provider
+    if (!provider?.providerRef || !provider.model || !provider.baseUrl || !provider.source) {
+      return {
+        text: JSON.stringify({
+          pass: false,
+          reason: '识图凭证不完整，请重新选择模型后再试',
+          errorClass: 'VISION_PROVIDER_CONTEXT_INVALID',
+          product_summary: '',
+        }),
+        visionUsed: false,
+      }
     }
-    const opts = providerOpts(resolved)
+    if (!provider.apiKey?.trim()) {
+      if (provider.source === 'user') {
+        return {
+          text: JSON.stringify({
+            pass: false,
+            reason: '自定义渠道未配置 API Key',
+            errorClass: 'VISION_BYOK_MISSING_KEY',
+            product_summary: '',
+          }),
+          visionUsed: false,
+        }
+      }
+      return {
+        text: JSON.stringify({
+          pass: false,
+          reason: '识图凭证不完整，请重新选择模型后再试',
+          errorClass: 'VISION_PROVIDER_CONTEXT_INVALID',
+          product_summary: '',
+        }),
+        visionUsed: false,
+      }
+    }
+    if (!supportsVisionTextModel(provider.model)) {
+      return {
+        text: JSON.stringify({
+          pass: false,
+          reason:
+            '当前模型不支持识图。请换成 DeepSeek Flash 或 Gemini / GPT-4o 后再问。我没有根据这张图编造产品信息。',
+          errorClass: 'VISION_UNSUPPORTED',
+          product_summary: '',
+        }),
+        visionUsed: false,
+      }
+    }
     const urls = params.imageUrls.map((u) => u.trim()).filter(Boolean)
     if (!urls.length) {
       throw new BadRequestException('imageUrls 不能为空')
@@ -462,9 +502,9 @@ export class StudioService {
     const providerRefs = await inlineUpstreamReferenceImages(urls)
     try {
       return await generateVisionQaJson(params.systemPrompt, params.userContent, providerRefs, {
-        model: gatewayModelId,
-        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        model: provider.model,
+        apiKey: provider.apiKey,
+        baseUrl: provider.baseUrl,
         maxRetries: 2,
       })
     } catch (err) {
