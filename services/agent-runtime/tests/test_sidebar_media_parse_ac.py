@@ -58,10 +58,27 @@ def _image_att(url: str) -> dict[str, str]:
     return {"mediaType": "image", "url": url}
 
 
-def _parse_node(nest: FakeVisionNest, *, model: str = "deepseek-flash"):
+def _vision_creds(*, model: str = "deepseek-flash", provider_ref: str | None = None) -> dict:
+    bare = model.split("::")[-1] if "::" in model else model
+    ref = provider_ref or (model if "::" in model else f"platform::{bare}")
+    return {
+        "provider_ref": ref,
+        "model": bare,
+        "api_key": "sk-test",
+        "base_url": "https://api.example/v1",
+        "source": "platform",
+    }
+
+
+def _parse_node(
+    nest: FakeVisionNest,
+    *,
+    model: str = "deepseek-flash",
+    provider_ref: str | None = None,
+):
     return make_parse_sidebar_media_node(
         nest=nest,
-        vision_creds={"model": model},
+        vision_creds=_vision_creds(model=model, provider_ref=provider_ref),
         skills_dir=".",
     )
 
@@ -223,7 +240,8 @@ async def test_ac06_channel_prefixed_flash_passed_to_nest_as_is():
     out = await _parse_node(nest, model=CHANNEL_FLASH)(
         {"sidebar_attachments": [_image_att(URL_A)]}
     )
-    assert nest.calls[0]["model"] == CHANNEL_FLASH
+    assert nest.calls[0]["provider_ref"] == CHANNEL_FLASH
+    assert nest.calls[0]["model"] == "deepseek-flash"
     assert out["sidebar_media_parse"]["vision_used"] is True
 
 
@@ -234,6 +252,7 @@ async def test_ac07_non_vision_prefix_and_explore_forbids_empty_listing():
         {"sidebar_attachments": [_image_att(URL_A)]}
     )
     parse = parse_out["sidebar_media_parse"]
+    assert nest.calls == []
     assert parse["vision_used"] is False
     result, messages = await _run_explore(
         parse=parse,
