@@ -1,7 +1,7 @@
 # 图片节点宫格裁剪（Grid Slice）设计
 
 日期：2026-09-15  
-状态：Draft（待产品确认后进入 implementation plan）  
+状态：Approved（P0 前端切图；P1 后端 slice + Agent tool 必做，契约/落子与 P0 对齐）  
 相关：Wave A 浮层二次操作 IA；放大落子模式；精修工作台壳；Agent 侧栏编排（P1）
 
 ## 1. 背景与目标
@@ -154,17 +154,19 @@ url → decode → equalRectangles(cols,rows) → canvas export blobs
 - 落子事务：先切齐并 persist 全部成功，再批量改画布；失败不留孤儿节点。
 - 积分：P0 本地后处理，不扣生成积分；未登录 persist 策略与现有上传/放大一致。
 
-### 6.3 P1：后端切分与 Agent（必做扩展，非 P0 实现）
+### 6.3 P1：后端切分与 Agent（**必做**，不在 P0 实现）
+
+**产品确认（2026-09-15）**：交互 P0 仍用前端；**后端 slice 纳入 P1 必做项**；**契约与落子字段必须与 P0 前端对齐**（同一 §6.1 + `data.gridSlice` + 源不变/边/grid 布局语义）。
 
 **动机**：侧栏 Agent 编排示例——芯片上传实拍 → 生成电商九宫格整图 → **切 9 张** → 分别连视频节点填营销提示词。Agent 无法依赖浏览器 Canvas，必须调用服务端能力。
 
 **P1 交付**
 
-- `POST /studio/image/slice`（或等价）：服务端 sharp（或现有图片管线）按契约切图并持久化，返回 `urls[]`。
-- Agent tool（如 `grid_slice_image`）：入参契约同上；可选 `applyCanvasActions` 落子 + 边 + grid 布局。
-- 人机「自定义工作台 / 一键切」可逐步改为调同一 API（或保留前端快路径），**对外语义不变**。
+- `POST /studio/image/slice`（或等价）：服务端 sharp（或现有图片管线）按 **§6.1 同一契约** 切图并持久化，返回 `urls[]`（行主序、长度=`cols*rows`）。
+- Agent tool（如 `grid_slice_image`）：入参/出参同 §6.1；落子时写入相同 `data.gridSlice`，`addEdge(source→child)` + `layoutNodesInGrid`，与人机 P0 行为一致。
+- 人机路径可继续前端快路径，或逐步改调同一 API；**对外语义与字段不得分叉**。
 
-P0 spec 必须冻结 §6.1，避免日后两套行列/排序语义。
+P0 实现与单测必须冻结 §6.1 与 `data.gridSlice` 形状，作为 P1 的对接验收基线。
 
 ## 7. 与现有模块关系
 
@@ -207,8 +209,8 @@ P0 spec 必须冻结 §6.1，避免日后两套行列/排序语义。
 
 | 阶段 | 内容 |
 |------|------|
-| P0 | 顶栏 + 一键切 + 自定义工作台（精修同壳）+ 前端切图落子 |
-| P1 | `POST .../slice` + Agent tool + 可选人机改调 API；不等分拖线可选更后 |
+| P0 | 顶栏 + 一键切 + 自定义工作台（精修同壳）+ 前端切图落子；冻结 §6.1 / `data.gridSlice` |
+| P1（必做） | `POST .../slice` + Agent tool；契约与落子字段与 P0 对齐；不等分拖线可选更后 |
 
 ## 11. 修订记录
 
@@ -216,3 +218,4 @@ P0 spec 必须冻结 §6.1，避免日后两套行列/排序语义。
 |------|------|
 | 2026-09-15 | 初稿：竞品对齐入口、精修同壳专房、前端 P0、Agent 后端契约 P1 |
 | 2026-09-15 | 补 §4.3：节点顶栏挂载与 SelectionActionBar / Wave A 关系 |
+| 2026-09-15 | Approved：P0 前端；P1 后端 slice 必做；契约/落子与 P0 对齐 |
