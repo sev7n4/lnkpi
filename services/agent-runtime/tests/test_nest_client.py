@@ -289,6 +289,18 @@ async def test_instantiate_recipe_explicit_utterance_wins(nest_client, captured)
 
 
 @pytest.mark.asyncio
+async def test_instantiate_recipe_ignores_confirm_chip_utterance(nest_client, captured):
+    nest_client.last_user_utterance = "规划一个角色三视图工作流，年轻亚洲女性模特半身肖像"
+    await nest_client.instantiate_recipe(
+        parent_id="model-turnaround",
+        parent_version="1.0.0",
+        utterance="确认落到画布",
+    )
+    req = _last(captured)
+    assert req["json"]["utterance"] == "规划一个角色三视图工作流，年轻亚洲女性模特半身肖像"
+
+
+@pytest.mark.asyncio
 async def test_arrange_nodes_along_edges(nest_client, captured):
     result = await nest_client.arrange_nodes_along_edges(node_ids=["a", "b"], gap=40)
     assert result["actions"] == []

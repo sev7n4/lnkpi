@@ -463,6 +463,6 @@ Explore 工具把当前侧栏附件随 instantiate 传给 Nest，不在 Python �
 | 项 | 要求 |
 |----|------|
 | 助手文案 | preview 已不回完整 IR 之后，模型仍可能自造「种子／出图方式 t2i」。explore 在规划绑定回合对助手回复做**确定性清洗**：去掉种子链/嫁接/t2i/i2i/v_ref/graft/parentId/目录 id；保留「模板 / 核心步骤 / 改版 / 接到另一套模板」与节点标题。确认句「请确认是否把改动落到画布」不得被洗掉。 |
-| instantiate 原话 | 模型漏传 `utterance` 时，runtime 自动带上最近一次**非 chip** 的用户原话（跳过「确认落到画布」等），供 Nest `fillRecipeSlots` 写 prompt 槽。显式传入的 `utterance` 优先。 |
+| instantiate 原话 | 模型漏传 `utterance`，或只传了「确认落到画布」等 chip 时，runtime 带上最近一次**非 chip** 用户原话，供 Nest `fillRecipeSlots` 写 prompt 槽。非 chip 的显式 `utterance` 优先。 |
 
 本切片仍不做 §14.6。
