@@ -15,7 +15,12 @@ from app.graph.explore_dispatch import (
     run_mandatory_explore,
     select_narrow_write_tools,
 )
-from app.graph.planner_copy import pick_planner_slot_utterance, sanitize_planner_reply
+from app.graph.planner_copy import (
+    format_planner_preview_hitl,
+    is_machine_payload_reply,
+    pick_planner_slot_utterance,
+    sanitize_planner_reply,
+)
 from app.graph.recent_turns import compress_recent_turns
 from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
 from app.metrics import record_explore_dispatch
@@ -212,6 +217,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         called_tools: set[str] = set()
         write_retry_done = False
         promote_followup = ""
+        preview_hitl = ""
 
         for _ in range(MAX_EXPLORE_TOOL_ROUNDS):
             ai = await llm_bound.ainvoke(convo)
@@ -275,6 +281,12 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 follow = planner_promote_followup(result) if str(name) == "promote_workflow_template" else None
                 if follow:
                     promote_followup = follow
+                if (
+                    str(name) == "preview_workflow_template"
+                    and isinstance(result, dict)
+                    and not result.get("error")
+                ):
+                    preview_hitl = format_planner_preview_hitl(result)
                 # Same-turn rebind after successful tool_search load.
                 if (
                     str(name) == META_TOOL_NAME
@@ -292,11 +304,21 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             "preview_workflow_template" in called_tools
             and "instantiate_workflow_template" not in called_tools
         ):
-            if _PLANNER_CONFIRM_LINE not in (final_reply or ""):
+            if preview_hitl:
+                final_reply = preview_hitl
+            elif _PLANNER_CONFIRM_LINE not in (final_reply or ""):
                 final_reply = f"{(final_reply or '').rstrip()}\n{_PLANNER_CONFIRM_LINE}".strip()
 
         if promote_followup and promote_followup not in (final_reply or ""):
             final_reply = f"{(final_reply or '').rstrip()}\n{promote_followup}".strip()
+
+        if is_machine_payload_reply(final_reply):
+            if preview_hitl and "instantiate_workflow_template" not in called_tools:
+                final_reply = preview_hitl
+            elif "instantiate_workflow_template" in called_tools:
+                final_reply = "已按模板落到画布。"
+            else:
+                final_reply = "已完成操作。"
 
         if (
             "preview_workflow_template" in visible
