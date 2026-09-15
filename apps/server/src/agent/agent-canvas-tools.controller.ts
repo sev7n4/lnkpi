@@ -743,6 +743,28 @@ class UpscaleImageDto {
   provider?: string
 }
 
+class GridSliceImageDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsOptional()
+  @IsString()
+  sourceUrl?: string
+
+  @IsOptional()
+  @IsString()
+  nodeId?: string
+
+  @IsNumber()
+  cols!: number
+
+  @IsNumber()
+  rows!: number
+}
+
 class SaveAgentMessageDto {
   @IsString()
   sessionId!: string
@@ -1215,6 +1237,12 @@ export class AgentCanvasToolsController {
   @Post('upscale-image')
   async upscaleImage(@Body() dto: UpscaleImageDto) {
     const data = await this.tools.upscaleImage(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('grid-slice-image')
+  async gridSliceImage(@Body() dto: GridSliceImageDto) {
+    const data = await this.tools.gridSliceImage(dto)
     return { code: 0, message: 'ok', data }
   }
 

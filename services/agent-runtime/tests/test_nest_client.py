@@ -130,6 +130,22 @@ def nest_client(captured):
             )
         if path.endswith("/arrange-nodes-along-edges"):
             return httpx.Response(200, json=_ok({"actions": []}))
+        if path.endswith("/grid-slice-image"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "urls": [
+                            "https://cdn.example/s1.png",
+                            "https://cdn.example/s2.png",
+                        ],
+                        "cols": 2,
+                        "rows": 1,
+                        "width": 800,
+                        "height": 400,
+                    }
+                ),
+            )
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -334,6 +350,59 @@ async def test_run_image_generation(nest_client, captured):
     assert result["status"] == "completed"
     req = _last(captured)
     assert req["json"] == {"sessionId": SESSION_ID, "userId": USER_ID, "nodeId": "n1"}
+
+
+@pytest.mark.asyncio
+async def test_grid_slice_image(nest_client, captured):
+    result = await nest_client.grid_slice_image(
+        cols=2,
+        rows=1,
+        source_url="https://cdn.example/src.png",
+        node_id="img-1",
+    )
+    assert result["urls"] == [
+        "https://cdn.example/s1.png",
+        "https://cdn.example/s2.png",
+    ]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/grid-slice-image"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "cols": 2,
+        "rows": 1,
+        "sourceUrl": "https://cdn.example/src.png",
+        "nodeId": "img-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_grid_slice_image_uses_long_timeout(monkeypatch):
+    from app.tools.nest_client import NestCanvasClient
+
+    captured: dict = {}
+
+    async def fake_post(self, path, body, *, timeout=None, tool_name=None):
+        captured["path"] = path
+        captured["timeout"] = timeout
+        return {
+            "urls": ["https://cdn.example/s1.png"],
+            "cols": 1,
+            "rows": 1,
+            "width": 100,
+            "height": 100,
+        }
+
+    monkeypatch.setattr(NestCanvasClient, "_post", fake_post)
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+    )
+    await client.grid_slice_image(cols=1, rows=1, source_url="https://cdn.example/src.png")
+    assert captured["path"] == "/agent/internal/grid-slice-image"
+    assert captured["timeout"] == 120.0
 
 
 @pytest.mark.asyncio

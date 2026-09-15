@@ -6,6 +6,7 @@ import { IMPORT_PLACE_MARGIN, rectsOverlap, unionNodeBBox, type CanvasData } fro
 import { PrismaService } from '../prisma/prisma.service'
 import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
+import { ImageSliceService } from '../studio/image-slice.service'
 import { UpscaleService } from '../studio/upscale.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
@@ -38,6 +39,7 @@ describe('AgentCanvasToolsService', () => {
   const materialFindFirst = vi.fn()
   const persistRemote = vi.fn()
   const upscale = vi.fn()
+  const sliceImage = vi.fn()
   const userWorkflowRecipeCreate = vi.fn()
 
   const defaultPrefs = {
@@ -136,6 +138,18 @@ describe('AgentCanvasToolsService', () => {
       providerId: 'fal',
       recordId: 'up-1',
     })
+    sliceImage.mockResolvedValue({
+      urls: [
+        'https://cdn.example/slice-1.png',
+        'https://cdn.example/slice-2.png',
+        'https://cdn.example/slice-3.png',
+        'https://cdn.example/slice-4.png',
+      ],
+      cols: 2,
+      rows: 2,
+      width: 800,
+      height: 600,
+    })
     listGenerations.mockResolvedValue([
       {
         id: 'g1',
@@ -214,6 +228,10 @@ describe('AgentCanvasToolsService', () => {
         {
           provide: UpscaleService,
           useValue: { upscale },
+        },
+        {
+          provide: ImageSliceService,
+          useValue: { slice: sliceImage },
         },
       ],
     }).compile()
@@ -1594,6 +1612,78 @@ describe('AgentCanvasToolsService', () => {
         providerId: 'fal',
         recordId: 'up-1',
       })
+    })
+
+    it('gridSliceImage prefers sourceUrl and delegates to ImageSliceService', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://cdn.example/node.png' },
+          },
+        ],
+        edges: [],
+      }
+      const result = await svc.gridSliceImage({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+        sourceUrl: 'https://cdn.example/explicit.png',
+        cols: 2,
+        rows: 2,
+      })
+      expect(sliceImage).toHaveBeenCalledWith({
+        userId: 'u1',
+        sourceUrl: 'https://cdn.example/explicit.png',
+        cols: 2,
+        rows: 2,
+        sessionId: 's1',
+      })
+      expect(result.urls).toHaveLength(4)
+    })
+
+    it('gridSliceImage resolves node data.url when sourceUrl is omitted', async () => {
+      canvas = {
+        nodes: [
+          {
+            id: 'img-1',
+            type: 'image',
+            position: { x: 0, y: 0 },
+            data: { url: 'https://cdn.example/node.png' },
+          },
+        ],
+        edges: [],
+      }
+      await svc.gridSliceImage({
+        sessionId: 's1',
+        userId: 'u1',
+        nodeId: 'img-1',
+        cols: 3,
+        rows: 3,
+      })
+      expect(sliceImage).toHaveBeenCalledWith({
+        userId: 'u1',
+        sourceUrl: 'https://cdn.example/node.png',
+        cols: 3,
+        rows: 3,
+        sessionId: 's1',
+      })
+    })
+
+    it('gridSliceImage rejects when neither sourceUrl nor resolvable node url', async () => {
+      await expect(
+        svc.gridSliceImage({ sessionId: 's1', userId: 'u1', cols: 2, rows: 2 }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+      canvas = {
+        nodes: [{ id: 'img-1', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+        edges: [],
+      }
+      await expect(
+        svc.gridSliceImage({ sessionId: 's1', userId: 'u1', nodeId: 'img-1', cols: 2, rows: 2 }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+      expect(sliceImage).not.toHaveBeenCalled()
     })
 
     it('getImageEditCapabilities reports only inpaint when image has url', async () => {

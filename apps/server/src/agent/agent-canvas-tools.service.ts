@@ -27,6 +27,7 @@ import { PUBLIC_ASSETS } from '../assets/public-assets.data'
 import { MaterialService } from '../canvas/material.service'
 import { sanitizeAgentMessageContent } from './agentMessageSanitize'
 import { StudioService, type StudioRefInput } from '../studio/studio.service'
+import { ImageSliceService } from '../studio/image-slice.service'
 import { UpscaleService } from '../studio/upscale.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import {
@@ -370,6 +371,7 @@ export class AgentCanvasToolsService {
     @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
     @Inject(PersistRemoteService) private readonly persistRemote: PersistRemoteService,
     @Inject(UpscaleService) private readonly upscaleService: UpscaleService,
+    @Inject(ImageSliceService) private readonly imageSliceService: ImageSliceService,
   ) {}
 
   private async loadAccountGenPrefs(userId: string): Promise<AccountGenPrefs> {
@@ -2371,6 +2373,35 @@ export class AgentCanvasToolsService {
       imageUrl: input.imageUrl,
       scale: input.scale,
       providerId: input.provider,
+    })
+  }
+
+  async gridSliceImage(input: {
+    sessionId: string
+    userId: string
+    sourceUrl?: string
+    nodeId?: string
+    cols: number
+    rows: number
+  }) {
+    let sourceUrl = String(input.sourceUrl ?? '').trim()
+    if (!sourceUrl) {
+      if (!input.nodeId) {
+        throw new BadRequestException('需要提供 sourceUrl 或 nodeId')
+      }
+      await this.loadOwnedSession(input.sessionId, input.userId)
+      const node = await this.getNode({ sessionId: input.sessionId, nodeId: input.nodeId })
+      sourceUrl = String(node.data?.url ?? '').trim()
+      if (!sourceUrl) {
+        throw new BadRequestException('节点缺少可切图的 URL')
+      }
+    }
+    return this.imageSliceService.slice({
+      userId: input.userId,
+      sourceUrl,
+      cols: input.cols,
+      rows: input.rows,
+      sessionId: input.sessionId,
     })
   }
 

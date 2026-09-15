@@ -36,6 +36,7 @@ EXPLORE_WRITE_TOOLS = frozenset({
     "connect_nodes",
     "duplicate_node",
     "upload_media_to_canvas",
+    "grid_slice_image",
     "apply_sidebar_attachments",
     "save_node_to_asset_library",
     "apply_asset_to_node",
@@ -223,6 +224,19 @@ class UploadMediaInput(BaseModel):
     url: str = Field(description="Public media URL to attach")
     media_type: str = Field(description="image, video, or audio")
     title: str | None = Field(default=None, description="Optional node title")
+
+
+class GridSliceImageInput(BaseModel):
+    cols: int = Field(description="Grid column count")
+    rows: int = Field(description="Grid row count")
+    source_url: str | None = Field(
+        default=None,
+        description="Image URL to slice; preferred over node_id when both are set",
+    )
+    node_id: str | None = Field(
+        default=None,
+        description="Canvas image node id; reads data.url from the session when source_url is omitted",
+    )
 
 
 class ExportMediaInput(BaseModel):
@@ -477,6 +491,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
     ) -> dict:
         return await client.upload_media_to_canvas(
             url=url, media_type=media_type, title=title
+        )
+
+    async def grid_slice_image(
+        cols: int,
+        rows: int,
+        source_url: str | None = None,
+        node_id: str | None = None,
+    ) -> dict:
+        return await client.grid_slice_image(
+            cols=cols,
+            rows=rows,
+            source_url=source_url,
+            node_id=node_id,
         )
 
     async def export_media_package(node_ids: list[str]) -> dict:
@@ -893,6 +920,24 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="upload_media_to_canvas",
                 description="Add a media node from a public URL",
                 args_schema=UploadMediaInput,
+            ),
+        ),
+        (
+            "grid_slice_image",
+            StructuredTool.from_function(
+                coroutine=grid_slice_image,
+                name="grid_slice_image",
+                description=(
+                    "Equal-split an image into cols×rows tiles and return uploaded URLs. "
+                    "Does NOT write to canvas. Requires source_url or node_id (prefer source_url when both). "
+                    "Placement sequence after slicing: "
+                    "1) grid_slice_image → urls[] (keep sourceNodeId); "
+                    "2) add_nodes_batch — create N image nodes with title '{source} · 格{i+1}' and positions in a grid to the right of source (gap ~36px); "
+                    "3) update_nodes_batch — patch each child with url, label, status='completed', "
+                    "gridSlice={sourceNodeId, index:i, cols, rows}; "
+                    "4) connect_nodes — sourceNodeId → each child."
+                ),
+                args_schema=GridSliceImageInput,
             ),
         ),
         (

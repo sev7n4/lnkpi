@@ -612,6 +612,30 @@ class NestCanvasClient:
             body["title"] = title
         return await self._post("/agent/internal/upload-media-to-canvas", body)
 
+    async def grid_slice_image(
+        self,
+        *,
+        cols: int,
+        rows: int,
+        source_url: str | None = None,
+        node_id: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "cols": cols,
+            "rows": rows,
+        }
+        if source_url:
+            body["sourceUrl"] = source_url
+        if node_id:
+            body["nodeId"] = node_id
+        return await self._post(
+            "/agent/internal/grid-slice-image",
+            body,
+            timeout=120.0,
+        )
+
     async def export_media_package(self, *, node_ids: list[str]) -> dict[str, Any]:
         return await self._post(
             "/agent/internal/export-media-package",
