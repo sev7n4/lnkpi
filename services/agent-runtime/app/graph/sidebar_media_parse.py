@@ -14,6 +14,28 @@ NON_VISION_PARSE_ERROR = (
 _SUCCESS_PREFIX = "根据参考图："
 _FAILURE_PREFIX = "未能根据参考图识别产品。"
 
+# Transient failures must not poison thread URL cache (↺ reuse would stay empty forever).
+_RETRYABLE_ERROR_MARKERS = (
+    "操作超时",
+    "timeout",
+    "timed out",
+    "429",
+    "rate limit",
+    "暂时不可用",
+    "downstream",
+    "empty reply",
+    "server disconnected",
+    "connecterror",
+    "remoteprotocol",
+)
+
+
+def is_retryable_parse_error(error: str | None) -> bool:
+    if not error or not str(error).strip():
+        return False
+    lowered = str(error).lower()
+    return any(marker.lower() in lowered for marker in _RETRYABLE_ERROR_MARKERS)
+
 
 def image_urls_for_parse(attachments: list) -> list[str]:
     urls: list[str] = []
@@ -33,7 +55,26 @@ def image_urls_for_parse(attachments: list) -> list[str]:
 def uncached_urls(urls: list[str], cache: dict | None) -> list[str]:
     if not cache:
         return list(urls)
-    return [u for u in urls if u not in cache]
+    out: list[str] = []
+    for url in urls:
+        rec = cache.get(url)
+        if rec is None:
+            out.append(url)
+            continue
+        # Successful parses stay cached; retryable errors are treated as cache miss.
+        if rec.get("vision_used"):
+            continue
+        if is_retryable_parse_error(str(rec.get("error") or "") if rec.get("error") else None):
+            out.append(url)
+            continue
+        if rec.get("error") and not rec.get("vision_used"):
+            # Non-retryable failure (e.g. non-vision model) — keep cache hit.
+            continue
+        # Empty / incomplete record without vision — re-fetch.
+        if not rec.get("user_facing_summary") and not rec.get("fields"):
+            out.append(url)
+            continue
+    return out
 
 
 def merge_parse_records(urls: list[str], cache: dict) -> dict:

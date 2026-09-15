@@ -59,10 +59,13 @@ export type MatchRecipesResult = {
 }
 
 export type PreviewRecipeDeltaResult = {
-  recipe: RecipeDocument
-  stripped: LintIssue[]
+  title: string
+  parentTitle: string
   diffLines: string[]
   userMessages: string[]
+  strippedCodes: string[]
+  addedTitles: string[]
+  removedTitles: string[]
 }
 
 export type PromoteRecipeInput = {
@@ -71,19 +74,34 @@ export type PromoteRecipeInput = {
   workflow?: unknown
   mode: 'variant' | 'new_template'
   confirmedSeedKeys?: string[]
+  confirmed?: boolean
   title?: string
   parentId?: string
   parentVersion?: string
 }
 
-export type PromoteRecipeResult = {
-  recipeId: string
-  version: string
-  title: string
-  parentId: string | null
-  parentVersion: string | null
-  body: string
-}
+export type PromoteCoreStep = { key: string; title: string }
+
+export type PromoteRecipeResult =
+  | {
+      status: 'needs_seed_confirm'
+      coreSteps: PromoteCoreStep[]
+      userMessage: string
+    }
+  | {
+      status: 'needs_variant_confirm'
+      parentTitle: string
+      userMessage: string
+    }
+  | {
+      status: 'saved'
+      recipeId: string
+      version: string
+      title: string
+      parentId: string | null
+      parentVersion: string | null
+      body: string
+    }
 
 @Injectable()
 export class WorkflowRecipeService {
@@ -146,7 +164,17 @@ export class WorkflowRecipeService {
     })
     const diffLines = diffRecipeLines(parent, recipe).filter((line) => !FORBIDDEN_USER_TEXT.test(line))
     const userMessages = this.userMessagesFor(stripped)
-    return { recipe, stripped, diffLines, userMessages }
+    const parentKeys = new Set(parent.nodes.map((node) => node.key))
+    const recipeKeys = new Set(recipe.nodes.map((node) => node.key))
+    return {
+      title: recipe.title,
+      parentTitle: parent.title,
+      diffLines,
+      userMessages,
+      strippedCodes: stripped.map((issue) => issue.code),
+      addedTitles: recipe.nodes.filter((node) => !parentKeys.has(node.key)).map((node) => node.title),
+      removedTitles: parent.nodes.filter((node) => !recipeKeys.has(node.key)).map((node) => node.title),
+    }
   }
 
   async compileInstantiate(input: {
@@ -218,7 +246,13 @@ export class WorkflowRecipeService {
     const workflow = await this.resolveWorkflow(input)
     const draft = this.inferDraft(workflow)
     if (input.mode === 'new_template') {
+      if (!(input.confirmedSeedKeys?.length)) {
+        return this.previewNewTemplate(draft)
+      }
       return this.promoteNewTemplate({ ...input, workflow }, draft)
+    }
+    if (!input.confirmed) {
+      return this.previewVariant(input, draft)
     }
     return this.promoteVariant({ ...input, workflow }, draft)
   }
@@ -296,6 +330,42 @@ export class WorkflowRecipeService {
         userMessage: UNRECOGNIZED_WORKFLOW,
       })
     }
+  }
+
+  private previewNewTemplate(draft: RecipeDocument): PromoteRecipeResult {
+    const coreSteps = this.proposedCoreSteps(draft)
+    if (coreSteps.length === 0) {
+      throw new BadRequestException({ message: UNCONFIRMED_SEED, userMessage: UNCONFIRMED_SEED })
+    }
+    const titles = coreSteps.map((step) => step.title).join('、')
+    return {
+      status: 'needs_seed_confirm',
+      coreSteps,
+      userMessage: `将锁定这些核心步骤：${titles}。确认后才会存成新模板。`,
+    }
+  }
+
+  private async previewVariant(
+    input: PromoteRecipeInput,
+    draft: RecipeDocument,
+  ): Promise<PromoteRecipeResult> {
+    const parentId = input.parentId || draft.id
+    const parentVersion = input.parentVersion || draft.version
+    const parent = await this.loadParent(input.userId, parentId, parentVersion)
+    if (!parent) {
+      throw new BadRequestException('找不到这套模板')
+    }
+    return {
+      status: 'needs_variant_confirm',
+      parentTitle: parent.title,
+      userMessage: '还是原来那套核心步骤，只记住这次的增减和连线。请确认是否保存为改版。',
+    }
+  }
+
+  private proposedCoreSteps(draft: RecipeDocument): PromoteCoreStep[] {
+    const locked = draft.nodes.filter((node) => node.role === 'seed' || node.role === 'turnaround')
+    const source = locked.length > 0 ? locked : draft.nodes
+    return source.map((node) => ({ key: node.key, title: node.title }))
   }
 
   private async promoteNewTemplate(
@@ -415,6 +485,7 @@ export class WorkflowRecipeService {
       },
     })
     return {
+      status: 'saved',
       recipeId: input.recipeId,
       version: input.version,
       title: input.title,

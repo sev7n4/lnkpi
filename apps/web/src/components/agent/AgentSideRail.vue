@@ -50,6 +50,7 @@ import {
   confirmAtomicGeneration as runConfirmAtomicGeneration,
   confirmProposeGeneration as runConfirmProposeGeneration,
   detectAgentChipSet,
+  canvasHasRecipeParent,
   extractProposeGenerationNodeId,
   resolveAtomicConfirmNodeId,
   resolvePendingConfirmNodeId,
@@ -525,6 +526,9 @@ const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingRecipeConfirm = computed(() => chipSet.value === 'recipe_confirm')
 const awaitingRecipePromote = computed(() => chipSet.value === 'recipe_promote')
+const awaitingRecipePromoteSeed = computed(() => chipSet.value === 'recipe_promote_seed')
+const awaitingRecipePromoteVariant = computed(() => chipSet.value === 'recipe_promote_variant')
+const canPromoteVariant = computed(() => canvasHasRecipeParent(props.canvasNodes))
 const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
 const generationProposePresentation = computed(() => {
   if (!awaitingGenerationPropose.value) return null
@@ -2608,6 +2612,7 @@ defineExpose({
             </div>
             <div v-else-if="awaitingRecipePromote" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
+                v-if="canPromoteVariant"
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
                 data-testid="recipe-promote-variant"
@@ -2619,11 +2624,52 @@ defineExpose({
               <button
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :class="canPromoteVariant ? '' : 'agent-preset-primary font-medium'"
                 data-testid="recipe-promote-new"
                 :disabled="agent.isStreaming"
                 @click="sendPreset('存成一套新模板')"
               >
                 存成一套新模板
+              </button>
+            </div>
+            <div v-else-if="awaitingRecipePromoteSeed" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="recipe-promote-seed-confirm"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认锁定这些核心步骤')"
+              >
+                确认锁定这些核心步骤
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                data-testid="recipe-promote-seed-back"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('返回上一步，这份工作流更像哪一种？')"
+              >
+                返回
+              </button>
+            </div>
+            <div v-else-if="awaitingRecipePromoteVariant" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="recipe-promote-variant-confirm"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认保存为改版')"
+              >
+                确认保存为改版
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                data-testid="recipe-promote-variant-back"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('返回上一步，这份工作流更像哪一种？')"
+              >
+                返回
               </button>
             </div>
             <div v-else-if="isRetakePending" class="mb-2 px-0.5" data-testid="retake-pending-callout">

@@ -79,6 +79,7 @@ class NestCanvasClient:
         self._http = http_client
         self._owns_http = http_client is None
         self.sidebar_attachments: list[dict[str, Any]] = []
+        self.last_user_utterance: str | None = None
         self._breaker = circuit_breaker or CircuitBreaker(
             failure_threshold=settings.circuit_breaker_failure_threshold,
             cooldown_sec=settings.circuit_breaker_cooldown_sec,
@@ -398,10 +399,12 @@ class NestCanvasClient:
             body["sceneKind"] = scene_kind
         if model:
             body["model"] = model
+        # Multi-image sidebar parse (up to 4 uploads) commonly takes 60–90s on prod;
+        # 60s hard-cut caused tool_timeout while Nest was still succeeding (~86s observed).
         return await self._post(
             "/agent/internal/run-vision-qa",
             body,
-            timeout=60.0,
+            timeout=120.0,
         )
 
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:
@@ -679,8 +682,9 @@ class NestCanvasClient:
         }
         if slots is not None:
             body["slots"] = slots
-        if utterance is not None:
-            body["utterance"] = utterance
+        resolved = (utterance or "").strip() or (self.last_user_utterance or "").strip()
+        if resolved:
+            body["utterance"] = resolved
         if self.sidebar_attachments:
             body["sidebarAttachments"] = self.sidebar_attachments
         return await self._post("/agent/internal/instantiate-recipe", body)
@@ -694,6 +698,7 @@ class NestCanvasClient:
         title: str | None = None,
         parent_id: str | None = None,
         parent_version: str | None = None,
+        confirmed: bool | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -710,6 +715,8 @@ class NestCanvasClient:
             body["parentId"] = parent_id
         if parent_version is not None:
             body["parentVersion"] = parent_version
+        if confirmed is not None:
+            body["confirmed"] = confirmed
         return await self._post("/agent/internal/promote-recipe", body)
 
     async def group_nodes(self, *, node_ids: list[str], title: str | None = None) -> dict[str, Any]:

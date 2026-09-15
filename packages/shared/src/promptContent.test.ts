@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   buildPromptNodeCardPreview,
   countMarkdownTableDataRows,
+  isProductFourPanelPrompt,
   isTurnaroundLikePrompt,
   summarizePromptCompletion,
   TURNAROUND_PIPELINE_USER_NOTE,
@@ -43,5 +44,13 @@ describe('promptContent', () => {
   it('detects turnaround-like prompts', () => {
     expect(isTurnaroundLikePrompt('现代都市白领女主角的三视图')).toBe(true)
     expect(isTurnaroundLikePrompt('蓝牙耳机主图')).toBe(false)
+  })
+
+  it('detects colloquial product four-panel prompts', () => {
+    expect(isProductFourPanelPrompt('生成这个产品的三视图提示词')).toBe(true)
+    expect(isProductFourPanelPrompt('帮我写这个产品的四视图')).toBe(true)
+    expect(isProductFourPanelPrompt('产品三视图，白底主图')).toBe(true)
+    expect(isProductFourPanelPrompt('帮我生成一个包含人物三视图的提示词')).toBe(false)
+    expect(isProductFourPanelPrompt('山海经吞金兽的三视图，CG风格')).toBe(false)
   })
 })

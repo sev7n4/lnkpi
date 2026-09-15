@@ -15,6 +15,7 @@ from app.graph.explore_dispatch import (
     run_mandatory_explore,
     select_narrow_write_tools,
 )
+from app.graph.planner_copy import pick_planner_slot_utterance, sanitize_planner_reply
 from app.graph.recent_turns import compress_recent_turns
 from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
 from app.metrics import record_explore_dispatch
@@ -28,14 +29,28 @@ _PLANNER_CONFIRM_LINE = "请确认是否把改动落到画布"
 _PLANNER_PROMOTE_LINE = "这份工作流更像哪一种？"
 _PLANNER_SYSTEM = (
     "规划工作流时：先 match_workflow_templates 再 preview_workflow_template。"
-    "不要调用 import_workflow 或 connect_nodes 手搭拓扑。"
+    "覆盖上面规则5：禁止用 connect_nodes 或 import_workflow 手搭规划拓扑。"
     "instantiate_workflow_template 只在用户确认落到画布之后调用，"
     "只传 parent_id、parent_version、delta，不要传完整模板。"
     "对用户只用「模板」「核心步骤」「改版」「接到另一套模板」；"
-    "不要对用户写 seed、种子链、graft、内部 id。"
-    "收成模板时先问「这份工作流更像哪一种？」再调用 promote_workflow_template。"
+    "不要对用户写 seed、种子、种子链、t2i、i2i、v_ref、graft、内部 id、recipe id、version、节点 key。"
+    "收成模板时先问「这份工作流更像哪一种？」；认不到原模板时只问新模板。"
+    "用户选出后先调用 promote_workflow_template："
+    "改版不要带 confirmed，新模板不要带 confirmed_seed_keys。"
+    "若工具返回 needs_seed_confirm 或 needs_variant_confirm，把 userMessage 原样告诉用户并等二次确认，禁止此时当已入库。"
+    "二次确认后再带 confirmed=true 或 confirmed_seed_keys 调用。"
     "instantiate_workflow_template 成功后，对返回的 addedNodeIds 调用 arrange_nodes_along_edges。"
 )
+
+
+def planner_promote_followup(result: Any) -> str | None:
+    if not isinstance(result, dict):
+        return None
+    status = str(result.get("status") or "")
+    msg = str(result.get("userMessage") or "").strip()
+    if status in ("needs_seed_confirm", "needs_variant_confirm") and msg:
+        return msg
+    return None
 
 # Unified canvas_agent system prompt (spec §3.6) — also re-exported as chat._SYSTEM.
 _EXPLORE_SYSTEM = (
@@ -131,7 +146,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         except Exception:
             summary = {"error": "无法拉取画布摘要"}
 
-        user_text = _latest_user_text(state.get("messages") or []) or "看看画布状态"
+        messages = list(state.get("messages") or [])
+        user_text = _latest_user_text(messages) or "看看画布状态"
+        human_texts = [
+            str(getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else "") or "")
+            for msg in messages
+            if _msg_is_human(msg)
+        ]
+        slot_utterance = pick_planner_slot_utterance(human_texts) or user_text
+        if hasattr(nest, "last_user_utterance"):
+            nest.last_user_utterance = slot_utterance
         parse = state.get("sidebar_media_parse")
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
@@ -174,7 +198,6 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
         if "preview_workflow_template" in visible or "match_workflow_templates" in visible:
             system_content = f"{system_content}\n{_PLANNER_SYSTEM}"
-        messages = list(state.get("messages") or [])
         # Prior turns only — current user utterance is seeded separately (D7).
         prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
         recent = compress_recent_turns(prior)
@@ -188,6 +211,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         canvas_commands: list[dict[str, Any]] = []
         called_tools: set[str] = set()
         write_retry_done = False
+        promote_followup = ""
 
         for _ in range(MAX_EXPLORE_TOOL_ROUNDS):
             ai = await llm_bound.ainvoke(convo)
@@ -248,6 +272,9 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                         tool_call_id=str(tool_call_id or name),
                     )
                 )
+                follow = planner_promote_followup(result) if str(name) == "promote_workflow_template" else None
+                if follow:
+                    promote_followup = follow
                 # Same-turn rebind after successful tool_search load.
                 if (
                     str(name) == META_TOOL_NAME
@@ -267,6 +294,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         ):
             if _PLANNER_CONFIRM_LINE not in (final_reply or ""):
                 final_reply = f"{(final_reply or '').rstrip()}\n{_PLANNER_CONFIRM_LINE}".strip()
+
+        if promote_followup and promote_followup not in (final_reply or ""):
+            final_reply = f"{(final_reply or '').rstrip()}\n{promote_followup}".strip()
+
+        if (
+            "preview_workflow_template" in visible
+            or "match_workflow_templates" in visible
+            or "instantiate_workflow_template" in called_tools
+        ):
+            final_reply = sanitize_planner_reply(final_reply)
 
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"

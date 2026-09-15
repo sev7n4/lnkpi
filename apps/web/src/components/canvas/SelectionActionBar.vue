@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
+import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.vue'
 
 /**
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
@@ -11,17 +12,22 @@ const props = defineProps<{
   node: FlowNode
   imageUpscale: boolean
   loading?: boolean
+  gridSlice?: boolean
+  gridSliceLoading?: boolean
+  gridSliceDisabled?: boolean
+  gridSliceDisabledTitle?: string
 }>()
 
 const emit = defineEmits<{
   upscale: []
   edit: []
+  'quick-slice': [n: number]
+  'open-custom': []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 
 const flowPos = ref<{ x: number; y: number } | null>(null)
-const barWidth = 168
 
 function updatePosition() {
   const allNodes = flowNodes.value as unknown as FlowNode[]
@@ -72,7 +78,7 @@ const barStyle = computed(() => {
   return {
     left: `${flowPos.value.x}px`,
     top: `${flowPos.value.y}px`,
-    width: `${barWidth}px`,
+    width: 'max-content',
     transform: 'translate(-50%, 0)',
   }
 })
@@ -101,6 +107,14 @@ function onUpscale() {
           class="neo-chrome flex items-center justify-center gap-1 rounded-xl px-1.5 py-1"
           @click.stop
         >
+          <GridSliceDropdown
+            v-if="gridSlice"
+            :disabled="gridSliceDisabled"
+            :loading="gridSliceLoading"
+            :disabled-title="gridSliceDisabledTitle"
+            @quick-slice="emit('quick-slice', $event)"
+            @open-custom="emit('open-custom')"
+          />
           <button
             type="button"
             class="toolbar-action accent"

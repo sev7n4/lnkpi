@@ -4,6 +4,7 @@ import {
   computeImportTranslation,
   duplicateResultToCanvasActions,
   duplicateSubgraph,
+  isProductFourPanelPrompt,
   isRootNode,
   remapWorkflowIds,
   resolveDuplicateSourceIds,
@@ -1029,7 +1030,7 @@ export class AgentCanvasToolsService {
     )
     const model = pickString(node.data?.imageModel, prefs.defaultImageModel) || undefined
 
-    if (pipeline === 'turnaround_image') {
+    if (pipeline === 'turnaround_image' || isProductFourPanelPrompt(prompt)) {
       const textModel = pickString(node.data?.textModel, prefs.defaultTextModel) || undefined
       const expanded = await this.studio.expandPromptContent(input.userId, prompt, textModel)
       imagePrompt = expanded.content

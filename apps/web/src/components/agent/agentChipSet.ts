@@ -10,6 +10,8 @@ export type AgentChipSet =
   | 'generation_propose'
   | 'recipe_confirm'
   | 'recipe_promote'
+  | 'recipe_promote_seed'
+  | 'recipe_promote_variant'
   | 'image_qa'
   | 'scheme_select'
   | 'macro_scheme_select'
@@ -34,6 +36,8 @@ const COPY_SNIPPETS = ['【主文案草稿】', '写入主文案'] as const
 const TOPO_SNIPPETS = ['确认出图', '当前资产拓扑', '要改拓扑'] as const
 const RECIPE_CONFIRM_SNIPPETS = ['请确认是否把改动落到画布'] as const
 const RECIPE_PROMOTE_SNIPPETS = ['这份工作流更像哪一种'] as const
+const RECIPE_PROMOTE_SEED_SNIPPETS = ['将锁定这些核心步骤'] as const
+const RECIPE_PROMOTE_VARIANT_SNIPPETS = ['请确认是否保存为改版'] as const
 
 /**
  * 修复 P1-4 + P2-1：上下文感知的 chipSet 检测
@@ -237,6 +241,16 @@ export async function confirmAtomicGeneration(
   return 'preset'
 }
 
+export function canvasHasRecipeParent(nodes: CanvasNodeLike[] | null | undefined): boolean {
+  return Boolean(
+    nodes?.some((node) => {
+      const recipeId = String(node?.data?.recipeId ?? '').trim()
+      const parentRecipeId = String(node?.data?.parentRecipeId ?? '').trim()
+      return Boolean(recipeId || parentRecipeId)
+    }),
+  )
+}
+
 /** Which confirm chip row to show under the agent input. */
 export function detectAgentChipSet(
   assistantText: string,
@@ -263,6 +277,8 @@ export function detectAgentChipSet(
   if (t.includes('视频/音频生成将消耗积分')) return 'atomic'
   if (t.includes('提交前需你确认')) return 'atomic'
   if (RECIPE_CONFIRM_SNIPPETS.some((s) => t.includes(s))) return 'recipe_confirm'
+  if (RECIPE_PROMOTE_SEED_SNIPPETS.some((s) => t.includes(s))) return 'recipe_promote_seed'
+  if (RECIPE_PROMOTE_VARIANT_SNIPPETS.some((s) => t.includes(s))) return 'recipe_promote_variant'
   if (RECIPE_PROMOTE_SNIPPETS.some((s) => t.includes(s))) return 'recipe_promote'
   if (TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (COPY_SNIPPETS.some((s) => t.includes(s))) return 'copy'

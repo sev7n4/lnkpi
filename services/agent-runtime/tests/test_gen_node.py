@@ -250,7 +250,7 @@ async def test_gen_node_hydrates_canvas_when_item_missing_node_id():
                 "chain": "outfit",
                 "role": "turnaround",
                 "title": "四视图",
-                "mentionedKeys": ["seed"],
+                "mentionedKeys": ["image-seed"],
             },
         },
         {
@@ -260,7 +260,7 @@ async def test_gen_node_hydrates_canvas_when_item_missing_node_id():
                 "chain": "outfit",
                 "role": "downstream",
                 "title": "穿搭",
-                "mentionedKeys": ["ta"],
+                "mentionedKeys": ["image-ta"],
             },
         },
     ]

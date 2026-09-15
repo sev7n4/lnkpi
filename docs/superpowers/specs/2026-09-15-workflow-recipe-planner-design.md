@@ -1,7 +1,7 @@
 # 工作流配方规划器（衍生 / 嫁接 / 晋升）设计
 
 > 日期：2026-09-15  
-> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）+ **v1.1 剩余缺口 2026-09-15**（见 §14）  
+> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）+ **v1.1 剩余缺口 2026-09-15**（见 §14）+ **v1.3 规格收口 2026-09-15**（见 §14.8）+ **v1.4 话术清洗 2026-09-15**（见 §14.9）  
 > 产品：超创平台（lnkpi）无限画布  
 > 相关：  
 > - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
@@ -441,3 +441,28 @@ Explore 工具把当前侧栏附件随 instantiate 传给 Nest，不在 Python �
 5. live explore：话术「规划一个角色三视图工作流」绑定规划工具且 **不**绑定 `import_workflow` / `set_node_prompt`；点确认后才出现 instantiate。
 6. preview 后的助手文案含「请确认是否把改动落到画布」，侧栏两枚 chip 可点。
 7. Hybrid：explore 仍不 bind `add_nodes_batch` / `run_*_generation`。
+
+### 14.8 v1.3 规格收口（#329 之后）
+
+对照 §7 / §10 / §14.1 仍须补上、且**不属于** §14.6 非目标的缺口：
+
+| 项 | 要求 |
+|----|------|
+| 出图 hydrate | compile 写入的 `mentionedKeys` 是画布 id。`hydrate_gen_by_key_from_canvas` 必须映回 `recipeKey`，跨链 `depends_on` 才能被 `build_chain_ref_order` 认到。旧图若仍存配方 key，保持兼容。 |
+| preview 载荷 | Nest `preview-recipe-delta` **不得**把完整 `RecipeDocument` 交回模型。只返回标题、diff 列表、用户文案、stripped 代号。 |
+| 晋升二次确认 | `promote` 第一步不入库：新模板返回 `needs_seed_confirm`（列出核心步骤**标题**）；改版返回 `needs_variant_confirm`。二次确认后才写用户目录。侧栏 chip：锁定核心步骤 / 确认保存为改版 / 返回。 |
+| 认不到父模板 | 画布节点没有 `recipeId` / `parentRecipeId` 时只显示「存成一套新模板」。 |
+| 黄金集 | 补 `graft_conflict`（把同一份目录配方接到自己身上）。Nest 覆盖：缺 seed 确认不入库、`empty_prompt` instantiate 拒绝。 |
+
+本切片仍不做 §14.6。
+
+### 14.9 v1.4 话术清洗与填槽原话（#330 之后）
+
+对照 §7 / §14.3，生产复测仍漏出的两处、且**不属于** §14.6 非目标：
+
+| 项 | 要求 |
+|----|------|
+| 助手文案 | preview 已不回完整 IR 之后，模型仍可能自造「种子／出图方式 t2i」。explore 在规划绑定回合对助手回复做**确定性清洗**：去掉种子链/嫁接/t2i/i2i/v_ref/graft/parentId/目录 id；保留「模板 / 核心步骤 / 改版 / 接到另一套模板」与节点标题。确认句「请确认是否把改动落到画布」不得被洗掉。 |
+| instantiate 原话 | 模型漏传 `utterance` 时，runtime 自动带上最近一次**非 chip** 的用户原话（跳过「确认落到画布」等），供 Nest `fillRecipeSlots` 写 prompt 槽。显式传入的 `utterance` 优先。 |
+
+本切片仍不做 §14.6。
