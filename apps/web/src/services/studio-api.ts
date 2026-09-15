@@ -39,6 +39,14 @@ export interface AudioGenerateOptions {
   model?: string
 }
 
+export interface ImageSliceResult {
+  urls: string[]
+  cols: number
+  rows: number
+  width?: number
+  height?: number
+}
+
 function scopeBody(scope?: CanvasGenerationScope) {
   if (!scope?.sessionId && !scope?.nodeId) return {}
   return {
@@ -99,6 +107,17 @@ export const studioApi = {
     ),
   segmentImage: (body: { imageUrl: string; x: number; y: number; label?: 0 | 1 }) =>
     api.post<{ data: { maskUrl: string } }>('/studio/image/segment', body),
+  imageSlice: async (
+    body: { sourceUrl: string; cols: number; rows: number; sessionId: string },
+    opts?: { timeout?: number },
+  ): Promise<ImageSliceResult> => {
+    const { data: res } = await api.post<{ data: ImageSliceResult }>(
+      '/studio/image/slice',
+      body,
+      { timeout: opts?.timeout ?? 120_000 },
+    )
+    return res.data
+  },
   generateText: (
     prompt: string,
     model?: string,

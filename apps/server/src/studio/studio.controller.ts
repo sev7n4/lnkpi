@@ -1,12 +1,13 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { MediaProbeService } from '../media/media-probe.service'
 import { createCancelFlag } from '../points/charge-session'
 import { PrismaService } from '../prisma/prisma.service'
 import { checkMediaProbeRateLimit } from './media-probe-rate-limit'
 import { isAllowedMediaProbeUrl } from './media-probe-url.util'
+import { ImageSliceService } from './image-slice.service'
 import { StudioService } from './studio.service'
 import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
 import { resolveVideoStartRequest, type VideoStartBody } from './video-generation-request.util'
@@ -273,6 +274,22 @@ class ImageSegmentDto {
   label?: 0 | 1
 }
 
+class ImageSliceDto {
+  @IsString()
+  @IsNotEmpty()
+  sourceUrl!: string
+
+  @IsNumber()
+  cols!: number
+
+  @IsNumber()
+  rows!: number
+
+  @IsString()
+  @IsNotEmpty()
+  sessionId!: string
+}
+
 @Controller('studio')
 export class StudioController {
   constructor(
@@ -280,6 +297,7 @@ export class StudioController {
     @Inject(VideoGenerationOrchestrator) private readonly videoOrchestrator: VideoGenerationOrchestrator,
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MediaProbeService) private readonly mediaProbeService: MediaProbeService,
+    @Inject(ImageSliceService) private readonly imageSliceService: ImageSliceService,
   ) {}
 
   private parseCanvas(raw: string | null | undefined): CanvasData {
@@ -395,6 +413,22 @@ export class StudioController {
       x: dto.x,
       y: dto.y,
       label: dto.label,
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('image/slice')
+  @UseGuards(AuthGuard)
+  async sliceImage(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ImageSliceDto,
+  ) {
+    const data = await this.imageSliceService.slice({
+      userId: req.user.sub,
+      sourceUrl: dto.sourceUrl,
+      cols: dto.cols,
+      rows: dto.rows,
+      sessionId: dto.sessionId,
     })
     return { code: 0, message: 'ok', data }
   }

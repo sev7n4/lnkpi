@@ -5,6 +5,7 @@ import { PrismaModule } from '../prisma/prisma.module'
 import { ProviderModule } from '../provider/provider.module'
 import { SessionsModule } from '../sessions/sessions.module'
 import { UploadModule } from '../upload/upload.module'
+import { ImageSliceService } from './image-slice.service'
 import { StudioController } from './studio.controller'
 import { StudioService } from './studio.service'
 import { UpscaleService } from './upscale.service'
@@ -20,7 +21,7 @@ import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
     UploadModule,
   ],
   controllers: [StudioController],
-  providers: [StudioService, UpscaleService, VideoGenerationOrchestrator],
-  exports: [StudioService, UpscaleService, VideoGenerationOrchestrator],
+  providers: [StudioService, UpscaleService, VideoGenerationOrchestrator, ImageSliceService],
+  exports: [StudioService, UpscaleService, VideoGenerationOrchestrator, ImageSliceService],
 })
 export class StudioModule {}

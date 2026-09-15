@@ -2642,6 +2642,7 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
       sourceUrl,
       cols: dims.cols,
       rows: dims.rows,
+      sessionId: sessionId.value,
       sourceNodeId: node.id,
       getSourceNode: () => findNodeById(node.id) ?? node,
       addNode: (type, childData, opts) =>
