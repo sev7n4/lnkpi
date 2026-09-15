@@ -57,7 +57,7 @@ def test_validate_llm_parse_blocks_generate_on_planning_conflict():
     u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
     result = {
         "action": "generate",
-        "route": "atomic_create",
+        "route": "canvas_agent",
         "items": [{"target_type": "image", "prompt": u, "title": "主图"}],
         "confidence": 0.95,
     }
@@ -73,7 +73,7 @@ def test_validate_llm_parse_blocks_plan_with_image_items():
     u = "详情页构图方案"
     result = {
         "action": "plan",
-        "route": "atomic_create",
+        "route": "canvas_agent",
         "items": [{"target_type": "image", "prompt": u, "title": "x"}],
         "confidence": 0.9,
     }
@@ -88,8 +88,26 @@ def test_validate_llm_parse_ok_for_explicit_generate():
     u = "生成一张蓝牙耳机主图"
     result = {
         "action": "generate",
-        "route": "atomic_create",
+        "route": "canvas_agent",
         "items": [{"target_type": "image", "prompt": u, "title": "主图"}],
         "confidence": 0.94,
     }
     assert validate_llm_parse(result, u) is None  # type: ignore[arg-type]
+
+
+def test_validate_llm_parse_accepts_legacy_atomic_create_route_key():
+    """planning_guard must treat shimmed atomic_create like canvas_agent."""
+    from app.graph.planning_guard import validate_llm_parse
+
+    u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
+    # action=plan + legacy route still conflicts when items empty + conflict utterance
+    # Use generate path which keys off utterance conflict regardless of route.
+    result = {
+        "action": "generate",
+        "route": "atomic_create",
+        "items": [{"target_type": "image", "prompt": u, "title": "主图"}],
+        "confidence": 0.95,
+    }
+    out = validate_llm_parse(result, u)  # type: ignore[arg-type]
+    assert out is not None
+    assert out["reason"] == "planning_image_conflict"

@@ -20,7 +20,7 @@ _STRUCTURED_PARSE_SYSTEM = """你是 Lnkpi 意图结构化解析器。根据用�
 {
   "action": "plan|write|generate|expand|regenerate|unknown",
   "scope": "atomic|campaign|unknown",
-  "route": "campaign|atomic_create|atomic_regenerate|single_node|chat",
+  "route": "campaign|canvas_agent|chat",
   "structure": "single|multi",
   "items": [
     {
@@ -40,16 +40,17 @@ _STRUCTURED_PARSE_SYSTEM = """你是 Lnkpi 意图结构化解析器。根据用�
 
 硬约束（与 planning_guard 一致）：
 - action=plan 且含「主图+详情页/构图方案」→ route=campaign 或 needs_clarify=true，禁止 items 仅 image 直出
-- action=write → route=atomic_create，items 为 text（vision_text 策划文档）
-- action=expand → route=atomic_create，items 为 prompt，可带 prompt_mode
-- action=generate + 「基于文案/提示词/文本生成视频」→ target_type=video，confirm_gate=true
-- action=generate + 「基于文本/文案生成图片」→ target_type=image
-- action=generate + 「生成一张/来一张」→ route=atomic_create，target_type=image，confidence≥0.85
+- action=write → route=canvas_agent，items 为 text（vision_text 策划文档）
+- action=expand → route=canvas_agent，items 为 prompt，可带 prompt_mode
+- action=generate + 「基于文案/提示词/文本生成视频」→ target_type=video，confirm_gate=true，route=canvas_agent
+- action=generate + 「基于文本/文案生成图片」→ target_type=image，route=canvas_agent
+- action=generate + 「生成一张/来一张」→ route=canvas_agent，target_type=image，confidence≥0.85
 - video/audio → confirm_gate=true
 - 营销方案/14节点/全链路 → route=campaign，scope=campaign
 - multi items >5 → needs_clarify=true，建议 campaign
-- 「再生成一张/按刚才风格」→ route=atomic_regenerate 或 needs_clarify（需 checkpoint）
-- 意图不清 → confidence<0.7，needs_clarify=true
+- 「再生成一张/按刚才风格」→ route=canvas_agent 或 needs_clarify=true（需 checkpoint）
+- 意图不清 → confidence<0.7，needs_clarify=true，route=chat 可接受
+- 无效 route：atomic_create / atomic_regenerate / single_node（勿输出；运行时会映射为 canvas_agent）
 """
 
 
