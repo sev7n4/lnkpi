@@ -78,6 +78,7 @@ import {
   createGroupFromNodes,
   getNodeSize,
   getSelectionBounds,
+  layoutNodesAlongEdges,
   layoutNodesInGrid,
   resizeGroupToFitChildren,
   ungroupNodes,
@@ -1543,11 +1544,18 @@ function handleDeleteSelection() {
   persistUserEdit()
 }
 
-function handleLayoutSelection() {
-  nodes.value = layoutNodesInGrid(
-    nodes.value as unknown as FlowNode[],
-    multiSelectedIds.value,
-  ) as EditableFlowNode[]
+function handleLayoutSelection(mode: 'along_edges' | 'grid') {
+  const selected = multiSelectedIds.value
+  const current = nodes.value as unknown as FlowNode[]
+  const next =
+    mode === 'along_edges'
+      ? layoutNodesAlongEdges(
+          current,
+          edges.value.map((e) => ({ source: e.source, target: e.target })),
+          selected,
+        )
+      : layoutNodesInGrid(current, selected)
+  nodes.value = next as EditableFlowNode[]
   persistUserEdit()
 }
 

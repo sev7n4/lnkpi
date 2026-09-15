@@ -282,6 +282,186 @@ function updateNodePosition(nodes: FlowNode[], id: string, pos: { x: number; y: 
   }
 }
 
+export type LayoutEdge = { source: string; target: string }
+
+function setAbsolutePosition(
+  nodes: FlowNode[],
+  node: FlowNode,
+  abs: { x: number; y: number },
+) {
+  if (node.parentNode) {
+    let parentAbs = { x: 0, y: 0 }
+    for (const p of nodes) {
+      if (p.id === node.parentNode) {
+        parentAbs = getAbsolutePosition(p, nodes)
+        break
+      }
+    }
+    updateNodePosition(nodes, node.id, {
+      x: abs.x - parentAbs.x,
+      y: abs.y - parentAbs.y,
+    })
+    return
+  }
+  updateNodePosition(nodes, node.id, abs)
+}
+
+function assignRanks(
+  component: string[],
+  adj: Map<string, string[]>,
+  absById: Map<string, { x: number; y: number }>,
+): Map<string, number> {
+  const inComp = new Set(component)
+  const hasEdge = component.some((id) => (adj.get(id) ?? []).some((t) => inComp.has(t)))
+  const rank = new Map<string, number>()
+
+  if (!hasEdge) {
+    const ordered = [...component].sort((a, b) => {
+      const pa = absById.get(a)!
+      const pb = absById.get(b)!
+      return pa.x - pb.x || pa.y - pb.y
+    })
+    ordered.forEach((id, i) => rank.set(id, i))
+    return rank
+  }
+
+  const indeg = new Map<string, number>()
+  for (const id of component) indeg.set(id, 0)
+  for (const id of component) {
+    for (const t of adj.get(id) ?? []) {
+      if (!inComp.has(t)) continue
+      indeg.set(t, (indeg.get(t) ?? 0) + 1)
+    }
+  }
+
+  let layer = 0
+  let frontier = component.filter((id) => (indeg.get(id) ?? 0) === 0)
+  const placed = new Set<string>()
+  while (frontier.length) {
+    frontier.sort((a, b) => {
+      const pa = absById.get(a)!
+      const pb = absById.get(b)!
+      return pa.y - pb.y || pa.x - pb.x
+    })
+    for (const id of frontier) {
+      rank.set(id, layer)
+      placed.add(id)
+    }
+    const nextFrontier: string[] = []
+    for (const id of frontier) {
+      for (const t of adj.get(id) ?? []) {
+        if (!inComp.has(t) || placed.has(t)) continue
+        const nextDeg = (indeg.get(t) ?? 0) - 1
+        indeg.set(t, nextDeg)
+        if (nextDeg === 0) nextFrontier.push(t)
+      }
+    }
+    frontier = nextFrontier
+    layer += 1
+  }
+
+  const leftover = component.filter((id) => !placed.has(id))
+  leftover.sort((a, b) => {
+    const pa = absById.get(a)!
+    const pb = absById.get(b)!
+    return pa.x - pb.x || pa.y - pb.y
+  })
+  leftover.forEach((id, i) => rank.set(id, layer + i))
+  return rank
+}
+
+/** Layered left-to-right along selected edges; same-rank nodes stack vertically and columns share a vertical center. */
+export function layoutNodesAlongEdges(
+  nodes: FlowNode[],
+  edges: LayoutEdge[],
+  selectedIds: string[],
+  gap = 40,
+): FlowNode[] {
+  const selected = new Set(selectedIds)
+  const targets: FlowNode[] = []
+  for (const n of nodes) {
+    if (selected.has(n.id) && n.type !== 'group') targets.push(n)
+  }
+  if (targets.length < 2) return nodes
+
+  const ids = new Set(targets.map((n) => n.id))
+  const adj = new Map<string, string[]>()
+  for (const id of ids) adj.set(id, [])
+  for (const edge of edges) {
+    if (!ids.has(edge.source) || !ids.has(edge.target) || edge.source === edge.target) continue
+    adj.get(edge.source)!.push(edge.target)
+  }
+
+  const next = nodes.map((n) => ({ ...n }))
+  const absById = new Map<string, { x: number; y: number }>()
+  const sizeById = new Map<string, { w: number; h: number }>()
+  for (const node of targets) {
+    absById.set(node.id, getAbsolutePosition(node, nodes))
+    sizeById.set(node.id, getNodeSize(node))
+  }
+
+  const component = targets.map((n) => n.id)
+  const ranks = assignRanks(component, adj, absById)
+  const byRank = new Map<number, string[]>()
+  let maxRank = 0
+  for (const id of component) {
+    const r = ranks.get(id) ?? 0
+    maxRank = Math.max(maxRank, r)
+    const list = byRank.get(r) ?? []
+    list.push(id)
+    byRank.set(r, list)
+  }
+  for (const list of byRank.values()) {
+    list.sort((a, b) => {
+      const pa = absById.get(a)!
+      const pb = absById.get(b)!
+      return pa.y - pb.y || pa.x - pb.x
+    })
+  }
+
+  let minX = Infinity
+  let minY = Infinity
+  let maxBottom = -Infinity
+  let colW = 0
+  for (const id of component) {
+    const abs = absById.get(id)!
+    const size = sizeById.get(id)!
+    minX = Math.min(minX, abs.x)
+    minY = Math.min(minY, abs.y)
+    maxBottom = Math.max(maxBottom, abs.y + size.h)
+    colW = Math.max(colW, size.w)
+  }
+
+  const colHeights: number[] = []
+  for (let r = 0; r <= maxRank; r += 1) {
+    const list = byRank.get(r) ?? []
+    let h = 0
+    list.forEach((id, i) => {
+      h += sizeById.get(id)!.h
+      if (i > 0) h += gap
+    })
+    colHeights[r] = h
+  }
+  const tallest = Math.max(0, ...colHeights)
+  const originY = minY + (maxBottom - minY - tallest) / 2
+
+  for (let r = 0; r <= maxRank; r += 1) {
+    const list = byRank.get(r) ?? []
+    const colH = colHeights[r] ?? 0
+    let y = originY + (tallest - colH) / 2
+    const x = minX + r * (colW + gap)
+    for (const id of list) {
+      const node = next.find((n) => n.id === id)
+      if (!node) continue
+      const size = sizeById.get(id)!
+      setAbsolutePosition(next, node, { x, y })
+      y += size.h + gap
+    }
+  }
+
+  return next
+}
+
 export function getSelectionBounds(nodes: FlowNode[], selectedIds: string[]) {
   const frame = getSelectionFrame(nodes, selectedIds)
   if (!frame) return null
