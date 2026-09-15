@@ -94,7 +94,8 @@ cases:
       messages: [{ role: user, content: "重新生成一张" }]
       atomic_node_id: node-1
       atomic_spec: { target_type: image, prompt: x, title: x }
-    gold: { flow_mode: atomic_regenerate }
+    # Phase 2d.2: checkpoint_regen rule kept; flow → canvas_agent
+    gold: { flow_mode: canvas_agent, reason: atomic_regenerate_checkpoint }
 
   - id: rt-regen-clarify-01
     state:
@@ -112,7 +113,8 @@ cases:
     state:
       messages: [{ role: user, content: "快速生成" }]
       focus_node_id: image-1
-    gold: { flow_mode: single_node }
+    # Phase 2d.2: focus_gen rule kept; flow → canvas_agent
+    gold: { flow_mode: canvas_agent, reason: single_node_focus }
 
   - id: rt-img2img-04
     state:

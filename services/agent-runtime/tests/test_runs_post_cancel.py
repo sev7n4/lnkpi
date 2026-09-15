@@ -144,6 +144,39 @@ def test_resolve_turn_input_defers_gate_resume_to_async_path():
     )
 
 
+def test_resolve_turn_input_retired_atomic_confirm_never_defers_billing():
+    """G6: production entry must neutralize await_atomic_confirm + confirm.
+
+    Must return Command → parse_sidebar_media (clear atomic_*), never None
+    (async gate resume / run_atomic_gen billing path).
+    """
+    turn_update = {
+        "messages": [HumanMessage(content="确认")],
+        "session_id": "s",
+        "atomic_spec": {"target_type": "video", "confirm_gate": True},
+        "atomic_node_id": "video-legacy",
+        "atomic_items": [{"id": "i1"}],
+        "atomic_record_id": "rec-1",
+    }
+
+    result = resolve_turn_input(
+        {"phase": "await_atomic_confirm", "atomic_spec": {"target_type": "video"}},
+        ["await_atomic_confirm"],
+        "确认",
+        "confirm",
+        turn_update,
+    )
+
+    assert result is not None, "must not defer to async gate resume (billing risk)"
+    assert result.goto == "parse_sidebar_media"
+    assert result.goto != "run_atomic_gen"
+    assert result.goto != "await_atomic_confirm"
+    assert result.update.get("atomic_spec") is None
+    assert result.update.get("atomic_node_id") is None
+    assert result.update.get("atomic_items") is None
+    assert result.update.get("atomic_record_id") is None
+
+
 @pytest.mark.asyncio
 async def test_get_thread_state_reports_cancelled_as_unfinished():
     checkpointer = MemorySaver()

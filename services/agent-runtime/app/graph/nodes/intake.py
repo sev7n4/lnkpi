@@ -5,12 +5,11 @@ from typing import Any, Callable
 
 from app.graph.clarify_context import pending_clarify
 from app.graph.clarify_reply import classify_clarify_reply
-from app.graph.intent import modify_intent, single_node_gen_intent
+from app.graph.intent import modify_intent
 from app.graph.atomic_clarify import is_affirmative_clarify_reply, pending_atomic_clarify
 from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route
 from app.graph.route_trace import serialize_route_decision
-from app.graph.context_packet import should_include_prior_task
 from app.graph.product_visual_v2.utterance import extract_user_request_labels, resolve_effective_utterance
 from app.graph.state import BRIEF_RESET_PREFIX
 from app.skills.loader import discover_skills
@@ -110,6 +109,11 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
         requested = str(ctx.get("requested_skill_id") or "").strip()
         skill_id: str | None = requested if requested in by_id else None
         flow_mode = decision["flow_mode"]
+        # Phase 2d.2: never write live atomic_create / atomic_regenerate / single_node.
+        if flow_mode in ("atomic_create", "atomic_regenerate", "single_node"):
+            skill_id = None
+            flow_mode = "canvas_agent"
+            decision = {**decision, "flow_mode": "canvas_agent"}
         mode = "modify" if decision.get("is_modify") else "create"
         proposed_brief: str | None = None
         needs_regen_clarify = decision.get("reason") == "regen_no_checkpoint"
@@ -126,8 +130,6 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
                 proposed_brief = BRIEF_RESET_PREFIX + text
             else:
                 proposed_brief = text
-        elif flow_mode in ("atomic_create", "atomic_regenerate", "single_node"):
-            skill_id = None
 
         if skill_id is None and flow_mode == "campaign":
             prev_skill = str(state.get("skill_id") or "").strip()
@@ -179,10 +181,7 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
             # Persist decided lane for multi-turn decide_lane (D7).
             "previous_lane": decision.get("flow_mode") or resolved_flow,
         }
-        if resolved_flow in ("atomic_create", "atomic_regenerate"):
-            out["split_manifest"] = []
-            out["skill_id"] = None
-        elif resolved_flow == "canvas_agent":
+        if resolved_flow == "canvas_agent":
             # Phase 2d: former atomic single-create isolation — clear campaign residue
             # when utterance still looks like single-node media create.
             from app.graph.atomic_intent import utterance_suggests_atomic_create
@@ -217,16 +216,6 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
                 labels = extract_user_request_labels(effective)
                 if labels:
                     out["user_request_labels"] = labels
-        prior_spec = state.get("atomic_spec") if isinstance(state.get("atomic_spec"), dict) else None
-        if (
-            resolved_flow == "atomic_create"
-            and prior_spec
-            and not should_include_prior_task(text, prior_spec)
-        ):
-            out["atomic_spec"] = None
-            out["atomic_node_id"] = None
-            out["atomic_items"] = None
-            out["atomic_record_id"] = None
         return out
 
     return intake

@@ -23,9 +23,11 @@ from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
     GATE_RESUME_COMMAND_GOTO,
     HITL_GATE_NODES,
+    RETIRED_INTERRUPT_GATES,
     build_fresh_turn_command,
     build_interrupt_resume_command,
     build_interrupt_state_update,
+    build_retired_atomic_confirm_command,
     cancel_state_clear_for_resume,
     interrupt_event_payload,
     prepare_interrupt_resume,
@@ -663,6 +665,9 @@ def resolve_turn_input(
 ) -> Any | None:
     """Resolve synchronous turn routing; ``None`` defers a gate resume."""
     nodes = [str(node) for node in next_nodes]
+    # G6: legacy await_atomic_confirm — clear + guidance; never resume into run_atomic_gen.
+    if nodes and nodes[0] in RETIRED_INTERRUPT_GATES:
+        return build_retired_atomic_confirm_command(update=turn_update)
     phase = str(pre_vals.get("phase") or "") or None
     # Post-cancel revise must tier off the phase the run was stopped in, not "cancelled".
     cancelled_from = str(pre_vals.get("cancelled_from_phase") or "") or None

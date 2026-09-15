@@ -143,5 +143,6 @@ async def test_intake_prod_img2img_case_atomic():
         "保持主图风格，背景，构图不变。"
     )
     out = await node({"messages": [HumanMessage(content=u)]})
-    assert out["flow_mode"] == "atomic_create"
+    # Phase 2d / 2d.2: img2img / create → canvas_agent
+    assert out["flow_mode"] == "canvas_agent"
     assert out.get("skill_id") is None

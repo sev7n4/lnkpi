@@ -253,7 +253,8 @@ def _rule_checkpoint_regen(
     if features.get("has_atomic_checkpoint") and atomic_regenerate_intent(intent.utterance):
         return _base_decision(
             ctx,
-            flow_mode="atomic_regenerate",
+            # Phase 2d.2: keep rule id; live flow → canvas_agent (no atomic_regenerate subgraph).
+            flow_mode="canvas_agent",
             reason="atomic_regenerate_checkpoint",
             confidence=0.96,
             precedence_rule_id="checkpoint_regen",
@@ -312,7 +313,8 @@ def _rule_focus_gen(
     ):
         return _base_decision(
             ctx,
-            flow_mode="single_node",
+            # Phase 2d.2: keep rule id; live flow → canvas_agent (no single_node subgraph).
+            flow_mode="canvas_agent",
             reason="single_node_focus",
             confidence=0.93,
             precedence_rule_id="focus_gen",

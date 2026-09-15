@@ -1,7 +1,7 @@
 # Agent 原子创作工具化（Canvas Operator + Propose/Confirm）
 
 > 日期：2026-09-14  
-> 状态：**已批准**（2026-09-14；终局 B；执行令开至 **Phase 2d**；2d.2/3 另开 plan 门禁）  
+> 状态：**已批准**（2026-09-14；终局 B；执行令开至 **Phase 2d.2**；Phase 3 另开 plan 门禁）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 上级：Hybrid A / CS（[2026-08-08-agent-canvas-control-surface-design.md](./2026-08-08-agent-canvas-control-surface-design.md)）  
 > 相关：[2026-09-14-codex-style-tool-plan-harness-design.md](./2026-09-14-codex-style-tool-plan-harness-design.md)、[2026-08-09-sidebar-ref-image-routing-design.md](./2026-08-09-sidebar-ref-image-routing-design.md)  
@@ -21,7 +21,7 @@
 | **D6** | Phase 3（规格原则）：`campaign` / `product_visual` 等大编排逐步工具化 / skill 多步任务；本文件 **不** 钉死 Phase 3 工具 API |
 | **D7** | 不回到 A 终局（永久保留 atomic 子图与 agent 双宇宙）；A 仅可作为 2a 过渡形态 |
 | **D8** | 相对 harness：**修订 CS-4 表述**——禁止的是 **计费执行工具**（`run_*` / destructive），允许 **propose / 画布突变** 工具进 visible |
-| **D9** | **执行令：** Phase 2a/2b/2c **已完成**；**Phase 2d 已授权**（[2d 规格](./2026-09-15-agent-atomic-phase-2d-design.md) + [2d plan](../plans/2026-09-15-agent-atomic-phase-2d.md)）。2d.2（子图删除）/ Phase 3 另开 plan |
+| **D9** | **执行令：** Phase 2a/2b/2c/2d **已完成**；**Phase 2d.2 已授权**（[2d.2 规格](./2026-09-15-agent-atomic-phase-2d2-design.md)）。Phase 3 另开 plan |
 
 ### 0.1 与 2026-09-14 Tool Plan Harness 的关系
 
@@ -169,11 +169,11 @@ RouteDecide（收紧后）
 - 确认卡 ≡ 节点 dock 生成；同一 Nest 路径；节点态为断线恢复 SSOT。  
 - **切片：** [2c 规格](./2026-09-14-agent-atomic-phase-2c-design.md) — **2c.1** 最小 SSOT（已授权）→ 2c.2 完整卡 → 2c.3 弱化 atomic UX；硬表见该文 §6.0.3 / 各子 plan。
 
-### 4.4 Phase 2d — Deprecate atomic 主路径（本档授权：路由关门）
+### 4.4 Phase 2d — Deprecate atomic 主路径
 
-- **2d（进行中）：** `flow_mode=atomic_create` 退出路由竞争（含 `sidebar_img2img` / `ref_backed_generate` / clarify 默认 / `decide_lane`）→ 一律 `canvas_agent`。详见 [2d 规格](./2026-09-15-agent-atomic-phase-2d-design.md)。  
-- **2d.2（未授权）：** 子图物理删除；`atomic_regenerate` / `single_node` 另评估。  
-- `decide_lane` 的 `atomic_create`：**本档删除或恒映射** `canvas_agent`。
+- **2d（已完成）：** `flow_mode=atomic_create` 退出路由竞争（含 `sidebar_img2img` / `ref_backed_generate` / clarify 默认 / `decide_lane`）→ 一律 `canvas_agent`。详见 [2d 规格](./2026-09-15-agent-atomic-phase-2d-design.md)。  
+- **2d.2（已授权）：** 卸 atomic/single 子图注册；`atomic_regenerate` / `single_node` 路由 remap → `canvas_agent`；旧 `await_atomic_confirm` 禁止静默扣费。详见 [2d.2 规格](./2026-09-15-agent-atomic-phase-2d2-design.md)。  
+- `decide_lane` 的 `atomic_create` / `atomic_regenerate` / `single_node`：**删除或恒映射** `canvas_agent`。
 
 **回滚：** 2a 可用 flag/`atomic_generate` 临时加回 precedence（仅紧急）；禁止回滚到「零工具 chat」。
 
@@ -203,6 +203,7 @@ RouteDecide（收紧后）
 | **2c.2** | 见 [2c 规格 §6.0.4](./2026-09-14-agent-atomic-phase-2c-design.md)（generation_propose presentation；积分可选） |
 | **2c.3** | 见 [2c 规格 §6.0.5](./2026-09-14-agent-atomic-phase-2c-design.md)（atomic 芯片映射 dock） |
 | **2d** | 见 [2d 规格 §6.0.6](./2026-09-15-agent-atomic-phase-2d-design.md)（V6 路由关门；F1–F7） |
+| **2d.2** | 见 [2d.2 规格 §6.0.7](./2026-09-15-agent-atomic-phase-2d2-design.md)（子图清尸 + regen/single remap；G1–G8） |
 
 #### 6.0.2 Phase 2b 验收硬表（合入门禁）
 
@@ -302,7 +303,7 @@ RouteDecide（收紧后）
 |----|--------|
 | `propose_generation` 最终工具名与批量语义 | **2b plan 前** |
 | 积分预估是否强制出现在确认卡 | 2b/2c plan |
-| 旧 atomic 子图代码删除时间表 | **2d.2**（路由关门后） |
+| 旧 atomic 子图代码删除时间表 | **2d.2**（[规格](./2026-09-15-agent-atomic-phase-2d2-design.md)；以 G4 图上不可达为准） |
 | Phase 3 生产流量门槛 | Phase 3 plan |
 | 2a 兄弟规则审计结论 | **2a 实现中记录；若需改规则则同 PR** |
 

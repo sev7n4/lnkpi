@@ -10,11 +10,9 @@ from langchain_core.messages import HumanMessage
 
 from app.graph.atomic_intent import (
     orchestration_complexity_intent,
-    resolve_intake_route,
 )
 from app.graph.atomic_parse_schema import MAX_ATOMIC_MULTI_ITEMS, validate_parse_result
 from app.graph.nodes.intake import make_intake_node
-from app.graph.subgraphs.atomic_create_gate import route_after_atomic_create
 
 SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 
@@ -61,29 +59,13 @@ def test_multi_item_limit_clarify():
     assert outcome["reason"] == "multi_item_limit"
 
 
-def test_mixed_modal_routes_to_confirm():
-    assert (
-        route_after_atomic_create(
-            {
-                "phase": "atomic_create",
-                "atomic_spec": {"target_type": "image", "confirm_gate": False},
-                "atomic_items": [
-                    {"target_type": "image", "title": "主图"},
-                    {"target_type": "video", "title": "视频", "confirm_gate": True},
-                ],
-            }
-        )
-        == "await_atomic_confirm"
-    )
-
-
 @pytest.mark.asyncio
 async def test_intake_planning_without_skill_clarifies_or_chat():
     intake = make_intake_node(SKILLS_DIR)
     u = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
     out = await intake({"messages": [HumanMessage(content=u)]})
     assert out.get("skill_id") is None
-    assert out["flow_mode"] in ("atomic_create", "chat") or out.get("phase") == "clarify"
+    assert out["flow_mode"] in ("atomic_create", "chat", "canvas_agent") or out.get("phase") == "clarify"
     assert out["flow_mode"] != "campaign" or out.get("skill_id")
 
 

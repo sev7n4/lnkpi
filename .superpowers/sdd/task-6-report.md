@@ -16,3 +16,22 @@ Report: `.superpowers/sdd/task-6-report.md`
 
 **Tests:** `DockStudioToolbar.test.ts` 4/4、`GuidePickerPopover.test.ts` 2/2 通过（含 defaultPrevented 与无焦点 Esc 场景）。
 Commit: `fix(web): Esc closes guide picker before dock`
+
+## Fix: clarify_gate writes canvas_agent (Phase 2d2 review)
+
+**Problem:** `clarify_gate` non-`route_orchestration` path still set `flow_mode = "atomic_create"`, violating the retired-flow production write ban.
+
+**Fix:**
+- `clarify_gate.py`: non-route clarify → `flow_mode = "canvas_agent"` (keep `clarify_route` for `route_orchestration`).
+- `test_clarify_gate_unified.py`: assert `canvas_agent` for atomic_parse path.
+
+**Tests:**
+```
+cd services/agent-runtime && PYTHONPATH=. python3.11 -m pytest \
+  tests/test_phase_2d2_subgraph_retire.py \
+  tests/test_hitl_resume.py \
+  tests/test_phase_2d_route_close.py \
+  tests/test_clarify_gate_unified.py -q
+# 37 passed, 1 warning in 25.71s
+```
+Commit: `fix(agent): clarify_gate writes canvas_agent not atomic_create`

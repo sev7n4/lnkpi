@@ -111,10 +111,11 @@ def test_primary_uses_llm_when_no_hard(primary_on):
 
 
 def test_low_confidence_goes_to_clarify(primary_on):
+    # Use a still-live graph lane; retired single_node is mapped to canvas_agent in parse.
     llm = FakeLLM(
         json.dumps(
             {
-                "lane": "single_node",
+                "lane": "campaign",
                 "confidence": 0.4,
                 "reason": "ambiguous_gen",
                 "clarify_question": "要出图还是画布操作？",
@@ -124,7 +125,7 @@ def test_low_confidence_goes_to_clarify(primary_on):
     ctx = assemble_route_context(
         {"messages": [{"role": "user", "content": "帮我弄一下那个"}]}
     )
-    d = decide_route(ctx, llm=llm)
+    d = decide_route(ctx, llm=llm, valid_skill_ids={"enterprise-marketing-campaign"})
     assert d["flow_mode"] == "clarify_route"
     assert llm.calls == 1
 
@@ -205,18 +206,19 @@ def test_primary_soft_guard_vetoes_graph_lane(primary_on, monkeypatch):
     from app.graph import route_decide as rd
 
     monkeypatch.setattr(rd, "_guard_veto", lambda _ctx: "planning_image_conflict")
+    # single_node retired → canvas_agent (no veto); use live campaign lane.
     llm = FakeLLM(
         json.dumps(
             {
-                "lane": "single_node",
+                "lane": "campaign",
                 "confidence": 0.9,
-                "reason": "llm_atomic",
+                "reason": "llm_campaign",
                 "clarify_question": None,
             }
         )
     )
     ctx = assemble_route_context({"messages": [{"role": "user", "content": "你好"}]})
-    d = decide_route(ctx, llm=llm)
+    d = decide_route(ctx, llm=llm, valid_skill_ids=set())
     assert d["flow_mode"] == "clarify_route"
     assert d.get("guard_veto") == "planning_image_conflict"
     assert d.get("reason") == "planning_guard_veto"

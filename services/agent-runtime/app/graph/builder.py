@@ -17,10 +17,8 @@ from app.graph.nodes.parse_sidebar_media import make_parse_sidebar_media_node
 from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
-from app.graph.subgraphs.atomic_create_gate import register_atomic_create_gate
 from app.graph.subgraphs.confirm_gate import register_confirm_gate
 from app.graph.subgraphs.copy_gate import register_copy_gate
-from app.graph.subgraphs.single_node_gate import register_single_node_gate
 from app.graph.subgraphs.topo_gate import register_topo_gate
 from app.graph.product_visual_v2.routing import shot_confirm_gate_name
 
@@ -33,12 +31,7 @@ def route_after_intake(state: AgentRuntimeState) -> str:
         return "clarify_gate"
     if state.get("phase") == "clarify" and state.get("clarify_question"):
         return "clarify_gate"
-    if state.get("flow_mode") == "atomic_regenerate":
-        return "prepare_atomic_regenerate"
-    if state.get("flow_mode") == "single_node":
-        return "prepare_single_gen"
-    if state.get("flow_mode") == "atomic_create":
-        return "parse_atomic_intent"
+    # REMOVED: atomic_regenerate / single_node / atomic_create branches
     if state.get("flow_mode") == "product_visual":
         return "image_qa_check"
     if state.get("skill_id"):
@@ -46,6 +39,7 @@ def route_after_intake(state: AgentRuntimeState) -> str:
     if state.get("flow_mode") in _AGENT_FLOW_MODES:
         return "explore"
     # Never fall back to zero-tool chat; unknown → tool-bearing agent.
+    # Legacy atomic_create / atomic_regenerate / single_node → explore.
     return "explore"
 
 
@@ -85,8 +79,6 @@ def build_agent_graph(
     register_confirm_gate(graph, nest=nest, llm=llm, skills_dir=skills_path)
     register_copy_gate(graph, nest=nest, llm=llm)
     register_topo_gate(graph, nest=nest)
-    register_single_node_gate(graph, nest=nest)
-    register_atomic_create_gate(graph, nest=nest, llm=llm)
     register_product_visual_gate(graph, nest=nest, llm=llm, skills_dir=skills_path, vision_creds=vision_creds)
 
     graph.add_edge(START, "parse_sidebar_media")
@@ -95,9 +87,6 @@ def build_agent_graph(
         "intake",
         route_after_intake,
         {
-            "prepare_atomic_regenerate": "prepare_atomic_regenerate",
-            "prepare_single_gen": "prepare_single_gen",
-            "parse_atomic_intent": "parse_atomic_intent",
             "image_qa_check": "image_qa_check",
             "clarify_gate": "clarify_gate",
             "decide_plan_mode": "decide_plan_mode",
@@ -126,7 +115,6 @@ def build_agent_graph(
             "await_confirm",
             "await_topo",
             "await_copy_confirm",
-            "await_atomic_confirm",
             "await_image_qa",
             "await_scheme_select",
             "await_macro_scheme_select",
