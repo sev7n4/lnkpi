@@ -4,6 +4,7 @@ import {
   applyAtomicProposeChipPriority,
   confirmAtomicGeneration,
   confirmProposeGeneration,
+  canvasHasRecipeParent,
   detectAgentChipSet,
   extractProposeGenerationNodeId,
   resolveAtomicConfirmNodeId,
@@ -104,6 +105,31 @@ describe('detectAgentChipSet', () => {
 
   it('detects recipe promote chips from HITL copy', () => {
     expect(detectAgentChipSet('这份工作流更像哪一种？')).toBe('recipe_promote')
+  })
+
+  it('detects promote seed-lock chips from second-step copy', () => {
+    expect(
+      detectAgentChipSet('将锁定这些核心步骤：模特定妆、模特四视图。确认后才会存成新模板。'),
+    ).toBe('recipe_promote_seed')
+  })
+
+  it('detects promote variant confirm chips from second-step copy', () => {
+    expect(
+      detectAgentChipSet('还是原来那套核心步骤，只记住这次的增减和连线。请确认是否保存为改版。'),
+    ).toBe('recipe_promote_variant')
+  })
+
+  it('detects recipe parent identity on instantiated canvas nodes', () => {
+    expect(canvasHasRecipeParent(undefined)).toBe(false)
+    expect(canvasHasRecipeParent([{ id: 'image-1', data: { title: '白底' } }])).toBe(false)
+    expect(
+      canvasHasRecipeParent([
+        { id: 'image-1', data: { recipeId: 'model-turnaround', recipeKey: 'model_portrait' } },
+      ]),
+    ).toBe(true)
+    expect(
+      canvasHasRecipeParent([{ id: 'image-1', data: { parentRecipeId: 'ecommerce-product-visual' } }]),
+    ).toBe(true)
   })
 
   it('detects plan structured options (new format)', () => {

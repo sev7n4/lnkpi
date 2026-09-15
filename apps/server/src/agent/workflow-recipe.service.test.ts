@@ -11,7 +11,6 @@ import { PrismaService } from '../prisma/prisma.service'
 import { WorkflowRecipeService } from './workflow-recipe.service'
 
 const FORBIDDEN = /parentId|delta|种子链|嫁接|\blint\b/i
-const UNCONFIRMED_SEED = '还没确认核心步骤，没法存成一套新模板。'
 
 const goldenWorkflow = {
   format: 'lnkpi.workflow',
@@ -152,8 +151,9 @@ describe('WorkflowRecipeService', () => {
         delta: { remove: ['banner'] },
       })
       expect(result.diffLines.some((line) => line.includes('去掉'))).toBe(true)
-      expect(result.recipe.nodes.some((node) => node.key === 'banner')).toBe(false)
-      expect(result.stripped).toEqual([])
+      expect(result.removedTitles).toContain('Banner')
+      expect(result.strippedCodes).toEqual([])
+      expect('recipe' in result).toBe(false)
     })
 
     it('maps seed_frozen to userMessages when removing white_bg', async () => {
@@ -163,10 +163,10 @@ describe('WorkflowRecipeService', () => {
         parentVersion: '1.0.0',
         delta: { remove: ['white_bg'] },
       })
-      expect(result.stripped.some((item) => item.code === 'seed_frozen')).toBe(true)
-      expect(result.recipe.nodes.some((node) => node.key === 'white_bg')).toBe(true)
+      expect(result.strippedCodes).toContain('seed_frozen')
+      expect(result.removedTitles).not.toContain('白底图')
       expect(result.userMessages.some((msg) => msg.includes('主图仍需跟着四视图'))).toBe(true)
-      expect([...result.userMessages, ...result.diffLines].join('\n')).not.toMatch(FORBIDDEN)
+      expect(JSON.stringify(result)).not.toMatch(FORBIDDEN)
     })
 
     it('grafts model seed chain without lifestyle nodes', async () => {
@@ -176,31 +176,53 @@ describe('WorkflowRecipeService', () => {
         parentVersion: '1.0.0',
         delta: { graft: { recipeId: 'model-turnaround', version: '1.0.0' } },
       })
-      expect(result.stripped.some((item) => item.code === 'graft_conflict')).toBe(false)
-      expect(result.recipe.nodes.some((node) => node.key === 'model_portrait')).toBe(true)
-      expect(result.recipe.nodes.some((node) => node.key === 'model_turnaround')).toBe(true)
-      expect(result.recipe.nodes.some((node) => node.key === 'model_lifestyle')).toBe(false)
-      expect([...result.userMessages, ...result.diffLines].join('\n')).not.toMatch(FORBIDDEN)
+      expect(result.strippedCodes).not.toContain('graft_conflict')
+      expect(result.addedTitles).toEqual(expect.arrayContaining(['模特定妆', '模特四视图']))
+      expect(result.addedTitles.some((title) => title.includes('人景'))).toBe(false)
+      expect(JSON.stringify(result)).not.toMatch(FORBIDDEN)
+      expect(JSON.stringify(result)).not.toMatch(/parentId|seedChains|model_portrait/)
     })
   })
 
   describe('promoteRecipe', () => {
-    it('rejects new_template without confirmed seed keys', async () => {
-      try {
-        await svc.promoteRecipe({
-          sessionId: 's1',
-          userId: 'u1',
-          workflow: goldenWorkflow,
-          mode: 'new_template',
-          title: '湖景',
-        })
-        throw new Error('expected reject')
-      } catch (err) {
-        expect(err).toBeInstanceOf(BadRequestException)
-        const body = (err as BadRequestException).getResponse() as { userMessage?: string; message?: string }
-        expect(body.userMessage ?? body.message).toBe(UNCONFIRMED_SEED)
-        expect(JSON.stringify(body)).not.toMatch(FORBIDDEN)
-      }
+    it('returns needs_seed_confirm without writing when seed keys are missing', async () => {
+      const result = await svc.promoteRecipe({
+        sessionId: 's1',
+        userId: 'u1',
+        workflow: goldenWorkflow,
+        mode: 'new_template',
+        title: '湖景',
+      })
+      expect(result).toMatchObject({
+        status: 'needs_seed_confirm',
+        userMessage: expect.stringContaining('将锁定这些核心步骤'),
+      })
+      if (result.status !== 'needs_seed_confirm') throw new Error('expected preview')
+      expect(result.coreSteps.map((step) => step.title)).toEqual(
+        expect.arrayContaining(['Scene prompt', 'Hero frame']),
+      )
+      expect(result.userMessage).not.toMatch(FORBIDDEN)
+      expect(result.userMessage).not.toMatch(/scene_prompt|hero_frame/)
+      expect(rows).toHaveLength(0)
+    })
+
+    it('returns needs_variant_confirm without writing until confirmed', async () => {
+      const parent = getPlatformRecipe('ecommerce-product-visual', '1.0.0')
+      expect(parent).toBeTruthy()
+      const workflow = compileRecipeToWorkflow(parent!)
+      const result = await svc.promoteRecipe({
+        sessionId: 's1',
+        userId: 'u2',
+        workflow,
+        mode: 'variant',
+        parentId: 'ecommerce-product-visual',
+        parentVersion: '1.0.0',
+      })
+      expect(result).toMatchObject({
+        status: 'needs_variant_confirm',
+        parentTitle: '电商套图',
+        userMessage: expect.stringContaining('请确认是否保存为改版'),
+      })
       expect(rows).toHaveLength(0)
     })
 
@@ -239,9 +261,12 @@ describe('WorkflowRecipeService', () => {
         userId: 'u2',
         workflow,
         mode: 'variant',
+        confirmed: true,
         parentId: 'ecommerce-product-visual',
         parentVersion: '1.0.0',
       })
+      expect(saved.status).toBe('saved')
+      if (saved.status !== 'saved') throw new Error('expected saved')
       const body = JSON.parse(saved.body) as { nodes: Array<{ key: string }> }
       expect(body.nodes.some((node) => node.key === 'banner')).toBe(false)
       expect(saved.parentId).toBe('ecommerce-product-visual')
@@ -426,16 +451,18 @@ describe('WorkflowRecipeService', () => {
         confirmedSeedKeys: ['look_seed', 'look_turn'],
         title: '我的定妆',
       })
+      expect(saved.status).toBe('saved')
+      if (saved.status !== 'saved') throw new Error('expected saved')
       const result = await svc.previewRecipeDelta({
         userId: 'u-graft',
         parentId: 'ecommerce-product-visual',
         parentVersion: '1.0.0',
         delta: { graft: { recipeId: saved.recipeId, version: saved.version } },
       })
-      expect(result.stripped.some((item) => item.code === 'graft_conflict')).toBe(false)
-      expect(result.recipe.nodes.some((node) => node.key === 'look_seed')).toBe(true)
-      expect(result.recipe.nodes.some((node) => node.key === 'look_turn')).toBe(true)
-      expect(result.recipe.graftedRecipeIds).toContain(saved.recipeId)
+      expect(result.strippedCodes).not.toContain('graft_conflict')
+      expect(result.addedTitles).toEqual(expect.arrayContaining(['我的定妆', '我的四视']))
+      expect(JSON.stringify(result)).not.toMatch(FORBIDDEN)
+      expect(JSON.stringify(result)).not.toContain(saved.recipeId)
     })
   })
 
@@ -469,6 +496,54 @@ describe('WorkflowRecipeService', () => {
       const turnaround = workflow.graph.nodes.find((node) => node.data.recipeKey === 'product_turnaround')
       expect(turnaround?.data.mentionedKeys).toEqual(['image-white_bg'])
       expect(workflow.graph.nodes.some((node) => node.data.recipeKey === 'banner')).toBe(false)
+    })
+
+    it('rejects empty_prompt after fill and does not import', async () => {
+      const { prisma, rows } = createPrisma()
+      rows.push({
+        userId: 'u-empty',
+        recipeId: 'bare-seed',
+        version: '1.0.0',
+        title: '空提示词',
+        parentId: null,
+        parentVersion: null,
+        body: JSON.stringify({
+          id: 'bare-seed',
+          version: '1.0.0',
+          title: '空提示词',
+          graftedRecipeIds: [],
+          invariants: { seedChains: [{ id: 'bare', keys: ['bare_seed'] }] },
+          nodes: [
+            {
+              key: 'bare_seed',
+              title: '空种子',
+              type: 'image',
+              chain: 'bare',
+              role: 'seed',
+              dependsOn: [],
+              genMode: 't2i',
+              autoGenerate: true,
+            },
+          ],
+        }),
+        sourceSessionId: null,
+        sourceHash: null,
+      })
+      const svc = new WorkflowRecipeService(prisma as unknown as PrismaService)
+      try {
+        await svc.compileInstantiate({
+          sessionId: 's1',
+          userId: 'u-empty',
+          parentId: 'bare-seed',
+          parentVersion: '1.0.0',
+          delta: {},
+        })
+        throw new Error('expected reject')
+      } catch (err) {
+        expect(err).toBeInstanceOf(BadRequestException)
+        const body = (err as BadRequestException).getResponse() as { userMessage?: string; message?: string }
+        expect(body.userMessage ?? body.message).toBe('还有步骤没写提示词，先补上再放到画布。')
+      }
     })
   })
 })
@@ -518,19 +593,19 @@ describe('recipe planner DTOs', () => {
     expect(result.title).toBe('湖景')
   })
 
-  it('keeps sessionId and allows omitting workflow', async () => {
+  it('keeps promote confirmed under ValidationPipe whitelist', async () => {
     const result = (await pipe.transform(
       {
         sessionId: 's1',
         userId: 'u1',
-        mode: 'new_template',
-        confirmedSeedKeys: ['scene_prompt'],
+        mode: 'variant',
+        confirmed: true,
+        parentId: 'ecommerce-product-visual',
+        parentVersion: '1.0.0',
       },
       { type: 'body', metatype: PromoteRecipeDto },
     )) as PromoteRecipeDto
-    expect(result.sessionId).toBe('s1')
-    expect(result.userId).toBe('u1')
-    expect(result.workflow).toBeUndefined()
-    expect(result.confirmedSeedKeys).toEqual(['scene_prompt'])
+    expect(result.confirmed).toBe(true)
+    expect(result.mode).toBe('variant')
   })
 })

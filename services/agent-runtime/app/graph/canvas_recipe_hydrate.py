@@ -20,6 +20,7 @@ def canvas_nodes_from_state(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 def hydrate_gen_by_key_from_canvas(nodes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Build gen_by_key items from canvas node recipe identity (compile/import)."""
+    id_to_recipe_key = _canvas_id_to_recipe_key(nodes)
     by_key: dict[str, dict[str, Any]] = {}
     for node in nodes:
         if not isinstance(node, dict):
@@ -40,8 +41,8 @@ def hydrate_gen_by_key_from_canvas(nodes: list[dict[str, Any]]) -> dict[str, dic
             "title": data.get("title") or node.get("title") or key,
         }
         mentioned = data.get("mentionedKeys")
-        if _is_recipe_key_list(mentioned):
-            item["depends_on"] = [str(k) for k in mentioned]
+        if _is_key_list(mentioned):
+            item["depends_on"] = [id_to_recipe_key.get(str(k), str(k)) for k in mentioned]
         gen_mode = data.get("genMode")
         if gen_mode:
             item["gen_mode"] = gen_mode
@@ -76,6 +77,19 @@ def _fill_missing_identity(hydrated_item: dict[str, Any], item: dict[str, Any]) 
     return out
 
 
-def _is_recipe_key_list(value: Any) -> bool:
-    """Task 3 compile writes recipe keys into mentionedKeys, not canvas node ids."""
+def _canvas_id_to_recipe_key(nodes: list[dict[str, Any]]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        data = node.get("data") if isinstance(node.get("data"), dict) else {}
+        nid = node.get("id")
+        raw_key = data.get("recipeKey") if isinstance(data, dict) else None
+        if nid and raw_key:
+            mapping[str(nid)] = str(raw_key)
+    return mapping
+
+
+def _is_key_list(value: Any) -> bool:
+    """Compile writes canvas node ids into mentionedKeys; older graphs may still store recipe keys."""
     return isinstance(value, list) and all(isinstance(x, str) for x in value)

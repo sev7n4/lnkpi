@@ -621,6 +621,10 @@ export class PromoteRecipeDto {
   @IsOptional()
   @IsString()
   parentVersion?: string
+
+  @IsOptional()
+  @IsBoolean()
+  confirmed?: boolean
 }
 
 class GroupNodesDto {

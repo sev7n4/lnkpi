@@ -78,7 +78,13 @@ def test_import_workflow_chinese_still_binds_only_import():
 
 
 def test_promote_phrases_bind_promote_not_only_import():
-    for phrase in ("存成一套新模板", "保存为当前模板的改版"):
+    for phrase in (
+        "存成一套新模板",
+        "保存为当前模板的改版",
+        "确认锁定这些核心步骤",
+        "将锁定这些核心步骤：定妆",
+        "这份工作流更像哪一种？",
+    ):
         tools = select_narrow_write_tools(phrase)
         assert "promote_workflow_template" in tools
         assert tools != _IMPORT_ONLY
