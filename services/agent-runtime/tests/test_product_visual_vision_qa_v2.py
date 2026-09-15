@@ -14,8 +14,17 @@ from app.graph.nodes.image_qa_gate import (
     make_image_qa_remedy_node,
 )
 from app.graph.product_visual_v2.vision_qa import VisionQAResult, evaluate_vision_qa_v2
+from app.graph.product_visual_v2.vision_qa_client import run_vision_qa
 
 SKILLS = Path(__file__).resolve().parents[1] / "skills"
+
+VISION_CREDS = {
+    "provider_ref": "platform::gpt-4o",
+    "model": "gpt-4o",
+    "api_key": "sk-platform",
+    "base_url": "https://api.openai.com/v1",
+    "source": "platform",
+}
 
 
 class FakeNestVision:
@@ -26,6 +35,14 @@ class FakeNestVision:
     async def run_vision_qa(self, **kwargs: Any) -> dict[str, Any]:
         self.calls.append(kwargs)
         return self.payload
+
+
+def _assert_provider_context(call: dict[str, Any], creds: dict[str, str]) -> None:
+    assert call["provider_ref"] == creds["provider_ref"]
+    assert call["model"] == creds["model"]
+    assert call["api_key"] == creds["api_key"]
+    assert call["base_url"] == creds["base_url"]
+    assert call["source"] == creds["source"]
 
 
 @pytest.mark.asyncio
@@ -40,7 +57,7 @@ async def test_vision_qa_check_pass_with_product_ref():
             "productIdentifiable": True,
         }
     )
-    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS)
+    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS, vision_creds=VISION_CREDS)
     out = await node(
         {
             "product_visual_scheme_v2": True,
@@ -62,6 +79,7 @@ async def test_vision_qa_check_pass_with_product_ref():
     assert "大闸蟹" in str(out.get("image_qa_reason") or "")
     assert nest.calls
     assert nest.calls[0]["image_urls"] == ["https://cdn.example/crab.jpg"]
+    _assert_provider_context(nest.calls[0], VISION_CREDS)
 
 
 @pytest.mark.asyncio
@@ -77,7 +95,7 @@ async def test_vision_qa_check_fail_shows_product_understanding():
             "productIdentifiable": True,
         }
     )
-    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS)
+    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS, vision_creds=VISION_CREDS)
     out = await node(
         {
             "product_visual_scheme_v2": True,
@@ -97,6 +115,7 @@ async def test_vision_qa_check_fail_shows_product_understanding():
     assert isinstance(pres, dict)
     body = pres.get("body") or {}
     assert "礼盒" in str(body.get("understanding") or "")
+    _assert_provider_context(nest.calls[0], VISION_CREDS)
 
 
 @pytest.mark.asyncio
@@ -111,7 +130,7 @@ async def test_vision_qa_check_fail_shows_reason():
             "productIdentifiable": False,
         }
     )
-    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS)
+    node = make_image_qa_check_node(nest=nest, skills_dir=SKILLS, vision_creds=VISION_CREDS)
     out = await node(
         {
             "product_visual_scheme_v2": True,
@@ -143,6 +162,62 @@ async def test_vision_qa_check_fail_shows_reason():
     msgs = out.get("messages") or []
     assert msgs
     assert pres.get("title") in str(getattr(msgs[0], "content", ""))
+    _assert_provider_context(nest.calls[0], VISION_CREDS)
+
+
+@pytest.mark.asyncio
+async def test_run_vision_qa_forwards_provider_context_without_settings_fallback(monkeypatch):
+    nest = FakeNestVision(
+        {
+            "pass": True,
+            "reason": "ok",
+            "visionUsed": True,
+            "isWhiteBg": True,
+            "isSharpEnough": True,
+            "productIdentifiable": True,
+        }
+    )
+    # Even if settings have openai_* values, Context must come only from vision_creds.
+    monkeypatch.setattr("app.config.settings.openai_chat_model", "should-not-use")
+    monkeypatch.setattr("app.config.settings.openai_api_key", "sk-settings-should-not-use")
+    monkeypatch.setattr("app.config.settings.openai_base_url", "https://settings.example/v1")
+
+    out = await run_vision_qa(
+        nest=nest,
+        state={
+            "sidebar_attachments": [
+                {"mediaType": "image", "url": "https://cdn.example/crab.jpg", "role": "product"}
+            ],
+            "messages": [HumanMessage(content="中秋大闸蟹包装")],
+        },
+        skills_dir=SKILLS,
+        vision_creds=VISION_CREDS,
+    )
+    assert out.pass_ is True
+    assert nest.calls
+    _assert_provider_context(nest.calls[0], VISION_CREDS)
+    assert nest.calls[0]["model"] != "should-not-use"
+
+
+@pytest.mark.asyncio
+async def test_run_vision_qa_incomplete_creds_fail_without_settings(monkeypatch):
+    monkeypatch.setattr("app.config.settings.openai_chat_model", "gpt-4o")
+    monkeypatch.setattr("app.config.settings.openai_api_key", "sk-settings")
+    monkeypatch.setattr("app.config.settings.openai_base_url", "https://api.openai.com/v1")
+
+    out = await run_vision_qa(
+        nest=None,
+        state={
+            "sidebar_attachments": [
+                {"mediaType": "image", "url": "https://cdn.example/crab.jpg", "role": "product"}
+            ],
+        },
+        skills_dir=SKILLS,
+        vision_creds={"provider_ref": None, "model": None, "api_key": None, "base_url": None, "source": None},
+    )
+    assert out.pass_ is False
+    assert out.vision_used is False
+    assert "凭证不完整" in out.reason
 
 
 def test_heuristic_only_cannot_pass_v2():

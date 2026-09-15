@@ -12,6 +12,14 @@ from app.graph.nodes.image_qa_gate import _run_qa_check
 SKILLS = Path(__file__).resolve().parents[1] / "skills"
 URL = "https://cdn.example/cup.jpg"
 
+VISION_CREDS = {
+    "provider_ref": "ch_x::deepseek-flash",
+    "model": "deepseek-flash",
+    "api_key": "sk-test",
+    "base_url": "https://api.example/v1",
+    "source": "user",
+}
+
 COMPLETE_QA = {
     "product_summary": "不锈钢水杯",
     "is_white_bg": True,
@@ -30,10 +38,10 @@ PARSE_COMPLETE = {
 
 class FakeNest:
     def __init__(self) -> None:
-        self.calls = 0
+        self.calls: list[dict[str, Any]] = []
 
     async def run_vision_qa(self, **kwargs: Any) -> dict[str, Any]:
-        self.calls += 1
+        self.calls.append(kwargs)
         return {
             "pass": True,
             "reason": "ok",
@@ -56,6 +64,14 @@ def _state(*, parse: dict, cache: dict | None = None) -> dict:
     }
 
 
+def _assert_provider_context(call: dict[str, Any]) -> None:
+    assert call["provider_ref"] == VISION_CREDS["provider_ref"]
+    assert call["model"] == VISION_CREDS["model"]
+    assert call["api_key"] == VISION_CREDS["api_key"]
+    assert call["base_url"] == VISION_CREDS["base_url"]
+    assert call["source"] == VISION_CREDS["source"]
+
+
 @pytest.mark.asyncio
 async def test_image_qa_skips_vision_http_when_cache_covers_complete_qa():
     nest = FakeNest()
@@ -63,9 +79,9 @@ async def test_image_qa_skips_vision_http_when_cache_covers_complete_qa():
         _state(parse=PARSE_COMPLETE),
         nest=nest,
         skills_dir=SKILLS,
-        vision_creds=None,
+        vision_creds=VISION_CREDS,
     )
-    assert nest.calls == 0
+    assert nest.calls == []
     assert out["product_summary"] == "不锈钢水杯"
 
 
@@ -97,9 +113,10 @@ async def test_image_qa_reruns_vision_when_second_url_cache_is_not_success():
         state,
         nest=nest,
         skills_dir=SKILLS,
-        vision_creds=None,
+        vision_creds=VISION_CREDS,
     )
-    assert nest.calls == 1
+    assert len(nest.calls) == 1
+    _assert_provider_context(nest.calls[0])
     assert out.get("product_summary") == "from-http"
 
 
@@ -118,7 +135,8 @@ async def test_image_qa_reruns_vision_when_is_white_bg_missing():
         _state(parse=parse),
         nest=nest,
         skills_dir=SKILLS,
-        vision_creds=None,
+        vision_creds=VISION_CREDS,
     )
-    assert nest.calls == 1
+    assert len(nest.calls) == 1
+    _assert_provider_context(nest.calls[0])
     assert out.get("product_summary") == "from-http"
