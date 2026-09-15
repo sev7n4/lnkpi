@@ -25,11 +25,15 @@ from app.tools.tool_search import make_tool_search_tool
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
 _PLANNER_CONFIRM_LINE = "请确认是否把改动落到画布"
+_PLANNER_PROMOTE_LINE = "这份工作流更像哪一种？"
 _PLANNER_SYSTEM = (
     "规划工作流时：先 match_workflow_templates 再 preview_workflow_template。"
     "不要调用 import_workflow 或 connect_nodes 手搭拓扑。"
     "instantiate_workflow_template 只在用户确认落到画布之后调用，"
     "只传 parent_id、parent_version、delta，不要传完整模板。"
+    "对用户只用「模板」「核心步骤」「改版」「接到另一套模板」；"
+    "不要对用户写 seed、种子链、graft、内部 id。"
+    "收成模板时先问「这份工作流更像哪一种？」再调用 promote_workflow_template。"
 )
 
 # Unified canvas_agent system prompt (spec §3.6) — also re-exported as chat._SYSTEM.
