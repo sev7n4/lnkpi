@@ -132,6 +132,7 @@ import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
 import GridSliceWorkbench from '@/components/canvas/grid-slice/GridSliceWorkbench.vue'
 import { useImageUpscale } from '@/composables/useImageUpscale'
 import { runGridSlice } from '@/composables/useGridSlice'
+import { clampGridDims, GRID_SLICE_LAYOUT_GAP, layoutSliceChildPositions } from '@/utils/gridSlice'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { canUpscaleNode } from '@/utils/upscaleNode'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -2595,14 +2596,21 @@ function handleSelectionUpscale() {
   void handleUpscaleForNode(node.id)
 }
 
-function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[]) {
-  const { w } = getNodeSize(source as FlowNode)
-  const originX = source.position.x + w + 36
-  const originY = source.position.y
+function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[], cols: number) {
+  const { w: sourceW } = getNodeSize(source as FlowNode)
+  const origin = {
+    x: source.position.x + sourceW + GRID_SLICE_LAYOUT_GAP,
+    y: source.position.y,
+  }
+  const sizes = childIds.map((id) => {
+    const child = findNodeById(id)
+    return child ? getNodeSize(child as FlowNode) : { w: 0, h: 0 }
+  })
+  const positions = layoutSliceChildPositions(origin, sizes, cols)
   childIds.forEach((id, i) => {
     const child = findNodeById(id)
     if (!child) return
-    child.position = { x: originX, y: originY + i * 56 }
+    child.position = positions[i]!
   })
 }
 
@@ -2628,11 +2636,12 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
   if (!sourceUrl || gridSliceBusy.value) return
 
   gridSliceBusy.value = true
+  const dims = clampGridDims(cols, rows)
   try {
     const result = await runGridSlice({
       sourceUrl,
-      cols,
-      rows,
+      cols: dims.cols,
+      rows: dims.rows,
       sourceNodeId: node.id,
       getSourceNode: () => findNodeById(node.id) ?? node,
       addNode: (type, childData, opts) =>
@@ -2646,7 +2655,7 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
           opts,
         ),
       addEdge,
-      layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds),
+      layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds, dims.cols),
     })
     ElMessage.success(`已裁剪为 ${result.nodeIds.length} 张`)
     selectNodeIds(result.nodeIds)

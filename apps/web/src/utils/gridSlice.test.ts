@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampGridDims, equalSliceRects } from './gridSlice'
+import { clampGridDims, equalSliceRects, layoutSliceChildPositions } from './gridSlice'
 
 describe('clampGridDims', () => {
   it('clamps 0 to 1', () => {
@@ -57,5 +57,29 @@ describe('equalSliceRects', () => {
         expect(coverage[y][x], `pixel ${x},${y}`).toBe(1)
       }
     }
+  })
+})
+
+describe('layoutSliceChildPositions', () => {
+  it('places children in row-major cols×rows grid to the right of origin', () => {
+    const sizes = Array.from({ length: 4 }, () => ({ w: 100, h: 80 }))
+    const positions = layoutSliceChildPositions({ x: 200, y: 50 }, sizes, 2, 24)
+
+    expect(positions).toEqual([
+      { x: 200, y: 50 },
+      { x: 324, y: 50 },
+      { x: 200, y: 154 },
+      { x: 324, y: 154 },
+    ])
+  })
+
+  it('uses a single column when cols is 1', () => {
+    const sizes = [{ w: 40, h: 30 }, { w: 40, h: 30 }]
+    const positions = layoutSliceChildPositions({ x: 0, y: 0 }, sizes, 1, 10)
+
+    expect(positions).toEqual([
+      { x: 0, y: 0 },
+      { x: 0, y: 40 },
+    ])
   })
 })
