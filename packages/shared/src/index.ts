@@ -35,6 +35,7 @@ export * from './videoGeneration/types'
 export { resolveCanonicalVideoRequest } from './videoGeneration/resolveCanonicalVideoRequest'
 export * from './videoGeneration/minimaxH3Reference'
 export * from './imagePromptingGuide'
+export * from './gridSlice'
 
 export type GenerationType = 'text' | 'image' | 'video'
 
