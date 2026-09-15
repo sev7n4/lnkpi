@@ -7,6 +7,7 @@ from app.graph.clarify_context import pending_clarify
 from app.graph.clarify_reply import classify_clarify_reply
 from app.graph.intent import modify_intent
 from app.graph.atomic_clarify import is_affirmative_clarify_reply, pending_atomic_clarify
+from app.graph.legacy_lane import LEGACY_LANE_SHIM, map_legacy_lane
 from app.graph.route_context import assemble_route_context, latest_user_text
 from app.graph.route_decide import ROUTE_CLARIFY_ORCHESTRATION, decide_route
 from app.graph.route_trace import serialize_route_decision
@@ -109,11 +110,11 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
         requested = str(ctx.get("requested_skill_id") or "").strip()
         skill_id: str | None = requested if requested in by_id else None
         flow_mode = decision["flow_mode"]
-        # Phase 2d.2: never write live atomic_create / atomic_regenerate / single_node.
-        if flow_mode in ("atomic_create", "atomic_regenerate", "single_node"):
+        # Phase 2d.3 D4: never write live retired lanes; map via LEGACY_LANE_SHIM.
+        if flow_mode in LEGACY_LANE_SHIM:
             skill_id = None
-            flow_mode = "canvas_agent"
-            decision = {**decision, "flow_mode": "canvas_agent"}
+            flow_mode = map_legacy_lane(flow_mode) or "canvas_agent"
+            decision = {**decision, "flow_mode": flow_mode}
         mode = "modify" if decision.get("is_modify") else "create"
         proposed_brief: str | None = None
         needs_regen_clarify = decision.get("reason") == "regen_no_checkpoint"
