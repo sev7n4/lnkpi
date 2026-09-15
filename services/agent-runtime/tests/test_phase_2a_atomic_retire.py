@@ -58,7 +58,7 @@ def test_a7_sibling_ref_backed_kept():
     features = extract_route_features(ctx, intent)
     raw = apply_route_precedence(intent, features, ctx)
     assert raw.get("precedence_rule_id") == "ref_backed_generate"
-    assert raw["flow_mode"] == "atomic_create"
+    assert raw["flow_mode"] == "canvas_agent"
 
 
 def test_a8_greeting_is_canvas_agent():

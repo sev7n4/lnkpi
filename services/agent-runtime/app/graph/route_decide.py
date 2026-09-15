@@ -196,8 +196,9 @@ def _clarify_resume_decision(
 ) -> RouteDecision | None:
     if not pending_clarify_reply or pending_clarify_reply == "none":
         return None
-    route = str(pending_clarify_reply.get("route") or "atomic_create")
-    flow = "campaign" if route == "campaign" else "atomic_create"
+    route = str(pending_clarify_reply.get("route") or "canvas_agent")
+    # Phase 2d: non-campaign clarify resume never reopens atomic_create (incl. legacy route).
+    flow = "campaign" if route == "campaign" else "canvas_agent"
     utterance = str(ctx.get("utterance") or "")
     return RouteDecision(
         flow_mode=flow,  # type: ignore[typeddict-item]

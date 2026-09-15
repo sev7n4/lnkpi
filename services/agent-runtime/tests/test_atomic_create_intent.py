@@ -157,7 +157,7 @@ async def test_intake_atomic_create_wins_over_regenerate_with_prior_node(tmp_pat
         "atomic_node_id": "node-abc",
         "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特人物图"},
     })
-    assert out["flow_mode"] == "atomic_create"
+    assert out["flow_mode"] == "canvas_agent"
     assert out["flow_mode"] != "atomic_regenerate"
 
 

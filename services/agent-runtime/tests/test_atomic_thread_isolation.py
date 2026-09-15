@@ -76,7 +76,7 @@ async def test_intake_variant_routes_to_atomic_create(tmp_path: Path):
     }
     for utterance in ("重新生成一张，背景改成白色", "按刚才那个风格再生成一张"):
         out = await intake({**checkpoint, "messages": [HumanMessage(content=utterance)]})
-        assert out["flow_mode"] == "atomic_create", utterance
+        assert out["flow_mode"] == "canvas_agent", utterance
 
 
 @pytest.mark.asyncio
@@ -123,7 +123,7 @@ async def test_intake_atomic_clears_campaign_split_manifest(tmp_path: Path):
             "user_brief": "天猫蓝牙耳机详情页",
         }
     )
-    assert out["flow_mode"] == "atomic_create"
+    assert out["flow_mode"] == "canvas_agent"
     assert out["split_manifest"] == []
     assert out.get("skill_id") is None
 

@@ -1,7 +1,7 @@
 # Agent Atomic Phase 2c — HITL 统一 / 节点 SSOT
 
 > 日期：2026-09-14  
-> 状态：**已批准方向**（切片节奏 2c.1→2c.2→2c.3）；**执行令开至 Phase 2c.3**；2d/3 另开  
+> 状态：**已批准方向**（切片节奏 2c.1→2c.2→2c.3）；**2c 执行完毕**；2d 见 [2d 规格](./2026-09-15-agent-atomic-phase-2d-design.md)  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md) §4.3 / D3 / H3  
 > 依赖：Phase 2c.1（#314）、2c.2（#316）已合入且生产冒烟绿  
@@ -14,7 +14,7 @@
 | # | 决策 |
 |---|------|
 | **C-D1** | Phase 2c 分三档：**2c.1 最小 SSOT → 充分验证 → 2c.2 完整 HITL 卡 → 2c.3 弱化旧 atomic 确认 UX**；每档单独硬表 + 生产冒烟 |
-| **C-D2** | **执行令开至 2c.3**；2d / 3 另开 plan，禁止同 PR 顺手做完 |
+| **C-D2** | **2c 执行令已关**（2c.1–2c.3 完成）；2d 见 [2d 规格](./2026-09-15-agent-atomic-phase-2d-design.md)；禁止在 2c PR 顺手做 2d |
 | **C-D3** | 确认卡 ≡ dock：确认必须调用与 dock **同一** `generateForNode(nodeId)`（或同一 Nest/studio 入口）；**禁止** `sendPreset('确认生成')` / `flow_mode=atomic_create` 作为主确认路径 |
 | **C-D4** | 画布节点 `data.status === 'pending_confirm'` 为断线恢复 SSOT；对话 chip 只是快捷入口 |
 | **C-D5** | 取消以 Nest 写回为准（`clearProposeGeneration` → `draft`）；禁止仅本地 patch 作为主路径 |
