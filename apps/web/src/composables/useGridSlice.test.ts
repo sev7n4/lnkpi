@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { runGridSlice } from './useGridSlice'
 
 function stubPlaceDeps() {
-  const addNode = vi.fn((_type: string, _data: Record<string, unknown>) => `child-${addNode.mock.calls.length}`)
+  let n = 0
+  const addNode = vi.fn((_type: string, _data: Record<string, unknown>) => {
+    n += 1
+    return `child-${n}`
+  })
   const addEdge = vi.fn()
   const layoutChildren = vi.fn()
   return { addNode, addEdge, layoutChildren }
@@ -61,18 +65,20 @@ describe('runGridSlice', () => {
     expect(layoutChildren).toHaveBeenCalledTimes(1)
     expect(layoutChildren).toHaveBeenCalledWith(['child-1', 'child-2', 'child-3', 'child-4'])
 
-    expect(addNode.mock.calls[0][0]).toBe('image')
-    expect(addNode.mock.calls[0][1]).toMatchObject({
+    const addNodeMock = vi.mocked(addNode)
+    const addEdgeMock = vi.mocked(addEdge)
+    expect(addNodeMock.mock.calls[0]![0]).toBe('image')
+    expect(addNodeMock.mock.calls[0]![1]).toMatchObject({
       url: 'https://cdn/cell-1.png',
       label: '主图 · 格1',
       gridSlice: { sourceNodeId: 'img-1', index: 0, cols: 2, rows: 2 },
     })
-    expect(addNode.mock.calls[3][1]).toMatchObject({
+    expect(addNodeMock.mock.calls[3]![1]).toMatchObject({
       url: 'https://cdn/cell-4.png',
       label: '主图 · 格4',
       gridSlice: { sourceNodeId: 'img-1', index: 3, cols: 2, rows: 2 },
     })
-    expect(addEdge.mock.calls[0][0]).toMatchObject({
+    expect(addEdgeMock.mock.calls[0]![0]).toMatchObject({
       source: 'img-1',
       target: 'child-1',
     })
@@ -96,7 +102,7 @@ describe('runGridSlice', () => {
       sessionId: 'sess-1',
     })
     expect(addNode).toHaveBeenCalledTimes(7)
-    expect(addNode.mock.calls[0][1].gridSlice).toEqual({
+    expect(vi.mocked(addNode).mock.calls[0]![1].gridSlice).toEqual({
       sourceNodeId: 'img-1',
       index: 0,
       cols: 7,
