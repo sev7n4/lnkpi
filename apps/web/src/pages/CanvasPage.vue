@@ -129,6 +129,7 @@ import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
+import GridSliceWorkbench from '@/components/canvas/grid-slice/GridSliceWorkbench.vue'
 import { useImageUpscale } from '@/composables/useImageUpscale'
 import { runGridSlice } from '@/composables/useGridSlice'
 import { useCapabilities } from '@/composables/useCapabilities'
@@ -737,6 +738,13 @@ const editorNode = computed((): EditableFlowNode | null => {
 const { imageUpscale: imageUpscaleCapability } = useCapabilities()
 const { loading: upscaleLoading, runUpscale } = useImageUpscale()
 const gridSliceBusy = ref(false)
+const gridSlicePanelNodeId = ref<string | null>(null)
+
+const gridSlicePanelNode = computed((): EditableFlowNode | null => {
+  if (!gridSlicePanelNodeId.value) return null
+  const node = findNodeById(gridSlicePanelNodeId.value)
+  return node ? (node as EditableFlowNode) : null
+})
 
 const refinePanelNode = computed((): EditableFlowNode | null => {
   if (!CX_IMAGE_EDIT_ENABLED) return null
@@ -747,7 +755,7 @@ const refinePanelNode = computed((): EditableFlowNode | null => {
 
 /** 单选 + 可放大图像节点时显示选中浮层（多选不出现） */
 const selectionUpscaleNode = computed((): EditableFlowNode | null => {
-  if (refinePanelNode.value) return null
+  if (refinePanelNode.value || gridSlicePanelNode.value) return null
   if (multiSelectedIds.value.length !== 1) return null
   const node = findNodeById(multiSelectedIds.value[0])
   if (!node) return null
@@ -765,9 +773,9 @@ const selectionUpscaleNode = computed((): EditableFlowNode | null => {
   return node as EditableFlowNode
 })
 
-/** 单选 image + 有 url；精修打开时隐藏（与放大入口互斥） */
+/** 单选 image + 有 url；精修/宫格工作台打开时隐藏 */
 const selectionGridSliceNode = computed((): EditableFlowNode | null => {
-  if (refinePanelNode.value) return null
+  if (refinePanelNode.value || gridSlicePanelNodeId.value) return null
   if (multiSelectedIds.value.length !== 1) return null
   const node = findNodeById(multiSelectedIds.value[0])
   if (!node || String(node.type ?? '') !== 'image') return null
@@ -822,6 +830,21 @@ const refineMediaWidth = computed(() => {
 
 const refineMediaHeight = computed(() => {
   const info = refinePanelNode.value?.data?.mediaInfo as { height?: number } | undefined
+  return typeof info?.height === 'number' ? info.height : undefined
+})
+
+const gridSliceUrl = computed(() => {
+  const data = gridSlicePanelNode.value?.data as Record<string, unknown> | undefined
+  return String(data?.url ?? '')
+})
+
+const gridSliceMediaWidth = computed(() => {
+  const info = gridSlicePanelNode.value?.data?.mediaInfo as { width?: number } | undefined
+  return typeof info?.width === 'number' ? info.width : undefined
+})
+
+const gridSliceMediaHeight = computed(() => {
+  const info = gridSlicePanelNode.value?.data?.mediaInfo as { height?: number } | undefined
   return typeof info?.height === 'number' ? info.height : undefined
 })
 
@@ -2479,6 +2502,10 @@ function applyRefineSelectionDecision(selectedId: string | null) {
 
 function openRefineForNode(node: EditableFlowNode | null | undefined) {
   if (!CX_IMAGE_EDIT_ENABLED || !node) return
+  if (gridSlicePanelNodeId.value || gridSliceBusy.value) {
+    ElMessage.warning('请先退出宫格裁剪')
+    return
+  }
   const data = (node.data ?? {}) as Record<string, unknown>
   if (
     !canOpenRefineForNode({
@@ -2579,19 +2606,33 @@ function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[]) {
   })
 }
 
-async function handleGridSliceQuick(n: number) {
-  const node = selectionGridSliceNode.value
-  if (!node || gridSliceBusy.value || gridSliceEntryDisabled.value) return
+function selectNodeIds(ids: string[]) {
+  if (ids.length === 0) return
+  if (ids.length === 1) {
+    selectOnlyNode(ids[0])
+    return
+  }
+  pendingExclusiveSelectId = null
+  const set = new Set(ids)
+  nodes.value = nodes.value.map((node) => {
+    const selected = set.has(node.id)
+    return node.selected === selected ? node : { ...node, selected }
+  })
+  multiSelectedIds.value = ids
+  selectedNodeId.value = ids[0]
+}
+
+async function executeGridSlice(node: EditableFlowNode, cols: number, rows: number) {
   const data = (node.data ?? {}) as Record<string, unknown>
   const sourceUrl = String(data.url ?? '').trim()
-  if (!sourceUrl) return
+  if (!sourceUrl || gridSliceBusy.value) return
 
   gridSliceBusy.value = true
   try {
     const result = await runGridSlice({
       sourceUrl,
-      cols: n,
-      rows: n,
+      cols,
+      rows,
       sourceNodeId: node.id,
       getSourceNode: () => findNodeById(node.id) ?? node,
       addNode: (type, childData, opts) =>
@@ -2608,17 +2649,43 @@ async function handleGridSliceQuick(n: number) {
       layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds),
     })
     ElMessage.success(`已裁剪为 ${result.nodeIds.length} 张`)
+    selectNodeIds(result.nodeIds)
     void persistUserEditAsync()
+    return result
   } catch (err) {
     ElMessage.error(apiErrorMessage(err, '宫格裁剪失败'))
+    return null
   } finally {
     gridSliceBusy.value = false
   }
 }
 
+async function handleGridSliceQuick(n: number) {
+  const node = selectionGridSliceNode.value
+  if (!node || gridSliceEntryDisabled.value) return
+  await executeGridSlice(node, n, n)
+}
+
+function closeGridSliceWorkbench() {
+  if (gridSliceBusy.value) return
+  gridSlicePanelNodeId.value = null
+}
+
 function handleGridSliceOpenCustom() {
-  if (!selectionGridSliceNode.value || gridSliceBusy.value) return
-  // Task 4: open GridSliceWorkbench session
+  const node = selectionGridSliceNode.value
+  if (!node || gridSliceBusy.value || gridSliceEntryDisabled.value) return
+  if (refinePanelNode.value || canvasEditor.refineBusy) {
+    ElMessage.warning('请先退出精修')
+    return
+  }
+  gridSlicePanelNodeId.value = node.id
+}
+
+async function handleGridSliceConfirm(dims: { cols: number; rows: number }) {
+  const node = gridSlicePanelNode.value
+  if (!node || gridSliceBusy.value) return
+  const result = await executeGridSlice(node, dims.cols, dims.rows)
+  if (result) closeGridSliceWorkbench()
 }
 
 function closeRefineWorkbench() {
@@ -2683,6 +2750,15 @@ function handleAgentOpenImageEditor(nodeId: string) {
 watch(selectedNodeId, (id) => {
   applyRefineSelectionDecision(id)
 })
+
+watch(
+  () => canvasEditor.imageTarget,
+  (target) => {
+    if (!target || !gridSlicePanelNodeId.value) return
+    canvasEditor.closeImageEditor()
+    ElMessage.warning('请先退出宫格裁剪')
+  },
+)
 
 watch(
   () => canvasEditor.imageTarget?.nodeId,
@@ -3597,8 +3673,17 @@ onUnmounted(() => {
           @revert="handleRefineRevert"
           @busy="canvasEditor.setRefineBusy"
         />
+        <GridSliceWorkbench
+          v-if="gridSlicePanelNode"
+          :url="gridSliceUrl"
+          :image-width="gridSliceMediaWidth"
+          :image-height="gridSliceMediaHeight"
+          :busy="gridSliceBusy"
+          @confirm="handleGridSliceConfirm"
+          @close="closeGridSliceWorkbench"
+        />
         <DockStudioToolbar
-          v-if="!refinePanelNode"
+          v-if="!refinePanelNode && !gridSlicePanelNode"
           :node="editorNode"
           :upstream="editorUpstream"
           :refs="selectedRefs"
