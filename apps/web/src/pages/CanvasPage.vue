@@ -130,6 +130,7 @@ import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
 import { useImageUpscale } from '@/composables/useImageUpscale'
+import { runGridSlice } from '@/composables/useGridSlice'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { canUpscaleNode } from '@/utils/upscaleNode'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -735,6 +736,7 @@ const editorNode = computed((): EditableFlowNode | null => {
 
 const { imageUpscale: imageUpscaleCapability } = useCapabilities()
 const { loading: upscaleLoading, runUpscale } = useImageUpscale()
+const gridSliceBusy = ref(false)
 
 const refinePanelNode = computed((): EditableFlowNode | null => {
   if (!CX_IMAGE_EDIT_ENABLED) return null
@@ -761,6 +763,36 @@ const selectionUpscaleNode = computed((): EditableFlowNode | null => {
     return null
   }
   return node as EditableFlowNode
+})
+
+/** 单选 image + 有 url；精修打开时隐藏（与放大入口互斥） */
+const selectionGridSliceNode = computed((): EditableFlowNode | null => {
+  if (refinePanelNode.value) return null
+  if (multiSelectedIds.value.length !== 1) return null
+  const node = findNodeById(multiSelectedIds.value[0])
+  if (!node || String(node.type ?? '') !== 'image') return null
+  const data = (node.data ?? {}) as Record<string, unknown>
+  if (!String(data.url ?? '').trim()) return null
+  return node as EditableFlowNode
+})
+
+const gridSliceEntryDisabled = computed(() => {
+  if (gridSliceBusy.value) return true
+  const node = selectionGridSliceNode.value
+  if (!node) return true
+  const data = (node.data ?? {}) as Record<string, unknown>
+  if (!String(data.url ?? '').trim()) return true
+  return isNodeGenerating(data.status) || data.status === 'uploading'
+})
+
+const gridSliceDisabledTitle = computed(() => {
+  if (gridSliceBusy.value) return '裁剪中…'
+  const node = selectionGridSliceNode.value
+  if (!node) return '当前图片不可裁剪'
+  const data = (node.data ?? {}) as Record<string, unknown>
+  if (!String(data.url ?? '').trim()) return '图片尚未就绪'
+  if (isNodeGenerating(data.status) || data.status === 'uploading') return '生成中，无法裁剪'
+  return ''
 })
 
 const refineBeforeUrl = computed(() => {
@@ -2536,6 +2568,59 @@ function handleSelectionUpscale() {
   void handleUpscaleForNode(node.id)
 }
 
+function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[]) {
+  const { w } = getNodeSize(source as FlowNode)
+  const originX = source.position.x + w + 36
+  const originY = source.position.y
+  childIds.forEach((id, i) => {
+    const child = findNodeById(id)
+    if (!child) return
+    child.position = { x: originX, y: originY + i * 56 }
+  })
+}
+
+async function handleGridSliceQuick(n: number) {
+  const node = selectionGridSliceNode.value
+  if (!node || gridSliceBusy.value || gridSliceEntryDisabled.value) return
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const sourceUrl = String(data.url ?? '').trim()
+  if (!sourceUrl) return
+
+  gridSliceBusy.value = true
+  try {
+    const result = await runGridSlice({
+      sourceUrl,
+      cols: n,
+      rows: n,
+      sourceNodeId: node.id,
+      getSourceNode: () => findNodeById(node.id) ?? node,
+      addNode: (type, childData, opts) =>
+        addNode(
+          type,
+          {
+            prompt: '',
+            imageModel: getProviderConfig('image').model,
+            ...childData,
+          },
+          opts,
+        ),
+      addEdge,
+      layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds),
+    })
+    ElMessage.success(`已裁剪为 ${result.nodeIds.length} 张`)
+    void persistUserEditAsync()
+  } catch (err) {
+    ElMessage.error(apiErrorMessage(err, '宫格裁剪失败'))
+  } finally {
+    gridSliceBusy.value = false
+  }
+}
+
+function handleGridSliceOpenCustom() {
+  if (!selectionGridSliceNode.value || gridSliceBusy.value) return
+  // Task 4: open GridSliceWorkbench session
+}
+
 function closeRefineWorkbench() {
   canvasEditor.closeImageEditor()
 }
@@ -3441,8 +3526,14 @@ onUnmounted(() => {
             :node="selectionUpscaleNode as FlowNode"
             :image-upscale="imageUpscaleCapability"
             :loading="upscaleLoading"
+            :grid-slice="Boolean(selectionGridSliceNode)"
+            :grid-slice-loading="gridSliceBusy"
+            :grid-slice-disabled="gridSliceEntryDisabled"
+            :grid-slice-disabled-title="gridSliceDisabledTitle"
             @upscale="handleSelectionUpscale"
             @edit="openRefineForSelected"
+            @quick-slice="handleGridSliceQuick"
+            @open-custom="handleGridSliceOpenCustom"
           />
 
           <MultiSelectConnectOverlay
