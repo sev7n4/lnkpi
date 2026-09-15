@@ -259,6 +259,31 @@ async def test_instantiate_recipe(nest_client, captured):
         "slots": {"white_bg": "mug"},
     }
     assert "recipe" not in req["json"]
+    assert "utterance" not in req["json"]
+
+
+@pytest.mark.asyncio
+async def test_instantiate_recipe_falls_back_to_last_user_utterance(nest_client, captured):
+    nest_client.last_user_utterance = "规划一个电商套图工作流，白色陶瓷杯放在木桌上"
+    await nest_client.instantiate_recipe(
+        parent_id="ecommerce-product-visual",
+        parent_version="1.0.0",
+        delta={"remove": ["banner"]},
+    )
+    req = _last(captured)
+    assert req["json"]["utterance"] == "规划一个电商套图工作流，白色陶瓷杯放在木桌上"
+
+
+@pytest.mark.asyncio
+async def test_instantiate_recipe_explicit_utterance_wins(nest_client, captured):
+    nest_client.last_user_utterance = "fallback-should-not-win"
+    await nest_client.instantiate_recipe(
+        parent_id="ecommerce-product-visual",
+        parent_version="1.0.0",
+        utterance="白色陶瓷杯放在木桌上",
+    )
+    req = _last(captured)
+    assert req["json"]["utterance"] == "白色陶瓷杯放在木桌上"
 
 
 @pytest.mark.asyncio

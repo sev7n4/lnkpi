@@ -10,6 +10,8 @@ def test_planner_system_uses_user_facing_copy():
     assert "核心步骤" in _PLANNER_SYSTEM
     assert "不要对用户写" in _PLANNER_SYSTEM
     assert "种子链" in _PLANNER_SYSTEM
+    assert "t2i" in _PLANNER_SYSTEM
+    assert "i2i" in _PLANNER_SYSTEM
     assert "覆盖上面规则5" in _PLANNER_SYSTEM
     assert "recipe id" in _PLANNER_SYSTEM
 

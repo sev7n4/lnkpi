@@ -79,6 +79,7 @@ class NestCanvasClient:
         self._http = http_client
         self._owns_http = http_client is None
         self.sidebar_attachments: list[dict[str, Any]] = []
+        self.last_user_utterance: str | None = None
         self._breaker = circuit_breaker or CircuitBreaker(
             failure_threshold=settings.circuit_breaker_failure_threshold,
             cooldown_sec=settings.circuit_breaker_cooldown_sec,
@@ -679,8 +680,9 @@ class NestCanvasClient:
         }
         if slots is not None:
             body["slots"] = slots
-        if utterance is not None:
-            body["utterance"] = utterance
+        resolved = (utterance or "").strip() or (self.last_user_utterance or "").strip()
+        if resolved:
+            body["utterance"] = resolved
         if self.sidebar_attachments:
             body["sidebarAttachments"] = self.sidebar_attachments
         return await self._post("/agent/internal/instantiate-recipe", body)
