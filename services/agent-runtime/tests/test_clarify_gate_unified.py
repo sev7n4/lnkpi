@@ -65,7 +65,7 @@ async def test_clarify_gate_atomic_parse_path():
         }
     )
     _assert_unified_checkpoint(out, kind="atomic_parse")
-    assert out.get("flow_mode") == "atomic_create"
+    assert out.get("flow_mode") == "canvas_agent"
     assert out.get("route_clarify") is False
 
 

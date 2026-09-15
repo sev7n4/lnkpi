@@ -110,7 +110,7 @@ def make_clarify_gate_node() -> Callable:
             message = question + _ref_ack_suffix(mentioned)
 
         thinking = str(state.get("thinking_summary") or "").strip() or _THINKING_BY_KIND[kind]
-        flow_mode = "clarify_route" if kind == "route_orchestration" else "atomic_create"
+        flow_mode = "clarify_route" if kind == "route_orchestration" else "canvas_agent"
 
         return {
             "phase": "clarify",
