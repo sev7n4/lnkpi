@@ -15,6 +15,7 @@ from app.graph.explore_dispatch import (
     run_mandatory_explore,
     select_narrow_write_tools,
 )
+from app.graph.planner_copy import pick_planner_slot_utterance, sanitize_planner_reply
 from app.graph.recent_turns import compress_recent_turns
 from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
 from app.metrics import record_explore_dispatch
@@ -32,7 +33,7 @@ _PLANNER_SYSTEM = (
     "instantiate_workflow_template 只在用户确认落到画布之后调用，"
     "只传 parent_id、parent_version、delta，不要传完整模板。"
     "对用户只用「模板」「核心步骤」「改版」「接到另一套模板」；"
-    "不要对用户写 seed、种子链、graft、内部 id、recipe id、version、节点 key。"
+    "不要对用户写 seed、种子、种子链、t2i、i2i、v_ref、graft、内部 id、recipe id、version、节点 key。"
     "收成模板时先问「这份工作流更像哪一种？」；认不到原模板时只问新模板。"
     "用户选出后先调用 promote_workflow_template："
     "改版不要带 confirmed，新模板不要带 confirmed_seed_keys。"
@@ -141,7 +142,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         except Exception:
             summary = {"error": "无法拉取画布摘要"}
 
-        user_text = _latest_user_text(state.get("messages") or []) or "看看画布状态"
+        messages = list(state.get("messages") or [])
+        user_text = _latest_user_text(messages) or "看看画布状态"
+        human_texts = [
+            str(getattr(msg, "content", None) or (msg.get("content") if isinstance(msg, dict) else "") or "")
+            for msg in messages
+            if _msg_is_human(msg)
+        ]
+        slot_utterance = pick_planner_slot_utterance(human_texts) or user_text
+        if hasattr(nest, "last_user_utterance"):
+            nest.last_user_utterance = slot_utterance
         parse = state.get("sidebar_media_parse")
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
@@ -184,7 +194,6 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
         if "preview_workflow_template" in visible or "match_workflow_templates" in visible:
             system_content = f"{system_content}\n{_PLANNER_SYSTEM}"
-        messages = list(state.get("messages") or [])
         # Prior turns only — current user utterance is seeded separately (D7).
         prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
         recent = compress_recent_turns(prior)
@@ -284,6 +293,13 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
 
         if promote_followup and promote_followup not in (final_reply or ""):
             final_reply = f"{(final_reply or '').rstrip()}\n{promote_followup}".strip()
+
+        if (
+            "preview_workflow_template" in visible
+            or "match_workflow_templates" in visible
+            or "instantiate_workflow_template" in called_tools
+        ):
+            final_reply = sanitize_planner_reply(final_reply)
 
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
