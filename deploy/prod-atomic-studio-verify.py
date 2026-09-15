@@ -178,15 +178,6 @@ def _is_valid_turnaround_expansion(text: str, utterance: str) -> bool:
     return has_layout or has_views
 
 
-def _has_photoreal_deai_markers(text: str) -> bool:
-    t = (text or "").strip()
-    if not t:
-        return False
-    has_negative = "Negative Prompt" in t or "negative prompt" in t.lower()
-    has_realism = any(m in t for m in ("85mm", "毛孔", "窗光", "去AI"))
-    return has_negative and has_realism
-
-
 def _lacks_photoreal_deai_markers(text: str) -> bool:
     t = (text or "").strip()
     return "Negative Prompt" not in t and "85mm" not in t
@@ -285,8 +276,8 @@ def verify_photoreal_turnaround_deai(tok: str) -> None:
     data = (node or {}).get("data") or {}
     expanded = str(data.get("expandedPrompt") or data.get("content") or "")
     record(
-        "photoreal turnaround de-AI markers",
-        _has_photoreal_deai_markers(expanded),
+        "photoreal turnaround skips de-AI",
+        _lacks_photoreal_deai_markers(expanded),
         expanded[:120],
     )
     record(

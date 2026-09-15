@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { generatePromptContent } from './generate'
+import { generatePromptContent, generatePromptFromUserInput } from './generate'
+import { FOUR_PANEL_PRODUCT_SYSTEM } from './modes/four-panel-product'
 
 describe('generatePromptContent without key', () => {
   it('returns placeholder that includes user prompt and is longer than input', async () => {
@@ -115,5 +116,38 @@ describe('generatePromptContent with key', () => {
     const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
     const last = body.messages[body.messages.length - 1]
     expect(JSON.stringify(last.content)).toContain('参考图')
+  })
+
+  it('uses product four-panel overlay and skips generic few-shots', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '同一SKU四格产品图' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { mode } = await generatePromptContent('生成这个产品的三视图提示词', 'generic', {
+      apiKey: 'test-key',
+    })
+    expect(mode).toBe('generic')
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.messages[0].content).toContain('同一 SKU')
+    expect(body.messages[0].content).toContain('90度侧面')
+    expect(body.messages[0].content).not.toMatch(/侧面或约/)
+    expect(body.messages[0].content).not.toMatch(/Negative Prompt：/)
+    const userTurns = body.messages.filter((m: { role: string }) => m.role === 'user')
+    expect(userTurns).toHaveLength(1)
+    expect(FOUR_PANEL_PRODUCT_SYSTEM).toContain('90度侧面')
+  })
+})
+
+describe('generatePromptFromUserInput product routing', () => {
+  afterEach(() => {
+    delete process.env.OPENAI_API_KEY
+  })
+
+  it('maps product three-view to generic without character mode', async () => {
+    delete process.env.OPENAI_API_KEY
+    const { mode } = await generatePromptFromUserInput('生成这个产品的三视图提示词')
+    expect(mode).toBe('generic')
+    expect(mode).not.toBe('character_turnaround')
   })
 })

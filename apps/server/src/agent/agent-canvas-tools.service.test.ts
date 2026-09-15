@@ -840,6 +840,50 @@ describe('AgentCanvasToolsService', () => {
     expect(canvas.nodes[0].data.imageResolution).toBe('2K')
   })
 
+  it('startImageGeneration expands product four-panel prompts without pipeline stamp', async () => {
+    expandPromptContent.mockResolvedValue({
+      mode: 'generic',
+      content: '同一SKU四格横排…近景特写…正面…90度侧面…背面',
+    })
+    canvas = {
+      nodes: [
+        {
+          id: 'img-product',
+          type: 'image',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '生成这个产品的三视图',
+            status: 'draft',
+            imageAspect: '16:9',
+            imageResolution: '1K',
+          },
+        },
+      ],
+      edges: [],
+    }
+    await svc.runImageGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'img-product',
+    })
+    expect(expandPromptContent).toHaveBeenCalledWith(
+      'u1',
+      '生成这个产品的三视图',
+      'platform::user-default-text',
+    )
+    expect(generateImage).toHaveBeenCalledWith(
+      'u1',
+      expect.stringContaining('同一SKU'),
+      'platform::user-default-image',
+      '2:1',
+      [],
+      undefined,
+      '2K',
+      2,
+      { sessionId: 's1', nodeId: 'img-product' },
+    )
+  })
+
   it('addNodesBatch stamps account defaults onto image/video/text/audio skeletons', async () => {
     const result = await svc.addNodesBatch({
       sessionId: 's1',

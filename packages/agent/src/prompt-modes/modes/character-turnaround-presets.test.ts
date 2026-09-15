@@ -58,4 +58,13 @@ describe('character-turnaround-presets', () => {
     expect(characterTurnaroundMode.system).toContain('Q版/Q萌/chibi')
     expect(characterTurnaroundMode.system).toContain('Q版萌系')
   })
+
+  it('photoreal commercial preset uses true side/back sheet geometry', () => {
+    const photoreal = CHARACTER_TURNAROUND_STYLE_PRESETS.find((p) => p.id === 'photoreal_commercial')!
+    expect(photoreal.panel3).toContain('90度侧面')
+    expect(photoreal.panel3).not.toMatch(/45\s*度微侧/)
+    expect(photoreal.panel4).toContain('背面全身')
+    expect(photoreal.lighting).toContain('均匀')
+    expect(photoreal.lighting).not.toContain('无填充光')
+  })
 })
