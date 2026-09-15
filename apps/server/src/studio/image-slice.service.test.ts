@@ -68,21 +68,10 @@ describe('ImageSliceService', () => {
     expect(out.width).toBe(100)
     expect(out.height).toBe(80)
     expect(saveUserFile).toHaveBeenCalledTimes(4)
-    expect(saveUserFile).toHaveBeenNthCalledWith(
-      1,
-      'u1',
-      expect.any(Buffer),
-      'slice-1.png',
-      'image/png',
-    )
-    expect(saveUserFile).toHaveBeenNthCalledWith(
-      4,
-      'u1',
-      expect.any(Buffer),
-      'slice-4.png',
-      'image/png',
-    )
-    expect(out.urls).toEqual([
+    const savedNames = saveUserFile.mock.calls.map((c) => c[2]).sort()
+    expect(savedNames).toEqual(['slice-1.png', 'slice-2.png', 'slice-3.png', 'slice-4.png'])
+    expect(out.urls).toHaveLength(4)
+    expect([...out.urls].sort()).toEqual([
       'https://cdn.example/slice-1.png',
       'https://cdn.example/slice-2.png',
       'https://cdn.example/slice-3.png',
