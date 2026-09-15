@@ -2089,6 +2089,8 @@ export class AgentCanvasToolsService {
     userId: string
     workflow?: unknown
     workflowUrl?: string
+    /** Default true: along-edges layout on addedNodeIds after merge. */
+    arrangeAlongEdges?: boolean
   }): Promise<{
     addedNodeIds: string[]
     idMap: Record<string, string>
@@ -2199,15 +2201,31 @@ export class AgentCanvasToolsService {
       nodes: [...canvas.nodes, ...(mergeNodes as CanvasNode[])],
       edges: [...canvas.edges, ...mergeEdges],
     }
-    await this.persistCanvasData(input.sessionId, updated)
 
+    const addedNodeIds = mergeNodes.map((node) => node.id)
+    const shouldArrange = input.arrangeAlongEdges !== false
+    const finalNodes =
+      shouldArrange
+        ? (layoutNodesAlongEdges(
+            updated.nodes as LayoutNode[],
+            updated.edges ?? [],
+            addedNodeIds,
+            40,
+          ) as CanvasNode[])
+        : updated.nodes
+    const finalCanvas: CanvasData = { ...updated, nodes: finalNodes }
+    await this.persistCanvasData(input.sessionId, finalCanvas)
+
+    const positionById = new Map(
+      finalNodes.map((node) => [node.id, node.position] as const),
+    )
     const actions: CanvasAction[] = [
       ...mergeNodes.map((node) => ({
         type: 'add_node' as const,
         payload: {
           id: node.id,
           nodeType: node.type,
-          position: node.position,
+          position: positionById.get(node.id) ?? node.position,
           data: node.data ?? {},
         },
       })),
@@ -2221,7 +2239,6 @@ export class AgentCanvasToolsService {
       })),
     ]
 
-    const addedNodeIds = mergeNodes.map((node) => node.id)
     return {
       addedNodeIds,
       idMap,

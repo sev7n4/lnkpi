@@ -16,13 +16,14 @@ function sliceFn(name: string, nextName: string) {
   return src.slice(start, end)
 }
 
-describe('no auto along-edges on write paths', () => {
+describe('along-edges on write paths (Hybrid)', () => {
   it('connectNodes does not arrange', () => {
     expect(sliceFn('connectNodes', 'removeNodes')).not.toMatch(/layoutNodesAlongEdges|arrangeNodesAlongEdges/)
   })
 
-  it('importWorkflow does not arrange', () => {
-    expect(sliceFn('importWorkflow', 'groupNodes')).not.toMatch(/layoutNodesAlongEdges|arrangeNodesAlongEdges/)
+  it('importWorkflow default path calls layoutNodesAlongEdges', () => {
+    // arrangeAlongEdges:false skip path is covered by service tests, not this source scan
+    expect(sliceFn('importWorkflow', 'groupNodes')).toMatch(/layoutNodesAlongEdges/)
   })
 
   it('addNodesBatch does not arrange', () => {

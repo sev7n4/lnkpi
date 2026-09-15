@@ -2180,6 +2180,99 @@ describe('AgentCanvasToolsService', () => {
       expect(result.mediaFail).toBeGreaterThanOrEqual(1)
       expect(result.addedNodeIds).toHaveLength(2)
     })
+
+    describe('default along-edges layout', () => {
+      const stackedChainWorkflow = {
+        format: 'lnkpi.workflow',
+        version: '1.0.0',
+        exportedAt: '2026-09-16T01:00:00.000Z',
+        mode: 'full',
+        exportMode: 'lightweight',
+        graph: {
+          nodes: [
+            {
+              id: 'prompt-stack-1',
+              type: 'prompt',
+              position: { x: 0, y: 0 },
+              data: { title: 'A', prompt: 'a' },
+              mediaRole: 'none',
+            },
+            {
+              id: 'image-stack-1',
+              type: 'image',
+              position: { x: 0, y: 80 },
+              data: { title: 'B', prompt: 'b' },
+              mediaRole: 'none',
+            },
+          ],
+          edges: [
+            {
+              id: 'edge-stack-1',
+              source: 'prompt-stack-1',
+              target: 'image-stack-1',
+            },
+          ],
+        },
+        mediaIndex: [],
+      }
+
+      it('arranges added chain left-to-right and keeps seed fixed', async () => {
+        canvas = {
+          nodes: [
+            {
+              id: 'seed-keep',
+              type: 'text',
+              position: { x: 12, y: 34 },
+              data: { title: 'seed' },
+            },
+          ],
+          edges: [],
+        }
+
+        const result = await svc.importWorkflow({
+          sessionId: 's1',
+          userId: 'u1',
+          workflow: stackedChainWorkflow,
+        })
+
+        const seed = canvas.nodes.find((n) => n.id === 'seed-keep')
+        expect(seed?.position).toEqual({ x: 12, y: 34 })
+
+        const promptId = result.idMap['prompt-stack-1']
+        const imageId = result.idMap['image-stack-1']
+        expect(promptId && imageId).toBeTruthy()
+        const prompt = canvas.nodes.find((n) => n.id === promptId)!
+        const image = canvas.nodes.find((n) => n.id === imageId)!
+        // stacked import becomes left→right columns (gap = maxColWidth + 40)
+        expect(prompt.position.x).toBeLessThan(image.position.x)
+        expect(image.position.x - prompt.position.x).toBe(280 + 40)
+        // no longer stacked on same x
+        expect(prompt.position.x).not.toBe(image.position.x)
+
+        const addActions = result.actions.filter((a) => a.type === 'add_node')
+        const byId = Object.fromEntries(
+          addActions.map((a) => [a.payload.id, a.payload.position]),
+        )
+        expect(byId[promptId!]).toEqual(prompt.position)
+        expect(byId[imageId!]).toEqual(image.position)
+      })
+
+      it('skips along-edges when arrangeAlongEdges is false', async () => {
+        const result = await svc.importWorkflow({
+          sessionId: 's1',
+          userId: 'u1',
+          workflow: stackedChainWorkflow,
+          arrangeAlongEdges: false,
+        })
+
+        const promptId = result.idMap['prompt-stack-1']
+        const imageId = result.idMap['image-stack-1']
+        const prompt = canvas.nodes.find((n) => n.id === promptId)!
+        const image = canvas.nodes.find((n) => n.id === imageId)!
+        expect(prompt.position.x).toBe(image.position.x)
+        expect(image.position.y - prompt.position.y).toBe(80)
+      })
+    })
   })
 
   describe('Phase 2b upsertMediaNode + proposeGeneration', () => {

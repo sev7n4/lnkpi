@@ -26,6 +26,8 @@ def test_planner_system_arranges_after_instantiate():
     assert "instantiate_workflow_template" in _PLANNER_SYSTEM
     assert "arrange_nodes_along_edges" in _PLANNER_SYSTEM
     assert "addedNodeIds" in _PLANNER_SYSTEM
+    assert "落盘已含" in _PLANNER_SYSTEM or "再整理" in _PLANNER_SYSTEM
+    assert "成功后，对返回的 addedNodeIds 调用" not in _PLANNER_SYSTEM
 
 
 def test_planner_promote_followup_uses_user_message():

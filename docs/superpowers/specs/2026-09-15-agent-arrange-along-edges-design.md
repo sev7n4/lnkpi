@@ -1,7 +1,7 @@
 # Agent 顺着连线整理 — 设计
 
 > 日期：2026-09-15（**2026-09-16 Hybrid 修订**）  
-> 状态：**已审核 + Hybrid 修订待确认**  
+> 状态：**Hybrid 已确认**（2026-09-16）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 前端对照：`apps/web/src/composables/useCanvasGrouping.ts` 的 `layoutNodesAlongEdges`（人手多选「整理布局」已接）
 
@@ -111,7 +111,7 @@ Tool / prompt 必须写清。实现按传入 id 排，**不做**服务端「整�
 
 `_EXPLORE_SYSTEM`：
 
-- `import_workflow` / `instantiate_workflow_template` **已在服务端对 addedNodeIds 默认顺连线**；成功后**不要**为同一批 id 再调 `arrange_nodes_along_edges`（除非用户明确要求再整理，或调用时传了跳过自动排）
+- `import_workflow` / `instantiate_workflow_template` **已在服务端对 addedNodeIds 默认顺连线**；成功后**不要**为同一批 id 再调 `arrange_nodes_along_edges`（除非用户明确要求再整理）
 - `connect_nodes` 成功后，仍须对当轮连线的 `source`/`target`（可并集）调用 `arrange_nodes_along_edges`
 - `node_ids` 只用 §3 来源，禁止整张画布
 

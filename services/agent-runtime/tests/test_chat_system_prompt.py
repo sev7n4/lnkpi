@@ -36,5 +36,8 @@ def test_chat_system_forbids_filename_copout_when_parse_present():
 
 def test_chat_system_requires_arrange_along_edges_on_new_nodes():
     assert "arrange_nodes_along_edges" in _SYSTEM
-    assert "addedNodeIds" in _SYSTEM or "当轮新节点" in _SYSTEM
+    assert "connect_nodes" in _SYSTEM
     assert "整张画布" in _SYSTEM
+    assert "已在服务端" in _SYSTEM or "默认顺连线" in _SYSTEM
+    # import/instantiate must not still require a follow-up arrange as hard obligation
+    assert "写完拓扑（connect_nodes / import_workflow / instantiate_workflow_template 成功）" not in _SYSTEM
