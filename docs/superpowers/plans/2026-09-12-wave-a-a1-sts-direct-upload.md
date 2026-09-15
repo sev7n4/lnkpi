@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — merged [#293](https://github.com/sev7n4/lnkpi/pull/293) (`feat: A1 STS direct upload (presigned PUT)`).
+
 **Goal:** COS 已配置时，浏览器经预签名 PUT 直传对象存储；未配置时保持现有 `POST /upload`（含分片）兜底；统一前端 `uploadApi`；capabilities 暴露 `stsDirectUpload`。
 
 **Architecture:** 扩展 `StorageAdapter` 可选 `presignPut`；仅 `S3CompatibleStorageAdapter` 实现。`DirectUploadService` 签发凭证或返回 `mode=local`。前端先问凭证再 PUT 或走旧路径。复用 A3 的 `OBJECT_STORAGE_*` env，不平行发明第二套配置。

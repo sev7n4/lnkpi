@@ -41,3 +41,9 @@ def test_chat_system_requires_arrange_along_edges_on_new_nodes():
     assert "已在服务端" in _SYSTEM or "默认顺连线" in _SYSTEM
     # import/instantiate must not still require a follow-up arrange as hard obligation
     assert "写完拓扑（connect_nodes / import_workflow / instantiate_workflow_template 成功）" not in _SYSTEM
+
+
+def test_chat_system_routes_upscale_to_tool_not_run_star():
+    assert "upscale_image" in _SYSTEM
+    assert "upsert_media_node" in _SYSTEM
+    assert "禁止" in _SYSTEM or "不要调用 run_*" in _SYSTEM

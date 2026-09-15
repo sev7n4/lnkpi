@@ -80,6 +80,9 @@ _EXPLORE_SYSTEM = (
     "connect_nodes 成功后，必须对当轮连线的 source/target 调用 arrange_nodes_along_edges；"
     "node_ids 只用这些工具返回的 addedNodeIds 或当轮连线的 source/target，"
     "禁止传入整张画布的全部 id。\n"
+    "9. 用户要放大/超分已有图：调用 upscale_image（默认 scale=2，走同一 UpscaleService）；"
+    "成功后用返回 url 调用 upsert_media_node，再用 connect_nodes 从源节点连到新节点。"
+    "禁止用 run_* 或文生图提示词冒充放大。\n"
     "\n当前画布摘要：\n{summary}"
 )
 
