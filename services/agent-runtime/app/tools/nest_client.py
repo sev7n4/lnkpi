@@ -399,10 +399,12 @@ class NestCanvasClient:
             body["sceneKind"] = scene_kind
         if model:
             body["model"] = model
+        # Multi-image sidebar parse (up to 4 uploads) commonly takes 60–90s on prod;
+        # 60s hard-cut caused tool_timeout while Nest was still succeeding (~86s observed).
         return await self._post(
             "/agent/internal/run-vision-qa",
             body,
-            timeout=60.0,
+            timeout=120.0,
         )
 
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:

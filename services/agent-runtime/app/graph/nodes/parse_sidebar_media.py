@@ -10,6 +10,7 @@ from app.graph.route_context import latest_user_text
 from app.graph.sidebar_media_parse import (
     NON_VISION_PARSE_ERROR,
     image_urls_for_parse,
+    is_retryable_parse_error,
     merge_parse_records,
     uncached_urls,
 )
@@ -181,11 +182,20 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
             rec["qa"] = qa
         if error:
             rec["error"] = error
-        for url in need:
-            cache[url] = rec
+
+        if vision_used or not is_retryable_parse_error(error):
+            for url in need:
+                cache[url] = rec
+            parse_out = _parse_from_cache(urls, cache, model)
+        else:
+            # Surface error this turn, but leave URL uncached so ↺ / next ask retries Nest.
+            ephemeral = dict(cache)
+            for url in need:
+                ephemeral[url] = rec
+            parse_out = _parse_from_cache(urls, ephemeral, model)
 
         return {
-            "sidebar_media_parse": _parse_from_cache(urls, cache, model),
+            "sidebar_media_parse": parse_out,
             "sidebar_media_parse_cache": cache,
         }
 

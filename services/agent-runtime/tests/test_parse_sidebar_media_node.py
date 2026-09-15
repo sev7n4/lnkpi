@@ -115,6 +115,48 @@ async def test_non_vision_copy_when_vision_used_false():
 
 
 @pytest.mark.asyncio
+async def test_timeout_error_not_written_to_cache_so_next_turn_retries():
+    class TimeoutOnce:
+        def __init__(self):
+            self.calls = 0
+
+        async def run_vision_qa(self, **kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("操作超时，请稍后重试")
+            return {
+                "visionUsed": True,
+                "userFacingSummary": "汽车HUD",
+                "category": "汽车电子",
+                "isWhiteBg": True,
+                "isSharpEnough": True,
+                "productIdentifiable": True,
+            }
+
+    nest = TimeoutOnce()
+    node = make_parse_sidebar_media_node(
+        nest=nest,
+        vision_creds={"model": "deepseek-flash"},
+        skills_dir=".",
+    )
+    att = [{"mediaType": "image", "url": "https://cdn.example/hud.jpg"}]
+    first = await node({"sidebar_attachments": att})
+    assert first["sidebar_media_parse"]["vision_used"] is False
+    assert "操作超时" in first["sidebar_media_parse"]["error"]
+    assert first["sidebar_media_parse_cache"] == {}
+
+    second = await node(
+        {
+            "sidebar_attachments": att,
+            "sidebar_media_parse_cache": first["sidebar_media_parse_cache"],
+        }
+    )
+    assert nest.calls == 2
+    assert second["sidebar_media_parse"]["vision_used"] is True
+    assert second["sidebar_media_parse"]["fields"]["category"] == "汽车电子"
+
+
+@pytest.mark.asyncio
 async def test_partial_cache_miss_rebuilds_from_all_current_urls():
     class Boom:
         async def run_vision_qa(self, **kwargs):

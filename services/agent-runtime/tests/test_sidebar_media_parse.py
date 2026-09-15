@@ -2,6 +2,7 @@ from app.graph.sidebar_media_parse import (
     NON_VISION_PARSE_ERROR,
     format_parse_context_block,
     image_urls_for_parse,
+    is_retryable_parse_error,
     merge_parse_records,
     prefix_assistant_reply,
     uncached_urls,
@@ -29,6 +30,26 @@ def test_uncached_skips_known():
         ["https://a", "https://b"],
         {"https://a": {"vision_used": True}},
     ) == ["https://b"]
+
+
+def test_uncached_retries_timeout_and_429():
+    cache = {
+        "https://a": {"vision_used": False, "error": "操作超时，请稍后重试"},
+        "https://b": {"vision_used": False, "error": "Vision API 429: rate limit"},
+        "https://c": {"vision_used": False, "error": NON_VISION_PARSE_ERROR},
+        "https://d": {"vision_used": True, "user_facing_summary": "ok"},
+    }
+    assert uncached_urls(
+        ["https://a", "https://b", "https://c", "https://d", "https://e"],
+        cache,
+    ) == ["https://a", "https://b", "https://e"]
+
+
+def test_is_retryable_parse_error():
+    assert is_retryable_parse_error("操作超时，请稍后重试")
+    assert is_retryable_parse_error("Vision API 429: rate limit")
+    assert not is_retryable_parse_error(NON_VISION_PARSE_ERROR)
+    assert not is_retryable_parse_error(None)
 
 
 def test_merge_joins_summaries():
