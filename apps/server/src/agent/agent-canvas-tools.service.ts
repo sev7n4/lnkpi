@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
-import { applyCanvasActions, parseVisionQaJson } from '@lnkpi/agent'
+import { applyCanvasActions, parseVisionQaJson, type ParsedVisionQaJson } from '@lnkpi/agent'
 import {
   computeImportTranslation,
   duplicateResultToCanvasActions,
@@ -275,23 +275,8 @@ function pickVisionQaModelFromCanvas(canvas: CanvasData, fallback: string): stri
   return fallback || undefined
 }
 
-function parseVisionQaResponse(raw: string): {
-  pass: boolean
-  reason: string
-  productSummary?: string
-  isWhiteBg?: boolean
-  isSharpEnough?: boolean
-  productIdentifiable?: boolean
-} {
-  const parsed = parseVisionQaJson(raw)
-  return {
-    pass: parsed.pass,
-    reason: parsed.reason,
-    productSummary: parsed.productSummary,
-    isWhiteBg: parsed.isWhiteBg,
-    isSharpEnough: parsed.isSharpEnough,
-    productIdentifiable: parsed.productIdentifiable,
-  }
+function parseVisionQaResponse(raw: string): ParsedVisionQaJson {
+  return parseVisionQaJson(raw)
 }
 
 function parseRecordText(metadata: string | null | undefined, prompt: string): string {
@@ -2752,15 +2737,7 @@ export class AgentCanvasToolsService {
     systemPrompt: string
     userContent: string
     model?: string
-  }): Promise<{
-    pass: boolean
-    reason: string
-    visionUsed: boolean
-    productSummary?: string
-    isWhiteBg?: boolean
-    isSharpEnough?: boolean
-    productIdentifiable?: boolean
-  }> {
+  }): Promise<ParsedVisionQaJson & { visionUsed: boolean }> {
     const session = await this.loadOwnedSession(input.sessionId, input.userId)
     const prefs = await this.loadAccountGenPrefs(input.userId)
     const canvasTextModel = pickVisionQaModelFromCanvas(session.canvas, prefs.defaultTextModel)

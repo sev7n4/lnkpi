@@ -1,5 +1,5 @@
 import { extractJsonObject } from './json-extract'
-import { supportsVisionTextModel } from './text-generation'
+import { supportsVisionTextModel, upstreamChatModel } from './text-generation'
 
 export interface VisionQaJsonOptions {
   apiKey?: string
@@ -18,12 +18,31 @@ export interface ParsedVisionQaJson {
   pass: boolean
   reason: string
   productSummary?: string
+  userFacingSummary?: string
+  category?: string
+  appearance?: string
+  materialHint?: string
+  textInImage?: string
+  unknown?: string[]
   isWhiteBg?: boolean
   isSharpEnough?: boolean
   productIdentifiable?: boolean
 }
 
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+
+function optionalText(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const text = String(value ?? '').trim()
+    if (text) return text
+  }
+  return undefined
+}
+
+function optionalStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) return undefined
+  return value as string[]
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -38,11 +57,17 @@ export function parseVisionQaJson(raw: string): ParsedVisionQaJson {
       reason: '识图模型返回格式异常，请重试或更换参考图',
     }
   }
-  const productSummary = String(data.product_summary ?? data.productSummary ?? '').trim() || undefined
+  const productSummary = optionalText(data.product_summary, data.productSummary)
   return {
     pass: Boolean(data.pass),
     reason: String(data.reason ?? '').trim() || '图源审核完成',
     productSummary,
+    userFacingSummary: optionalText(data.user_facing_summary, data.userFacingSummary) ?? productSummary,
+    category: optionalText(data.category),
+    appearance: optionalText(data.appearance),
+    materialHint: optionalText(data.material_hint, data.materialHint),
+    textInImage: optionalText(data.text_in_image, data.textInImage),
+    unknown: optionalStringList(data.unknown),
     isWhiteBg: typeof data.is_white_bg === 'boolean' ? data.is_white_bg : undefined,
     isSharpEnough: typeof data.is_sharp_enough === 'boolean' ? data.is_sharp_enough : undefined,
     productIdentifiable:
@@ -92,12 +117,12 @@ export async function generateVisionQaJson(
     }
   }
 
-  const model = opts.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
-  if (!supportsVisionTextModel(model)) {
+  const rawModel = opts.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
+  if (!supportsVisionTextModel(rawModel)) {
     return {
       text: JSON.stringify({
         pass: false,
-        reason: `当前文本模型（${model}）不支持识图`,
+        reason: `当前文本模型（${rawModel}）不支持识图`,
         product_summary: '',
       }),
       visionUsed: false,
@@ -111,6 +136,7 @@ export async function generateVisionQaJson(
   const endpoint = `${baseUrl}/chat/completions`
   const maxRetries = opts.maxRetries ?? 2
 
+  const model = upstreamChatModel(rawModel)
   const baseBody = {
     model,
     stream: false,

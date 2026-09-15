@@ -13,6 +13,7 @@ from app.graph.nodes.explore import make_explore_node
 from app.graph.nodes.done import make_done_node
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
 from app.graph.nodes.intake import make_intake_node
+from app.graph.nodes.parse_sidebar_media import make_parse_sidebar_media_node
 from app.graph.subgraphs.product_visual_gate import register_product_visual_gate
 from app.graph.nodes.split import make_split_node
 from app.graph.state import AgentRuntimeState
@@ -69,6 +70,10 @@ def build_agent_graph(
     skills_path = Path(skills_dir)
     graph = StateGraph(AgentRuntimeState)
 
+    graph.add_node(
+        "parse_sidebar_media",
+        make_parse_sidebar_media_node(nest=nest, vision_creds=vision_creds, skills_dir=skills_path),
+    )
     graph.add_node("intake", make_intake_node(skills_path, llm=llm))
     graph.add_node("clarify_gate", make_clarify_gate_node())
     # chat node retired (M2a): chat|explore_canvas|canvas_agent → explore
@@ -84,7 +89,8 @@ def build_agent_graph(
     register_atomic_create_gate(graph, nest=nest, llm=llm)
     register_product_visual_gate(graph, nest=nest, llm=llm, skills_dir=skills_path, vision_creds=vision_creds)
 
-    graph.add_edge(START, "intake")
+    graph.add_edge(START, "parse_sidebar_media")
+    graph.add_edge("parse_sidebar_media", "intake")
     graph.add_conditional_edges(
         "intake",
         route_after_intake,

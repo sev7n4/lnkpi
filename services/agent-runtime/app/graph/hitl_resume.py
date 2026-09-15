@@ -91,6 +91,7 @@ FRESH_TURN_STATE_CLEAR: dict[str, Any] = {
     "visual_intent": None,
     "presentation": None,
     "journey_trace": None,
+    "sidebar_media_parse": None,
     **CANCEL_STATE_CLEAR,
 }
 
@@ -235,8 +236,8 @@ def should_resume_interrupt(
 
 
 def build_fresh_turn_command(*, update: dict[str, Any]) -> Command:
-    """Jump back to intake with cleared gate / atomic checkpoint fields."""
-    return Command(goto="intake", update={**FRESH_TURN_STATE_CLEAR, **update})
+    """Jump back through sidebar parse so a fresh turn does not skip vision prepass."""
+    return Command(goto="parse_sidebar_media", update={**FRESH_TURN_STATE_CLEAR, **update})
 
 
 def build_interrupt_state_update(

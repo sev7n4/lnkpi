@@ -18,7 +18,7 @@ export function isDeepSeekFlashVisionModel(model?: string | null): boolean {
   return DEEPSEEK_FLASH_VISION_PATTERN.test(model.trim())
 }
 
-function upstreamChatModel(model?: string): string | undefined {
+export function upstreamChatModel(model?: string): string | undefined {
   if (!model) return model
   return decodeChannelModel(model)?.modelName ?? model
 }

@@ -22,6 +22,27 @@ from app.graph.product_visual_v2.vision_qa import (
     vision_qa_metrics_from_result,
 )
 from app.graph.product_visual_v2.vision_qa_client import image_urls_from_state, run_vision_qa
+from app.graph.sidebar_media_parse import parse_as_vision_qa_result
+
+_QA_BOOL_KEYS = ("is_white_bg", "is_sharp_enough", "product_identifiable")
+
+
+def _qa_fields_complete(parse: dict) -> bool:
+    qa = parse.get("qa") if isinstance(parse.get("qa"), dict) else {}
+    src = qa or parse
+    return all(src.get(k) is not None for k in _QA_BOOL_KEYS)
+
+
+def _cache_covers(urls: list[str], cache: dict | None) -> bool:
+    if not urls or not isinstance(cache, dict):
+        return False
+    for url in urls:
+        rec = cache.get(url)
+        if not isinstance(rec, dict) or not rec.get("vision_used"):
+            return False
+        if not _qa_fields_complete(rec):
+            return False
+    return True
 
 REMEDIATE_PROGRESS_MSG = "正在生成标准白底图与四视图…"
 REMEDIATE_DONE_MSG = "已生成标准白底图与四视图，继续策划视觉方案…"
@@ -265,6 +286,14 @@ async def _run_qa_check(
     v2 = is_v2_enabled(state)
     urls = image_urls_from_state(state)
     vision = None
+
+    parse = state.get("sidebar_media_parse")
+    if urls and isinstance(parse, dict) and parse.get("vision_used") and _qa_fields_complete(parse):
+        if set(urls) <= set(parse.get("image_urls") or []) or _cache_covers(
+            urls, state.get("sidebar_media_parse_cache")
+        ):
+            vision = parse_as_vision_qa_result(parse)
+            return evaluate_vision_qa_v2(vision, metrics)
 
     if urls and skills_dir is not None:
         state_with_metrics = {**state, "_qa_metrics": metrics}

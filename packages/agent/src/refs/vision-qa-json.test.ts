@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { generateVisionQaJson } from './vision-qa-json'
+import { generateVisionQaJson, parseVisionQaJson } from './vision-qa-json'
 
 describe('generateVisionQaJson', () => {
   afterEach(() => {
@@ -51,5 +51,72 @@ describe('generateVisionQaJson', () => {
     })
     expect(result.visionUsed).toBe(true)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('decodes channel-prefixed Flash before posting model', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '{"pass":true,"reason":"ok","product_summary":"桶"}' } }],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await generateVisionQaJson('sys', 'user', ['https://example.com/a.jpg'], {
+      apiKey: 'k',
+      model: 'ch_x::deepseek-flash',
+    })
+    expect(result.visionUsed).toBe(true)
+    const body = JSON.parse((fetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)
+    expect(body.model).toBe('deepseek-flash')
+  })
+})
+
+describe('parseVisionQaJson', () => {
+  it('parses sidebar parse fields from QA json', () => {
+    const parsed = parseVisionQaJson(
+      JSON.stringify({
+        pass: true,
+        reason: '清晰白底',
+        product_summary: '不锈钢水杯',
+        user_facing_summary: '一只带提手的不锈钢水杯',
+        category: '水杯',
+        appearance: '银白圆柱，塑料提手',
+        material_hint: '不锈钢',
+        text_in_image: '',
+        unknown: ['price_band', 'platform'],
+        is_white_bg: true,
+        is_sharp_enough: true,
+        product_identifiable: true,
+      }),
+    )
+    expect(parsed.userFacingSummary).toBe('一只带提手的不锈钢水杯')
+    expect(parsed.category).toBe('水杯')
+    expect(parsed.appearance).toBe('银白圆柱，塑料提手')
+    expect(parsed.materialHint).toBe('不锈钢')
+    expect(parsed.unknown).toEqual(['price_band', 'platform'])
+    expect(parsed.isWhiteBg).toBe(true)
+  })
+
+  it('falls back userFacingSummary to productSummary when empty', () => {
+    const parsed = parseVisionQaJson(
+      JSON.stringify({
+        pass: true,
+        reason: 'ok',
+        product_summary: '不锈钢水杯',
+        user_facing_summary: '  ',
+      }),
+    )
+    expect(parsed.userFacingSummary).toBe('不锈钢水杯')
+  })
+
+  it('keeps unknown only when it is a string array', () => {
+    const parsed = parseVisionQaJson(
+      JSON.stringify({
+        pass: true,
+        reason: 'ok',
+        unknown: [1, 'price_band'],
+      }),
+    )
+    expect(parsed.unknown).toBeUndefined()
   })
 })
