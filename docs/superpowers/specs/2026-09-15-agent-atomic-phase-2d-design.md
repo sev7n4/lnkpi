@@ -1,7 +1,7 @@
 # Agent Atomic Phase 2d — V6 路由关门（atomic_create 退出竞争）
 
 > 日期：2026-09-15  
-> 状态：**已批准方向**（方案 A）；**执行令开至 Phase 2d（本档）**；2d.2 子图删除 / regenerate / single_node 另开  
+> 状态：**已完成**（方案 A；F1–F7 已合入生产）；后续见 [2d.2](./2026-09-15-agent-atomic-phase-2d2-design.md)  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md) §4.4 / V6 / D9  
 > 依赖：Phase 2a–2c.3 已合入且生产冒烟绿（含 #318 E6）  
@@ -80,13 +80,9 @@
 
 ---
 
-## 5. 2d.2 路线图（未授权）
+## 5. 2d.2 路线图（已授权）
 
-- 卸 `register_atomic_create_gate` / 删除或归档子图节点  
-- 评估 `atomic_regenerate`、`single_node` 是否映射 agent  
-- 遗留 `await_atomic_confirm` checkpoint 迁移策略  
-
-另开 plan + 硬表后再开工。
+见 [2026-09-15-agent-atomic-phase-2d2-design.md](./2026-09-15-agent-atomic-phase-2d2-design.md)（方案 B：卸门 + regen/single remap + 禁静默扣费；硬表 G1–G8）。
 
 ---
 
@@ -94,7 +90,7 @@
 
 | 父项 | 本文件 |
 |------|--------|
-| §4.4 Deprecate atomic 主路径 | 本档 = 路由关门切片 |
+| §4.4 Deprecate atomic 主路径 | 本档 = 路由关门切片（已完成） |
 | V6 | §3 F1–F7 |
-| 开放项「子图删除可晚于路由关门」 | **2d.2** |
-| D9 执行令 | 开至 **2d**；2d.2/3 另开 |
+| 开放项「子图删除可晚于路由关门」 | **[2d.2](./2026-09-15-agent-atomic-phase-2d2-design.md)** |
+| D9 执行令 | 2d 已完成；执行令见 2d.2 / 父规格 |
