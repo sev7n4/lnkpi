@@ -123,8 +123,14 @@ class PreviewWorkflowTemplateInput(BaseModel):
 
 
 class InstantiateWorkflowTemplateInput(BaseModel):
-    recipe: dict[str, Any] = Field(description="确认后的完整模板")
+    parent_id: str = Field(description="主模板 id")
+    parent_version: str = Field(description="主模板版本")
+    delta: dict[str, Any] | None = Field(
+        default=None,
+        description="相对主模板的结构改动；确认原模板则传空对象",
+    )
     slots: dict[str, str] | None = Field(default=None, description="可选槽位填入，如节点提示词")
+    utterance: str | None = Field(default=None, description="用户原话，用于填槽")
 
 
 class PromoteWorkflowTemplateInput(BaseModel):
@@ -298,10 +304,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
         )
 
     async def instantiate_workflow_template(
-        recipe: dict[str, Any],
+        parent_id: str,
+        parent_version: str,
+        delta: dict[str, Any] | None = None,
         slots: dict[str, str] | None = None,
+        utterance: str | None = None,
     ) -> dict:
-        return await client.instantiate_recipe(recipe=recipe, slots=slots)
+        return await client.instantiate_recipe(
+            parent_id=parent_id,
+            parent_version=parent_version,
+            delta=delta,
+            slots=slots,
+            utterance=utterance,
+        )
 
     async def promote_workflow_template(
         mode: Literal["variant", "new_template"],
@@ -585,7 +600,8 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="instantiate_workflow_template",
                 description=(
                     "把确认后的工作流模板实例化到当前画布（编译为 lnkpi.workflow 再导入）。"
-                    "仅在用户确认结构之后调用；本步不出图。"
+                    "仅在用户确认结构之后调用；只传 parent_id、parent_version、delta，不要传完整模板。"
+                    "本步不出图。"
                 ),
                 args_schema=InstantiateWorkflowTemplateInput,
             ),

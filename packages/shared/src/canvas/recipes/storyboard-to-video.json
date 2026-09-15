@@ -1,0 +1,43 @@
+{
+  "id": "storyboard-to-video",
+  "version": "1.0.0",
+  "title": "分镜成片",
+  "invariants": {
+    "seedChains": [{ "id": "storyboard", "keys": ["storyboard_keyframe", "storyboard_board"] }]
+  },
+  "nodes": [
+    {
+      "key": "storyboard_keyframe",
+      "title": "分镜首帧",
+      "type": "image",
+      "chain": "storyboard",
+      "role": "seed",
+      "dependsOn": [],
+      "genMode": "t2i",
+      "promptHintTemplate": "分镜首帧，清晰主体与场景，电影感构图，同一场戏的视觉锚点…",
+      "autoGenerate": true
+    },
+    {
+      "key": "storyboard_board",
+      "title": "分镜板",
+      "type": "image",
+      "chain": "storyboard",
+      "role": "turnaround",
+      "dependsOn": ["storyboard_keyframe"],
+      "genMode": "i2i",
+      "promptHintTemplate": "同一场戏的分镜板：多格镜头顺序清晰，人物与场景身份锁定，禁止换场换人…",
+      "autoGenerate": true
+    },
+    {
+      "key": "storyboard_clip",
+      "title": "成片",
+      "type": "video",
+      "chain": "storyboard",
+      "role": "downstream",
+      "dependsOn": ["storyboard_board"],
+      "genMode": "v_ref",
+      "promptHintTemplate": "按分镜板镜头顺序生成成片，运动流畅，主体与场景一致…",
+      "autoGenerate": false
+    }
+  ]
+}

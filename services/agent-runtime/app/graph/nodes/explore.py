@@ -13,6 +13,7 @@ from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
     run_mandatory_explore,
+    select_narrow_write_tools,
 )
 from app.graph.recent_turns import compress_recent_turns
 from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
@@ -23,6 +24,13 @@ from app.tools.tool_registry import DEFERRED_TOOL_NAMES
 from app.tools.tool_search import make_tool_search_tool
 
 MAX_EXPLORE_TOOL_ROUNDS = 4
+_PLANNER_CONFIRM_LINE = "请确认是否把改动落到画布"
+_PLANNER_SYSTEM = (
+    "规划工作流时：先 match_workflow_templates 再 preview_workflow_template。"
+    "不要调用 import_workflow 或 connect_nodes 手搭拓扑。"
+    "instantiate_workflow_template 只在用户确认落到画布之后调用，"
+    "只传 parent_id、parent_version、delta，不要传完整模板。"
+)
 
 # Unified canvas_agent system prompt (spec §3.6) — also re-exported as chat._SYSTEM.
 _EXPLORE_SYSTEM = (
@@ -78,10 +86,20 @@ def _bind_plan_tools(
     llm: Any,
     tools_by_name: dict[str, Any],
     loaded: list[str],
+    utterance: str,
 ) -> tuple[Any, frozenset[str]]:
     plan = build_tool_plan(loaded=loaded)
-    bound_tools = [tools_by_name[n] for n in plan.ordered_visible if n in tools_by_name]
-    return llm.bind_tools(bound_tools), plan.visible_names
+    narrow_writes = select_narrow_write_tools(utterance)
+    visible: set[str] = set()
+    for name in plan.ordered_visible:
+        if name in EXPLORE_WRITE_TOOLS:
+            if name in narrow_writes:
+                visible.add(name)
+        else:
+            visible.add(name)
+    bound_tools = [tools_by_name[n] for n in plan.ordered_visible if n in visible and n in tools_by_name]
+    extra = [tools_by_name[n] for n in sorted(visible) if n not in plan.ordered_visible and n in tools_by_name]
+    return llm.bind_tools(bound_tools + extra), frozenset(visible)
 
 
 def make_explore_node(*, llm: Any, nest: Any) -> Callable:
@@ -136,13 +154,18 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             return out
 
         record_explore_dispatch(intent, "llm")
-        llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
+        attachments = state.get("sidebar_attachments") or []
+        if hasattr(nest, "sidebar_attachments"):
+            nest.sidebar_attachments = list(attachments)
+        llm_bound, visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
         if parse:
             system_content = system_content + "\n\n" + format_parse_context_block(parse)
             if not parse.get("vision_used"):
                 system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
+        if "preview_workflow_template" in visible or "match_workflow_templates" in visible:
+            system_content = f"{system_content}\n{_PLANNER_SYSTEM}"
         messages = list(state.get("messages") or [])
         # Prior turns only — current user utterance is seeded separately (D7).
         prior = messages[:-1] if messages and _msg_is_human(messages[-1]) else messages
@@ -169,7 +192,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and not write_retry_done
                 ):
                     write_retry_done = True
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
+                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
                     convo.append(ai)
                     convo.append(
                         SystemMessage(
@@ -223,12 +246,19 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and isinstance(result, dict)
                     and result.get("loaded")
                 ):
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded)
+                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
         else:
             final_reply = str(getattr(convo[-1], "content", "") or "").strip()
 
         if intent == "node_write" and not called_tools.intersection(EXPLORE_WRITE_TOOLS):
             final_reply = _NODE_WRITE_CLARIFY
+
+        if (
+            "preview_workflow_template" in called_tools
+            and "instantiate_workflow_template" not in called_tools
+        ):
+            if _PLANNER_CONFIRM_LINE not in (final_reply or ""):
+                final_reply = f"{(final_reply or '').rstrip()}\n{_PLANNER_CONFIRM_LINE}".strip()
 
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"

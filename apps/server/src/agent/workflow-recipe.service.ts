@@ -3,7 +3,9 @@ import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundEx
 import {
   applyDelta,
   buildWorkflowDocument,
+  compileRecipeToWorkflow,
   diffRecipeLines,
+  fillRecipeSlots,
   getPlatformRecipe,
   inferRecipeDraftFromWorkflow,
   lintRecipe,
@@ -17,6 +19,8 @@ import {
   type RecipeDelta,
   type RecipeDocument,
   type RecipeNode,
+  type SidebarAttachment,
+  type WorkflowDocument,
 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 
@@ -28,6 +32,8 @@ const UNRECOGNIZED_WORKFLOW = '这份工作流文件无法识别。'
 const TOO_MANY_NODES = '节点太多，没法存成模板。'
 const RECIPE_NOT_READY = '这份工作流还不能存成模板，请先调整步骤和连线。'
 const KEY_CHAIN_CONFLICT = '步骤名称和已有模板重复，请改个名字再保存。'
+const INSTANTIATE_NEEDS_CONFIRM = '请先确认改动再落到画布。'
+const EMPTY_PROMPT = '还有步骤没写提示词，先补上再放到画布。'
 
 const USER_MESSAGE_BY_CODE: Record<string, string> = {
   seed_frozen: '主图仍需跟着四视图，那一步没改。',
@@ -36,6 +42,7 @@ const USER_MESSAGE_BY_CODE: Record<string, string> = {
   invalid_edge: '图片只能接在图片后面。',
   dag_cycle: '步骤连线成环了，请先改连线。',
   seed_order: '核心步骤的顺序对不上，请先调整。',
+  empty_prompt: EMPTY_PROMPT,
 }
 
 export type MatchRecipeItem = {
@@ -140,6 +147,53 @@ export class WorkflowRecipeService {
     const diffLines = diffRecipeLines(parent, recipe).filter((line) => !FORBIDDEN_USER_TEXT.test(line))
     const userMessages = this.userMessagesFor(stripped)
     return { recipe, stripped, diffLines, userMessages }
+  }
+
+  async compileInstantiate(input: {
+    sessionId: string
+    userId: string
+    parentId: string
+    parentVersion: string
+    delta: unknown
+    slots?: Record<string, string>
+    utterance?: string
+    sidebarAttachments?: unknown[]
+    recipe?: unknown
+  }): Promise<WorkflowDocument> {
+    if (input.recipe !== undefined && input.recipe !== null) {
+      throw new BadRequestException({
+        message: INSTANTIATE_NEEDS_CONFIRM,
+        userMessage: INSTANTIATE_NEEDS_CONFIRM,
+      })
+    }
+    const parent = await this.loadParent(input.userId, input.parentId, input.parentVersion)
+    if (!parent) {
+      throw new BadRequestException('找不到这套模板')
+    }
+    validateRecipe(parent)
+    const delta = this.parseDelta(input.delta ?? {})
+    const graftSource = await this.loadGraftSource(input.userId, delta)
+    const { recipe } = applyDelta(parent, delta, {
+      graftSource,
+      alreadyGrafted: parent.graftedRecipeIds.length,
+    })
+    const attachments = Array.isArray(input.sidebarAttachments)
+      ? (input.sidebarAttachments as SidebarAttachment[])
+      : []
+    const filled = fillRecipeSlots(recipe, {
+      utterance: input.utterance,
+      attachments,
+      slots: input.slots,
+    })
+    const issues = lintRecipe(recipe, { slots: filled.slots })
+    if (issues.length > 0) {
+      const empty = issues.some((issue) => issue.code === 'empty_prompt')
+      throw new BadRequestException({
+        message: empty ? EMPTY_PROMPT : '这套模板有不合法的步骤或连线，没法放到画布上。',
+        userMessage: empty ? EMPTY_PROMPT : '这套模板有不合法的步骤或连线，没法放到画布上。',
+      })
+    }
+    return compileRecipeToWorkflow(recipe, filled.slots, filled.localRefsByKey)
   }
 
   async getUserRecipe(
@@ -429,7 +483,7 @@ export class WorkflowRecipeService {
   }
 
   private isPlatformId(id: string): boolean {
-    return id === ECOMMERCE_ID || id === MODEL_ID
+    return PLATFORM_RECIPES.some((recipe) => recipe.id === id)
   }
 
   private hashWorkflow(workflow: unknown): string {

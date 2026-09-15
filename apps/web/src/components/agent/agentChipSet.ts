@@ -8,6 +8,7 @@ export type AgentChipSet =
   | 'topo'
   | 'atomic'
   | 'generation_propose'
+  | 'recipe_confirm'
   | 'image_qa'
   | 'scheme_select'
   | 'macro_scheme_select'
@@ -30,6 +31,7 @@ export type CanvasNodeLike = {
 const PLAN_SNIPPETS = ['1. 采纳推荐', '1 / A', '确认方案', '请选择：'] as const
 const COPY_SNIPPETS = ['【主文案草稿】', '写入主文案'] as const
 const TOPO_SNIPPETS = ['确认出图', '当前资产拓扑', '要改拓扑'] as const
+const RECIPE_CONFIRM_SNIPPETS = ['请确认是否把改动落到画布'] as const
 
 /**
  * 修复 P1-4 + P2-1：上下文感知的 chipSet 检测
@@ -258,6 +260,7 @@ export function detectAgentChipSet(
   if (t.includes('【主文案草稿】') && TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (t.includes('视频/音频生成将消耗积分')) return 'atomic'
   if (t.includes('提交前需你确认')) return 'atomic'
+  if (RECIPE_CONFIRM_SNIPPETS.some((s) => t.includes(s))) return 'recipe_confirm'
   if (TOPO_SNIPPETS.some((s) => t.includes(s))) return 'topo'
   if (COPY_SNIPPETS.some((s) => t.includes(s))) return 'copy'
   if (PLAN_SNIPPETS.some((s) => t.includes(s))) return 'plan'

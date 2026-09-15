@@ -25,6 +25,8 @@ const REQUIRED_IDS = [
   'graft-twice',
   'infer-missing-seed',
   'second-derive-frozen-graft-seed',
+  'recognize-storyboard',
+  'recognize-i2v',
 ] as const
 
 type EvalExpect = {

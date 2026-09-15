@@ -96,6 +96,12 @@ describe('detectAgentChipSet', () => {
     ).toBe('generation_propose')
   })
 
+  it('detects recipe confirm chips from planner preview copy', () => {
+    expect(
+      detectAgentChipSet('增加「包装细节」\n请确认是否把改动落到画布'),
+    ).toBe('recipe_confirm')
+  })
+
   it('detects plan structured options (new format)', () => {
     expect(
       detectAgentChipSet(

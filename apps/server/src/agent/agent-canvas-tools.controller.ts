@@ -545,11 +545,28 @@ export class InstantiateRecipeDto {
   @IsString()
   userId!: string
 
-  @IsOptional()
-  recipe!: unknown
+  @IsString()
+  parentId!: string
+
+  @IsString()
+  parentVersion!: string
+
+  @IsObject()
+  delta!: Record<string, unknown>
 
   @IsOptional()
   slots?: Record<string, string>
+
+  @IsOptional()
+  @IsString()
+  utterance?: string
+
+  @IsOptional()
+  @IsArray()
+  sidebarAttachments?: unknown[]
+
+  @IsOptional()
+  recipe?: unknown
 }
 
 export class MatchRecipesDto {
@@ -1103,7 +1120,12 @@ export class AgentCanvasToolsController {
 
   @Post('instantiate-recipe')
   async instantiateRecipe(@Body() dto: InstantiateRecipeDto) {
-    const data = await this.tools.instantiateRecipe(dto)
+    const workflow = await this.recipes.compileInstantiate(dto)
+    const data = await this.tools.importWorkflow({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      workflow,
+    })
     return { code: 0, message: 'ok', data }
   }
 
