@@ -28,9 +28,6 @@ from app.graph.route_precedence import (
 logger = logging.getLogger(__name__)
 
 RouteFlowMode = Literal[
-    "atomic_create",
-    "atomic_regenerate",
-    "single_node",
     "campaign",
     "product_visual",
     "explore_canvas",

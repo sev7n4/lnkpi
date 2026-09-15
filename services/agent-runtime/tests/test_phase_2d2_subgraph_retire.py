@@ -37,7 +37,7 @@ def _precedence(state: dict):
 
 def test_g1_checkpoint_regen_routes_canvas_agent():
     # Fixture mirrors test_route_precedence.test_precedence_checkpoint_regen
-    # so has_atomic_checkpoint + regenerate intent fire checkpoint_regen.
+    # so has_regen_checkpoint + regenerate intent fire checkpoint_regen.
     d = _precedence(
         {
             "messages": [{"role": "user", "content": "重新生成一张"}],
@@ -50,7 +50,7 @@ def test_g1_checkpoint_regen_routes_canvas_agent():
 
 
 def test_g2_focus_gen_routes_canvas_agent():
-    # Utterance must match single_node_gen_intent (see test_precedence_focus_gen:
+    # Utterance must match focus_gen_intent (see test_precedence_focus_gen:
     # "快速生成"); "生成这个节点" does not fire focus_gen today.
     d = _precedence(
         {

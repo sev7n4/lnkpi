@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import re
 from typing import TypedDict
 
 from app.graph.atomic_intent import (
-    atomic_regenerate_intent,
+    regen_intent,
     regenerate_phrase_intent,
-    utterance_suggests_atomic_create,
+    utterance_suggests_media_create,
 )
-from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create
+from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_media_create
 from app.graph.explore_route import explore_explicit_intent
-from app.graph.intent import single_node_gen_intent
+from app.graph.intent import focus_gen_intent
 from app.graph.l0_action import has_preserve_intent, utterance_has_multi_image_refs
 from app.graph.media_utterance import (
     media_directed_question,
@@ -53,7 +52,7 @@ class RouteFeatures(TypedDict, total=False):
     media_directed_question: bool
     media_create_high: bool
     explicit_skill: bool
-    has_atomic_checkpoint: bool
+    has_regen_checkpoint: bool
     preserve_composition: bool
     orchestration_phrases: bool
     modality_conflict_risk: bool
@@ -83,10 +82,10 @@ def _explore_blocked(utterance: str, intent: AtomicIntent) -> bool:
     if not utterance:
         return False
     blocked = (
-        (intent_suggests_atomic_create(intent) and not explore_explicit_intent(utterance))
-        or single_node_gen_intent(utterance)
+        (intent_suggests_media_create(intent) and not explore_explicit_intent(utterance))
+        or focus_gen_intent(utterance)
         or regenerate_phrase_intent(utterance)
-        or atomic_regenerate_intent(utterance)
+        or regen_intent(utterance)
     )
     return blocked
 
@@ -139,7 +138,7 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
     # Soft signal only (Phase 2a): must NOT alone set flow_mode=atomic_create.
     # Routing uses hard/precedence without atomic_generate; propose tools are Phase 2b.
     media_high = bool(
-        utterance_suggests_atomic_create(normalized)
+        utterance_suggests_media_create(normalized)
         or strong_generate_media(utterance)
         or strong_generate_media(normalized)
     )
@@ -165,7 +164,7 @@ def extract_route_features(ctx: RouteContext, intent: AtomicIntent) -> RouteFeat
         media_directed_question=media_directed_question(utterance),
         media_create_high=media_high,
         explicit_skill=bool(str(ctx.get("requested_skill_id") or "").strip()),
-        has_atomic_checkpoint=has_checkpoint,
+        has_regen_checkpoint=has_checkpoint,
         preserve_composition=has_preserve_intent(utterance),
         orchestration_phrases=_has_orchestration_phrases(utterance),
         modality_conflict_risk=has_planning_image_conflict(utterance)

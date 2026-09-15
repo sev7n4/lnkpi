@@ -11,12 +11,12 @@ import yaml
 
 from app.graph.intent import (
     CONFIRM_GEN_HINTS,
+    focus_gen_intent,
     modify_intent,
-    single_node_gen_intent,
 )
 from app.graph.atomic_intent_ir import (
     derive_studio_prompt,
-    intent_suggests_atomic_create,
+    intent_suggests_media_create,
     is_prompt_expand_intent,
     is_source_backed_media_generation,
     resolve_atomic_intent,
@@ -42,7 +42,7 @@ _TAXONOMY = _load_taxonomy()
 
 AtomicTargetType = Literal["image", "text", "video", "audio", "prompt"]
 
-ATOMIC_CREATE_HINTS = tuple(_TAXONOMY.get("atomic_create_hints") or (
+MEDIA_CREATE_HINTS = tuple(_TAXONOMY.get("media_create_hints") or (
     "帮我生成",
     "帮我做一张",
     "生成一个",
@@ -300,7 +300,7 @@ _BATCH_IMAGE_COUNT = re.compile(
 )
 
 
-def utterance_suggests_atomic_create(text: str) -> bool:
+def utterance_suggests_media_create(text: str) -> bool:
     """True when user wants a single-shot create-and-generate flow (shared IR + taxonomy)."""
     lowered = (text or "").strip().lower()
     if not lowered:
@@ -323,7 +323,7 @@ def utterance_suggests_atomic_create(text: str) -> bool:
         count = _parse_orch_count(token)
         if count is not None and count >= 2:
             return True
-    if any(h in lowered for h in ATOMIC_CREATE_HINTS):
+    if any(h in lowered for h in MEDIA_CREATE_HINTS):
         return True
     if any(h in text for h in TEXT_DEFAULT_KEYWORDS):
         return True
@@ -338,17 +338,12 @@ def utterance_suggests_atomic_create(text: str) -> bool:
     return False
 
 
-def atomic_create_intent(text: str) -> bool:
-    """Deprecated routing helper — prefer intent_suggests_atomic_create in L0 path."""
-    return utterance_suggests_atomic_create(text)
-
-
 def regenerate_phrase_intent(text: str) -> bool:
     """True when utterance looks like regenerate/variant retry phrasing."""
     return _matches_regenerate_hints(text)
 
 
-def atomic_regenerate_intent(text: str) -> bool:
+def regen_intent(text: str) -> bool:
     """True when user wants to re-run gen on existing atomic_node_id."""
     t = (text or "").strip()
     if not t:
@@ -385,7 +380,7 @@ def orchestration_complexity_intent(text: str) -> OrchestrationComplexity:
         return "atomic"
     if detect_action(t) == "write":
         return "atomic"
-    if atomic_create_intent(t):
+    if utterance_suggests_media_create(t):
         return "atomic"
     return "clarify"
 
@@ -398,7 +393,7 @@ def resolve_intake_route(
     """Intake routing — campaign/orchestration requires explicit skill in route_decide."""
     if (
         focus_node_id
-        and single_node_gen_intent(text)
+        and focus_gen_intent(text)
         and not modify_intent(text)
     ):
         return "single_node"
@@ -407,7 +402,7 @@ def resolve_intake_route(
     if detect_action(text) == "write":
         return "atomic_create"
     intent = resolve_atomic_intent(text, mentioned_keys=None)
-    if intent_suggests_atomic_create(intent):
+    if intent_suggests_media_create(intent):
         return "atomic_create"
     return "chat"
 
@@ -467,19 +462,3 @@ def build_atomic_spec(
             spec["videoSettings"] = {"duration": duration}
     return spec
 
-
-AtomicConfirmDecision = Literal["none", "confirm", "cancel"]
-
-
-def classify_atomic_confirm(text: str) -> AtomicConfirmDecision:
-    """Classify user reply at await_atomic_confirm (D2)."""
-    lowered = (text or "").strip().lower()
-    if not lowered:
-        return "none"
-    if any(k in lowered for k in ATOMIC_CANCEL_KEYWORDS):
-        return "cancel"
-    if any(k in lowered for k in ATOMIC_CONFIRM_KEYWORDS):
-        return "confirm"
-    if lowered in ("ok", "okay", "yes", "1", "y"):
-        return "confirm"
-    return "none"

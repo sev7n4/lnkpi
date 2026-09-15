@@ -8,7 +8,7 @@ import pytest
 import yaml
 from langchain_core.messages import HumanMessage
 
-from app.graph.atomic_intent import atomic_create_intent, atomic_regenerate_intent
+from app.graph.atomic_intent import regen_intent, utterance_suggests_media_create
 from app.graph.atomic_parse_util import parse_atomic_multi_items
 from app.graph.nodes.intake import make_intake_node
 
@@ -59,9 +59,9 @@ def test_intent_classifier_regression(regression_cases: list[dict], case_id: str
     gold = case["gold"]
     utterance = case["utterance"]
     if "atomic_create_intent" in gold:
-        assert atomic_create_intent(utterance) is gold["atomic_create_intent"], case_id
+        assert utterance_suggests_media_create(utterance) is gold["atomic_create_intent"], case_id
     if "atomic_regenerate_intent" in gold:
-        assert atomic_regenerate_intent(utterance) is gold["atomic_regenerate_intent"], case_id
+        assert regen_intent(utterance) is gold["atomic_regenerate_intent"], case_id
 
 
 @pytest.mark.parametrize("case_id", ["multi-01", "multi-02"])

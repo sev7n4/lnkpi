@@ -401,9 +401,9 @@ def rule_parse_confidence(
     elif any(k in t for k in _STRONG_SIGNAL_KEYWORDS):
         conf = 0.96
     else:
-        from app.graph.atomic_intent import atomic_create_intent
+        from app.graph.atomic_intent import utterance_suggests_media_create
 
-        conf = 0.88 if atomic_create_intent(t) else 0.55
+        conf = 0.88 if utterance_suggests_media_create(t) else 0.55
     return planning_guard_confidence_cap(t, conf)
 
 

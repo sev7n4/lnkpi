@@ -10,8 +10,8 @@ import yaml
 from langchain_core.messages import HumanMessage
 
 from app.graph.atomic_intent import (
-    atomic_create_intent,
-    atomic_regenerate_intent,
+    utterance_suggests_media_create,
+    regen_intent,
     build_atomic_spec,
     is_turnaround_image_intent,
     parse_atomic_target_type,
@@ -73,7 +73,7 @@ def test_turnaround_prompt_phrase_routes_to_prompt_node():
     assert parse_atomic_target_type(utterance) == "prompt"
     spec = build_atomic_spec(utterance)
     assert spec["target_type"] == "prompt"
-    assert atomic_create_intent(utterance)
+    assert utterance_suggests_media_create(utterance)
 
 
 def test_turnaround_image_without_prompt_word_stays_image():
@@ -95,7 +95,7 @@ def test_resolve_intake_route_planning_may_atomic_without_skill():
 def test_turnaround_pipeline_spec_for_direct_image_request():
     utterance = "山海经吞金兽的三视图，CG风格"
     assert is_turnaround_image_intent(utterance)
-    assert atomic_create_intent(utterance)
+    assert utterance_suggests_media_create(utterance)
     spec = build_atomic_spec(utterance)
     assert spec["target_type"] == "image"
     assert spec.get("pipeline") == "turnaround_image"
@@ -117,9 +117,9 @@ def test_build_atomic_spec_infers_video_duration():
     assert spec.get("videoSettings") == {"duration": 15}
 
 
-def test_atomic_create_intent_negative_campaign():
-    assert not atomic_create_intent("帮我做一套天猫蓝牙耳机详情页营销方案")
-    assert atomic_create_intent("帮我生成一个模特人物图")
+def test_utterance_suggests_media_create_negative_campaign():
+    assert not utterance_suggests_media_create("帮我做一套天猫蓝牙耳机详情页营销方案")
+    assert utterance_suggests_media_create("帮我生成一个模特人物图")
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,7 @@ async def test_intake_atomic_regenerate_when_prior_node(tmp_path: Path):
     # Phase 2d.2: checkpoint_regen → canvas_agent; soft intent may remain
     assert out["flow_mode"] == "canvas_agent"
     assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"
-    assert atomic_regenerate_intent("再试一次")
+    assert regen_intent("再试一次")
 
 
 @pytest.mark.asyncio
@@ -148,7 +148,7 @@ async def test_intake_regenerate_phrase_with_prior_node(tmp_path: Path):
     })
     assert out["flow_mode"] == "canvas_agent"
     assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"
-    assert not atomic_create_intent("重新生成一张")
+    assert not utterance_suggests_media_create("重新生成一张")
 
 
 @pytest.mark.asyncio
