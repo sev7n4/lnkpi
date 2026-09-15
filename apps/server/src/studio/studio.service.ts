@@ -29,6 +29,7 @@ import {
   generateVisionQaJson,
   imageRefDescriptorsFromRefs,
   mergeRefsToPrompt,
+  resolvePromptGenerateText,
   Seedance1xUnsupportedError,
   stripRefImagePromptTags,
   type MergeTextSource,
@@ -633,8 +634,11 @@ export class StudioService {
     cancel?: CancelFlag,
     scope?: CanvasGenerationScope,
     guideSceneId?: string,
+    refs?: StudioRefInput[],
+    mentionedKeys?: string[],
   ) {
-    const trimmed = prompt?.trim()
+    const referenceImages = extractReferenceImages(refs)
+    const trimmed = resolvePromptGenerateText(prompt, referenceImages)
     if (!trimmed) throw new BadRequestException('prompt 不能为空')
     const cost = 5
     const chargeReason = '提示词模式生成'
@@ -654,19 +658,28 @@ export class StudioService {
       modelKey: resolvedKey,
       gatewayModelId,
       channelId: resolved.channelId,
+      refsCount: refs?.length ?? 0,
+      visionUsed: false,
+      referenceImages,
       ...(fallback && resolved.source === 'platform' ? { modelFallback: true } : {}),
       ...(guideSceneId ? { guideSceneId } : {}),
+      ...(mentionedKeys?.length ? { mentionedKeys } : {}),
     }
 
     try {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { mode, content } = await generatePromptFromUserInput(trimmed, {
+      const providerRefs = referenceImages.length
+        ? await inlineUpstreamReferenceImages(referenceImages)
+        : referenceImages
+      const { mode, content, visionUsed } = await generatePromptFromUserInput(trimmed, {
         model: gatewayModelId,
         apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
         baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
         guideSceneId,
+        referenceImages: providerRefs,
+        mentionedKeys,
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(
@@ -688,7 +701,9 @@ export class StudioService {
           model: storeModel,
           url: null,
           status: 'completed',
-          metadata: JSON.stringify(applyChargeMeta({ ...baseMeta, mode, content }, cost)),
+          metadata: JSON.stringify(
+            applyChargeMeta({ ...baseMeta, mode, content, visionUsed }, cost),
+          ),
           ...withCanvasScope(scope),
         },
       })
@@ -1950,14 +1965,26 @@ export class StudioService {
             typeof meta.guideSceneId === 'string' && meta.guideSceneId.trim()
               ? meta.guideSceneId.trim()
               : undefined
-          const { mode, content } = await generatePromptFromUserInput(record.prompt, {
+          const { mode, content, visionUsed } = await generatePromptFromUserInput(record.prompt, {
             model: gatewayModelId,
             apiKey: process.env.OPENAI_API_KEY,
             baseUrl: process.env.OPENAI_BASE_URL,
             guideSceneId,
+            referenceImages: referenceImages.length
+              ? await inlineUpstreamReferenceImages(referenceImages)
+              : referenceImages,
+            mentionedKeys: Array.isArray(meta.mentionedKeys)
+              ? (meta.mentionedKeys as string[])
+              : undefined,
           })
           text = content
-          promptMeta = { mode, content, ...(guideSceneId ? { guideSceneId } : {}) }
+          promptMeta = {
+            mode,
+            content,
+            visionUsed,
+            referenceImages,
+            ...(guideSceneId ? { guideSceneId } : {}),
+          }
         } else if (referenceImages.length > 0) {
           const providerRefs = await inlineUpstreamReferenceImages(referenceImages)
           const result = await generateTextForRefs(record.prompt, providerRefs, {

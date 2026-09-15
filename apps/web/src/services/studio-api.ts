@@ -128,12 +128,16 @@ export const studioApi = {
     signal?: AbortSignal,
     scope?: CanvasGenerationScope,
     guideSceneId?: string,
+    refs?: StudioRefPayload[],
+    mentionedKeys?: string[],
   ) =>
     api.post<{ data: GenerationRecord }>(
       '/studio/prompt/generate',
       {
         prompt,
         model,
+        refs,
+        mentionedKeys,
         ...scopeBody(scope),
         ...(guideSceneId ? { guideSceneId } : {}),
       },

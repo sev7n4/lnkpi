@@ -708,7 +708,8 @@ async function cancelRemoteGeneration(
     const mentionedKeys = parseRefMentions(local)
     if (!deps.requireLogin()) return
     if (nodeType === 'prompt') {
-      if (!local) return
+      const hasImageRef = refs.some((r) => r.mediaType === 'image' && Boolean(r.url?.trim()))
+      if (!local && !hasImageRef) return
     } else if (nodeType !== 'sceneComposer' && !local && !refs.length) {
       return
     }
@@ -753,6 +754,8 @@ async function cancelRemoteGeneration(
           signal,
           canvasScope(node.id),
           guideSceneId,
+          refs,
+          mentionedKeys,
         )
         if (signal.aborted) return
         // Bump record id before resolve — otherwise poll gate treats the new

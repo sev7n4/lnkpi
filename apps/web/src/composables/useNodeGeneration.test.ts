@@ -1626,6 +1626,81 @@ describe('useNodeGeneration', () => {
       expect.any(AbortSignal),
       canvasScope('prompt-1'),
       'g3_exact_text',
+      [],
+      [],
     )
+  })
+
+  it('forwards image refs from prompt node to generatePrompt', async () => {
+    vi.mocked(studioApi.generatePrompt).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'prompt',
+          id: 'prompt-rec-2',
+          url: null,
+        },
+      }),
+    )
+    const node = createNode('prompt', {
+      prompt: '按参考图写提示词',
+      textModel: encodeChannelModel('platform', defaultModelKey('text')),
+      localRefs: [
+        {
+          id: 'ref-1',
+          mediaType: 'image',
+          sourceKind: 'upload',
+          label: 'bottle.jpg',
+          url: 'https://example.com/bottle.jpg',
+        },
+      ],
+      refOrder: ['ref-1'],
+    })
+    const { api } = createDeps([node])
+    await api.generateForNode(node)
+    expect(studioApi.generatePrompt).toHaveBeenCalledWith(
+      '按参考图写提示词',
+      encodeChannelModel('platform', defaultModelKey('text')),
+      expect.any(AbortSignal),
+      canvasScope('prompt-1'),
+      undefined,
+      expect.arrayContaining([
+        expect.objectContaining({
+          mediaType: 'image',
+          url: 'https://example.com/bottle.jpg',
+        }),
+      ]),
+      expect.any(Array),
+    )
+  })
+
+  it('allows prompt generate with image refs and empty prompt', async () => {
+    vi.mocked(studioApi.generatePrompt).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'prompt',
+          id: 'prompt-rec-3',
+          url: null,
+        },
+      }),
+    )
+    const node = createNode('prompt', {
+      prompt: '',
+      textModel: encodeChannelModel('platform', defaultModelKey('text')),
+      localRefs: [
+        {
+          id: 'ref-1',
+          mediaType: 'image',
+          sourceKind: 'upload',
+          label: 'bottle.jpg',
+          url: 'https://example.com/bottle.jpg',
+        },
+      ],
+      refOrder: ['ref-1'],
+    })
+    const { api } = createDeps([node])
+    await api.generateForNode(node)
+    expect(studioApi.generatePrompt).toHaveBeenCalled()
   })
 })

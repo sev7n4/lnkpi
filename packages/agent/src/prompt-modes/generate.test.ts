@@ -59,4 +59,61 @@ describe('generatePromptContent with key', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(content).toContain('分镜执行脚本')
   })
+
+  it('sends image_url on the last user turn for vision models', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '哑光绿保温杯提示词' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { visionUsed } = await generatePromptContent('写主图提示词', 'generic', {
+      apiKey: 'test-key',
+      model: 'ch_x::deepseek-flash',
+      referenceImages: ['https://cdn.example/bottle.jpg'],
+      mentionedKeys: ['I1'],
+    })
+    expect(visionUsed).toBe(true)
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    expect(body.model).toBe('deepseek-flash')
+    const last = body.messages[body.messages.length - 1]
+    expect(Array.isArray(last.content)).toBe(true)
+    expect(last.content.some((p: { type: string }) => p.type === 'image_url')).toBe(true)
+    expect(body.messages[0].content).toContain('优先参考')
+    expect(body.messages[0].content).toContain('I1')
+  })
+
+  it('falls back to text-only image URL note for non-vision models', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'fallback' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const { visionUsed } = await generatePromptContent('写主图提示词', 'generic', {
+      apiKey: 'test-key',
+      model: 'deepseek-v4-pro',
+      referenceImages: ['https://cdn.example/bottle.jpg'],
+    })
+    expect(visionUsed).toBe(false)
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    const last = body.messages[body.messages.length - 1]
+    expect(typeof last.content).toBe('string')
+    expect(last.content).toContain('不支持直接识图')
+    expect(last.content).toContain('https://cdn.example/bottle.jpg')
+  })
+
+  it('allows empty prompt when reference images exist', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'from image' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    await generatePromptContent('', 'generic', {
+      apiKey: 'test-key',
+      model: 'gemini-3.1-flash',
+      referenceImages: ['https://cdn.example/bottle.jpg'],
+    })
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body))
+    const last = body.messages[body.messages.length - 1]
+    expect(JSON.stringify(last.content)).toContain('参考图')
+  })
 })

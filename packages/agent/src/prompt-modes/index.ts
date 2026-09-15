@@ -5,6 +5,7 @@ export {
   buildGuideSystemOverlay,
   generatePromptContent,
   generatePromptFromUserInput,
+  resolvePromptGenerateText,
 } from './generate'
 export type { GeneratePromptOpts } from './generate'
 export {

@@ -1370,7 +1370,9 @@ export class AgentCanvasToolsService {
     if (!node) throw new NotFoundException('节点不存在')
 
     const prompt = String(node.data?.prompt ?? '').trim()
-    if (!prompt) throw new NotFoundException('节点缺少 prompt')
+    const refs = toStudioRefs(node, canvas)
+    const hasImageRef = refs.some((r) => r.mediaType === 'image' && Boolean(r.url?.trim()))
+    if (!prompt && !hasImageRef) throw new NotFoundException('节点缺少 prompt')
 
     const started: CanvasAction[] = [
       {
@@ -1398,6 +1400,10 @@ export class AgentCanvasToolsService {
         undefined,
         { sessionId: input.sessionId, nodeId: input.nodeId },
         guideSceneId,
+        refs,
+        Array.isArray(node.data?.mentionedKeys)
+          ? (node.data.mentionedKeys as string[])
+          : undefined,
       )
       const recordId = record.id
       const parsed = parseRecordPromptContent(record.metadata, prompt)

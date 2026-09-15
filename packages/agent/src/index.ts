@@ -54,6 +54,7 @@ export {
   buildGuideSystemOverlay,
   generatePromptContent,
   generatePromptFromUserInput,
+  resolvePromptGenerateText,
 } from './prompt-modes'
 export type { GeneratePromptOpts } from './prompt-modes'
 export { mergeRefsToPrompt } from './refs/merge-refs'
