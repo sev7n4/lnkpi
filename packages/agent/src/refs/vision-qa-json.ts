@@ -5,7 +5,7 @@ export interface VisionQaJsonOptions {
   apiKey?: string
   baseUrl?: string
   model?: string
-  /** Retry count for transient upstream failures (5xx / 429). Default 2. */
+  /** Retry count for 429 / timeout only (D-RETRY). Default 2. */
   maxRetries?: number
 }
 
@@ -29,7 +29,8 @@ export interface ParsedVisionQaJson {
   productIdentifiable?: boolean
 }
 
-const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+/** D-RETRY: only 429 (and timeout via thrown errors). Never 5xx. */
+const RETRYABLE_STATUSES = new Set([429])
 
 function optionalText(...values: unknown[]): string | undefined {
   for (const value of values) {
@@ -46,6 +47,19 @@ function optionalStringList(value: unknown): string[] | undefined {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableTimeout(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  const name = err.name
+  const msg = err.message.toLowerCase()
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    msg.includes('timeout') ||
+    msg.includes('timed out') ||
+    msg.includes('aborted')
+  )
 }
 
 /** Parse vision QA model output into structured fields. */
@@ -159,29 +173,39 @@ export async function generateVisionQaJson(
       await sleep(400 * attempt)
     }
 
-    let res = await postVisionChat(endpoint, key, {
-      ...baseBody,
-      response_format: { type: 'json_object' },
-    })
+    try {
+      let res = await postVisionChat(endpoint, key, {
+        ...baseBody,
+        response_format: { type: 'json_object' },
+      })
 
-    if (!res.ok && res.status === 400) {
-      res = await postVisionChat(endpoint, key, baseBody)
-    }
-
-    if (res.ok) {
-      const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
-      const text = json.choices[0]?.message?.content?.trim()
-      if (!text) {
-        lastError = 'Vision LLM 返回空内容'
-        continue
+      if (!res.ok && res.status === 400) {
+        res = await postVisionChat(endpoint, key, baseBody)
       }
-      return { text, visionUsed: true }
-    }
 
-    const errText = await res.text()
-    lastError = `Vision API ${res.status}: ${errText.slice(0, 240)}`
-    if (!RETRYABLE_STATUSES.has(res.status) || attempt >= maxRetries) {
-      throw new Error(lastError)
+      if (res.ok) {
+        const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
+        const text = json.choices[0]?.message?.content?.trim()
+        if (!text) {
+          lastError = 'Vision LLM 返回空内容'
+          continue
+        }
+        return { text, visionUsed: true }
+      }
+
+      const errText = await res.text()
+      lastError = `Vision API ${res.status}: ${errText.slice(0, 240)}`
+      if (!RETRYABLE_STATUSES.has(res.status) || attempt >= maxRetries) {
+        throw new Error(lastError)
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Vision API ')) {
+        throw err
+      }
+      lastError = err instanceof Error ? err.message : String(err)
+      if (!isRetryableTimeout(err) || attempt >= maxRetries) {
+        throw err instanceof Error ? err : new Error(lastError)
+      }
     }
   }
 

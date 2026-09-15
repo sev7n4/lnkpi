@@ -1,7 +1,29 @@
-from app.graph.nodes.parse_sidebar_media import make_parse_sidebar_media_node
-from app.graph.sidebar_media_parse import NON_VISION_PARSE_ERROR
+from unittest.mock import AsyncMock
 
 import pytest
+
+from app.graph.nodes.parse_sidebar_media import make_parse_sidebar_media_node
+from app.graph.sidebar_media_parse import (
+    NON_VISION_PARSE_ERROR,
+    map_vision_error_class,
+    media_parse_cache_key,
+)
+
+FLASH_CREDS = {
+    "provider_ref": "ch_x::deepseek-flash",
+    "model": "deepseek-flash",
+    "api_key": "sk-test",
+    "base_url": "https://api.example/v1",
+    "source": "user",
+}
+
+GPT_CREDS = {
+    "provider_ref": "platform::gpt-4o",
+    "model": "gpt-4o",
+    "api_key": "sk-platform",
+    "base_url": "https://api.openai.com/v1",
+    "source": "platform",
+}
 
 
 class _Nest:
@@ -30,7 +52,7 @@ async def test_parses_new_image_and_skips_second_call():
     nest = _Nest()
     node = make_parse_sidebar_media_node(
         nest=nest,
-        vision_creds={"model": "deepseek-flash"},
+        vision_creds=FLASH_CREDS,
         skills_dir=".",
     )
     att = [{"mediaType": "image", "url": "https://cdn.example/p.jpg"}]
@@ -46,6 +68,12 @@ async def test_parses_new_image_and_skips_second_call():
     assert len(nest.calls) == 1
     assert nest.calls[0]["image_urls"] == ["https://cdn.example/p.jpg"]
     assert nest.calls[0]["model"] == "deepseek-flash"
+    assert nest.calls[0]["provider_ref"] == "ch_x::deepseek-flash"
+    assert nest.calls[0]["api_key"] == "sk-test"
+    assert nest.calls[0]["base_url"] == "https://api.example/v1"
+    assert nest.calls[0]["source"] == "user"
+    key = media_parse_cache_key("https://cdn.example/p.jpg", FLASH_CREDS["provider_ref"])
+    assert key in first["sidebar_media_parse_cache"]
     second = await node(
         {
             "sidebar_attachments": att,
@@ -59,7 +87,7 @@ async def test_parses_new_image_and_skips_second_call():
 @pytest.mark.asyncio
 async def test_no_image_does_not_call_nest():
     nest = _Nest()
-    node = make_parse_sidebar_media_node(nest=nest, vision_creds={}, skills_dir=".")
+    node = make_parse_sidebar_media_node(nest=nest, vision_creds=FLASH_CREDS, skills_dir=".")
     out = await node({"sidebar_attachments": [{"mediaType": "text", "text": "hi"}]})
     assert nest.calls == []
     assert not out.get("sidebar_media_parse")
@@ -68,7 +96,7 @@ async def test_no_image_does_not_call_nest():
 @pytest.mark.asyncio
 async def test_clears_parse_when_turn_has_no_image_urls():
     nest = _Nest()
-    node = make_parse_sidebar_media_node(nest=nest, vision_creds={}, skills_dir=".")
+    node = make_parse_sidebar_media_node(nest=nest, vision_creds=FLASH_CREDS, skills_dir=".")
     prev = {
         "vision_used": True,
         "user_facing_summary": "一只不锈钢水杯",
@@ -78,7 +106,9 @@ async def test_clears_parse_when_turn_has_no_image_urls():
         {
             "sidebar_attachments": [{"mediaType": "text", "text": "hi"}],
             "sidebar_media_parse": prev,
-            "sidebar_media_parse_cache": {"https://cdn.example/p.jpg": prev},
+            "sidebar_media_parse_cache": {
+                media_parse_cache_key("https://cdn.example/p.jpg", FLASH_CREDS["provider_ref"]): prev
+            },
         }
     )
     assert nest.calls == []
@@ -92,26 +122,73 @@ async def test_nest_error_becomes_vision_false(monkeypatch):
         async def run_vision_qa(self, **kwargs):
             raise RuntimeError("upstream 500")
 
-    node = make_parse_sidebar_media_node(nest=Boom(), vision_creds={"model": "gpt-4o"}, skills_dir=".")
+    node = make_parse_sidebar_media_node(nest=Boom(), vision_creds=GPT_CREDS, skills_dir=".")
     out = await node({"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]})
     assert out["sidebar_media_parse"]["vision_used"] is False
     assert out["sidebar_media_parse"]["error"]
     assert out["sidebar_media_parse"]["error"] != NON_VISION_PARSE_ERROR
+    assert "upstream 500" not in out["sidebar_media_parse"]["error"]
+    assert out["sidebar_media_parse"]["error"] == map_vision_error_class("VISION_UPSTREAM")
 
 
 @pytest.mark.asyncio
-async def test_non_vision_copy_when_vision_used_false():
-    class NonVision:
-        async def run_vision_qa(self, **kwargs):
-            return {"visionUsed": False, "reason": "text-only fallback"}
-
+async def test_parse_skips_nest_when_model_not_vision():
+    nest = AsyncMock()
     node = make_parse_sidebar_media_node(
-        nest=NonVision(),
-        vision_creds={"model": "deepseek-v4-pro"},
+        nest=nest,
+        vision_creds={
+            "provider_ref": "ch::deepseek-v4-pro",
+            "model": "deepseek-v4-pro",
+            "api_key": "sk-test",
+            "base_url": "https://api.example/v1",
+            "source": "user",
+        },
         skills_dir=".",
     )
-    out = await node({"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]})
+    out = await node(
+        {"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]}
+    )
+    nest.run_vision_qa.assert_not_called()
+    assert "不支持识图" in (out["sidebar_media_parse"]["error"] or "")
     assert out["sidebar_media_parse"]["error"] == NON_VISION_PARSE_ERROR
+
+
+@pytest.mark.asyncio
+async def test_incomplete_context_skips_nest():
+    nest = AsyncMock()
+    node = make_parse_sidebar_media_node(
+        nest=nest,
+        vision_creds={"provider_ref": None, "model": "deepseek-flash", "api_key": None, "base_url": None, "source": None},
+        skills_dir=".",
+    )
+    out = await node(
+        {"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]}
+    )
+    nest.run_vision_qa.assert_not_called()
+    assert out["sidebar_media_parse"]["error"] == map_vision_error_class(
+        "VISION_PROVIDER_CONTEXT_INVALID"
+    )
+
+
+@pytest.mark.asyncio
+async def test_byok_missing_key_skips_nest():
+    nest = AsyncMock()
+    node = make_parse_sidebar_media_node(
+        nest=nest,
+        vision_creds={
+            "provider_ref": "ch_byok::deepseek-flash",
+            "model": "deepseek-flash",
+            "api_key": "",
+            "base_url": "https://api.example/v1",
+            "source": "user",
+        },
+        skills_dir=".",
+    )
+    out = await node(
+        {"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]}
+    )
+    nest.run_vision_qa.assert_not_called()
+    assert out["sidebar_media_parse"]["error"] == map_vision_error_class("VISION_BYOK_MISSING_KEY")
 
 
 @pytest.mark.asyncio
@@ -122,7 +199,7 @@ async def test_timeout_error_not_written_to_cache_so_next_turn_retries():
 
         async def run_vision_qa(self, **kwargs):
             self.calls += 1
-            if self.calls == 1:
+            if self.calls <= 3:
                 raise RuntimeError("操作超时，请稍后重试")
             return {
                 "visionUsed": True,
@@ -136,24 +213,67 @@ async def test_timeout_error_not_written_to_cache_so_next_turn_retries():
     nest = TimeoutOnce()
     node = make_parse_sidebar_media_node(
         nest=nest,
-        vision_creds={"model": "deepseek-flash"},
+        vision_creds=FLASH_CREDS,
         skills_dir=".",
     )
     att = [{"mediaType": "image", "url": "https://cdn.example/hud.jpg"}]
     first = await node({"sidebar_attachments": att})
     assert first["sidebar_media_parse"]["vision_used"] is False
-    assert "操作超时" in first["sidebar_media_parse"]["error"]
+    assert first["sidebar_media_parse"]["error"] == map_vision_error_class("VISION_TIMEOUT")
     assert first["sidebar_media_parse_cache"] == {}
+    # Same-turn retries: max 3 attempts
+    assert nest.calls == 3
 
-    second = await node(
+    class OkNest:
+        def __init__(self):
+            self.calls = 0
+
+        async def run_vision_qa(self, **kwargs):
+            self.calls += 1
+            return {
+                "visionUsed": True,
+                "userFacingSummary": "汽车HUD",
+                "category": "汽车电子",
+                "isWhiteBg": True,
+                "isSharpEnough": True,
+                "productIdentifiable": True,
+            }
+
+    nest2 = OkNest()
+    node2 = make_parse_sidebar_media_node(
+        nest=nest2,
+        vision_creds=FLASH_CREDS,
+        skills_dir=".",
+    )
+    second = await node2(
         {
             "sidebar_attachments": att,
             "sidebar_media_parse_cache": first["sidebar_media_parse_cache"],
         }
     )
-    assert nest.calls == 2
+    assert nest2.calls == 1
     assert second["sidebar_media_parse"]["vision_used"] is True
     assert second["sidebar_media_parse"]["fields"]["category"] == "汽车电子"
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retries_then_maps_chinese(monkeypatch):
+    class RateLimit:
+        def __init__(self):
+            self.calls = 0
+
+        async def run_vision_qa(self, **kwargs):
+            self.calls += 1
+            raise RuntimeError("HTTP 429: rate limit — Upgrade to a Token Plan for more")
+
+    nest = RateLimit()
+    node = make_parse_sidebar_media_node(nest=nest, vision_creds=FLASH_CREDS, skills_dir=".")
+    out = await node({"sidebar_attachments": [{"mediaType": "image", "url": "https://x/a.jpg"}]})
+    assert nest.calls == 3
+    err = out["sidebar_media_parse"]["error"]
+    assert err == map_vision_error_class("VISION_RATE_LIMIT")
+    assert "Upgrade" not in err
+    assert out["sidebar_media_parse_cache"] == {}
 
 
 @pytest.mark.asyncio
@@ -166,7 +286,7 @@ async def test_partial_cache_miss_rebuilds_from_all_current_urls():
     url_b = "https://cdn.example/b.jpg"
     node = make_parse_sidebar_media_node(
         nest=Boom(),
-        vision_creds={"model": "gpt-4o"},
+        vision_creds=GPT_CREDS,
         skills_dir=".",
     )
     cached_a = {
@@ -188,7 +308,9 @@ async def test_partial_cache_miss_rebuilds_from_all_current_urls():
                 {"mediaType": "image", "url": url_a},
                 {"mediaType": "image", "url": url_b},
             ],
-            "sidebar_media_parse_cache": {url_a: cached_a},
+            "sidebar_media_parse_cache": {
+                media_parse_cache_key(url_a, GPT_CREDS["provider_ref"]): cached_a
+            },
         }
     )
     parse = out["sidebar_media_parse"]

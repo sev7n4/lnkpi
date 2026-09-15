@@ -85,9 +85,11 @@ describe('AgentService dock forwarding', () => {
         threadId: 'thread-1',
         message: 'hello',
         skillId: 'enterprise-marketing-campaign',
+        llmProviderRef: 'platform::gpt-4o-mini',
         llmModel: 'gpt-4o-mini',
         llmApiKey: 'sk-test',
         llmBaseUrl: 'https://api.example.com/v1',
+        llmSource: 'platform',
       }),
     )
   })
@@ -135,9 +137,11 @@ describe('AgentService dock forwarding', () => {
     )
     expect(streamRun).toHaveBeenCalledWith(
       expect.objectContaining({
+        llmProviderRef: 'ch-deepseek::deepseek-v4-flash',
         llmModel: 'deepseek-v4-flash',
         llmApiKey: 'sk-byok',
         llmBaseUrl: 'https://api.deepseek.example/v1',
+        llmSource: 'user',
       }),
     )
   })
@@ -168,9 +172,11 @@ describe('AgentService dock forwarding', () => {
     expect(streamRun).toHaveBeenCalledWith(
       expect.objectContaining({
         skillId: undefined,
+        llmProviderRef: undefined,
         llmModel: undefined,
         llmApiKey: undefined,
         llmBaseUrl: undefined,
+        llmSource: undefined,
       }),
     )
   })

@@ -10,12 +10,25 @@ from typing import Any
 
 import httpx
 
-from app.config import settings
 from app.graph.atomic_parse_llm import extract_json_object
 from app.graph.product_visual_v2.vision_qa import VisionQAResult
 from app.graph.product_visual_v2_prompt import build_vision_qa_user_content, load_vision_qa_prompt
 
 logger = logging.getLogger(__name__)
+
+_INCOMPLETE_CONTEXT_REASON = "识图凭证不完整，请重新选择模型后再试"
+
+
+def _creds_fields(vision_creds: dict[str, str | None] | None) -> dict[str, str | None]:
+    creds = vision_creds or {}
+    return {
+        "provider_ref": (str(creds["provider_ref"]).strip() if creds.get("provider_ref") else None),
+        "model": (str(creds["model"]).strip() if creds.get("model") else None),
+        "api_key": (str(creds["api_key"]).strip() if creds.get("api_key") else None),
+        "base_url": (str(creds["base_url"]).strip() if creds.get("base_url") else None),
+        "source": (str(creds["source"]).strip() if creds.get("source") else None),
+    }
+
 
 _VISION_MODEL = re.compile(
     r"(?:^|[/:])(?:gemini|gpt-4o|gpt-4-turbo|gpt-4-vision|gpt-5|claude-(?:opus|sonnet|haiku|3)|agnes)(?:[-./]|$)",
@@ -201,8 +214,12 @@ async def run_vision_qa(
         image_count=len(image_urls),
     )
 
-    creds = vision_creds or {}
-    cred_model = str(creds.get("model") or "").strip() or None
+    fields = _creds_fields(vision_creds)
+    provider_ref = fields["provider_ref"]
+    model = fields["model"]
+    api_key = fields["api_key"]
+    base_url = fields["base_url"]
+    source = fields["source"]
 
     run_fn = getattr(nest, "run_vision_qa", None) if nest is not None else None
     if run_fn is not None:
@@ -213,7 +230,11 @@ async def run_vision_qa(
                 scene_kind=scene_kind,
                 system_prompt=system_prompt,
                 user_content=user_content,
-                model=cred_model,
+                provider_ref=provider_ref,
+                model=model,
+                api_key=api_key,
+                base_url=base_url,
+                source=source,
             )
             if isinstance(data, dict):
                 product_summary = str(
@@ -233,9 +254,13 @@ async def run_vision_qa(
         except Exception as exc:  # noqa: BLE001
             logger.warning("nest run_vision_qa failed: %s", exc)
 
-    model = str(creds.get("model") or settings.openai_chat_model or "gpt-4o")
-    api_key = str(creds.get("api_key") or settings.openai_api_key or "")
-    base_url = str(creds.get("base_url") or settings.openai_base_url or "https://api.openai.com/v1")
+    # Direct fallback only when Nest unavailable; never fill from settings.openai_*.
+    if not provider_ref or not model or not api_key or not base_url or not source:
+        return VisionQAResult(
+            pass_=False,
+            reason=_INCOMPLETE_CONTEXT_REASON,
+            vision_used=False,
+        )
     return await _call_vision_http(
         system_prompt=system_prompt,
         user_content=user_content,
