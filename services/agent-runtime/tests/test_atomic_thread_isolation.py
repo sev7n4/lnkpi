@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import HumanMessage
 
 from app.graph.atomic_intent import (
-    atomic_regenerate_intent,
+    regen_intent,
     detect_regenerate_adjust,
     is_regenerate_new_variant,
 )
@@ -21,8 +21,8 @@ def test_variant_phrases_are_not_same_node_regenerate():
     assert is_regenerate_new_variant("按刚才那个风格再生成一张")
     assert not is_regenerate_new_variant("重新生成一张")
     assert not is_regenerate_new_variant("再试一次")
-    assert not atomic_regenerate_intent("重新生成一张，背景改成白色")
-    assert atomic_regenerate_intent("重新生成一张")
+    assert not regen_intent("重新生成一张，背景改成白色")
+    assert regen_intent("重新生成一张")
 
 
 def test_detect_regenerate_adjust_with_tail():
@@ -84,6 +84,6 @@ async def test_intake_regenerate_on_mixed_canvas_routes_canvas_agent(tmp_path: P
     )
     assert out["flow_mode"] == "canvas_agent"
     # checkpoint_regen no longer clears campaign residue the way atomic_regenerate did;
-    # only utterance_suggests_atomic_create clears split_manifest.
+    # only utterance_suggests_media_create clears split_manifest.
     assert out.get("skill_id") is None
     assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"

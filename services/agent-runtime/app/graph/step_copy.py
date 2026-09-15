@@ -17,7 +17,6 @@ NODE_STEP_LABELS: dict[str, str] = {
     "collect_gen": "汇总生成结果",
     "parse_atomic_intent": "解析创作意图",
     "clarify_gate": "澄清需求",
-    "clarify_atomic_intent": "澄清创作需求",
     "create_atomic_node": "创建画布节点",
     "run_atomic_gen": "生成内容",
     "await_atomic_confirm": "等待你确认生成参数",

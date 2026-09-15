@@ -72,7 +72,7 @@ def test_explicit_skill_feature():
     assert features["explicit_skill"] is True
 
 
-def test_atomic_checkpoint_feature():
+def test_regen_checkpoint_feature():
     ctx = assemble_route_context(
         {
             "messages": [{"role": "user", "content": "重新生成一张"}],
@@ -82,7 +82,7 @@ def test_atomic_checkpoint_feature():
     )
     intent = _intent("重新生成一张")
     features = extract_route_features(ctx, intent)
-    assert features["has_atomic_checkpoint"] is True
+    assert features["has_regen_checkpoint"] is True
 
 
 def test_modality_conflict_risk_planning_detail_page():

@@ -135,7 +135,7 @@ def should_resume_interrupt(
     if not text:
         return False
 
-    from app.graph.atomic_intent import atomic_create_intent
+    from app.graph.atomic_intent import utterance_suggests_media_create
     from app.graph.intent import classify_topo_decision, classify_user_decision
 
     if gate == "await_confirm":
@@ -143,7 +143,7 @@ def should_resume_interrupt(
         if decision is not None:
             return True
         # Long @ref task while plan gate is open → restart intake, not confirm/revise.
-        if len(text) >= 12 and REF_MENTION_RE.search(text) and atomic_create_intent(text):
+        if len(text) >= 12 and REF_MENTION_RE.search(text) and utterance_suggests_media_create(text):
             return False
         return len(text) <= 16
 

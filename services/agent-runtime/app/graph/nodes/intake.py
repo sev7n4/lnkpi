@@ -185,9 +185,9 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
         if resolved_flow == "canvas_agent":
             # Phase 2d: former atomic single-create isolation — clear campaign residue
             # when utterance still looks like single-node media create.
-            from app.graph.atomic_intent import utterance_suggests_atomic_create
+            from app.graph.atomic_intent import utterance_suggests_media_create
 
-            if utterance_suggests_atomic_create(text):
+            if utterance_suggests_media_create(text):
                 out["split_manifest"] = []
                 out["skill_id"] = None
         if (
