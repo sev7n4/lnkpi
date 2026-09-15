@@ -1,65 +1,103 @@
-# Task 7 Report: 黄金评测集 + 文档
+# Task 7 Report: 回归总验 + 规格状态
 
-## Status
+**Status:** DONE  
+**Branch:** `fix/agent-sidebar-vision-provider-context`  
+**PR:** https://github.com/sev7n4/lnkpi/pull/342
 
-**DONE**
+## Spec status
 
-## What I implemented
-
-- Extracted `matchPlatformRecipes(utterance)` into `packages/shared/src/canvas/recipeCatalog.ts`
-  - 套图/详情/主图/电商 → `ecommerce-product-visual`
-  - 三视图/定妆/模特/角色 → `model-turnaround`
-  - both → parent ecommerce + `graftHint` model-turnaround
-  - none → `needsClarify`, both platform summaries
-- Nest `WorkflowRecipeService.matchRecipes` calls that helper, then unions the user catalog
-- Gold eval fixtures: `docs/workflow/examples/recipe-planner-eval.json` (8 cases from spec §10.6)
-- Iterator: `packages/shared/src/canvas/recipePlannerEval.test.ts`
-- `docs/workflow/README.md` 交叉引用 2026-09-15 spec；外部 Agent 仍只生成 `lnkpi.workflow` 实例（未把 delta schema 写成对外教程）
-
-## Tests + TDD evidence
-
-### RED (fixtures missing)
-
-```
-AssertionError: expected false to be true
-❯ recipe planner gold eval > fails when gold eval fixtures are missing
-ENOENT: .../docs/workflow/examples/recipe-planner-eval.json
-```
-
-### RED (helper missing, fixtures present)
-
-```
-TypeError: matchPlatformRecipes is not a function
-```
-
-### GREEN
-
-```bash
-pnpm --filter @lnkpi/shared exec vitest run src/canvas/recipePlannerEval.test.ts src/canvas/workflowRecipe.test.ts src/canvas/recipeCatalog.test.ts
-pnpm --filter @lnkpi/server exec vitest run src/agent/workflow-recipe.service.test.ts
-```
-
-Shared: `46 passed` (3 files). Nest match/promote: `13 passed`.
-
-## Files changed
-
-| File | Change |
-| --- | --- |
-| `packages/shared/src/canvas/recipeCatalog.ts` | `matchPlatformRecipes` |
-| `packages/shared/src/canvas/recipeCatalog.test.ts` | 四条认亲规则 |
-| `packages/shared/src/canvas/recipePlannerEval.test.ts` | 迭代黄金 JSON |
-| `docs/workflow/examples/recipe-planner-eval.json` | 8 条评测 |
-| `docs/workflow/README.md` | 交叉引用 2026-09-15 spec |
-| `apps/server/src/agent/workflow-recipe.service.ts` | match 调 shared helper ∪ 用户目录 |
+`docs/superpowers/specs/2026-09-16-agent-sidebar-vision-provider-context-design.md`  
+header → **已定稿 / 实现完成（P0+P1）**（P2 仍另排期）
 
 ## Commit
 
-`test(shared): recipe planner gold eval set`
+`8ea4e6bc` — `docs: mark vision ProviderContext spec complete (P0+P1)`
 
-Not pushed.
+## Regression results
 
-## Concerns
+### Server (provider-context + dock)
 
-1. **Case 7 is shared-only.** `inferRecipeDraftFromWorkflow` + empty `seedChains` stands in for Nest promote 400；不调 `promoteRecipe`。
-2. **Graft lifestyle check injects `model_lifestyle` in the test runner** because the platform model recipe has no downstream. Still proves graft copies only seed/turnaround.
-3. **Shared now exports `MatchRecipeItem`**, same name as Nest’s local type (structural, no import clash in the service).
+```bash
+pnpm --filter @lnkpi/server exec vitest run \
+  src/provider/provider-context.test.ts \
+  src/agent/agent.service.dock.test.ts
+```
+
+- Test Files: 2 passed  
+- Tests: **5 passed**
+
+### Runtime (parse / nest)
+
+`uv` 不在 PATH；改用主仓 `.venv` + worktree `PYTHONPATH`：
+
+```bash
+cd services/agent-runtime
+PYTHONPATH="$PWD" \
+  /Users/4seven/workspace/lnkpi/services/agent-runtime/.venv/bin/pytest \
+  tests/test_parse_sidebar_media_node.py \
+  tests/test_sidebar_media_parse.py \
+  tests/test_nest_client.py -q
+```
+
+- **53 passed**, 1 pydantic deprecation warning
+
+### Web (UniversalModelSelector)
+
+```bash
+cd apps/web && pnpm exec vitest run \
+  src/components/canvas/UniversalModelSelector.test.ts
+```
+
+- Tests: **2 passed**
+
+## AC-1…8
+
+记在 PR #342 描述中（手工验收勾选）；自动化覆盖主要为 AC-2/3/5/6 相关单测路径。
+
+## Push / PR
+
+- `git push -u origin HEAD` → OK  
+- `gh pr create` → https://github.com/sev7n4/lnkpi/pull/342
+
+## Notes
+
+- 未提交本地改动的 `.superpowers/sdd/task-6-report.md`（与本任务无关）。
+- P2 未实施。
+
+---
+
+## Post-review Important fixes (I1 / I2)
+
+**Status:** DONE  
+**Date:** 2026-09-16
+
+### I1 — AC-8 / shared `buildTextProviderContext`
+
+- Extracted `providerContextFromResolved` (shared map/validate used by Agent `buildTextProviderContext`).
+- Wired Studio canvas text paths (`generateText`, `generatePrompt`, `expandPromptContent`) via `textGenCreds` → same helper when `providerRef` is complete (no env overlay for BYOK).
+- `agent-canvas-tools` already calls `studio.generateText`, so canvas node text inherits the shared contract.
+- AC-8 unit test: same `providerRef` → Agent path vs canvas `providerContextFromResolved` yield identical `source`/`baseUrl`/`apiKey`.
+
+### I2 — D-RETRY (no 5xx in Nest/`@lnkpi/agent`)
+
+- `generateVisionQaJson`: `RETRYABLE_STATUSES = {429}` only; timeout/Abort errors still retry; **5xx hard-fail** (no retry).
+- Tests: 500 not retried; 429 retries then succeeds; timeout retries then succeeds.
+
+### Verification
+
+```bash
+pnpm --filter @lnkpi/agent exec vitest run src/refs/vision-qa-json.test.ts
+# 8 passed
+
+pnpm --filter @lnkpi/server exec vitest run \
+  src/provider/provider-context.test.ts \
+  src/agent/agent.service.dock.test.ts \
+  src/studio/run-vision-qa-context.test.ts \
+  src/studio/studio.fallback.test.ts
+# 32 passed (4 files)
+```
+
+### Concerns
+
+- Runtime still owns outer 429/timeout retry; Nest package now aligns on no-5xx (reduces amplification). Nested 429 retry (Runtime × Nest) remains possible but bounded by D-BUDGET 180s.
+- Incomplete BYOK on canvas still falls through to existing `fallback_pending` path (helper throw → `textGenCreds` env/opts fallthrough); Agent 启 run remains fail-fast on incomplete Context.

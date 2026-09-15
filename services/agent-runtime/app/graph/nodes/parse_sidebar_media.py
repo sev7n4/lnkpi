@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 from app.graph.product_visual_v2.vision_qa_client import supports_vision_model
 from app.graph.route_context import latest_user_text
 from app.graph.sidebar_media_parse import (
-    NON_VISION_PARSE_ERROR,
+    VISION_BYOK_MISSING_KEY,
+    VISION_MAX_ATTEMPTS,
+    VISION_PROVIDER_CONTEXT_INVALID,
+    VISION_UNSUPPORTED,
+    VISION_WALL_BUDGET_SEC,
+    classify_vision_error,
     image_urls_for_parse,
+    is_retryable_error_class,
     is_retryable_parse_error,
+    map_vision_error_class,
+    media_parse_cache_key,
     merge_parse_records,
     uncached_urls,
 )
@@ -69,26 +78,49 @@ def _unknown_list(data: dict) -> list[str]:
     return [str(item) for item in raw if item]
 
 
-def _error_message(model: str, *, payload: dict | None = None, exc: BaseException | None = None) -> str:
-    if not supports_vision_model(model):
-        return NON_VISION_PARSE_ERROR
-    if payload:
-        reason = str(payload.get("reason") or "").strip()
-        if reason:
-            return reason
-    if exc is not None:
-        return str(exc) or "识图失败"
-    return "识图失败"
+def _creds_fields(vision_creds: dict | None) -> dict[str, str | None]:
+    creds = vision_creds or {}
+    return {
+        "provider_ref": (str(creds["provider_ref"]).strip() if creds.get("provider_ref") else None),
+        "model": (str(creds["model"]).strip() if creds.get("model") else None),
+        "api_key": (str(creds["api_key"]).strip() if creds.get("api_key") else None),
+        "base_url": (str(creds["base_url"]).strip() if creds.get("base_url") else None),
+        "source": (str(creds["source"]).strip() if creds.get("source") else None),
+    }
 
 
-def _parse_from_cache(urls: list[str], cache: dict, model: str) -> dict[str, Any]:
-    merged = merge_parse_records(urls, cache)
+def _gate_error_class(fields: dict[str, str | None]) -> str | None:
+    """Runtime gates before Nest: unsupported model / incomplete Context / BYOK key."""
+    model = fields.get("model")
+    if model and not supports_vision_model(model):
+        return VISION_UNSUPPORTED
+    provider_ref = fields.get("provider_ref")
+    base_url = fields.get("base_url")
+    source = fields.get("source")
+    api_key = fields.get("api_key")
+    if not provider_ref or not model or not base_url or not source:
+        return VISION_PROVIDER_CONTEXT_INVALID
+    if not api_key:
+        if source == "user":
+            return VISION_BYOK_MISSING_KEY
+        return VISION_PROVIDER_CONTEXT_INVALID
+    return None
+
+
+def _parse_from_cache(
+    urls: list[str],
+    cache: dict,
+    model: str,
+    *,
+    provider_ref: str | None,
+) -> dict[str, Any]:
+    merged = merge_parse_records(urls, cache, provider_ref=provider_ref)
     vision_used = False
     error = None
     qa: dict[str, Any] = {}
     sent: list[str] = []
     for url in urls:
-        rec = cache.get(url) or {}
+        rec = cache.get(media_parse_cache_key(url, provider_ref)) or {}
         if rec.get("vision_used"):
             vision_used = True
         if rec.get("error") and error is None:
@@ -119,6 +151,24 @@ def _build_user_content(state: dict, image_count: int) -> str:
     return "\n\n".join(bits)
 
 
+def _failure_record(
+    *,
+    need: list[str],
+    error_class: str,
+    model: str,
+) -> dict[str, Any]:
+    return {
+        "vision_used": False,
+        "user_facing_summary": "",
+        "fields": {},
+        "unknown": [],
+        "image_urls": list(need),
+        "error": map_vision_error_class(error_class),
+        "error_class": error_class,
+        "model": model,
+    }
+
+
 def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skills_dir: Any) -> Callable:
     _ = skills_dir  # builder signature; prompt path is locked to runtime package root
     async def parse_sidebar_media(state: dict) -> dict:
@@ -126,13 +176,30 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
         if not urls:
             return {"sidebar_media_parse": None}
 
+        fields = _creds_fields(vision_creds)
+        provider_ref = fields.get("provider_ref")
+        model = fields.get("model") or ""
+
         cache = dict(state.get("sidebar_media_parse_cache") or {})
-        need = uncached_urls(urls, cache)
-        model = str((vision_creds or {}).get("model") or "")
+        need = uncached_urls(urls, cache, provider_ref=provider_ref)
 
         if not need:
             return {
-                "sidebar_media_parse": _parse_from_cache(urls, cache, model),
+                "sidebar_media_parse": _parse_from_cache(
+                    urls, cache, model, provider_ref=provider_ref
+                ),
+                "sidebar_media_parse_cache": cache,
+            }
+
+        gate = _gate_error_class(fields)
+        if gate is not None:
+            rec = _failure_record(need=need, error_class=gate, model=model)
+            for url in need:
+                cache[media_parse_cache_key(url, provider_ref)] = rec
+            return {
+                "sidebar_media_parse": _parse_from_cache(
+                    urls, cache, model, provider_ref=provider_ref
+                ),
                 "sidebar_media_parse_cache": cache,
             }
 
@@ -142,23 +209,58 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
         data: dict[str, Any] = {}
         vision_used = False
         error: str | None = None
-        try:
-            raw = await nest.run_vision_qa(
-                system_prompt=system_prompt,
-                user_content=user_content,
-                image_urls=need,
-                model=model,
-            )
-            data = raw if isinstance(raw, dict) else {}
-            vision_used = _vision_used(data)
-            if not vision_used:
-                error = _error_message(model, payload=data)
-        except Exception as exc:  # noqa: BLE001
-            vision_used = False
-            error = _error_message(model, exc=exc)
+        error_class: str | None = None
+        started = time.monotonic()
+        attempt = 0
+
+        while attempt < VISION_MAX_ATTEMPTS:
+            elapsed = time.monotonic() - started
+            if elapsed >= VISION_WALL_BUDGET_SEC:
+                if error_class is None:
+                    error_class = classify_vision_error(reason="timeout")
+                break
+            attempt += 1
+            try:
+                raw = await nest.run_vision_qa(
+                    system_prompt=system_prompt,
+                    user_content=user_content,
+                    image_urls=need,
+                    provider_ref=fields["provider_ref"],
+                    model=fields["model"],
+                    api_key=fields["api_key"],
+                    base_url=fields["base_url"],
+                    source=fields["source"],
+                )
+                data = raw if isinstance(raw, dict) else {}
+                vision_used = _vision_used(data)
+                if vision_used:
+                    error = None
+                    error_class = None
+                    break
+                error_class = classify_vision_error(payload=data)
+                error = map_vision_error_class(error_class)
+                if (
+                    is_retryable_error_class(error_class)
+                    and attempt < VISION_MAX_ATTEMPTS
+                    and (time.monotonic() - started) < VISION_WALL_BUDGET_SEC
+                ):
+                    continue
+                break
+            except Exception as exc:  # noqa: BLE001
+                vision_used = False
+                error_class = classify_vision_error(exc=exc)
+                error = map_vision_error_class(error_class)
+                data = {}
+                if (
+                    is_retryable_error_class(error_class)
+                    and attempt < VISION_MAX_ATTEMPTS
+                    and (time.monotonic() - started) < VISION_WALL_BUDGET_SEC
+                ):
+                    continue
+                break
 
         summary = ""
-        fields: dict[str, str] = {}
+        mapped_fields: dict[str, str] = {}
         unknown: list[str] = []
         qa: dict[str, Any] = {}
         if vision_used:
@@ -167,14 +269,14 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                 or _pick(data, "product_summary", "productSummary")
                 or ""
             ).strip()
-            fields = _map_fields(data)
+            mapped_fields = _map_fields(data)
             unknown = _unknown_list(data)
             qa = _map_qa(data)
 
         rec: dict[str, Any] = {
             "vision_used": vision_used,
             "user_facing_summary": summary,
-            "fields": fields,
+            "fields": mapped_fields,
             "unknown": unknown,
             "image_urls": list(need),
         }
@@ -182,17 +284,19 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
             rec["qa"] = qa
         if error:
             rec["error"] = error
+        if error_class:
+            rec["error_class"] = error_class
 
         if vision_used or not is_retryable_parse_error(error):
             for url in need:
-                cache[url] = rec
-            parse_out = _parse_from_cache(urls, cache, model)
+                cache[media_parse_cache_key(url, provider_ref)] = rec
+            parse_out = _parse_from_cache(urls, cache, model, provider_ref=provider_ref)
         else:
             # Surface error this turn, but leave URL uncached so ↺ / next ask retries Nest.
             ephemeral = dict(cache)
             for url in need:
-                ephemeral[url] = rec
-            parse_out = _parse_from_cache(urls, ephemeral, model)
+                ephemeral[media_parse_cache_key(url, provider_ref)] = rec
+            parse_out = _parse_from_cache(urls, ephemeral, model, provider_ref=provider_ref)
 
         return {
             "sidebar_media_parse": parse_out,

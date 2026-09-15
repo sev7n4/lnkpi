@@ -158,6 +158,11 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/run-vision-qa"):
+            return httpx.Response(
+                200,
+                json=_ok({"pass": True, "reason": "ok", "visionUsed": True}),
+            )
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -412,6 +417,35 @@ async def test_grid_slice_image(nest_client, captured):
         "rows": 1,
         "sourceUrl": "https://cdn.example/src.png",
         "nodeId": "img-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_vision_qa_posts_provider_context(nest_client, captured):
+    result = await nest_client.run_vision_qa(
+        image_urls=["https://cdn.example/a.png"],
+        system_prompt="sys",
+        user_content="usr",
+        provider_ref="ch_byok::deepseek-flash",
+        model="deepseek-flash",
+        api_key="sk-byok",
+        base_url="https://api.byok.example/v1",
+        source="user",
+    )
+    assert result["pass"] is True
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/run-vision-qa"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "imageUrls": ["https://cdn.example/a.png"],
+        "systemPrompt": "sys",
+        "userContent": "usr",
+        "providerRef": "ch_byok::deepseek-flash",
+        "model": "deepseek-flash",
+        "apiKey": "sk-byok",
+        "baseUrl": "https://api.byok.example/v1",
+        "source": "user",
     }
 
 

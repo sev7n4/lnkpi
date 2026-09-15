@@ -385,7 +385,11 @@ class NestCanvasClient:
         scene_kind: str | None = None,
         system_prompt: str,
         user_content: str,
+        provider_ref: str | None = None,
         model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        source: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -393,13 +397,16 @@ class NestCanvasClient:
             "imageUrls": image_urls,
             "systemPrompt": system_prompt,
             "userContent": user_content,
+            "providerRef": provider_ref,
+            "model": model,
+            "apiKey": api_key,
+            "baseUrl": base_url,
+            "source": source,
         }
         if user_text:
             body["userText"] = user_text
         if scene_kind:
             body["sceneKind"] = scene_kind
-        if model:
-            body["model"] = model
         # Multi-image sidebar parse (up to 4 uploads) commonly takes 60–90s on prod;
         # 60s hard-cut caused tool_timeout while Nest was still succeeding (~86s observed).
         return await self._post(

@@ -1,5 +1,6 @@
 import type { AgentStreamEvent } from '@lnkpi/agent'
 import type { SidebarAttachment } from '@lnkpi/shared'
+import type { ProviderSource } from '../provider/provider-context'
 
 export interface RuntimeRunInput {
   sessionId: string
@@ -11,9 +12,11 @@ export interface RuntimeRunInput {
   /** Runtime skill id after UI→runtime mapping */
   skillId?: string
   focusNodeId?: string
+  llmProviderRef?: string
   llmModel?: string
   llmApiKey?: string
   llmBaseUrl?: string
+  llmSource?: ProviderSource
   attachments?: SidebarAttachment[]
   refOrder?: string[]
   mentionedKeys?: string[]
@@ -257,9 +260,11 @@ export class AgentRuntimeClient {
         // W5：转发 user_decision，供 interrupt_before gate 恢复（见 hitl_resume.py）
         user_decision: input.userDecision,
         skill_id: input.skillId,
+        llm_provider_ref: input.llmProviderRef,
         llm_model: input.llmModel,
         llm_api_key: input.llmApiKey,
         llm_base_url: input.llmBaseUrl,
+        llm_source: input.llmSource,
         focus_node_id: input.focusNodeId,
         attachments: input.attachments,
         ref_order: input.refOrder,

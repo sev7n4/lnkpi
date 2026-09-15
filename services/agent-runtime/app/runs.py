@@ -277,9 +277,11 @@ class RunRequest(BaseModel):
     # W5修复：添加user_decision字段，支持用户确认/修改/换方向
     user_decision: str | None = None  # "confirm" | "revise" | "replan"
     skill_id: str | None = None
+    llm_provider_ref: str | None = None
     llm_model: str | None = None
     llm_api_key: str | None = None
     llm_base_url: str | None = None
+    llm_source: str | None = None
     focus_node_id: str | None = None  # W28: single-node quick gen target
     sidebar_attachments: list[dict[str, Any]] | None = Field(
         default=None,
@@ -650,9 +652,11 @@ async def _save_new_assistant_messages(
 
 def resolve_vision_creds(req: RunRequest) -> dict[str, str | None]:
     return {
-        "model": req.llm_model or settings.openai_chat_model,
-        "api_key": req.llm_api_key or settings.openai_api_key or None,
-        "base_url": req.llm_base_url or settings.openai_base_url,
+        "provider_ref": req.llm_provider_ref,
+        "model": req.llm_model,
+        "api_key": req.llm_api_key,
+        "base_url": req.llm_base_url,
+        "source": req.llm_source,
     }
 
 

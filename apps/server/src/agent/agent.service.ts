@@ -24,6 +24,10 @@ import { MaterialService } from '../canvas/material.service'
 import { ShotService } from '../canvas/shot.service'
 import { PrismaService } from '../prisma/prisma.service'
 import { isObjectStorageConfigured } from '../storage/object-storage-env'
+import {
+  buildTextProviderContext,
+  type ProviderContext,
+} from '../provider/provider-context'
 import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { AgentRuntimeClient } from './agent-runtime.client'
 import { mapUiSkillId } from './agent-skill-map'
@@ -374,16 +378,11 @@ export class AgentService {
     let turnPresentation: Record<string, unknown> | undefined
 
     const runtimeSkillId = mapUiSkillId(skillId)
-    let llmModel: string | undefined
-    let llmApiKey: string | undefined
-    let llmBaseUrl: string | undefined
+    let ctx: ProviderContext | undefined
     if (userId) {
       const requested = model?.trim() || (await this.loadDefaultTextModel(userId))
       if (requested) {
-        const resolved = await this.providerResolver.resolveForGeneration(userId, requested, 'text')
-        llmModel = resolved.modelName
-        llmApiKey = resolved.credentials.apiKey
-        llmBaseUrl = resolved.credentials.baseUrl
+        ctx = await buildTextProviderContext(this.providerResolver, userId, requested)
       }
     }
 
@@ -397,9 +396,11 @@ export class AgentService {
       // interrupt_before 恢复：注入 user_decision 后 astream(None)，不再重跑 intake
       userDecision,
       skillId: runtimeSkillId,
-      llmModel,
-      llmApiKey,
-      llmBaseUrl,
+      llmProviderRef: ctx?.providerRef,
+      llmModel: ctx?.model,
+      llmApiKey: ctx?.apiKey,
+      llmBaseUrl: ctx?.baseUrl,
+      llmSource: ctx?.source,
       focusNodeId,
       attachments,
       refOrder,

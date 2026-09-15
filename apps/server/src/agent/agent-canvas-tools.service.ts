@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common'
 import { applyCanvasActions, parseVisionQaJson, type ParsedVisionQaJson } from '@lnkpi/agent'
+import type { ProviderContext, ProviderSource } from '../provider/provider-context'
 import {
   computeImportTranslation,
   duplicateResultToCanvasActions,
@@ -264,18 +265,6 @@ const HARDCODE_PREFS: AccountGenPrefs = {
 
 function pickString(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
-}
-
-function pickVisionQaModelFromCanvas(canvas: CanvasData, fallback: string): string | undefined {
-  for (const node of canvas.nodes ?? []) {
-    if (node.type !== 'text' && node.type !== 'prompt') continue
-    const refs = (node.data?.localRefs as LocalRefBinding[] | undefined) ?? []
-    const hasImageRef = refs.some((r) => r.mediaType === 'image')
-    if (!hasImageRef) continue
-    const model = pickString(node.data?.textModel, '')
-    if (model) return model
-  }
-  return fallback || undefined
 }
 
 function parseVisionQaResponse(raw: string): ParsedVisionQaJson {
@@ -2810,18 +2799,25 @@ export class AgentCanvasToolsService {
     sceneKind?: string
     systemPrompt: string
     userContent: string
-    model?: string
+    providerRef: string
+    model: string
+    apiKey: string
+    baseUrl: string
+    source: ProviderSource
   }): Promise<ParsedVisionQaJson & { visionUsed: boolean }> {
-    const session = await this.loadOwnedSession(input.sessionId, input.userId)
-    const prefs = await this.loadAccountGenPrefs(input.userId)
-    const canvasTextModel = pickVisionQaModelFromCanvas(session.canvas, prefs.defaultTextModel)
-    const textModel =
-      pickString(input.model, pickString(canvasTextModel, prefs.defaultTextModel)) || undefined
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const provider: ProviderContext = {
+      providerRef: input.providerRef,
+      model: input.model,
+      apiKey: input.apiKey,
+      baseUrl: input.baseUrl,
+      source: input.source,
+    }
     const { text, visionUsed } = await this.studio.runVisionQaInternal(input.userId, {
       systemPrompt: input.systemPrompt,
       userContent: input.userContent,
       imageUrls: input.imageUrls,
-      model: textModel,
+      provider,
     })
     const parsed = parseVisionQaResponse(text)
     return { ...parsed, visionUsed }
