@@ -1,0 +1,87 @@
+{
+  "id": "ecommerce-product-visual",
+  "version": "1.0.0",
+  "title": "电商套图",
+  "invariants": {
+    "seedChains": [{ "id": "product", "keys": ["white_bg", "product_turnaround"] }]
+  },
+  "nodes": [
+    {
+      "key": "white_bg",
+      "title": "白底图",
+      "type": "image",
+      "chain": "product",
+      "role": "seed",
+      "dependsOn": [],
+      "genMode": "t2i",
+      "promptHintTemplate": "产品白底主图，居中，商业摄影，干净纯白背景，同一 SKU 外观清晰可见…",
+      "autoGenerate": true
+    },
+    {
+      "key": "product_turnaround",
+      "title": "产品四视图",
+      "type": "image",
+      "chain": "product",
+      "role": "turnaround",
+      "dependsOn": ["white_bg"],
+      "genMode": "i2i",
+      "promptHintTemplate": "单张横排四格拼图（一次出图）：最左近景特写，后接正/侧/背；同一产品锁定材质比例与外观，禁止每格换款；干净背景，商业摄影…",
+      "autoGenerate": true
+    },
+    {
+      "key": "hero_main",
+      "title": "主图",
+      "type": "image",
+      "chain": "product",
+      "role": "downstream",
+      "dependsOn": ["product_turnaround", "white_bg"],
+      "genMode": "i2i",
+      "promptHintTemplate": "电商主图，与产品四视图同一产品身份，突出卖点与场景感…",
+      "autoGenerate": true
+    },
+    {
+      "key": "detail_cut",
+      "title": "细节/剖面",
+      "type": "image",
+      "chain": "product",
+      "role": "downstream",
+      "dependsOn": ["product_turnaround", "white_bg"],
+      "genMode": "i2i",
+      "promptHintTemplate": "产品细节或剖面特写，与四视图同一产品身份…",
+      "autoGenerate": true
+    },
+    {
+      "key": "scene",
+      "title": "场景图",
+      "type": "image",
+      "chain": "product",
+      "role": "downstream",
+      "dependsOn": ["product_turnaround"],
+      "genMode": "i2i",
+      "promptHintTemplate": "产品自然融入环境的场景图，与四视图同一产品身份…",
+      "autoGenerate": true
+    },
+    {
+      "key": "banner",
+      "title": "Banner",
+      "type": "image",
+      "chain": "product",
+      "role": "downstream",
+      "dependsOn": ["product_turnaround"],
+      "genMode": "i2i",
+      "promptHintTemplate": "电商 Banner，品牌调性，与四视图同一产品身份…",
+      "autoGenerate": true
+    },
+    {
+      "key": "brand",
+      "title": "品牌图",
+      "type": "image",
+      "chain": "product",
+      "role": "downstream",
+      "dependsOn": ["product_turnaround"],
+      "genMode": "i2i",
+      "promptHintTemplate": "品牌视觉，可结合 logo；产品形象与四视图一致…",
+      "autoGenerate": true
+    }
+  ]
+}

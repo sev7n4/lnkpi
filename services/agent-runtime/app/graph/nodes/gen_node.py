@@ -18,6 +18,11 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from app.errors import AgentToolError, from_exception
+from app.graph.canvas_recipe_hydrate import (
+    canvas_nodes_from_state,
+    hydrate_gen_by_key_from_canvas,
+    merge_hydrated_by_key,
+)
 from app.graph.chain_refs import build_chain_ref_order
 from app.graph.gen_copy import format_gen_progress_line
 from app.graph.task_events import hint_for_error, is_recoverable, max_auto_retries
@@ -80,8 +85,14 @@ def make_gen_node(*, nest: Any) -> Callable:
         if not key:
             return {}
 
-        by_key = state.get("gen_by_key") or {}
+        by_key = dict(state.get("gen_by_key") or {})
         item = by_key.get(key)
+        if not item or not item.get("node_id"):
+            nodes = canvas_nodes_from_state(state)
+            if nodes:
+                hydrated = hydrate_gen_by_key_from_canvas(nodes)
+                by_key = merge_hydrated_by_key(key=str(key), by_key=by_key, hydrated=hydrated)
+                item = by_key.get(key)
         if not item:
             return {}
 

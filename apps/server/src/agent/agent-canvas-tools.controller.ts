@@ -1,8 +1,9 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
+import { WorkflowRecipeService } from './workflow-recipe.service'
 
 class UpsertPromptNodeDto {
   @IsString()
@@ -537,6 +538,74 @@ class ImportWorkflowDto {
   workflowUrl?: string
 }
 
+export class InstantiateRecipeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsOptional()
+  recipe!: unknown
+
+  @IsOptional()
+  slots?: Record<string, string>
+}
+
+export class MatchRecipesDto {
+  @IsString()
+  userId!: string
+
+  @IsString()
+  utterance!: string
+}
+
+export class PreviewRecipeDeltaDto {
+  @IsString()
+  userId!: string
+
+  @IsString()
+  parentId!: string
+
+  @IsString()
+  parentVersion!: string
+
+  @IsObject()
+  delta!: Record<string, unknown>
+}
+
+export class PromoteRecipeDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsIn(['variant', 'new_template'])
+  mode!: 'variant' | 'new_template'
+
+  @IsOptional()
+  @IsObject()
+  workflow?: unknown
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  confirmedSeedKeys?: string[]
+
+  @IsOptional()
+  @IsString()
+  title?: string
+
+  @IsOptional()
+  @IsString()
+  parentId?: string
+
+  @IsOptional()
+  @IsString()
+  parentVersion?: string
+}
+
 class GroupNodesDto {
   @IsString()
   sessionId!: string
@@ -769,6 +838,7 @@ class SaveContextSnapshotDto {
 export class AgentCanvasToolsController {
   constructor(
     @Inject(AgentCanvasToolsService) private readonly tools: AgentCanvasToolsService,
+    @Inject(WorkflowRecipeService) private readonly recipes: WorkflowRecipeService,
   ) {}
 
   @Post('upsert-prompt-node')
@@ -1028,6 +1098,30 @@ export class AgentCanvasToolsController {
   @Post('import-workflow')
   async importWorkflow(@Body() dto: ImportWorkflowDto) {
     const data = await this.tools.importWorkflow(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('instantiate-recipe')
+  async instantiateRecipe(@Body() dto: InstantiateRecipeDto) {
+    const data = await this.tools.instantiateRecipe(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('match-recipes')
+  async matchRecipes(@Body() dto: MatchRecipesDto) {
+    const data = await this.recipes.matchRecipes(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('preview-recipe-delta')
+  async previewRecipeDelta(@Body() dto: PreviewRecipeDeltaDto) {
+    const data = await this.recipes.previewRecipeDelta(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('promote-recipe')
+  async promoteRecipe(@Body() dto: PromoteRecipeDto) {
+    const data = await this.recipes.promoteRecipe(dto)
     return { code: 0, message: 'ok', data }
   }
 

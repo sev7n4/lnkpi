@@ -1,7 +1,15 @@
 """Tests for plan-based explore bind (narrow-bind keyword cull removed)."""
 
-from app.graph.explore_dispatch import classify_explore_intent
+from app.graph.explore_dispatch import classify_explore_intent, select_narrow_write_tools
 from app.tools.tool_plan import build_tool_plan
+
+_PLANNER_TOOLS = frozenset({
+    "preview_workflow_template",
+    "instantiate_workflow_template",
+    "match_workflow_templates",
+    "promote_workflow_template",
+})
+_IMPORT_ONLY = frozenset({"import_workflow"})
 
 
 def test_plan_always_includes_import_workflow_in_core():
@@ -26,3 +34,40 @@ def test_plan_visible_ignores_utterance_keywords():
     assert "upload_media_to_canvas" in plan.visible_names
     assert "import_workflow" in plan.visible_names
     assert "set_node_prompt" in plan.visible_names
+
+
+def test_planner_utterance_binds_preview_and_instantiate_not_only_import():
+    tools = select_narrow_write_tools("帮我规划一个电商套图工作流，接到角色三视图")
+    assert "preview_workflow_template" in tools
+    assert "instantiate_workflow_template" in tools
+    assert "match_workflow_templates" in tools
+    assert tools != _IMPORT_ONLY
+    assert len(tools) <= 5
+    assert tools == _PLANNER_TOOLS
+
+
+def test_import_workflow_utterance_still_binds_only_import():
+    assert select_narrow_write_tools("请用 import_workflow 导入") == _IMPORT_ONLY
+
+
+def test_planner_keywords_bind_planner_tools():
+    for keyword in ("规划工作流", "接到", "改版", "新模板", "存成一套"):
+        tools = select_narrow_write_tools(f"请帮我{keyword}")
+        assert "preview_workflow_template" in tools
+        assert "instantiate_workflow_template" in tools
+        assert tools == _PLANNER_TOOLS
+        assert tools != _IMPORT_ONLY
+
+
+def test_import_workflow_chinese_still_binds_only_import():
+    assert select_narrow_write_tools("请导入工作流到画布") == _IMPORT_ONLY
+    assert select_narrow_write_tools("导入工作流") == _IMPORT_ONLY
+
+
+def test_promote_phrases_bind_promote_not_only_import():
+    for phrase in ("存成一套新模板", "保存为当前模板的改版"):
+        tools = select_narrow_write_tools(phrase)
+        assert "promote_workflow_template" in tools
+        assert tools != _IMPORT_ONLY
+        assert len(tools) <= 5
+        assert tools == _PLANNER_TOOLS

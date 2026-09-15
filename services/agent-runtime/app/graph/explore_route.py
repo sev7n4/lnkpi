@@ -54,6 +54,19 @@ _WORKFLOW_IO_MARKERS = (
     "lnkpi.workflow",
     "import_workflow",
     "export_media_package",
+    "规划工作流",
+    "接到",
+    "改版",
+    "新模板",
+    "存成一套",
+)
+
+_PLANNER_MARKERS = (
+    "规划工作流",
+    "接到",
+    "改版",
+    "新模板",
+    "存成一套",
 )
 
 _EXPLORE_LIFECYCLE_MARKERS = (
@@ -109,6 +122,9 @@ def explore_explicit_intent(utterance: str) -> bool:
         return True
 
     if any(k in u for k in _EXPLORE_LIFECYCLE_MARKERS):
+        return True
+
+    if any(k in u for k in _PLANNER_MARKERS):
         return True
 
     return False
