@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@lnkpi/agent": "workspace:*",
     "@lnkpi/shared": "workspace:*",
     "@mediapipe/tasks-vision": "^1.0.1",
     "@tiptap/extension-placeholder": "^3.28.0",

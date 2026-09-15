@@ -99,6 +99,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@lnkpi/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
       '@lnkpi/shared':
         specifier: workspace:*
         version: link:../../packages/shared

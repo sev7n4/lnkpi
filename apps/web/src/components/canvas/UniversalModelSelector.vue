@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { supportsVisionTextModel, upstreamChatModel } from '@lnkpi/agent'
 import type { GenerationType } from '@lnkpi/shared'
 import { decodeChannelModel, modelOptionName } from '@lnkpi/shared'
 import { type StudioModality } from '@/constants/studioModels'
@@ -13,6 +14,7 @@ export type SelectorModelOption = {
   name: string
   channelName: string
   disabled?: boolean
+  visionCapable?: boolean
 }
 
 const props = withDefaults(
@@ -66,6 +68,7 @@ const selectableOptions = computed((): SelectorModelOption[] => {
     id,
     name: modelOptionName(id),
     channelName: channelNameForValue(id),
+    visionCapable: supportsVisionTextModel(upstreamChatModel(id)),
   }))
 })
 
@@ -153,6 +156,12 @@ function select(id: string) {
         @click="select(model.id)"
       >
         <span class="truncate">{{ model.name }}</span>
+        <span
+          v-if="type === 'text' && model.visionCapable"
+          class="ml-1 shrink-0 text-[10px] text-emerald-400/80"
+        >
+          可识图
+        </span>
         <span class="ml-2 shrink-0 opacity-45">{{ model.channelName }}</span>
       </button>
       <p v-if="!selectableOptions.length" class="px-3 py-2 text-[11px] text-[var(--neo-text-muted)]">

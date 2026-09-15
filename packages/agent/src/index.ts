@@ -68,6 +68,7 @@ export {
   appendImageRefsForTextOnlyPrompt,
   generateTextForRefs,
   supportsVisionTextModel,
+  upstreamChatModel,
   isDeepSeekFlashVisionModel,
 } from './refs/text-generation'
 export type { TextGenerationWithRefsOptions } from './refs/text-generation'
