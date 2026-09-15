@@ -60,4 +60,23 @@ describe('SelectionActionBar', () => {
     expect(wrapper.get('button.accent').attributes('disabled')).toBeDefined()
     wrapper.unmount()
   })
+
+  it('forwards grid-slice events when enabled', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: {
+        node: node as never,
+        imageUpscale: true,
+        gridSlice: true,
+      },
+    })
+
+    const trigger = wrapper.findAll('button').find((b) => b.text().includes('宫格裁剪'))
+    expect(trigger).toBeTruthy()
+    await trigger!.trigger('click')
+    const threeByThree = wrapper.findAll('button').find((b) => b.text() === '3×3')
+    expect(threeByThree).toBeTruthy()
+    await threeByThree!.trigger('click')
+    expect(wrapper.emitted('quick-slice')).toEqual([[3]])
+    wrapper.unmount()
+  })
 })
