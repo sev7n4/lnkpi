@@ -403,12 +403,14 @@ export type CanvasLayoutOp =
   | { op: 'group'; nodeIds: string[]; title?: string }
   | { op: 'ungroup'; groupId: string }
   | { op: 'arrange_grid'; nodeIds: string[]; gap?: number }
+  | { op: 'arrange_along_edges'; nodeIds: string[]; gap?: number }
   | { op: 'move'; items: Array<{ nodeId: string; x: number; y: number }> }
 
 export type CanvasLayoutOpResult =
   | { op: 'group'; groupId: string; nodeIds: string[] }
   | { op: 'ungroup'; groupId: string; nodeIds: string[] }
   | { op: 'arrange_grid'; nodeIds: string[] }
+  | { op: 'arrange_along_edges'; nodeIds: string[] }
   | { op: 'move'; nodeIds: string[] }
 
 /** Move nodes by absolute canvas coordinates (converts to parent-relative when nested). */
@@ -443,6 +445,7 @@ export function moveNodes(
 export function applyLayoutOps(
   nodes: LayoutNode[],
   ops: CanvasLayoutOp[],
+  edges: LayoutEdge[] = [],
 ): { nodes: LayoutNode[]; results: CanvasLayoutOpResult[] } {
   let current = nodes.map((n) => ({ ...n, data: { ...(n.data ?? {}) } }))
   const results: CanvasLayoutOpResult[] = []
@@ -467,6 +470,11 @@ export function applyLayoutOps(
       case 'arrange_grid': {
         current = layoutNodesInGrid(current, op.nodeIds, op.gap ?? 40)
         results.push({ op: 'arrange_grid', nodeIds: op.nodeIds })
+        break
+      }
+      case 'arrange_along_edges': {
+        current = layoutNodesAlongEdges(current, edges, op.nodeIds, op.gap ?? 40)
+        results.push({ op: 'arrange_along_edges', nodeIds: op.nodeIds })
         break
       }
       case 'move': {

@@ -333,5 +333,18 @@ describe('canvas-layout.util', () => {
       expect(ungrouped.results[0]?.op).toBe('ungroup')
       expect(ungrouped.nodes.some((n) => n.id === group.id)).toBe(false)
     })
+
+    it('arrange_along_edges uses provided edges', () => {
+      const base = [node('a', 'image', 0, 200), node('b', 'image', 50, 10)]
+      const { nodes, results } = applyLayoutOps(
+        base,
+        [{ op: 'arrange_along_edges', nodeIds: ['a', 'b'] }],
+        [{ source: 'a', target: 'b' }],
+      )
+      expect(results[0]?.op).toBe('arrange_along_edges')
+      const byId = Object.fromEntries(nodes.map((n) => [n.id, n.position]))
+      expect(byId.a.y).toBe(byId.b.y)
+      expect(byId.b.x - byId.a.x).toBe(280 + 40)
+    })
   })
 })

@@ -2302,7 +2302,7 @@ export class AgentCanvasToolsService {
     let after: LayoutNode[]
     let results: CanvasLayoutOpResult[]
     try {
-      ;({ nodes: after, results } = applyLayoutOps(before, input.ops))
+      ;({ nodes: after, results } = applyLayoutOps(before, input.ops, canvas.edges ?? []))
     } catch (err) {
       throw new BadRequestException(err instanceof Error ? err.message : '布局操作失败')
     }
