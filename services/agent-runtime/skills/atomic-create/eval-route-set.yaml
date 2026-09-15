@@ -12,18 +12,18 @@ cases:
       sidebar_attachments:
         - { mediaType: image, url: "https://a/1.jpg" }
         - { mediaType: image, url: "https://a/2.jpg" }
-    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }
+    gold: { flow_mode: canvas_agent, reason: sidebar_img2img_p1 }
 
   - id: rt-img2img-02
     state:
       messages: [{ role: user, content: "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。保持主图风格，背景，构图不变。" }]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-img2img-03
     state:
       messages: [{ role: user, content: "@I1 @I2 融合换装" }]
       sidebar_mentioned_keys: [I1, I2]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-preserve-01
     state:
@@ -35,7 +35,7 @@ cases:
     state:
       messages: [{ role: user, content: "保持构图不变，按 @I1 出图" }]
       sidebar_mentioned_keys: [I1]
-    gold: { flow_mode: atomic_create }
+    gold: { flow_mode: canvas_agent }
 
   - id: rt-atomic-01
     state:
@@ -121,7 +121,7 @@ cases:
       sidebar_attachments:
         - { mediaType: image, url: "https://a/1.jpg" }
         - { mediaType: image, url: "https://a/2.jpg" }
-    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }
+    gold: { flow_mode: canvas_agent, reason: sidebar_img2img_p1 }
 
   - id: sidebar-t1-style3-atomic
     state:
@@ -129,7 +129,7 @@ cases:
       sidebar_mentioned_keys: [T1]
       sidebar_attachments:
         - { refKey: T1, mediaType: text, content: "风格3说明" }
-    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+    gold: { flow_mode: canvas_agent, reason: sidebar_ref_atomic }
 
   - id: tmall-detail-campaign-clarify
     state:
@@ -155,7 +155,7 @@ cases:
     state:
       messages: [{ role: user, content: "@T1 请基于文案生成视频" }]
       sidebar_mentioned_keys: [T1]
-    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+    gold: { flow_mode: canvas_agent, reason: sidebar_ref_atomic }
 
   - id: rt-video-plain-01
     state:
@@ -166,7 +166,7 @@ cases:
     state:
       messages: [{ role: user, content: "@I1 按这张出图" }]
       sidebar_mentioned_keys: [I1]
-    gold: { flow_mode: atomic_create, reason: sidebar_ref_atomic }
+    gold: { flow_mode: canvas_agent, reason: sidebar_ref_atomic }
 
   - id: rt-orch-clarify-04
     state:
@@ -252,4 +252,4 @@ cases:
       sidebar_mentioned_keys: [I1]
       sidebar_attachments:
         - { refKey: I1, mediaType: image, url: "https://a/tiger.jpg" }
-    gold: { flow_mode: atomic_create, reason: sidebar_img2img_p1 }
+    gold: { flow_mode: canvas_agent, reason: sidebar_img2img_p1 }
