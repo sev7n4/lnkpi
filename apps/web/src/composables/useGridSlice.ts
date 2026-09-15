@@ -43,9 +43,21 @@ export type GridSliceResult = {
   nodeIds: string[]
 }
 
+/** Spec §6.2: reject oversized sources before canvas work. */
+export const GRID_SLICE_MAX_EDGE = 8192
+
 export type SliceImageToFilesDeps = {
   loadImage?: LoadSliceImageFn
   crop?: CropSliceFn
+}
+
+export function assertSliceImageWithinLimit(width: number, height: number): void {
+  if (width > GRID_SLICE_MAX_EDGE || height > GRID_SLICE_MAX_EDGE) {
+    throw new Error(`图片过大（边长上限 ${GRID_SLICE_MAX_EDGE}px）`)
+  }
+  if (width < 1 || height < 1) {
+    throw new Error('无效图片尺寸')
+  }
 }
 
 export async function defaultLoadSliceImage(url: string): Promise<LoadedSliceImage> {
@@ -105,6 +117,7 @@ export async function sliceImageToFiles(
   const loadImage = deps.loadImage ?? defaultLoadSliceImage
   const crop = deps.crop ?? defaultCropSlice
   const image = await loadImage(sourceUrl)
+  assertSliceImageWithinLimit(image.width, image.height)
   const dims = clampGridDims(cols, rows)
   const rects = equalSliceRects(image.width, image.height, dims.cols, dims.rows)
   const files: File[] = []

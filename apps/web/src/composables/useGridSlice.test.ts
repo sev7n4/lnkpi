@@ -45,6 +45,17 @@ describe('sliceImageToFiles', () => {
     )
     expect(crop.mock.calls.map((call) => call[1])).toEqual(equalSliceRects(10, 10, 3, 3))
   })
+
+  it('rejects oversized source images before crop', async () => {
+    const crop = vi.fn()
+    await expect(
+      sliceImageToFiles('https://cdn/huge.png', 2, 2, {
+        loadImage: async () => ({ width: 9000, height: 100 }),
+        crop,
+      }),
+    ).rejects.toThrow(/过大/)
+    expect(crop).not.toHaveBeenCalled()
+  })
 })
 
 describe('runGridSlice', () => {
