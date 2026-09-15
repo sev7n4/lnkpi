@@ -12,7 +12,7 @@ const emit = defineEmits<{
   group: []
   ungroup: []
   delete: []
-  layout: []
+  layout: [mode: 'along_edges' | 'grid']
   generateVideo: []
   download: [mode: 'full_package' | 'lightweight' | 'media_list_only']
   addAgentRef: []
@@ -21,9 +21,14 @@ const emit = defineEmits<{
 }>()
 
 const exportMenuOpen = ref(false)
+const layoutMenuOpen = ref(false)
 
 function closeExportMenu() {
   exportMenuOpen.value = false
+}
+
+function closeLayoutMenu() {
+  layoutMenuOpen.value = false
 }
 
 function onExport(mode: 'full_package' | 'lightweight' | 'media_list_only') {
@@ -31,10 +36,18 @@ function onExport(mode: 'full_package' | 'lightweight' | 'media_list_only') {
   emit('download', mode)
 }
 
+function onLayout(mode: 'along_edges' | 'grid') {
+  layoutMenuOpen.value = false
+  emit('layout', mode)
+}
+
 function onDocClick(event: MouseEvent) {
   const target = event.target as HTMLElement | null
   if (!target?.closest('[data-export-menu]')) {
     closeExportMenu()
+  }
+  if (!target?.closest('[data-layout-menu]')) {
+    closeLayoutMenu()
   }
 }
 
@@ -109,14 +122,38 @@ onUnmounted(() => {
       >
         加入 Agent 引用
       </button>
-      <button
+      <div
         v-if="selectedIds.length >= 2"
-        type="button"
-        class="toolbar-action"
-        @click="emit('layout')"
+        class="relative"
+        data-layout-menu
       >
-        整理布局
-      </button>
+        <button
+          type="button"
+          class="toolbar-action"
+          @click.stop="layoutMenuOpen = !layoutMenuOpen; exportMenuOpen = false"
+        >
+          整理布局
+        </button>
+        <div
+          v-if="layoutMenuOpen"
+          class="export-menu neo-chrome absolute left-0 top-full z-50 mt-1 min-w-[8.5rem] rounded-lg py-1"
+        >
+          <button
+            type="button"
+            class="export-menu-item"
+            @click="onLayout('along_edges')"
+          >
+            顺着连线
+          </button>
+          <button
+            type="button"
+            class="export-menu-item"
+            @click="onLayout('grid')"
+          >
+            自动网格
+          </button>
+        </div>
+      </div>
       <div
         v-if="selectedIds.length >= 2"
         class="relative"
@@ -125,7 +162,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="toolbar-action"
-          @click.stop="exportMenuOpen = !exportMenuOpen"
+          @click.stop="exportMenuOpen = !exportMenuOpen; layoutMenuOpen = false"
         >
           导出工作流
         </button>

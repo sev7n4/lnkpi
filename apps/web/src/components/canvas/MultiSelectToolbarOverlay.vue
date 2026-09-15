@@ -14,7 +14,7 @@ const emit = defineEmits<{
   group: []
   ungroup: []
   delete: []
-  layout: []
+  layout: [mode: 'along_edges' | 'grid']
   generateVideo: []
   download: [mode: 'full_package' | 'lightweight' | 'media_list_only']
   addAgentRef: []
@@ -93,7 +93,7 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @group="emit('group')"
     @ungroup="emit('ungroup')"
     @delete="emit('delete')"
-    @layout="emit('layout')"
+    @layout="emit('layout', $event)"
     @generate-video="emit('generateVideo')"
     @download="emit('download', $event)"
     @add-agent-ref="emit('addAgentRef')"
