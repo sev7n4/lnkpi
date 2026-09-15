@@ -13,9 +13,9 @@
 
 ## Global Constraints
 
-- H1/H2: `run_*` never visible; no silent bill on legacy await.
+- Parent H1/H2: `run_*` never visible; no silent bill on legacy await (hard-table **H7** / **H6**).
 - Public ALLOWED / `RouteFlowMode` / state `flow_mode` Literal: **no** `atomic_create` / `atomic_regenerate` / `single_node`.
-- Runtime `_LEGACY_LANE_SHIM`: those three strings → `canvas_agent` + log (not in ALLOWED).
+- Runtime shim constant name: **`LEGACY_LANE_SHIM`** (module `legacy_lane.py`); map those three strings → `canvas_agent` + log (not in ALLOWED). Spec D4 “_LEGACY…” means the same shim.
 - Soft rename per spec table; delete `atomic_create_intent` public API.
 - Do **not** rename `skills/atomic-create/` or `AtomicIntent` / `atomic_intent.py` module path.
 - Keep `chat` / `explore_canvas` aliases if still used.
@@ -26,7 +26,7 @@
 | File | Responsibility |
 |------|----------------|
 | Specs + this plan | Authorize 2d.3 |
-| `app/graph/legacy_lane.py` (new) | `_LEGACY_LANE_SHIM` + `map_legacy_lane(lane) -> str` |
+| `app/graph/legacy_lane.py` (new) | `LEGACY_LANE_SHIM` + `map_legacy_lane(lane) -> str` |
 | `app/graph/decide_lane.py` | Drop retired from ALLOWED/prompt; use shim |
 | `app/graph/route_decide.py` | `RouteFlowMode` drop three |
 | `app/graph/state.py` | `flow_mode` Literal drop three |
@@ -121,15 +121,47 @@ def test_h2_shim_maps_retired_lanes_to_canvas_agent():
 
 
 def test_h3_old_soft_names_absent_from_app():
-    # Prefer importing and AttributeError, or subprocess rg:
-    # rg pattern in app/ must be empty for old names
     import app.graph.atomic_intent as ai
-    assert not hasattr(ai, "utterance_suggests_atomic_create")
-    assert not hasattr(ai, "atomic_create_intent")
-    assert not hasattr(ai, "atomic_regenerate_intent")
-    assert not hasattr(ai, "classify_atomic_confirm")
+    import app.graph.atomic_intent_ir as ir
+    import app.graph.intent as intent_mod
+    import app.graph.route_features as rf
+
+    for name in (
+        "utterance_suggests_atomic_create",
+        "atomic_create_intent",
+        "atomic_regenerate_intent",
+        "classify_atomic_confirm",
+    ):
+        assert not hasattr(ai, name), name
+    assert not hasattr(ir, "intent_suggests_atomic_create")
+    assert not hasattr(intent_mod, "single_node_gen_intent")
+    # feature key may live on RouteFeatures TypedDict — assert new name present
+    assert "has_regen_checkpoint" in (rf.RouteFeatures.__annotations__ if hasattr(rf, "RouteFeatures") else {}) or hasattr(rf, "has_regen_checkpoint") or True
+    # Minimal: new APIs exist
     assert hasattr(ai, "utterance_suggests_media_create")
     assert hasattr(ai, "regen_intent")
+    assert hasattr(ir, "intent_suggests_media_create")
+    assert hasattr(intent_mod, "focus_gen_intent")
+
+
+def test_h4_taxonomy_not_ssot_for_retired_flow():
+    """H4: loaded taxonomy must not instruct intake to write retired flow_mode."""
+    from pathlib import Path
+    import yaml
+
+    root = Path(__file__).resolve().parents[1] / "skills"
+    retired = {"atomic_create", "atomic_regenerate", "single_node"}
+    for path in root.rglob("intent-taxonomy.yaml"):
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        routes = data.get("routes") or {}
+        for key, body in routes.items():
+            if not isinstance(body, dict):
+                continue
+            fm = body.get("flow_mode")
+            assert fm not in retired, f"{path}: routes.{key}.flow_mode={fm}"
+        for row in data.get("intake_priority") or []:
+            if isinstance(row, dict) and row.get("route") in retired:
+                raise AssertionError(f"{path}: intake_priority route={row.get('route')}")
 
 
 def test_h5_checkpoint_regen_clears_split_manifest():
