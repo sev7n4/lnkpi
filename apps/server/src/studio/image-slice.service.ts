@@ -64,9 +64,15 @@ export class ImageSliceService {
       throw new BadRequestException(message)
     }
 
-    const meta = await sharp(buffer).metadata()
-    const width = meta.width ?? 0
-    const height = meta.height ?? 0
+    let width = 0
+    let height = 0
+    try {
+      const meta = await sharp(buffer).metadata()
+      width = meta.width ?? 0
+      height = meta.height ?? 0
+    } catch {
+      throw new BadRequestException('无法解析源图')
+    }
     if (!width || !height) {
       throw new BadRequestException('无法解析源图尺寸')
     }
@@ -76,10 +82,15 @@ export class ImageSliceService {
 
     const rects = equalSliceRects(width, height, cols, rows)
     const urls = await mapWithConcurrency(rects, SLICE_CONCURRENCY, async (rect, index) => {
-      const sliceBuf = await sharp(buffer)
-        .extract({ left: rect.x, top: rect.y, width: rect.w, height: rect.h })
-        .png()
-        .toBuffer()
+      let sliceBuf: Buffer
+      try {
+        sliceBuf = await sharp(buffer)
+          .extract({ left: rect.x, top: rect.y, width: rect.w, height: rect.h })
+          .png()
+          .toBuffer()
+      } catch {
+        throw new BadRequestException('无法裁剪源图')
+      }
       const saved = await this.upload.saveUserFile(
         input.userId,
         sliceBuf,

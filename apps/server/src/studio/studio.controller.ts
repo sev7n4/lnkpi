@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsIn, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { MediaProbeService } from '../media/media-probe.service'
 import { createCancelFlag } from '../points/charge-session'
@@ -276,6 +276,7 @@ class ImageSegmentDto {
 
 class ImageSliceDto {
   @IsString()
+  @IsNotEmpty()
   sourceUrl!: string
 
   @IsNumber()
@@ -285,6 +286,7 @@ class ImageSliceDto {
   rows!: number
 
   @IsString()
+  @IsNotEmpty()
   sessionId!: string
 }
 

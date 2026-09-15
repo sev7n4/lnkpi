@@ -129,4 +129,11 @@ describe('ImageSliceService', () => {
     await expect(svc.slice(baseInput)).rejects.toThrow('disk full')
     expect(saveUserFile).toHaveBeenCalledTimes(3)
   })
+
+  it('throws BadRequest when buffer is not a valid image', async () => {
+    vi.mocked(readImageBuffer).mockResolvedValue(Buffer.from('not-an-image'))
+
+    await expect(svc.slice(baseInput)).rejects.toBeInstanceOf(BadRequestException)
+    expect(saveUserFile).not.toHaveBeenCalled()
+  })
 })
