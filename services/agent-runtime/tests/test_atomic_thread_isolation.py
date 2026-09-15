@@ -83,7 +83,7 @@ async def test_intake_regenerate_on_mixed_canvas_routes_canvas_agent(tmp_path: P
         }
     )
     assert out["flow_mode"] == "canvas_agent"
-    # checkpoint_regen no longer clears campaign residue the way atomic_regenerate did;
-    # only utterance_suggests_media_create clears split_manifest.
+    # Phase 2d.3 H5: checkpoint_regen → agent clears campaign split_manifest.
+    assert out["split_manifest"] == []
     assert out.get("skill_id") is None
     assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"

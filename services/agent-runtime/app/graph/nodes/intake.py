@@ -183,11 +183,12 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
             "previous_lane": decision.get("flow_mode") or resolved_flow,
         }
         if resolved_flow == "canvas_agent":
-            # Phase 2d: former atomic single-create isolation — clear campaign residue
-            # when utterance still looks like single-node media create.
+            # Phase 2d / 2d.3 H5: clear campaign residue for media_create soft
+            # signal or checkpoint_regen → agent (prefer rule-id gate).
             from app.graph.atomic_intent import utterance_suggests_media_create
 
-            if utterance_suggests_media_create(text):
+            rule_id = (decision or {}).get("precedence_rule_id")
+            if utterance_suggests_media_create(text) or rule_id == "checkpoint_regen":
                 out["split_manifest"] = []
                 out["skill_id"] = None
         if (
