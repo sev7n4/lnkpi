@@ -32,3 +32,9 @@ def test_chat_system_forbids_fake_in_progress_generation():
 def test_chat_system_forbids_filename_copout_when_parse_present():
     assert "若已提供【侧栏参考图解析】" in _SYSTEM
     assert "不得声称只能看到文件名或画布节点标题" in _SYSTEM
+
+
+def test_chat_system_requires_arrange_along_edges_on_new_nodes():
+    assert "arrange_nodes_along_edges" in _SYSTEM
+    assert "addedNodeIds" in _SYSTEM or "当轮新节点" in _SYSTEM
+    assert "整张画布" in _SYSTEM

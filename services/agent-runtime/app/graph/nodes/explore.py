@@ -39,6 +39,7 @@ _PLANNER_SYSTEM = (
     "改版不要带 confirmed，新模板不要带 confirmed_seed_keys。"
     "若工具返回 needs_seed_confirm 或 needs_variant_confirm，把 userMessage 原样告诉用户并等二次确认，禁止此时当已入库。"
     "二次确认后再带 confirmed=true 或 confirmed_seed_keys 调用。"
+    "instantiate_workflow_template 成功后，对返回的 addedNodeIds 调用 arrange_nodes_along_edges。"
 )
 
 
@@ -67,6 +68,9 @@ _EXPLORE_SYSTEM = (
     "串起来，不要压成单个 atomic 式节点。\n"
     "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
     "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。\n"
+    "8. 写完拓扑（connect_nodes / import_workflow / instantiate_workflow_template 成功）后，"
+    "必须对当轮新节点调用 arrange_nodes_along_edges；node_ids 只用这些工具返回的 addedNodeIds "
+    "或当轮连线的 source/target，禁止传入整张画布的全部 id。\n"
     "\n当前画布摘要：\n{summary}"
 )
 

@@ -243,6 +243,16 @@ class ArrangeNodesGridInput(BaseModel):
     gap: int | None = Field(default=None, description="Grid gap in pixels")
 
 
+class ArrangeNodesAlongEdgesInput(BaseModel):
+    node_ids: list[str] = Field(
+        description=(
+            "Node ids to layout (use addedNodeIds or this-turn connect source/target; "
+            "do not pass every canvas id)"
+        )
+    )
+    gap: int | None = Field(default=None, description="Gap in pixels, default 40")
+
+
 class ListGenerationTasksInput(BaseModel):
     type: str | None = Field(default=None, description="Optional filter: image, video, etc.")
 
@@ -264,7 +274,7 @@ class MoveNodesInput(BaseModel):
 class ApplyLayoutOpsInput(BaseModel):
     ops: list[dict[str, Any]] = Field(
         description=(
-            "Ordered layout ops: group, ungroup, arrange_grid, move "
+            "Ordered layout ops: group, ungroup, arrange_grid, arrange_along_edges, move "
             "(see canvas layout workflow harness)"
         )
     )
@@ -480,6 +490,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def arrange_nodes_grid(node_ids: list[str], gap: int | None = None) -> dict:
         return await client.arrange_nodes_grid(node_ids=node_ids, gap=gap)
+
+    async def arrange_nodes_along_edges(
+        node_ids: list[str], gap: int | None = None
+    ) -> dict:
+        return await client.arrange_nodes_along_edges(node_ids=node_ids, gap=gap)
 
     async def move_nodes(items: list[dict[str, Any]]) -> dict:
         normalized = [
@@ -929,6 +944,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="arrange_nodes_grid",
                 description="Arrange nodes in a grid layout (graph batch)",
                 args_schema=ArrangeNodesGridInput,
+            ),
+        ),
+        (
+            "arrange_nodes_along_edges",
+            StructuredTool.from_function(
+                coroutine=arrange_nodes_along_edges,
+                name="arrange_nodes_along_edges",
+                description=(
+                    "Arrange selected canvas nodes along directed edges, left to right. "
+                    "Same rank stacks vertically; columns share a vertical center. "
+                    "Pass only newly written node_ids. Do not use arrange_nodes_grid."
+                ),
+                args_schema=ArrangeNodesAlongEdgesInput,
             ),
         ),
         (

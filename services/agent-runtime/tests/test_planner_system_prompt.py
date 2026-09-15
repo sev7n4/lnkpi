@@ -22,6 +22,12 @@ def test_planner_system_asks_promote_choice_before_tool():
     assert "needs_seed_confirm" in _PLANNER_SYSTEM
 
 
+def test_planner_system_arranges_after_instantiate():
+    assert "instantiate_workflow_template" in _PLANNER_SYSTEM
+    assert "arrange_nodes_along_edges" in _PLANNER_SYSTEM
+    assert "addedNodeIds" in _PLANNER_SYSTEM
+
+
 def test_planner_promote_followup_uses_user_message():
     assert planner_promote_followup({
         "status": "needs_seed_confirm",
