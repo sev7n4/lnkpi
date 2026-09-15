@@ -3,7 +3,7 @@
 > **对标参考**：[NeoWOW Workflow](https://neowow.cn/workflow?sessionId=2074796563114016768)  
 > **UI 调研**：[NEOWOW_CANVAS_UI_RESEARCH.md](./NEOWOW_CANVAS_UI_RESEARCH.md)（§4.2 BottomToolbarWrapper / NodePanel）  
 > **创建日期**：2026-07-13  
-> **最后更新**：2026-09-13（B-2 / I-7 image upscale ✅；§十 BYOK 渠道；§C2.1 Canvas T*/I* refs 验收）
+> **最后更新**：2026-09-16（A1 STS+Upscale 收口：Explore `upscale_image`；Tracking 过期 OSS/upscale 文案对齐 #293/#295）
 
 ---
 
@@ -113,8 +113,8 @@
 2. ~~**P1 sceneComposer**（D-1~D-4）~~ ✅ 2026-07-14 代码落地
 3. ~~**生产手测** videoComposition export~~ ✅ 2026-07-16 API；UI 见 §0.5 U7
 4. **P0 浏览器 UI**：§0.5 U1–U8 + 配置生产 AI Key
-5. **P1 polish**：I-6、UX-6 全量 Capabilities、OSS STS
-6. **P2** worldModel / upscale / lip-sync
+5. **P1 polish**：I-6、UX-6 全量 Capabilities
+6. **P2** worldModel / lip-sync
 
 ---
 
@@ -205,7 +205,7 @@ completed → 写回 url / content / coverUrl
 | **audio** | ✅ | 🟢 80% | ✅ voice+settings | ✅ 入边 text 预填 | 情感/语速存 metadata | 已完成 |
 | **shot（分镜）** | ✅ | 🟢 85% | ✅ canvas | ✅ 入边 text + shotGenerateMode | ShotDockPanel 已拆 | 已完成 |
 | **sceneComposer** | ✅ | 🟢 85% | ✅ save/batch/expand | ✅ 可接 text synopsis | 浏览器 UI 闭环待验；批量生成依赖 API Key | D-1~D-4 完成 |
-| **mediaInput** | ✅ | 🟢 75% | 🟡 本地 upload | ✅ | 预览+转节点已完成；OSS STS 待升级 | 基本完成 |
+| **mediaInput** | ✅ | 🟢 85% | ✅ 登录走 `uploadApi`（COS 预签名 PUT / 本地兜底） | ✅ | 预览+转节点已完成；A1 直传已收口 | 已完成 |
 | **videoComposition** | ✅ | 🟢 85% | ✅ export | ✅ 入边 video/audio/mediaInput | ✅ 生产 export 2026-07-16 | C-1~C-4 完成 |
 | **worldModel** | ❌ | — | ❌ | ❌ | **无 Dock、无 3D API** | 未开始 |
 | **prompt** | ✅ | 🟡 50% | ⚠️ 与 text 混用 | ❌ | Legacy 面板，是否合并进 text 待产品定稿 | 未开始 |
@@ -219,7 +219,7 @@ completed → 写回 url / content / coverUrl
 | G-2 | `handleNodeGenerate` 在 `CanvasPage.vue` 600+ 行，缺 `useNodeGeneration` | 已迁出至 composable | 已完成 |
 | G-3 | 上游图解析未标准化（连线 text/image → prompt/refImage） | `useUpstreamNodeContext` 已实现 | 已完成 |
 | G-4 | 视频/分镜异步轮询不统一（shot 有 polling，studio video 无） | `useGenerationPolling` + B-6 部分提前 | 已完成 |
-| G-5 | 后端缺 upscale、lip-sync、OSS、capabilities 对齐 | 部分 Dock 控件无 API | 未开始 |
+| G-5 | lip-sync 未接；OSS 直传 / upscale / capabilities 已落地 | 口型同步仍缺 | lip-sync 未开始；STS+upscale ✅ |
 
 ### 2.2 未接线 / 重复组件
 
@@ -447,12 +447,12 @@ interface DockStudioEntry {
 |----|------|------|
 | M-1 | 加入 `EDITABLE_NODE_TYPES` | 已完成 |
 | M-2 | `MediaInputDockPanel`：预览 + 文件名 + 「转为 image/video 节点」 | 已完成 |
-| M-3 | OSS/STS 上传（替换 blob URL） | 部分完成（本地 upload API） |
+| M-3 | OSS/STS 上传（替换 blob URL） | 已完成（`uploadApi`：COS 预签名 PUT / 本地 `POST /upload` 兜底） |
 | M-4 | 作为上游 ref 被 image/video 消费 | 已完成 |
 
 - [x] M-1 — EDITABLE 注册
 - [x] M-2 — MediaInputDockPanel
-- [x] M-3 — OSS 上传（本地 API，见附录 E）
+- [x] M-3 — OSS 上传（`uploadApi` 直传 / 本地兜底，见附录 E）
 - [x] M-4 — 上游 ref 消费
 
 ---
@@ -667,7 +667,7 @@ Phase 0 (P0-1~P0-6)
 | Dock 壳层 | `DockStudioShell.vue` | 动画保留在 `DockStudioToolbar.vue` | 可选抽取 |
 | 非 image/video 节点 | 各自 Panel | `LegacyDockPanel` → `NodeEditorToolbar` | Sprint B 拆分 |
 | 图片比例 | 传给 image provider | 仅存 `metadata.aspectRatio` + API DTO | 待 provider 支持 |
-| 参考图上传 | OSS | 本地 `POST /api/upload` → `/api/uploads/{userId}/` | 可升级 OSS STS |
+| 参考图上传 | OSS | `uploadApi`：COS 预签名 PUT（就绪时）+ 本地 `POST /upload` 兜底 | A1 #293 已收口 |
 | Dock 只读态 | generating 禁用编辑 | `dockReadonly` + `is-dock-readonly` CSS | — |
 | B-6 轮询 API | Phase 4 | Sprint A 提前实现 `GET /studio/generations/:id` | — |
 | 单测 | P0-1 含单测骨架 | 未加单测（build 验收通过） | 按需补 |
@@ -725,7 +725,7 @@ Phase 0 (P0-1~P0-6)
 
 | 项 | 原规划 | 实际实现 | 后续 |
 |----|--------|---------|------|
-| B-4 / M-3 上传 | OSS STS + 对象存储 | `POST /api/upload` 存本地 `uploads/{userId}/`，静态 `/api/uploads/` | 生产环境换 OSS |
+| B-4 / M-3 上传 | OSS STS + 对象存储 | `uploadApi` Presigned PUT（COS 就绪）+ 本地 `POST /api/upload` 兜底 | A1 #293 已收口 |
 | 拖入媒体 | 建 mediaInput 节点 | 登录用户上传后建 image/video/audio/text；未登录仍 blob | 可选统一 mediaInput |
 | UX-4 文本文件 | Dock 联动 | 文本仍走 `createFileNodeAt` → text 节点 | 可扩展 |
 | `useCanvasMedia` | 传 `MediaFilePayload` | 改为直接传 `File`，由 `ingestMediaFile` 统一持久化 | — |

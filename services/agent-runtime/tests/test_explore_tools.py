@@ -27,6 +27,7 @@ def test_explore_tools_exclude_generation():
     assert "move_nodes" not in names
     assert "apply_layout_ops" not in names
     assert "arrange_nodes_along_edges" in names
+    assert "upscale_image" in names
     assert "arrange_nodes_grid" not in names
     assert names <= EXPLORE_TOOL_NAMES
 
@@ -40,4 +41,5 @@ def test_graph_only_includes_generation():
     assert "connect_nodes" not in names
     assert "import_workflow" not in names
     assert "arrange_nodes_along_edges" not in names
+    assert "upscale_image" not in names
     assert names <= GRAPH_ONLY_TOOL_NAMES

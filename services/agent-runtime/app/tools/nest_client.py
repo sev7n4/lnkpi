@@ -33,6 +33,7 @@ _LONG_GEN_PATHS = frozenset({
     "/agent/internal/run-text-generation",
     "/agent/internal/run-prompt-generation",
     "/agent/internal/run-audio-generation",
+    "/agent/internal/upscale-image",
 })
 
 _VIDEO_GEN_PATHS = frozenset({
@@ -824,6 +825,28 @@ class NestCanvasClient:
             "/agent/internal/get-image-edit-capabilities",
             {"sessionId": self._session_id, "nodeId": node_id},
         )
+
+    async def upscale_image(
+        self,
+        *,
+        node_id: str | None = None,
+        image_url: str | None = None,
+        scale: int | None = None,
+        provider: str | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+        }
+        if node_id:
+            body["nodeId"] = node_id
+        if image_url:
+            body["imageUrl"] = image_url
+        if scale is not None:
+            body["scale"] = scale
+        if provider:
+            body["provider"] = provider
+        return await self._post("/agent/internal/upscale-image", body)
 
     async def get_agent_messages(self, *, thread_id: str) -> list[dict[str, Any]]:
         """Load conversation history for one thread (Nest single-writer)."""

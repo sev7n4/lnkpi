@@ -267,6 +267,17 @@ class ArrangeNodesAlongEdgesInput(BaseModel):
     gap: int | None = Field(default=None, description="Gap in pixels, default 40")
 
 
+class UpscaleImageInput(BaseModel):
+    node_id: str | None = Field(default=None, description="Source image node id")
+    image_url: str | None = Field(
+        default=None, description="Image URL when node_id is omitted"
+    )
+    scale: Literal[2, 4] | None = Field(
+        default=2, description="UI default 2; 4 only if the provider supports it"
+    )
+    provider: str | None = Field(default=None, description="Optional provider id override")
+
+
 class ListGenerationTasksInput(BaseModel):
     type: str | None = Field(default=None, description="Optional filter: image, video, etc.")
 
@@ -539,6 +550,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def get_image_edit_capabilities(node_id: str) -> dict:
         return await client.get_image_edit_capabilities(node_id=node_id)
+
+    async def upscale_image(
+        node_id: str | None = None,
+        image_url: str | None = None,
+        scale: Literal[2, 4] | None = 2,
+        provider: str | None = None,
+    ) -> dict:
+        return await client.upscale_image(
+            node_id=node_id,
+            image_url=image_url,
+            scale=scale,
+            provider=provider,
+        )
 
     async def apply_sidebar_attachments(
         node_ids: list[str],
@@ -962,6 +986,19 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 name="get_image_edit_capabilities",
                 description="Check whether a node supports image refine modes",
                 args_schema=NodeIdInput,
+            ),
+        ),
+        (
+            "upscale_image",
+            StructuredTool.from_function(
+                coroutine=upscale_image,
+                name="upscale_image",
+                description=(
+                    "Upscale an existing canvas image 2× (same Nest UpscaleService as the UI). "
+                    "Pass node_id or image_url. On success, upsert_media_node with the returned url "
+                    "and connect_nodes from the source. Do not fake upscale with run_* or prompts."
+                ),
+                args_schema=UpscaleImageInput,
             ),
         ),
         (

@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — merged [#295](https://github.com/sev7n4/lnkpi/pull/295) (`feat: A1 image upscale (fal Real-ESRGAN)`). Explore `upscale_image` closeout follows the same `UpscaleService`.
+
 **Goal:** 独立 `UpscaleProvider` + Nest `UpscaleService` + `POST /agent/canvas/material/upscale-image`；选中浮层「放大|编辑」与右键同步；Agent tool 同路径；capabilities `imageUpscale`；规格接入清单填实。
 
 **Architecture:** `packages/agent` 定义 `UpscaleProvider`；优先探测/实现 Agnes；否则在现有通道能接尽接。Nest 扣点、调 provider、写 `image_upscale` record。前端浮层与右键调同一 API，成功新建 image 节点 + 源边。依赖 PR1 已合并非硬依赖（放大吃可访问 URL）。

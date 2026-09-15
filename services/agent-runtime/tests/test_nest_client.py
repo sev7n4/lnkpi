@@ -146,6 +146,18 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/upscale-image"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "url": "https://cdn.example/up.png",
+                        "scale": 2,
+                        "providerId": "fal",
+                        "recordId": "rec-up",
+                    }
+                ),
+            )
         if path.endswith("/run-vision-qa"):
             return httpx.Response(
                 200,
@@ -319,6 +331,21 @@ async def test_instantiate_recipe_ignores_confirm_chip_utterance(nest_client, ca
     )
     req = _last(captured)
     assert req["json"]["utterance"] == "规划一个角色三视图工作流，年轻亚洲女性模特半身肖像"
+
+
+@pytest.mark.asyncio
+async def test_upscale_image(nest_client, captured):
+    result = await nest_client.upscale_image(node_id="image-1", scale=2)
+    assert result["url"] == "https://cdn.example/up.png"
+    assert result["scale"] == 2
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/upscale-image"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "nodeId": "image-1",
+        "scale": 2,
+    }
 
 
 @pytest.mark.asyncio

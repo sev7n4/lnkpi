@@ -1,7 +1,7 @@
 # Wave A · A1 OSS 直传（STS）+ 图像 Upscale 设计
 
 > 日期：2026-09-12  
-> 状态：已批准（对话确认 §1–§4；计划见 `../plans/2026-09-12-wave-a-a1-*.md`）  
+> 状态：已收口（#293 直传、#295 Upscale、Explore `upscale_image` 同 UpscaleService）  
 > 上级纲领：[2026-09-10-wave-a-delivery-program-design.md](./2026-09-10-wave-a-delivery-program-design.md)  
 > 前置：  
 > - [2026-09-10-wave-a-a3-media-persist-design.md](./2026-09-10-wave-a-a3-media-persist-design.md)（`StorageAdapter` / COS 双轨）  
@@ -232,8 +232,9 @@ interface UpscaleProvider {
 
 ### 5.7 Agent
 
-- Tool（名建议 `upscale_image`，可微调）调用同一 Upscale service。  
-- 返回 URL；建节点方式与现有 generate/harness 惯例一致（规格不发明第二套画布写入协议）。
+- Tool 名 **`upscale_image`**：Explore 与 Nest `POST /agent/internal/upscale-image` / UI `POST /agent/canvas/material/upscale-image` **同一 `UpscaleService`**。  
+- 不在 `EXPLORE_WRITE_TOOLS`（窄绑定不可裁掉）。默认 `scale=2`。  
+- 返回 `{ url, scale, providerId, recordId }`；建节点走现有 `upsert_media_node` + `connect_nodes`（规格不发明第二套画布写入协议）。
 
 ### 5.8 Capabilities
 
@@ -298,15 +299,18 @@ interface UpscaleProvider {
 
 ## 10. 成功标准（收口）
 
-- [ ] COS 配置下上传主路径为预签名 PUT；本地仅为兜底  
-- [ ] 图像可 2× 放大；入口在浮层+右键；Dock 无放大主入口  
-- [ ] UI 与 Agent 同 Nest 路径  
-- [ ] capabilities 可探测；失败可诊断  
-- [ ] 接入清单与代码一致  
-- [ ] 无 lip-sync / worldModel / 完整 STS Token 下发误入本规格 PR  
+- [x] COS 配置下上传主路径为预签名 PUT；本地仅为兜底  
+- [x] 图像可 2× 放大；入口在浮层+右键；Dock 无放大主入口  
+- [x] UI 与 Agent 同 Nest 路径  
+- [x] capabilities 可探测；失败可诊断  
+- [x] 接入清单与代码一致  
+- [x] 无 lip-sync / worldModel / 完整 STS Token 下发误入本规格 PR  
+
+落地：[#293](https://github.com/sev7n4/lnkpi/pull/293) 直传、[#295](https://github.com/sev7n4/lnkpi/pull/295) Upscale UI/API；Explore `upscale_image` 与上述同 service。  
 
 ## 11. 修订记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-09-12 | 初稿：对话确认架构、直传、Upscale、UI；方案 1 双 PR |
+| 2026-09-16 | 收口：§10 勾选；§5.7 写明 Explore `upscale_image` 同 UpscaleService |
