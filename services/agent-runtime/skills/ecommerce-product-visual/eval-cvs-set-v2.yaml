@@ -12,7 +12,8 @@ cases:
       - { kind: image, role: product, url: fixture/cvs02-crab.jpg }
     assert_flow_mode: product_visual
     assert_v2: true
-    assert_shot_types_include: [packaging_hero, packaging_structure, model_holding_pack]
+    assert_shot_types_include: [packaging_hero, packaging_structure]
+    # model_holding_pack lives on macro B; assert only when AB selected (CVS-02-AB-v2)
     assert_macro_schemes_min: 1
     assert_prose_min_chars: 180
     dialog_fixture:

@@ -131,7 +131,9 @@ async def test_intake_atomic_regenerate_when_prior_node(tmp_path: Path):
         "atomic_node_id": "node-abc",
         "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特人物图"},
     })
-    assert out["flow_mode"] == "atomic_regenerate"
+    # Phase 2d.2: checkpoint_regen → canvas_agent; soft intent may remain
+    assert out["flow_mode"] == "canvas_agent"
+    assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"
     assert atomic_regenerate_intent("再试一次")
 
 
@@ -144,7 +146,8 @@ async def test_intake_regenerate_phrase_with_prior_node(tmp_path: Path):
         "atomic_node_id": "node-abc",
         "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特人物图"},
     })
-    assert out["flow_mode"] == "atomic_regenerate"
+    assert out["flow_mode"] == "canvas_agent"
+    assert (out.get("route_decision") or {}).get("precedence_rule_id") == "checkpoint_regen"
     assert not atomic_create_intent("重新生成一张")
 
 

@@ -17,7 +17,8 @@ cases:
         prompt: 模特人物图
         confirm_gate: false
     gold:
-      flow_mode: atomic_regenerate
+      # Phase 2d.2: checkpoint_regen → canvas_agent
+      flow_mode: canvas_agent
 
   - id: reg-02
     utterance: 重新生成一张
@@ -29,7 +30,8 @@ cases:
         prompt: 模特人物图
         confirm_gate: false
     gold:
-      flow_mode: atomic_regenerate
+      # Phase 2d.2: checkpoint_regen → canvas_agent
+      flow_mode: canvas_agent
 
   - id: reg-03
     utterance: 帮我生成一个模特人物图
@@ -41,7 +43,8 @@ cases:
         prompt: 模特人物图
         confirm_gate: false
     gold:
-      flow_mode: atomic_create
+      # Phase 2d / 2d.2: atomic_create retired → canvas_agent
+      flow_mode: canvas_agent
     notes: explicit new create wins over regenerate when user asks for new asset
 
   - id: reg-04
@@ -54,7 +57,8 @@ cases:
         prompt: 模特人物图
         confirm_gate: false
     gold:
-      flow_mode: atomic_create
+      # Phase 2d / 2d.2: variant → canvas_agent
+      flow_mode: canvas_agent
     notes: variant/adjust creates new node, not same-node regenerate
 
   - id: reg-05
@@ -67,7 +71,8 @@ cases:
         prompt: 模特人物图
         confirm_gate: false
     gold:
-      flow_mode: atomic_create
+      # Phase 2d / 2d.2: style variant → canvas_agent
+      flow_mode: canvas_agent
     notes: style variant creates new node
 
   # --- regenerate without checkpoint ---
@@ -128,5 +133,6 @@ cases:
   - id: reg-2026-08-07-img2img-sidebar
     utterance: "@I1 这个是模特图，@I2 这个是产品图，让模特穿上这件衣服。保持主图风格，背景，构图不变。"
     gold:
-      flow_mode: atomic_create
+      # Phase 2d / 2d.2: atomic_create retired → canvas_agent
+      flow_mode: canvas_agent
       skill_id: null

@@ -105,7 +105,8 @@ def test_intake_routes_batch_color_variants_to_atomic():
     out = asyncio.get_event_loop().run_until_complete(
         intake({"messages": [HumanMessage(content=utterance)]})
     )
-    assert out["flow_mode"] == "atomic_create"
+    # Phase 2d / 2d.2: atomic_create retired → canvas_agent
+    assert out["flow_mode"] == "canvas_agent"
 
 
 def test_build_atomic_spec_enriched_uses_clean_prompt():

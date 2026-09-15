@@ -41,18 +41,19 @@ async def test_get_thread_state_includes_atomic_checkpoint(tmp_path):
         checkpointer=cp,
     )
     config = {"configurable": {"thread_id": "t-atomic-diag"}}
-    await graph.ainvoke(
+    # Seed checkpoint without running the graph (legacy atomic_create → explore needs llm).
+    await graph.aupdate_state(
+        config,
         {
             "messages": [HumanMessage(content="帮我生成一个模特人物图")],
             "atomic_node_id": "node-x",
             "atomic_spec": {"target_type": "image", "title": "模特图", "prompt": "模特"},
-            "flow_mode": "atomic_create",
+            "flow_mode": "canvas_agent",
             "phase": "done",
             "thread_id": "t-atomic-diag",
             "session_id": "s1",
             "user_id": "u1",
         },
-        config,
     )
     state = await get_thread_state("t-atomic-diag", checkpointer=cp)
     assert state["hasAtomicCheckpoint"] is True

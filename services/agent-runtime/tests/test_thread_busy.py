@@ -65,14 +65,27 @@ class _Nest:
     async def run_image_generation(self, node_id: str) -> dict[str, Any]:
         return {"nodeId": node_id, "status": "completed", "actions": []}
 
+    async def get_canvas_summary(self) -> dict[str, Any]:
+        return {"nodes": [], "edges": []}
+
 
 class _SlowLLM:
-    """Blocks inside plan LLM so a second concurrent turn can race."""
+    """Blocks inside explore/plan LLM so a second concurrent turn can race."""
 
     def __init__(self, gate: asyncio.Event, release: asyncio.Event) -> None:
         self.gate = gate
         self.release = release
         self.calls = 0
+
+    def bind_tools(self, tools: Any) -> "_SlowLLM":
+        # Phase 2d.2: planning utterances often land on canvas_agent/explore.
+        return self
+
+    def invoke(self, messages: Any, **kwargs: Any) -> AIMessage:
+        # Sync decide_lane must not hold the busy gate / inflate call count.
+        return AIMessage(
+            content='{"lane":"canvas_agent","confidence":0.9,"reason":"busy_test","clarify_question":null}'
+        )
 
     async def ainvoke(self, messages: Any, **kwargs: Any) -> AIMessage:
         self.calls += 1
