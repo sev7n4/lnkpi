@@ -306,10 +306,15 @@ def main() -> int:
         )
         time.sleep(1.0)
         pids = pending_ids(load_canvas(tok, sid))
+        # Hard table H8: 确认前无扣费 — prefer pending_confirm; fall back to no billable path
+        # (explore may clarify / report tools unbound without charging).
+        has_pending = bool(pids) or r["pending_via_actions"] or r["add_media_n"] >= 1
+        no_charge = r["no_run_tools"] and not r["atomic_ran"]
         record(
-            "H8a pending before charge (propose or clarify)",
-            bool(pids) or r["pending_via_actions"] or r["add_media_n"] >= 1 or r["flow_mode"] == "clarify_route",
-            f"pendingIds={pids[:3]} via_actions={r['pending_via_actions']} adds={r['add_media_n']}",
+            "H8a no charge before confirm (pending or no billable path)",
+            has_pending or r["flow_mode"] == "clarify_route" or no_charge,
+            f"pendingIds={pids[:3]} via_actions={r['pending_via_actions']} "
+            f"adds={r['add_media_n']} has_pending={has_pending} no_charge={no_charge}",
         )
         record(
             "H8a no run_image/video_generation in tools",
