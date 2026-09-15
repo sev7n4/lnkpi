@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.config import settings
 from app.checkpoint_observability import checkpoint_diagnostics
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
+from app.llm_thinking import apply_agent_llm_thinking_policy
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
@@ -295,6 +296,9 @@ class RunRequest(BaseModel):
         default=None,
         validation_alias="mentioned_keys",
     )
+    # Agent Dock「深度思考」；默认关。DeepSeek + tools 开启时需 reasoning_content 回传。
+    thinking: bool = False
+    thinking_effort: str | None = None
 
 
 class CancelRunRequest(BaseModel):
@@ -556,16 +560,25 @@ def resolve_skills_dir(skills_dir: str | Path | None = None) -> Path:
     return Path(__file__).resolve().parents[1] / raw
 
 
-def default_llm() -> Any:
-    return ChatOpenAI(
-        api_key=settings.openai_api_key or "sk-placeholder",
-        base_url=settings.openai_base_url,
-        model=settings.openai_chat_model or "gpt-4o",
-        temperature=0.4,
+def default_llm(*, thinking: bool = False, thinking_effort: str | None = None) -> Any:
+    model = settings.openai_chat_model or "gpt-4o"
+    kwargs = apply_agent_llm_thinking_policy(
+        model,
+        {
+            "api_key": settings.openai_api_key or "sk-placeholder",
+            "base_url": settings.openai_base_url,
+            "model": model,
+            "temperature": 0.4,
+        },
+        thinking=thinking,
+        thinking_effort=thinking_effort,
     )
+    return ChatOpenAI(**kwargs)
 
 
 def resolve_llm(req: RunRequest) -> Any:
+    thinking = bool(req.thinking)
+    effort = req.thinking_effort
     if req.llm_model and req.llm_api_key:
         kwargs: dict[str, Any] = {
             "api_key": req.llm_api_key,
@@ -574,16 +587,29 @@ def resolve_llm(req: RunRequest) -> Any:
         }
         if req.llm_base_url:
             kwargs["base_url"] = req.llm_base_url
-        return ChatOpenAI(**kwargs)
+        return ChatOpenAI(
+            **apply_agent_llm_thinking_policy(
+                req.llm_model,
+                kwargs,
+                thinking=thinking,
+                thinking_effort=effort,
+            )
+        )
     if req.llm_model:
         return ChatOpenAI(
-            api_key=settings.openai_api_key or "sk-placeholder",
-            base_url=settings.openai_base_url,
-            model=req.llm_model,
-            temperature=0.4,
+            **apply_agent_llm_thinking_policy(
+                req.llm_model,
+                {
+                    "api_key": settings.openai_api_key or "sk-placeholder",
+                    "base_url": settings.openai_base_url,
+                    "model": req.llm_model,
+                    "temperature": 0.4,
+                },
+                thinking=thinking,
+                thinking_effort=effort,
+            )
         )
-    return default_llm()
-
+    return default_llm(thinking=thinking, thinking_effort=effort)
 
 def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
     return NestCanvasClient(
