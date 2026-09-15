@@ -399,10 +399,12 @@ class NestCanvasClient:
             body["sceneKind"] = scene_kind
         if model:
             body["model"] = model
+        # Multi-image sidebar parse (up to 4 uploads) commonly takes 60–90s on prod;
+        # 60s hard-cut caused tool_timeout while Nest was still succeeding (~86s observed).
         return await self._post(
             "/agent/internal/run-vision-qa",
             body,
-            timeout=60.0,
+            timeout=120.0,
         )
 
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:
@@ -753,6 +755,18 @@ class NestCanvasClient:
         if gap is not None:
             body["gap"] = gap
         return await self._post("/agent/internal/arrange-nodes-grid", body)
+
+    async def arrange_nodes_along_edges(
+        self, *, node_ids: list[str], gap: int | None = None
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "nodeIds": node_ids,
+        }
+        if gap is not None:
+            body["gap"] = gap
+        return await self._post("/agent/internal/arrange-nodes-along-edges", body)
 
     async def move_nodes(self, *, items: list[dict[str, Any]]) -> dict[str, Any]:
         return await self._post(

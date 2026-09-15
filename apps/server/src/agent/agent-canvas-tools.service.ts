@@ -34,6 +34,7 @@ import {
   createGroupFromNodes,
   getAbsolutePosition,
   getNodeSize,
+  layoutNodesAlongEdges,
   layoutNodesInGrid,
   moveNodes,
   summarizeLayoutGroups,
@@ -2272,6 +2273,24 @@ export class AgentCanvasToolsService {
     return { actions: [] }
   }
 
+  async arrangeNodesAlongEdges(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+    gap?: number
+  }): Promise<{ actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const after = layoutNodesAlongEdges(
+      canvas.nodes as LayoutNode[],
+      canvas.edges ?? [],
+      input.nodeIds,
+      input.gap ?? 40,
+    )
+    await this.persistLayoutNodes(input.sessionId, after)
+    return { actions: [] }
+  }
+
   async moveNodes(input: {
     sessionId: string
     userId: string
@@ -2303,7 +2322,7 @@ export class AgentCanvasToolsService {
     let after: LayoutNode[]
     let results: CanvasLayoutOpResult[]
     try {
-      ;({ nodes: after, results } = applyLayoutOps(before, input.ops))
+      ;({ nodes: after, results } = applyLayoutOps(before, input.ops, canvas.edges ?? []))
     } catch (err) {
       throw new BadRequestException(err instanceof Error ? err.message : '布局操作失败')
     }
