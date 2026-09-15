@@ -22,7 +22,6 @@ import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGener
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
-import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import type { LocalRefBinding, NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
@@ -38,6 +37,7 @@ import {
   isValidImageRef,
 } from '@/components/canvas/dock-studio/shared/dockRefRoleLabels'
 import { studioApi } from '@/services/studio-api'
+import { inferVideoDockMode } from './inferVideoDockMode'
 
 const { getConfig } = useModelProviderSettings()
 
@@ -107,10 +107,30 @@ const unsupportedMediaRefs = computed(() =>
   ),
 )
 
+const hasVideoOrAudioRef = computed(
+  () => unsupportedMediaRefs.value.hasVideo || unsupportedMediaRefs.value.hasAudio,
+)
+
+const referenceModeLocked = computed(
+  () => capabilities.value.supportsReferenceToVideo && hasVideoOrAudioRef.value,
+)
+
+const showChipActions = computed(
+  () =>
+    (capabilities.value.supportsFirstLastFrame && canUseFirstLastFrame.value)
+    || capabilities.value.supportsReferenceToVideo
+    || !!props.upstream.lastFrameUrl
+    || showContinueShotButton.value,
+)
+
 const generateDisabled = computed(() => {
   if (props.generating) return false
   if (!prompt.value.trim()) return true
-  if (videoMode.value === 'image_to_video' && !effectiveRefUrl.value) return true
+  if (
+    videoMode.value === 'image_to_video'
+    && imageRefCount.value === 0
+    && !effectiveRefUrl.value
+  ) return true
   if (firstLastFrameInvalid.value) return true
   if (videoMode.value === 'reference_to_video') {
     const refs = props.refs ?? []
@@ -266,6 +286,30 @@ watch(
 
 watch(
   () =>
+    [
+      videoMode.value,
+      imageRefCount.value,
+      effectiveRefUrl.value,
+      hasVideoOrAudioRef.value,
+      capabilities.value.supportsFirstLastFrame,
+      capabilities.value.supportsReferenceToVideo,
+    ] as const,
+  () => {
+    const next = inferVideoDockMode({
+      current: videoMode.value,
+      imageCount: imageRefCount.value,
+      hasFallbackImage: Boolean(effectiveRefUrl.value.trim()),
+      hasVideoOrAudioRef: hasVideoOrAudioRef.value,
+      supportsFirstLastFrame: capabilities.value.supportsFirstLastFrame,
+      supportsReferenceToVideo: capabilities.value.supportsReferenceToVideo,
+    })
+    if (next !== videoMode.value) setVideoMode(next)
+  },
+  { immediate: true },
+)
+
+watch(
+  () =>
     [props.node.id, imageRefSources.value.map((src) => `${src.refKey ?? ''}:${src.url}`).join('|')] as const,
   () => {
     void refreshRefPreflight()
@@ -332,22 +376,19 @@ function setVideoMode(mode: VideoGenerationMode) {
   syncField('videoMode', mode)
 }
 
-function onNegativePromptInput(value: string) {
-  negativePrompt.value = value
-  syncField('negativePrompt', value.trim() || undefined)
+function toggleFirstLastFrame() {
+  setVideoMode(videoMode.value === 'first_last_frame' ? 'image_to_video' : 'first_last_frame')
 }
 
-function onSeedInput(raw: string) {
-  const trimmed = raw.trim()
-  if (!trimmed) {
-    seed.value = undefined
-    syncField('seed', undefined)
+function toggleReferenceMode() {
+  if (referenceModeLocked.value) return
+  if (videoMode.value === 'reference_to_video') {
+    setVideoMode(
+      imageRefCount.value > 0 || effectiveRefUrl.value ? 'image_to_video' : 'text_to_video',
+    )
     return
   }
-  const n = Number.parseInt(trimmed, 10)
-  if (!Number.isFinite(n)) return
-  seed.value = n
-  syncField('seed', n)
+  setVideoMode('reference_to_video')
 }
 
 function onGenerate() {
@@ -361,6 +402,16 @@ function onGenerate() {
     negativePrompt: negativePrompt.value.trim() || undefined,
   })
   emit('generate')
+}
+
+function onSeedUpdate(value: number | undefined) {
+  seed.value = value
+  syncField('seed', value)
+}
+
+function onNegativePromptUpdate(value: string) {
+  negativePrompt.value = value
+  syncField('negativePrompt', value.trim() || undefined)
 }
 
 function continueFromLastFrame() {
@@ -426,6 +477,51 @@ function onRefMention(refKey: string) {
     <input ref="refInput" type="file" accept="image/*" class="hidden" @change="onRefFileChange">
     <p v-if="refUploadError" class="mx-3 mb-1 text-[10px] text-red-400/90">{{ refUploadError }}</p>
 
+    <div v-if="showChipActions" class="dock-video-chip-actions">
+      <button
+        v-if="capabilities.supportsFirstLastFrame && canUseFirstLastFrame"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :class="{ 'is-on': videoMode === 'first_last_frame' }"
+        :disabled="readonly"
+        :title="capabilities.firstLastFrameLabel"
+        @click="toggleFirstLastFrame"
+      >
+        {{ capabilities.firstLastFrameLabel }}
+      </button>
+      <button
+        v-if="capabilities.supportsReferenceToVideo"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :class="{ 'is-on': videoMode === 'reference_to_video' }"
+        :disabled="readonly || referenceModeLocked"
+        :title="referenceModeLocked ? '已根据视频/音频参考自动选用' : '参考生成'"
+        @click="toggleReferenceMode"
+      >
+        参考生成
+      </button>
+      <button
+        v-if="upstream.lastFrameUrl"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :disabled="readonly"
+        title="使用上游视频末帧作为参考图"
+        @click="continueFromLastFrame"
+      >
+        延续上一镜
+      </button>
+      <button
+        v-if="showContinueShotButton"
+        type="button"
+        class="neo-chip rounded-md px-2 py-1 text-[10px]"
+        :disabled="readonly"
+        title="以上一镜末帧为参考，创建下一段视频"
+        @click="continueNextShot"
+      >
+        接下一段
+      </button>
+    </div>
+
     <p
       v-if="capabilities.supportsReferenceToVideo && (unsupportedMediaRefs.hasVideo || unsupportedMediaRefs.hasAudio) && videoMode !== 'reference_to_video'"
       class="dock-ref-warning"
@@ -450,103 +546,16 @@ function onRefMention(refKey: string) {
       @submit="onGenerate"
     />
 
-    <details class="dock-advanced">
-      <summary class="dock-advanced-summary">高级</summary>
-      <div class="dock-advanced-body">
-        <label class="dock-advanced-field">
-          <span class="dock-advanced-label">Seed</span>
-          <input
-            type="number"
-            class="dock-advanced-input"
-            :value="seed ?? ''"
-            :disabled="readonly"
-            placeholder="随机"
-            step="1"
-            @input="onSeedInput(($event.target as HTMLInputElement).value)"
-          >
-        </label>
-        <label class="dock-advanced-field dock-advanced-field-grow">
-          <span class="dock-advanced-label">Negative prompt</span>
-          <input
-            type="text"
-            class="dock-advanced-input"
-            :value="negativePrompt"
-            :disabled="readonly"
-            placeholder="排除内容，如 watermark, blur"
-            @input="onNegativePromptInput(($event.target as HTMLInputElement).value)"
-          >
-        </label>
-      </div>
-    </details>
+    <ElAlert
+      v-if="showRefPreflightAlert"
+      :type="refPreflight!.level === 'error' ? 'error' : 'warning'"
+      :closable="false"
+      show-icon
+      class="dock-ref-preflight-alert"
+      :title="refPreflightLoading ? `${refPreflight!.message}（检测中…）` : refPreflight!.message"
+    />
 
-    <div class="bottom-toolbar-actions flex-wrap">
-      <div class="flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/5 p-0.5">
-        <button
-          type="button"
-          class="dock-seg-btn rounded-md px-1.5 py-1"
-          :class="{ 'is-on': videoMode === 'text_to_video' }"
-          :disabled="readonly"
-          title="文生视频"
-          @click="setVideoMode('text_to_video')"
-        >
-          <DockTypeIcon icon="text" :size="12" />
-        </button>
-        <button
-          type="button"
-          class="dock-seg-btn rounded-md px-1.5 py-1"
-          :class="{ 'is-on': videoMode === 'image_to_video' }"
-          :disabled="readonly"
-          title="图生视频"
-          @click="setVideoMode('image_to_video')"
-        >
-          <DockTypeIcon icon="image" :size="12" />
-        </button>
-        <button
-          v-if="capabilities.supportsFirstLastFrame && canUseFirstLastFrame"
-          type="button"
-          class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
-          :class="{ 'is-on': videoMode === 'first_last_frame' }"
-          :disabled="readonly"
-          :title="capabilities.firstLastFrameLabel"
-          @click="setVideoMode('first_last_frame')"
-        >
-          {{ capabilities.firstLastFrameLabel }}
-        </button>
-        <button
-          v-if="capabilities.supportsReferenceToVideo"
-          type="button"
-          class="dock-seg-btn rounded-md px-1.5 py-1 text-[10px]"
-          :class="{ 'is-on': videoMode === 'reference_to_video' }"
-          :disabled="readonly"
-          title="参考生成"
-          @click="setVideoMode('reference_to_video')"
-        >
-          参考生成
-        </button>
-      </div>
-
-      <button
-        v-if="upstream.lastFrameUrl"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px]"
-        :disabled="readonly"
-        title="使用上游视频末帧作为参考图"
-        @click="continueFromLastFrame"
-      >
-        延续上一镜
-      </button>
-
-      <button
-        v-if="showContinueShotButton"
-        type="button"
-        class="neo-chip rounded-md px-2 py-1 text-[10px]"
-        :disabled="readonly"
-        title="以上一镜末帧为参考，创建下一段视频"
-        @click="continueNextShot"
-      >
-        接下一段
-      </button>
-
+    <div class="bottom-toolbar-actions flex-wrap items-center">
       <UniversalModelSelector
         v-model="videoModel"
         type="video"
@@ -556,16 +565,11 @@ function onRefMention(refKey: string) {
         v-model="videoSettings"
         :capabilities="capabilities"
         :model-key="catalogModelKeyFromValue(videoModel)"
+        :seed="seed"
+        :negative-prompt="negativePrompt"
         @update:model-value="syncField('videoSettings', $event)"
-      />
-
-      <ElAlert
-        v-if="showRefPreflightAlert"
-        :type="refPreflight!.level === 'error' ? 'error' : 'warning'"
-        :closable="false"
-        show-icon
-        class="dock-ref-preflight-alert w-full basis-full"
-        :title="refPreflightLoading ? `${refPreflight!.message}（检测中…）` : refPreflight!.message"
+        @update:seed="onSeedUpdate"
+        @update:negative-prompt="onNegativePromptUpdate"
       />
 
       <div class="ml-auto flex items-center gap-2">
@@ -607,61 +611,11 @@ function onRefMention(refKey: string) {
   color: rgba(253, 224, 71, 0.95);
 }
 
-.dock-advanced {
-  margin: 0 2px 6px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.dock-advanced-summary {
-  cursor: pointer;
-  padding: 4px 8px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.65);
-  user-select: none;
-  list-style: none;
-}
-
-.dock-advanced-summary::-webkit-details-marker {
-  display: none;
-}
-
-.dock-advanced-body {
+.dock-video-chip-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 8px 8px;
-}
-
-.dock-advanced-field {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 88px;
-}
-
-.dock-advanced-field-grow {
-  flex: 1;
-  min-width: 160px;
-}
-
-.dock-advanced-label {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.dock-advanced-input {
-  width: 100%;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(0, 0, 0, 0.25);
-  padding: 4px 6px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.dock-advanced-input:disabled {
-  opacity: 0.5;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 6px;
 }
 </style>

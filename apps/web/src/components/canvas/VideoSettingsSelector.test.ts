@@ -27,6 +27,61 @@ describe('VideoSettingsSelector', () => {
     expect(wrapper.text()).not.toContain('生成音频')
   })
 
+  it('hides generateAudio, seed and negative for minimax-h3', async () => {
+    const capabilities = resolveVideoModelCapabilities('minimax-h3', 'MiniMax-H3')
+    const wrapper = mount(VideoSettingsSelector, {
+      props: {
+        modelValue: { ...DEFAULT_VIDEO_SETTINGS },
+        capabilities,
+        modelKey: 'minimax-h3',
+      },
+    })
+
+    await openPopover(wrapper)
+    const text = wrapper.text()
+    expect(text).not.toContain('生成音频')
+    expect(text).not.toContain('Seed')
+    expect(text).not.toContain('排除内容')
+  })
+
+  it('shows seed and negative for Agnes, seed only for Seedance', async () => {
+    const agnes = mount(VideoSettingsSelector, {
+      props: {
+        modelValue: { ...DEFAULT_VIDEO_SETTINGS },
+        capabilities: resolveVideoModelCapabilities('agnes-video-v2.0', 'agnes-video-v2.0'),
+        modelKey: 'agnes-video-v2.0',
+      },
+    })
+    await openPopover(agnes)
+    expect(agnes.text()).toContain('Seed')
+    expect(agnes.text()).toContain('排除内容')
+
+    const seedance = mount(VideoSettingsSelector, {
+      props: {
+        modelValue: { ...DEFAULT_VIDEO_SETTINGS },
+        capabilities: resolveVideoModelCapabilities('seedance-2.0', 'doubao-seedance-2.0'),
+        modelKey: 'seedance-2.0',
+      },
+    })
+    await openPopover(seedance)
+    expect(seedance.text()).toContain('Seed')
+    expect(seedance.text()).not.toContain('排除内容')
+  })
+
+  it('does not inherit Agnes extras for unknown BYOK aliases', async () => {
+    const wrapper = mount(VideoSettingsSelector, {
+      props: {
+        modelValue: { ...DEFAULT_VIDEO_SETTINGS },
+        modelKey: 'MinMax-H3',
+      },
+    })
+
+    await openPopover(wrapper)
+    expect(wrapper.text()).not.toContain('Seed')
+    expect(wrapper.text()).not.toContain('排除内容')
+    expect(wrapper.text()).not.toContain('生成音频')
+  })
+
   it('shows generateAudio for seedance models', async () => {
     const capabilities = resolveVideoModelCapabilities('seedance-2.0', 'doubao-seedance-2.0')
     const wrapper = mount(VideoSettingsSelector, {
