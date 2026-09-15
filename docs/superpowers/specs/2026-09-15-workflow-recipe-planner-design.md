@@ -1,7 +1,7 @@
 # 工作流配方规划器（衍生 / 嫁接 / 晋升）设计
 
 > 日期：2026-09-15  
-> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）  
+> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）+ **v1.1 剩余缺口 2026-09-15**（见 §14）  
 > 产品：超创平台（lnkpi）无限画布  
 > 相关：  
 > - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
@@ -339,7 +339,8 @@ SSOT 放 `@lnkpi/shared`（与 `validateWorkflow` 同包）。**apply / lint / c
 4. 出图调度读节点 `data.chain`/`role`/`recipeKey`  
 5. Runtime/Nest：认亲检索、derive 提议、HITL diff  
 6. 用户配方存储 + 晋升两步确认 + 反推标注  
-7. 黄金评测集与 `docs/workflow` 交叉引用（规划器内部契约，不把 delta 教给外部 Agent）
+7. 黄金评测集与 `docs/workflow` 交叉引用（规划器内部契约，不把 delta 教给外部 Agent）  
+8. **v1.1（独立 PR）**：instantiate 只吃 parent+delta；`mentionedKeys`/`localRefs`；分镜成片 + 图生视频；填槽；`empty_prompt`；live explore 窄绑定 + chip 确认门（§14）
 
 ---
 
@@ -348,3 +349,95 @@ SSOT 放 `@lnkpi/shared`（与 `validateWorkflow` 同包）。**apply / lint / c
 - 本文件：设计规格  
 - 交换契约仍以 `docs/workflow/README.md` 为准（实例 JSON）  
 - 实现计划：规格审阅通过后 writing-plans 另文
+
+---
+
+## 14. v1.1 剩余缺口（对照最初五块数据流）
+
+第一期（PR 配方规划器）立住了 Recipe IR、`applyDelta`/`lintRecipe`（一轮剥离）、两份平台配方、preview → compile → `import_workflow`、用户晋升。对照最初五块，下列为 **已锁定、须在独立 PR 补完** 的产品缺口。不重开 §0–§9 已批决策。
+
+### 14.1 作者契约：instantiate 不得吃整份 IR
+
+| 项 | 要求 |
+|----|------|
+| 禁止 | 模型把完整 `RecipeDocument` 交给 `instantiate`。那会绕过「只输出 delta」。 |
+| 允许 | `parentId` + `parentVersion` + `delta`（可空 = 按原模板落图）。服务端 **重新** `loadParent` → `applyDelta` → `lintRecipe` → 填槽 → `compileRecipeToWorkflow` → 现有 `import_workflow`。 |
+| 旧字段 | 请求体若仍带 `recipe` 整份 IR → **400**，用户文案「请先确认改动再落到画布」。 |
+| `mentionedKeys` | 写 **编译后的画布 node id**（`{type}-{key}`），与边的 source/target 一致，禁止再写配方 `key` 字符串。 |
+| `localRefs` | 仅当填槽把侧栏/上传素材挂到节点时，写成画布原生 `LocalRefBinding`（`id` / `mediaType` / `sourceKind` / `label` / `url`）。无素材的 i2i **不**编造空对象；依赖靠边 + `mentionedKeys`。 |
+
+### 14.2 场景配方库：补两份视频模板
+
+平台目录在电商套图、角色三视图之外增加（工程 JSON，与现有两份同样 `validateRecipe`）：
+
+| id | 用户标题 | 种子链 | 节点 |
+|----|----------|--------|------|
+| `storyboard-to-video` | 分镜成片 | `storyboard`：`storyboard_keyframe`(seed, image, t2i) → `storyboard_board`(turnaround, image, i2i) | 下游 `storyboard_clip`(video, `v_ref`，挂 turnaround，`autoGenerate: false`) |
+| `image-to-video` | 图生视频 | `i2v`：`source_image`(seed, image, t2i) | 下游 `motion_clip`(video, `v_ref`，挂 seed，`autoGenerate: false`) |
+
+认亲关键词（可与标题/id 命中叠加）：
+
+- 分镜成片：`分镜`、`故事板`、`分镜视频`
+- 图生视频：`图生视频`、`i2v`、`图转视频`、`首帧视频`
+- 裸「规划一个视频工作流」且未命中上列 → `needsClarify`，只列出这两份视频模板（仍最多 3 条）
+- **不**因为话术里有「视频」就抢走电商套图；`套图`/`详情`/`主图`/`电商` 仍认电商
+
+`chain`/`key` 不得与 `product`/`model` 及现有节点 key 冲突。视频节点仍遵守 §3.3：`video` 只依赖 `image`。
+
+### 14.3 规划器填槽（仍无向导）
+
+兑现 §0.1.6：无单独填槽 UI。Nest `instantiate` 在编译前调用共享 `fillRecipeSlots(recipe, { utterance, attachments })`：
+
+1. **文案**：从话术去掉规划套话（规划/工作流/接到/改版/确认落到画布等）后，剩余 ≥ 8 字则写入各 `autoGenerate` 节点的 prompt 槽（仍可被显式 `slots` 覆盖）。
+2. **侧栏素材**：复用 `SidebarAttachment`。带 `role: product` 的图 → 产品链 seed；`role: model` → 模特链 seed；其余图片按顺序填还空着的 image seed。写成该节点的 `localRefs`，**不**把图片 URL 写进 prompt。
+3. 无素材、无剩余文案 → 继续用 `promptHintTemplate` 落骨架。
+
+Explore 工具把当前侧栏附件随 instantiate 传给 Nest，不在 Python 里填槽。
+
+### 14.4 语义 lint：空 prompt；修复环维持一轮
+
+| 项 | 要求 |
+|----|------|
+| `empty_prompt` | `autoGenerate: true` 且填槽后仍无 prompt、也无 `promptHintTemplate` → lint 失败，**不 import**。用户文案：「还有步骤没写提示词，先补上再放到画布。」 |
+| `autoGenerate: false` | 允许空 prompt（骨架）。 |
+| 修复环 | **不**做第二轮「交给模型再改」。仍按 §4.3：第一次剥非法刀，第二次放弃 delta。 |
+| 挂角色 | 维持现状：只对标了 `chain` 的下游查 turnaround/seed；不强迫无链节点挂角色。 |
+
+`lintRecipe(recipe, { slots }?)` 在 instantiate 填槽之后、compile 之前执行。
+
+### 14.5 意图路由 + 确认后落图
+
+**不**把规划器送进 campaign `await_topo`（§0.1.7）。确认门复用侧栏 chip（§0.1.8）。
+
+1. **生产 explore 必须调用 `select_narrow_write_tools`。** 可见工具 = CORE 只读 ∪ META ∪ 窄写集合。禁止继续 `build_explore_tools` 整表 CORE。
+2. **窄写集合**
+   - 强导入锚点（`import_workflow` / `导入工作流` / `导入`+工作流）→ 仅 `import_workflow`
+   - 规划话术 → `match_workflow_templates` + `preview_workflow_template` + `promote_workflow_template`（**不含** instantiate）
+   - 用户点「确认落到画布」→ 上款 ∪ `instantiate_workflow_template`
+   - 其它 → 现有默认 5 个轻量写工具
+3. **规划话术**在原有「规划工作流 / 接到 / 改版 / 新模板 / 存成一套」之外，下列也进规划器（导入锚点仍优先）：
+   - 同一句里同时出现「规划」和「工作流」（覆盖「规划一个电商套图工作流」）
+   - `分镜`、`图生视频`、`确认落到画布`
+4. **HITL**：preview 成功且本轮未 instantiate 时，explore 回复必须含固定句 **「请确认是否把改动落到画布」**（可接在 diff 列表后）。侧栏出现两枚 chip：
+   - 确认落到画布（主按钮，`sendPreset`）
+   - 先不改
+5. 确认后的 instantiate **只传** `parentId` / `parentVersion` / `delta` / 槽位与侧栏，禁止再传 preview 返回的整份 `recipe`。
+6. 规划绑定期间系统提示覆盖 § 旧规则 5：禁止用 `connect_nodes` / `import_workflow` 手搭规划拓扑。
+
+### 14.6 非目标（本切片仍不做）
+
+- 多轮 LLM lint 修复
+- 填槽向导页 / 模板市场
+- 把规划器接入 `await_topo` Mermaid 门
+- 第三份以上平台配方（短片全流程、sceneComposer 等）
+- 运行时代码生成 JSON
+
+### 14.7 验收（叠加 §10，本切片）
+
+1. `instantiate` 带整份 `recipe` → 400；带 `parentId`+`delta` → 服务端 apply+lint 后 import。
+2. 编译后 i2i 节点 `mentionedKeys` 为上游画布 id；侧栏图出现在 seed 的 `localRefs`。
+3. `match`：「分镜成片」「图生视频」命中对应新模板；「蓝牙耳机详情页套图」仍是电商。
+4. 空 hint 且 `autoGenerate` 的节点 instantiate 被拒。
+5. live explore：话术「规划一个角色三视图工作流」绑定规划工具且 **不**绑定 `import_workflow` / `set_node_prompt`；点确认后才出现 instantiate。
+6. preview 后的助手文案含「请确认是否把改动落到画布」，侧栏两枚 chip 可点。
+7. Hybrid：explore 仍不 bind `add_nodes_batch` / `run_*_generation`。
