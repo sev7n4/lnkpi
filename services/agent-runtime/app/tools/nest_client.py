@@ -680,7 +680,12 @@ class NestCanvasClient:
         }
         if slots is not None:
             body["slots"] = slots
-        resolved = (utterance or "").strip() or (self.last_user_utterance or "").strip()
+        from app.graph.planner_copy import pick_planner_slot_utterance
+
+        resolved = pick_planner_slot_utterance([
+            self.last_user_utterance or "",
+            utterance or "",
+        ])
         if resolved:
             body["utterance"] = resolved
         if self.sidebar_attachments:
