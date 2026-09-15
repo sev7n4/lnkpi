@@ -665,6 +665,21 @@ class ArrangeNodesGridDto {
   gap?: number
 }
 
+class ArrangeNodesAlongEdgesDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsArray()
+  @IsString({ each: true })
+  nodeIds!: string[]
+
+  @IsOptional()
+  gap?: number
+}
+
 class MoveNodeItemDto {
   @IsString()
   nodeId!: string
@@ -1162,6 +1177,12 @@ export class AgentCanvasToolsController {
   @Post('arrange-nodes-grid')
   async arrangeNodesGrid(@Body() dto: ArrangeNodesGridDto) {
     const data = await this.tools.arrangeNodesGrid(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('arrange-nodes-along-edges')
+  async arrangeNodesAlongEdges(@Body() dto: ArrangeNodesAlongEdgesDto) {
+    const data = await this.tools.arrangeNodesAlongEdges(dto)
     return { code: 0, message: 'ok', data }
   }
 

@@ -33,6 +33,7 @@ import {
   createGroupFromNodes,
   getAbsolutePosition,
   getNodeSize,
+  layoutNodesAlongEdges,
   layoutNodesInGrid,
   moveNodes,
   summarizeLayoutGroups,
@@ -2267,6 +2268,24 @@ export class AgentCanvasToolsService {
     const { canvas } = await this.loadSession(input.sessionId)
     const before = canvas.nodes as LayoutNode[]
     const after = layoutNodesInGrid(before, input.nodeIds, input.gap ?? 40)
+    await this.persistLayoutNodes(input.sessionId, after)
+    return { actions: [] }
+  }
+
+  async arrangeNodesAlongEdges(input: {
+    sessionId: string
+    userId: string
+    nodeIds: string[]
+    gap?: number
+  }): Promise<{ actions: CanvasAction[] }> {
+    await this.loadOwnedSession(input.sessionId, input.userId)
+    const { canvas } = await this.loadSession(input.sessionId)
+    const after = layoutNodesAlongEdges(
+      canvas.nodes as LayoutNode[],
+      canvas.edges ?? [],
+      input.nodeIds,
+      input.gap ?? 40,
+    )
     await this.persistLayoutNodes(input.sessionId, after)
     return { actions: [] }
   }
