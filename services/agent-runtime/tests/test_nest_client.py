@@ -128,6 +128,8 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/arrange-nodes-along-edges"):
+            return httpx.Response(200, json=_ok({"actions": []}))
         return httpx.Response(404, json={"code": 404, "message": "not found"})
 
     transport = httpx.MockTransport(handler)
@@ -259,6 +261,20 @@ async def test_instantiate_recipe(nest_client, captured):
         "slots": {"white_bg": "mug"},
     }
     assert "recipe" not in req["json"]
+
+
+@pytest.mark.asyncio
+async def test_arrange_nodes_along_edges(nest_client, captured):
+    result = await nest_client.arrange_nodes_along_edges(node_ids=["a", "b"], gap=40)
+    assert result["actions"] == []
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/arrange-nodes-along-edges"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "nodeIds": ["a", "b"],
+        "gap": 40,
+    }
 
 
 @pytest.mark.asyncio
