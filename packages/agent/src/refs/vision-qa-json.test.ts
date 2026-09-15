@@ -32,10 +32,47 @@ describe('generateVisionQaJson', () => {
     expect(body.messages[1].content[0]).toEqual({ type: 'text', text: '用户上传 1 张图' })
   })
 
-  it('retries on 500 then succeeds', async () => {
+  it('does not retry on 500 (D-RETRY: 5xx hard fail)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'err' })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      generateVisionQaJson('sys', 'user', ['https://example.com/a.jpg'], {
+        apiKey: 'k',
+        model: 'gpt-4o',
+        maxRetries: 2,
+      }),
+    ).rejects.toThrow(/Vision API 500/)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries on 429 then succeeds', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => 'err' })
+      .mockResolvedValueOnce({ ok: false, status: 429, text: async () => 'rate limit' })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: '{"pass":true,"reason":"ok","product_summary":"x"}' } }],
+        }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await generateVisionQaJson('sys', 'user', ['https://example.com/a.jpg'], {
+      apiKey: 'k',
+      model: 'gpt-4o',
+      maxRetries: 2,
+    })
+    expect(result.visionUsed).toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('retries on timeout then succeeds', async () => {
+    const timeoutErr = new Error('request timeout')
+    timeoutErr.name = 'TimeoutError'
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(timeoutErr)
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({

@@ -10,14 +10,17 @@ export type ProviderContext = {
   source: ProviderSource
 }
 
-export async function buildTextProviderContext(
-  resolver: ProviderResolverService,
-  userId: string,
+/** Map a resolved generation provider into ProviderContext (shared Agent + canvas contract). */
+export function providerContextFromResolved(
   providerRef: string,
-): Promise<ProviderContext> {
+  resolved: {
+    modelName: string
+    credentials: { apiKey?: string; baseUrl?: string }
+    source: ProviderSource
+  },
+): ProviderContext {
   const ref = providerRef.trim()
   if (!ref) throw new Error('providerRef required')
-  const resolved = await resolver.resolveForGeneration(userId, ref, 'text')
   const apiKey = resolved.credentials.apiKey?.trim() ?? ''
   const baseUrl = resolved.credentials.baseUrl?.trim() ?? ''
   if (!apiKey || !baseUrl) {
@@ -30,4 +33,15 @@ export async function buildTextProviderContext(
     baseUrl,
     source: resolved.source,
   }
+}
+
+export async function buildTextProviderContext(
+  resolver: ProviderResolverService,
+  userId: string,
+  providerRef: string,
+): Promise<ProviderContext> {
+  const ref = providerRef.trim()
+  if (!ref) throw new Error('providerRef required')
+  const resolved = await resolver.resolveForGeneration(userId, ref, 'text')
+  return providerContextFromResolved(ref, resolved)
 }

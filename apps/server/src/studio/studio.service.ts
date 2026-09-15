@@ -80,7 +80,10 @@ import {
 import { PrismaService } from '../prisma/prisma.service'
 import { classifyByokFailure } from '../provider/byok-fallback'
 import { mergeChatModel } from '../provider/merge-chat-model'
-import type { ProviderContext } from '../provider/provider-context'
+import {
+  providerContextFromResolved,
+  type ProviderContext,
+} from '../provider/provider-context'
 import {
   ProviderResolverService,
   type ResolvedGenerationProvider,
@@ -185,6 +188,30 @@ function providerOpts(resolved: ResolvedGenerationProvider) {
   return {
     apiKey,
     baseUrl: baseUrl || undefined,
+  }
+}
+
+/**
+ * Text upstream credentials shared with Agent via providerContextFromResolved (AC-8).
+ * When providerRef is set and complete, no env overlay — same source/baseUrl as 启 run.
+ */
+function textGenCreds(
+  resolved: ResolvedGenerationProvider,
+  model?: string,
+): { apiKey?: string; baseUrl?: string } {
+  const ref = model?.trim()
+  if (ref) {
+    try {
+      const ctx = providerContextFromResolved(ref, resolved)
+      return { apiKey: ctx.apiKey, baseUrl: ctx.baseUrl }
+    } catch {
+      // incomplete BYOK / missing platform creds — fall through
+    }
+  }
+  const opts = providerOpts(resolved)
+  return {
+    apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
+    baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
   }
 }
 
@@ -569,14 +596,14 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const opts = providerOpts(resolved)
+      const creds = textGenCreds(resolved, model)
       const providerRefs = referenceImages.length
         ? await inlineUpstreamReferenceImages(referenceImages)
         : referenceImages
       const { text, visionUsed } = await generateTextForRefs(mergedText, providerRefs, {
         model: gatewayModelId,
-        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        apiKey: creds.apiKey,
+        baseUrl: creds.baseUrl,
         textOpts,
       })
       if (cancel?.isCancelled()) {
@@ -693,7 +720,7 @@ export class StudioService {
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
     const storeModel = resolved.source === 'user' ? model ?? resolvedKey : resolvedKey
-    const opts = providerOpts(resolved)
+    const creds = textGenCreds(resolved, model)
     const baseMeta = {
       modelKey: resolvedKey,
       gatewayModelId,
@@ -715,8 +742,8 @@ export class StudioService {
         : referenceImages
       const { mode, content, visionUsed } = await generatePromptFromUserInput(trimmed, {
         model: gatewayModelId,
-        apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-        baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+        apiKey: creds.apiKey,
+        baseUrl: creds.baseUrl,
         guideSceneId,
         referenceImages: providerRefs,
         mentionedKeys,
@@ -823,14 +850,14 @@ export class StudioService {
     const { modelKey: resolvedKey, entry } = resolveModelKey('text', resolved.modelName)
     const gatewayModelId =
       resolved.source === 'user' ? resolved.modelName : entry.gatewayModelId
-    const opts = providerOpts(resolved)
+    const creds = textGenCreds(resolved, model)
     if (resolved.source === 'user' && !resolved.credentials.apiKey) {
       throw new Error('missing api key')
     }
     const { mode, content } = await generatePromptFromUserInput(trimmed, {
       model: gatewayModelId,
-      apiKey: opts?.apiKey ?? process.env.OPENAI_API_KEY,
-      baseUrl: opts?.baseUrl ?? process.env.OPENAI_BASE_URL,
+      apiKey: creds.apiKey,
+      baseUrl: creds.baseUrl,
     })
     return { mode, content }
   }
