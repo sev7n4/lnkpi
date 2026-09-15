@@ -213,6 +213,17 @@ class GeneratePromptDto extends CanvasScopeFields {
   @IsOptional()
   @IsString()
   guideSceneId?: string
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudioRefDto)
+  refs?: StudioRefDto[]
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  mentionedKeys?: string[]
 }
 
 class ImageVariationDto extends CanvasScopeFields {
@@ -326,6 +337,8 @@ export class StudioController {
       cancel,
       { sessionId: dto.sessionId, nodeId: dto.nodeId },
       dto.guideSceneId,
+      dto.refs,
+      dto.mentionedKeys,
     )
     return { code: 0, message: 'ok', data }
   }

@@ -655,6 +655,53 @@ describe('AgentCanvasToolsService', () => {
     expect(canvas.nodes[0].data.promptMode).toBe('image_prompt_multi_style')
   })
 
+  it('runPromptGeneration forwards local image refs to studio.generatePrompt', async () => {
+    canvas = {
+      nodes: [
+        {
+          id: 'prm-2',
+          type: 'prompt',
+          position: { x: 0, y: 0 },
+          data: {
+            prompt: '按图写提示词',
+            status: 'draft',
+            localRefs: [
+              {
+                id: 'att-1',
+                mediaType: 'image',
+                sourceKind: 'upload',
+                label: 'bottle.jpg',
+                url: 'https://cdn.example/bottle.jpg',
+              },
+            ],
+            refOrder: ['att-1'],
+          },
+        },
+      ],
+      edges: [],
+    }
+    await svc.runPromptGeneration({
+      sessionId: 's1',
+      userId: 'u1',
+      nodeId: 'prm-2',
+    })
+    expect(generatePrompt).toHaveBeenCalledWith(
+      'u1',
+      '按图写提示词',
+      expect.anything(),
+      undefined,
+      expect.objectContaining({ sessionId: 's1', nodeId: 'prm-2' }),
+      undefined,
+      expect.arrayContaining([
+        expect.objectContaining({
+          mediaType: 'image',
+          url: 'https://cdn.example/bottle.jpg',
+        }),
+      ]),
+      undefined,
+    )
+  })
+
   it('runAudioGeneration writes url and completed status', async () => {
     canvas = {
       nodes: [
