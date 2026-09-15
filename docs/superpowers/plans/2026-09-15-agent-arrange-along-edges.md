@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded (partial):** 2026-09-16 Hybrid revises L-D2 — import/instantiate now default Nest along-edges. See [2026-09-16-import-default-along-edges.md](./2026-09-16-import-default-along-edges.md). This plan remains the historical record for the explore tool landing.
+
 **Goal:** Let the explore Agent call `arrange_nodes_along_edges` after writing topology; do not auto-layout on connect/import/instantiate.
 
 **Architecture:** Port web `layoutNodesAlongEdges` into Nest `canvas-layout.util.ts`. Expose `POST /agent/internal/arrange-nodes-along-edges` and an explore-bound runtime tool. Add `arrange_along_edges` to `applyLayoutOps` (still GRAPH_NODE). Prompt the model to pass only newly written `node_ids`. Keep the human toolbar on the frontend.
