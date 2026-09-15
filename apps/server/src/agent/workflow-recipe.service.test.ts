@@ -438,6 +438,39 @@ describe('WorkflowRecipeService', () => {
       expect(result.recipe.graftedRecipeIds).toContain(saved.recipeId)
     })
   })
+
+  describe('compileInstantiate', () => {
+    it('rejects a full recipe IR', async () => {
+      const { prisma } = createPrisma()
+      const svc = new WorkflowRecipeService(prisma as unknown as PrismaService)
+      await expect(
+        svc.compileInstantiate({
+          sessionId: 's1',
+          userId: 'u1',
+          parentId: 'ecommerce-product-visual',
+          parentVersion: '1.0.0',
+          delta: {},
+          recipe: getPlatformRecipe('ecommerce-product-visual', '1.0.0'),
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException)
+    })
+
+    it('compiles parent+delta with canvas mentionedKeys', async () => {
+      const { prisma } = createPrisma()
+      const svc = new WorkflowRecipeService(prisma as unknown as PrismaService)
+      const workflow = await svc.compileInstantiate({
+        sessionId: 's1',
+        userId: 'u1',
+        parentId: 'ecommerce-product-visual',
+        parentVersion: '1.0.0',
+        delta: { remove: ['banner'] },
+        slots: { white_bg: 'a white mug' },
+      })
+      const turnaround = workflow.graph.nodes.find((node) => node.data.recipeKey === 'product_turnaround')
+      expect(turnaround?.data.mentionedKeys).toEqual(['image-white_bg'])
+      expect(workflow.graph.nodes.some((node) => node.data.recipeKey === 'banner')).toBe(false)
+    })
+  })
 })
 
 describe('recipe planner DTOs', () => {

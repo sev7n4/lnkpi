@@ -5,10 +5,10 @@ from app.tools.tool_plan import build_tool_plan
 
 _PLANNER_TOOLS = frozenset({
     "preview_workflow_template",
-    "instantiate_workflow_template",
     "match_workflow_templates",
     "promote_workflow_template",
 })
+_PLANNER_CONFIRM_TOOLS = _PLANNER_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_ONLY = frozenset({"import_workflow"})
 
 
@@ -39,11 +39,24 @@ def test_plan_visible_ignores_utterance_keywords():
 def test_planner_utterance_binds_preview_and_instantiate_not_only_import():
     tools = select_narrow_write_tools("帮我规划一个电商套图工作流，接到角色三视图")
     assert "preview_workflow_template" in tools
-    assert "instantiate_workflow_template" in tools
+    assert "instantiate_workflow_template" not in tools
     assert "match_workflow_templates" in tools
     assert tools != _IMPORT_ONLY
     assert len(tools) <= 5
     assert tools == _PLANNER_TOOLS
+
+
+def test_plan_a_workflow_without_consecutive_anchor_binds_planner():
+    tools = select_narrow_write_tools("帮我规划一个角色三视图工作流")
+    assert tools == _PLANNER_TOOLS
+    assert "import_workflow" not in tools
+    assert "set_node_prompt" not in tools
+
+
+def test_confirm_canvas_bind_includes_instantiate():
+    tools = select_narrow_write_tools("确认落到画布")
+    assert tools == _PLANNER_CONFIRM_TOOLS
+    assert "instantiate_workflow_template" in tools
 
 
 def test_import_workflow_utterance_still_binds_only_import():
@@ -54,7 +67,7 @@ def test_planner_keywords_bind_planner_tools():
     for keyword in ("规划工作流", "接到", "改版", "新模板", "存成一套"):
         tools = select_narrow_write_tools(f"请帮我{keyword}")
         assert "preview_workflow_template" in tools
-        assert "instantiate_workflow_template" in tools
+        assert "instantiate_workflow_template" not in tools
         assert tools == _PLANNER_TOOLS
         assert tools != _IMPORT_ONLY
 
@@ -71,3 +84,26 @@ def test_promote_phrases_bind_promote_not_only_import():
         assert tools != _IMPORT_ONLY
         assert len(tools) <= 5
         assert tools == _PLANNER_TOOLS
+
+
+def test_live_explore_bind_uses_narrow_planner_writes():
+    from unittest.mock import MagicMock
+    from app.graph.nodes.explore import _bind_plan_tools
+    from app.tools.definitions import EXPLORE_WRITE_TOOLS
+
+    captured: list[list[str]] = []
+
+    class FakeLlm:
+        def bind_tools(self, tools):
+            captured.append([getattr(t, "name", "") for t in tools])
+            return self
+
+    tools_by_name = {name: MagicMock(name=name) for name in EXPLORE_WRITE_TOOLS}
+    for name, tool in tools_by_name.items():
+        tool.name = name
+    _bind_plan_tools(FakeLlm(), tools_by_name, [], "帮我规划一个角色三视图工作流")
+    bound = set(captured[0])
+    assert "preview_workflow_template" in bound
+    assert "import_workflow" not in bound
+    assert "set_node_prompt" not in bound
+    assert "instantiate_workflow_template" not in bound

@@ -523,6 +523,7 @@ const awaitingConfirm = computed(() => chipSet.value === 'plan')
 const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
+const awaitingRecipeConfirm = computed(() => chipSet.value === 'recipe_confirm')
 const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
 const generationProposePresentation = computed(() => {
   if (!awaitingGenerationPropose.value) return null
@@ -2584,6 +2585,24 @@ defineExpose({
                 @click="cancelAtomicChip()"
               >
                 取消
+              </button>
+            </div>
+            <div v-else-if="awaitingRecipeConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('确认落到画布')"
+              >
+                确认落到画布
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('先不改')"
+              >
+                先不改
               </button>
             </div>
             <div v-else-if="isRetakePending" class="mb-2 px-0.5" data-testid="retake-pending-callout">

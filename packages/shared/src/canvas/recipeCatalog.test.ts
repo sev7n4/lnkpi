@@ -32,16 +32,23 @@ describe('recipeCatalog', () => {
   })
 
   it('both platform recipes validate and appear in summaries', () => {
-    expect(PLATFORM_RECIPES).toHaveLength(2)
+    expect(PLATFORM_RECIPES).toHaveLength(4)
     for (const recipe of PLATFORM_RECIPES) {
       expect(validateRecipe(recipe)).toEqual(recipe)
     }
     const summaries = listPlatformRecipeSummaries()
     expect(summaries.map((s) => s.id).sort()).toEqual([
       'ecommerce-product-visual',
+      'image-to-video',
       'model-turnaround',
+      'storyboard-to-video',
     ])
-    expect(summaries.map((s) => s.title).sort()).toEqual(['电商套图', '角色三视图'])
+    expect(summaries.map((s) => s.title).sort()).toEqual([
+      '分镜成片',
+      '图生视频',
+      '电商套图',
+      '角色三视图',
+    ])
     expect(summaries.every((s) => s.version === '1.0.0' && s.title.length > 0)).toBe(true)
   })
 
@@ -81,8 +88,36 @@ describe('recipeCatalog', () => {
     expect(result.needsClarify).toBe(true)
     expect(result.items.map((item) => item.id).sort()).toEqual([
       'ecommerce-product-visual',
+      'image-to-video',
       'model-turnaround',
+      'storyboard-to-video',
     ])
     expect(result.graftHint).toBeUndefined()
+  })
+
+  it('matches 分镜/故事板 to storyboard-to-video', () => {
+    const result = matchPlatformRecipes('帮我规划一个分镜成片')
+    expect(result.items[0]?.id).toBe('storyboard-to-video')
+    expect(result.needsClarify).not.toBe(true)
+  })
+
+  it('matches 图生视频/i2v to image-to-video', () => {
+    const result = matchPlatformRecipes('做一个图生视频工作流')
+    expect(result.items[0]?.id).toBe('image-to-video')
+    expect(result.needsClarify).not.toBe(true)
+  })
+
+  it('generic 规划一个视频工作流 clarifies between the two video recipes', () => {
+    const result = matchPlatformRecipes('规划一个视频工作流')
+    expect(result.needsClarify).toBe(true)
+    expect(result.items.map((item) => item.id).sort()).toEqual([
+      'image-to-video',
+      'storyboard-to-video',
+    ])
+  })
+
+  it('does not let 视频 steal ecommerce 套图', () => {
+    const result = matchPlatformRecipes('蓝牙耳机详情页套图再出一段视频')
+    expect(result.items[0]?.id).toBe('ecommerce-product-visual')
   })
 })
