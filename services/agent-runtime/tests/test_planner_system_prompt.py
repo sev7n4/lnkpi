@@ -11,3 +11,9 @@ def test_planner_system_uses_user_facing_copy():
 def test_planner_system_asks_promote_choice_before_tool():
     assert _PLANNER_PROMOTE_LINE in _PLANNER_SYSTEM
     assert "promote_workflow_template" in _PLANNER_SYSTEM
+
+
+def test_planner_system_arranges_after_instantiate():
+    assert "instantiate_workflow_template" in _PLANNER_SYSTEM
+    assert "arrange_nodes_along_edges" in _PLANNER_SYSTEM
+    assert "addedNodeIds" in _PLANNER_SYSTEM
