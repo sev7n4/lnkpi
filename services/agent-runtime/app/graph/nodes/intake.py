@@ -68,11 +68,12 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
                         "route_clarify": True,
                         "clarify_context": pending,
                     }
-                if route == "atomic_create":
+                if route in ("atomic_create", "canvas_agent"):
+                    # Phase 2d: clarify single-image / vision-text → canvas_agent (legacy atomic_create mapped).
                     out: dict[str, Any] = {
                         "phase": "intake",
                         "skill_id": None,
-                        "flow_mode": "atomic_create",
+                        "flow_mode": "canvas_agent",
                         "mode": "create",
                         "user_decision": "none",
                         "clarify_context": None,
@@ -80,7 +81,7 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
                         "route_clarify": False,
                         "pre_parsed_intent": classified,
                         "split_manifest": [],
-                        "previous_lane": "atomic_create",
+                        "previous_lane": "canvas_agent",
                     }
                     mk = list(pending.get("mentioned_keys") or [])
                     if mk:
@@ -159,8 +160,9 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
             and pending_atomic.get("kind") != "route_orchestration"
             and is_affirmative_clarify_reply(text)
         ):
-            flow_mode = "atomic_create"
-            resolved_flow = "atomic_create"
+            # Phase 2d: affirmative atomic-style clarify → canvas_agent (not atomic_create).
+            flow_mode = "canvas_agent"
+            resolved_flow = "canvas_agent"
             skill_id = None
 
         out = {
@@ -180,6 +182,14 @@ def make_intake_node(skills_dir: Path, *, llm: Any = None) -> Callable:
         if resolved_flow in ("atomic_create", "atomic_regenerate"):
             out["split_manifest"] = []
             out["skill_id"] = None
+        elif resolved_flow == "canvas_agent":
+            # Phase 2d: former atomic single-create isolation — clear campaign residue
+            # when utterance still looks like single-node media create.
+            from app.graph.atomic_intent import utterance_suggests_atomic_create
+
+            if utterance_suggests_atomic_create(text):
+                out["split_manifest"] = []
+                out["skill_id"] = None
         if (
             pending_atomic
             and pending_atomic.get("kind") != "route_orchestration"

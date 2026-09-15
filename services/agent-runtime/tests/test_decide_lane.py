@@ -114,7 +114,7 @@ def test_low_confidence_goes_to_clarify(primary_on):
     llm = FakeLLM(
         json.dumps(
             {
-                "lane": "atomic_create",
+                "lane": "single_node",
                 "confidence": 0.4,
                 "reason": "ambiguous_gen",
                 "clarify_question": "要出图还是画布操作？",
@@ -208,7 +208,7 @@ def test_primary_soft_guard_vetoes_graph_lane(primary_on, monkeypatch):
     llm = FakeLLM(
         json.dumps(
             {
-                "lane": "atomic_create",
+                "lane": "single_node",
                 "confidence": 0.9,
                 "reason": "llm_atomic",
                 "clarify_question": None,

@@ -16,7 +16,7 @@ def test_clarify_reply_generate_alias_uses_original_prompt(reply: str):
     result = classify_clarify_reply(ORIGINAL_GENERATE, ROUTE_CLARIFY_MEDIA, reply)
 
     assert result != "none"
-    assert result["route"] == "atomic_create"
+    assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "image"
     assert result["items"][0]["prompt"] == ORIGINAL_GENERATE
 
@@ -38,6 +38,6 @@ def test_clarify_reply_interpret_sidebar_alias(reply: str):
     )
 
     assert result != "none"
-    assert result["route"] == "atomic_create"
+    assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "text"
     assert result["items"][0]["prompt_mode"] == "vision_text"

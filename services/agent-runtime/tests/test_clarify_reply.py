@@ -13,7 +13,7 @@ def test_clarify_reply_choice_1_generate_image():
     original = "请你帮我设计一个蓝牙耳机主图，详情页的构图方案"
     result = classify_clarify_reply(original, "q", "1")
     assert result != "none"
-    assert result["route"] == "atomic_create"
+    assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "image"
     outcome = intent_result_to_parse_outcome(result, "生成一张蓝牙耳机主图")
     assert outcome["kind"] == "success"

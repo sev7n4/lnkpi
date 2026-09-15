@@ -270,7 +270,7 @@ def _rule_sidebar_img2img(
     if _sidebar_img2img_match(intent, features, ctx):
         return _base_decision(
             ctx,
-            flow_mode="atomic_create",
+            flow_mode="canvas_agent",
             reason="sidebar_img2img_p1",
             confidence=0.95,
             precedence_rule_id="sidebar_img2img",
@@ -287,7 +287,7 @@ def _rule_ref_backed_generate(
     if _ref_backed_generate_match(intent, features):
         return _base_decision(
             ctx,
-            flow_mode="atomic_create",
+            flow_mode="canvas_agent",
             reason="sidebar_ref_atomic",
             confidence=0.92,
             precedence_rule_id="ref_backed_generate",
@@ -531,8 +531,9 @@ def apply_route_precedence(
 ) -> dict[str, Any]:
     """First matching precedence rule wins (design §9.9)."""
     if pending_clarify_reply and pending_clarify_reply != "none":
-        route = str(pending_clarify_reply.get("route") or "atomic_create")
-        flow = "campaign" if route == "campaign" else "atomic_create"
+        route = str(pending_clarify_reply.get("route") or "canvas_agent")
+        # Phase 2d: non-campaign clarify resume never reopens atomic_create (incl. legacy route).
+        flow = "campaign" if route == "campaign" else "canvas_agent"
         return _base_decision(
             ctx,
             flow_mode=flow,

@@ -18,7 +18,7 @@ def test_assemble_includes_sidebar_fields():
     assert len(ctx["sidebar_attachments"]) == 1
 
 
-def test_p1_sidebar_img2img_atomic():
+def test_p1_sidebar_img2img_canvas_agent():
     ctx = assemble_route_context({
         "messages": [{"role": "user", "content": PROD}],
         "sidebar_mentioned_keys": ["I1", "I2"],
@@ -28,7 +28,7 @@ def test_p1_sidebar_img2img_atomic():
         ],
     })
     d = decide_route(ctx)
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["reason"] == "sidebar_img2img_p1"
     assert d["confidence"] >= 0.9
 
@@ -52,18 +52,18 @@ def test_explicit_skill_orchestration():
     assert d["flow_mode"] == "campaign"
 
 
-def test_prod_utterance_atomic_without_attachments():
+def test_prod_utterance_canvas_agent_without_attachments():
     ctx = assemble_route_context({"messages": [{"role": "user", "content": PROD}]})
     d = decide_route(ctx)
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
 
 
-def test_sidebar_t1_style3_atomic():
+def test_sidebar_t1_style3_canvas_agent():
     ctx = assemble_route_context({
         "messages": [{"role": "user", "content": "@T1 请按风格3出图"}],
         "sidebar_mentioned_keys": ["T1"],
         "sidebar_attachments": [{"refKey": "T1", "mediaType": "text"}],
     })
     d = decide_route(ctx)
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["reason"] == "sidebar_ref_atomic"
