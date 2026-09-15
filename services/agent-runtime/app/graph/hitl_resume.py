@@ -25,13 +25,21 @@ from app.graph.cancel_checkpoint import CANCEL_STATE_CLEAR
 
 GATE_DECISION_CLEAR = {"user_decision": "none", "force_choice": None}
 
+# Legacy gates that may still appear as ``snap.next`` on old checkpoints.
+# Never resume into them (Phase 2d.2 G6 / 2D2-D6) — clear + fresh turn instead.
+RETIRED_INTERRUPT_GATES: frozenset[str] = frozenset({"await_atomic_confirm"})
+
+ATOMIC_CONFIRM_RETIRE_GUIDANCE = (
+    "旧的「确认生成参数」流程已下线。请在画布节点上确认后再生成，或重新描述你的需求。"
+)
+
 # ``interrupt_before`` nodes registered in builder.py / product_visual_v2 routing.
 HITL_GATE_NODES: frozenset[str] = frozenset(
     {
         "await_confirm",
         "await_topo",
         "await_copy_confirm",
-        "await_atomic_confirm",
+        "await_atomic_confirm",  # retired; kept for legacy checkpoint detection
         "await_image_qa",
         "await_scheme_select",
         "await_macro_scheme_select",
@@ -114,6 +122,12 @@ def should_resume_interrupt(
     """Return True when *message* is a gate reply; False for a fresh task."""
     if not next_nodes:
         return False
+
+    gate = str(next_nodes[0])
+    # G6: never treat legacy await_atomic_confirm as a resume (no run_atomic_gen).
+    if gate in RETIRED_INTERRUPT_GATES:
+        return False
+
     if user_decision and str(user_decision).strip().lower() not in ("", "none"):
         return True
 
@@ -121,9 +135,7 @@ def should_resume_interrupt(
     if not text:
         return False
 
-    gate = str(next_nodes[0])
-
-    from app.graph.atomic_intent import atomic_create_intent, classify_atomic_confirm
+    from app.graph.atomic_intent import atomic_create_intent
     from app.graph.intent import classify_topo_decision, classify_user_decision
 
     if gate == "await_confirm":
@@ -151,13 +163,6 @@ def should_resume_interrupt(
         if len(text) >= 12 and REF_MENTION_RE.search(text):
             return False
         return len(text) <= 20
-
-    if gate == "await_atomic_confirm":
-        if classify_atomic_confirm(text) != "none":
-            return True
-        if len(text) >= 12 and REF_MENTION_RE.search(text):
-            return False
-        return len(text) <= 16
 
     if gate == "await_image_qa":
         from app.graph.nodes.image_qa_gate import classify_image_qa_decision
@@ -240,6 +245,28 @@ def build_fresh_turn_command(*, update: dict[str, Any]) -> Command:
     return Command(goto="parse_sidebar_media", update={**FRESH_TURN_STATE_CLEAR, **update})
 
 
+def build_retired_atomic_confirm_command(*, update: dict[str, Any]) -> Command:
+    """Safe exit from legacy ``await_atomic_confirm`` — never goto ``run_atomic_gen``.
+
+    Clears atomic checkpoint fields (via ``FRESH_TURN_STATE_CLEAR``) and restarts
+    at sidebar parse with agent guidance. Billable gen must go through canvas dock.
+    """
+    from langchain_core.messages import AIMessage
+
+    msgs = list(update.get("messages") or [])
+    msgs.append(AIMessage(content=ATOMIC_CONFIRM_RETIRE_GUIDANCE))
+    # Clears must win over stale atomic_* fields carried in *update*.
+    return Command(
+        goto="parse_sidebar_media",
+        update={
+            **update,
+            **FRESH_TURN_STATE_CLEAR,
+            "messages": msgs,
+            "phase": None,
+        },
+    )
+
+
 def build_interrupt_state_update(
     message: str,
     *,
@@ -253,7 +280,8 @@ def build_interrupt_state_update(
 
 
 # Gates that must resume via Command(goto=...) — astream(None) can no-op on stale checkpoints.
-GATE_RESUME_COMMAND_GOTO: frozenset[str] = frozenset({"await_atomic_confirm"})
+# Phase 2d.2: await_atomic_confirm removed (G6); no remaining members.
+GATE_RESUME_COMMAND_GOTO: frozenset[str] = frozenset()
 
 
 def build_interrupt_resume_command(
@@ -263,20 +291,22 @@ def build_interrupt_resume_command(
     user_decision: str | None = None,
     extra_update: dict[str, Any] | None = None,
 ) -> Command:
-    """Jump directly to a gate with user reply (fixes interrupt_before no-op resume)."""
-    return Command(
-        goto=gate,
-        update={
-            **(extra_update or {}),
-            **build_interrupt_state_update(message, user_decision=user_decision),
-        },
-    )
+    """Jump directly to a gate with user reply (fixes interrupt_before no-op resume).
+
+    Retired gates (``await_atomic_confirm``) never goto the gate or ``run_atomic_gen``.
+    """
+    base = {
+        **(extra_update or {}),
+        **build_interrupt_state_update(message, user_decision=user_decision),
+    }
+    if gate in RETIRED_INTERRUPT_GATES:
+        return build_retired_atomic_confirm_command(update=base)
+    return Command(goto=gate, update=base)
 
 
 # interrupt_before gate → last completed node for ambiguous checkpoint updates.
-GATE_RESUME_AS_NODE: dict[str, str] = {
-    "await_atomic_confirm": "create_atomic_node",
-}
+# Phase 2d.2 G6: no as_node shortcut for await_atomic_confirm (was create_atomic_node).
+GATE_RESUME_AS_NODE: dict[str, str] = {}
 
 
 async def prepare_interrupt_resume(
@@ -292,13 +322,19 @@ async def prepare_interrupt_resume(
     Returns graph input ``None`` (continue from interrupt) and the message index
     after which new assistant replies should be persisted.
 
-    Some gates (e.g. ``await_atomic_confirm``) need ``as_node`` set to the upstream
-    node so LangGraph applies the update and actually runs the gate on ``ainvoke(None)``.
+    Some gates need ``as_node`` set to the upstream node so LangGraph applies the
+    update and actually runs the gate on ``ainvoke(None)``. Retired atomic confirm
+    must not use this path — callers should use ``build_retired_atomic_confirm_command``.
     """
     snap = await graph.aget_state(config)
     vals = getattr(snap, "values", None) or {}
     next_nodes = [str(n) for n in (getattr(snap, "next", None) or ())]
     gate_node = next_nodes[0] if next_nodes else None
+    if gate_node in RETIRED_INTERRUPT_GATES:
+        raise ValueError(
+            f"refusing prepare_interrupt_resume for retired gate {gate_node!r}; "
+            "use build_retired_atomic_confirm_command instead"
+        )
     resume_as_node = as_node or (GATE_RESUME_AS_NODE.get(gate_node or "") if gate_node else None)
     assistant_save_after = len(vals.get("messages") or []) + 1
     update = {

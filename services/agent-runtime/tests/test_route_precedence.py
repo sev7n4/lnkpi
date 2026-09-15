@@ -62,7 +62,7 @@ def test_precedence_checkpoint_regen():
             "atomic_spec": {"target_type": "image", "prompt": "x", "title": "x"},
         }
     )
-    assert d["flow_mode"] == "atomic_regenerate"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "checkpoint_regen"
 
 
@@ -150,7 +150,7 @@ def test_precedence_focus_gen():
             "focus_node_id": "image-1",
         }
     )
-    assert d["flow_mode"] == "single_node"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "focus_gen"
 
 

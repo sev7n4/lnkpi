@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from langchain_core.messages import HumanMessage
 
+from app.graph.atomic_parse_schema import parse_outcome_to_state
 from app.graph.builder import route_after_intake
 from app.graph.nodes.clarify_gate import make_clarify_gate_node
 from app.graph.nodes.intake import make_intake_node
-from app.graph.subgraphs.atomic_create_gate import route_after_atomic_parse
-from app.graph.atomic_parse_schema import parse_outcome_to_state
-from pathlib import Path
 
 SKILLS = Path(__file__).resolve().parents[1] / "skills"
 
@@ -89,7 +89,8 @@ async def test_intake_regen_clarify_routes_to_clarify_gate():
     assert route_after_intake(out) == "clarify_gate"
 
 
-def test_atomic_parse_clarify_routes_to_clarify_gate():
+def test_atomic_parse_clarify_outcome_sets_phase():
+    """Schema clarify outcome still produces phase=clarify (gate routing retired)."""
     parsed = parse_outcome_to_state(
         {
             "kind": "clarify",
@@ -99,4 +100,4 @@ def test_atomic_parse_clarify_routes_to_clarify_gate():
         }
     )
     assert parsed["phase"] == "clarify"
-    assert route_after_atomic_parse(parsed) == "clarify_gate"
+    assert parsed.get("clarify_question")

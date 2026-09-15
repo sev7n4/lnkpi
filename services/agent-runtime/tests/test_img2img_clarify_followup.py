@@ -41,25 +41,3 @@ def test_clarify_reply_yes_confirms_img2img():
     assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "image"
     assert "穿上" in result["items"][0]["prompt"]
-
-
-@pytest.mark.asyncio
-async def test_parse_skips_clarify_for_sidebar_img2img():
-    from app.graph.nodes.atomic_parse import make_parse_atomic_intent_node
-
-    node = make_parse_atomic_intent_node()
-    out = await node(
-        {
-            "messages": [HumanMessage(content=IMG2IMG)],
-            "sidebar_mentioned_keys": ["I1", "I2"],
-            "route_decision": {"reason": "sidebar_img2img_p1", "flow_mode": "atomic_create"},
-            "route_context": {
-                "utterance": IMG2IMG,
-                "mentioned_keys": ["I1", "I2"],
-                "sidebar_attachments": [],
-            },
-        }
-    )
-    assert out.get("phase") == "atomic_parse"
-    assert out.get("atomic_spec")
-    assert out.get("atomic_spec", {}).get("target_type") == "image"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -14,8 +13,6 @@ from app.graph.generation_request import (
     build_generation_request_from_dock,
     generation_request_parity_keys,
 )
-from app.graph.nodes.atomic_create_node import make_create_atomic_node
-from app.graph.nodes.atomic_parse import make_parse_atomic_intent_node
 from app.graph.nodes.intake import make_intake_node
 
 STYLE3 = "@T1 请按风格3出图"
@@ -90,36 +87,6 @@ def test_atomic_state_uses_spec_prompt():
     assert req["mentioned_keys"] == []
 
 
-@pytest.mark.asyncio
-async def test_create_atomic_node_writes_generation_request():
-    class FakeNest:
-        async def add_nodes_batch(self, items: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
-            return {
-                "nodes": [
-                    {"key": item["key"], "nodeId": "node-1"}
-                    for item in items
-                ],
-            }
-
-    create = make_create_atomic_node(nest=FakeNest())
-    out = await create(
-        {
-            "messages": [HumanMessage(content=STYLE3)],
-            "sidebar_mentioned_keys": ["T1"],
-            "sidebar_attachments": [dict(T1_REF)],
-            "atomic_spec": {
-                "target_type": "image",
-                "prompt": STYLE3,
-                "title": STYLE3[:24],
-            },
-        }
-    )
-    req = out.get("generation_request")
-    assert isinstance(req, dict)
-    assert req.get("prompt") == STYLE3
-    assert req.get("slots") == {"ref": "T1", "style": "3"}
-
-
 def test_apply_generation_request_after_clarify_resume_fields():
     state = {
         "messages": [HumanMessage(content="请帮我生一个小女孩的图片")],
@@ -137,6 +104,7 @@ def test_apply_generation_request_after_clarify_resume_fields():
 
 @pytest.mark.asyncio
 async def test_soft_create_clarify_resume_keeps_subject_in_generation_prompt():
+    """Intake clarify resume should keep original subject for GenerationRequest helpers."""
     original = "帮我弄张小女孩图片看看"
     state = {
         "messages": [HumanMessage(content=original), HumanMessage(content="1")],
@@ -152,12 +120,15 @@ async def test_soft_create_clarify_resume_keeps_subject_in_generation_prompt():
         ],
     }
     resumed = await make_intake_node(SKILLS_DIR)(state)
-    parsed = await make_parse_atomic_intent_node()({**state, **resumed})
     final_state = {
         **state,
         **resumed,
-        **parsed,
-        "messages": [*state["messages"], *(parsed.get("messages") or [])],
+        "atomic_spec": {
+            "target_type": "image",
+            "prompt": original,
+            "title": "小女孩",
+        },
+        "messages": [*state["messages"], *(resumed.get("messages") or [])],
     }
     req = build_generation_request_from_atomic_state(final_state)
 
