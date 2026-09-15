@@ -47,6 +47,21 @@ def test_h1_allowed_and_types_lack_retired():
     assert RETIRED.isdisjoint(state_flow), f"state.flow_mode still has {RETIRED & state_flow}"
 
 
+def test_h1b_intent_parse_routes_and_prompt_lack_retired():
+    """H1b: intent_parse VALID_ROUTES + route enum must not teach retired lanes."""
+    from app.graph.intent_parse_llm import _STRUCTURED_PARSE_SYSTEM
+    from app.graph.intent_parse_schema import VALID_ROUTES
+
+    assert RETIRED.isdisjoint(VALID_ROUTES)
+    assert "canvas_agent" in VALID_ROUTES
+    route_line = next(
+        line for line in _STRUCTURED_PARSE_SYSTEM.splitlines() if '"route":' in line
+    )
+    for name in RETIRED:
+        assert name not in route_line, f"route enum still teaches {name}"
+    assert "canvas_agent" in route_line
+
+
 def test_h2_shim_maps_retired_lanes_to_canvas_agent():
     for lane in RETIRED:
         mapped = parse_decide_lane_json(

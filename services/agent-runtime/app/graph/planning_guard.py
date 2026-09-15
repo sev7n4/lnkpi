@@ -134,6 +134,7 @@ def validate_llm_parse(result: "IntentParseResult", utterance: str) -> "ParseOut
     """Return clarify outcome if LLM parse conflicts with planning guard; None if OK."""
     from app.graph.atomic_intent_ir import expected_output_modality
     from app.graph.atomic_parse_schema import ParseOutcome
+    from app.graph.legacy_lane import map_legacy_lane
 
     action = str(result.get("action") or "unknown")
     items = result.get("items") or []
@@ -169,7 +170,10 @@ def validate_llm_parse(result: "IntentParseResult", utterance: str) -> "ParseOut
                 "reason": "planning_image_conflict",
                 "clarify_question": planning_clarify_question(utterance),
             }
-        if has_planning_image_conflict(utterance) and str(result.get("route") or "") == "atomic_create":
+        mapped_route = map_legacy_lane(str(result.get("route") or "")) or str(
+            result.get("route") or ""
+        )
+        if has_planning_image_conflict(utterance) and mapped_route == "canvas_agent":
             for item in items:
                 if str(item.get("target_type") or "") == "image":
                     return {

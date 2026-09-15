@@ -10,12 +10,12 @@ from app.graph.atomic_parse_schema import (
     validate_parse_result,
 )
 from app.graph.atomic_parse_llm import extract_json_object
+from app.graph.legacy_lane import map_legacy_lane
 
 VALID_ACTIONS = frozenset({"plan", "write", "generate", "expand", "regenerate", "unknown"})
 VALID_SCOPES = frozenset({"atomic", "campaign", "unknown"})
-VALID_ROUTES = frozenset(
-    {"campaign", "atomic_create", "atomic_regenerate", "single_node", "chat"}
-)
+# Phase 2d.3 D3: retired atomic_create / atomic_regenerate / single_node → canvas_agent
+VALID_ROUTES = frozenset({"campaign", "canvas_agent", "chat"})
 VALID_STRUCTURES = frozenset({"single", "multi"})
 VALID_TARGET_TYPES = frozenset({"image", "text", "video", "audio", "prompt"})
 
@@ -100,6 +100,8 @@ def parse_llm_json(raw: str) -> IntentParseResult | None:
         scope = "unknown"
 
     route = str(data.get("route") or "chat").strip()
+    # Legacy model emissions → canvas_agent (never silently coerce retired → chat)
+    route = map_legacy_lane(route) or route
     if route not in VALID_ROUTES:
         route = "chat"
 
@@ -153,11 +155,11 @@ def intent_result_to_parse_outcome(
     utterance: str,
 ) -> ParseOutcome:
     """Map validated IntentParseResult to atomic ParseOutcome for graph state."""
-    route = str(result.get("route") or "chat")
+    route = map_legacy_lane(str(result.get("route") or "chat")) or "chat"
     if route == "campaign":
         return _campaign_clarify(result)
 
-    if route in ("atomic_regenerate", "single_node", "chat"):
+    if route == "chat":
         question = result.get("clarify_question") or (
             f"我还不太确定「{utterance[:24]}」要如何执行。"
             "请补充是要重新生成、单节点出图，还是其他操作。"
@@ -165,10 +167,11 @@ def intent_result_to_parse_outcome(
         return {
             "kind": "clarify",
             "confidence": result.get("confidence", 0.0),
-            "reason": f"llm_route_{route}",
+            "reason": "llm_route_chat",
             "clarify_question": question,
         }
 
+    # canvas_agent (incl. shimmed atomic_create / atomic_regenerate / single_node)
     atomic_items: list[AtomicParseItem] = []
     for item in result.get("items") or []:
         atomic_items.append(dict(item))  # type: ignore[arg-type]
