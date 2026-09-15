@@ -142,6 +142,8 @@ export class AgentService {
     attachments?: SidebarAttachment[],
     refOrder?: string[],
     mentionedKeys?: string[],
+    thinking?: boolean,
+    thinkingEffort?: 'high' | 'max',
   ): AsyncGenerator<AgentStreamEvent> {
     // Register idempotency key (if provided) before starting
     if (idempotencyKey) {
@@ -203,6 +205,8 @@ export class AgentService {
           validatedAttachments,
           refOrder,
           validatedMentionedKeys,
+          thinking,
+          thinkingEffort,
         )) {
           if (event.type === 'text_delta') {
             assistantText += (event.data as { text: string }).text
@@ -370,6 +374,8 @@ export class AgentService {
     attachments?: SidebarAttachment[],
     refOrder?: string[],
     mentionedKeys?: string[],
+    thinking?: boolean,
+    thinkingEffort?: 'high' | 'max',
   ): AsyncGenerator<AgentStreamEvent> {
     let assistantText = ''
     const canvasActions: CanvasAction[] = []
@@ -386,6 +392,7 @@ export class AgentService {
       }
     }
 
+    const thinkingOn = thinking === true
     for await (const event of client.streamRun({
       sessionId,
       userId,
@@ -405,6 +412,8 @@ export class AgentService {
       attachments,
       refOrder,
       mentionedKeys,
+      thinking: thinkingOn,
+      thinkingEffort: thinkingOn ? (thinkingEffort === 'max' ? 'max' : 'high') : undefined,
     })) {
       if (TRACE_PERSIST_EVENT_TYPES.has(event.type)) {
         executionEvents.push({ type: event.type, data: event.data })

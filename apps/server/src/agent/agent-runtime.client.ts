@@ -20,6 +20,9 @@ export interface RuntimeRunInput {
   attachments?: SidebarAttachment[]
   refOrder?: string[]
   mentionedKeys?: string[]
+  /** DeepSeek 深度思考；默认关，Dock 可开 */
+  thinking?: boolean
+  thinkingEffort?: 'high' | 'max'
 }
 
 export interface RuntimeThreadState {
@@ -269,6 +272,13 @@ export class AgentRuntimeClient {
         attachments: input.attachments,
         ref_order: input.refOrder,
         mentioned_keys: input.mentionedKeys,
+        thinking: input.thinking === true,
+        thinking_effort:
+          input.thinking === true
+            ? input.thinkingEffort === 'max'
+              ? 'max'
+              : 'high'
+            : undefined,
       }),
     })
 

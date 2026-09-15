@@ -10,7 +10,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common'
-import { IsArray, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, IsBoolean, IsIn, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
 import type { Request, Response } from 'express'
 import { AuthGuard } from '../auth/auth.guard'
@@ -104,6 +104,15 @@ class ConversationDto {
   @IsArray()
   @IsString({ each: true })
   mentionedKeys?: string[]
+
+  /** DeepSeek 深度思考（默认关；与文本节点 Dock 对齐） */
+  @IsOptional()
+  @IsBoolean()
+  thinking?: boolean
+
+  @IsOptional()
+  @IsIn(['high', 'max'])
+  thinkingEffort?: 'high' | 'max'
 }
 
 class OptimizePromptDto {
@@ -281,6 +290,8 @@ export class AgentController {
         dto.attachments,
         dto.refOrder,
         dto.mentionedKeys,
+        dto.thinking,
+        dto.thinkingEffort,
       )) {
         res.write(`data: ${JSON.stringify(event)}\n\n`)
       }
