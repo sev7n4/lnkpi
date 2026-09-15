@@ -21,18 +21,30 @@ const props = defineProps<{
   modelValue: VideoSettings
   capabilities?: VideoModelCapabilities
   modelKey?: string
+  seed?: number
+  negativePrompt?: string
 }>()
 
-const showGenerateAudio = computed(() => {
-  if (!props.capabilities) return true
-  return props.capabilities.supportsGenerateAudio
+const nativeParams = computed(() => {
+  const hidden = { generateAudio: false, crop: false, seed: false, negativePrompt: false }
+  if (!props.modelKey) return hidden
+  const resolved = resolveModelKey('video', props.modelKey)
+  if (resolved.fallback) return hidden
+  return {
+    generateAudio: resolved.entry.params.generateAudio === 'native',
+    crop: resolved.entry.params.crop === 'native',
+    seed: resolved.entry.params.seed === 'native',
+    negativePrompt: resolved.entry.params.negativePrompt === 'native',
+  }
 })
 
-const showCrop = computed(() => {
-  if (!props.modelKey) return true
-  const { entry } = resolveModelKey('video', props.modelKey)
-  return entry.params.crop === 'native'
-})
+const showGenerateAudio = computed(() => nativeParams.value.generateAudio)
+
+const showSeed = computed(() => nativeParams.value.seed)
+
+const showNegativePrompt = computed(() => nativeParams.value.negativePrompt)
+
+const showCrop = computed(() => nativeParams.value.crop)
 
 const durationBelowMinHint = computed(() => {
   const min = props.capabilities?.minDuration
@@ -74,7 +86,20 @@ function ensureAllowedAspectAndResolution() {
 
 const emit = defineEmits<{
   'update:modelValue': [value: VideoSettings]
+  'update:seed': [value: number | undefined]
+  'update:negativePrompt': [value: string]
 }>()
+
+function onSeedInput(raw: string) {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    emit('update:seed', undefined)
+    return
+  }
+  const n = Number.parseInt(trimmed, 10)
+  if (!Number.isFinite(n)) return
+  emit('update:seed', n)
+}
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
@@ -214,7 +239,7 @@ watch(
         </button>
       </div>
 
-      <div v-if="showCrop">
+      <div v-if="showCrop" class="mb-3">
         <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">裁剪</p>
         <div class="flex flex-wrap gap-1">
           <button
@@ -230,6 +255,29 @@ watch(
             {{ opt.label }}
           </button>
         </div>
+      </div>
+
+      <div v-if="showSeed" class="mb-3">
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">Seed</p>
+        <input
+          type="number"
+          class="w-full rounded-md border border-white/10 bg-black/25 px-2 py-1 text-[10px] text-white/90"
+          :value="seed ?? ''"
+          placeholder="随机"
+          step="1"
+          @input="onSeedInput(($event.target as HTMLInputElement).value)"
+        >
+      </div>
+
+      <div v-if="showNegativePrompt">
+        <p class="mb-1.5 text-[10px] text-[var(--neo-text-muted)]">排除内容</p>
+        <input
+          type="text"
+          class="w-full rounded-md border border-white/10 bg-black/25 px-2 py-1 text-[10px] text-white/90"
+          :value="negativePrompt ?? ''"
+          placeholder="如 watermark, blur"
+          @input="emit('update:negativePrompt', ($event.target as HTMLInputElement).value)"
+        >
       </div>
 
       <button
