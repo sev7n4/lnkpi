@@ -1,15 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useAuthStore } from '@/stores/auth'
 import BrandLogo from '@/components/brand/BrandLogo.vue'
-import MembershipModal from '@/components/membership/MembershipModal.vue'
-
-const showMembership = ref(false)
+import AccountChrome from '@/components/account/AccountChrome.vue'
 
 const route = useRoute()
 const router = useRouter()
-const auth = useAuthStore()
 
 const tabs = [
   { label: '画布', path: '/workflow' },
@@ -59,30 +55,8 @@ function navigate(path: string) {
       </div>
 
       <div class="flex shrink-0 items-center gap-2 sm:gap-3">
-        <template v-if="auth.isLoggedIn">
-          <button
-            class="rounded-xl bg-[#6366f1]/20 px-2.5 py-1.5 text-xs text-[#818cf8] transition hover:bg-[#6366f1]/30 sm:px-3"
-            @click="showMembership = true"
-          >
-            {{ auth.user?.points ?? 0 }} 积分
-          </button>
-          <button
-            class="flex max-w-[9rem] items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 transition hover:bg-white/10 sm:max-w-none sm:px-3"
-            @click="navigate('/profile')"
-          >
-            <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#6366f1] text-xs font-medium"
-            >
-              {{ auth.user?.nickname?.[0] ?? 'U' }}
-            </div>
-            <span class="hidden truncate text-sm text-white/80 sm:inline">{{ auth.user?.nickname }}</span>
-          </button>
-          <button class="btn-ghost hidden text-xs sm:inline" @click="auth.logout()">退出</button>
-        </template>
-        <button v-else class="btn-ghost text-sm" @click="auth.openLogin()">登录</button>
+        <AccountChrome />
       </div>
     </div>
   </header>
-
-  <MembershipModal v-model="showMembership" />
 </template>

@@ -73,7 +73,15 @@ async function upgrade(plan: string) {
 </script>
 
 <template>
-  <el-dialog v-model="visible" title="积分与会员" width="560px" class="membership-dialog">
+  <!-- append-to-body: escape canvas chrome pointer-events-none / z-50 stacking -->
+  <el-dialog
+    v-model="visible"
+    title="积分与会员"
+    width="560px"
+    class="membership-dialog"
+    append-to-body
+    align-center
+  >
     <div v-if="auth.isLoggedIn" class="space-y-4">
       <!-- 积分总览：品牌渐变能量卡 -->
       <div class="membership-hero relative overflow-hidden rounded-xl p-4">

@@ -159,6 +159,80 @@ export async function confirmProposeGeneration(
   await deps.generateForNode(id)
 }
 
+/**
+ * Phase 2c.3 E1: pending_confirm beats await_atomic_confirm interrupt chips.
+ * Other interrupt chip sets are unchanged.
+ */
+export function applyAtomicProposeChipPriority(
+  interruptChip: AgentChipSet,
+  pendingNodeId: string | null | undefined,
+): AgentChipSet {
+  if (interruptChip === 'atomic' && String(pendingNodeId ?? '').trim()) {
+    return 'generation_propose'
+  }
+  return interruptChip
+}
+
+const MEDIA_NODE_TYPES = new Set(['image', 'video', 'text', 'audio'])
+
+export type ResolveAtomicConfirmNodeInput = {
+  canvasNodes?: CanvasNodeLike[] | null
+  selectedNodeId?: string | null
+  /** Thread-state atomicNodeId from Nest/runtime */
+  atomicNodeId?: string | null
+  /** Optional selected node type (image/video/…) */
+  selectedNodeType?: string | null
+}
+
+/**
+ * Phase 2c.3 §3.2: pending → atomicNodeId → selected media node → null.
+ */
+export function resolveAtomicConfirmNodeId(
+  input: ResolveAtomicConfirmNodeInput,
+): string | null {
+  const pending = resolvePendingConfirmNodeId(input.canvasNodes, input.selectedNodeId)
+  if (pending) return pending
+
+  const fromThread = String(input.atomicNodeId ?? '').trim()
+  if (fromThread) return fromThread
+
+  const selected = String(input.selectedNodeId ?? '').trim()
+  if (!selected) return null
+
+  const typeHint = String(input.selectedNodeType ?? '').trim()
+  if (MEDIA_NODE_TYPES.has(typeHint)) return selected
+
+  const node = input.canvasNodes?.find((n) => n.id === selected)
+  const dataType = String(node?.data?.type ?? '').trim()
+  if (MEDIA_NODE_TYPES.has(dataType)) return selected
+  // Vue-flow nodes often store type on the node object; allow via data._type fallback only.
+  return null
+}
+
+export type ConfirmAtomicDeps = {
+  generateForNode: (nodeId: string) => void | Promise<void>
+  sendPreset: (text: string) => void | Promise<void>
+  /** Clear local interrupt gate + resume revise/cancel (no atomic gen). */
+  unwindAtomicInterrupt?: () => void | Promise<void>
+}
+
+/**
+ * Phase 2c.3 E2/E3: prefer dock generateForNode; fallback sendPreset only if no nodeId.
+ */
+export async function confirmAtomicGeneration(
+  nodeId: string | null | undefined,
+  deps: ConfirmAtomicDeps,
+): Promise<'dock' | 'preset'> {
+  const id = String(nodeId ?? '').trim()
+  if (id) {
+    await deps.unwindAtomicInterrupt?.()
+    await deps.generateForNode(id)
+    return 'dock'
+  }
+  await deps.sendPreset('确认生成')
+  return 'preset'
+}
+
 /** Which confirm chip row to show under the agent input. */
 export function detectAgentChipSet(
   assistantText: string,

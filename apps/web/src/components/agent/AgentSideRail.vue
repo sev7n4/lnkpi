@@ -46,11 +46,15 @@ import AgentMacroSchemeCards from '@/components/agent/presentation/AgentMacroSch
 import { hasSchemeDraftSections, splitAssistantDraftMessage } from '@/components/agent/presentation/schemeDraftProse'
 import type { AgentPresentationEnvelope } from '@/components/agent/presentation/types'
 import {
+  applyAtomicProposeChipPriority,
+  confirmAtomicGeneration as runConfirmAtomicGeneration,
   confirmProposeGeneration as runConfirmProposeGeneration,
   detectAgentChipSet,
   extractProposeGenerationNodeId,
+  resolveAtomicConfirmNodeId,
   resolvePendingConfirmNodeId,
 } from '@/components/agent/agentChipSet'
+import { buildGenerationProposePresentation } from '@/components/agent/generationProposePresentation'
 import {
   chipSetFromInterrupt,
   interruptPayloadFromThreadState,
@@ -456,6 +460,8 @@ const interruptGate = ref<AgentInterruptPayload | null>(null)
 const threadJourneyTrace = ref<JourneyTraceSnapshot | null>(null)
 /** LangGraph checkpoint: same thread can regenerate/variant on prior atomic node */
 const hasAtomicCheckpoint = ref(false)
+/** Phase 2c.3: thread-state atomicNodeId for dock-mapped atomic confirm */
+const atomicNodeId = ref<string | null>(null)
 
 const agentStream = useAgentStream({
   onStale: () => {
@@ -487,14 +493,21 @@ function proposeLatchKey(nodeId: string): string {
 }
 
 const chipSet = computed(() => {
-  // Interrupt overrides propose (and all text chips).
+  const proposeId =
+    extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls) ??
+    resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
+
+  // Interrupt overrides propose — except Phase 2c.3: pending beats await_atomic_confirm.
   const fromInterrupt = chipSetFromInterrupt(interruptGate.value)
-  if (fromInterrupt) return fromInterrupt
+  const interruptChip = applyAtomicProposeChipPriority(fromInterrupt, proposeId)
+  if (interruptChip === 'generation_propose' && proposeId) {
+    const key = proposeLatchKey(proposeId)
+    if (clearedProposeKey.value !== key) return 'generation_propose'
+  }
+  if (interruptChip && interruptChip !== 'generation_propose') return interruptChip
+
   if (agent.isStreaming) return null
   const last = lastAssistantMessage.value
-  const proposeId =
-    extractProposeGenerationNodeId(last?.toolCalls) ??
-    resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
   if (proposeId) {
     const key = proposeLatchKey(proposeId)
     if (clearedProposeKey.value !== key) return 'generation_propose'
@@ -511,6 +524,21 @@ const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
+const generationProposePresentation = computed(() => {
+  if (!awaitingGenerationPropose.value) return null
+  const nodeId = proposeGenerationNodeId.value
+  if (!nodeId) return null
+  const fromCanvas = props.canvasNodes?.find((n) => n.id === nodeId)
+  const node =
+    fromCanvas ??
+    (props.selectedNode?.id === nodeId ? props.selectedNode : null)
+  if (!node) return null
+  return buildGenerationProposePresentation({
+    id: node.id,
+    type: 'type' in node ? (node as { type?: string | null }).type : undefined,
+    data: node.data ?? null,
+  })
+})
 const awaitingImageQa = computed(() => chipSet.value === 'image_qa' && !isRetakePending.value)
 const isRetakePending = computed(() =>
   isRetakePendingPhase({
@@ -628,7 +656,8 @@ const hasDockPresentation = computed(
     || awaitingShotConfirm.value
     || (awaitingTopoConfirm.value && !awaitingShotConfirm.value)
     || isRetakePending.value
-    || showCancelledCallout.value,
+    || showCancelledCallout.value
+    || (awaitingGenerationPropose.value && Boolean(generationProposePresentation.value)),
 )
 const awaitingDeliveryConfirm = computed(() => chipSet.value === 'delivery_confirm')
 const userRequestLabels = ref<string[]>([])
@@ -1012,6 +1041,7 @@ async function selectThread(threadId: string) {
   cancelledPresentation.value = null
   cancelledProgressText.value = null
   hasAtomicCheckpoint.value = false
+  atomicNodeId.value = null
   retakePending.value = false
   effectiveUtterance.value = null
   recoveredPhaseHint.value = null
@@ -1067,6 +1097,7 @@ watch(
     cancelledPresentation.value = null
     cancelledProgressText.value = null
     hasAtomicCheckpoint.value = false
+    atomicNodeId.value = null
     retakePending.value = false
     effectiveUtterance.value = null
     recoveredPhaseHint.value = null
@@ -1175,6 +1206,7 @@ function newAgentSession() {
   cancelledProgressText.value = null
   threadJourneyTrace.value = null
   hasAtomicCheckpoint.value = false
+  atomicNodeId.value = null
   retakePending.value = false
   effectiveUtterance.value = null
   recoveredPhaseHint.value = null
@@ -1217,6 +1249,7 @@ async function refreshThreadCheckpoint() {
     const json = (await res.json()) as {
       data?: {
         hasAtomicCheckpoint?: boolean
+        atomicNodeId?: string | null
         interrupted?: boolean
         phase?: string | null
         runCancelled?: boolean | null
@@ -1239,6 +1272,7 @@ async function refreshThreadCheckpoint() {
       }
     }
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    atomicNodeId.value = json.data?.atomicNodeId ? String(json.data.atomicNodeId) : null
     imageQaReason.value = json.data?.imageQaReason ?? null
     imageQaMetrics.value = json.data?.imageQaMetrics ?? null
     syncRetakeFromPayload(json.data)
@@ -1399,6 +1433,42 @@ function cancelProposeGeneration() {
   if (!nodeId || agent.isStreaming) return
   latchProposeChip(nodeId)
   emit('clearProposeGeneration', nodeId)
+}
+
+/** Phase 2c.3: unwind await_atomic_confirm without running atomic gen. */
+async function unwindAtomicInterrupt() {
+  interruptGate.value = null
+  // Fire-and-forget resume revise/cancel so LangGraph leaves the gate; dock owns billing gen.
+  void sendPreset('取消')
+}
+
+/** Phase 2c.3: atomic chip confirm → dock when node resolvable. */
+function confirmAtomicChip() {
+  if (agent.isStreaming) return
+  const nodeId = resolveAtomicConfirmNodeId({
+    canvasNodes: props.canvasNodes,
+    selectedNodeId: props.selectedNodeId,
+    atomicNodeId: atomicNodeId.value,
+    selectedNodeType: props.selectedNode?.type ?? null,
+  })
+  void runConfirmAtomicGeneration(nodeId, {
+    generateForNode: (id) => emit('generateNode', id),
+    sendPreset,
+    unwindAtomicInterrupt,
+  })
+}
+
+/** Phase 2c.3: atomic cancel — clear pending if any, else interrupt cancel. */
+function cancelAtomicChip() {
+  if (agent.isStreaming) return
+  const pendingId = resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
+  if (pendingId) {
+    latchProposeChip(pendingId)
+    emit('clearProposeGeneration', pendingId)
+    interruptGate.value = null
+    return
+  }
+  void sendPreset('取消')
 }
 
 async function sendPreset(text: string) {
@@ -1630,6 +1700,7 @@ async function reconnectStream() {
         finished?: boolean
         nextNodes?: string[]
         hasAtomicCheckpoint?: boolean
+        atomicNodeId?: string | null
         productVisualPlan?: ProductVisualPlan | null
         macroSchemes?: ProductVisualMacroScheme[] | null
         shotManifest?: ProductVisualShot[] | null
@@ -1646,6 +1717,7 @@ async function reconnectStream() {
     const phase = json.data?.phase ?? null
     syncCompletionPresentation(phase, json.data?.presentation)
     hasAtomicCheckpoint.value = Boolean(json.data?.hasAtomicCheckpoint)
+    atomicNodeId.value = json.data?.atomicNodeId ? String(json.data.atomicNodeId) : null
     if (json.data?.productVisualSchemeV2 != null) {
       productVisualSchemeV2.value = Boolean(json.data.productVisualSchemeV2)
     }
@@ -2465,40 +2537,51 @@ defineExpose({
                 自己说明修改
               </button>
             </div>
-            <div v-else-if="awaitingGenerationPropose" class="mb-2 flex flex-wrap gap-2 px-0.5">
-              <button
-                type="button"
-                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
-                data-testid="generation-propose-confirm"
+            <div v-else-if="awaitingGenerationPropose" class="mb-2 px-0.5">
+              <AgentPresentationHost
+                v-if="generationProposePresentation"
+                class="mb-2"
+                :presentation="generationProposePresentation"
                 :disabled="agent.isStreaming"
-                @click="confirmProposeGeneration()"
-              >
-                确认生成
-              </button>
-              <button
-                type="button"
-                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
-                data-testid="generation-propose-cancel"
-                :disabled="agent.isStreaming"
-                @click="cancelProposeGeneration()"
-              >
-                取消
-              </button>
+                @focus-node="onFocusNode($event)"
+              />
+              <div class="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                  data-testid="generation-propose-confirm"
+                  :disabled="agent.isStreaming"
+                  @click="confirmProposeGeneration()"
+                >
+                  确认生成
+                </button>
+                <button
+                  type="button"
+                  class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                  data-testid="generation-propose-cancel"
+                  :disabled="agent.isStreaming"
+                  @click="cancelProposeGeneration()"
+                >
+                  取消
+                </button>
+              </div>
             </div>
             <div v-else-if="awaitingAtomicConfirm" class="mb-2 flex flex-wrap gap-2 px-0.5">
               <button
                 type="button"
                 class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="atomic-confirm-dock"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('确认生成')"
+                @click="confirmAtomicChip()"
               >
                 确认生成
               </button>
               <button
                 type="button"
                 class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                data-testid="atomic-confirm-cancel"
                 :disabled="agent.isStreaming"
-                @click="sendPreset('取消')"
+                @click="cancelAtomicChip()"
               >
                 取消
               </button>

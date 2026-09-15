@@ -32,7 +32,6 @@ import { isNodeGenerating, NODE_GENERATION_STATUS } from '@/constants/dockStudio
 import { estimateVideoCredits } from '@/constants/credits'
 import { useDockLocalImageUpload, createLocalRefId } from '@/components/canvas/dock-studio/shared/useDockLocalImageUpload'
 import { useVideoModelCapabilities } from '@/composables/useVideoModelCapabilities'
-import VideoCapabilityBadges from '@/components/canvas/dock-studio/shared/VideoCapabilityBadges.vue'
 import {
   countValidImageRefs,
   hasUnsupportedMediaRefs,
@@ -548,14 +547,11 @@ function onRefMention(refKey: string) {
         接下一段
       </button>
 
-      <div class="flex flex-col gap-1">
-        <UniversalModelSelector
-          v-model="videoModel"
-          type="video"
-          @update:model-value="syncField('videoModel', $event)"
-        />
-        <VideoCapabilityBadges :capabilities="capabilities" />
-      </div>
+      <UniversalModelSelector
+        v-model="videoModel"
+        type="video"
+        @update:model-value="syncField('videoModel', $event)"
+      />
       <VideoSettingsSelector
         v-model="videoSettings"
         :capabilities="capabilities"
