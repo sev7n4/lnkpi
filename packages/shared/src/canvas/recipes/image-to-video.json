@@ -1,0 +1,32 @@
+{
+  "id": "image-to-video",
+  "version": "1.0.0",
+  "title": "图生视频",
+  "invariants": {
+    "seedChains": [{ "id": "i2v", "keys": ["source_image"] }]
+  },
+  "nodes": [
+    {
+      "key": "source_image",
+      "title": "首帧图",
+      "type": "image",
+      "chain": "i2v",
+      "role": "seed",
+      "dependsOn": [],
+      "genMode": "t2i",
+      "promptHintTemplate": "图生视频首帧，主体清晰，适合作为运动起点…",
+      "autoGenerate": true
+    },
+    {
+      "key": "motion_clip",
+      "title": "运动成片",
+      "type": "video",
+      "chain": "i2v",
+      "role": "downstream",
+      "dependsOn": ["source_image"],
+      "genMode": "v_ref",
+      "promptHintTemplate": "以首帧图为起点生成短视频，运动自然，主体不变形…",
+      "autoGenerate": false
+    }
+  ]
+}

@@ -72,12 +72,13 @@ _WORKFLOW_IMPORT_ANCHORS = (
 )
 _UPLOAD_MARKERS = ("上传", "http", "url", "picsum")
 _PLANNER_ANCHORS = ("规划工作流", "接到", "改版", "新模板", "存成一套")
+_PLANNER_CONFIRM = "确认落到画布"
 _PLANNER_WRITE_TOOLS = frozenset({
     "preview_workflow_template",
-    "instantiate_workflow_template",
     "match_workflow_templates",
     "promote_workflow_template",
 })
+_PLANNER_INSTANTIATE_TOOLS = _PLANNER_WRITE_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
 _DEFAULT_NARROW_WRITE = frozenset({
     "set_node_prompt",
@@ -123,6 +124,18 @@ class MandatoryExploreResult:
     tools_called: list[str] = field(default_factory=list)
 
 
+def _is_planner_utterance(text: str) -> bool:
+    if not text:
+        return False
+    if any(anchor in text for anchor in _PLANNER_ANCHORS):
+        return True
+    if _PLANNER_CONFIRM in text:
+        return True
+    if "分镜" in text or "图生视频" in text:
+        return True
+    return "规划" in text and "工作流" in text
+
+
 def select_narrow_write_tools(utterance: str) -> frozenset[str]:
     """Keyword bind for workflow import vs recipe planner (≤5 write tools).
 
@@ -133,7 +146,9 @@ def select_narrow_write_tools(utterance: str) -> frozenset[str]:
     low = text.lower()
     if "import_workflow" in low or "导入工作流" in text:
         return _IMPORT_WRITE_TOOLS
-    if any(anchor in text for anchor in _PLANNER_ANCHORS):
+    if _PLANNER_CONFIRM in text:
+        return _PLANNER_INSTANTIATE_TOOLS
+    if _is_planner_utterance(text):
         return _PLANNER_WRITE_TOOLS
     if _is_workflow_import_utterance(text):
         return _IMPORT_WRITE_TOOLS
@@ -149,7 +164,7 @@ def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> E
     if _is_workflow_import_utterance(u):
         return "node_write"
 
-    if any(anchor in u for anchor in _PLANNER_ANCHORS):
+    if _is_planner_utterance(u):
         return "node_write"
 
     if ("撤销" in u or "重做" in u) and ("画布" in u or "操作" in u or "撤销" in u):

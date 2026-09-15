@@ -78,6 +78,7 @@ class NestCanvasClient:
         self._user_id = user_id
         self._http = http_client
         self._owns_http = http_client is None
+        self.sidebar_attachments: list[dict[str, Any]] = []
         self._breaker = circuit_breaker or CircuitBreaker(
             failure_threshold=settings.circuit_breaker_failure_threshold,
             cooldown_sec=settings.circuit_breaker_cooldown_sec,
@@ -663,16 +664,25 @@ class NestCanvasClient:
     async def instantiate_recipe(
         self,
         *,
-        recipe: dict[str, Any],
+        parent_id: str,
+        parent_version: str,
+        delta: dict[str, Any] | None = None,
         slots: dict[str, str] | None = None,
+        utterance: str | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
             "userId": self._user_id,
-            "recipe": recipe,
+            "parentId": parent_id,
+            "parentVersion": parent_version,
+            "delta": delta or {},
         }
         if slots is not None:
             body["slots"] = slots
+        if utterance is not None:
+            body["utterance"] = utterance
+        if self.sidebar_attachments:
+            body["sidebarAttachments"] = self.sidebar_attachments
         return await self._post("/agent/internal/instantiate-recipe", body)
 
     async def promote_recipe(

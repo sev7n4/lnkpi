@@ -10,6 +10,7 @@ import {
   slugRecipeKey,
   diffRecipeLines,
   compileRecipeToWorkflow,
+  fillRecipeSlots,
   inferRecipeDraftFromWorkflow,
   RECIPE_DATA_KEYS,
 } from './workflowRecipe'
@@ -507,6 +508,52 @@ describe('compileRecipeToWorkflow', () => {
     expect(doc.graph.edges.some((e) => e.source === bg!.id && e.target === ta!.id)).toBe(true)
   })
 
+  it('writes sidebar localRefs onto the seed and keeps mentionedKeys as canvas ids', () => {
+    const parent = validateRecipe({
+      ...productParent,
+      nodes: productParent.nodes.map((node) => ({
+        ...node,
+        promptHintTemplate: 'hint',
+      })),
+    })
+    const filled = fillRecipeSlots(parent, {
+      attachments: [{
+        id: 'att-1',
+        mediaType: 'image',
+        sourceKind: 'upload',
+        label: 'mug',
+        url: 'https://cdn.example/mug.png',
+        role: 'product',
+      }],
+    })
+    const doc = compileRecipeToWorkflow(parent, filled.slots, filled.localRefsByKey)
+    const bg = doc.graph.nodes.find((n) => n.data.recipeKey === 'white_bg')
+    expect(bg?.data.localRefs).toEqual([
+      {
+        id: 'att-1',
+        mediaType: 'image',
+        sourceKind: 'upload',
+        label: 'mug',
+        url: 'https://cdn.example/mug.png',
+      },
+    ])
+    const ta = doc.graph.nodes.find((n) => n.data.recipeKey === 'product_turnaround')
+    expect(ta?.data.mentionedKeys).toEqual(['image-white_bg'])
+    expect(ta?.data.localRefs).toBeUndefined()
+  })
+
+  it('fillRecipeSlots writes leftover utterance into autoGenerate slots', () => {
+    const recipe = validateRecipe({
+      ...productParent,
+      nodes: productParent.nodes.map((node) => ({ ...node, promptHintTemplate: 'hint' })),
+    })
+    const filled = fillRecipeSlots(recipe, {
+      utterance: '规划一个电商套图工作流，白色陶瓷杯放在木桌上',
+    })
+    expect(filled.slots.white_bg).toContain('白色陶瓷杯')
+    expect(filled.slots.white_bg).not.toContain('规划')
+  })
+
   it('uses type-key ids, hint prompts, mentionedKeys, and layered grid', () => {
     const withHint = {
       ...productParent,
@@ -531,8 +578,8 @@ describe('compileRecipeToWorkflow', () => {
     expect(bg?.data.chain).toBe('product')
     expect(bg?.data.genMode).toBe('t2i')
     expect(banner?.data.prompt).toBe('banner hint')
-    expect(ta?.data.mentionedKeys).toEqual(['white_bg'])
-    expect(banner?.data.mentionedKeys).toEqual(['product_turnaround'])
+    expect(ta?.data.mentionedKeys).toEqual(['image-white_bg'])
+    expect(banner?.data.mentionedKeys).toEqual(['image-product_turnaround'])
   })
 
   it('does not queue autoGenerate false nodes and still writes identity', () => {
@@ -554,6 +601,24 @@ describe('compileRecipeToWorkflow', () => {
     expect(added?.data.recipeId).toBe('ecommerce-product-visual')
     expect(added?.data.recipeKey).toBe('pack_detail')
     expect(added?.data.parentRecipeId).toBe('ecommerce-product-visual')
+  })
+})
+
+describe('lintRecipe empty_prompt', () => {
+  it('flags autoGenerate nodes that have neither hint nor slot', () => {
+    const issues = lintRecipe(validateRecipe(productParent), {})
+    expect(issues.some((issue) => issue.code === 'empty_prompt' && issue.key === 'white_bg')).toBe(true)
+  })
+
+  it('passes when slots fill the prompt', () => {
+    const issues = lintRecipe(validateRecipe(productParent), {
+      slots: { white_bg: 'mug', product_turnaround: 'turn', banner: 'banner' },
+    })
+    expect(issues.some((issue) => issue.code === 'empty_prompt')).toBe(false)
+  })
+
+  it('skips empty_prompt when used as structural lint', () => {
+    expect(lintRecipe(validateRecipe(productParent)).some((issue) => issue.code === 'empty_prompt')).toBe(false)
   })
 })
 

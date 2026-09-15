@@ -108,5 +108,21 @@
       "strippedCodes": ["seed_frozen"],
       "seedUnchanged": true
     }
+  },
+  {
+    "id": "recognize-storyboard",
+    "utterance": "帮我规划一个分镜成片",
+    "parentId": "storyboard-to-video",
+    "expect": {
+      "parentId": "storyboard-to-video"
+    }
+  },
+  {
+    "id": "recognize-i2v",
+    "utterance": "做一个图生视频工作流",
+    "parentId": "image-to-video",
+    "expect": {
+      "parentId": "image-to-video"
+    }
   }
 ]

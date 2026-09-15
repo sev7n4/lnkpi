@@ -241,17 +241,24 @@ async def test_preview_recipe_delta_does_not_import(nest_client, captured):
 
 @pytest.mark.asyncio
 async def test_instantiate_recipe(nest_client, captured):
-    recipe = {"id": "ecommerce-product-visual", "version": "1.0.0"}
-    result = await nest_client.instantiate_recipe(recipe=recipe, slots={"white_bg": "mug"})
+    result = await nest_client.instantiate_recipe(
+        parent_id="ecommerce-product-visual",
+        parent_version="1.0.0",
+        delta={"remove": ["banner"]},
+        slots={"white_bg": "mug"},
+    )
     assert result["addedNodeIds"] == ["image-white_bg"]
     req = _last(captured)
     assert req["url"] == f"{BASE_URL}/agent/internal/instantiate-recipe"
     assert req["json"] == {
         "sessionId": SESSION_ID,
         "userId": USER_ID,
-        "recipe": recipe,
+        "parentId": "ecommerce-product-visual",
+        "parentVersion": "1.0.0",
+        "delta": {"remove": ["banner"]},
         "slots": {"white_bg": "mug"},
     }
+    assert "recipe" not in req["json"]
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import type { LocalRefBinding } from '../nodeRefs'
+import type { SidebarAttachment } from '../sidebarAttachments'
 import { buildWorkflowDocument, validateWorkflow, type WorkflowDocument } from './workflowExchange'
 
 export const RECIPE_DATA_KEYS = [
@@ -280,7 +282,10 @@ function hookForChain(
   return turnaroundByChain.get(chainId) ?? seedByChain.get(chainId)
 }
 
-export function lintRecipe(recipe: RecipeDocument): LintIssue[] {
+export function lintRecipe(
+  recipe: RecipeDocument,
+  opts?: { slots?: Record<string, string> },
+): LintIssue[] {
   const issues: LintIssue[] = []
   const byKey = new Map<string, RecipeNode>()
   for (const node of recipe.nodes) {
@@ -382,6 +387,15 @@ export function lintRecipe(recipe: RecipeDocument): LintIssue[] {
           issues.push({ code: 'invalid_edge', message: 'video 只依赖 image', key: node.key })
         }
       }
+    }
+  }
+
+  for (const node of recipe.nodes) {
+    if (!opts) continue
+    if (!node.autoGenerate) continue
+    const prompt = opts.slots?.[node.key] ?? node.promptHintTemplate ?? ''
+    if (!prompt.trim()) {
+      issues.push({ code: 'empty_prompt', message: '生成步骤缺少提示词', key: node.key })
     }
   }
 
@@ -609,6 +623,96 @@ function recipeNodeId(node: RecipeNode): string {
   return `${node.type}-${node.key}`
 }
 
+const SLOT_STRIP_PHRASES = [
+  '规划工作流',
+  '确认落到画布',
+  '存成一套',
+  '新模板',
+  '接到',
+  '改版',
+  '规划',
+  '工作流',
+  '先不改',
+  '模板',
+] as const
+
+export type FillRecipeSlotsInput = {
+  utterance?: string
+  attachments?: SidebarAttachment[]
+  slots?: Record<string, string>
+}
+
+export type FillRecipeSlotsResult = {
+  slots: Record<string, string>
+  localRefsByKey: Record<string, LocalRefBinding[]>
+}
+
+function stripPlannerPhrases(utterance: string): string {
+  let text = utterance
+  for (const phrase of SLOT_STRIP_PHRASES) {
+    text = text.split(phrase).join(' ')
+  }
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+function attachmentToLocalRef(attachment: SidebarAttachment): LocalRefBinding {
+  return {
+    id: attachment.id,
+    mediaType: attachment.mediaType,
+    sourceKind: attachment.sourceKind === 'upload' ? 'upload' : 'asset',
+    label: attachment.label,
+    ...(attachment.url ? { url: attachment.url } : {}),
+    ...(attachment.text ? { text: attachment.text } : {}),
+  }
+}
+
+export function fillRecipeSlots(
+  recipe: RecipeDocument,
+  input: FillRecipeSlotsInput = {},
+): FillRecipeSlotsResult {
+  const slots: Record<string, string> = { ...(input.slots ?? {}) }
+  const brief = stripPlannerPhrases(input.utterance ?? '')
+  if (brief.length >= 8) {
+    for (const node of recipe.nodes) {
+      if (!node.autoGenerate) continue
+      if (slots[node.key] !== undefined) continue
+      slots[node.key] = brief
+    }
+  }
+
+  const localRefsByKey: Record<string, LocalRefBinding[]> = {}
+  const imageSeeds = recipe.nodes.filter((node) => node.type === 'image' && node.role === 'seed')
+  const used = new Set<string>()
+  const images = (input.attachments ?? []).filter((item) => item.mediaType === 'image')
+
+  const assignToSeed = (seed: RecipeNode | undefined, attachment: SidebarAttachment) => {
+    if (!seed || used.has(attachment.id)) return
+    localRefsByKey[seed.key] = [attachmentToLocalRef(attachment)]
+    used.add(attachment.id)
+  }
+
+  for (const attachment of images) {
+    if (attachment.role === 'product') {
+      assignToSeed(
+        imageSeeds.find((node) => node.chain === 'product'),
+        attachment,
+      )
+    } else if (attachment.role === 'model') {
+      assignToSeed(
+        imageSeeds.find((node) => node.chain === 'model'),
+        attachment,
+      )
+    }
+  }
+  for (const attachment of images) {
+    if (used.has(attachment.id)) continue
+    const seed = imageSeeds.find((node) => !localRefsByKey[node.key])
+    assignToSeed(seed, attachment)
+  }
+
+  return { slots, localRefsByKey }
+}
+
 function topologicalLayers(nodes: RecipeNode[]): Map<string, number> {
   const byKey = new Map(nodes.map((node) => [node.key, node]))
   const memo = new Map<string, number>()
@@ -638,6 +742,7 @@ function topologicalLayers(nodes: RecipeNode[]): Map<string, number> {
 export function compileRecipeToWorkflow(
   recipeInput: unknown,
   slots?: Record<string, string>,
+  localRefsByKey?: Record<string, LocalRefBinding[]>,
 ): WorkflowDocument {
   const recipe = parseRecipeLoose(recipeInput)
   const layers = topologicalLayers(recipe.nodes)
@@ -649,6 +754,7 @@ export function compileRecipeToWorkflow(
     indexInLayer.set(node.key, index)
     layerCounts.set(layer, index + 1)
   }
+  const idByKey = new Map(recipe.nodes.map((node) => [node.key, recipeNodeId(node)]))
 
   const nodes = recipe.nodes.map((node) => {
     const layer = layers.get(node.key) ?? 0
@@ -665,7 +771,13 @@ export function compileRecipeToWorkflow(
     if (node.role !== undefined) data.role = node.role
     if (node.genMode !== undefined) data.genMode = node.genMode
     if (recipe.parentId !== undefined) data.parentRecipeId = recipe.parentId
-    if (node.dependsOn.length > 0) data.mentionedKeys = [...node.dependsOn]
+    if (node.dependsOn.length > 0) {
+      data.mentionedKeys = node.dependsOn
+        .map((dep) => idByKey.get(dep))
+        .filter((id): id is string => Boolean(id))
+    }
+    const localRefs = localRefsByKey?.[node.key]
+    if (localRefs && localRefs.length > 0) data.localRefs = localRefs
     if (!node.autoGenerate) data.status = 'draft'
     return {
       id: recipeNodeId(node),
@@ -678,7 +790,6 @@ export function compileRecipeToWorkflow(
     }
   })
 
-  const idByKey = new Map(recipe.nodes.map((node) => [node.key, recipeNodeId(node)]))
   const edges: Array<{ id: string; source: string; target: string }> = []
   for (const node of recipe.nodes) {
     const target = idByKey.get(node.key)!
