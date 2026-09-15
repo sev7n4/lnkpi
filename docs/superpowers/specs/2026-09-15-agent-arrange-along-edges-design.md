@@ -1,7 +1,7 @@
 # Agent 顺着连线整理 — 设计
 
 > 日期：2026-09-15  
-> 状态：**待用户审阅 spec**  
+> 状态：**已审核**（实现前锁定）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 前端对照：`apps/web/src/composables/useCanvasGrouping.ts` 的 `layoutNodesAlongEdges`（人手多选「整理布局」已接）
 
@@ -18,8 +18,9 @@
 | **L-D5** | 该 tool placement = `EXPLORE`（CORE）；**不进** `EXPLORE_WRITE_TOOLS`，从而不被 `select_narrow_write_tools` 裁掉，导入 / 规划 / 默认当轮都始终可调 |
 | **L-D6** | `apply_layout_ops` 增加 op `arrange_along_edges`；placement 仍为 `GRAPH_NODE`，explore 不暴露 |
 | **L-D7** | `arrange_nodes_grid` 保持 `GRAPH_NODE`，不进 explore |
-| **L-D8** | `node_ids` 只允许当轮新写入的节点（见 §3）；禁止把整张画布 id 当作默认参数 |
+| **L-D8** | `node_ids` 范围是 **prompt/tool 契约**，不是服务端校验：Nest 按传入 id 排，**不**拒绝「整布 id」。禁止整布只写在 prompt + description |
 | **L-D9** | 算法：按选区内边左→右分层；同层竖排（按原 y）；各列相对最高列垂直居中。无内部边时按当前 x 排成一行、共用同一 Y |
+| **L-D10** | Runtime 参数 `node_ids` → Nest DTO `nodeIds`。`TOOL_TIERS["arrange_nodes_along_edges"]=GRAPH_BATCH`（与 `connect_nodes` 同：explore placement + GRAPH_BATCH tier） |
 
 ---
 
@@ -56,7 +57,7 @@ explore LLM
 
 ## 3. `node_ids` 范围（硬规则）
 
-Tool / prompt 必须写清，实现按传入 id 排，**不做**服务端「整布」推断。
+Tool / prompt 必须写清。实现按传入 id 排，**不做**服务端「整布」推断，也**不**因 id 数量≈全画布而拒绝。
 
 允许的 id 来源（只传这些，可并集）：
 
@@ -85,6 +86,7 @@ Tool / prompt 必须写清，实现按传入 id 排，**不做**服务端「整�
 | `build_explore_tools` | **包含** |
 | `build_graph_only_tools` | **不包含** 该专用 tool |
 | `DEFERRED_GRAPH_NODE_TOOLS` | 不把该专用 tool 放进去（它不是 GRAPH_NODE） |
+| `TOOL_TIERS` | `GRAPH_BATCH` |
 
 `_bind_plan_tools`：因不在 `EXPLORE_WRITE_TOOLS`，走「非 write → 始终 visible」，与 `get_canvas_layout` 相同。
 
@@ -126,7 +128,7 @@ Tool / prompt 必须写清，实现按传入 id 排，**不做**服务端「整�
 | **A2** | `applyLayoutOps([{ op: 'arrange_along_edges', nodeIds }])` | 坐标变化符合 A1；未知 op 仍失败 |
 | **A3** | `build_explore_tools` | 含 `arrange_nodes_along_edges`；不含 `apply_layout_ops` / `arrange_nodes_grid` |
 | **A4** | `_bind_plan_tools`：导入话术、规划话术、默认话术 | 三轮都绑定 `arrange_nodes_along_edges` |
-| **A5** | `_EXPLORE_SYSTEM` / `_PLANNER_SYSTEM` | 含 tool 名 + 「当轮新节点 / addedNodeIds」+ 禁止整布 |
+| **A5** | `_EXPLORE_SYSTEM`（`chat._SYSTEM` 再导出）/ `_PLANNER_SYSTEM` | 含 tool 名 + 「当轮新节点 / addedNodeIds」+ 禁止整布 |
 | **A6** | nest_client | POST `.../arrange-nodes-along-edges` 带 `nodeIds` |
 | **A7** | `connectNodes` / `importWorkflow` / instantiate | **不**调用 along-edges（回归：无自动排） |
 | **A8** | 人手整理 | 前端下拉行为不回退 |
