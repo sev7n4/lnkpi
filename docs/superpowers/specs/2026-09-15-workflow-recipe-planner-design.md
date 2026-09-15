@@ -1,7 +1,7 @@
 # 工作流配方规划器（衍生 / 嫁接 / 晋升）设计
 
 > 日期：2026-09-15  
-> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）+ **v1.1 剩余缺口 2026-09-15**（见 §14）+ **v1.3 规格收口 2026-09-15**（见 §14.8）+ **v1.4 话术清洗 2026-09-15**（见 §14.9）  
+> 状态：已批准（对话确认 §1–§6）+ **审核修订 2026-09-15**（见 §0.1）+ **v1.1 剩余缺口 2026-09-15**（见 §14）+ **v1.3 规格收口 2026-09-15**（见 §14.8）+ **v1.4 话术清洗 2026-09-15**（见 §14.9）+ **v1.5 HITL diff SSOT 2026-09-16**（见 §14.10）  
 > 产品：超创平台（lnkpi）无限画布  
 > 相关：  
 > - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
@@ -466,3 +466,14 @@ Explore 工具把当前侧栏附件随 instantiate 传给 Nest，不在 Python �
 | instantiate 原话 | 模型漏传 `utterance`，或只传了「确认落到画布」等 chip 时，runtime 带上最近一次**非 chip** 用户原话，供 Nest `fillRecipeSlots` 写 prompt 槽。非 chip 的显式 `utterance` 优先。 |
 
 本切片仍不做 §14.6。
+
+### 14.10 v1.5 HITL diff SSOT（#336 之后）
+
+对照 §7.1 / §14.5.4，preview 已不回 IR、话术清洗已挡住 t2i 之后，生产里助手仍会自由复述模板步骤，确认轮还可能把 `tool_search` JSON 当回复。本切片钉死：
+
+| 项 | 要求 |
+|----|------|
+| preview 回复 | explore 在 `preview_workflow_template` 成功且本轮未 instantiate 时，**用 Nest 返回的 `diffLines` / `userMessages` / `parentTitle` 生成用户文案**，覆盖模型 walkthrough。有改动则列出相对主模板的变化；空 delta 写「按原模板落到画布」。固定句「请确认是否把改动落到画布」仍必须出现。 |
+| 机器载荷 | 助手回复若是 JSON 且含 `loaded` / `candidates` 等工具字段，不得展示给用户。有 preview SSOT 则改用 SSOT；刚 instantiate 则改用「已按模板落到画布。」 |
+
+本切片仍不做 §14.6。仍不做 §8 全表补齐、instantiate 后出图 E2E。

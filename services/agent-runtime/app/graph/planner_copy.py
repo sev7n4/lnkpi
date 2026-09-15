@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 
 _FORBIDDEN_PHRASES = (
@@ -99,3 +100,38 @@ def pick_planner_slot_utterance(texts: list[str] | None) -> str:
             continue
         return text
     return cleaned[-1] if cleaned else ""
+
+
+_PLANNER_CONFIRM_LINE = "请确认是否把改动落到画布"
+_MACHINE_KEYS = frozenset({"loaded", "candidates", "tool_call_id", "error_type"})
+
+
+def format_planner_preview_hitl(preview: dict | None) -> str:
+    if not isinstance(preview, dict):
+        return _PLANNER_CONFIRM_LINE
+    parent = str(preview.get("parentTitle") or preview.get("title") or "这套模板").strip() or "这套模板"
+    diffs = [str(line).strip() for line in (preview.get("diffLines") or []) if str(line).strip()]
+    notes = [str(msg).strip() for msg in (preview.get("userMessages") or []) if str(msg).strip()]
+    parts: list[str] = []
+    if diffs:
+        parts.append(f"相对「{parent}」的改动：")
+        parts.extend(f"- {line}" for line in diffs)
+    else:
+        parts.append(f"相对「{parent}」，按原模板落到画布。")
+    parts.extend(notes)
+    if _PLANNER_CONFIRM_LINE not in "\n".join(parts):
+        parts.append(_PLANNER_CONFIRM_LINE)
+    return "\n".join(parts)
+
+
+def is_machine_payload_reply(text: str | None) -> bool:
+    raw = (text or "").strip()
+    if not raw or raw[0] not in "{[":
+        return False
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return "loaded" in raw and "candidates" in raw
+    if isinstance(payload, dict):
+        return bool(set(payload) & _MACHINE_KEYS)
+    return False
