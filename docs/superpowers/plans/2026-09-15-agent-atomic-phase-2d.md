@@ -25,11 +25,13 @@
 |------|----------------|
 | `docs/superpowers/specs/2026-09-15-agent-atomic-phase-2d-design.md` | Authorize 2d + F1–F7 |
 | `docs/superpowers/specs/2026-09-14-agent-atomic-as-tools-design.md` | D9 / §4.4 / §6.0 → 2d |
+| `services/agent-runtime/app/graph/nodes/intake.py` | Clarify fast-path → `canvas_agent` |
+| `services/agent-runtime/app/graph/clarify_reply.py` | Non-campaign `route` → `canvas_agent` |
 | `services/agent-runtime/app/graph/route_precedence.py` | Remap two rules + clarify resume default |
 | `services/agent-runtime/app/graph/route_decide.py` | Clarify resume default align |
 | `services/agent-runtime/app/graph/decide_lane.py` | Drop lane + prompt + postprocess map |
-| `services/agent-runtime/tests/test_phase_2d_*.py` (or extend existing) | F1–F6 |
-| Optional: `clarify_reply.py` | If it still emits route=atomic_create as default |
+| `services/agent-runtime/tests/test_phase_2d_route_close.py` | F1–F4 / F3b dedicated |
+| Existing route/2a tests | Flip `atomic_create` expectations → `canvas_agent` |
 
 ---
 
@@ -49,21 +51,21 @@
 
 ### Task 0: Docs authorize
 
-- [ ] Commit this plan + 2d design + parent D9
+- [x] Commit this plan + 2d design + parent D9
 
 ### Task 1: Failing tests F1–F4 (+ F5/F6 regression hooks)
 
-- [ ] Assert sidebar_img2img / ref_backed_generate decisions are `canvas_agent` with same rule ids
-- [ ] Assert clarify resume non-campaign is not `atomic_create`
-- [ ] Assert decide_lane rejects/maps `atomic_create`
-- [ ] Commit failing tests
+- [x] Assert sidebar_img2img / ref_backed_generate decisions are `canvas_agent` with same rule ids
+- [x] Assert clarify resume non-campaign is not `atomic_create`
+- [x] Assert decide_lane rejects/maps `atomic_create`
+- [x] Commit failing tests
 
 ### Task 2: Implement route remaps
 
-- [ ] `_rule_sidebar_img2img` / `_rule_ref_backed_generate` → `flow_mode="canvas_agent"`
-- [ ] clarify defaults in `route_precedence` + `route_decide` (+ `clarify_reply` if needed)
-- [ ] `decide_lane`: remove from ALLOWED_LANES; fix prompt; postprocess map
-- [ ] Tests green; commit
+- [x] `_rule_sidebar_img2img` / `_rule_ref_backed_generate` → `flow_mode="canvas_agent"`
+- [x] clarify defaults in `route_precedence` + `route_decide` (+ `clarify_reply` if needed)
+- [x] `decide_lane`: remove from ALLOWED_LANES; fix prompt; postprocess map
+- [x] Tests green; commit
 
 ### Task 3: PR + F7 smoke
 

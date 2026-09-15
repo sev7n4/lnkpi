@@ -27,7 +27,7 @@ async def test_intake_reply_1_after_route_clarify():
             "sidebar_mentioned_keys": ["T1"],
         }
     )
-    assert out["flow_mode"] == "atomic_create"
+    assert out["flow_mode"] == "canvas_agent"
     assert out.get("clarify_question") is None
     assert out.get("clarify_context") is None
     assert out.get("pre_parsed_intent") is not None

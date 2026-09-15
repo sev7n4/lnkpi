@@ -74,7 +74,7 @@ def classify_clarify_reply(
         return {
             "action": "generate",
             "scope": "atomic",
-            "route": "atomic_create",
+            "route": "canvas_agent",
             "structure": "single",
             "items": [
                 {
@@ -120,7 +120,7 @@ def classify_clarify_reply(
         return {
             "action": "write",
             "scope": "atomic",
-            "route": "atomic_create",
+            "route": "canvas_agent",
             "structure": "single",
             "items": [
                 {
@@ -141,7 +141,7 @@ def classify_clarify_reply(
         return {
             "action": "generate",
             "scope": "atomic",
-            "route": "atomic_create",
+            "route": "canvas_agent",
             "structure": "single",
             "items": [
                 {

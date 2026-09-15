@@ -77,13 +77,13 @@ def test_precedence_sidebar_img2img():
             ],
         }
     )
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "sidebar_img2img"
     assert d["reason"] == "sidebar_img2img_p1"
 
 
 def test_sidebar_single_tiger_edit_not_chat():
-    """Prod: sidebar chip image + 给这只小老虎带上眼镜和帽子 → atomic, not chat."""
+    """Prod: sidebar chip image + 给这只小老虎带上眼镜和帽子 → agent, not chat."""
     d = _decide(
         {
             "messages": [{"role": "user", "content": "给这只小老虎带上眼镜和帽子"}],
@@ -93,7 +93,7 @@ def test_sidebar_single_tiger_edit_not_chat():
             "sidebar_mentioned_keys": ["I1"],
         }
     )
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "sidebar_img2img"
     assert d["precedence_rule_id"] != "default_chat"
 
@@ -138,7 +138,7 @@ def test_precedence_ref_backed_generate_style3():
             "sidebar_attachments": [{"refKey": "T1", "mediaType": "text"}],
         }
     )
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "ref_backed_generate"
     assert d["reason"] == "sidebar_ref_atomic"
 
@@ -216,7 +216,7 @@ def test_precedence_clarify_resume():
         },
         pending=pending,
     )
-    assert d["flow_mode"] == "atomic_create"
+    assert d["flow_mode"] == "canvas_agent"
     assert d["precedence_rule_id"] == "clarify_resume"
 
 
@@ -306,7 +306,7 @@ def test_vision_qa_with_sidebar_not_chat():
     )
     assert d["flow_mode"] != "canvas_agent"
     assert d["precedence_rule_id"] != "default_chat"
-    assert d["flow_mode"] in ("clarify_route", "atomic_create")
+    assert d["flow_mode"] in ("clarify_route", "canvas_agent")
     if d["flow_mode"] == "clarify_route":
         assert d["clarify_question"] == ROUTE_CLARIFY_MEDIA
 

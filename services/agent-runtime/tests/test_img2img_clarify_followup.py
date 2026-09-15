@@ -15,7 +15,7 @@ IMG2IMG = "@I1 这个是女生，@I2 这个是产品，请让这个女生穿上�
 
 
 @pytest.mark.asyncio
-async def test_intake_affirmative_after_atomic_clarify_stays_atomic():
+async def test_intake_affirmative_after_atomic_clarify_routes_canvas_agent():
     skills = Path(__file__).resolve().parents[1] / "skills"
     intake = make_intake_node(skills)
     out = await intake(
@@ -30,15 +30,15 @@ async def test_intake_affirmative_after_atomic_clarify_stays_atomic():
             "clarify_question": "需要生成一张女生穿冲锋衣的图片吗？",
         }
     )
-    assert out["flow_mode"] == "atomic_create"
+    assert out["flow_mode"] == "canvas_agent"
     assert out.get("skill_id") is None
-    assert route_after_intake(out) == "parse_atomic_intent"
+    assert route_after_intake(out) == "explore"
 
 
 def test_clarify_reply_yes_confirms_img2img():
     result = classify_clarify_reply(IMG2IMG, "需要生成吗", "是的")
     assert result != "none"
-    assert result["route"] == "atomic_create"
+    assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "image"
     assert "穿上" in result["items"][0]["prompt"]
 
