@@ -1,4 +1,4 @@
-import { formatFundamentalsBlock, getGenerationScene } from '@lnkpi/shared'
+import { formatFundamentalsBlock, getGenerationScene, isProductFourPanelPrompt } from '@lnkpi/shared'
 import {
   appendImageRefsForTextOnlyPrompt,
   supportsVisionTextModel,
@@ -7,6 +7,7 @@ import {
 import { getPromptMode, PROMPT_MODE_IDS } from './registry'
 import type { PromptModeId } from './types'
 import { classifyPromptMode } from './classify'
+import { FOUR_PANEL_PRODUCT_SYSTEM } from './modes/four-panel-product'
 import { validateCommercialStoryboardOutput } from './modes/commercial-storyboard-validate'
 
 const MODE_TEMPERATURE: Partial<Record<PromptModeId, number>> = {
@@ -119,6 +120,7 @@ export async function generatePromptContent(
   const vision = imageUrls.length > 0 && supportsVisionTextModel(opts?.model)
   const key = opts?.apiKey ?? process.env.OPENAI_API_KEY
   const def = getPromptMode(mode)
+  const productFourPanel = isProductFourPanelPrompt(demand || prompt)
 
   if (!key) {
     return { mode, content: def.placeholder(demand || prompt), visionUsed: false }
@@ -127,10 +129,11 @@ export async function generatePromptContent(
   const baseUrl = (opts?.baseUrl ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '')
   const model = upstreamChatModel(opts?.model) ?? opts?.model ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o'
   const temperature = MODE_TEMPERATURE[mode] ?? 0.8
-  const fewShots = def.fewShots ?? [def.fewShot]
+  const fewShots = productFourPanel ? [] : (def.fewShots ?? [def.fewShot])
   const overlay = buildGuideSystemOverlay(opts?.guideSceneId)
   const visionOverlay = buildPromptVisionSystemOverlay(imageUrls, opts?.mentionedKeys)
-  let system = overlay ? `${def.system}\n\n## Image prompting guide\n${overlay}` : def.system
+  let system = productFourPanel ? FOUR_PANEL_PRODUCT_SYSTEM : def.system
+  system = overlay ? `${system}\n\n## Image prompting guide\n${overlay}` : system
   if (visionOverlay) {
     system = `${system}\n\n${visionOverlay}`
   }
@@ -171,10 +174,15 @@ export async function generatePromptFromUserInput(
   const imageUrls = normalizeImageUrls(opts?.referenceImages)
   const demand = resolvePromptGenerateText(prompt, imageUrls)
   const scene = opts?.guideSceneId ? getGenerationScene(opts.guideSceneId) : undefined
-  const forced = scene?.expandViaPromptMode
+  const forcedRaw = scene?.expandViaPromptMode
+  const forced =
+    forcedRaw && PROMPT_MODE_IDS.includes(forcedRaw as PromptModeId)
+      ? (forcedRaw as PromptModeId)
+      : undefined
   const mode =
-    forced && PROMPT_MODE_IDS.includes(forced as PromptModeId)
-      ? (forced as PromptModeId)
-      : (await classifyPromptMode(demand || prompt, opts)).mode
+    forced ??
+    (isProductFourPanelPrompt(demand || prompt)
+      ? 'generic'
+      : (await classifyPromptMode(demand || prompt, opts)).mode)
   return generatePromptContent(prompt, mode, opts)
 }

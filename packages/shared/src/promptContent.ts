@@ -98,3 +98,15 @@ export const TURNAROUND_INTENT_PATTERN =
 export function isTurnaroundLikePrompt(text: string): boolean {
   return TURNAROUND_INTENT_PATTERN.test(text)
 }
+
+const PRODUCT_PANEL_RE =
+  /同一\s*SKU|同一产品|产品四视图|产品三视图|产品的[三四]视图|这个产品.{0,20}[三四]视图|商品[三四]视图|禁止每格换款|SKU\s*外观|四格拼图.*产品/
+const VIEW_RE = /三视图|四视图|多视图|正侧背|turnaround/i
+const WHITE_BG_RE = /白底主图|电商主图/
+
+export function isProductFourPanelPrompt(prompt: string): boolean {
+  const p = prompt.trim()
+  if (!p) return false
+  if (PRODUCT_PANEL_RE.test(p)) return true
+  return WHITE_BG_RE.test(p) && VIEW_RE.test(p)
+}

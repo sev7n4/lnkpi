@@ -1,9 +1,15 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { tryRuleShortcut, classifyPromptMode } from './classify'
 
 describe('tryRuleShortcut', () => {
-  it('returns null in phase 1', () => {
+  it('returns null for non-product prompts', () => {
     expect(tryRuleShortcut('帮我生成一个分镜提示词')).toBeNull()
+    expect(tryRuleShortcut('帮我生成一个包含人物三视图的提示词')).toBeNull()
+  })
+
+  it('routes product four-panel away from character_turnaround before Call-1', () => {
+    expect(tryRuleShortcut('生成这个产品的三视图提示词')).toBe('generic')
+    expect(tryRuleShortcut('帮我写这个产品的四视图提示词')).toBe('generic')
   })
 })
 
@@ -43,5 +49,29 @@ describe('classifyPromptMode without API key', () => {
       '单张横排四格拼图：最左近景特写，后接正/侧/背；同一产品锁定材质比例与外观，禁止每格换款；干净背景，商业摄影',
     )
     expect(res.mode).toBe('generic')
+  })
+
+  it('does not classify colloquial product three-view as character', async () => {
+    delete process.env.OPENAI_API_KEY
+    const res = await classifyPromptMode('生成这个产品的三视图提示词')
+    expect(res.mode).toBe('generic')
+  })
+})
+
+describe('classifyPromptMode with API key still honors product shortcut', () => {
+  afterEach(() => {
+    delete process.env.OPENAI_API_KEY
+  })
+
+  it('skips Call-1 when product four-panel shortcut matches', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test-must-not-be-called'
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const res = await classifyPromptMode('生成这个产品的三视图提示词', {
+      apiKey: 'sk-test-must-not-be-called',
+    })
+    expect(res.mode).toBe('generic')
+    expect(fetchMock).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 })
