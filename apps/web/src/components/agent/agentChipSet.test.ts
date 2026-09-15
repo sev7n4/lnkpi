@@ -102,6 +102,10 @@ describe('detectAgentChipSet', () => {
     ).toBe('recipe_confirm')
   })
 
+  it('detects recipe promote chips from HITL copy', () => {
+    expect(detectAgentChipSet('这份工作流更像哪一种？')).toBe('recipe_promote')
+  })
+
   it('detects plan structured options (new format)', () => {
     expect(
       detectAgentChipSet(

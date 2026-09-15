@@ -6,6 +6,7 @@ import { AgentRuntimeClient } from './agent-runtime.client'
 describe('AgentService dock forwarding', () => {
   const agentMessageCreate = vi.fn()
   const resolveForGeneration = vi.fn()
+  const userAiPreferencesFindUnique = vi.fn()
 
   let service: AgentService
 
@@ -13,6 +14,7 @@ describe('AgentService dock forwarding', () => {
     vi.restoreAllMocks()
     process.env.AGENT_RUNTIME_URL = 'http://127.0.0.1:8000'
     agentMessageCreate.mockResolvedValue({})
+    userAiPreferencesFindUnique.mockResolvedValue(null)
     resolveForGeneration.mockResolvedValue({
       channelId: 'platform',
       modelName: 'gpt-4o-mini',
@@ -41,6 +43,9 @@ describe('AgentService dock forwarding', () => {
           findUnique: vi.fn(),
           updateMany: vi.fn(),
           deleteMany: vi.fn(),
+        },
+        userAiPreferences: {
+          findUnique: userAiPreferencesFindUnique,
         },
       } as never,
       { create: vi.fn() } as never,
@@ -87,7 +92,57 @@ describe('AgentService dock forwarding', () => {
     )
   })
 
-  it('skips provider resolution when model is omitted', async () => {
+  it('falls back to user defaultTextModel when conversation model is omitted', async () => {
+    userAiPreferencesFindUnique.mockResolvedValue({
+      defaultTextModel: 'ch-deepseek::deepseek-v4-flash',
+    })
+    resolveForGeneration.mockResolvedValue({
+      channelId: 'ch-deepseek',
+      modelName: 'deepseek-v4-flash',
+      apiFormat: 'openai',
+      credentials: { apiKey: 'sk-byok', baseUrl: 'https://api.deepseek.example/v1' },
+      source: 'user',
+    })
+    const streamRun = vi.fn(async function* () {
+      yield { type: 'done', data: {} }
+    })
+
+    vi.spyOn(service, 'createRuntimeClient').mockReturnValue({
+      healthOk: vi.fn().mockResolvedValue(true),
+      streamRun,
+    } as unknown as AgentRuntimeClient)
+
+    for await (const _ of service.streamConversation(
+      's1',
+      'hello',
+      'u1',
+      undefined,
+      undefined,
+      undefined,
+      'storyboard',
+    )) {
+      // drain
+    }
+
+    expect(userAiPreferencesFindUnique).toHaveBeenCalledWith({
+      where: { userId: 'u1' },
+      select: { defaultTextModel: true },
+    })
+    expect(resolveForGeneration).toHaveBeenCalledWith(
+      'u1',
+      'ch-deepseek::deepseek-v4-flash',
+      'text',
+    )
+    expect(streamRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        llmModel: 'deepseek-v4-flash',
+        llmApiKey: 'sk-byok',
+        llmBaseUrl: 'https://api.deepseek.example/v1',
+      }),
+    )
+  })
+
+  it('skips provider resolution when model and defaultTextModel are both omitted', async () => {
     const streamRun = vi.fn(async function* () {
       yield { type: 'done', data: {} }
     })

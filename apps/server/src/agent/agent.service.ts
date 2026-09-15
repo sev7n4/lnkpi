@@ -377,11 +377,14 @@ export class AgentService {
     let llmModel: string | undefined
     let llmApiKey: string | undefined
     let llmBaseUrl: string | undefined
-    if (model && userId) {
-      const resolved = await this.providerResolver.resolveForGeneration(userId, model, 'text')
-      llmModel = resolved.modelName
-      llmApiKey = resolved.credentials.apiKey
-      llmBaseUrl = resolved.credentials.baseUrl
+    if (userId) {
+      const requested = model?.trim() || (await this.loadDefaultTextModel(userId))
+      if (requested) {
+        const resolved = await this.providerResolver.resolveForGeneration(userId, requested, 'text')
+        llmModel = resolved.modelName
+        llmApiKey = resolved.credentials.apiKey
+        llmBaseUrl = resolved.credentials.baseUrl
+      }
     }
 
     for await (const event of client.streamRun({
@@ -518,5 +521,14 @@ export class AgentService {
         })
       }
     }
+  }
+
+  private async loadDefaultTextModel(userId: string): Promise<string | undefined> {
+    const row = await this.prisma.userAiPreferences.findUnique({
+      where: { userId },
+      select: { defaultTextModel: true },
+    })
+    const value = row?.defaultTextModel?.trim()
+    return value || undefined
   }
 }

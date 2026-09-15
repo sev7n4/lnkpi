@@ -524,6 +524,7 @@ const awaitingCopyConfirm = computed(() => chipSet.value === 'copy')
 const awaitingTopoConfirm = computed(() => chipSet.value === 'topo')
 const awaitingAtomicConfirm = computed(() => chipSet.value === 'atomic')
 const awaitingRecipeConfirm = computed(() => chipSet.value === 'recipe_confirm')
+const awaitingRecipePromote = computed(() => chipSet.value === 'recipe_promote')
 const awaitingGenerationPropose = computed(() => chipSet.value === 'generation_propose')
 const generationProposePresentation = computed(() => {
   if (!awaitingGenerationPropose.value) return null
@@ -2603,6 +2604,26 @@ defineExpose({
                 @click="sendPreset('先不改')"
               >
                 先不改
+              </button>
+            </div>
+            <div v-else-if="awaitingRecipePromote" class="mb-2 flex flex-wrap gap-2 px-0.5">
+              <button
+                type="button"
+                class="neo-ctl agent-preset-primary rounded-lg px-3 py-1.5 text-xs font-medium"
+                data-testid="recipe-promote-variant"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('保存为当前模板的改版')"
+              >
+                保存为当前模板的改版
+              </button>
+              <button
+                type="button"
+                class="neo-ctl rounded-lg px-3 py-1.5 text-xs"
+                data-testid="recipe-promote-new"
+                :disabled="agent.isStreaming"
+                @click="sendPreset('存成一套新模板')"
+              >
+                存成一套新模板
               </button>
             </div>
             <div v-else-if="isRetakePending" class="mb-2 px-0.5" data-testid="retake-pending-callout">

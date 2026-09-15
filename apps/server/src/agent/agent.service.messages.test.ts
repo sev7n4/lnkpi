@@ -69,6 +69,9 @@ describe('AgentService messages & threads', () => {
           updateMany: idempotencyRecordUpdateMany,
           deleteMany: idempotencyRecordDeleteMany,
         },
+        userAiPreferences: {
+          findUnique: vi.fn().mockResolvedValue(null),
+        },
       } as never,
       { create: vi.fn() } as never,
       { createFromAgent: vi.fn() } as never,
