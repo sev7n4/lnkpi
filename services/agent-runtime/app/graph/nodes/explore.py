@@ -16,8 +16,14 @@ from app.graph.explore_dispatch import (
     select_narrow_write_tools,
 )
 from app.graph.planner_copy import (
+    PLANNER_CANCEL_REPLY,
+    PLANNER_INSTANTIATED_REPLY,
+    PLANNER_NO_PREVIEW_REPLY,
     format_planner_preview_hitl,
     is_machine_payload_reply,
+    is_planner_cancel_chip,
+    is_planner_confirm_chip,
+    last_successful_preview_args,
     pick_planner_slot_utterance,
     sanitize_planner_reply,
 )
@@ -170,6 +176,46 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         if hasattr(nest, "last_user_utterance"):
             nest.last_user_utterance = slot_utterance
         parse = state.get("sidebar_media_parse")
+
+        def _chip_out(text: str, canvas_commands: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+            payload: dict[str, Any] = {
+                "phase": "done",
+                "skill_id": None,
+                "user_decision": "none",
+                "messages": [
+                    AIMessage(
+                        content=prefix_assistant_reply(text, parse)
+                    )
+                ],
+                "explore_summary": summary if isinstance(summary, dict) else None,
+                "tool_plan_loaded": list(loaded),
+            }
+            if canvas_commands:
+                payload["canvas_commands"] = canvas_commands
+            return payload
+
+        if is_planner_cancel_chip(user_text):
+            return _chip_out(PLANNER_CANCEL_REPLY)
+        if is_planner_confirm_chip(user_text):
+            preview_args = last_successful_preview_args(messages)
+            if not preview_args:
+                return _chip_out(PLANNER_NO_PREVIEW_REPLY)
+            instantiate = getattr(nest, "instantiate_recipe", None)
+            if not callable(instantiate):
+                return _chip_out(PLANNER_NO_PREVIEW_REPLY)
+            try:
+                result = await instantiate(
+                    parent_id=preview_args["parent_id"],
+                    parent_version=preview_args["parent_version"],
+                    delta=preview_args["delta"],
+                )
+            except AgentToolError as exc:
+                return _chip_out(str(exc.error.get("message") or PLANNER_NO_PREVIEW_REPLY))
+            except Exception as exc:
+                err = from_exception("instantiate_workflow_template", exc)
+                return _chip_out(err["message"])
+            cmds = extract_canvas_commands(result if isinstance(result, dict) else {})
+            return _chip_out(PLANNER_INSTANTIATED_REPLY, cmds or None)
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:
@@ -324,7 +370,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             if preview_hitl and "instantiate_workflow_template" not in called_tools:
                 final_reply = preview_hitl
             elif "instantiate_workflow_template" in called_tools:
-                final_reply = "已按模板落到画布。"
+                final_reply = PLANNER_INSTANTIATED_REPLY
             else:
                 final_reply = "已完成操作。"
 

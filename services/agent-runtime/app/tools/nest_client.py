@@ -10,6 +10,7 @@ from app.errors import (
     circuit_open_error,
     from_http_status,
     from_nest_message,
+    message_from_http_error_body,
     tool_timeout_error,
 )
 from app.metrics import record_tool_call
@@ -134,6 +135,12 @@ class NestCanvasClient:
             raise AgentToolError(tool_timeout_error(name)) from exc
         except httpx.HTTPStatusError as exc:
             err = from_http_status(name, exc.response.status_code)
+            try:
+                body = exc.response.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict):
+                err["message"] = message_from_http_error_body(body, err["message"])
             if err["error_type"] == "downstream_unavailable":
                 self._breaker.record_failure(name)
             record_tool_call(name, success=False)

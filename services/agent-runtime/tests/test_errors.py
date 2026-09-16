@@ -55,3 +55,31 @@ def test_from_exception_wraps_agent_tool_error():
     inner = AgentToolError(tool_timeout_error("waitImageGeneration"))
     err = from_exception("gen", inner)
     assert err["error_type"] == "tool_timeout"
+
+
+EMPTY_PROMPT = "还有步骤没写提示词，先补上再放到画布。"
+
+
+def test_message_from_http_error_body_prefers_userMessage():
+    from app.errors import message_from_http_error_body
+
+    assert message_from_http_error_body(
+        {
+            "statusCode": 400,
+            "message": {"message": "x", "userMessage": EMPTY_PROMPT},
+            "error": "Bad Request",
+        },
+        "请求参数有误",
+    ) == EMPTY_PROMPT
+
+
+def test_message_from_http_error_body_string_message():
+    from app.errors import message_from_http_error_body
+
+    assert message_from_http_error_body({"message": EMPTY_PROMPT}, "请求参数有误") == EMPTY_PROMPT
+
+
+def test_message_from_http_error_body_fallback():
+    from app.errors import message_from_http_error_body
+
+    assert message_from_http_error_body("nope", "请求参数有误") == "请求参数有误"

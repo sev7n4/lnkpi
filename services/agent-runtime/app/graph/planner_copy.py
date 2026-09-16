@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from typing import Any
 
 _FORBIDDEN_PHRASES = (
     "种子／出图方式",
@@ -44,6 +45,77 @@ _CHIP_PREFIXES = (
     "确认锁定这些核心步骤",
     "将锁定这些核心步骤",
 )
+_PREVIEW_TOOL = "preview_workflow_template"
+
+PLANNER_CONFIRM_CHIP = "确认落到画布"
+PLANNER_CANCEL_CHIP = "先不改"
+PLANNER_NO_PREVIEW_REPLY = "请先规划并确认模板改动，再落到画布。"
+PLANNER_CANCEL_REPLY = "已取消落到画布。"
+PLANNER_INSTANTIATED_REPLY = "已按模板落到画布。"
+
+
+def is_planner_confirm_chip(text: str | None) -> bool:
+    return (text or "").strip() == PLANNER_CONFIRM_CHIP
+
+
+def is_planner_cancel_chip(text: str | None) -> bool:
+    return (text or "").strip() == PLANNER_CANCEL_CHIP
+
+
+def _tool_field(item: Any, key: str, default: Any = None) -> Any:
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
+def _parse_tool_payload(content: Any) -> Any:
+    if isinstance(content, dict):
+        return content
+    if isinstance(content, str) and content.strip():
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            return content
+    return content
+
+
+def _normalize_preview_args(args: Any) -> dict[str, Any] | None:
+    if not isinstance(args, dict):
+        return None
+    parent_id = str(args.get("parent_id") or args.get("parentId") or "").strip()
+    parent_version = str(args.get("parent_version") or args.get("parentVersion") or "").strip()
+    if not parent_id or not parent_version:
+        return None
+    delta = args.get("delta")
+    if not isinstance(delta, dict):
+        delta = {}
+    return {"parent_id": parent_id, "parent_version": parent_version, "delta": delta}
+
+
+def last_successful_preview_args(messages: list[Any] | None) -> dict[str, Any] | None:
+    """Latest successful preview_workflow_template call args from raw thread messages."""
+    pending: dict[str, dict[str, Any]] = {}
+    successes: list[dict[str, Any]] = []
+    for msg in messages or []:
+        for tc in _tool_field(msg, "tool_calls") or []:
+            if _tool_field(tc, "name") != _PREVIEW_TOOL:
+                continue
+            normalized = _normalize_preview_args(_tool_field(tc, "args") or {})
+            tc_id = str(_tool_field(tc, "id") or "").strip()
+            if normalized and tc_id:
+                pending[tc_id] = normalized
+        role = getattr(msg, "type", None) or _tool_field(msg, "role")
+        if role not in ("tool",) and type(msg).__name__ != "ToolMessage":
+            continue
+        tc_id = str(_tool_field(msg, "tool_call_id") or "").strip()
+        if tc_id not in pending:
+            continue
+        args = pending.pop(tc_id)
+        payload = _parse_tool_payload(_tool_field(msg, "content"))
+        if isinstance(payload, dict) and payload.get("error"):
+            continue
+        successes.append(args)
+    return successes[-1] if successes else None
 
 
 def _has_forbidden(fragment: str) -> bool:
