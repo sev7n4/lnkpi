@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service'
 import { PointsRangeKey, resolvePointsRange } from '../points/points-range'
 import { computePointsInsights, type PointsInsights } from '../points/points-insights'
 import {
+  parseShanghaiDay,
   resolveHeatmapRange,
   resolveUsageDaysRange,
   type UsageDaysRangeKey,
@@ -191,21 +192,36 @@ export class MembershipService {
   async listTransactions(
     userId: string,
     opts: {
-      range: PointsRangeKey
+      range?: PointsRangeKey
+      day?: string
       kind?: PointKind
       category?: PointCategory
       cursor?: string
       limit?: number
     },
   ): Promise<{ items: PointTxDto[]; nextCursor: string | null; from: string | null; to: string }> {
-    const { from, to } = resolvePointsRange(opts.range)
+    let from: Date | null
+    let to: Date
+    let createdAt: { gte?: Date; lte?: Date; lt?: Date }
+    if (opts.day) {
+      const parsed = parseShanghaiDay(opts.day)
+      if (!parsed) throw new BadRequestException('无效日期')
+      from = parsed.from
+      to = parsed.next
+      createdAt = { gte: parsed.from, lt: parsed.next }
+    } else {
+      const resolved = resolvePointsRange(opts.range ?? 'month')
+      from = resolved.from
+      to = resolved.to
+      createdAt = from ? { gte: from, lte: to } : { lte: to }
+    }
     const limit = opts.limit ?? 50
     const rows = await this.prisma.pointTransaction.findMany({
       where: {
         userId,
         ...(opts.kind ? { kind: opts.kind } : {}),
         ...(opts.category ? { category: opts.category } : {}),
-        createdAt: from ? { gte: from, lte: to } : { lte: to },
+        createdAt,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -213,7 +229,6 @@ export class MembershipService {
     })
     const hasMore = rows.length > limit
     const items = rows.slice(0, limit)
-
     return {
       items,
       nextCursor: hasMore ? items.at(-1)?.id ?? null : null,

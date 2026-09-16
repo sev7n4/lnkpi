@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parseUsageDaysRange, parseShanghaiDay } from '../points/points-usage-range'
 import { parseLimit } from './membership.controller'
 
 describe('parseLimit', () => {
@@ -18,5 +19,15 @@ describe('parseLimit', () => {
     expect(parseLimit('100')).toBe(100)
     expect(parseLimit('101')).toBe(100)
     expect(parseLimit('9999')).toBe(100)
+  })
+})
+
+describe('usage query parsers', () => {
+  it('usage-days illegal range is 7d', () => {
+    expect(parseUsageDaysRange('nope')).toBe('7d')
+  })
+
+  it('rejects invalid shanghai day', () => {
+    expect(parseShanghaiDay('2026-02-31')).toBeNull()
   })
 })

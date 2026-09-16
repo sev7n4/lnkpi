@@ -112,6 +112,26 @@ describe('MembershipService', () => {
     vi.useRealTimers()
   })
 
+  it('filters transactions to a Shanghai day and ignores range', async () => {
+    findMany.mockResolvedValue([{ id: 'tx1' }])
+    await service.listTransactions('u1', { day: '2026-09-16', range: 'month', limit: 50 })
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'u1',
+          createdAt: {
+            gte: new Date('2026-09-15T16:00:00.000Z'),
+            lt: new Date('2026-09-16T16:00:00.000Z'),
+          },
+        }),
+      }),
+    )
+  })
+
+  it('throws on invalid day', async () => {
+    await expect(service.listTransactions('u1', { day: '2026-02-31' })).rejects.toThrow('无效日期')
+  })
+
   it('writes structured grant fields when claiming daily points', async () => {
     userUpdate.mockResolvedValue({ points: 1100 })
     transactionCreate.mockResolvedValue({ id: 'tx1' })
