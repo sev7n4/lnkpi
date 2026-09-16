@@ -3,9 +3,9 @@ import type { CanvasAction, CanvasData } from '@lnkpi/shared'
 /** Apply agent canvas mutations to an in-memory canvas snapshot. */
 export function applyCanvasActions(data: CanvasData, actions: CanvasAction[]): CanvasData {
   const result: CanvasData = {
+    ...data,
     nodes: [...data.nodes],
     edges: [...data.edges],
-    viewport: data.viewport,
   }
 
   for (const action of actions) {

@@ -2767,7 +2767,7 @@ export class AgentCanvasToolsService {
       await tx.session.update({
         where: { id: input.sessionId },
         data: {
-          canvasData: JSON.stringify(updated),
+          canvasData: JSON.stringify({ ...current, ...updated }),
           stagedActions: null,
           stagedAt: null,
         },
@@ -2935,11 +2935,12 @@ export class AgentCanvasToolsService {
       }
       const current = parseCanvas(session.canvasData)
       const updated = applyCanvasActions(current, actions)
+      const merged: CanvasData = { ...current, ...updated }
       await tx.session.update({
         where: { id: sessionId },
-        data: { canvasData: JSON.stringify(updated) },
+        data: { canvasData: JSON.stringify(merged) },
       })
-      return updated
+      return merged
     })
   }
 }
