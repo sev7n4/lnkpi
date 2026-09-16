@@ -1703,4 +1703,20 @@ describe('useNodeGeneration', () => {
     await api.generateForNode(node)
     expect(studioApi.generatePrompt).toHaveBeenCalled()
   })
+
+  it('2e.1: pending_confirm image without imageModel still starts studio generate', async () => {
+    const node = createNode('image', {
+      prompt: '帮我生成一张蓝色天空产品主图',
+      status: 'pending_confirm',
+    })
+    const isModelSelectable = vi.fn(() => true)
+    const { api } = createDeps([node], { isModelSelectable })
+
+    await api.generateForNode(node)
+
+    expect(studioApi.generateImage).toHaveBeenCalled()
+    expect(isModelSelectable).toHaveBeenCalled()
+    expect(node.data?.status).not.toBe('pending_confirm')
+    expect(node.data?.generationRecordId).toBe('rec-1')
+  })
 })
