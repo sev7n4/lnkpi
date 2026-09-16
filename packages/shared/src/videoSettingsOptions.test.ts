@@ -27,6 +27,19 @@ describe('videoAspectRatioOptionsForCapabilities', () => {
     const opts = videoAspectRatioOptionsForCapabilities(c)
     expect(opts.map((o) => o.value)).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4'])
   })
+
+  it('agnes 2.5 flash includes 21:9 and only 720p', () => {
+    const c = resolveVideoModelCapabilities('agnes-video-2.5-flash', 'agnes-video-2.5-flash')
+    expect(videoAspectRatioOptionsForCapabilities(c).map((o) => o.value)).toEqual([
+      '16:9',
+      '9:16',
+      '1:1',
+      '4:3',
+      '3:4',
+      '21:9',
+    ])
+    expect(videoResolutionOptionsForCapabilities(c).map((o) => o.value)).toEqual(['720p'])
+  })
 })
 
 describe('videoResolutionOptionsForCapabilities', () => {

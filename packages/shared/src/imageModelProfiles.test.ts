@@ -57,6 +57,13 @@ describe('resolveImageModelProfile', () => {
     expect(p.responseMode).toBe('sync_url')
   })
 
+  it('maps agnes-image-2.5-flash to the same extra_body wire as 2.1', () => {
+    const p = resolveImageModelProfile('agnes-image-2.5-flash', 'agnes-image-2.5-flash')
+    expect(p.refWire).toBe('agnes_extra_body')
+    expect(p.responseMode).toBe('sync_url')
+    expect(p.gatewayModelId).toBe('agnes-image-2.5-flash')
+  })
+
   it('falls back to legacy prompt tags for unknown models', () => {
     const p = resolveImageModelProfile('navo-pro', 'navo-pro')
     expect(p.refWire).toBe('legacy_prompt_tags')

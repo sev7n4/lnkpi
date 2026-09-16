@@ -14,6 +14,19 @@ describe('resolveVideoModelCapabilities', () => {
     expect(c.firstLastFrameLabel).toBe('关键帧过渡')
   })
 
+  it('agnes-video-2.5-flash: 4–12s, 720p only, keyframes yes, no V/A', () => {
+    const c = resolveVideoModelCapabilities('agnes-video-2.5-flash', 'agnes-video-2.5-flash')
+    expect(c.supportsKeyframes).toBe(true)
+    expect(c.supportsFirstLastFrame).toBe(false)
+    expect(c.supportsVideoRef).toBe(false)
+    expect(c.supportsAudioRef).toBe(false)
+    expect(c.minDuration).toBe(4)
+    expect(c.maxDuration).toBe(12)
+    expect(c.maxImageRefs).toBe(5)
+    expect(c.allowedResolutions).toEqual(['720p'])
+    expect(c.allowedAspectRatios).toContain('21:9')
+  })
+
   it('seedance standard: firstLast, V/A, audio, 4K', () => {
     const c = resolveVideoModelCapabilities('seedance-2.0', SEEDANCE_20_GATEWAYS.standard)
     expect(c.supportsFirstLastFrame).toBe(true)

@@ -60,6 +60,14 @@ function isAgnesVideoModel(modelKey: string, gatewayModelId: string): boolean {
   return /^agnes-video-/i.test(modelKey) || /^agnes-video-/i.test(gatewayModelId)
 }
 
+export function isAgnesVideo25FlashModel(modelKey: string, gatewayModelId = ''): boolean {
+  return /agnes-video-2\.5-flash/i.test(modelKey) || /agnes-video-2\.5-flash/i.test(gatewayModelId)
+}
+
+export function isAgnesVideo25Family(modelKey: string, gatewayModelId = ''): boolean {
+  return /agnes-video-2\.5/i.test(modelKey) || /agnes-video-2\.5/i.test(gatewayModelId)
+}
+
 function isOfficialMiniMaxH3VideoModel(modelKey: string, gatewayModelId: string): boolean {
   return /^minimax-h3$/i.test(modelKey) || /^minimax-h3$/i.test(gatewayModelId)
 }
@@ -237,6 +245,25 @@ export function resolveVideoModelProfile(
   }
 
   const gw = resolveVideoGatewayModelId(modelKey, gatewayModelId)
+  if (isAgnesVideo25FlashModel(modelKey, gw)) {
+    return {
+      refWire: 'agnes_single_image',
+      sizeWire: 'ratio_duration',
+      responseMode: 'agnes_poll',
+      gatewayModelId: gw,
+      maxImageRefs: 5,
+      maxVideoRefs: 0,
+      maxAudioRefs: 0,
+      minDuration: 4,
+      maxDuration: 12,
+      allowedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+      allowedResolutions: ['720p'],
+      defaultGenerateAudio: false,
+      pollIntervalMs: 2_000,
+      maxPollMs: 600_000,
+      maxResolution: '720p',
+    }
+  }
   if (isAgnesVideoModel(modelKey, gw)) {
     return {
       refWire: 'agnes_single_image',

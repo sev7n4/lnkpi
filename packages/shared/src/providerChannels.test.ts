@@ -37,6 +37,13 @@ describe('providerChannels', () => {
     expect(inferModelCapability('minimax-h3')).toBe('video')
     expect(inferModelCapability('MiniMax-H3')).toBe('video')
     expect(inferModelCapability('minimax-M3')).toBe('text')
+    expect(inferModelCapability('agnes-image-2.0-flash')).toBe('image')
+    expect(inferModelCapability('agnes-image-2.5-flash')).toBe('image')
+    expect(inferModelCapability('agnes-video-v2.0')).toBe('video')
+    expect(inferModelCapability('agnes-video-2.5')).toBe('video')
+    expect(inferModelCapability('agnes-video-2.5-flash')).toBe('video')
+    expect(inferModelCapability('agnes-2.5-flash')).toBe('text')
+    expect(inferModelCapability('agnes-3.0-flash')).toBe('text')
   })
 
   it('preserves previously tagged capability when re-pulling models', () => {
@@ -45,6 +52,19 @@ describe('providerChannels', () => {
     ).toBe('image')
     expect(resolvePulledModelCapability('brand-new-model', {})).toBe('text')
     expect(resolvePulledModelCapability('dall-e-3', {})).toBe('image')
+  })
+
+  it('upgrades stale text tags when Agnes image/video ids are re-pulled', () => {
+    expect(
+      resolvePulledModelCapability('agnes-image-2.5-flash', {
+        'agnes-image-2.5-flash': 'text',
+      }),
+    ).toBe('image')
+    expect(
+      resolvePulledModelCapability('agnes-video-2.5-flash', {
+        'agnes-video-2.5-flash': 'text',
+      }),
+    ).toBe('video')
   })
 })
 

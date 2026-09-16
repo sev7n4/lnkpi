@@ -28,9 +28,9 @@ export function modelOptionName(value: string): string {
 }
 
 const IMAGE_MODEL_RE =
-  /(dall-?e|flux|seedream|imagen|midjourney|stable-?diffusion|sdxl|gpt-image|ideogram|recraft|banana)/i
+  /(dall-?e|flux|seedream|imagen|midjourney|stable-?diffusion|sdxl|gpt-image|ideogram|recraft|banana|agnes-image-)/i
 const VIDEO_MODEL_RE =
-  /(kling|seedance|sora|runway|luma|pika|hailuo|vidu|veo|wan2|cogvideo|happyhose|minimax-h3)/i
+  /(kling|seedance|sora|runway|luma|pika|hailuo|vidu|veo|wan2|cogvideo|happyhose|minimax-h3|agnes-video-)/i
 const AUDIO_MODEL_RE = /(whisper|tts|audio|suno|fish-speech|cosyvoice|speech|voice)/i
 
 /** Best-effort modality guess from OpenAI-compatible model ids (no modality in /models). */
@@ -44,14 +44,15 @@ export function inferModelCapability(modelName: string): ModelCapability {
 }
 
 /**
- * When re-pulling models: keep user/previous tags, else infer from name, else text.
+ * When re-pulling models: keep user image/video/audio tags, else infer from name.
+ * Stale `text` tags are upgraded when the id clearly maps to another modality.
  */
 export function resolvePulledModelCapability(
   modelName: string,
   previousByName: Record<string, ModelCapability>,
 ): ModelCapability {
   const prev = previousByName[modelName]
-  if (prev === 'text' || prev === 'image' || prev === 'video' || prev === 'audio') return prev
+  if (prev === 'image' || prev === 'video' || prev === 'audio') return prev
   return inferModelCapability(modelName)
 }
 

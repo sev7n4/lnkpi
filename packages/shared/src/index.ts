@@ -194,10 +194,15 @@ export interface VideoSettings {
   generateAudio?: boolean
 }
 
-export function clampVideoDuration(n: unknown): number {
+export function clampVideoDuration(
+  n: unknown,
+  bounds?: { min?: number; max?: number },
+): number {
+  const min = bounds?.min ?? 4
+  const max = bounds?.max ?? 15
   const v = typeof n === 'number' ? n : Number(n)
-  if (!Number.isFinite(v)) return 5
-  return Math.min(15, Math.max(4, Math.round(v)))
+  if (!Number.isFinite(v)) return Math.min(max, Math.max(min, 5))
+  return Math.min(max, Math.max(min, Math.round(v)))
 }
 
 export const VIDEO_ASPECT_RATIO_OPTIONS: { value: VideoAspectRatio; label: string }[] = [

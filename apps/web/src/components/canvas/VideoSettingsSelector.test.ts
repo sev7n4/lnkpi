@@ -168,4 +168,32 @@ describe('VideoSettingsSelector', () => {
     expect(last.aspectRatio).toBe('16:9')
     expect(last.resolution).toBe('480p')
   })
+
+  it('limits Agnes Video 2.5 Flash to 720p, 21:9, seed, and 4–12s', async () => {
+    const capabilities = resolveVideoModelCapabilities('agnes-video-2.5-flash', 'agnes-video-2.5-flash')
+    const wrapper = mount(VideoSettingsSelector, {
+      props: {
+        modelValue: { ...DEFAULT_VIDEO_SETTINGS, duration: 15, resolution: '1080p' },
+        capabilities,
+        modelKey: 'agnes-video-2.5-flash',
+      },
+    })
+
+    await openPopover(wrapper)
+    const text = wrapper.text()
+    expect(text).toContain('21:9 超宽')
+    expect(text).toContain('Seed')
+    expect(text).not.toContain('排除内容')
+    expect(text).toMatch(/分辨率720p/)
+
+    const range = wrapper.get('input[type="range"]')
+    expect(range.attributes('min')).toBe('4')
+    expect(range.attributes('max')).toBe('12')
+
+    const emitted = wrapper.emitted('update:modelValue')
+    expect(emitted?.length).toBeGreaterThan(0)
+    const last = emitted!.at(-1)![0] as typeof DEFAULT_VIDEO_SETTINGS
+    expect(last.duration).toBe(12)
+    expect(last.resolution).toBe('720p')
+  })
 })

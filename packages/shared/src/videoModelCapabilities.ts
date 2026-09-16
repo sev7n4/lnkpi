@@ -12,6 +12,7 @@ export interface VideoModelCapabilities {
   allowedAspectRatios: string[]
   allowedResolutions: string[]
   minDuration: number
+  maxDuration: number
   maxImageRefs: number
   maxVideoRefs: number
   maxAudioRefs: number
@@ -43,6 +44,7 @@ export function resolveVideoModelCapabilities(
     allowedAspectRatios: profile.allowedAspectRatios,
     allowedResolutions: profile.allowedResolutions,
     minDuration: profile.minDuration,
+    maxDuration: profile.maxDuration,
     maxImageRefs: profile.maxImageRefs,
     maxVideoRefs: profile.maxVideoRefs,
     maxAudioRefs: profile.maxAudioRefs,
