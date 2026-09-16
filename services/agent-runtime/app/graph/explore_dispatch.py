@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from app.errors import AgentToolError
 from app.graph.canvas_commands import extract_canvas_commands
+from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 from app.graph.explore_route import has_canvas_node_id_reference
 from app.graph.node_ref import resolve_node_ref, resolve_node_refs
 ExploreIntent = Literal[
@@ -310,7 +311,18 @@ async def _invoke_tool(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> Any:
+    await maybe_emit_tool_sse(
+        event_sink,
+        {
+            "type": "tool_call",
+            "data": {
+                "name": str(name),
+                "arguments": cap_tool_sse_payload(args or {}, kind="arguments"),
+            },
+        },
+    )
     tool = tools_by_name.get(name)
     if tool is None:
         result: Any = {"error": f"unknown tool: {name}"}
@@ -324,6 +336,16 @@ async def _invoke_tool(
                 "error_type": err["error_type"],
                 "retry_hint": err.get("retry_hint"),
             }
+    await maybe_emit_tool_sse(
+        event_sink,
+        {
+            "type": "tool_result",
+            "data": {
+                "name": str(name),
+                "result": cap_tool_sse_payload(result, kind="result"),
+            },
+        },
+    )
     tools_called.append(name)
     tool_results.append(result)
     for cmd in extract_canvas_commands(result):
@@ -338,6 +360,7 @@ async def run_mandatory_explore(
     *,
     summary: dict,
     tools_by_name: dict[str, Any],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     """Direct tool dispatch without LLM (UI / lifecycle / asset_read)."""
     canvas_commands: list[dict[str, Any]] = []
@@ -352,6 +375,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     if intent == "lifecycle":
@@ -362,6 +386,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     if intent == "asset_read":
@@ -371,6 +396,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     return MandatoryExploreResult(
@@ -389,6 +415,7 @@ async def _mandatory_ui(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     u = user_text or ""
 
@@ -396,6 +423,7 @@ async def _mandatory_ui(
         await _invoke_tool(
             tools_by_name, "redo", {}, canvas_commands=canvas_commands,
             tool_results=tool_results, tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -408,6 +436,7 @@ async def _mandatory_ui(
         await _invoke_tool(
             tools_by_name, "undo", {}, canvas_commands=canvas_commands,
             tool_results=tool_results, tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -429,6 +458,7 @@ async def _mandatory_ui(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -450,6 +480,7 @@ async def _mandatory_ui(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -472,6 +503,7 @@ async def _mandatory_ui(
                 canvas_commands=canvas_commands,
                 tool_results=tool_results,
                 tools_called=tools_called,
+                event_sink=event_sink,
             )
             reply = f"已将视口定位到节点 {node_ids[0]}。"
         else:
@@ -482,6 +514,7 @@ async def _mandatory_ui(
                 canvas_commands=canvas_commands,
                 tool_results=tool_results,
                 tools_called=tools_called,
+                event_sink=event_sink,
             )
             reply = f"已将视口定位到 {len(node_ids)} 个节点。"
         return MandatoryExploreResult(
@@ -502,6 +535,7 @@ async def _mandatory_lifecycle(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     node_id = resolve_node_ref(user_text, summary)
     if not node_id:
@@ -527,6 +561,7 @@ async def _mandatory_lifecycle(
         canvas_commands=canvas_commands,
         tool_results=tool_results,
         tools_called=tools_called,
+        event_sink=event_sink,
     )
     err_msg = _lifecycle_user_message(result)
     reply = err_msg if err_msg else ok_msg
@@ -545,6 +580,7 @@ async def _mandatory_asset(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     u = user_text or ""
     tool_name = "list_public_assets" if "公共" in u else "list_user_assets"
@@ -555,6 +591,7 @@ async def _mandatory_asset(
         canvas_commands=canvas_commands,
         tool_results=tool_results,
         tools_called=tools_called,
+        event_sink=event_sink,
     )
     return MandatoryExploreResult(
         tool_results=tool_results,

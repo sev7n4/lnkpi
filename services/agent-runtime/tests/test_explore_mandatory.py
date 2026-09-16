@@ -139,3 +139,30 @@ async def test_mandatory_list_user_assets():
     )
     assert out.tools_called == ["list_user_assets"]
     assert "logo.png" in out.reply_text
+
+
+@pytest.mark.asyncio
+async def test_t3_mandatory_undo_emits_tool_call():
+    events: list[dict] = []
+
+    class Sink:
+        async def _emit(self, event: dict) -> None:
+            events.append(event)
+
+    tools = {
+        "undo": FakeTool("undo", {"ok": True, "canvasCommands": [{"type": "undo"}]}),
+    }
+    out = await run_mandatory_explore(
+        "ui_command",
+        "查询画布，撤销上一步画布编辑操作",
+        summary=SUMMARY,
+        tools_by_name=tools,
+        event_sink=Sink(),
+    )
+    assert out.tools_called == ["undo"]
+    names = [
+        str((e.get("data") or {}).get("name") or "")
+        for e in events
+        if e.get("type") == "tool_call"
+    ]
+    assert names == ["undo"]
