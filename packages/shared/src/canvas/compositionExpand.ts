@@ -4,6 +4,8 @@ import {
   I0_SKELETON_PROMPT,
   LOOK_SKELETON_PROMPT,
   P_SKELETON_PROMPT,
+  SCENE_SKELETON_PROMPT,
+  WHITE_SKELETON_PROMPT,
   renderCompositionCopy,
 } from './compositionCopy'
 import { buildWorkflowDocument, type WorkflowDocument } from './workflowExchange'
@@ -153,13 +155,20 @@ export function expandComposition(
   localRefsByRef?: Record<string, LocalRefBinding[]>,
 ): WorkflowDocument {
   const copy = ir.copy ?? {}
-  const { identityRef, garmentRefs, wantVideo } = ir.primitives
+  const { identityRef, garmentRefs, wantVideo, otherRefs, sequence } = ir.primitives
   const skipI0 = Boolean(ir.primitives.skipI0)
   const tryOn = Boolean(identityRef) && garmentRefs.length > 0
+  const productSequence = sequence.includes('white_bg')
   const drafts: DraftNode[] = []
 
   if (identityRef) {
-    drafts.push(sourceNode(identityRef, titleOf(copy, `src-${identityRef}`, '模特源图'), localRefsByRef))
+    drafts.push(
+      sourceNode(
+        identityRef,
+        titleOf(copy, `src-${identityRef}`, productSequence ? '产品源图' : '模特源图'),
+        localRefsByRef,
+      ),
+    )
   }
 
   if (tryOn && identityRef) {
@@ -197,12 +206,75 @@ export function expandComposition(
     return toWorkflow(drafts)
   }
 
-  // Conservative graph: identity-only and/or wantVideo-only. Gold-2 sequence
-  // expand is Task 3; do not throw.
+  if (productSequence) {
+    appendProductSequence(drafts, copy, {
+      identityRef,
+      otherRefs,
+      sequence,
+      localRefsByRef,
+    })
+    if (wantVideo) {
+      const imageKeys = drafts
+        .filter((node) => node.type === 'image' && !node.id.startsWith('image-src-'))
+        .map((node) => node.id)
+      appendVideo(drafts, copy, imageKeys)
+    }
+    return toWorkflow(drafts)
+  }
+
+  // Conservative graph: identity-only and/or wantVideo-only.
   if (wantVideo) {
     appendVideo(drafts, copy, identityRef ? [srcId(identityRef)] : [])
   }
   return toWorkflow(drafts)
+}
+
+function appendProductSequence(
+  drafts: DraftNode[],
+  copy: NonNullable<CompositionIR['copy']>,
+  opts: {
+    identityRef: string | undefined
+    otherRefs: CompositionIR['primitives']['otherRefs']
+    sequence: CompositionIR['primitives']['sequence']
+    localRefsByRef: Record<string, LocalRefBinding[]> | undefined
+  },
+): void {
+  const seen = new Set(drafts.map((node) => node.id))
+  for (const other of opts.otherRefs) {
+    const id = srcId(other.ref)
+    if (seen.has(id)) continue
+    seen.add(id)
+    const fallback =
+      other.role === 'scene' ? '场景图' : other.role === 'product' ? '产品源图' : '参考图'
+    drafts.push(sourceNode(other.ref, titleOf(copy, `src-${other.ref}`, fallback), opts.localRefsByRef))
+  }
+
+  if (opts.sequence.includes('white_bg')) {
+    drafts.push(
+      imageGenNode(
+        'image-white',
+        titleOf(copy, 'white', '产品白底'),
+        slot(copy, 'white') ?? WHITE_SKELETON_PROMPT,
+        opts.identityRef ? [srcId(opts.identityRef)] : [],
+      ),
+    )
+  }
+
+  if (opts.sequence.includes('scene')) {
+    const sceneRefs = opts.otherRefs.filter((other) => other.role === 'scene')
+    const mentionedKeys = [
+      ...(opts.sequence.includes('white_bg') ? ['image-white'] : []),
+      ...sceneRefs.map((other) => srcId(other.ref)),
+    ]
+    drafts.push(
+      imageGenNode(
+        'image-scene',
+        titleOf(copy, 'scene', '场景图'),
+        slot(copy, 'scene') ?? SCENE_SKELETON_PROMPT,
+        mentionedKeys,
+      ),
+    )
+  }
 }
 
 function appendVideo(

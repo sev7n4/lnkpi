@@ -11,8 +11,17 @@ export const LOOK_SKELETON_PROMPT =
 export const P_SKELETON_PROMPT =
   '同一人按两套造型顺序切换的 lookbook，非剧情片。'
 
+/** Product white-bg: 产品白底, not 模特三视图 / 锁脸 / 禁止换装. */
+export const WHITE_SKELETON_PROMPT =
+  '将产品置于干净白底，保持产品外观、比例与材质，输出产品白底图。'
+
+export const SCENE_SKELETON_PROMPT =
+  '将产品放入使用场景中合理摆放，保持产品外观，输出场景图。'
+
 const I0_CLAUSES = [/白底/, /三视图|多视图/, /锁脸/, /禁止换装/]
 const P_CLAUSES = [/同一人/, /两套造型|造型顺序/, /lookbook/]
+const WHITE_CLAUSES = [/产品/, /白底/]
+const SCENE_CLAUSES = [/场景/]
 
 function filled(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
@@ -36,16 +45,32 @@ export function renderCompositionCopy(ir: CompositionIR): CompositionIR {
   const promptSlots: Record<string, string> = { ...(ir.copy?.promptSlots ?? {}) }
   const pSlots: Record<string, string> = { ...(ir.copy?.pSlots ?? {}) }
 
-  const { identityRef, skipI0, garmentRefs, wantVideo } = ir.primitives
+  const { identityRef, skipI0, garmentRefs, wantVideo, sequence, otherRefs } = ir.primitives
   const tryOn = Boolean(identityRef) && garmentRefs.length > 0
+  const productSequence = sequence.includes('white_bg')
 
   if (identityRef) {
     const key = `src-${identityRef}`
-    titles[key] = pickTitle(titles[key], '模特源图')
+    titles[key] = pickTitle(titles[key], productSequence ? '产品源图' : '模特源图')
   }
   for (const ref of garmentRefs) {
     const key = `src-${ref}`
     titles[key] = pickTitle(titles[key], '服装图')
+  }
+  for (const other of otherRefs) {
+    const key = `src-${other.ref}`
+    const fallback =
+      other.role === 'scene' ? '场景图' : other.role === 'product' ? '产品源图' : '参考图'
+    titles[key] = pickTitle(titles[key], fallback)
+  }
+
+  if (productSequence) {
+    promptSlots.white = pickPrompt(promptSlots.white, WHITE_SKELETON_PROMPT, WHITE_CLAUSES)
+    titles.white = pickTitle(titles.white, '产品白底')
+  }
+  if (sequence.includes('scene')) {
+    promptSlots.scene = pickPrompt(promptSlots.scene, SCENE_SKELETON_PROMPT, SCENE_CLAUSES)
+    titles.scene = pickTitle(titles.scene, '场景图')
   }
 
   if (tryOn && !skipI0) {
