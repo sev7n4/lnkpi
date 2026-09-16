@@ -415,4 +415,104 @@ describe('AgnesVideoProvider', () => {
     expect(body.seed).toBe(42)
     expect(body.negative_prompt).toBe('watermark, blur')
   })
+
+  it('sends OpenAI Videos 2.5 flash seconds/size/mode instead of pixel frames', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-25' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/v25.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider(
+      'test-key',
+      'https://apihub.agnes-ai.com/v1',
+      'https://apihub.agnes-ai.com',
+      'agnes-video-2.5-flash',
+      0,
+    )
+    await provider.generate('rainy city', {
+      model: 'agnes-video-2.5-flash',
+      duration: 8,
+      aspectRatio: '9:16',
+      resolution: '1080p',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as Record<string, unknown>
+    expect(body).toMatchObject({
+      model: 'agnes-video-2.5-flash',
+      prompt: 'rainy city',
+      seconds: '8',
+      mode: 'text',
+      size: '720P',
+      aspect_ratio: '9:16',
+    })
+    expect(body).not.toHaveProperty('width')
+    expect(body).not.toHaveProperty('num_frames')
+    expect(body).not.toHaveProperty('negative_prompt')
+  })
+
+  it('maps two reference images to 2.5 flash keyframe first/last frames', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-25kf' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/kf25.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider(
+      'test-key',
+      'https://apihub.agnes-ai.com/v1',
+      'https://apihub.agnes-ai.com',
+      'agnes-video-2.5-flash',
+      0,
+    )
+    await provider.generate('turn', {
+      model: 'agnes-video-2.5-flash',
+      referenceImages: ['https://cdn/a.png', 'https://cdn/b.png'],
+      refWire: 'agnes_keyframes',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as Record<string, unknown>
+    expect(body.mode).toBe('keyframe')
+    expect(body.first_frame).toBe('https://cdn/a.png')
+    expect(body.last_frame).toBe('https://cdn/b.png')
+    expect(body).not.toHaveProperty('extra_body')
+    expect(body).not.toHaveProperty('image')
+  })
+
+  it('maps a single reference image to 2.5 flash reference mode', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ video_id: 'vid-25ref' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: 'completed', url: 'https://example.com/ref25.mp4' }),
+      })
+
+    const provider = new AgnesVideoProvider(
+      'test-key',
+      'https://apihub.agnes-ai.com/v1',
+      'https://apihub.agnes-ai.com',
+      'agnes-video-2.5-flash',
+      0,
+    )
+    await provider.generate('run', {
+      model: 'agnes-video-2.5-flash',
+      image: 'https://cdn/char.png',
+    })
+
+    const body = JSON.parse(String(fetchMock.mock.calls[0][1].body)) as Record<string, unknown>
+    expect(body.mode).toBe('reference')
+    expect(body.images).toEqual(['https://cdn/char.png'])
+    expect(body).not.toHaveProperty('image')
+  })
 })

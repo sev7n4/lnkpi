@@ -1,4 +1,5 @@
 import type { VideoGenerationMode, VideoRefWire } from '@lnkpi/shared'
+import { isAgnesVideo25Family, isAgnesVideo25FlashModel } from '@lnkpi/shared'
 import { FalH3MaxVideoProvider } from './fal-h3-max-video-provider'
 import {
   MiniMaxH3VideoProvider,
@@ -87,32 +88,10 @@ export class AgnesVideoProvider implements VideoProvider {
 
   async generate(prompt: string, options?: VideoGenerateOptions): Promise<{ url: string }> {
     const model = options?.model || this.defaultModel
-    const { width, height, num_frames, frame_rate } = resolveVideoParams(
-      options?.duration,
-      options?.aspectRatio,
-      options?.resolution,
-    )
-
-    const body: Record<string, unknown> = {
-      model,
-      prompt,
-      width,
-      height,
-      num_frames,
-      frame_rate,
-    }
-
     const refs = (options?.referenceImages ?? []).map((url) => url.trim()).filter(Boolean)
-    const useKeyframes = options?.refWire === 'agnes_keyframes' || refs.length >= 2
-    if (useKeyframes && refs.length >= 2) {
-      body.extra_body = { image: refs, mode: 'keyframes' }
-    } else if (options?.image) {
-      body.image = options.image
-    } else if (refs.length === 1) {
-      body.image = refs[0]
-    }
-    if (options?.seed != null) body.seed = options.seed
-    if (options?.negativePrompt) body.negative_prompt = options.negativePrompt
+    const body = isAgnesVideo25Family(model)
+      ? buildAgnes25VideoBody(prompt, model, refs, options)
+      : buildAgnesV20VideoBody(prompt, model, refs, options)
 
     const createRes = await fetch(`${this.baseUrl}/videos`, {
       method: 'POST',
@@ -153,6 +132,97 @@ export class AgnesVideoProvider implements VideoProvider {
 
     throw new Error(`Agnes video timed out after ${this.maxPollAttempts} polls`)
   }
+}
+
+function collectAgnesImageRefs(refs: string[], options?: VideoGenerateOptions): string[] {
+  const out: string[] = []
+  const add = (url?: string) => {
+    const trimmed = url?.trim()
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed)
+  }
+  add(options?.image)
+  for (const url of refs) add(url)
+  return out
+}
+
+function agnes25Size(model: string, resolution?: string): string {
+  if (isAgnesVideo25FlashModel(model)) return '720P'
+  const lower = (resolution ?? '720p').toLowerCase()
+  if (lower.includes('1080') || lower.includes('2k') || lower.includes('4k')) return '1080P'
+  return '720P'
+}
+
+function agnes25Seconds(duration?: number): string {
+  const raw = duration ?? 5
+  return String(Math.min(12, Math.max(4, Math.round(raw))))
+}
+
+function buildAgnes25VideoBody(
+  prompt: string,
+  model: string,
+  refs: string[],
+  options?: VideoGenerateOptions,
+): Record<string, unknown> {
+  const images = collectAgnesImageRefs(refs, options)
+  const useKeyframe =
+    images.length >= 2 &&
+    (options?.refWire === 'agnes_keyframes' ||
+      options?.videoMode === 'first_last_frame' ||
+      options?.videoMode !== 'reference_to_video')
+
+  const body: Record<string, unknown> = {
+    model,
+    prompt,
+    seconds: agnes25Seconds(options?.duration),
+    mode: 'text',
+    size: agnes25Size(model, options?.resolution),
+    aspect_ratio: options?.aspectRatio?.trim() || '16:9',
+  }
+
+  if (useKeyframe) {
+    body.mode = 'keyframe'
+    body.first_frame = images[0]
+    body.last_frame = images[images.length - 1]
+  } else if (images.length >= 1) {
+    body.mode = 'reference'
+    const max = isAgnesVideo25FlashModel(model) ? 5 : images.length
+    body.images = images.slice(0, max)
+  }
+
+  if (options?.seed != null) body.seed = options.seed
+  return body
+}
+
+function buildAgnesV20VideoBody(
+  prompt: string,
+  model: string,
+  refs: string[],
+  options?: VideoGenerateOptions,
+): Record<string, unknown> {
+  const { width, height, num_frames, frame_rate } = resolveVideoParams(
+    options?.duration,
+    options?.aspectRatio,
+    options?.resolution,
+  )
+  const body: Record<string, unknown> = {
+    model,
+    prompt,
+    width,
+    height,
+    num_frames,
+    frame_rate,
+  }
+  const useKeyframes = options?.refWire === 'agnes_keyframes' || refs.length >= 2
+  if (useKeyframes && refs.length >= 2) {
+    body.extra_body = { image: refs, mode: 'keyframes' }
+  } else if (options?.image) {
+    body.image = options.image
+  } else if (refs.length === 1) {
+    body.image = refs[0]
+  }
+  if (options?.seed != null) body.seed = options.seed
+  if (options?.negativePrompt) body.negative_prompt = options.negativePrompt
+  return body
 }
 
 function isGatewayHost(hostname: string, allowedRoots: string[]): boolean {

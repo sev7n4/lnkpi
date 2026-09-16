@@ -18,5 +18,7 @@ describe('clampVideoDuration', () => {
     expect(clampVideoDuration(3)).toBe(4)
     expect(clampVideoDuration(99)).toBe(15)
     expect(clampVideoDuration('x')).toBe(5)
+    expect(clampVideoDuration(15, { max: 12 })).toBe(12)
+    expect(clampVideoDuration(3, { min: 4, max: 12 })).toBe(4)
   })
 })
