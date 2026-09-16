@@ -5,7 +5,7 @@
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md)（V1–V4 / §6.1）  
 > 前置：Phase 2d.3（#345/#347）、裸生成绑定（#349）、SSE `tool_call`（#352）、侧栏媒体绑定（#353）  
-> 实现 plan：2e.1 [2026-09-16-canvas-operator-2e1-hitl.md](../plans/2026-09-16-canvas-operator-2e1-hitl.md)（已交付 #354）。本刀：[2026-09-16-canvas-operator-2e2-operator-set.md](../plans/2026-09-16-canvas-operator-2e2-operator-set.md)（**仅 2e.2**）。2e.3 另开 plan + PR；禁止一张 PR 做完两刀。
+> 实现 plan：2e.1 [2026-09-16-canvas-operator-2e1-hitl.md](../plans/2026-09-16-canvas-operator-2e1-hitl.md)（已交付 #354）。2e.2 [2026-09-16-canvas-operator-2e2-operator-set.md](../plans/2026-09-16-canvas-operator-2e2-operator-set.md)（已交付 #357）。本刀：[2026-09-16-canvas-operator-2e3-v1-skeleton.md](../plans/2026-09-16-canvas-operator-2e3-v1-skeleton.md)（**仅 2e.3**）。禁止一张 PR 做完两刀。
 
 ---
 
