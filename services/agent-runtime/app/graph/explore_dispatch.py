@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -103,6 +104,66 @@ _MEDIA_PROPOSE_WRITE = frozenset({
     "set_node_prompt",
     "attach_refs",
 })
+_SIDEBAR_MEDIA_WRITE = frozenset({
+    "upsert_media_node",
+    "apply_sidebar_attachments",
+    "set_node_prompt",
+    "propose_generation",
+})
+
+
+def resolve_sidebar_image_ref_keys(
+    *,
+    image_keys: Sequence[str] = (),
+    this_turn_new_image_keys: Sequence[str] = (),
+    mentioned_keys: Sequence[str] = (),
+) -> list[str] | None:
+    images = [str(k).strip().upper() for k in image_keys if str(k).strip()]
+    image_set = set(images)
+    if not images:
+        return None
+    mentioned_i = [
+        str(k).strip().upper()
+        for k in mentioned_keys
+        if str(k).strip().upper().startswith("I") and str(k).strip().upper() in image_set
+    ]
+    # de-dupe mention order
+    seen: set[str] = set()
+    mentioned_i = [k for k in mentioned_i if not (k in seen or seen.add(k))]
+    if mentioned_i:
+        return mentioned_i
+    new_keys = {str(k).strip().upper() for k in this_turn_new_image_keys if str(k).strip()}
+    if new_keys == image_set and len(images) in (1, 2):
+        return list(images)
+    return None
+
+
+def utterance_binds_sidebar_media_propose(
+    text: str, ref_keys: list[str] | None
+) -> bool:
+    from app.graph.atomic_intent import (
+        CAMPAIGN_OVERRIDE_PHRASES,
+        regen_intent,
+        regenerate_phrase_intent,
+    )
+    from app.graph.media_utterance import (
+        media_directed_question,
+        suspected_media_create,
+        suspected_vision_qa,
+    )
+
+    if not ref_keys:
+        return False
+    t = text or ""
+    if regen_intent(t) or regenerate_phrase_intent(t):
+        return False
+    if any(p in t for p in CAMPAIGN_OVERRIDE_PHRASES):
+        return False
+    if suspected_vision_qa(t) or media_directed_question(t):
+        return False
+    if not suspected_media_create(t) and ("是什么" in t or "是啥" in t):
+        return False
+    return True
 
 
 def utterance_binds_media_propose(text: str) -> bool:
@@ -177,7 +238,13 @@ def _is_planner_utterance(text: str) -> bool:
     return "规划" in text and "工作流" in text
 
 
-def select_narrow_write_tools(utterance: str) -> frozenset[str]:
+def select_narrow_write_tools(
+    utterance: str,
+    *,
+    sidebar_image_keys: Sequence[str] = (),
+    this_turn_new_image_keys: Sequence[str] = (),
+    mentioned_keys: Sequence[str] = (),
+) -> frozenset[str]:
     """Keyword bind for workflow import vs recipe planner vs media propose (≤5 write tools).
 
     Strong import anchors win so planner keywords never steal
@@ -194,6 +261,13 @@ def select_narrow_write_tools(utterance: str) -> frozenset[str]:
         return _PLANNER_WRITE_TOOLS
     if _is_workflow_import_utterance(text):
         return _IMPORT_WRITE_TOOLS
+    ref_keys = resolve_sidebar_image_ref_keys(
+        image_keys=sidebar_image_keys,
+        this_turn_new_image_keys=this_turn_new_image_keys,
+        mentioned_keys=mentioned_keys,
+    )
+    if utterance_binds_sidebar_media_propose(text, ref_keys):
+        return _SIDEBAR_MEDIA_WRITE
     if utterance_binds_media_propose(text):
         return _MEDIA_PROPOSE_WRITE
     return _DEFAULT_NARROW_WRITE
