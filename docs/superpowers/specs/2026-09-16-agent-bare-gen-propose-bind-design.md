@@ -5,7 +5,7 @@
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md)（V2 / §6.0.2 B9）  
 > 前置：Phase 2b 工具已存在；Phase 2d.3 已合入生产（#345/#347）  
-> 实现 plan：待写 [`../plans/2026-09-16-agent-bare-gen-propose-bind.md`](../plans/2026-09-16-agent-bare-gen-propose-bind.md)
+> 实现 plan：[../plans/2026-09-16-agent-bare-gen-propose-bind.md](../plans/2026-09-16-agent-bare-gen-propose-bind.md)
 
 ---
 
@@ -54,7 +54,7 @@
 
 1. **谓词 `utterance_binds_media_propose(text) -> bool`**（放 `explore_dispatch.py`，避免把 bind 政策塞进 `atomic_intent.py`）  
    - `regen_intent(text)` 或 `regenerate_phrase_intent(text)` → **False**（「重新生成一张」含字面「生成一张」，必须排除）。  
-   - campaign 覆盖（与 `utterance_suggests_media_create` 同一 `_is_campaign_override`）→ **False**。  
+   - 任一 `CAMPAIGN_OVERRIDE_PHRASES` 子串（`营销方案` / `拆画布` / `全链路` / `campaign`）→ **False**。不 import 私有 `_is_campaign_override`。  
    - 否则：任一 `MEDIA_CREATE_HINTS` 为 text 子串 → True；或 `strong_generate_media(normalize_colloquial_create_verbs(text))` → True。  
    - 金标句必须 True；「看看这张海报」必须 False。
 
