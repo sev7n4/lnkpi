@@ -147,3 +147,13 @@ def test_assemble_copies_composition_pending():
         }
     )
     assert ctx.get("composition_pending") == '{"a":1}'
+
+
+def test_v1_operator_gold_does_not_trip_composition_structure():
+    from app.graph.composition_route import is_composition_structure_utterance
+
+    gold = (
+        "我期望的工作流不是全都是提示词节点，我期望通过画布的各类节点骨架连接好直接生图生视频，提示词自动填入到dock"
+    )
+    assert is_composition_structure_utterance(gold) is False
+    assert is_composition_structure_utterance(GOLD_COMPOSE_1) is True

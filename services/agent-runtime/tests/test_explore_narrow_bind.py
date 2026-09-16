@@ -484,3 +484,14 @@ def test_e12_shengtu_shengshipin_is_not_planner_exclusive():
     assert OPERATOR_WRITE <= tools
     assert tools != _PLANNER_TOOLS
     assert "match_workflow_templates" not in tools
+
+
+def test_e14_v1_gold_is_not_composition_structure():
+    from app.graph.composition_route import is_composition_structure_utterance
+
+    assert is_composition_structure_utterance(GOLD_V1) is False
+    tools = select_narrow_write_tools(GOLD_V1)
+    assert OPERATOR_WRITE <= tools
+    assert "connect_nodes" in tools
+    assert "import_workflow" not in tools
+    assert "instantiate_workflow_template" not in tools
