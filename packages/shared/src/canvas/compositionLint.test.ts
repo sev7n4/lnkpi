@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { expect, it } from 'vitest'
-import { GOLD_COMPOSE_1 } from './compositionGold'
+import { GOLD_COMPOSE_1, GOLD_COMPOSE_2 } from './compositionGold'
 import { extractCompositionPrimitives } from './compositionExtract'
 import { expandComposition, renderCompositionCopy } from './compositionExpand'
 import {
@@ -37,6 +37,9 @@ it('lints gold dump and hashes stably', () => {
   const summary = summarizeCompositionDump(dump, { existingNodeCount: 2 })
   expect(summary).toContain('请确认是否把构图落到画布')
   expect(summary).toContain('新建白底三视图')
+  expect(summary).toContain('服装扇出')
+  expect(summary).toContain('P+V')
+  expect(summary).toContain('生成请用 Dock 生成工作流')
   expect(summary).toContain('保留 2')
   expect(summary).toContain('新增')
 })
@@ -57,7 +60,21 @@ it('summarizes skipI0 looks as 沿用 I1 作为 I0', () => {
   expect(summary).toContain('请确认是否把构图落到画布')
   expect(summary).toContain('沿用 I1 作为 I0')
   expect(summary).not.toContain('新建白底三视图')
+  expect(summary).toContain('服装扇出')
+  expect(summary).toContain('P+V')
+  expect(summary).toContain('生成请用 Dock 生成工作流')
   expect(summary).toContain('保留 0')
+  expect(summary).toContain('新增')
+})
+
+it('summarizes gold 2 without garment fan-out or P+V, still points to Dock', () => {
+  const dump = goldDump(GOLD_COMPOSE_2)
+  const summary = summarizeCompositionDump(dump, { existingNodeCount: 3 })
+  expect(summary).toContain('请确认是否把构图落到画布')
+  expect(summary).not.toContain('服装扇出')
+  expect(summary).not.toContain('P+V')
+  expect(summary).toContain('生成请用 Dock 生成工作流')
+  expect(summary).toContain('保留 3')
   expect(summary).toContain('新增')
 })
 

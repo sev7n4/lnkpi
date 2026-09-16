@@ -107,6 +107,11 @@ describe('detectAgentChipSet', () => {
     expect(
       detectAgentChipSet('新建白底三视图，再换装两套造型。\n请确认是否把构图落到画布'),
     ).toBe('recipe_confirm')
+    expect(
+      detectAgentChipSet(
+        '请确认是否把构图落到画布\n新建白底三视图\n服装扇出 2\nP+V\n保留 0\n新增 6\n生成请用 Dock 生成工作流',
+      ),
+    ).toBe('recipe_confirm')
   })
 
   it('detects recipe promote chips from HITL copy', () => {

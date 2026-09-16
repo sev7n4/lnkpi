@@ -7,6 +7,9 @@ from app.graph.composition_route import (
     GOLD_COMPOSE_2,
     is_composition_confirm_chip,
     is_composition_structure_utterance,
+    is_fresh_composition_pending,
+    is_live_composition_pending,
+    leaves_composition_pending,
 )
 
 GOLD = (
@@ -48,3 +51,27 @@ def test_confirm_chip_exact_trim():
     assert is_composition_confirm_chip("先不改了") is False
     assert is_composition_confirm_chip("") is False
     assert is_composition_confirm_chip(None) is False
+
+
+def test_pending_ttl_and_leave_helpers():
+    import json
+    from datetime import datetime, timedelta, timezone
+
+    fresh = json.dumps({"utterance": "x", "ts": datetime.now(timezone.utc).isoformat()})
+    stale = json.dumps(
+        {
+            "utterance": "x",
+            "ts": (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat(),
+        }
+    )
+    assert is_fresh_composition_pending(fresh) is True
+    assert is_fresh_composition_pending(stale) is False
+    assert is_fresh_composition_pending('{"identityRef":"I1"}') is True
+    assert leaves_composition_pending("I1 模特 I2 I3 服装") is False
+    assert leaves_composition_pending("继续刚才那个") is False
+    assert leaves_composition_pending("你好") is True
+    assert leaves_composition_pending("生成一张猫") is True
+    assert leaves_composition_pending("@I1 模特 @I2 产品，让模特穿上，保持构图不变") is True
+    assert is_live_composition_pending(fresh, "I1 模特 I2 I3 服装") is True
+    assert is_live_composition_pending(stale, "继续刚才那个") is False
+    assert is_live_composition_pending(fresh, "你好") is False

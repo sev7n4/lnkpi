@@ -359,6 +359,8 @@ def test_utterance_binds_sidebar_media_propose_gate():
     assert utterance_binds_sidebar_media_propose("看看这张图", ["I1"]) is False
     assert utterance_binds_sidebar_media_propose(GOLD_TRYON + "，做个营销方案", ["I1", "I2"]) is False
     assert utterance_binds_sidebar_media_propose(GOLD_TRYON, None) is False
+    # Composition resume without @ must not relax SM-D7 (still needs parsed ref keys).
+    assert utterance_binds_sidebar_media_propose("I1 模特 I2 I3 服装", None) is False
 
 
 def test_chip_armed_look_at_poster_does_not_bind_sidebar_set():

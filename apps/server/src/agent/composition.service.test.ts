@@ -82,6 +82,7 @@ describe('CompositionService', () => {
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
     expect(out.userMessage).toContain('请确认是否把构图落到画布')
+    expect(out.userMessage).toContain('生成请用 Dock 生成工作流')
     expect(importWorkflow).not.toHaveBeenCalled()
   })
 
@@ -196,7 +197,7 @@ describe('CompositionService', () => {
     const out = await svc.preview({
       sessionId: 's1',
       userId: 'u1',
-      utterance: '@I1 是模特 @I2 是服装图',
+      utterance: 'I1 模特 I2 I3 服装',
       existingNodeCount: 0,
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
@@ -206,10 +207,12 @@ describe('CompositionService', () => {
       primitives?: { identityRef?: string; garmentRefs?: string[] }
     }
     const ids = stored.dump.graph.nodes.map((node) => node.id)
-    expect(ids).toEqual(expect.arrayContaining(['image-src-I1', 'image-src-I2', 'image-look-0']))
+    expect(ids).toEqual(
+      expect.arrayContaining(['image-src-I1', 'image-src-I2', 'image-src-I3', 'image-look-0']),
+    )
     expect(ids).toContain('image-i0')
     expect(stored.primitives?.identityRef).toBe('I1')
-    expect(stored.primitives?.garmentRefs).toEqual(['I2'])
+    expect(stored.primitives?.garmentRefs).toEqual(['I2', 'I3'])
     expect(importWorkflow).not.toHaveBeenCalled()
   })
 
@@ -226,12 +229,12 @@ describe('CompositionService', () => {
       svc.preview({
         sessionId: 's1',
         userId: 'u1',
-        utterance: '@I1 是模特 @I2 是服装图',
+        utterance: '@I2 @I3 是服装图',
         existingNodeCount: 0,
       }),
     ).rejects.toMatchObject({ response: { userMessage: '请指明哪张是模特、哪张是服装。' } })
     const pending = JSON.parse(sessions.get('s1')!.compositionPending!) as { utterance?: string }
-    expect(pending.utterance).toBe('@I1 是模特 @I2 是服装图')
+    expect(pending.utterance).toBe('@I2 @I3 是服装图')
     expect(importWorkflow).not.toHaveBeenCalled()
   })
 
