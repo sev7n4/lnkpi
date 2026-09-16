@@ -1,4 +1,4 @@
-"""Tests for plan-based explore bind (narrow-bind keyword cull removed)."""
+"""Explore write-tool narrow bind: planner/import exclusive sets + media-propose set."""
 
 from app.graph.explore_dispatch import classify_explore_intent, select_narrow_write_tools
 from app.tools.tool_plan import build_tool_plan
@@ -10,6 +10,13 @@ _PLANNER_TOOLS = frozenset({
 })
 _PLANNER_CONFIRM_TOOLS = _PLANNER_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_ONLY = frozenset({"import_workflow"})
+GOLD_BARE_GEN = "帮我生成一张蓝色天空产品主图"
+MEDIA_WRITE = frozenset({
+    "upsert_media_node",
+    "propose_generation",
+    "set_node_prompt",
+    "attach_refs",
+})
 
 
 def test_plan_always_includes_import_workflow_in_core():
@@ -113,3 +120,60 @@ def test_live_explore_bind_uses_narrow_planner_writes():
     assert "import_workflow" not in bound
     assert "set_node_prompt" not in bound
     assert "instantiate_workflow_template" not in bound
+
+
+def test_p1_gold_sentence_binds_media_narrow_set():
+    tools = select_narrow_write_tools(GOLD_BARE_GEN)
+    assert tools == MEDIA_WRITE
+    assert len(tools) <= 5
+
+
+def test_p2_poster_look_does_not_bind_propose():
+    tools = select_narrow_write_tools("看看这张海报")
+    assert "upsert_media_node" not in tools
+    assert "propose_generation" not in tools
+    assert tools != MEDIA_WRITE
+
+
+def test_p3_regen_phrase_does_not_bind_propose():
+    tools = select_narrow_write_tools("重新生成一张")
+    assert "upsert_media_node" not in tools
+    assert "propose_generation" not in tools
+
+
+def test_campaign_override_does_not_bind_media_set():
+    tools = select_narrow_write_tools(GOLD_BARE_GEN + "，做个营销方案")
+    assert tools != MEDIA_WRITE
+    assert "propose_generation" not in tools
+
+
+def test_p5_bind_plan_tools_gold_includes_media_writes():
+    from unittest.mock import MagicMock
+    from app.graph.nodes.explore import _bind_plan_tools
+    from app.tools.definitions import EXPLORE_WRITE_TOOLS
+
+    captured: list[list[str]] = []
+
+    class FakeLlm:
+        def bind_tools(self, tools):
+            captured.append([getattr(t, "name", "") for t in tools])
+            return self
+
+    tools_by_name = {name: MagicMock(name=name) for name in EXPLORE_WRITE_TOOLS}
+    for name, tool in tools_by_name.items():
+        tool.name = name
+    _bind_plan_tools(FakeLlm(), tools_by_name, [], GOLD_BARE_GEN)
+    bound = set(captured[0])
+    assert "upsert_media_node" in bound
+    assert "propose_generation" in bound
+    assert "set_node_prompt" in bound
+    assert "attach_refs" in bound
+
+
+def test_utterance_binds_media_propose_gate():
+    from app.graph.explore_dispatch import utterance_binds_media_propose
+
+    assert utterance_binds_media_propose(GOLD_BARE_GEN) is True
+    assert utterance_binds_media_propose("看看这张海报") is False
+    assert utterance_binds_media_propose("重新生成一张") is False
+    assert utterance_binds_media_propose(GOLD_BARE_GEN + "，做个营销方案") is False

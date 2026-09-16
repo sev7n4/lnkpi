@@ -96,6 +96,37 @@ _DEFAULT_NARROW_WRITE = frozenset({
     "duplicate_node",
     "upsert_prompt_node",
 })
+_MEDIA_PROPOSE_WRITE = frozenset({
+    "upsert_media_node",
+    "propose_generation",
+    "set_node_prompt",
+    "attach_refs",
+})
+
+
+def utterance_binds_media_propose(text: str) -> bool:
+    """True when explore should bind upsert_media_node + propose_generation."""
+    from app.graph.atomic_intent import (
+        CAMPAIGN_OVERRIDE_PHRASES,
+        MEDIA_CREATE_HINTS,
+        regen_intent,
+        regenerate_phrase_intent,
+    )
+    from app.graph.media_utterance import (
+        normalize_colloquial_create_verbs,
+        strong_generate_media,
+    )
+
+    t = text or ""
+    if not t.strip():
+        return False
+    if regen_intent(t) or regenerate_phrase_intent(t):
+        return False
+    if any(p in t for p in CAMPAIGN_OVERRIDE_PHRASES):
+        return False
+    if any(h in t for h in MEDIA_CREATE_HINTS):
+        return True
+    return strong_generate_media(normalize_colloquial_create_verbs(t))
 
 
 def _has_strong_workflow_import_anchor(text: str, low: str) -> bool:
@@ -146,10 +177,11 @@ def _is_planner_utterance(text: str) -> bool:
 
 
 def select_narrow_write_tools(utterance: str) -> frozenset[str]:
-    """Keyword bind for workflow import vs recipe planner (≤5 write tools).
+    """Keyword bind for workflow import vs recipe planner vs media propose (≤5 write tools).
 
     Strong import anchors win so planner keywords never steal
     ``请用 import_workflow 导入`` / ``导入工作流``.
+    Media propose is after planner/import so those sets stay exclusive.
     """
     text = utterance or ""
     low = text.lower()
@@ -161,6 +193,8 @@ def select_narrow_write_tools(utterance: str) -> frozenset[str]:
         return _PLANNER_WRITE_TOOLS
     if _is_workflow_import_utterance(text):
         return _IMPORT_WRITE_TOOLS
+    if utterance_binds_media_propose(text):
+        return _MEDIA_PROPOSE_WRITE
     return _DEFAULT_NARROW_WRITE
 
 
