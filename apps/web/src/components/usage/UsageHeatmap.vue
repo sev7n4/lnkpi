@@ -37,7 +37,9 @@ function isEmptyCell(cell: HeatmapCell) {
 
 function cellStyle(cell: HeatmapCell) {
   if (isEmptyCell(cell)) return undefined
-  return { backgroundColor: LEVEL_COLORS[cell.level] }
+  const level = cell.level
+  if (level === 0) return undefined
+  return { backgroundColor: LEVEL_COLORS[level] }
 }
 
 function cellTitle(cell: HeatmapCell) {
