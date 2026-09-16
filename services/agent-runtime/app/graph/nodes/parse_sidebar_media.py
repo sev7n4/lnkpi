@@ -219,6 +219,8 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                 if error_class is None:
                     error_class = classify_vision_error(reason="timeout")
                 break
+            remaining = VISION_WALL_BUDGET_SEC - elapsed
+            http_timeout = min(120.0, max(1.0, remaining))
             attempt += 1
             try:
                 raw = await nest.run_vision_qa(
@@ -230,6 +232,7 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                     api_key=fields["api_key"],
                     base_url=fields["base_url"],
                     source=fields["source"],
+                    timeout=http_timeout,
                 )
                 data = raw if isinstance(raw, dict) else {}
                 vision_used = _vision_used(data)

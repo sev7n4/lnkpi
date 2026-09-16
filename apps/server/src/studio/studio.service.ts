@@ -338,6 +338,22 @@ function withCanvasScope(scope?: CanvasGenerationScope) {
   }
 }
 
+/** Map generateVisionQaJson throws to structured errorClass + neutral Chinese reason. */
+function classifyVisionCatch(err: unknown): { errorClass: string; reason: string } {
+  const raw = err instanceof Error ? err.message : String(err)
+  const lower = raw.toLowerCase()
+  if (/\b429\b/.test(raw) || lower.includes('rate limit')) {
+    return { errorClass: 'VISION_RATE_LIMIT', reason: '识图请求过于频繁，请稍后再试' }
+  }
+  if (lower.includes('timeout') || lower.includes('timed out') || raw.includes('超时')) {
+    return { errorClass: 'VISION_TIMEOUT', reason: '识图超时，请稍后重试' }
+  }
+  if (lower.includes('fetch failed') || lower.includes('download')) {
+    return { errorClass: 'VISION_FETCH_FAILED', reason: '参考图读取失败，请重新上传' }
+  }
+  return { errorClass: 'VISION_UPSTREAM', reason: '识图失败' }
+}
+
 @Injectable()
 export class StudioService {
   constructor(
@@ -532,12 +548,12 @@ export class StudioService {
         model: provider.model,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
-        maxRetries: 2,
+        maxRetries: 0,
       })
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
+      const { errorClass, reason } = classifyVisionCatch(err)
       return {
-        text: JSON.stringify({ pass: false, reason, product_summary: '' }),
+        text: JSON.stringify({ pass: false, reason, errorClass, product_summary: '' }),
         visionUsed: false,
       }
     }
