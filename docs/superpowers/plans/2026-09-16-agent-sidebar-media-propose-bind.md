@@ -55,9 +55,9 @@
 - Consumes: spec SM-D1–SM-D7
 - Produces: spec header links here
 
-- [ ] **Step 1:** Confirm spec header `状态` is **已批准** and `实现 plan` links to this file.
+- [x] **Step 1:** Confirm spec header `状态` is **已批准** and `实现 plan` links to this file.
 
-- [ ] **Step 2: Commit** (docs only; skip if already in the same commit)
+- [x] **Step 2: Commit** (docs only; skip if already in the same commit)
 
 ```bash
 git add docs/superpowers/specs/2026-09-16-agent-sidebar-media-propose-bind-design.md \
@@ -207,6 +207,36 @@ def test_utterance_binds_sidebar_media_propose_gate():
     assert utterance_binds_sidebar_media_propose("看看这张图", ["I1"]) is False
     assert utterance_binds_sidebar_media_propose(GOLD_TRYON + "，做个营销方案", ["I1", "I2"]) is False
     assert utterance_binds_sidebar_media_propose(GOLD_TRYON, None) is False
+
+
+def test_chip_armed_look_at_poster_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        "看看这张海报",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1",),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_chip_armed_regen_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        "重新生成一张",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_chip_armed_gold_plus_campaign_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        GOLD_TRYON + "，做个营销方案",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
 ```
 
 - [ ] **Step 2:** Run
@@ -499,7 +529,17 @@ def mentioned_keys_for_sidebar_bind(
 
 Do **not** call `resolve_sidebar_mentioned_keys` (state-first).
 
-- [ ] **Step 5: `_bind_plan_tools` + explore call site**
+- [ ] **Step 5: `_bind_plan_tools` + all three explore call sites**
+
+`explore.py` has **three** `_bind_plan_tools` call sites that must all receive the same sidebar kwargs (otherwise retry / `tool_search` rebind drops the sidebar 4-set back to default):
+
+| Line | When |
+|------|------|
+| ~254 | First bind after `nest.sidebar_attachments = list(attachments)` |
+| ~290 | `node_write` retry when the model replied without write tools |
+| ~373 | Same-turn rebind after `tool_search` loads deferred tools |
+
+Extend `_bind_plan_tools` signature (unchanged body aside from forwarding kwargs):
 
 ```python
 def _bind_plan_tools(
@@ -522,12 +562,11 @@ def _bind_plan_tools(
     # existing visible loop unchanged
 ```
 
-At the existing call after `nest.sidebar_attachments = list(attachments)`:
+After `nest.sidebar_attachments = list(attachments)`, compute sidebar kwargs **once** per explore turn, then pass them to **every** bind:
 
 ```python
 from app.graph.explore_dispatch import (
     mentioned_keys_for_sidebar_bind,
-    select_narrow_write_tools,
     sidebar_image_keys_from_attachments,
     this_turn_new_image_keys_from_parse,
 )
@@ -537,16 +576,30 @@ new_keys = this_turn_new_image_keys_from_parse(attachments, parse)
 mention_keys = mentioned_keys_for_sidebar_bind(
     user_text, state.get("sidebar_mentioned_keys")
 )
-llm_bound, visible = _bind_plan_tools(
-    llm,
-    tools_by_name,
-    loaded,
-    user_text,
-    sidebar_image_keys=image_keys,
-    this_turn_new_image_keys=new_keys,
-    mentioned_keys=mention_keys,
-)
+
+def bind() -> tuple[Any, frozenset[str]]:
+    return _bind_plan_tools(
+        llm,
+        tools_by_name,
+        loaded,
+        user_text,
+        sidebar_image_keys=image_keys,
+        this_turn_new_image_keys=new_keys,
+        mentioned_keys=mention_keys,
+    )
+
+llm_bound, visible = bind()  # ~254: first bind
+
+# ... explore loop ...
+
+llm_bound, _visible = bind()  # ~290: node_write write-tool retry
+
+# ... inside tool_search success (loaded may have grown) ...
+
+llm_bound, _visible = bind()  # ~373: rebind after deferred load
 ```
+
+Do **not** leave bare `_bind_plan_tools(llm, tools_by_name, loaded, user_text)` at lines 290 or 373.
 
 Existing `_bind_plan_tools(..., GOLD_BARE_GEN)` tests must still pass (kwargs default empty).
 
@@ -946,9 +999,4 @@ rg -n "穿上|换装" services/agent-runtime/app/graph/explore_dispatch.py servi
 
 ## Execution handoff
 
-Plan saved. Two options:
-
-1. **Subagent-Driven (recommended)** — fresh subagent per task, review between tasks  
-2. **Inline Execution** — execute in this session with checkpoints  
-
-Which approach?
+Plan saved. Recommended execution modes: **Subagent-Driven** (fresh subagent per task, review between tasks) or **Inline Execution** (same session with checkpoints).

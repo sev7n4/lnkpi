@@ -134,6 +134,8 @@ select_narrow_write_tools(
 
 explore 在已有 `nest.sidebar_attachments = attachments` 之后，传入本轮 `I*`、`this_turn_new_image_keys`（与 parse 的 `uncached_urls` 对齐）、以及 §2.1 的本轮 `mentioned_keys`。裁剪逻辑本身不改，只因窄集变化而露出侧栏四工具。
 
+**explore.py 内所有 `_bind_plan_tools` 调用点**（首次绑定 ~254、`node_write` 重试 ~290、`tool_search` 加载 deferred 后 ~373）必须传入同一组侧栏 kwargs；否则重试或 rebind 会把侧栏四件套 cull 回默认窄集。
+
 既有 `_bind_plan_tools(llm, tools, loaded, GOLD_BARE_GEN)` 不传侧栏参数必须仍绑裸生成集（P5 回归）。
 
 ### 2.5 工具契约：`apply_sidebar_attachments`
