@@ -164,3 +164,49 @@ it('keeps ledger error in the expanded area only', async () => {
   expect(wrapper.text()).toContain('日期')
   expect(wrapper.text()).not.toContain('2026-09-15')
 })
+
+it('discards stale load-more after collapse and re-expand of the same day', async () => {
+  const stalePageItem = { ...ledgerItem, id: 'stale-t2', reason: '过期第二页' }
+  const freshFirstItem = { ...ledgerItem, id: 'fresh-t1', reason: '新第一页' }
+
+  let resolveStaleLoadMore: (value: unknown) => void = () => {}
+  const staleLoadMore = new Promise((resolve) => {
+    resolveStaleLoadMore = resolve
+  })
+
+  let page1Calls = 0
+  transactions.mockImplementation((args: unknown) => {
+    const query = args as { cursor?: string }
+    if (query.cursor) return staleLoadMore
+    page1Calls += 1
+    if (page1Calls === 1) {
+      return Promise.resolve({
+        data: { data: { items: [ledgerItem], nextCursor: 'c1' } },
+      })
+    }
+    return Promise.resolve({
+      data: { data: { items: [freshFirstItem], nextCursor: null } },
+    })
+  })
+
+  const wrapper = mountTable([consumeDay])
+  await wrapper.get('[data-day="2026-09-16"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-expanded]').text()).toContain('生成')
+
+  await wrapper.get('[data-expanded] button').trigger('click')
+
+  await wrapper.get('[data-day="2026-09-16"]').trigger('click')
+  await wrapper.get('[data-day="2026-09-16"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[data-expanded]').text()).toContain('新第一页')
+
+  resolveStaleLoadMore({
+    data: { data: { items: [stalePageItem], nextCursor: null } },
+  })
+  await flushPromises()
+
+  const expanded = wrapper.get('[data-expanded]')
+  expect(expanded.text()).toContain('新第一页')
+  expect(expanded.text()).not.toContain('过期第二页')
+})

@@ -38,6 +38,14 @@ const ledgerLoading = ref(false)
 const ledgerLoadingMore = ref(false)
 const loadError = ref('')
 
+/** Monotonic generation; stale ledger responses are discarded after collapse/re-expand. */
+let fetchGeneration = 0
+
+function bumpFetchGeneration() {
+  fetchGeneration += 1
+  return fetchGeneration
+}
+
 function formatCreatedAt(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -62,6 +70,7 @@ function resetLedger() {
 }
 
 async function fetchLedger(day: string, cursor?: string) {
+  const gen = fetchGeneration
   if (cursor) ledgerLoadingMore.value = true
   else ledgerLoading.value = true
   try {
@@ -70,16 +79,16 @@ async function fetchLedger(day: string, cursor?: string) {
       limit: 50,
       ...(cursor ? { cursor } : {}),
     })
-    if (expandedDay.value !== day) return
+    if (gen !== fetchGeneration) return
     const payload = response.data.data
     items.value = cursor ? [...items.value, ...payload.items] : payload.items
     nextCursor.value = payload.nextCursor
     loadError.value = ''
   } catch {
-    if (expandedDay.value !== day) return
+    if (gen !== fetchGeneration) return
     loadError.value = '流水加载失败，请稍后重试'
   } finally {
-    if (expandedDay.value === day) {
+    if (gen === fetchGeneration) {
       ledgerLoading.value = false
       ledgerLoadingMore.value = false
     }
@@ -89,10 +98,14 @@ async function fetchLedger(day: string, cursor?: string) {
 async function toggleDay(day: string) {
   if (expandedDay.value === day) {
     expandedDay.value = null
+    bumpFetchGeneration()
     resetLedger()
+    ledgerLoading.value = false
+    ledgerLoadingMore.value = false
     return
   }
   expandedDay.value = day
+  bumpFetchGeneration()
   resetLedger()
   await fetchLedger(day)
 }
