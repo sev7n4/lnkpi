@@ -5,7 +5,7 @@
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md)（V2 / §6.0.2 B9）  
 > 前置：[2026-09-16-agent-bare-gen-propose-bind-design.md](./2026-09-16-agent-bare-gen-propose-bind-design.md)（#349；画布 pending 已通、SSE 名仍空）  
-> 实现 plan：批准本档后另写 `docs/superpowers/plans/2026-09-16-sse-tool-call-emit.md`
+> 实现 plan：[../plans/2026-09-16-sse-tool-call-emit.md](../plans/2026-09-16-sse-tool-call-emit.md)
 
 ---
 
