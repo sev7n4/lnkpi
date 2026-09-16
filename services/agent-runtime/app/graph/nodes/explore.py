@@ -101,8 +101,11 @@ _EXPLORE_SYSTEM = (
     "闲聊、谢谢、纯识图问句、「重新生成一张」即使工具可见也不得 upsert_media_node / propose_generation。"
     "无「确认落到画布」不得 instantiate_workflow_template。"
     "一致性写在提示词和 ref 顺序（先身份后衣服/产品），不要再搭工作流。\n"
-    "5. 工作流类请求（骨架 + 生成 + 填 dock）：优先摆多个节点并用连线（connect_nodes）"
-    "串起来，不要压成单个 atomic 式节点。\n"
+    "5. 口语搭骨架（含「生图生视频」、多节点+连线+填 dock）：至少 upsert_media_node 两个媒体节点"
+    "（一张 image 与一条 video，或 image→video 链），每个可生成节点 prompt 非空（创建时带 prompt 或 set_node_prompt），"
+    "用 connect_nodes 连 canvas 节点 id，再对每个可生成节点 propose_generation。"
+    "不要压成单个 atomic 式节点；不要 import_workflow / instantiate_workflow_template 顶替本句；"
+    "不要把 @I* 芯片连成边。确认前不要 run_*、不要声称已出图。\n"
     "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。"
     "upsert_media_node / propose_generation 在「生成一张」类口语下应已绑定，不要用 tool_search 找 CORE。"
     "connect_nodes 已绑定，不要用 tool_search 找 CORE 写工具。"
@@ -131,6 +134,11 @@ _PARSE_FAIL_NO_EMPTY_LISTING = (
 )
 
 _NODE_WRITE_CLARIFY = "未能更新节点，请提供节点 id（如 prompt-1）。"
+_WRITE_RETRY_SYSTEM = (
+    "必须调用写入类工具完成操作（如 upsert_media_node、connect_nodes、"
+    "set_node_prompt、propose_generation）。"
+    "口语搭骨架不要改用 import_workflow。"
+)
 
 
 def _last_composition_dump_hash(state: dict[str, Any], messages: list[Any]) -> str:
@@ -407,10 +415,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     convo.append(ai)
                     convo.append(
                         SystemMessage(
-                            content=(
-                                "必须调用写入类工具完成操作（如 set_node_prompt、"
-                                "import_workflow、upload_media_to_canvas 等）。"
-                            )
+                            content=_WRITE_RETRY_SYSTEM
                         )
                     )
                     continue

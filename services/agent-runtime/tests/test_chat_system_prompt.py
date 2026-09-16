@@ -94,10 +94,9 @@ def test_chat_system_v1_skeleton_must_not_prefer_import():
 
 
 def test_explore_write_retry_names_operator_skeleton_tools():
-    from app.graph.nodes.explore import make_explore_node
-    import inspect
+    from app.graph.nodes.explore import _WRITE_RETRY_SYSTEM
 
-    src = inspect.getsource(make_explore_node)
-    assert "upsert_media_node" in src
-    assert "connect_nodes" in src
-    assert "propose_generation" in src
+    assert "upsert_media_node" in _WRITE_RETRY_SYSTEM
+    assert "connect_nodes" in _WRITE_RETRY_SYSTEM
+    assert "propose_generation" in _WRITE_RETRY_SYSTEM
+    assert "import_workflow" in _WRITE_RETRY_SYSTEM
