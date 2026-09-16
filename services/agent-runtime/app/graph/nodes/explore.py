@@ -9,6 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 
 from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
+from app.graph.composition_route import is_composition_structure_utterance
 from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
@@ -19,9 +20,13 @@ from app.graph.explore_dispatch import (
     this_turn_new_image_keys_from_parse,
 )
 from app.graph.planner_copy import (
-    PLANNER_CANCEL_REPLY,
+    COMPOSITION_CANCEL_REPLY,
+    COMPOSITION_DUMP_HASH_KW,
+    COMPOSITION_EXTRACT_INCOMPLETE,
+    COMPOSITION_KIND,
+    COMPOSITION_LANDED_REPLY,
+    COMPOSITION_NO_PREVIEW_REPLY,
     PLANNER_INSTANTIATED_REPLY,
-    PLANNER_NO_PREVIEW_REPLY,
     PLANNER_PREVIEW_ARGS_KW,
     format_planner_preview_hitl,
     is_machine_payload_reply,
@@ -120,6 +125,22 @@ _PARSE_FAIL_NO_EMPTY_LISTING = (
 _NODE_WRITE_CLARIFY = "未能更新节点，请提供节点 id（如 prompt-1）。"
 
 
+def _last_composition_dump_hash(state: dict[str, Any], messages: list[Any]) -> str:
+    hashed = str(state.get("composition_dump_hash") or "").strip()
+    if hashed:
+        return hashed
+    for msg in reversed(messages or []):
+        extra = getattr(msg, "additional_kwargs", None)
+        if extra is None and isinstance(msg, dict):
+            extra = msg.get("additional_kwargs")
+        if not isinstance(extra, dict):
+            continue
+        hashed = str(extra.get(COMPOSITION_DUMP_HASH_KW) or "").strip()
+        if hashed:
+            return hashed
+    return ""
+
+
 def _latest_user_text(messages: list[Any]) -> str:
     for msg in reversed(messages or []):
         role = getattr(msg, "type", None) or (msg.get("role") if isinstance(msg, dict) else None)
@@ -204,14 +225,21 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             nest.last_user_utterance = slot_utterance
         parse = state.get("sidebar_media_parse")
 
-        def _chip_out(text: str, canvas_commands: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+        def _chip_out(
+            text: str,
+            canvas_commands: list[dict[str, Any]] | None = None,
+            *,
+            additional_kwargs: dict[str, Any] | None = None,
+            extra_state: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
             payload: dict[str, Any] = {
                 "phase": "done",
                 "skill_id": None,
                 "user_decision": "none",
                 "messages": [
                     AIMessage(
-                        content=prefix_assistant_reply(text, parse)
+                        content=prefix_assistant_reply(text, parse),
+                        additional_kwargs=additional_kwargs or {},
                     )
                 ],
                 "explore_summary": summary if isinstance(summary, dict) else None,
@@ -219,30 +247,66 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             }
             if canvas_commands:
                 payload["canvas_commands"] = canvas_commands
+            if extra_state:
+                payload.update(extra_state)
             return payload
 
         if is_planner_cancel_chip(user_text):
-            return _chip_out(PLANNER_CANCEL_REPLY)
+            return _chip_out(COMPOSITION_CANCEL_REPLY)
         if is_planner_confirm_chip(user_text):
-            preview_args = last_successful_preview_args(messages)
-            if not preview_args:
-                return _chip_out(PLANNER_NO_PREVIEW_REPLY)
-            instantiate = getattr(nest, "instantiate_recipe", None)
-            if not callable(instantiate):
-                return _chip_out(PLANNER_NO_PREVIEW_REPLY)
+            dump_hash = _last_composition_dump_hash(state, messages)
+            if not dump_hash:
+                return _chip_out(COMPOSITION_NO_PREVIEW_REPLY)
+            confirm = getattr(nest, "confirm_composition", None)
+            if not callable(confirm):
+                return _chip_out(COMPOSITION_NO_PREVIEW_REPLY)
             try:
-                result = await instantiate(
-                    parent_id=preview_args["parent_id"],
-                    parent_version=preview_args["parent_version"],
-                    delta=preview_args["delta"],
-                )
+                result = await confirm(dump_hash)
             except AgentToolError as exc:
-                return _chip_out(str(exc.error.get("message") or PLANNER_NO_PREVIEW_REPLY))
+                return _chip_out(str(exc.error.get("message") or COMPOSITION_NO_PREVIEW_REPLY))
             except Exception as exc:
-                err = from_exception("instantiate_workflow_template", exc)
+                err = from_exception("confirm_composition", exc)
                 return _chip_out(err["message"])
             cmds = extract_canvas_commands(result if isinstance(result, dict) else {})
-            return _chip_out(PLANNER_INSTANTIATED_REPLY, cmds or None)
+            extra: dict[str, Any] = {"composition_pending": None}
+            if isinstance(result, dict):
+                landed_hash = str(result.get("dumpHash") or result.get("dump_hash") or dump_hash).strip()
+                if landed_hash:
+                    extra["composition_dump_hash"] = landed_hash
+            return _chip_out(COMPOSITION_LANDED_REPLY, cmds or None, extra_state=extra)
+
+        if is_composition_structure_utterance(user_text) or state.get("composition_pending"):
+            preview = getattr(nest, "preview_composition", None)
+            if callable(preview):
+                try:
+                    result = await preview(user_text)
+                except AgentToolError as exc:
+                    msg = str(exc.error.get("message") or "")
+                    extra = {}
+                    if COMPOSITION_EXTRACT_INCOMPLETE in msg:
+                        extra["composition_pending"] = json.dumps(
+                            {"utterance": user_text},
+                            ensure_ascii=False,
+                        )
+                    return _chip_out(msg or COMPOSITION_NO_PREVIEW_REPLY, extra_state=extra)
+                except Exception as exc:
+                    err = from_exception("preview_composition", exc)
+                    return _chip_out(err["message"])
+                user_message = ""
+                dump_hash = ""
+                if isinstance(result, dict):
+                    user_message = str(result.get("userMessage") or result.get("user_message") or "")
+                    dump_hash = str(result.get("dumpHash") or result.get("dump_hash") or "").strip()
+                additional: dict[str, Any] = {"kind": COMPOSITION_KIND}
+                extra = {"composition_pending": None}
+                if dump_hash:
+                    additional[COMPOSITION_DUMP_HASH_KW] = dump_hash
+                    extra["composition_dump_hash"] = dump_hash
+                return _chip_out(
+                    user_message or COMPOSITION_NO_PREVIEW_REPLY,
+                    additional_kwargs=additional,
+                    extra_state=extra,
+                )
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:

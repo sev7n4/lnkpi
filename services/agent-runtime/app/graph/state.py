@@ -216,6 +216,8 @@ class AgentRuntimeState(TypedDict, total=False):
     # explore_canvas path (Phase 2)
     explore_summary: dict | None
     canvas_commands: list[dict] | None
+    composition_pending: str | None
+    composition_dump_hash: str | None
 
     # ecommerce-product-visual (Phase 1 image-only)
     product_visual_plan: dict | None

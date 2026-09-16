@@ -128,6 +128,28 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/preview-composition"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "userMessage": "请确认是否把构图落到画布",
+                        "dumpHash": "ab" * 32,
+                        "nodeTitles": ["定妆", "换装"],
+                    }
+                ),
+            )
+        if path.endswith("/confirm-composition"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "addedNodeIds": ["image-1"],
+                        "canvasCommands": [{"type": "focus_nodes", "nodeIds": ["image-1"]}],
+                        "dumpHash": "ab" * 32,
+                    }
+                ),
+            )
         if path.endswith("/arrange-nodes-along-edges"):
             return httpx.Response(200, json=_ok({"actions": []}))
         if path.endswith("/grid-slice-image"):
@@ -331,6 +353,47 @@ async def test_instantiate_recipe_ignores_confirm_chip_utterance(nest_client, ca
     )
     req = _last(captured)
     assert req["json"]["utterance"] == "规划一个角色三视图工作流，年轻亚洲女性模特半身肖像"
+
+
+@pytest.mark.asyncio
+async def test_preview_composition(nest_client, captured):
+    result = await nest_client.preview_composition(
+        "设计一段模特换装的工作流并做好连线，写入画布",
+    )
+    assert result["dumpHash"] == "ab" * 32
+    assert "请确认是否把构图落到画布" in result["userMessage"]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/preview-composition"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "utterance": "设计一段模特换装的工作流并做好连线，写入画布",
+    }
+
+
+@pytest.mark.asyncio
+async def test_preview_composition_optional_copy(nest_client, captured):
+    copy = {"hitl": "请确认是否把构图落到画布"}
+    await nest_client.preview_composition("规划一套流水线", copy=copy)
+    req = _last(captured)
+    assert req["json"]["copy"] == copy
+    assert req["json"]["sessionId"] == SESSION_ID
+    assert req["json"]["userId"] == USER_ID
+
+
+@pytest.mark.asyncio
+async def test_confirm_composition(nest_client, captured):
+    dump_hash = "ab" * 32
+    result = await nest_client.confirm_composition(dump_hash)
+    assert result["addedNodeIds"] == ["image-1"]
+    assert result["dumpHash"] == dump_hash
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/confirm-composition"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "dumpHash": dump_hash,
+    }
 
 
 @pytest.mark.asyncio

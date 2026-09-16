@@ -54,6 +54,13 @@ PLANNER_NO_PREVIEW_REPLY = "请先规划并确认模板改动，再落到画布�
 PLANNER_CANCEL_REPLY = "已取消落到画布。"
 PLANNER_INSTANTIATED_REPLY = "已按模板落到画布。"
 
+COMPOSITION_NO_PREVIEW_REPLY = "请先确认构图，再落到画布。"
+COMPOSITION_CANCEL_REPLY = "已取消落到画布。"
+COMPOSITION_LANDED_REPLY = "已按构图落到画布。"
+COMPOSITION_EXTRACT_INCOMPLETE = "请指明哪张是模特、哪张是服装。"
+COMPOSITION_KIND = "composition"
+COMPOSITION_DUMP_HASH_KW = "composition_dump_hash"
+
 
 def is_planner_confirm_chip(text: str | None) -> bool:
     return (text or "").strip() == PLANNER_CONFIRM_CHIP
