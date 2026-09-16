@@ -722,7 +722,7 @@ async function cancelRemoteGeneration(
     )
   }
 
-  function runGroupMemberHasUsableOutput(node: EditableFlowNode | undefined): boolean {
+  function runGroupMemberHasUsableOutput(node: EditableFlowNode | null | undefined): boolean {
     if (!node || node.data?.status !== NODE_GENERATION_STATUS.completed) return false
     const type = String(node.type)
     if (type === 'image' || type === 'video') {
