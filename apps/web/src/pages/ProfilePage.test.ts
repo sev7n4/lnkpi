@@ -80,6 +80,30 @@ const usageDaysPayload = {
   },
 }
 
+function usageDaysWithMarker(range: string, from: string, to: string, date: string, generationCount: number) {
+  return {
+    data: {
+      data: {
+        range,
+        from,
+        to,
+        days: [
+          {
+            date,
+            generationCount,
+            netConsumed: generationCount,
+            byCategory: { text: 0, image: 0, audio: 0, video: 0 },
+            otherNetConsumed: 0,
+          },
+        ],
+      },
+    },
+  }
+}
+
+const stale7dDaysPayload = usageDaysWithMarker('7d', '2026-01-01', '2026-01-07', '2026-01-07', 7)
+const fresh30dDaysPayload = usageDaysWithMarker('30d', '2026-08-01', '2026-08-30', '2026-08-20', 3)
+
 async function mountProfile() {
   setActivePinia(createPinia())
   const auth = useAuthStore()
@@ -97,6 +121,34 @@ async function mountProfile() {
   })
   await flushPromises()
   return wrapper
+}
+
+async function mountUsageWithOverlappingDaysRequests() {
+  let settleStale7d: (value: unknown) => void = () => {}
+  let rejectStale7d: (reason?: unknown) => void = () => {}
+  const stale7dRequest = new Promise((resolve, reject) => {
+    settleStale7d = resolve
+    rejectStale7d = reject
+  })
+  let settle30d: (value: unknown) => void = () => {}
+  const pending30d = new Promise((resolve) => {
+    settle30d = resolve
+  })
+
+  membershipMocks.usageDays
+    .mockImplementationOnce(() => stale7dRequest)
+    .mockImplementationOnce(() => pending30d)
+
+  routeQuery.tab = 'usage'
+  const wrapper = await mountProfile()
+  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(1)
+
+  await wrapper.get('[data-range="30d"]').trigger('click')
+  await flushPromises()
+  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
+  expect(membershipMocks.usageDays).toHaveBeenLastCalledWith('30d')
+
+  return { wrapper, settleStale7d, rejectStale7d, settle30d }
 }
 
 describe('ProfilePage', () => {
@@ -163,6 +215,36 @@ describe('ProfilePage', () => {
     expect(membershipMocks.usage).toHaveBeenCalledTimes(1)
     expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
     expect(membershipMocks.usageDays).toHaveBeenLastCalledWith('30d')
+  })
+
+  it('ignores a stale 7d usageDays success after switching to 30d', async () => {
+    const { wrapper, settleStale7d, settle30d } = await mountUsageWithOverlappingDaysRequests()
+
+    settle30d(fresh30dDaysPayload)
+    await flushPromises()
+    expect(wrapper.text()).toContain('2026-08-20')
+
+    settleStale7d(stale7dDaysPayload)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2026-08-20')
+    expect(wrapper.text()).not.toContain('2026-01-07')
+    expect(wrapper.text()).not.toContain('用量趋势加载失败，请稍后重试')
+  })
+
+  it('ignores a stale 7d usageDays rejection after 30d has succeeded', async () => {
+    const { wrapper, rejectStale7d, settle30d } = await mountUsageWithOverlappingDaysRequests()
+
+    settle30d(fresh30dDaysPayload)
+    await flushPromises()
+    expect(wrapper.text()).toContain('2026-08-20')
+
+    rejectStale7d(new Error('stale 7d'))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('2026-08-20')
+    expect(wrapper.text()).not.toContain('2026-01-07')
+    expect(wrapper.text()).not.toContain('用量趋势加载失败，请稍后重试')
   })
 
   it('exposes a close control with aria-label 关闭', async () => {

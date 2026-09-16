@@ -46,6 +46,20 @@ const daysLoading = ref(false)
 const showMembership = ref(false)
 const inviteCopied = ref(false)
 
+/** Independent generations; stale overview / days responses are discarded. */
+let usageFetchGeneration = 0
+let daysFetchGeneration = 0
+
+function bumpUsageFetchGeneration() {
+  usageFetchGeneration += 1
+  return usageFetchGeneration
+}
+
+function bumpDaysFetchGeneration() {
+  daysFetchGeneration += 1
+  return daysFetchGeneration
+}
+
 const membershipLabel = computed(() => {
   const m = profile.value?.membership
   if (m === 'pro') return '专业版'
@@ -70,28 +84,38 @@ async function copyInvite() {
 }
 
 async function loadUsage() {
+  const gen = bumpUsageFetchGeneration()
   usageLoading.value = true
   usageError.value = ''
   try {
     const response = await membershipApi.usage()
+    if (gen !== usageFetchGeneration) return
     usage.value = response.data.data
   } catch {
+    if (gen !== usageFetchGeneration) return
     usageError.value = '用量总览加载失败，请稍后重试'
   } finally {
-    usageLoading.value = false
+    if (gen === usageFetchGeneration) {
+      usageLoading.value = false
+    }
   }
 }
 
 async function loadUsageDays() {
+  const gen = bumpDaysFetchGeneration()
   daysLoading.value = true
   daysError.value = ''
   try {
     const response = await membershipApi.usageDays(usageRange.value)
+    if (gen !== daysFetchGeneration) return
     usageDays.value = response.data.data
   } catch {
+    if (gen !== daysFetchGeneration) return
     daysError.value = '用量趋势加载失败，请稍后重试'
   } finally {
-    daysLoading.value = false
+    if (gen === daysFetchGeneration) {
+      daysLoading.value = false
+    }
   }
 }
 
