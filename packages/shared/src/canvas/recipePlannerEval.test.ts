@@ -82,12 +82,7 @@ function graftSourceFor(delta: RecipeDelta, includeLifestyle: boolean): RecipeDo
 function runCase(fixture: EvalCase) {
   if (fixture.utterance) {
     const matched = matchPlatformRecipes(fixture.utterance)
-    if (fixture.expect.parentId) {
-      expect(matched.items[0]?.id, fixture.id).toBe(fixture.expect.parentId)
-    }
-    if (fixture.expect.graftHintRecipeId) {
-      expect(matched.graftHint?.recipeId, fixture.id).toBe(fixture.expect.graftHintRecipeId)
-    }
+    expect(matched.items, fixture.id).toEqual([])
     return
   }
 

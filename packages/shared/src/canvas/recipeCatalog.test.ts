@@ -61,63 +61,14 @@ describe('recipeCatalog', () => {
     expect(src).not.toMatch(/readFileSync/)
   })
 
-  it('matches 套图/详情/主图/电商 to ecommerce-product-visual', () => {
-    const result = matchPlatformRecipes('蓝牙耳机详情页套图')
-    expect(result.items[0]?.id).toBe('ecommerce-product-visual')
-    expect(result.graftHint).toBeUndefined()
-    expect(result.needsClarify).not.toBe(true)
-  })
-
-  it('matches 套图+三视图 to ecommerce parent with model graftHint', () => {
-    const result = matchPlatformRecipes('套图并且要模特三视图')
-    expect(result.items[0]?.id).toBe('ecommerce-product-visual')
-    expect(result.items.some((item) => item.id === 'model-turnaround')).toBe(true)
-    expect(result.graftHint).toEqual({ recipeId: 'model-turnaround', version: '1.0.0' })
-    expect(result.needsClarify).not.toBe(true)
-  })
-
-  it('matches 三视图/定妆/模特/角色 to model-turnaround', () => {
-    const result = matchPlatformRecipes('角色定妆照')
-    expect(result.items[0]?.id).toBe('model-turnaround')
-    expect(result.graftHint).toBeUndefined()
-    expect(result.needsClarify).not.toBe(true)
-  })
-
-  it('lists both platform summaries with needsClarify when nothing matches', () => {
-    const result = matchPlatformRecipes('今天天气怎么样')
-    expect(result.needsClarify).toBe(true)
-    expect(result.items.map((item) => item.id).sort()).toEqual([
-      'ecommerce-product-visual',
-      'image-to-video',
-      'model-turnaround',
-      'storyboard-to-video',
-    ])
-    expect(result.graftHint).toBeUndefined()
-  })
-
-  it('matches 分镜/故事板 to storyboard-to-video', () => {
-    const result = matchPlatformRecipes('帮我规划一个分镜成片')
-    expect(result.items[0]?.id).toBe('storyboard-to-video')
-    expect(result.needsClarify).not.toBe(true)
-  })
-
-  it('matches 图生视频/i2v to image-to-video', () => {
-    const result = matchPlatformRecipes('做一个图生视频工作流')
-    expect(result.items[0]?.id).toBe('image-to-video')
-    expect(result.needsClarify).not.toBe(true)
-  })
-
-  it('generic 规划一个视频工作流 clarifies between the two video recipes', () => {
-    const result = matchPlatformRecipes('规划一个视频工作流')
-    expect(result.needsClarify).toBe(true)
-    expect(result.items.map((item) => item.id).sort()).toEqual([
-      'image-to-video',
-      'storyboard-to-video',
-    ])
-  })
-
-  it('does not let 视频 steal ecommerce 套图', () => {
-    const result = matchPlatformRecipes('蓝牙耳机详情页套图再出一段视频')
-    expect(result.items[0]?.id).toBe('ecommerce-product-visual')
+  it('matchPlatformRecipes is offline (empty items)', () => {
+    expect(matchPlatformRecipes('做一个图生视频工作流')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('帮我规划一个分镜成片')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('蓝牙耳机详情页套图')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('套图并且要模特三视图')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('角色定妆照')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('今天天气怎么样')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('规划一个视频工作流')).toEqual({ items: [] })
+    expect(matchPlatformRecipes('蓝牙耳机详情页套图再出一段视频')).toEqual({ items: [] })
   })
 })
