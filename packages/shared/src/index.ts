@@ -13,6 +13,8 @@ export * from './canvas/recipeCatalog'
 export * from './canvas/compositionGold'
 export * from './canvas/compositionIr'
 export * from './canvas/compositionExtract'
+export * from './canvas/compositionExpand'
+export * from './canvas/compositionLint'
 export * from './sceneComposer'
 export * from './videoComposition'
 export * from './nodeRefs'
@@ -133,6 +135,7 @@ export interface CanvasData {
   nodes: CanvasNode[]
   edges: CanvasEdge[]
   viewport?: { x: number; y: number; zoom: number }
+  compositionRunGroup?: { nodeIds: string[]; dumpHash: string; createdAt: string }
 }
 
 export interface GenerationRequest {

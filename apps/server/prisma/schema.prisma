@@ -193,13 +193,15 @@ model Story {
 }
 
 model Session {
-  id            String         @id @default(cuid())
-  title         String         @default("未命名画布")
-  userId        String
-  user          User           @relation(fields: [userId], references: [id])
-  canvasData    String?
-  stagedActions String?
-  stagedAt      DateTime?
+  id                   String         @id @default(cuid())
+  title                String         @default("未命名画布")
+  userId               String
+  user                 User           @relation(fields: [userId], references: [id])
+  canvasData           String?
+  compositionPreview   String?
+  compositionPending   String?
+  stagedActions        String?
+  stagedAt             DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   works         Work[]

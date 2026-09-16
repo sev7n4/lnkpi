@@ -1,8 +1,10 @@
 import { Body, Controller, Inject, Post, UseGuards } from '@nestjs/common'
 import { IsArray, IsBoolean, IsIn, IsNumber, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator'
 import { Type } from 'class-transformer'
+import { PrismaService } from '../prisma/prisma.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
+import { CompositionService } from './composition.service'
 import { WorkflowRecipeService } from './workflow-recipe.service'
 
 class UpsertPromptNodeDto {
@@ -549,6 +551,42 @@ class ImportWorkflowDto {
   workflowUrl?: string
 }
 
+class PreviewCompositionDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  utterance!: string
+
+  @IsOptional()
+  @IsObject()
+  copy?: Record<string, unknown>
+}
+
+class ConfirmCompositionDto {
+  @IsString()
+  sessionId!: string
+
+  @IsString()
+  userId!: string
+
+  @IsString()
+  dumpHash!: string
+}
+
+function countCanvasNodes(raw: string | null | undefined): number {
+  if (!raw) return 0
+  try {
+    const parsed = JSON.parse(raw) as { nodes?: unknown }
+    return Array.isArray(parsed.nodes) ? parsed.nodes.length : 0
+  } catch {
+    return 0
+  }
+}
+
 export class InstantiateRecipeDto {
   @IsString()
   sessionId!: string
@@ -908,6 +946,8 @@ export class AgentCanvasToolsController {
   constructor(
     @Inject(AgentCanvasToolsService) private readonly tools: AgentCanvasToolsService,
     @Inject(WorkflowRecipeService) private readonly recipes: WorkflowRecipeService,
+    @Inject(CompositionService) private readonly composition: CompositionService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
   @Post('upsert-prompt-node')
@@ -1167,6 +1207,25 @@ export class AgentCanvasToolsController {
   @Post('import-workflow')
   async importWorkflow(@Body() dto: ImportWorkflowDto) {
     const data = await this.tools.importWorkflow(dto)
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('preview-composition')
+  async previewComposition(@Body() dto: PreviewCompositionDto) {
+    const session = await this.prisma.session.findUnique({ where: { id: dto.sessionId } })
+    const data = await this.composition.preview({
+      sessionId: dto.sessionId,
+      userId: dto.userId,
+      utterance: dto.utterance,
+      copy: dto.copy,
+      existingNodeCount: countCanvasNodes(session?.canvasData),
+    })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('confirm-composition')
+  async confirmComposition(@Body() dto: ConfirmCompositionDto) {
+    const data = await this.composition.confirm(dto)
     return { code: 0, message: 'ok', data }
   }
 
