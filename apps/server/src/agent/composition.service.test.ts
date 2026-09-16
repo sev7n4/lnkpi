@@ -132,6 +132,133 @@ describe('CompositionService', () => {
     expect(importWorkflow).not.toHaveBeenCalled()
   })
 
+  it('preview gold 1 stamps sidebar image localRefs on source nodes; confirm imports frozen dump', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = mockImportWritingCanvas(sessions)
+    const svc = new CompositionService(prisma, { importWorkflow } as never)
+    const attachments = [
+      {
+        id: 'att-i1',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'I1',
+        url: 'https://cdn.example/i1.png',
+      },
+      {
+        id: 'att-i2',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'I2',
+        url: 'https://cdn.example/i2.png',
+      },
+    ]
+    const out = await svc.preview({
+      sessionId: 's1',
+      userId: 'u1',
+      utterance: GOLD_COMPOSE_1,
+      existingNodeCount: 0,
+      attachments,
+    })
+    const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
+      dump: {
+        graph: {
+          nodes: Array<{ id: string; data?: { localRefs?: Array<{ id?: string; url?: string }> } }>
+        }
+      }
+    }
+    const srcI1 = stored.dump.graph.nodes.find((node) => node.id === 'image-src-I1')
+    expect(srcI1?.data?.localRefs?.[0]).toMatchObject({
+      id: 'att-i1',
+      url: 'https://cdn.example/i1.png',
+    })
+    const srcI2 = stored.dump.graph.nodes.find((node) => node.id === 'image-src-I2')
+    expect(srcI2?.data?.localRefs?.[0]).toMatchObject({
+      id: 'att-i2',
+      url: 'https://cdn.example/i2.png',
+    })
+    await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: out.dumpHash })
+    expect(importWorkflow).toHaveBeenCalledTimes(1)
+    expect(importWorkflow.mock.calls[0][0].workflow).toEqual(stored.dump)
+  })
+
+  it('resumes pending extract by merging follow-up into original utterance', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = vi.fn()
+    const svc = new CompositionService(prisma, { importWorkflow } as never)
+    await expect(
+      svc.preview({
+        sessionId: 's1',
+        userId: 'u1',
+        utterance: '作为模特换装，服装图',
+        existingNodeCount: 0,
+      }),
+    ).rejects.toMatchObject({ response: { userMessage: '请指明哪张是模特、哪张是服装。' } })
+    const out = await svc.preview({
+      sessionId: 's1',
+      userId: 'u1',
+      utterance: '@I1 是模特 @I2 是服装图',
+      existingNodeCount: 0,
+    })
+    expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(sessions.get('s1')!.compositionPending).toBeNull()
+    const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
+      dump: { graph: { nodes: Array<{ id: string }> } }
+      primitives?: { identityRef?: string; garmentRefs?: string[] }
+    }
+    const ids = stored.dump.graph.nodes.map((node) => node.id)
+    expect(ids).toEqual(expect.arrayContaining(['image-src-I1', 'image-src-I2', 'image-look-0']))
+    expect(ids).toContain('image-i0')
+    expect(stored.primitives?.identityRef).toBe('I1')
+    expect(stored.primitives?.garmentRefs).toEqual(['I2'])
+    expect(importWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('ignores compositionPending older than 15 minutes', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = vi.fn()
+    const svc = new CompositionService(prisma, { importWorkflow } as never)
+    sessions.get('s1')!.compositionPending = JSON.stringify({
+      utterance: '作为模特换装，服装图',
+      primitivesPartial: {},
+      ts: new Date(Date.now() - 16 * 60 * 1000).toISOString(),
+    })
+    await expect(
+      svc.preview({
+        sessionId: 's1',
+        userId: 'u1',
+        utterance: '@I1 是模特 @I2 是服装图',
+        existingNodeCount: 0,
+      }),
+    ).rejects.toMatchObject({ response: { userMessage: '请指明哪张是模特、哪张是服装。' } })
+    const pending = JSON.parse(sessions.get('s1')!.compositionPending!) as { utterance?: string }
+    expect(pending.utterance).toBe('@I1 是模特 @I2 是服装图')
+    expect(importWorkflow).not.toHaveBeenCalled()
+  })
+
+  it('replaces pending when the follow-up is a new structure utterance', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = vi.fn()
+    const svc = new CompositionService(prisma, { importWorkflow } as never)
+    sessions.get('s1')!.compositionPending = JSON.stringify({
+      utterance: '@I1 作为模特，@I2 @I3 @I4 @I5 @I6 这些是服装图',
+      primitivesPartial: {},
+      ts: new Date().toISOString(),
+    })
+    const out = await svc.preview({
+      sessionId: 's1',
+      userId: 'u1',
+      utterance: GOLD_COMPOSE_1,
+      existingNodeCount: 0,
+    })
+    expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
+    expect(sessions.get('s1')!.compositionPending).toBeNull()
+    const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
+      primitives?: { identityRef?: string; garmentRefs?: string[] }
+    }
+    expect(stored.primitives?.identityRef).toBe('I1')
+    expect(stored.primitives?.garmentRefs).toEqual(['I2', 'I3'])
+  })
+
   it('lint fail throws compile_failed and does not import', async () => {
     const { prisma } = createPrisma()
     const importWorkflow = vi.fn()

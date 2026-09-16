@@ -4,7 +4,7 @@ import { Type } from 'class-transformer'
 import { PrismaService } from '../prisma/prisma.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentInternalGuard } from './agent-internal.guard'
-import { CompositionService } from './composition.service'
+import { CompositionService, type PreviewCompositionInput } from './composition.service'
 import { WorkflowRecipeService } from './workflow-recipe.service'
 
 class UpsertPromptNodeDto {
@@ -564,6 +564,10 @@ class PreviewCompositionDto {
   @IsOptional()
   @IsObject()
   copy?: Record<string, unknown>
+
+  @IsOptional()
+  @IsArray()
+  attachments?: Record<string, unknown>[]
 }
 
 class ConfirmCompositionDto {
@@ -1219,6 +1223,7 @@ export class AgentCanvasToolsController {
       utterance: dto.utterance,
       copy: dto.copy,
       existingNodeCount: countCanvasNodes(session?.canvasData),
+      attachments: dto.attachments as PreviewCompositionInput['attachments'],
     })
     return { code: 0, message: 'ok', data }
   }

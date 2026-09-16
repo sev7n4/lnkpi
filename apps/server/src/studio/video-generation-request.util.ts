@@ -27,10 +27,11 @@ export type VideoStartBody = {
   nodeId?: string
 }
 
-export function hasCompositionPBlock(canvas: CanvasData): boolean {
-  if (canvas.nodes.some((node) => node.id === 'text-p')) return true
+export function hasCompositionPBlock(canvas: CanvasData, videoNodeId?: string): boolean {
   const ids = canvas.compositionRunGroup?.nodeIds
   if (!ids?.length) return false
+  if (videoNodeId && !ids.includes(videoNodeId)) return false
+  if (canvas.nodes.some((node) => node.id === 'text-p')) return true
   const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
   return ids.some((id) => byId.get(id)?.type === 'text')
 }
@@ -96,7 +97,7 @@ export function resolveVideoStartRequest(input: {
       throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
     }
 
-    const usePPrompt = hasCompositionPBlock(input.canvas)
+    const usePPrompt = hasCompositionPBlock(input.canvas, nodeId)
     const node = input.canvas.nodes.find((n) => n.id === nodeId)
     if (node) {
       const request = resolveCanonicalVideoRequest({

@@ -382,6 +382,22 @@ async def test_preview_composition_optional_copy(nest_client, captured):
 
 
 @pytest.mark.asyncio
+async def test_preview_composition_forwards_sidebar_attachments(nest_client, captured):
+    nest_client.sidebar_attachments = [
+        {
+            "id": "att-i1",
+            "mediaType": "image",
+            "sourceKind": "upload",
+            "label": "I1",
+            "url": "https://cdn.example/i1.png",
+        }
+    ]
+    await nest_client.preview_composition("设计一段模特换装的工作流并做好连线，写入画布")
+    req = _last(captured)
+    assert req["json"]["attachments"] == nest_client.sidebar_attachments
+
+
+@pytest.mark.asyncio
 async def test_confirm_composition(nest_client, captured):
     dump_hash = "ab" * 32
     result = await nest_client.confirm_composition(dump_hash)

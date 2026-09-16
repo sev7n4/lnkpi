@@ -223,6 +223,9 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         slot_utterance = pick_planner_slot_utterance(human_texts) or user_text
         if hasattr(nest, "last_user_utterance"):
             nest.last_user_utterance = slot_utterance
+        attachments = state.get("sidebar_attachments") or []
+        if hasattr(nest, "sidebar_attachments"):
+            nest.sidebar_attachments = list(attachments)
         parse = state.get("sidebar_media_parse")
 
         def _chip_out(
@@ -337,9 +340,6 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             return out
 
         record_explore_dispatch(intent, "llm")
-        attachments = state.get("sidebar_attachments") or []
-        if hasattr(nest, "sidebar_attachments"):
-            nest.sidebar_attachments = list(attachments)
         image_keys = sidebar_image_keys_from_attachments(attachments)
         new_keys = this_turn_new_image_keys_from_parse(attachments, parse)
         mention_keys = mentioned_keys_for_sidebar_bind(

@@ -87,6 +87,11 @@ describe('resolveVideoStartRequest', () => {
           canvasNode('video-v', 'video', { prompt: 'OLD' }),
         ],
         edges: [],
+        compositionRunGroup: {
+          nodeIds: ['image-i0', 'image-look-0', 'text-p', 'video-v'],
+          dumpHash: 'h1',
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
       },
     })
     expect(request.prompt).toBe('NEW SCRIPT')
@@ -104,6 +109,11 @@ describe('resolveVideoStartRequest', () => {
             canvasNode('video-v', 'video', { prompt: 'OLD' }),
           ],
           edges: [],
+          compositionRunGroup: {
+            nodeIds: ['text-p', 'video-v'],
+            dumpHash: 'h1',
+            createdAt: '2026-09-16T00:00:00.000Z',
+          },
         },
       }),
     ).toThrow(BadRequestException)
@@ -118,9 +128,56 @@ describe('resolveVideoStartRequest', () => {
             canvasNode('video-v', 'video', { prompt: 'OLD' }),
           ],
           edges: [],
+          compositionRunGroup: {
+            nodeIds: ['text-p', 'video-v'],
+            dumpHash: 'h1',
+            createdAt: '2026-09-16T00:00:00.000Z',
+          },
         },
       }),
     ).toThrow('分镜还是空的，写好后再生成视频。')
+  })
+
+  it('keeps non-composition video prompt when stray text-p exists', () => {
+    const { request } = resolveVideoStartRequest({
+      body: { prompt: 'body prompt' },
+      sessionId: 's1',
+      nodeId: 'video-other',
+      canvas: {
+        nodes: [
+          canvasNode('text-p', 'text', { prompt: 'COMPOSITION SCRIPT' }),
+          canvasNode('video-other', 'video', { prompt: 'OWN PROMPT' }),
+        ],
+        edges: [],
+        compositionRunGroup: {
+          nodeIds: ['text-p', 'video-v'],
+          dumpHash: 'h1',
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
+      },
+    })
+    expect(request.prompt).toBe('OWN PROMPT')
+  })
+
+  it('does not throw empty P for a video outside the run group', () => {
+    const { request } = resolveVideoStartRequest({
+      body: { prompt: 'body prompt' },
+      sessionId: 's1',
+      nodeId: 'video-other',
+      canvas: {
+        nodes: [
+          canvasNode('text-p', 'text', { prompt: '' }),
+          canvasNode('video-other', 'video', { prompt: 'OWN PROMPT' }),
+        ],
+        edges: [],
+        compositionRunGroup: {
+          nodeIds: ['text-p', 'video-v'],
+          dumpHash: 'h1',
+          createdAt: '2026-09-16T00:00:00.000Z',
+        },
+      },
+    })
+    expect(request.prompt).toBe('OWN PROMPT')
   })
 })
 

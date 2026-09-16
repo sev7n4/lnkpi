@@ -135,3 +135,21 @@ export function flowToCanvasData(
   }
   return data
 }
+
+export type CanvasSaveExtras = {
+  compositionRunGroup?: CanvasData['compositionRunGroup']
+  previousCanvas?: Pick<CanvasData, 'compositionRunGroup'>
+}
+
+/** Prefer in-memory extras; if both are empty, keep a server-side compositionRunGroup. */
+export function extrasForCanvasSave(input: {
+  current?: CanvasData['compositionRunGroup'] | null
+  lastKnown?: CanvasData['compositionRunGroup'] | null
+  server?: CanvasData['compositionRunGroup'] | null
+}): CanvasSaveExtras {
+  const extras: CanvasSaveExtras = {}
+  if (input.current) extras.compositionRunGroup = input.current
+  const previous = input.lastKnown ?? input.server ?? undefined
+  if (previous) extras.previousCanvas = { compositionRunGroup: previous }
+  return extras
+}

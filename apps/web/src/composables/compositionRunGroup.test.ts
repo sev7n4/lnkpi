@@ -6,7 +6,7 @@ import {
   expandComposition,
   renderCompositionCopy,
 } from '@lnkpi/shared'
-import { flowToCanvasData } from '@/composables/useCanvasActions'
+import { flowToCanvasData, extrasForCanvasSave } from '@/composables/useCanvasActions'
 import {
   compositionGenerateIdsForClick,
   orderedCompositionGenerateIds,
@@ -141,5 +141,38 @@ describe('flowToCanvasData compositionRunGroup', () => {
       { previousCanvas: { compositionRunGroup: group } },
     )
     expect(data.compositionRunGroup).toEqual(group)
+  })
+
+  it('preserves server compositionRunGroup when current and lastKnown are empty', () => {
+    const group = {
+      nodeIds: ['image-i0', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    }
+    const extras = extrasForCanvasSave({
+      current: null,
+      lastKnown: null,
+      server: group,
+    })
+    const data = flowToCanvasData(
+      [{ id: 'image-i0', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+      [],
+      extras,
+    )
+    expect(data.compositionRunGroup).toEqual(group)
+  })
+
+  it('does not invent a compositionRunGroup when server also has none', () => {
+    const extras = extrasForCanvasSave({
+      current: null,
+      lastKnown: null,
+      server: null,
+    })
+    const data = flowToCanvasData(
+      [{ id: 'image-i0', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+      [],
+      extras,
+    )
+    expect(data.compositionRunGroup).toBeUndefined()
   })
 })

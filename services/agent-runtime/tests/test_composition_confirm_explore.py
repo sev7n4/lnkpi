@@ -75,6 +75,28 @@ async def test_gold_preview_does_not_call_llm():
 
 
 @pytest.mark.asyncio
+async def test_preview_copies_sidebar_attachments_onto_nest():
+    llm = _llm()
+    nest = _nest()
+    explore = make_explore_node(llm=llm, nest=nest)
+    attachments = [
+        {
+            "id": "att-i1",
+            "mediaType": "image",
+            "sourceKind": "upload",
+            "label": "I1",
+            "url": "https://cdn.example/i1.png",
+        }
+    ]
+    await explore({
+        "messages": [HumanMessage(content=GOLD_COMPOSE_1)],
+        "sidebar_attachments": attachments,
+    })
+    nest.preview_composition.assert_awaited_once_with(GOLD_COMPOSE_1)
+    assert nest.sidebar_attachments == attachments
+
+
+@pytest.mark.asyncio
 async def test_confirm_chip_imports_composition_not_instantiate():
     llm = _llm()
     nest = _nest()

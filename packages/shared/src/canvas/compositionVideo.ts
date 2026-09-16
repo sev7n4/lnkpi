@@ -27,10 +27,23 @@ function firstRunGroupTextNode(canvas: CompositionVideoCanvas) {
   return undefined
 }
 
+function isCompositionRunVideo(canvas: CompositionVideoCanvas, videoNodeId: string): boolean {
+  const ids = canvas.compositionRunGroup?.nodeIds
+  if (!ids?.length) return false
+  return ids.includes(videoNodeId)
+}
+
 export function resolveCompositionVideoPrompt(
   canvas: CompositionVideoCanvas,
   videoNodeId: string,
 ): CompositionVideoPromptResult {
+  const video = canvas.nodes.find((node) => node.id === videoNodeId)
+  const ownPrompt = { prompt: trimmedField(video?.data, 'prompt') }
+
+  if (!isCompositionRunVideo(canvas, videoNodeId)) {
+    return ownPrompt
+  }
+
   const textP = canvas.nodes.find((node) => node.id === 'text-p')
   if (textP) {
     const prompt = blockText(textP.data)
@@ -43,6 +56,5 @@ export function resolveCompositionVideoPrompt(
     return prompt ? { prompt } : { error: 'empty_p_block_v' }
   }
 
-  const video = canvas.nodes.find((node) => node.id === videoNodeId)
-  return { prompt: trimmedField(video?.data, 'prompt') }
+  return ownPrompt
 }

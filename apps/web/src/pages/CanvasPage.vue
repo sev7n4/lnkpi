@@ -27,7 +27,7 @@ import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
+import { applyActionsToFlow, extrasForCanvasSave, flowToCanvasData } from '@/composables/useCanvasActions'
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
@@ -1180,7 +1180,7 @@ function addNode(
   return id
 }
 
-function handleAgentActions(actions: unknown[]) {
+async function handleAgentActions(actions: unknown[]) {
   const result = applyActionsToFlow(
     nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
     edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
@@ -1194,7 +1194,7 @@ function handleAgentActions(actions: unknown[]) {
   startPollingForGeneratingRecords()
   // Hydrate run-group extras as soon as actions land (not only loadSession),
   // so persistUserEdit cannot PUT canvas without compositionRunGroup.
-  void hydrateCompositionRunGroupFromSession()
+  await hydrateCompositionRunGroupFromSession()
   // 勿 persistUserEdit：Nest Agent tools 已写 Session.canvasData；
   // 用本地旧图 + 部分 action 回写会抹掉追加拆图节点。
 }
@@ -3123,15 +3123,29 @@ async function hydrateCompositionRunGroupFromSession() {
 async function saveCanvas() {
   saving.value = true
   try {
+    let serverGroup: CompositionRunGroup | undefined
+    if (!compositionRunGroup.value && !lastKnownCompositionRunGroup.value) {
+      try {
+        const { data } = await api.get<{
+          data: { canvasData?: { compositionRunGroup?: CompositionRunGroup } }
+        }>(`/sessions/${sessionId.value}`)
+        serverGroup = data.data.canvasData?.compositionRunGroup
+        if (serverGroup) {
+          lastKnownCompositionRunGroup.value = serverGroup
+          if (!compositionRunGroup.value) compositionRunGroup.value = serverGroup
+        }
+      } catch {
+        // demo mode
+      }
+    }
     const canvasData = flowToCanvasData(
       nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
       edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
-      {
-        compositionRunGroup: compositionRunGroup.value ?? undefined,
-        previousCanvas: lastKnownCompositionRunGroup.value
-          ? { compositionRunGroup: lastKnownCompositionRunGroup.value }
-          : undefined,
-      },
+      extrasForCanvasSave({
+        current: compositionRunGroup.value,
+        lastKnown: lastKnownCompositionRunGroup.value,
+        server: serverGroup,
+      }),
     )
     if (canvasData.compositionRunGroup) {
       lastKnownCompositionRunGroup.value = canvasData.compositionRunGroup

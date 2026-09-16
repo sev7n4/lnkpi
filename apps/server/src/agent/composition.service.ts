@@ -9,11 +9,13 @@ import {
   expandComposition,
   extractCompositionPrimitives,
   hashCompositionDump,
+  isCompositionStructureUtterance,
   lintCompositionDump,
   renderCompositionCopy,
   summarizeCompositionDump,
   type CanvasData,
   type CompositionIR,
+  type LocalRefBinding,
   type SidebarAttachment,
   type WorkflowDocument,
 } from '@lnkpi/shared'
@@ -24,6 +26,7 @@ const EXTRACT_INCOMPLETE = '请指明哪张是模特、哪张是服装。'
 const COMPILE_FAILED = '这版构图还不能放到画布，请稍后再试或简化步骤。'
 const PERSIST_MISSING = '请先确认构图，再落到画布。'
 const SOURCE_PREFIX = 'image-src-'
+const PENDING_TTL_MS = 15 * 60 * 1000
 
 type CompositionCopy = NonNullable<CompositionIR['copy']>
 
@@ -45,7 +48,13 @@ export type PreviewCompositionInput = {
   utterance: string
   copy?: object
   existingNodeCount?: number
-  attachments?: SidebarAttachment[]
+  attachments?: Array<Partial<SidebarAttachment> & { media_type?: string }>
+}
+
+type StoredPending = {
+  utterance?: string
+  primitivesPartial?: Record<string, unknown>
+  ts?: string
 }
 
 export type ConfirmCompositionInput = {
@@ -69,7 +78,8 @@ export class CompositionService {
     const session = await this.loadOwnedSession(input.sessionId, input.userId)
     const existingNodeCount =
       input.existingNodeCount ?? countCanvasNodes(session.canvasData)
-    const extracted = extractCompositionPrimitives(input.utterance)
+    const utterance = resolvePreviewUtterance(input.utterance, session.compositionPending)
+    const extracted = extractCompositionPrimitives(utterance)
     const ts = new Date().toISOString()
 
     if (!extracted.ok) {
@@ -77,7 +87,7 @@ export class CompositionService {
         where: { id: session.id },
         data: {
           compositionPending: JSON.stringify({
-            utterance: input.utterance,
+            utterance,
             primitivesPartial: {},
             ts,
           }),
@@ -91,7 +101,10 @@ export class CompositionService {
       primitives: extracted.primitives,
       copy: asCopy(input.copy),
     })
-    const dump = expandComposition(rendered)
+    const dump = expandComposition(
+      rendered,
+      localRefsByRefFromSidebarAttachments(utterance, input.attachments),
+    )
     const lint = lintCompositionDump(dump)
     if (!lint.ok) {
       throw new BadRequestException({ userMessage: lint.message || COMPILE_FAILED })
@@ -193,6 +206,72 @@ export class CompositionService {
 function asCopy(copy: object | undefined): CompositionCopy {
   if (!copy || typeof copy !== 'object') return {}
   return copy as CompositionCopy
+}
+
+function parseStoredPending(raw: string | null | undefined): StoredPending | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as StoredPending
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function isPendingFresh(ts: string | undefined): boolean {
+  if (!ts) return true
+  const parsed = Date.parse(ts)
+  if (!Number.isFinite(parsed)) return true
+  return Date.now() - parsed <= PENDING_TTL_MS
+}
+
+function resolvePreviewUtterance(
+  incoming: string,
+  pendingRaw: string | null | undefined,
+): string {
+  const pending = parseStoredPending(pendingRaw)
+  const original = pending?.utterance?.trim()
+  if (!original || !isPendingFresh(pending?.ts)) return incoming
+  if (isCompositionStructureUtterance(incoming)) return incoming
+  return `${original} ${incoming.trim()}`.trim()
+}
+
+function attachmentToLocalRef(
+  attachment: Partial<SidebarAttachment> & { media_type?: string },
+): LocalRefBinding | null {
+  const id = String(attachment.id || attachment.url || '').trim()
+  const label = String(attachment.label || '图').trim() || '图'
+  if (!id) return null
+  return {
+    id,
+    mediaType: 'image',
+    sourceKind: attachment.sourceKind === 'asset' ? 'asset' : 'upload',
+    label,
+    ...(attachment.url ? { url: attachment.url } : {}),
+    ...(attachment.text ? { text: attachment.text } : {}),
+  }
+}
+
+function localRefsByRefFromSidebarAttachments(
+  utterance: string,
+  attachments: PreviewCompositionInput['attachments'],
+): Record<string, LocalRefBinding[]> {
+  const images = (attachments ?? []).filter((item) => {
+    const media = String(item.mediaType || item.media_type || '')
+    return media === 'image'
+  })
+  const mentioned = new Set(
+    [...utterance.matchAll(/@I([0-9]+)/g)].map((match) => `I${match[1]}`),
+  )
+  const map: Record<string, LocalRefBinding[]> = {}
+  images.forEach((attachment, index) => {
+    const key = `I${index + 1}`
+    if (mentioned.size > 0 && !mentioned.has(key)) return
+    const binding = attachmentToLocalRef(attachment)
+    if (binding) map[key] = [binding]
+  })
+  return map
 }
 
 function countCanvasNodes(raw: string | null | undefined): number {

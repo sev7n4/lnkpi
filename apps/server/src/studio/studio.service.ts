@@ -1588,7 +1588,7 @@ export class StudioService {
         if ('error' in livePrompt) {
           throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
         }
-        if (hasCompositionPBlock(canvas)) {
+        if (hasCompositionPBlock(canvas, scope.nodeId)) {
           prompt = livePrompt.prompt
         }
       }
