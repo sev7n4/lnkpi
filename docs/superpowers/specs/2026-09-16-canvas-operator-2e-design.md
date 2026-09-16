@@ -1,11 +1,11 @@
 # Canvas Operator 2e — HITL 闭环 / 操作集常驻 / V1 工作流摆盘
 
 > 日期：2026-09-16  
-> 状态：**已批准**（审阅补丁：只加不减 + 确认卡 SSOT；2026-09-16）  
+> 状态：**已批准**（审阅补丁 2：E2 UI 唯一 / D10 评测非 CI / 挂参分工 / E16 只认手搭；2026-09-16）  
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md)（V1–V4 / §6.1）  
 > 前置：Phase 2d.3（#345/#347）、裸生成绑定（#349）、SSE `tool_call`（#352）、侧栏媒体绑定（#353）  
-> 实现 plan：**按切片另开**（本档审阅通过后先写 2e.1 plan）。2e.2 / 2e.3 各自 plan，禁止一张 PR 做完三刀。
+> 实现 plan：[2026-09-16-canvas-operator-2e1-hitl.md](../plans/2026-09-16-canvas-operator-2e1-hitl.md)（**仅 2e.1**）。2e.2 / 2e.3 各自另开 plan + PR；禁止一张 PR 做完三刀。
 
 ---
 
@@ -16,13 +16,13 @@
 | **2E-D1** | 程序顺序钉死：**2e.1 确认出图 → 2e.2 操作集常驻 → 2e.3 V1 工作流摆盘**。前一刀生产硬表未绿，不得开下一刀。 |
 | **2E-D2** | 2e.2 起画布**操作集只加不减**：默认 `canvas_agent` 轮始终可见 §0.1 九件套。规划/导入工具在强锚点上 **叠加**，**禁止**再把操作集藏起来。 |
 | **2E-D3** | **废止**「图生视频」「工作流」「分镜」作为规划/导入**减工具**谓词。V1 金标含「生图生视频」，现网 `_is_planner_utterance` 会把它送进规划三件套并拿走画布工具——2e.2 必须拆掉。导入/模板确认锚点（§0.2）只负责 **加** 规划/导入工具，永不减 §0.1。 |
-| **2E-D4** | 2e.1 的 HITL SSOT 是侧栏确认卡 → `handleAgentGenerateNode` → `generateForNode`（与 Dock 同一函数）→ studio。允许测试账号 **一次**小图扣费。脚本直打 `POST /studio/image/generate` **只作诊断，不得单独当 V4 生产绿**。取消走已有 `POST /agent/clear-propose`。**禁止**为本刀新造 `POST /agent/confirm-propose`。 |
+| **2E-D4** | 2e.1 的 HITL SSOT 是侧栏确认卡。生产 **E2 唯一路径**：浏览器点 `[data-testid=generation-propose-confirm]`（文案「确认生成」）。该点击必须走到 `handleAgentGenerateNode` → `generateForNode`（与 Dock 同一函数）→ studio。**点了但生成未开始 = E2 失败**（含无 prompt/refs 静默 return、`assertModelSelectable` 挡掉）。`generateForNode` spy **只**用于 2e.1 修 bug 的单测，不得单独当生产绿。允许测试账号 **一次**小图扣费。脚本直打 `POST /studio/image/generate` **只作诊断，不得单独当 V4 生产绿**。取消走已有 `POST /agent/clear-propose` 或点 `[data-testid=generation-propose-cancel]`。**禁止**为本刀新造 `POST /agent/confirm-propose`。 |
 | **2E-D5** | V1 按节点确认；侧栏仍只恢复一张最新/选中的 `pending_confirm`（2c 已钉）。**不做**图级「一键跑工作流」。`@I*` 芯片继续 `localRefs`，不是 canvas 边。 |
 | **2E-D6** | 常驻九件套，**不是** 19 个 `EXPLORE_WRITE_TOOLS` 全开。上传 / 超分切片 / 资产库等专才保持 deferred + `tool_search`。 |
 | **2E-D7** | Agent **永不**可见或调用 `run_*`。不 mandatory 直调生成。不向 `MEDIA_CREATE_HINTS` 扩「工作流/分镜/搭骨架」同义词。 |
 | **2E-D8** | 本档是程序规格。每刀单独硬表 + 单独 plan + 单独 PR。2e.1 **不改**窄写集合。 |
 | **2E-D9** | 系统提示与可见工具必须同构：提示说到的写工具，该轮 bind 里必须有；不得再出现「规则 5 要 `connect_nodes` 但 cull 掉」的 ACI 撒谎。 |
-| **2E-D10** | 有工具 ≠ 必须调用。负例（谢谢、识图问句、重新生成一张）在 2e.2 之后工具仍在，靠提示 + 既有负类谓词禁止 **调用** propose；用单测锁可见性，用冒烟/评测锁「不得出现 propose `tool_call`」。 |
+| **2E-D10** | 有工具 ≠ 必须调用。2e.2 **合入门禁** = E6–E13 可见性 + 无 `run_*` + 无 mandatory propose。负例（谢谢、识图问句、重新生成一张）不得 **mandatory** 直调 propose；提示写清闲聊不得 upsert/propose。负例「不得出现 propose `tool_call`」是 **部署后抽检/评测**，**不当** 2e.2 CI flake 门；失败先看提示，不立刻回滚九件套。 |
 
 ### 0.1 常驻操作集（钉死，恰好 9 个）
 
@@ -39,6 +39,10 @@
 | 禁止当独占谓词 | `图生视频`、单独的 `工作流`、`分镜`、`生图生视频` | 不得因此拿走 §0.1 |
 
 导入弱锚点（无工作流标记的「导入+URL」）保持现网「不抢 upload」行为；**不得**因此清空操作集。
+
+「接到 / 改版」等规划强锚点在 2e.2 **仍叠加**规划工具（不再缴械）。2e.2 提示必须写：无「确认落到画布」不得 instantiate；口语搭骨架（含 V1 金标）优先 `upsert_media_node` + `connect_nodes`，不得用 `match_workflow_templates` 顶替手搭。
+
+`arrange_nodes_along_edges` 现网不在 `EXPLORE_WRITE_TOOLS` cull 里，一般已可见。2e.2 提示同构时列一次即可，**不**塞进九件套。
 
 ### 0.3 金标句（钉死）
 
@@ -88,10 +92,11 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 ### 2.1 2e.1 HITL 闭环
 
 1. 先跑未改语义的 V2 裸生成，得到 `pending_confirm` 节点。  
-2. **确认：** 生产 UI 点侧栏 `generation_propose` 确认（或等价驱动 `generateForNode(node)`）。节点离开 `pending_confirm`，进入 `generating` 或出现 `generationRecordId`；studio 路径与 Dock 相同。允许一次小图积分。  
-3. **取消（另开会话或另开节点）：** `POST /agent/clear-propose` 后该节点 `draft`，无 studio generate、无扣费。  
+2. **确认（生产 E2 唯一）：** 打开该会话画布 `/workflow/:sessionId`，侧栏出现确认卡后，浏览器点 `[data-testid=generation-propose-confirm]`。节点必须进入 `generating` 或出现 `generationRecordId`（studio 已启动）。仅离开 `pending_confirm` 但未开始生成 = 失败。禁止 `sendPreset('确认生成')`。禁止用脚本直调 `generateForNode` 或 studio 判 E2 绿。  
+3. **取消（另开会话或另开节点）：** `POST /agent/clear-propose` 或点 `[data-testid=generation-propose-cancel]` 后该节点 `draft`，无 studio generate、无扣费。  
 4. 直打 `/studio/image/generate` 若与确认卡结果不一致，以确认卡为准，记录诊断，**不得**把直打结果写成 V4 绿。  
-5. 2e.1 **零** runtime bind 变更。若确认卡失败，本刀修 2c 接线（`CanvasPage.handleAgentGenerateNode` / `useNodeGeneration.generateForNode` / pending 未清），修完再绿，不跳 2e.2。
+5. 2e.1 **零** runtime bind 变更。若确认卡失败，本刀修 2c 接线（`CanvasPage.handleAgentGenerateNode` / `useNodeGeneration.generateForNode` / pending 未清 / 缺 `imageModel` 被 `assertModelSelectable` 挡掉），修完再绿，不跳 2e.2。  
+6. Agent 新建节点可能没有 `imageModel`。`resolveGenerationModel` 必须落到平台默认；`assertModelSelectable` 不得因缺字段静默 return。E2 验收的是「生成已开始」，不是「按钮可点」。
 
 ### 2.2 2e.2 只加不减
 
@@ -99,15 +104,21 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 2. 删除或改写 `_is_planner_utterance` 里 `图生视频` / `分镜` 导致的独占；`生图生视频` 不得进入规划叠加，除非同时具备 §0.2 规划强锚点。  
 3. `tool_search` 仍只搜 deferred；**禁止**把 CORE 写工具塞进 `tool_search`。  
 4. 系统提示：规则 4/5/8/9 与可见工具对齐；规划叠加轮可另附「不要用手搭替代已确认的 instantiate」，但不删 `connect_nodes`。  
-5. 负例调用：`utterance_binds_media_propose` / `utterance_binds_sidebar_media_propose` / regen / 识图问句保持 False 时，**不** mandatory propose。提示写明闲聊、谢谢、纯问答不得 upsert/propose。
+5. 负例调用：`utterance_binds_media_propose` / `utterance_binds_sidebar_media_propose` / regen / 识图问句保持 False 时，**不** mandatory propose。提示写明闲聊、谢谢、纯问答不得 upsert/propose。合入只锁可见性（E10）；「谢谢不得出现 propose `tool_call`」见 2E-D10，不当 CI flake 门。  
+6. **挂参分工（2e.2 提示与工具描述必须写死，防 #353 身份串）：**
+
+| 用户指的东西 | 只用 | 禁止 |
+|--------------|------|------|
+| 侧栏芯片 `@I*` / `I1` | `apply_sidebar_attachments`（`mode=localRefs`） | `attach_refs` 吃芯片 key；`connect_nodes` 连芯片 |
+| 画布已有 `image-*` / `video-*` | `attach_refs` 和/或 `connect_nodes` 边 | 把 canvas id 当芯片 key 喂给 `apply_sidebar_attachments` |
 
 ### 2.3 2e.3 V1 摆盘
 
 1. 金标句走 `canvas_agent`，不进 atomic 子图。  
-2. ≥2 个媒体节点（至少覆盖「生图」与「生视频」两种类型，或图→视频一条链）+ ≥1 条 canvas **边**（`connect_nodes` 的 `canvas_action` 或 instantiate/import 返回的边）。  
+2. ≥2 个媒体节点（至少覆盖「生图」与「生视频」两种类型，或图→视频一条链）+ ≥1 条 canvas **边**。对本金标，边必须来自 `connect_nodes` 的 `canvas_action`；**不得**用 import/instantiate 的落点边混绿。  
 3. 可生成节点 dock prompt 非空。  
 4. 每个新建的可生成媒体节点都 `propose_generation`；确认前无 `run_*`、无 billed complete。  
-5. 不把 `@I*` 连成边。导入/模板已对 `addedNodeIds` 顺连线的，禁止再手搭同一批 id（沿用 explore 规则 8）。  
+5. 不把 `@I*` 连成边。  
 6. 成功标准容忍拓扑多样，不锁死唯一 DAG。  
 7. HITL 沿用 2c：多 pending 时侧栏一张卡，其余 Dock。本刀 **不** 自动确认、**不** 扣费出图（2e.1 已证确认通道；2e.3 停在 propose）。
 
@@ -128,7 +139,7 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 | ID | 检查 | 唯一期望 |
 |----|------|----------|
 | **E1** | V2 金标前置 | 与现网 P7 相同：`canvas_agent`、upsert→propose、`pending_confirm`、无 `run_*` |
-| **E2** | 确认卡 / `generateForNode` | 该节点不再是 `pending_confirm`；`generating` 或已有 `generationRecordId`；**不是** `sendPreset('确认生成')` |
+| **E2** | 生产：点 `[data-testid=generation-propose-confirm]` | 生成已开始：`generating` 或已有 `generationRecordId`；**不是** `sendPreset('确认生成')`；点了但未启动 = 失败 |
 | **E3** | 扣费 | 确认轮有 studio 生成记录（一次小图）；取消轮无 |
 | **E4** | 取消 | `clear-propose` 后节点 `draft` |
 | **E5** | 诊断直打 studio | 可选；**不得**在缺 E2 时单独判绿 |
@@ -141,7 +152,7 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 | **E7** | `_bind_plan_tools("帮我生成一张蓝色天空产品主图")` | 含 upsert + propose（回归 P5） |
 | **E8** | `_bind_plan_tools("导入工作流")` | 含 `import_workflow` **且** 含 §0.1 操作集 |
 | **E9** | `_bind_plan_tools("确认落到画布")` | 含 `instantiate_workflow_template` **且** 含操作集 |
-| **E10** | `_bind_plan_tools("谢谢")` / `"@I1 是什么衣服"` / `"重新生成一张"` | 操作集仍可见；**不含** `run_*` |
+| **E10** | `_bind_plan_tools("谢谢")` / `"@I1 是什么衣服"` / `"重新生成一张"` | **可见性**：操作集仍可见；**不含** `run_*`。本行 **不**断言「不得出现 propose `tool_call`」（那是部署后评测，见 2E-D10） |
 | **E11** | `build_tool_plan().visible_names` | 仍不含 `run_image_generation` / `run_video_generation` |
 | **E12** | 规划独占谓词 | `"…生图生视频…"`（无规划强锚点）**不得**把可见集收成仅 planner 三件套 |
 | **E13** | 既有 planner/import/sidebar/裸生成单测 | 行为改为叠加后更新期望：不再断言「仅 N 个写工具」若该断言依赖减工具 |
@@ -152,7 +163,7 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 |----|------|----------|
 | **E14** | `flow_mode` | `canvas_agent` |
 | **E15** | 结构 | ≥2 媒体节点 + ≥1 canvas 边 + 非空 prompt |
-| **E16** | 工具序 | 有 `upsert_media_node`（或 instantiate/import 落点）与 `propose_generation`；若手搭则有 `connect_nodes`；无 `run_*` |
+| **E16** | 工具序（对本金标） | 必须同时有 `upsert_media_node`（或等价新建媒体节点）+ `connect_nodes` + `propose_generation`；无 `run_*`。**`import_workflow` / `instantiate_workflow_template` 不得作为本句通过条件**（本句是口语搭骨架，不是导入；instantiate 只有用户说了「确认落到画布」才算） |
 | **E17** | 确认前 | 可生成节点 `pending_confirm` 或等价待确认；无 billed complete |
 | **E18** | 负 | 无原子「基于引用内容…」卡；芯片未当边 |
 
@@ -195,7 +206,10 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 
 - [x] 无 TBD 阻塞合入门禁；2e.2/2e.3 plan 预留、本档不实施那两刀  
 - [x] V1 金标与 `图生视频` 独占冲突已写进 2E-D3 / E12  
-- [x] 确认卡 SSOT；studio 直打不得单独判绿  
+- [x] 确认卡 SSOT；生产 E2 只认侧栏 `generation-propose-confirm` 点击；studio 直打不得单独判绿  
+- [x] 2E-D10：负例 tool_call 是评测不是 CI flake 门  
+- [x] 挂参分工表：`@I*` → apply_sidebar；canvas id → attach_refs/边  
+- [x] E16 对本金标只认手搭，import/instantiate 不得混绿  
 - [x] 只加不减；九件套钉死；禁止 19 全开与 `run_*`  
 - [x] 未滑入 Phase 3 / 2d.4 / 模型切片 / 新 confirm API / 图级自动跑  
 - [x] 每刀硬表可测、金标句唯一且不改字  
