@@ -17,10 +17,11 @@
 | **C4** | 只用 preview **调用参数** `parent_id` / `parent_version` / `delta`（缺 delta → `{}`）。禁止把 preview 返回体里的整份 Recipe IR 交给 instantiate |
 | **C5** | 填槽原话仍用 `pick_planner_slot_utterance`（跳过确认 chip）；侧栏附件照旧随 Nest instantiate |
 | **C6** | 无成功 preview：不写画布；文案见 §3。**禁止**「未能更新节点，请提供节点 id」 |
-| **C7** | Nest instantiate 失败：把服务端用户文案原样回侧栏。同样禁止节点 id 追问 |
+| **C7** | Nest instantiate 失败：解析 HTTP 4xx body 的 `userMessage`（其次 `message`）回侧栏，禁止节点 id 追问。不得只展示泛化 `param_error`（`NestCanvasClient._post` 现状会丢掉 body） |
 | **C8** | 「先不改」整句：不写画布、不调 LLM；短回取消文案 |
 | **C9** | 同一 preview 再次「确认落到画布」：**再落一份**（与现有 import 语义一致；本切片不去重） |
 | **C10** | 「先不改」**不作废**上次成功 preview；之后再点确认仍按 C3 查找 |
+| **C11** | instantiate 成功必须把结果里的 `canvasCommands` 写入 explore `canvas_commands`（与 LLM 工具环同一 `extract_canvas_commands`），否则画布不刷新 |
 
 ## 1. 背景
 
@@ -36,8 +37,8 @@
        命中最近一次成功的 preview_workflow_template
        （有 tool 调用，配对 ToolMessage 无 error）
   → 有：不调 LLM；instantiate(parent_id, parent_version, delta?)
-       成功 → 「已按模板落到画布。」
-       Nest 失败 → 原样回服务端用户文案（如 empty_prompt）
+       成功 → 「已按模板落到画布。」+ 转发 canvas_commands
+       Nest 失败 → HTTP body `userMessage` 或 `message`
   → 无任何成功 preview：不写画布 → 「请先规划并确认模板改动，再落到画布。」
 
 本轮 user trim 后全等「先不改」

@@ -1,12 +1,18 @@
+from __future__ import annotations
+
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.graph.nodes.explore import make_explore_node
 from app.graph.planner_copy import (
     format_planner_preview_hitl,
     is_machine_payload_reply,
+    is_planner_cancel_chip,
+    is_planner_confirm_chip,
+    last_successful_preview_args,
     pick_planner_slot_utterance,
     sanitize_planner_reply,
 )
@@ -192,40 +198,87 @@ async def test_explore_preview_reply_uses_diff_ssot_not_llm_walkthrough():
 async def test_explore_drops_tool_search_json_after_instantiate():
     llm = MagicMock()
     llm.bind_tools = MagicMock(side_effect=lambda tools: llm)
-    llm.ainvoke = AsyncMock(
-        side_effect=[
+    llm.ainvoke = AsyncMock()
+    nest = _Nest()
+    nest.instantiate_recipe = AsyncMock(return_value={"addedNodeIds": ["image-1"]})
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [
+            HumanMessage(content="帮我规划一个角色三视图工作流"),
             AIMessage(
                 content="",
                 tool_calls=[{
-                    "name": "instantiate_workflow_template",
+                    "name": "preview_workflow_template",
                     "args": {"parent_id": "model-turnaround", "parent_version": "1.0.0", "delta": {}},
-                    "id": "i1",
+                    "id": "p1",
                 }],
             ),
-            AIMessage(
-                content=(
-                    '{"loaded": ["get_image_edit_capabilities"], '
-                    '"candidates": [{"name": "get_image_edit_capabilities"}], "hint": null}'
-                )
-            ),
-        ]
-    )
-    instantiate = MagicMock()
-    instantiate.name = "instantiate_workflow_template"
-    instantiate.ainvoke = AsyncMock(return_value={"addedNodeIds": ["image-1"]})
-    nest = _Nest()
-    import app.graph.nodes.explore as explore_mod
-
-    original = explore_mod.build_explore_tools
-    explore_mod.build_explore_tools = lambda _nest: [instantiate]
-    try:
-        explore = make_explore_node(llm=llm, nest=nest)
-        result = await explore({
-            "messages": [HumanMessage(content="确认落到画布")],
-        })
-    finally:
-        explore_mod.build_explore_tools = original
+            ToolMessage(content='{"parentTitle":"角色三视图","diffLines":[]}', tool_call_id="p1"),
+            HumanMessage(content="确认落到画布"),
+        ],
+    })
+    llm.ainvoke.assert_not_called()
     text = result["messages"][0].content
     assert "loaded" not in text
     assert "get_image_edit_capabilities" not in text
     assert "落到画布" in text
+
+
+def test_confirm_chip_trim_exact_only():
+    assert is_planner_confirm_chip("确认落到画布") is True
+    assert is_planner_confirm_chip("  确认落到画布\n") is True
+    assert is_planner_confirm_chip("确认落到画布吧") is False
+    assert is_planner_cancel_chip("先不改") is True
+    assert is_planner_cancel_chip("先不改了") is False
+
+
+def _preview_turn(call_id: str, args: dict, result: dict) -> list:
+    return [
+        AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "preview_workflow_template",
+                "args": args,
+                "id": call_id,
+            }],
+        ),
+        ToolMessage(content=json.dumps(result, ensure_ascii=False), tool_call_id=call_id),
+    ]
+
+
+def test_last_successful_preview_skips_failed_and_keeps_earlier():
+    ok = {"parent_id": "model-turnaround", "parent_version": "1.0.0", "delta": {}}
+    msgs = [
+        HumanMessage(content="规划一个角色三视图工作流"),
+        *_preview_turn("p1", ok, {"parentTitle": "角色三视图", "diffLines": []}),
+        *_preview_turn(
+            "p2",
+            {"parent_id": "ecommerce-product-visual", "parent_version": "1.0.0", "delta": {"remove": ["banner"]}},
+            {"error": "lint failed"},
+        ),
+        HumanMessage(content="确认落到画布"),
+    ]
+    assert last_successful_preview_args(msgs) == {
+        "parent_id": "model-turnaround",
+        "parent_version": "1.0.0",
+        "delta": {},
+    }
+
+
+def test_last_successful_preview_none_when_all_fail():
+    msgs = _preview_turn("p1", {"parent_id": "x", "parent_version": "1.0.0"}, {"error": "nope"})
+    assert last_successful_preview_args(msgs) is None
+
+
+def test_last_successful_preview_normalizes_parentId_and_missing_delta():
+    msgs = _preview_turn(
+        "p1",
+        {"parentId": "model-turnaround", "parentVersion": "1.0.0"},
+        {"ok": True},
+    )
+    assert last_successful_preview_args(msgs) == {
+        "parent_id": "model-turnaround",
+        "parent_version": "1.0.0",
+        "delta": {},
+    }
+

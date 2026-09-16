@@ -109,6 +109,34 @@ def from_nest_message(tool_name: str, message: str, *, code: int | None = None) 
     }
 
 
+def message_from_http_error_body(body: Any, fallback: str) -> str:
+    """Prefer Nest ``userMessage`` from a 4xx JSON body; else ``fallback``."""
+    fallback = fallback or ""
+    if not isinstance(body, dict):
+        return fallback
+
+    def _as_text(value: Any) -> str:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, str) and item.strip():
+                    return item.strip()
+        return ""
+
+    nested = body.get("message")
+    if isinstance(nested, dict):
+        for key in ("userMessage", "message"):
+            text = _as_text(nested.get(key))
+            if text:
+                return text
+    for key in ("userMessage", "message"):
+        text = _as_text(body.get(key))
+        if text:
+            return text
+    return fallback
+
+
 def from_http_status(tool_name: str, status_code: int) -> AgentError:
     if status_code in (401, 403):
         error_type: ErrorType = "permission_denied"
