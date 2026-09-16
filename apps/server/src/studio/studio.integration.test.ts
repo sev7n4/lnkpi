@@ -489,6 +489,11 @@ describe('StudioService integration (provider params)', () => {
         { id: 'video-v', type: 'video', position: { x: 0, y: 0 }, data: { prompt: 'OLD' } },
       ],
       edges: [],
+      compositionRunGroup: {
+        nodeIds: ['text-p', 'video-v'],
+        dumpHash: 'ab'.repeat(32),
+        createdAt: new Date().toISOString(),
+      },
     })
 
     await expect(
