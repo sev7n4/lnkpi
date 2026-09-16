@@ -16,6 +16,7 @@ describe('MembershipService', () => {
       pointTransaction: { create: transactionCreate },
     }),
   )
+  const $queryRaw = vi.fn()
   let service: MembershipService
 
   beforeEach(async () => {
@@ -28,6 +29,7 @@ describe('MembershipService', () => {
           useValue: {
             pointTransaction: { findMany, groupBy, findFirst },
             $transaction,
+            $queryRaw,
           },
         },
       ],
@@ -110,6 +112,26 @@ describe('MembershipService', () => {
     vi.useRealTimers()
   })
 
+  it('filters transactions to a Shanghai day and ignores range', async () => {
+    findMany.mockResolvedValue([{ id: 'tx1' }])
+    await service.listTransactions('u1', { day: '2026-09-16', range: 'month', limit: 50 })
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          userId: 'u1',
+          createdAt: {
+            gte: new Date('2026-09-15T16:00:00.000Z'),
+            lt: new Date('2026-09-16T16:00:00.000Z'),
+          },
+        }),
+      }),
+    )
+  })
+
+  it('throws on invalid day', async () => {
+    await expect(service.listTransactions('u1', { day: '2026-02-31' })).rejects.toThrow('无效日期')
+  })
+
   it('writes structured grant fields when claiming daily points', async () => {
     userUpdate.mockResolvedValue({ points: 1100 })
     transactionCreate.mockResolvedValue({ id: 'tx1' })
@@ -147,5 +169,51 @@ describe('MembershipService', () => {
         balanceAfter: 6000,
       },
     })
+  })
+
+  it('returns lifetime overview and sparse heatmap days from raw daily rows', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-16T12:00:00.000Z'))
+    groupBy.mockResolvedValue([
+      { kind: 'consume', category: 'image', _sum: { amount: -30 } },
+      { kind: 'refund', category: 'image', _sum: { amount: 10 } },
+    ])
+    $queryRaw
+      .mockResolvedValueOnce([{ distinctGens: 2, nullGens: 1, activeDays: 4 }])
+      .mockResolvedValueOnce([
+        { day: '2026-09-14', kind: 'consume', category: 'image', amountSum: -20 },
+      ])
+      .mockResolvedValueOnce([{ day: '2026-09-14', distinctGens: 1, nullGens: 0 }])
+
+    const result = await service.usage('u1')
+    expect(result.overview).toEqual({
+      netConsumedTotal: 20,
+      byCategory: { text: 0, image: 20, audio: 0, video: 0 },
+      otherNetConsumed: 0,
+      generationCount: 3,
+      activeDays: 4,
+    })
+    expect(result.heatmap.from).toBe('2026-03-16')
+    expect(result.heatmap.to).toBe('2026-09-16')
+    expect(result.heatmap.days).toEqual([{ date: '2026-09-14', netConsumed: 20, generationCount: 1 }])
+    expect($queryRaw).toHaveBeenCalledTimes(3)
+    vi.useRealTimers()
+  })
+
+  it('fills every calendar day for usageDays 7d', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-16T12:00:00.000Z'))
+    $queryRaw
+      .mockResolvedValueOnce([{ day: '2026-09-16', kind: 'consume', category: 'video', amountSum: -40 }])
+      .mockResolvedValueOnce([{ day: '2026-09-16', distinctGens: 1, nullGens: 0 }])
+
+    const result = await service.usageDays('u1', '7d')
+    expect(result.range).toBe('7d')
+    expect(result.from).toBe('2026-09-10')
+    expect(result.to).toBe('2026-09-16')
+    expect(result.days).toHaveLength(7)
+    expect(result.days.at(-1)).toMatchObject({ date: '2026-09-16', netConsumed: 40, generationCount: 1 })
+    expect(result.days[0]).toMatchObject({ date: '2026-09-10', netConsumed: 0, generationCount: 0 })
+    vi.useRealTimers()
   })
 })

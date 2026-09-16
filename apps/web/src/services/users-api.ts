@@ -62,6 +62,52 @@ export interface PointsSummary {
   insights: PointsInsights
 }
 
+export type UsageDaysRangeKey = '7d' | '30d' | 'month'
+
+export interface UsageCategoryBreakdown {
+  text: number
+  image: number
+  audio: number
+  video: number
+}
+
+export interface UsageDayPoint {
+  date: string
+  generationCount: number
+  netConsumed: number
+  byCategory: UsageCategoryBreakdown
+  otherNetConsumed: number
+}
+
+export interface UsageHeatmapDay {
+  date: string
+  netConsumed: number
+  generationCount: number
+}
+
+export interface UsageOverviewResponse {
+  overview: {
+    netConsumedTotal: number
+    byCategory: UsageCategoryBreakdown
+    otherNetConsumed: number
+    generationCount: number
+    activeDays: number
+  }
+  heatmap: {
+    from: string
+    to: string
+    activeDays: number
+    days: UsageHeatmapDay[]
+  }
+}
+
+export interface UsageDaysResponse {
+  range: UsageDaysRangeKey
+  from: string
+  to: string
+  days: UsageDayPoint[]
+}
+
 export const membershipApi = {
   getPlans: () => api.get<{ data: MembershipPlan[] }>('/membership/plans'),
   getPoints: () => api.get<{ data: { points: number; membership: string } }>('/membership/points'),
@@ -73,10 +119,14 @@ export const membershipApi = {
     category?: PointCategory
     cursor?: string
     limit?: number
+    day?: string
   }) =>
     api.get<{
       data: { items: PointTransactionItem[]; nextCursor: string | null; from: string | null; to: string }
     }>('/membership/transactions', { params }),
   pointsSummary: (range?: PointsRangeKey) =>
     api.get<{ data: PointsSummary }>('/membership/points-summary', { params: { range } }),
+  usage: () => api.get<{ data: UsageOverviewResponse }>('/membership/usage'),
+  usageDays: (range?: UsageDaysRangeKey) =>
+    api.get<{ data: UsageDaysResponse }>('/membership/usage-days', { params: { range } }),
 }
