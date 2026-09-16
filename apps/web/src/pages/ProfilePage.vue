@@ -119,10 +119,32 @@ async function loadUsageDays() {
   }
 }
 
+const daysViewLoading = computed(
+  () => daysLoading.value || (!usageDays.value && !daysError.value),
+)
+
+const usageViewLoading = computed(
+  () => usageLoading.value || (!usage.value && !usageError.value),
+)
+
+async function loadProfile() {
+  try {
+    const { data } = await api.get<{ data: User }>('/auth/profile')
+    profile.value = data.data
+    auth.user = data.data
+  } catch {
+    void router.push('/workflow')
+  }
+}
+
+function loadBillingUsage() {
+  void loadUsage()
+  void loadUsageDays()
+}
+
 watch(activeTab, (tab) => {
   if (tab === 'billing') {
-    void loadUsage()
-    void loadUsageDays()
+    loadBillingUsage()
   }
 })
 
@@ -130,20 +152,14 @@ watch(usageRange, () => {
   void loadUsageDays()
 })
 
-onMounted(async () => {
+onMounted(() => {
   if (!auth.isLoggedIn) {
     auth.openLogin()
     return
   }
-  try {
-    const { data } = await api.get<{ data: User }>('/auth/profile')
-    profile.value = data.data
-    auth.user = data.data
-    if (activeTab.value === 'billing') {
-      await Promise.all([loadUsage(), loadUsageDays()])
-    }
-  } catch {
-    router.push('/workflow')
+  void loadProfile()
+  if (activeTab.value === 'billing') {
+    loadBillingUsage()
   }
 })
 </script>
@@ -175,7 +191,7 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div v-if="profile && activeTab === 'account'" class="mx-auto max-w-3xl space-y-4">
+    <div v-if="profile && activeTab === 'account'" class="max-w-3xl space-y-4">
       <section class="rounded-2xl border border-white/8 bg-[#16161C] p-6">
         <div class="flex items-center gap-4">
           <div class="profile-avatar flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full">
@@ -242,14 +258,15 @@ onMounted(async () => {
         :active-days="usage.heatmap.activeDays"
         :days="usage.heatmap.days"
       />
+      <div v-else-if="usageViewLoading" class="h-48 animate-pulse rounded-2xl bg-white/5" />
 
       <div v-if="daysError" class="rounded-2xl border border-red-400/15 p-6 text-sm text-red-300/80">
         {{ daysError }}
         <button type="button" class="ml-2 underline" @click="loadUsageDays">重新加载</button>
       </div>
       <template v-else>
-        <UsageTrend :range="usageRange" :days="usageDays?.days ?? []" :loading="daysLoading" @update:range="usageRange = $event" />
-        <UsageDayTable :days="usageDays?.days ?? []" :loading="daysLoading" />
+        <UsageTrend :range="usageRange" :days="usageDays?.days ?? []" :loading="daysViewLoading" @update:range="usageRange = $event" />
+        <UsageDayTable :days="usageDays?.days ?? []" :loading="daysViewLoading" />
       </template>
     </div>
 

@@ -27,3 +27,11 @@ it('emits range change and defaults to generationCount', async () => {
   expect(wrapper.emitted('update:range')?.[0]).toEqual(['30d'])
   expect(wrapper.find('polyline').exists()).toBe(true)
 })
+
+it('uses native SVG title tooltips for hover date and value', () => {
+  const wrapper = mount(UsageTrend, { props: { range: '7d', days } })
+  const titles = wrapper.findAll('circle title').map((node) => node.text())
+
+  expect(titles).toContain('2026-09-15 · 2')
+  expect(titles).toContain('2026-09-16 · 0')
+})

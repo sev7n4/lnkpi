@@ -105,8 +105,9 @@ function capsuleClass(selected: boolean) {
         :cy="p.y"
         r="3"
         fill="rgba(255,255,255,0.8)"
-        :title="`${p.date} · ${p.value}`"
-      />
+      >
+        <title>{{ p.date }} · {{ p.value }}</title>
+      </circle>
     </svg>
   </section>
 </template>

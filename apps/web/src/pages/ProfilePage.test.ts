@@ -4,7 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from '@/stores/auth'
 import ProfilePage from './ProfilePage.vue'
 
-const { routerMocks, routeQuery, membershipMocks } = vi.hoisted(() => ({
+const { routerMocks, routeQuery, membershipMocks, apiGet } = vi.hoisted(() => ({
   routerMocks: {
     push: vi.fn(),
     back: vi.fn(),
@@ -16,6 +16,7 @@ const { routerMocks, routeQuery, membershipMocks } = vi.hoisted(() => ({
     usageDays: vi.fn(),
     transactions: vi.fn(),
   },
+  apiGet: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({
@@ -25,9 +26,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/api', () => ({
   api: {
-    get: vi.fn().mockResolvedValue({
-      data: { data: { nickname: '测', phone: '172****8608', points: 34, membership: 'free' } },
-    }),
+    get: (...args: unknown[]) => apiGet(...args),
   },
 }))
 
@@ -162,6 +161,10 @@ describe('ProfilePage', () => {
     membershipMocks.usage.mockReset()
     membershipMocks.usageDays.mockReset()
     membershipMocks.transactions.mockReset()
+    apiGet.mockReset()
+    apiGet.mockResolvedValue({
+      data: { data: { nickname: '测', phone: '172****8608', points: 34, membership: 'free' } },
+    })
     membershipMocks.usage.mockResolvedValue(usagePayload)
     membershipMocks.usageDays.mockResolvedValue(usageDaysPayload)
     membershipMocks.transactions.mockResolvedValue({
@@ -176,6 +179,15 @@ describe('ProfilePage', () => {
     expect(wrapper.text()).toContain('创作能量')
     expect(wrapper.text()).toContain('我的邀请码')
     expect(wrapper.text()).toContain('充值')
+  })
+
+  it('left-aligns the account column without mx-auto', async () => {
+    const wrapper = await mountProfile()
+    const identity = wrapper.find('.max-w-3xl')
+
+    expect(identity.exists()).toBe(true)
+    expect(identity.classes()).toContain('max-w-3xl')
+    expect(identity.classes()).not.toContain('mx-auto')
   })
 
   it('renders usage overview on billing and usage query tabs', async () => {
@@ -196,6 +208,21 @@ describe('ProfilePage', () => {
     const wrapper = await mountProfile()
     expect(wrapper.text()).toContain('用量总览')
   })
+
+  it.each(['billing', 'usage'] as const)(
+    'shows usage skeletons instead of empty copy while %s deep-link requests hang',
+    async (tab) => {
+      apiGet.mockReturnValue(new Promise(() => {}))
+      membershipMocks.usage.mockReturnValue(new Promise(() => {}))
+      membershipMocks.usageDays.mockReturnValue(new Promise(() => {}))
+      routeQuery.tab = tab
+
+      const wrapper = await mountProfile()
+
+      expect(wrapper.text()).not.toContain('还没有消耗')
+      expect(wrapper.find('.h-48.animate-pulse').exists()).toBe(true)
+    },
+  )
 
   it('does not fetch usage on the account tab', async () => {
     await mountProfile()
