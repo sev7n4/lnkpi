@@ -12,8 +12,11 @@ from app.graph.canvas_commands import extract_canvas_commands
 from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
+    mentioned_keys_for_sidebar_bind,
     run_mandatory_explore,
     select_narrow_write_tools,
+    sidebar_image_keys_from_attachments,
+    this_turn_new_image_keys_from_parse,
 )
 from app.graph.planner_copy import (
     PLANNER_CANCEL_REPLY,
@@ -131,9 +134,18 @@ def _bind_plan_tools(
     tools_by_name: dict[str, Any],
     loaded: list[str],
     utterance: str,
+    *,
+    sidebar_image_keys: tuple[str, ...] = (),
+    this_turn_new_image_keys: tuple[str, ...] = (),
+    mentioned_keys: tuple[str, ...] = (),
 ) -> tuple[Any, frozenset[str]]:
     plan = build_tool_plan(loaded=loaded)
-    narrow_writes = select_narrow_write_tools(utterance)
+    narrow_writes = select_narrow_write_tools(
+        utterance,
+        sidebar_image_keys=sidebar_image_keys,
+        this_turn_new_image_keys=this_turn_new_image_keys,
+        mentioned_keys=mentioned_keys,
+    )
     visible: set[str] = set()
     for name in plan.ordered_visible:
         if name in EXPLORE_WRITE_TOOLS:
@@ -251,7 +263,24 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         attachments = state.get("sidebar_attachments") or []
         if hasattr(nest, "sidebar_attachments"):
             nest.sidebar_attachments = list(attachments)
-        llm_bound, visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+        image_keys = sidebar_image_keys_from_attachments(attachments)
+        new_keys = this_turn_new_image_keys_from_parse(attachments, parse)
+        mention_keys = mentioned_keys_for_sidebar_bind(
+            user_text, state.get("sidebar_mentioned_keys")
+        )
+
+        def bind() -> tuple[Any, frozenset[str]]:
+            return _bind_plan_tools(
+                llm,
+                tools_by_name,
+                loaded,
+                user_text,
+                sidebar_image_keys=image_keys,
+                this_turn_new_image_keys=new_keys,
+                mentioned_keys=mention_keys,
+            )
+
+        llm_bound, visible = bind()
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
         if parse:
@@ -287,7 +316,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and not write_retry_done
                 ):
                     write_retry_done = True
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+                    llm_bound, _visible = bind()
                     convo.append(ai)
                     convo.append(
                         SystemMessage(
@@ -370,7 +399,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and isinstance(result, dict)
                     and result.get("loaded")
                 ):
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+                    llm_bound, _visible = bind()
         else:
             final_reply = str(getattr(convo[-1], "content", "") or "").strip()
 

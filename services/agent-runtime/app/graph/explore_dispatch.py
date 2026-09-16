@@ -273,6 +273,66 @@ def select_narrow_write_tools(
     return _DEFAULT_NARROW_WRITE
 
 
+def sidebar_image_keys_from_attachments(attachments: list | None) -> tuple[str, ...]:
+    from app.graph.sidebar_attachments import REF_PREFIX
+
+    counters = {k: 0 for k in REF_PREFIX}
+    keys: list[str] = []
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("mediaType") or item.get("media_type") or "").strip()
+        prefix = REF_PREFIX.get(media_type)
+        if not prefix:
+            continue
+        counters[media_type] += 1
+        key = f"{prefix}{counters[media_type]}"
+        url = str(item.get("url") or "").strip()
+        if prefix == "I" and url:
+            keys.append(key)
+    return tuple(keys)
+
+
+def this_turn_new_image_keys_from_parse(
+    attachments: list | None, parse: dict | None
+) -> tuple[str, ...]:
+    raw = (parse or {}).get("this_turn_uncached_image_urls") if isinstance(parse, dict) else None
+    urls = {str(u).strip() for u in (raw or []) if str(u).strip()}
+    if not urls:
+        return ()
+    from app.graph.sidebar_attachments import REF_PREFIX
+
+    counters = {k: 0 for k in REF_PREFIX}
+    keys: list[str] = []
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("mediaType") or item.get("media_type") or "").strip()
+        prefix = REF_PREFIX.get(media_type)
+        if not prefix:
+            continue
+        counters[media_type] += 1
+        key = f"{prefix}{counters[media_type]}"
+        url = str(item.get("url") or "").strip()
+        if prefix == "I" and url in urls:
+            keys.append(key)
+    return tuple(keys)
+
+
+def mentioned_keys_for_sidebar_bind(
+    user_text: str, request_keys: list | None
+) -> tuple[str, ...]:
+    from app.graph.sidebar_attachments import (
+        normalize_mentioned_keys,
+        parse_mentioned_keys_from_text,
+    )
+
+    from_text = parse_mentioned_keys_from_text(user_text)
+    if from_text:
+        return tuple(from_text)
+    return tuple(normalize_mentioned_keys(request_keys))
+
+
 def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> ExploreIntent:
     """Rule-based intent for explore dispatch (Phase 2a)."""
     u = (user_text or "").strip()

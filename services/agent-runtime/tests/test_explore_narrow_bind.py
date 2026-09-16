@@ -326,3 +326,33 @@ def test_chip_armed_gold_plus_campaign_does_not_bind_sidebar_set():
     )
     assert "propose_generation" not in tools
     assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_s1_bind_plan_tools_tryon_includes_sidebar_writes():
+    from unittest.mock import MagicMock
+    from app.graph.nodes.explore import _bind_plan_tools
+    from app.tools.definitions import EXPLORE_WRITE_TOOLS
+
+    captured: list[list[str]] = []
+
+    class FakeLlm:
+        def bind_tools(self, tools):
+            captured.append([getattr(t, "name", "") for t in tools])
+            return self
+
+    tools_by_name = {name: MagicMock(name=name) for name in EXPLORE_WRITE_TOOLS}
+    for name, tool in tools_by_name.items():
+        tool.name = name
+    _bind_plan_tools(
+        FakeLlm(),
+        tools_by_name,
+        [],
+        GOLD_TRYON,
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    bound = set(captured[0])
+    assert "upsert_media_node" in bound
+    assert "apply_sidebar_attachments" in bound
+    assert "propose_generation" in bound
+    assert "attach_refs" not in bound

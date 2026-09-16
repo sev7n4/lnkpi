@@ -197,6 +197,8 @@ async def test_ac03_same_url_second_vision_qa_count_is_zero():
     )
     assert len(nest.calls) == 1
     assert second["sidebar_media_parse"]["user_facing_summary"] == SUMMARY
+    assert first["sidebar_media_parse"].get("this_turn_uncached_image_urls") == [URL_A]
+    assert second["sidebar_media_parse"].get("this_turn_uncached_image_urls") == []
 
 
 @pytest.mark.asyncio
