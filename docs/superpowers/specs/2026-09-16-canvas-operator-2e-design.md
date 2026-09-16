@@ -5,7 +5,7 @@
 > 产品：超创平台（lnkpi）无限画布 / Agent Runtime  
 > 父规格：[2026-09-14-agent-atomic-as-tools-design.md](./2026-09-14-agent-atomic-as-tools-design.md)（V1–V4 / §6.1）  
 > 前置：Phase 2d.3（#345/#347）、裸生成绑定（#349）、SSE `tool_call`（#352）、侧栏媒体绑定（#353）  
-> 实现 plan：[2026-09-16-canvas-operator-2e1-hitl.md](../plans/2026-09-16-canvas-operator-2e1-hitl.md)（**仅 2e.1**）。2e.2 / 2e.3 各自另开 plan + PR；禁止一张 PR 做完三刀。
+> 实现 plan：2e.1 [2026-09-16-canvas-operator-2e1-hitl.md](../plans/2026-09-16-canvas-operator-2e1-hitl.md)（已交付 #354）。本刀：[2026-09-16-canvas-operator-2e2-operator-set.md](../plans/2026-09-16-canvas-operator-2e2-operator-set.md)（**仅 2e.2**）。2e.3 另开 plan + PR；禁止一张 PR 做完两刀。
 
 ---
 
@@ -14,7 +14,7 @@
 | # | 决策 |
 |---|------|
 | **2E-D1** | 程序顺序钉死：**2e.1 确认出图 → 2e.2 操作集常驻 → 2e.3 V1 工作流摆盘**。前一刀生产硬表未绿，不得开下一刀。 |
-| **2E-D2** | 2e.2 起画布**操作集只加不减**：默认 `canvas_agent` 轮始终可见 §0.1 九件套。规划/导入工具在强锚点上 **叠加**，**禁止**再把操作集藏起来。 |
+| **2E-D2** | 2e.2 起画布**操作集只加不减**：默认 `canvas_agent` 轮始终可见 §0.1 九件套。导入工具在强锚点上 **叠加**，**禁止**再把操作集藏起来。**#355 例外：** `is_composition_structure_utterance`（规划+工作流 / 连线+写入画布）bind **空写集**，preview/confirm 走 Nest HTTP，不绑 recipe `match/preview/instantiate/promote`。 |
 | **2E-D3** | **废止**「图生视频」「工作流」「分镜」作为规划/导入**减工具**谓词。V1 金标含「生图生视频」，现网 `_is_planner_utterance` 会把它送进规划三件套并拿走画布工具——2e.2 必须拆掉。导入/模板确认锚点（§0.2）只负责 **加** 规划/导入工具，永不减 §0.1。 |
 | **2E-D4** | 2e.1 的 HITL SSOT 是侧栏确认卡。生产 **E2 唯一路径**：浏览器点 `[data-testid=generation-propose-confirm]`（文案「确认生成」）。该点击必须走到 `handleAgentGenerateNode` → `generateForNode`（与 Dock 同一函数）→ studio。**点了但生成未开始 = E2 失败**（含无 prompt/refs 静默 return、`assertModelSelectable` 挡掉）。`generateForNode` spy **只**用于 2e.1 修 bug 的单测，不得单独当生产绿。允许测试账号 **一次**小图扣费。脚本直打 `POST /studio/image/generate` **只作诊断，不得单独当 V4 生产绿**。取消走已有 `POST /agent/clear-propose` 或点 `[data-testid=generation-propose-cancel]`。**禁止**为本刀新造 `POST /agent/confirm-propose`。 |
 | **2E-D5** | V1 按节点确认；侧栏仍只恢复一张最新/选中的 `pending_confirm`（2c 已钉）。**不做**图级「一键跑工作流」。`@I*` 芯片继续 `localRefs`，不是 canvas 边。 |
@@ -35,12 +35,13 @@
 | 意图 | 强锚点（仅这些可 **加** 工具） | 叠加工具 |
 |------|-------------------------------|----------|
 | 导入 | `import_workflow` 字面量、`导入工作流`、`导入`+`工作流`/`workflow`/`lnkpi.workflow` | `import_workflow` |
-| 规划 | `确认落到画布`；既有规划确认/模板锚点（`规划工作流`、`接到`、`改版`、`新模板`、`存成一套`、`将锁定这些核心步骤`、`这份工作流更像哪一种`） | `match_workflow_templates` · `preview_workflow_template` · `promote_workflow_template`；仅当句面含 `确认落到画布` 时再加 `instantiate_workflow_template` |
-| 禁止当独占谓词 | `图生视频`、单独的 `工作流`、`分镜`、`生图生视频` | 不得因此拿走 §0.1 |
+| 规划 recipe 工具 | — | **#355 P0：永不 bind** `match_workflow_templates` / `preview_workflow_template` / `promote_workflow_template` / `instantiate_workflow_template`。确认芯片走 `confirm_composition` HTTP。 |
+| composition 结构口令 | `is_composition_structure_utterance` | **空写集**（不减 CORE 只读；不给九件套，避免手搭抢 HTTP preview） |
+| 禁止当独占谓词 | `图生视频`、单独的 `工作流`、`分镜`、`生图生视频` | 不得因此拿走 §0.1（V1 金标不是 composition 结构口令） |
 
 导入弱锚点（无工作流标记的「导入+URL」）保持现网「不抢 upload」行为；**不得**因此清空操作集。
 
-「接到 / 改版」等规划强锚点在 2e.2 **仍叠加**规划工具（不再缴械）。2e.2 提示必须写：无「确认落到画布」不得 instantiate；口语搭骨架（含 V1 金标）优先 `upsert_media_node` + `connect_nodes`，不得用 `match_workflow_templates` 顶替手搭。
+「接到 / 改版」等规划锚点 **不再**叠加 recipe 工具（#355）。默认轮仍 ⊇ 九件套。2e.2 提示必须写：无「确认落到画布」不得 instantiate；口语搭骨架（含 V1 金标）优先 `upsert_media_node` + `connect_nodes`。
 
 `arrange_nodes_along_edges` 现网不在 `EXPLORE_WRITE_TOOLS` cull 里，一般已可见。2e.2 提示同构时列一次即可，**不**塞进九件套。
 
@@ -100,8 +101,8 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 
 ### 2.2 2e.2 只加不减
 
-1. `_bind_plan_tools`：写工具默认可见集 = §0.1。规划/导入命中时 `visible |= 叠加集`，**禁止** `return` 一个不含操作集的小集合。  
-2. 删除或改写 `_is_planner_utterance` 里 `图生视频` / `分镜` 导致的独占；`生图生视频` 不得进入规划叠加，除非同时具备 §0.2 规划强锚点。  
+1. `_bind_plan_tools`：写工具默认可见集 = §0.1。导入命中时 `visible |= import_workflow`，**禁止** `return` 一个不含操作集的小集合。**#355 例外：** composition 结构口令返回空写集。  
+2. 删除 `_is_planner_utterance` 里 `图生视频` / `分镜` 导致的独占；`生图生视频` 不得把可见集收成 planner 三件套。recipe planner 工具按 #355 P0 不叠加。  
 3. `tool_search` 仍只搜 deferred；**禁止**把 CORE 写工具塞进 `tool_search`。  
 4. 系统提示：规则 4/5/8/9 与可见工具对齐；规划叠加轮可另附「不要用手搭替代已确认的 instantiate」，但不删 `connect_nodes`。  
 5. 负例调用：`utterance_binds_media_propose` / `utterance_binds_sidebar_media_propose` / regen / 识图问句保持 False 时，**不** mandatory propose。提示写明闲聊、谢谢、纯问答不得 upsert/propose。合入只锁可见性（E10）；「谢谢不得出现 propose `tool_call`」见 2E-D10，不当 CI flake 门。  
@@ -151,7 +152,7 @@ Canvas Operator 已能：路由进 `canvas_agent`；单节点 upsert→propose�
 | **E6** | `_bind_plan_tools(V1 金标)` 可见名 | 含九件套中的 `upsert_media_node`、`connect_nodes`、`propose_generation` |
 | **E7** | `_bind_plan_tools("帮我生成一张蓝色天空产品主图")` | 含 upsert + propose（回归 P5） |
 | **E8** | `_bind_plan_tools("导入工作流")` | 含 `import_workflow` **且** 含 §0.1 操作集 |
-| **E9** | `_bind_plan_tools("确认落到画布")` | 含 `instantiate_workflow_template` **且** 含操作集 |
+| **E9** | `_bind_plan_tools("确认落到画布")` | 含 §0.1 操作集；**不含** `instantiate_workflow_template`（确认走 #355 `confirm_composition`） |
 | **E10** | `_bind_plan_tools("谢谢")` / `"@I1 是什么衣服"` / `"重新生成一张"` | **可见性**：操作集仍可见；**不含** `run_*`。本行 **不**断言「不得出现 propose `tool_call`」（那是部署后评测，见 2E-D10） |
 | **E11** | `build_tool_plan().visible_names` | 仍不含 `run_image_generation` / `run_video_generation` |
 | **E12** | 规划独占谓词 | `"…生图生视频…"`（无规划强锚点）**不得**把可见集收成仅 planner 三件套 |
