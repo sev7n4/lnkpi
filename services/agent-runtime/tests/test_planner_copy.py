@@ -282,3 +282,25 @@ def test_last_successful_preview_normalizes_parentId_and_missing_delta():
         "delta": {},
     }
 
+
+def test_last_successful_preview_reads_stamped_kwargs_on_hitl_reply():
+    msgs = [
+        HumanMessage(content="帮我规划一个角色三视图工作流"),
+        AIMessage(
+            content="相对「角色三视图」，按原模板落到画布。\n请确认是否把改动落到画布",
+            additional_kwargs={
+                "planner_preview_args": {
+                    "parent_id": "model-turnaround",
+                    "parent_version": "1.0.0",
+                    "delta": {},
+                }
+            },
+        ),
+        HumanMessage(content="确认落到画布"),
+    ]
+    assert last_successful_preview_args(msgs) == {
+        "parent_id": "model-turnaround",
+        "parent_version": "1.0.0",
+        "delta": {},
+    }
+

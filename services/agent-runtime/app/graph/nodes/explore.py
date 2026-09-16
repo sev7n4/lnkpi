@@ -19,6 +19,7 @@ from app.graph.planner_copy import (
     PLANNER_CANCEL_REPLY,
     PLANNER_INSTANTIATED_REPLY,
     PLANNER_NO_PREVIEW_REPLY,
+    PLANNER_PREVIEW_ARGS_KW,
     format_planner_preview_hitl,
     is_machine_payload_reply,
     is_planner_cancel_chip,
@@ -384,11 +385,21 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
 
+        additional: dict[str, Any] = {}
+        preview_persist = last_successful_preview_args(convo)
+        if preview_persist:
+            additional[PLANNER_PREVIEW_ARGS_KW] = preview_persist
+
         out = {
             "phase": "done",
             "skill_id": None,
             "user_decision": "none",
-            "messages": [AIMessage(content=prefix_assistant_reply(final_reply, parse))],
+            "messages": [
+                AIMessage(
+                    content=prefix_assistant_reply(final_reply, parse),
+                    additional_kwargs=additional,
+                )
+            ],
             "explore_summary": summary if isinstance(summary, dict) else None,
             "tool_plan_loaded": list(loaded),
         }
