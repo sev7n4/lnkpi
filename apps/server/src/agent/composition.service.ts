@@ -206,16 +206,22 @@ function countCanvasNodes(raw: string | null | undefined): number {
 }
 
 function parseCanvas(raw: string | null | undefined): CanvasData {
-  if (!raw) return { nodes: [], edges: [] }
+  if (!raw) {
+    throw new BadRequestException({ userMessage: COMPILE_FAILED })
+  }
   try {
     const parsed = JSON.parse(raw) as CanvasData
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new BadRequestException({ userMessage: COMPILE_FAILED })
+    }
     return {
       ...parsed,
       nodes: Array.isArray(parsed.nodes) ? parsed.nodes : [],
       edges: Array.isArray(parsed.edges) ? parsed.edges : [],
     }
-  } catch {
-    return { nodes: [], edges: [] }
+  } catch (err) {
+    if (err instanceof BadRequestException) throw err
+    throw new BadRequestException({ userMessage: COMPILE_FAILED })
   }
 }
 

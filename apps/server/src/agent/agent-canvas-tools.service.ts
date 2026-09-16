@@ -67,9 +67,9 @@ function parseCanvas(raw: string | null | undefined): CanvasData {
   try {
     const parsed = JSON.parse(raw) as CanvasData
     return {
+      ...parsed,
       nodes: Array.isArray(parsed.nodes) ? parsed.nodes : [],
       edges: Array.isArray(parsed.edges) ? parsed.edges : [],
-      viewport: parsed.viewport,
     }
   } catch {
     return { nodes: [], edges: [] }

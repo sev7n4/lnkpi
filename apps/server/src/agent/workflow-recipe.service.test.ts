@@ -540,6 +540,24 @@ describe('WorkflowRecipeService', () => {
       }
     })
   })
+
+  it('parseCanvas preserves compositionRunGroup', () => {
+    const group = {
+      nodeIds: ['image-golden-1'],
+      dumpHash: 'ab'.repeat(32),
+      createdAt: '2026-09-16T00:00:00.000Z',
+    }
+    const parsed = (
+      svc as unknown as {
+        parseCanvas: (raw: string) => {
+          compositionRunGroup?: { nodeIds: string[]; dumpHash: string; createdAt: string }
+        }
+      }
+    ).parseCanvas(
+      JSON.stringify({ nodes: [], edges: [], compositionRunGroup: group }),
+    )
+    expect(parsed.compositionRunGroup).toEqual(group)
+  })
 })
 
 describe('recipe planner DTOs', () => {
