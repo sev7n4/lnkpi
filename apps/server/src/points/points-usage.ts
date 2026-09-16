@@ -1,3 +1,5 @@
+import { shanghaiDayKey } from './points-insights'
+
 export interface UsageCategoryBreakdown {
   text: number
   image: number
@@ -98,6 +100,18 @@ export function generationCountFromParts(parts: { distinctGens: number; nullGens
   return Math.max(0, parts.distinctGens) + Math.max(0, parts.nullGens)
 }
 
+/** Normalize $queryRaw day values to YYYY-MM-DD. Null/invalid keys are dropped. */
+export function coerceDayKey(day: unknown): string | null {
+  if (typeof day === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(day)) return day
+    const parsed = new Date(day)
+    if (!Number.isNaN(parsed.getTime())) return shanghaiDayKey(parsed)
+    return null
+  }
+  if (day instanceof Date && !Number.isNaN(day.getTime())) return shanghaiDayKey(day)
+  return null
+}
+
 function nextDateKey(key: string): string {
   const [y, m, d] = key.split('-').map(Number)
   return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10)
@@ -109,11 +123,18 @@ export function foldDailyUsage(
 ): UsageDayPoint[] {
   const byDay = new Map<string, DailyAmountRow[]>()
   for (const row of amountRows) {
-    const list = byDay.get(row.day) ?? []
-    list.push(row)
-    byDay.set(row.day, list)
+    const day = coerceDayKey(row.day)
+    if (!day) continue
+    const list = byDay.get(day) ?? []
+    list.push({ ...row, day })
+    byDay.set(day, list)
   }
-  const gens = new Map(generationRows.map((row) => [row.day, row]))
+  const gens = new Map<string, DailyGenerationRow>()
+  for (const row of generationRows) {
+    const day = coerceDayKey(row.day)
+    if (!day) continue
+    gens.set(day, { ...row, day })
+  }
   const days = new Set([...byDay.keys(), ...gens.keys()])
   return [...days]
     .sort()
@@ -140,11 +161,12 @@ export function fillCalendarDays(fromKey: string, toKey: string, days: UsageDayP
 }
 
 export function filterHeatmapDays(days: UsageDayPoint[]): UsageHeatmapDay[] {
-  return days
-    .filter((day) => day.netConsumed > 0 || day.generationCount > 0)
-    .map((day) => ({
-      date: day.date,
-      netConsumed: day.netConsumed,
-      generationCount: day.generationCount,
-    }))
+  const out: UsageHeatmapDay[] = []
+  for (const day of days) {
+    const date = coerceDayKey(day.date)
+    if (!date) continue
+    if (day.netConsumed <= 0 && day.generationCount <= 0) continue
+    out.push({ date, netConsumed: day.netConsumed, generationCount: day.generationCount })
+  }
+  return out
 }

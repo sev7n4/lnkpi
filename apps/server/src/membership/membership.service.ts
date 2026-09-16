@@ -14,6 +14,7 @@ import {
   foldDailyUsage,
   generationCountFromParts,
   netFromKindCategorySums,
+  coerceDayKey,
   type DailyAmountRow,
   type DailyGenerationRow,
   type UsageDaysResponse,
@@ -237,6 +238,7 @@ export class MembershipService {
     }
   }
 
+  // Prisma SQLite DateTime is unix ms; SQLite datetime(n) treats numbers as seconds.
   private async queryLifetimeStats(userId: string) {
     const rows = await this.prisma.$queryRaw<
       Array<{ distinctGens: number | bigint; nullGens: number | bigint; activeDays: number | bigint }>
@@ -248,7 +250,7 @@ export class MembershipService {
       (SELECT COUNT(*) FROM PointTransaction
         WHERE userId = ${userId} AND kind = 'consume'
           AND (generationId IS NULL OR generationId = '')) AS nullGens,
-      (SELECT COUNT(DISTINCT date(datetime(createdAt, '+8 hours'))) FROM PointTransaction
+      (SELECT COUNT(DISTINCT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours'))) FROM PointTransaction
         WHERE userId = ${userId} AND kind = 'consume') AS activeDays
   `
     const row = rows[0] ?? { distinctGens: 0, nullGens: 0, activeDays: 0 }
@@ -265,7 +267,7 @@ export class MembershipService {
     const rows = await this.prisma.$queryRaw<
       Array<{ day: string; kind: string; category: string; amountSum: number | bigint }>
     >`
-    SELECT date(datetime(createdAt, '+8 hours')) AS day,
+    SELECT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours')) AS day,
            kind,
            category,
            SUM(amount) AS amountSum
@@ -273,19 +275,25 @@ export class MembershipService {
     WHERE userId = ${userId} AND createdAt >= ${from} AND createdAt <= ${to}
     GROUP BY day, kind, category
   `
-    return rows.map((row) => ({
-      day: row.day,
-      kind: row.kind,
-      category: row.category,
-      amountSum: Number(row.amountSum),
-    }))
+    return rows.flatMap((row) => {
+      const day = coerceDayKey(row.day)
+      if (!day) return []
+      return [
+        {
+          day,
+          kind: row.kind,
+          category: row.category,
+          amountSum: Number(row.amountSum),
+        },
+      ]
+    })
   }
 
   private async queryDailyGenerationRows(userId: string, from: Date, to: Date): Promise<DailyGenerationRow[]> {
     const rows = await this.prisma.$queryRaw<
       Array<{ day: string; distinctGens: number | bigint; nullGens: number | bigint }>
     >`
-    SELECT date(datetime(createdAt, '+8 hours')) AS day,
+    SELECT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours')) AS day,
            COUNT(DISTINCT CASE WHEN generationId IS NOT NULL AND generationId != '' THEN generationId END) AS distinctGens,
            SUM(CASE WHEN generationId IS NULL OR generationId = '' THEN 1 ELSE 0 END) AS nullGens
     FROM PointTransaction
@@ -293,11 +301,17 @@ export class MembershipService {
       AND createdAt >= ${from} AND createdAt <= ${to}
     GROUP BY day
   `
-    return rows.map((row) => ({
-      day: row.day,
-      distinctGens: Number(row.distinctGens),
-      nullGens: Number(row.nullGens),
-    }))
+    return rows.flatMap((row) => {
+      const day = coerceDayKey(row.day)
+      if (!day) return []
+      return [
+        {
+          day,
+          distinctGens: Number(row.distinctGens),
+          nullGens: Number(row.nullGens),
+        },
+      ]
+    })
   }
 
   async usage(userId: string, now = new Date()): Promise<UsageOverviewResponse> {

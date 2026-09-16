@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  coerceDayKey,
   fillCalendarDays,
   filterHeatmapDays,
   foldDailyUsage,
@@ -27,7 +28,26 @@ describe('generationCountFromParts', () => {
   })
 })
 
+describe('coerceDayKey', () => {
+  it('keeps YYYY-MM-DD and drops null', () => {
+    expect(coerceDayKey('2026-09-16')).toBe('2026-09-16')
+    expect(coerceDayKey(null)).toBeNull()
+  })
+
+  it('maps UTC evening to the next Shanghai calendar day', () => {
+    expect(coerceDayKey(new Date('2026-09-16T16:30:00.000Z'))).toBe('2026-09-17')
+  })
+})
+
 describe('foldDailyUsage', () => {
+  it('drops null day buckets so they cannot collapse the calendar', () => {
+    const days = foldDailyUsage(
+      [{ day: null as unknown as string, kind: 'consume', category: 'image', amountSum: -20 }],
+      [{ day: null as unknown as string, distinctGens: 1, nullGens: 0 }],
+    )
+    expect(days).toEqual([])
+  })
+
   it('nets same-day refund and counts consume gens', () => {
     const days = foldDailyUsage(
       [
@@ -96,5 +116,19 @@ describe('filterHeatmapDays', () => {
       },
     ])
     expect(rows).toEqual([{ date: '2026-09-14', netConsumed: 0, generationCount: 1 }])
+  })
+
+  it('drops null dates so heatmap cells can match YYYY-MM-DD', () => {
+    expect(
+      filterHeatmapDays([
+        {
+          date: null as unknown as string,
+          generationCount: 2,
+          netConsumed: 30,
+          byCategory: { text: 0, image: 30, audio: 0, video: 0 },
+          otherNetConsumed: 0,
+        },
+      ]),
+    ).toEqual([])
   })
 })
