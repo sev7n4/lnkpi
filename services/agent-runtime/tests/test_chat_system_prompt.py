@@ -47,3 +47,10 @@ def test_chat_system_routes_upscale_to_tool_not_run_star():
     assert "upscale_image" in _SYSTEM
     assert "upsert_media_node" in _SYSTEM
     assert "禁止" in _SYSTEM or "不要调用 run_*" in _SYSTEM
+
+
+def test_chat_system_says_not_to_search_core_media_tools():
+    assert "tool_search" in _SYSTEM
+    assert "upsert_media_node" in _SYSTEM
+    assert "propose_generation" in _SYSTEM
+    assert "不要用 tool_search" in _SYSTEM or "勿用 tool_search" in _SYSTEM
