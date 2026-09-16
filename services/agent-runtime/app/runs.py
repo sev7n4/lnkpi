@@ -413,15 +413,20 @@ class NestEventProxy:
         self,
         *,
         node_ids: list[str],
-        attachments: list[dict[str, Any]],
+        attachments: list[dict[str, Any]] | None = None,
         ref_order: list[str] | None,
         mode: str,
         mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
+        atts = attachments if attachments else list(
+            getattr(self._inner, "sidebar_attachments", None) or []
+        )
+        if not atts:
+            return {"ok": False, "error": "没有侧栏附件"}
         return await self._forward_actions(
             await self._inner.apply_sidebar_attachments(
                 node_ids=node_ids,
-                attachments=attachments,
+                attachments=atts,
                 ref_order=ref_order,
                 mode=mode,
                 mentioned_keys=mentioned_keys,

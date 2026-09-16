@@ -199,11 +199,15 @@ class SaveNodeAssetInput(BaseModel):
 
 class ApplySidebarAttachmentsInput(BaseModel):
     node_ids: list[str] = Field(description="Target canvas node ids")
-    attachments: list[dict[str, Any]] = Field(description="Sidebar attachment payloads")
+    attachments: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Sidebar attachment payloads; omit to use this-turn nest sidebar_attachments",
+    )
     ref_order: list[str] | None = Field(default=None, description="Attachment id order")
-    mode: str = Field(description="localRefs or attach_edges")
+    mode: str = Field(default="localRefs", description="localRefs or attach_edges")
     mentioned_keys: list[str] | None = Field(
-        default=None, description="Explicit @I1-style mention keys"
+        default=None,
+        description="Sidebar chip keys such as I1/I2, never canvas image-* ids",
     )
 
 
@@ -566,8 +570,8 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
 
     async def apply_sidebar_attachments(
         node_ids: list[str],
-        attachments: list[dict[str, Any]],
-        mode: str,
+        attachments: list[dict[str, Any]] | None = None,
+        mode: str = "localRefs",
         ref_order: list[str] | None = None,
         mentioned_keys: list[str] | None = None,
     ) -> dict:
@@ -583,11 +587,16 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
                 mentioned_keys = parsed if isinstance(parsed, list) else None
             except json.JSONDecodeError:
                 mentioned_keys = None
+        atts = attachments if attachments else list(
+            getattr(client, "sidebar_attachments", None) or []
+        )
+        if not atts:
+            return {"ok": False, "error": "没有侧栏附件"}
         return await client.apply_sidebar_attachments(
             node_ids=node_ids,
-            attachments=attachments,
+            attachments=atts,
             ref_order=ref_order,
-            mode=mode,
+            mode=mode or "localRefs",
             mentioned_keys=mentioned_keys,
         )
 
@@ -878,7 +887,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             StructuredTool.from_function(
                 coroutine=apply_sidebar_attachments,
                 name="apply_sidebar_attachments",
-                description="Write sidebar attachments onto canvas nodes (localRefs or ref edges)",
+                description=(
+                    "Write sidebar chip attachments onto canvas nodes as localRefs (default). "
+                    "mentioned_keys are I1/I2 chip keys, not canvas image-* ids. "
+                    "attachments may be omitted; the server uses this-turn sidebar attachments."
+                ),
                 args_schema=ApplySidebarAttachmentsInput,
             ),
         ),

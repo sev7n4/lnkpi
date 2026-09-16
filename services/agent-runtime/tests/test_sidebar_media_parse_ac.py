@@ -156,6 +156,9 @@ async def test_ac01_parse_then_explore_reply_uses_summary_not_node_id():
     assert CATEGORY in _system_text(messages) or CATEGORY in reply
     assert NODE_ID not in reply
     assert NODE_TITLE not in reply
+    system = _system_text(messages)
+    assert "待确认项" not in system
+    assert "向用户确认" not in system
 
 
 @pytest.mark.asyncio
@@ -197,6 +200,8 @@ async def test_ac03_same_url_second_vision_qa_count_is_zero():
     )
     assert len(nest.calls) == 1
     assert second["sidebar_media_parse"]["user_facing_summary"] == SUMMARY
+    assert first["sidebar_media_parse"].get("this_turn_uncached_image_urls") == [URL_A]
+    assert second["sidebar_media_parse"].get("this_turn_uncached_image_urls") == []
 
 
 @pytest.mark.asyncio

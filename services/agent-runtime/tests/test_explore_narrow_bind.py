@@ -17,6 +17,13 @@ MEDIA_WRITE = frozenset({
     "set_node_prompt",
     "attach_refs",
 })
+GOLD_TRYON = "@I1 模特 @I2 产品，让模特穿上，保持构图不变"
+SIDEBAR_MEDIA_WRITE = frozenset({
+    "upsert_media_node",
+    "apply_sidebar_attachments",
+    "set_node_prompt",
+    "propose_generation",
+})
 
 
 def test_plan_always_includes_import_workflow_in_core():
@@ -177,3 +184,175 @@ def test_utterance_binds_media_propose_gate():
     assert utterance_binds_media_propose("看看这张海报") is False
     assert utterance_binds_media_propose("重新生成一张") is False
     assert utterance_binds_media_propose(GOLD_BARE_GEN + "，做个营销方案") is False
+
+
+def test_s1_tryon_gold_with_chips_binds_sidebar_set():
+    tools = select_narrow_write_tools(
+        GOLD_TRYON,
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    assert tools == SIDEBAR_MEDIA_WRITE
+    assert "attach_refs" not in tools
+    assert "connect_nodes" not in tools
+    assert len(tools) <= 5
+
+
+def test_s2_tryon_gold_without_chips_does_not_bind_via_chuanshang():
+    tools = select_narrow_write_tools(GOLD_TRYON)
+    assert tools != SIDEBAR_MEDIA_WRITE
+    assert tools != MEDIA_WRITE
+    assert "propose_generation" not in tools
+
+
+def test_s3_implicit_two_new_images_binds_sidebar_set():
+    tools = select_narrow_write_tools(
+        "让模特穿上这件衣服",
+        sidebar_image_keys=("I1", "I2"),
+        this_turn_new_image_keys=("I1", "I2"),
+    )
+    assert tools == SIDEBAR_MEDIA_WRITE
+
+
+def test_s3b_reused_images_without_at_do_not_bind():
+    tools = select_narrow_write_tools(
+        "让模特穿上这件衣服",
+        sidebar_image_keys=("I1", "I2"),
+        this_turn_new_image_keys=(),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_s3b_thanks_with_old_chips_does_not_bind():
+    tools = select_narrow_write_tools(
+        "谢谢",
+        sidebar_image_keys=("I1", "I2"),
+        this_turn_new_image_keys=(),
+    )
+    assert "propose_generation" not in tools
+
+
+def test_s4_three_new_images_without_at_do_not_bind():
+    tools = select_narrow_write_tools(
+        "让模特穿上这件衣服",
+        sidebar_image_keys=("I1", "I2", "I3"),
+        this_turn_new_image_keys=("I1", "I2", "I3"),
+    )
+    assert "propose_generation" not in tools
+
+
+def test_s5_what_is_i1_does_not_bind_propose():
+    for text in ("@I1 是什么衣服", "I1是什么衣服"):
+        tools = select_narrow_write_tools(
+            text,
+            sidebar_image_keys=("I1", "I2"),
+            mentioned_keys=("I1",),
+        )
+        assert "propose_generation" not in tools
+        assert "upsert_media_node" not in tools
+
+
+def test_s6_planner_plus_chips_stays_planner():
+    tools = select_narrow_write_tools(
+        "帮我规划一个电商套图工作流，接到角色三视图",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+        this_turn_new_image_keys=("I1", "I2"),
+    )
+    assert tools == _PLANNER_TOOLS
+    assert "propose_generation" not in tools
+
+
+def test_s1_bare_gen_plus_chips_uses_sidebar_set_not_attach_refs():
+    tools = select_narrow_write_tools(
+        GOLD_BARE_GEN,
+        sidebar_image_keys=("I1",),
+        mentioned_keys=("I1",),
+    )
+    assert tools == SIDEBAR_MEDIA_WRITE
+    assert "attach_refs" not in tools
+
+
+def test_s7_bare_gen_without_chips_still_media_write():
+    assert select_narrow_write_tools(GOLD_BARE_GEN) == MEDIA_WRITE
+
+
+def test_resolve_sidebar_image_ref_keys_mention_wins_over_empty_new():
+    from app.graph.explore_dispatch import resolve_sidebar_image_ref_keys
+
+    assert resolve_sidebar_image_ref_keys(
+        image_keys=("I1", "I2"),
+        this_turn_new_image_keys=(),
+        mentioned_keys=("I2", "I1"),
+    ) == ["I2", "I1"]
+
+
+def test_utterance_binds_sidebar_media_propose_gate():
+    from app.graph.explore_dispatch import utterance_binds_sidebar_media_propose
+
+    assert utterance_binds_sidebar_media_propose(GOLD_TRYON, ["I1", "I2"]) is True
+    assert utterance_binds_sidebar_media_propose("@I1 是什么衣服", ["I1"]) is False
+    assert utterance_binds_sidebar_media_propose("看看这张图", ["I1"]) is False
+    assert utterance_binds_sidebar_media_propose(GOLD_TRYON + "，做个营销方案", ["I1", "I2"]) is False
+    assert utterance_binds_sidebar_media_propose(GOLD_TRYON, None) is False
+
+
+def test_chip_armed_look_at_poster_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        "看看这张海报",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1",),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_chip_armed_regen_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        "重新生成一张",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_chip_armed_gold_plus_campaign_does_not_bind_sidebar_set():
+    tools = select_narrow_write_tools(
+        GOLD_TRYON + "，做个营销方案",
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    assert "propose_generation" not in tools
+    assert tools != SIDEBAR_MEDIA_WRITE
+
+
+def test_s1_bind_plan_tools_tryon_includes_sidebar_writes():
+    from unittest.mock import MagicMock
+    from app.graph.nodes.explore import _bind_plan_tools
+    from app.tools.definitions import EXPLORE_WRITE_TOOLS
+
+    captured: list[list[str]] = []
+
+    class FakeLlm:
+        def bind_tools(self, tools):
+            captured.append([getattr(t, "name", "") for t in tools])
+            return self
+
+    tools_by_name = {name: MagicMock(name=name) for name in EXPLORE_WRITE_TOOLS}
+    for name, tool in tools_by_name.items():
+        tool.name = name
+    _bind_plan_tools(
+        FakeLlm(),
+        tools_by_name,
+        [],
+        GOLD_TRYON,
+        sidebar_image_keys=("I1", "I2"),
+        mentioned_keys=("I1", "I2"),
+    )
+    bound = set(captured[0])
+    assert "upsert_media_node" in bound
+    assert "apply_sidebar_attachments" in bound
+    assert "propose_generation" in bound
+    assert "attach_refs" not in bound

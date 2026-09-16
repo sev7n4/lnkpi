@@ -229,20 +229,35 @@ def parse_as_vision_qa_result(parse: dict) -> VisionQAResult:
     )
 
 
-def format_parse_context_block(parse: dict) -> str:
+_PARSE_ASK_UNKNOWN_MARKERS = ("上架", "投放", "营销方案", "全链路", "详情页")
+
+
+def parse_block_asks_unknown(text: str) -> bool:
+    t = text or ""
+    return any(m in t for m in _PARSE_ASK_UNKNOWN_MARKERS)
+
+
+def format_parse_context_block(parse: dict, *, ask_unknown: bool = False) -> str:
     summary = str(parse.get("user_facing_summary") or "").strip() or "未知"
     category = str((parse.get("fields") or {}).get("category") or "").strip()
     category_line = category if category else "未知，勿编造"
     unknown = parse.get("unknown") or []
     unknown_hint = ""
-    if unknown:
+    if ask_unknown and unknown:
         unknown_hint = f"\n待确认项：{'、'.join(str(u) for u in unknown)}"
+    if ask_unknown:
+        commerce = "图中未出现的价格/平台/资质不要编，改为向用户确认。"
+    else:
+        commerce = (
+            "图中未出现的价格/平台/资质不要编造；不要向用户追问这些项，"
+            "也不要因此推迟摆盘或 propose_generation。"
+        )
     return (
         "【侧栏参考图解析】\n"
         f"摘要：{summary}\n"
         f"品类：{category_line}{unknown_hint}\n"
         "请基于以上理解回答或写方案。不要声称只能看到文件名或画布节点标题。\n"
-        "图中未出现的价格/平台/资质不要编，改为向用户确认。"
+        f"{commerce}"
     )
 
 
