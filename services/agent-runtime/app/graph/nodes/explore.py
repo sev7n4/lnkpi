@@ -227,6 +227,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 user_text,
                 summary=summary if isinstance(summary, dict) else {},
                 tools_by_name=tools_by_name,
+                event_sink=nest,
             )
             out: dict[str, Any] = {
                 "phase": "done",
