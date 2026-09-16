@@ -86,24 +86,16 @@ _PLANNER_ANCHORS = (
 )
 _PLANNER_CONFIRM = "确认落到画布"
 _IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
-_DEFAULT_NARROW_WRITE = frozenset({
+_OPERATOR_WRITE = frozenset({
+    "upsert_media_node",
+    "propose_generation",
     "set_node_prompt",
     "set_node_content",
+    "upsert_prompt_node",
+    "connect_nodes",
+    "apply_sidebar_attachments",
     "attach_refs",
     "duplicate_node",
-    "upsert_prompt_node",
-})
-_MEDIA_PROPOSE_WRITE = frozenset({
-    "upsert_media_node",
-    "propose_generation",
-    "set_node_prompt",
-    "attach_refs",
-})
-_SIDEBAR_MEDIA_WRITE = frozenset({
-    "upsert_media_node",
-    "apply_sidebar_attachments",
-    "set_node_prompt",
-    "propose_generation",
 })
 
 
@@ -228,8 +220,6 @@ def _is_planner_utterance(text: str) -> bool:
         return True
     if _PLANNER_CONFIRM in text:
         return True
-    if "分镜" in text or "图生视频" in text:
-        return True
     return "规划" in text and "工作流" in text
 
 
@@ -240,32 +230,25 @@ def select_narrow_write_tools(
     this_turn_new_image_keys: Sequence[str] = (),
     mentioned_keys: Sequence[str] = (),
 ) -> frozenset[str]:
-    """Keyword bind for workflow import vs composition vs media propose (≤5 write tools).
+    """Default operator set; import overlays add; composition structure binds no writes.
 
-    Strong import anchors win so other keywords never steal
-    ``请用 import_workflow 导入`` / ``导入工作流``.
-    Composition structure binds no writes (preview/confirm are Nest HTTP, not tools).
-    P0 never binds match/preview/instantiate/promote workflow template tools.
-    Sidebar-media propose (#353) runs only after composition/import lose.
+    Composition preview/confirm are Nest HTTP (#355). P0 never binds
+    match/preview/instantiate/promote workflow template tools.
+    Sidebar kwargs are kept for API compatibility and do not shrink visibility.
     """
+    visible = set(_OPERATOR_WRITE)
     text = utterance or ""
     low = text.lower()
     if "import_workflow" in low or "导入工作流" in text:
-        return _IMPORT_WRITE_TOOLS
+        visible |= _IMPORT_WRITE_TOOLS
+        return frozenset(visible)
     if is_composition_structure_utterance(text):
         return frozenset()
     if _is_workflow_import_utterance(text):
-        return _IMPORT_WRITE_TOOLS
-    ref_keys = resolve_sidebar_image_ref_keys(
-        image_keys=sidebar_image_keys,
-        this_turn_new_image_keys=this_turn_new_image_keys,
-        mentioned_keys=mentioned_keys,
-    )
-    if utterance_binds_sidebar_media_propose(text, ref_keys):
-        return _SIDEBAR_MEDIA_WRITE
-    if utterance_binds_media_propose(text):
-        return _MEDIA_PROPOSE_WRITE
-    return _DEFAULT_NARROW_WRITE
+        if _has_strong_workflow_import_anchor(text, low):
+            visible |= _IMPORT_WRITE_TOOLS
+        return frozenset(visible)
+    return frozenset(visible)
 
 
 def sidebar_image_keys_from_attachments(attachments: list | None) -> tuple[str, ...]:
