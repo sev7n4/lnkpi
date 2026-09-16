@@ -46,6 +46,10 @@ import {
   parseShortGenerationError,
 } from '@/utils/generationDiagnostic'
 import { useAuthStore } from '@/stores/auth'
+import {
+  compositionGenerateIdsForClick,
+  type CompositionRunGroup,
+} from '@/composables/compositionRunGroup'
 
 export type FallbackConfirmDecision = 'confirm' | 'cancel'
 
@@ -73,6 +77,7 @@ export interface NodeGenerationDeps {
   requestFallbackConfirm?: (req: FallbackPendingRequest) => Promise<FallbackConfirmDecision>
   isModelSelectable?: (modality: StudioModality, model: string) => boolean
   onInsufficientPoints?: () => void
+  compositionRunGroup?: Ref<CompositionRunGroup | null | undefined>
 }
 
 /** Node still accepts poll / resolve writes (not cancelled to draft). */
@@ -694,6 +699,7 @@ async function cancelRemoteGeneration(
         type: String(n.type ?? ''),
         data: n.data,
       })),
+      compositionRunGroup: deps.compositionRunGroup?.value ?? undefined,
     }
   }
 
@@ -709,7 +715,44 @@ async function cancelRemoteGeneration(
     return resolved.prompt
   }
 
-  async function generateForNode(node: EditableFlowNode) {
+  async function generateForNode(
+    node: EditableFlowNode,
+    opts?: { asRunGroupMember?: boolean },
+  ) {
+    if (!opts?.asRunGroupMember) {
+      if (isNodeBusy(node.id)) {
+        cancelGeneration(node.id)
+        return
+      }
+      if (
+        isDockGenerateBusy(node.data?.status)
+        && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+      ) {
+        cancelGeneration(node.id)
+        return
+      }
+      const ids = compositionGenerateIdsForClick(node.id, {
+        nodes: deps.nodes.value.map((n) => ({
+          id: n.id,
+          type: String(n.type ?? ''),
+          data: n.data,
+        })),
+        edges: deps.edges.value,
+        compositionRunGroup: deps.compositionRunGroup?.value ?? undefined,
+      })
+      if (!ids.length) return
+      if (ids.length !== 1 || ids[0] !== node.id) {
+        for (const id of ids) {
+          const member = findNodeById(deps.nodes.value, id)
+          if (!member) continue
+          await generateForNode(member, { asRunGroupMember: true })
+          const after = findNodeById(deps.nodes.value, id)
+          if (after?.data?.status === NODE_GENERATION_STATUS.error) return
+        }
+        return
+      }
+    }
+
     if (isNodeBusy(node.id)) {
       cancelGeneration(node.id)
       return

@@ -104,9 +104,13 @@ export function canvasDataToFlow(data: CanvasData): { nodes: FlowNode[]; edges: 
   }
 }
 
-export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasData {
+export function flowToCanvasData(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  extras?: { compositionRunGroup?: CanvasData['compositionRunGroup'] },
+): CanvasData {
   const ids = new Set(nodes.map((n) => n.id))
-  return {
+  const data: CanvasData = {
     nodes: nodes.map((n) => ({
       id: n.id,
       type: (n.type ?? 'prompt') as CanvasData['nodes'][0]['type'],
@@ -122,4 +126,8 @@ export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasDa
         target: e.target,
       })),
   }
+  if (extras?.compositionRunGroup) {
+    data.compositionRunGroup = extras.compositionRunGroup
+  }
+  return data
 }

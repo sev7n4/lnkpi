@@ -34,6 +34,7 @@ import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseR
 import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
+import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
 import { canvasApi } from '@/services/canvas-api'
@@ -172,6 +173,7 @@ interface CanvasEdge {
 
 const nodes = ref<EditableFlowNode[]>([])
 const edges = ref<CanvasEdge[]>([])
+const compositionRunGroup = ref<CompositionRunGroup | null>(null)
 
 /** 受控模式：:nodes + apply-default=false，由 onNodesChange 落地变更，避免内部/外部状态互相覆盖 */
 const flowNodes = computed(() => nodes.value as unknown as Node[])
@@ -3108,6 +3110,7 @@ async function saveCanvas() {
       canvasData: flowToCanvasData(
         nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
         edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
+        { compositionRunGroup: compositionRunGroup.value ?? undefined },
       ),
     })
   } catch {
@@ -3155,6 +3158,7 @@ const {
   onInsufficientPoints: () => {
     showMembership.value = true
   },
+  compositionRunGroup,
 })
 
 function retryNodeGeneration(nodeId: string) {
@@ -3239,7 +3243,13 @@ function hydrateCanvasEdges(
 
 async function loadSession() {
   try {
-    const { data } = await api.get<{ data: { title: string; userId?: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
+    const { data } = await api.get<{
+      data: {
+        title: string
+        userId?: string
+        canvasData?: { nodes: Node[]; edges: Edge[]; compositionRunGroup?: CompositionRunGroup }
+      }
+    }>(
       `/sessions/${sessionId.value}`,
     )
     sessionTitle.value = data.data.title
@@ -3259,6 +3269,7 @@ async function loadSession() {
         nodes.value,
       )
       nodeCounter = nextNodeCounterFromNodes(nodes.value)
+      compositionRunGroup.value = data.data.canvasData.compositionRunGroup ?? null
     } else {
       nodes.value = [{
         id: 'prompt-1',
@@ -3267,6 +3278,7 @@ async function loadSession() {
         data: { prompt: '描述你的创意场景...' },
       }]
       nodeCounter = 1
+      compositionRunGroup.value = null
     }
   } catch (e) {
     nodes.value = [{
@@ -3276,6 +3288,7 @@ async function loadSession() {
       data: { prompt: '描述你的创意场景...' },
     }]
     nodeCounter = 1
+    compositionRunGroup.value = null
   }
   generationFieldsCache.clear()
   for (const n of nodes.value) {

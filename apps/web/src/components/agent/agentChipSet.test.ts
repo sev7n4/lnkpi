@@ -103,6 +103,12 @@ describe('detectAgentChipSet', () => {
     ).toBe('recipe_confirm')
   })
 
+  it('detects recipe confirm chips from composition HITL copy', () => {
+    expect(
+      detectAgentChipSet('新建白底三视图，再换装两套造型。\n请确认是否把构图落到画布'),
+    ).toBe('recipe_confirm')
+  })
+
   it('detects recipe promote chips from HITL copy', () => {
     expect(detectAgentChipSet('这份工作流更像哪一种？')).toBe('recipe_promote')
   })
