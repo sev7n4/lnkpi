@@ -116,10 +116,59 @@ describe('runVisionQaInternal ProviderContext', () => {
         model: 'deepseek-flash',
         apiKey: 'sk-byok',
         baseUrl: 'https://byok.example/v1',
-        maxRetries: 2,
+        maxRetries: 0,
       }),
     )
     expect(inlineUpstreamReferenceImages).toHaveBeenCalledWith(['http://127.0.0.1/x.png'])
+  })
+
+  it('maps catch 429 to VISION_RATE_LIMIT with neutral Chinese reason', async () => {
+    vi.mocked(generateVisionQaJson).mockRejectedValueOnce(
+      new Error('Vision API 429: rate limit — Upgrade to a Token Plan for more'),
+    )
+    const result = await svc.runVisionQaInternal('u1', {
+      systemPrompt: 's',
+      userContent: 'u',
+      imageUrls: ['http://127.0.0.1/x.png'],
+      provider: {
+        providerRef: 'ch_x::deepseek-flash',
+        model: 'deepseek-flash',
+        apiKey: 'sk-byok',
+        baseUrl: 'https://byok.example/v1',
+        source: 'user',
+      },
+    })
+    expect(result.visionUsed).toBe(false)
+    const payload = JSON.parse(result.text) as { errorClass?: string; reason?: string }
+    expect(payload.errorClass).toBe('VISION_RATE_LIMIT')
+    expect(payload.reason).toBe('识图请求过于频繁，请稍后再试')
+    expect(payload.reason).not.toMatch(/Upgrade/i)
+  })
+
+  it('maps catch timeout / fetch / other to structured errorClass', async () => {
+    const cases: Array<[Error, string, string]> = [
+      [new Error('Request timed out after 120s'), 'VISION_TIMEOUT', '识图超时，请稍后重试'],
+      [new Error('fetch failed: download error'), 'VISION_FETCH_FAILED', '参考图读取失败，请重新上传'],
+      [new Error('Vision LLM 返回空内容'), 'VISION_UPSTREAM', '识图失败'],
+    ]
+    for (const [err, errorClass, reason] of cases) {
+      vi.mocked(generateVisionQaJson).mockRejectedValueOnce(err)
+      const result = await svc.runVisionQaInternal('u1', {
+        systemPrompt: 's',
+        userContent: 'u',
+        imageUrls: ['http://127.0.0.1/x.png'],
+        provider: {
+          providerRef: 'ch_x::deepseek-flash',
+          model: 'deepseek-flash',
+          apiKey: 'sk-byok',
+          baseUrl: 'https://byok.example/v1',
+          source: 'user',
+        },
+      })
+      const payload = JSON.parse(result.text) as { errorClass?: string; reason?: string }
+      expect(payload.errorClass).toBe(errorClass)
+      expect(payload.reason).toBe(reason)
+    }
   })
 
   it('rejects missing provider context without env OPENAI fallback', async () => {

@@ -390,6 +390,7 @@ class NestCanvasClient:
         api_key: str | None = None,
         base_url: str | None = None,
         source: str | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -412,7 +413,7 @@ class NestCanvasClient:
         return await self._post(
             "/agent/internal/run-vision-qa",
             body,
-            timeout=120.0,
+            timeout=120.0 if timeout is None else timeout,
         )
 
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:

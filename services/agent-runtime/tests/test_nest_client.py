@@ -450,6 +450,34 @@ async def test_run_vision_qa_posts_provider_context(nest_client, captured):
 
 
 @pytest.mark.asyncio
+async def test_run_vision_qa_forwards_explicit_timeout(monkeypatch):
+    from app.tools.nest_client import NestCanvasClient
+
+    captured: dict = {}
+
+    async def fake_post(self, path, body, *, timeout=None, tool_name=None):
+        captured["path"] = path
+        captured["timeout"] = timeout
+        return {"pass": True}
+
+    monkeypatch.setattr(NestCanvasClient, "_post", fake_post)
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+    )
+    await client.run_vision_qa(
+        image_urls=["https://cdn.example/a.png"],
+        system_prompt="sys",
+        user_content="usr",
+        timeout=30.0,
+    )
+    assert captured["path"] == "/agent/internal/run-vision-qa"
+    assert captured["timeout"] == 30.0
+
+
+@pytest.mark.asyncio
 async def test_grid_slice_image_uses_long_timeout(monkeypatch):
     from app.tools.nest_client import NestCanvasClient
 

@@ -318,3 +318,24 @@ async def test_partial_cache_miss_rebuilds_from_all_current_urls():
     assert parse["user_facing_summary"] == "一只不锈钢水杯"
     assert parse["vision_used"] is True
     assert "error" not in parse
+
+
+@pytest.mark.asyncio
+async def test_run_vision_qa_timeout_capped_by_remaining_budget(monkeypatch):
+    ticks = [1000.0, 1150.0]
+    idx = {"i": 0}
+
+    def now() -> float:
+        i = idx["i"]
+        idx["i"] = min(i + 1, len(ticks) - 1)
+        return ticks[i]
+
+    monkeypatch.setattr("app.graph.nodes.parse_sidebar_media.time.monotonic", now)
+    nest = _Nest()
+    node = make_parse_sidebar_media_node(
+        nest=nest,
+        vision_creds=FLASH_CREDS,
+        skills_dir=".",
+    )
+    await node({"sidebar_attachments": [{"mediaType": "image", "url": "https://cdn.example/p.jpg"}]})
+    assert nest.calls[0]["timeout"] == 30.0
