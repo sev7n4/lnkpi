@@ -55,7 +55,9 @@ import {
   type MediaRefPreflight,
   type StudioModality,
   type VideoGenerationMode,
+  type CanvasData,
   assertMiniMaxH3ReferenceLimits,
+  resolveCompositionVideoPrompt,
 } from '@lnkpi/shared'
 import {
   alreadyRefunded,
@@ -337,6 +339,21 @@ function withCanvasScope(scope?: CanvasGenerationScope) {
     ...(scope.nodeId ? { nodeId: scope.nodeId } : {}),
   }
 }
+
+function parseSessionCanvas(raw: string | null | undefined): CanvasData | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as CanvasData
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.nodes)) {
+      return undefined
+    }
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+const EMPTY_P_BLOCK_V_MESSAGE = '分镜还是空的，写好后再生成视频。'
 
 /** Map generateVisionQaJson throws to structured errorClass + neutral Chinese reason. */
 function classifyVisionCatch(err: unknown): { errorClass: string; reason: string } {
@@ -1562,6 +1579,17 @@ export class StudioService {
     seed?: number,
     negativePrompt?: string,
   ) {
+    if (scope?.sessionId && scope?.nodeId) {
+      const session = await this.prisma.session.findUnique({ where: { id: scope.sessionId } })
+      const canvas = parseSessionCanvas(session?.canvasData)
+      if (canvas) {
+        const livePrompt = resolveCompositionVideoPrompt(canvas, scope.nodeId)
+        if ('error' in livePrompt) {
+          throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
+        }
+        prompt = livePrompt.prompt
+      }
+    }
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
       mediaType: ref.mediaType as GenerationRefPayload['mediaType'],

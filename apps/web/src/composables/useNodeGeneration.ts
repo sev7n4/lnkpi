@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import type { VideoSettings } from '@lnkpi/shared'
+import { resolveCompositionVideoPrompt, type VideoSettings } from '@lnkpi/shared'
 import type { EditableFlowNode } from '@/composables/useSelectedNodeEditor'
 import { NODE_GENERATION_STATUS, isDockGenerateBusy, isNodeGenerating } from '@/constants/dockStudio'
 import { shouldApplyGenerationPoll } from '@/utils/generationPollGate'
@@ -687,6 +687,28 @@ async function cancelRemoteGeneration(
     return { sessionId: deps.sessionId.value, nodeId }
   }
 
+  function compositionVideoCanvas() {
+    return {
+      nodes: deps.nodes.value.map((n) => ({
+        id: n.id,
+        type: String(n.type ?? ''),
+        data: n.data,
+      })),
+    }
+  }
+
+  function applyLiveCompositionVideoPrompt(videoNodeId: string): string | null {
+    const resolved = resolveCompositionVideoPrompt(compositionVideoCanvas(), videoNodeId)
+    if ('error' in resolved) {
+      deps.patchNodeData(videoNodeId, {
+        status: NODE_GENERATION_STATUS.error,
+        errorMessage: '分镜还是空的，写好后再生成视频。',
+      })
+      return null
+    }
+    return resolved.prompt
+  }
+
   async function generateForNode(node: EditableFlowNode) {
     if (isNodeBusy(node.id)) {
       cancelGeneration(node.id)
@@ -711,7 +733,8 @@ async function cancelRemoteGeneration(
       const hasImageRef = refs.some((r) => r.mediaType === 'image' && Boolean(r.url?.trim()))
       if (!local && !hasImageRef) return
     } else if (nodeType !== 'sceneComposer' && !local && !refs.length) {
-      return
+      const hasTextP = nodeType === 'video' && deps.nodes.value.some((n) => n.id === 'text-p')
+      if (!hasTextP) return
     }
 
     const blobError = blobReferenceError(refs, data)
@@ -851,6 +874,7 @@ async function cancelRemoteGeneration(
     const shotId = linkedShotEdge?.source
     const shotNode = shotId ? findNodeById(deps.nodes.value, shotId) : null
     const refImage = firstImageRefUrl(refs) || mergeReferenceImageUrl(data, upstream)
+    let requestPrompt = prompt
 
     if (nodeType === 'video') {
       const audioOnlyError = audioOnlyVideoRefError(refs, refImage)
@@ -861,6 +885,9 @@ async function cancelRemoteGeneration(
         })
         return
       }
+      const livePrompt = applyLiveCompositionVideoPrompt(node.id)
+      if (livePrompt === null) return
+      requestPrompt = livePrompt
     }
 
     if (shotNode?.type === 'shot' && shotId) {
@@ -876,7 +903,7 @@ async function cancelRemoteGeneration(
       })
       if (nodeType === 'video') {
         const params = resolveCanvasVideoParams(data)
-        const { data: matRes } = await canvasApi.generateVideo(shotId, prompt, {
+        const { data: matRes } = await canvasApi.generateVideo(shotId, requestPrompt, {
           ...params,
           refs,
           mentionedKeys,
@@ -937,7 +964,7 @@ async function cancelRemoteGeneration(
       typeof seedRaw === 'number' && Number.isFinite(seedRaw) ? Math.trunc(seedRaw) : undefined
     const negativePrompt = String(data.negativePrompt ?? '').trim() || undefined
     const { data: res } = await studioApi.startVideoGeneration(
-      prompt,
+      requestPrompt,
       resolveGenerationModel('video', data.videoModel as string | undefined),
       settings?.duration,
       settings?.aspectRatio,

@@ -1,9 +1,18 @@
 /** @vitest-environment node */
+import { BadRequestException } from '@nestjs/common'
 import { describe, expect, it } from 'vitest'
 import {
   buildCanonicalVideoRequestFromBody,
   resolveVideoStartRequest,
 } from './video-generation-request.util'
+
+function canvasNode(
+  id: string,
+  type: 'image' | 'text' | 'video',
+  data: Record<string, unknown>,
+) {
+  return { id, type, position: { x: 0, y: 0 }, data }
+}
 
 describe('resolveVideoStartRequest', () => {
   it('uses canvas node when session canvas is available', () => {
@@ -50,6 +59,55 @@ describe('resolveVideoStartRequest', () => {
     })
     expect(request.prompt).toBe('body prompt')
     expect(request.videoSettings.duration).toBe(15)
+  })
+
+  it('replaces video node snapshot with live text-p prompt', () => {
+    const { request } = resolveVideoStartRequest({
+      body: { prompt: 'OLD' },
+      sessionId: 's1',
+      nodeId: 'video-v',
+      canvas: {
+        nodes: [
+          canvasNode('image-i0', 'image', { prompt: 'I0' }),
+          canvasNode('image-look-0', 'image', { prompt: 'LOOK' }),
+          canvasNode('text-p', 'text', { prompt: 'NEW SCRIPT' }),
+          canvasNode('video-v', 'video', { prompt: 'OLD' }),
+        ],
+        edges: [],
+      },
+    })
+    expect(request.prompt).toBe('NEW SCRIPT')
+  })
+
+  it('throws when composition text-p is empty', () => {
+    expect(() =>
+      resolveVideoStartRequest({
+        body: { prompt: 'OLD' },
+        sessionId: 's1',
+        nodeId: 'video-v',
+        canvas: {
+          nodes: [
+            canvasNode('text-p', 'text', { prompt: '' }),
+            canvasNode('video-v', 'video', { prompt: 'OLD' }),
+          ],
+          edges: [],
+        },
+      }),
+    ).toThrow(BadRequestException)
+    expect(() =>
+      resolveVideoStartRequest({
+        body: { prompt: 'OLD' },
+        sessionId: 's1',
+        nodeId: 'video-v',
+        canvas: {
+          nodes: [
+            canvasNode('text-p', 'text', { prompt: '' }),
+            canvasNode('video-v', 'video', { prompt: 'OLD' }),
+          ],
+          edges: [],
+        },
+      }),
+    ).toThrow('分镜还是空的，写好后再生成视频。')
   })
 })
 

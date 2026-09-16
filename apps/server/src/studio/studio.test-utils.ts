@@ -55,6 +55,9 @@ export function createPrismaMock() {
       findFirst: async () => null,
       findMany: async () => [],
     },
+    session: {
+      findUnique: async () => null,
+    },
     $transaction: async (arg: unknown) => {
       if (typeof arg === 'function') {
         return (arg as (tx: unknown) => Promise<unknown>)({

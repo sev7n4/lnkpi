@@ -1,10 +1,13 @@
+import { BadRequestException } from '@nestjs/common'
 import type {
   CanvasData,
   CanonicalVideoGenerationRequest,
   GenerationRefPayload,
   VideoGenerationMode,
 } from '@lnkpi/shared'
-import { resolveCanonicalVideoRequest } from '@lnkpi/shared'
+import { resolveCanonicalVideoRequest, resolveCompositionVideoPrompt } from '@lnkpi/shared'
+
+const EMPTY_P_BLOCK_V_MESSAGE = '分镜还是空的，写好后再生成视频。'
 
 export type VideoStartBody = {
   prompt: string
@@ -80,6 +83,11 @@ export function resolveVideoStartRequest(input: {
   const nodeId = input.nodeId ?? input.body.nodeId ?? ''
 
   if (input.canvas && nodeId) {
+    const resolvedPrompt = resolveCompositionVideoPrompt(input.canvas, nodeId)
+    if ('error' in resolvedPrompt) {
+      throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
+    }
+
     const node = input.canvas.nodes.find((n) => n.id === nodeId)
     if (node) {
       const request = resolveCanonicalVideoRequest({
@@ -87,8 +95,21 @@ export function resolveVideoStartRequest(input: {
         canvas: input.canvas,
         sessionId,
       })
+      request.prompt = resolvedPrompt.prompt
       const legacy = String(node.data?.referenceImageUrl ?? bodyReference(input.body)).trim() || undefined
       return { request, legacyReferenceImageUrl: legacy }
+    }
+
+    const request = buildCanonicalVideoRequestFromBody({
+      ...input.body,
+      prompt: resolvedPrompt.prompt,
+      sessionId,
+      nodeId,
+    })
+    const legacy = bodyReference(input.body)
+    return {
+      request,
+      legacyReferenceImageUrl: legacy || undefined,
     }
   }
 

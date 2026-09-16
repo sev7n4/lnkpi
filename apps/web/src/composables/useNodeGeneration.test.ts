@@ -817,6 +817,79 @@ describe('useNodeGeneration', () => {
     expect(deps.startShotPolling).toHaveBeenCalledWith(['shot-1'])
   })
 
+  it('canvas video generate reads live text-p instead of video snapshot', async () => {
+    const video = createNode('video', {
+      prompt: 'OLD',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+    }, 'video-v')
+    const textP = createNode('text', { prompt: 'NEW SCRIPT' }, 'text-p')
+    const i0 = createNode('image', { prompt: 'I0', url: 'https://example.com/i0.png' }, 'image-i0')
+    const look = createNode('image', { prompt: 'LOOK', url: 'https://example.com/look.png' }, 'image-look-0')
+    const { api } = createDeps([i0, look, textP, video])
+    vi.mocked(studioApi.startVideoGeneration).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'video',
+          id: 'rec-video-p',
+          status: 'generating',
+          generationStartedAt: '2026-08-14T12:00:00.000Z',
+        },
+      }),
+    )
+
+    await api.generateForNode(video)
+
+    expect(vi.mocked(studioApi.startVideoGeneration).mock.calls[0]?.[0]).toBe('NEW SCRIPT')
+  })
+
+  it('blocks video generate when text-p is empty', async () => {
+    const video = createNode('video', {
+      prompt: 'OLD',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+    }, 'video-v')
+    const textP = createNode('text', { prompt: '   ' }, 'text-p')
+    const { api, deps } = createDeps([textP, video])
+
+    await api.generateForNode(video)
+
+    expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
+    expect(canvasApi.generateVideo).not.toHaveBeenCalled()
+    expect(deps.patchNodeData).toHaveBeenCalledWith('video-v', {
+      status: NODE_GENERATION_STATUS.error,
+      errorMessage: '分镜还是空的，写好后再生成视频。',
+    })
+  })
+
+  it('shot-linked video generate reads live text-p prompt', async () => {
+    const shot = createNode('shot', { title: 'Shot', prompt: 'OLD' }, 'shot-1')
+    const video = createNode('video', {
+      prompt: 'OLD',
+      videoModel: encodeChannelModel('platform', 'happyhose-1.1'),
+      videoSettings: {
+        duration: 10,
+        aspectRatio: '9:16',
+        resolution: '1080p',
+        crop: 'center',
+      },
+    }, 'video-v')
+    const textP = createNode('text', { prompt: 'NEW SCRIPT' }, 'text-p')
+    const { api, deps } = createDeps([shot, video, textP])
+    deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'video-v' }]
+    vi.mocked(canvasApi.generateVideo).mockResolvedValue(mockAxiosResponse({ data: { id: 'mat-1' } }))
+
+    await api.generateForNode(video)
+
+    expect(canvasApi.generateVideo).toHaveBeenCalledWith(
+      'shot-1',
+      'NEW SCRIPT',
+      expect.objectContaining({
+        model: encodeChannelModel('platform', 'happyhose-1.1'),
+      }),
+    )
+    expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
+  })
+
   it('text generate writes result to content without overwriting prompt', async () => {
     const node = createNode('text', {
       prompt: '写一句广告语',
