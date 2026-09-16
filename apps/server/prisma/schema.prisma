@@ -49,6 +49,21 @@ model InviteRedemption {
   @@index([inviterId, createdAt])
 }
 
+model InviteRedemption {
+  id                         String   @id @default(cuid())
+  inviteeId                  String   @unique
+  invitee                    User     @relation("RedemptionInvitee", fields: [inviteeId], references: [id], onDelete: Cascade)
+  inviterId                  String
+  inviter                    User     @relation("RedemptionInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  inviteCode                 String
+  inviteePoints              Int
+  inviterPoints              Int
+  inviterRewardSkippedReason String?
+  createdAt                  DateTime @default(now())
+
+  @@index([inviterId, createdAt])
+}
+
 // 用户全局资产库：跨画布可用，用户在节点上主动保存或面板上传入库
 model UserAsset {
   id           String   @id @default(cuid())
