@@ -54,3 +54,9 @@ def test_chat_system_says_not_to_search_core_media_tools():
     assert "upsert_media_node" in _SYSTEM
     assert "propose_generation" in _SYSTEM
     assert "不要用 tool_search" in _SYSTEM or "勿用 tool_search" in _SYSTEM
+
+
+def test_chat_system_sidebar_chips_are_not_canvas_ids():
+    assert "@I1" in _SYSTEM or "侧栏芯片" in _SYSTEM
+    assert "不是画布节点" in _SYSTEM or "不是画布" in _SYSTEM
+    assert "apply_sidebar_attachments" in _SYSTEM

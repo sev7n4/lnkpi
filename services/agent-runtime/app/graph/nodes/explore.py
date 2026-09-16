@@ -32,7 +32,11 @@ from app.graph.planner_copy import (
     sanitize_planner_reply,
 )
 from app.graph.recent_turns import compress_recent_turns
-from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
+from app.graph.sidebar_media_parse import (
+    format_parse_context_block,
+    parse_block_asks_unknown,
+    prefix_assistant_reply,
+)
 from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
@@ -80,12 +84,21 @@ _EXPLORE_SYSTEM = (
     "（禁止调用任何 run_*）。真正出图/出视频须等用户在 UI 确认后由系统执行。\n"
     "4. 用户要创建图片/视频/文本/音频节点或明确「生成一张…」时：用 upsert_media_node"
     "创建或更新节点（可带 prompt），按需再用 set_node_prompt 填参、用 connect_nodes 连线，"
-    "然后调用 propose_generation，并等待用户确认；不要假装已出图。\n"
+    "然后调用 propose_generation，并等待用户确认；不要假装已出图。"
+    "有侧栏参考图要出结果图时：用 upsert_media_node 新建一张图节点（用户明确要求改某个"
+    "image-* 除外），再 apply_sidebar_attachments（mode=localRefs，mentioned_keys 用 I1/I2"
+    "芯片序），必要时 set_node_prompt，然后 propose_generation。此路径不要 connect_nodes、"
+    "不要 attach_refs。一致性写在提示词和 ref 顺序（先身份后衣服/产品），不要再搭工作流。\n"
     "5. 工作流类请求（骨架 + 生成 + 填 dock）：优先摆多个节点并用连线（connect_nodes）"
     "串起来，不要压成单个 atomic 式节点。\n"
     "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。"
-    "upsert_media_node / propose_generation 在「生成一张」类口语下应已绑定，不要用 tool_search 找 CORE。\n"
-    "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。\n"
+    "upsert_media_node / propose_generation 在「生成一张」类口语下应已绑定，不要用 tool_search 找 CORE。"
+    "有侧栏参考图要出结果图时 upsert_media_node / apply_sidebar_attachments / propose_generation"
+    "应已绑定，不要用 tool_search 找 CORE。\n"
+    "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。"
+    "@I1/@I2 是侧栏芯片 key，不是画布节点 id。禁止问「I1 对应画布哪张图」；禁止把芯片映射到"
+    "已有画布节点（除非用户明确要求改该节点）。侧栏图≥3 且未 @、或只有旧图且未 @：先问用哪几张"
+    "或请 @I1，不要对闲聊新建节点。\n"
     "8. import_workflow / instantiate_workflow_template 已在服务端对 addedNodeIds "
     "默认顺连线；成功后不要为同一批 id 再调 arrange_nodes_along_edges"
     "（除非用户明确要求再整理）。"
@@ -284,7 +297,9 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
         if parse:
-            system_content = system_content + "\n\n" + format_parse_context_block(parse)
+            system_content = system_content + "\n\n" + format_parse_context_block(
+                parse, ask_unknown=parse_block_asks_unknown(user_text)
+            )
             if not parse.get("vision_used"):
                 system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
         if "preview_workflow_template" in visible or "match_workflow_templates" in visible:

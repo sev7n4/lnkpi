@@ -141,3 +141,22 @@ def test_context_block_forbids_filename_copout():
     )
     assert "【侧栏参考图解析】" in block
     assert "不要声称只能看到文件名" in block
+    assert "待确认项" not in block
+    assert "向用户确认" not in block
+
+
+def test_context_block_ask_unknown_true_keeps_confirm_hint():
+    block = format_parse_context_block(
+        {"user_facing_summary": "不锈钢水杯", "fields": {"category": "水杯"}, "unknown": ["price_band"]},
+        ask_unknown=True,
+    )
+    assert "待确认项" in block
+    assert "price_band" in block
+    assert "向用户确认" in block
+
+
+def test_parse_block_asks_unknown_closed_set():
+    from app.graph.sidebar_media_parse import parse_block_asks_unknown
+
+    assert parse_block_asks_unknown("请帮我设计这个产品的电商产品上架方案") is True
+    assert parse_block_asks_unknown("@I1 模特 @I2 产品，让模特穿上，保持构图不变") is False
