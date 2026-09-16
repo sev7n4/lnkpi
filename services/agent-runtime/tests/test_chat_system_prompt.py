@@ -60,3 +60,20 @@ def test_chat_system_sidebar_chips_are_not_canvas_ids():
     assert "@I1" in _SYSTEM or "侧栏芯片" in _SYSTEM
     assert "不是画布节点" in _SYSTEM or "不是画布" in _SYSTEM
     assert "apply_sidebar_attachments" in _SYSTEM
+
+
+def test_chat_system_hang_identity_chips_vs_canvas_ids():
+    assert "apply_sidebar_attachments" in _SYSTEM
+    assert "attach_refs" in _SYSTEM
+    assert "芯片" in _SYSTEM
+    assert "image-*" in _SYSTEM or "画布节点" in _SYSTEM
+
+
+def test_chat_system_idle_must_not_require_propose():
+    assert "谢谢" in _SYSTEM or "闲聊" in _SYSTEM
+    assert "propose_generation" in _SYSTEM
+
+
+def test_chat_system_instantiate_only_after_confirm_canvas():
+    assert "确认落到画布" in _SYSTEM
+    assert "instantiate_workflow_template" in _SYSTEM

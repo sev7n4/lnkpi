@@ -762,7 +762,11 @@ def _all_tool_specs(client: NestCanvasClient) -> list[tuple[str, StructuredTool]
             StructuredTool.from_function(
                 coroutine=attach_refs,
                 name="attach_refs",
-                description="Attach ordered reference nodes to a target node",
+                description=(
+                    "Attach ordered canvas node ids (image-* / video-*) as refs. "
+                    "Never pass sidebar chip keys (I1/I2/@I*). "
+                    "Use apply_sidebar_attachments for chips."
+                ),
                 args_schema=AttachRefsInput,
             ),
         ),
