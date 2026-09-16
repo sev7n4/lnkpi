@@ -27,6 +27,14 @@ export type VideoStartBody = {
   nodeId?: string
 }
 
+function hasCompositionPBlock(canvas: CanvasData): boolean {
+  if (canvas.nodes.some((node) => node.id === 'text-p')) return true
+  const ids = canvas.compositionRunGroup?.nodeIds
+  if (!ids?.length) return false
+  const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
+  return ids.some((id) => byId.get(id)?.type === 'text')
+}
+
 function inferVideoMode(explicit: unknown, refs: GenerationRefPayload[]): VideoGenerationMode {
   const mode = String(explicit ?? '').trim()
   if (
@@ -88,6 +96,7 @@ export function resolveVideoStartRequest(input: {
       throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
     }
 
+    const usePPrompt = hasCompositionPBlock(input.canvas)
     const node = input.canvas.nodes.find((n) => n.id === nodeId)
     if (node) {
       const request = resolveCanonicalVideoRequest({
@@ -95,21 +104,25 @@ export function resolveVideoStartRequest(input: {
         canvas: input.canvas,
         sessionId,
       })
-      request.prompt = resolvedPrompt.prompt
+      if (usePPrompt) {
+        request.prompt = resolvedPrompt.prompt
+      }
       const legacy = String(node.data?.referenceImageUrl ?? bodyReference(input.body)).trim() || undefined
       return { request, legacyReferenceImageUrl: legacy }
     }
 
-    const request = buildCanonicalVideoRequestFromBody({
-      ...input.body,
-      prompt: resolvedPrompt.prompt,
-      sessionId,
-      nodeId,
-    })
-    const legacy = bodyReference(input.body)
-    return {
-      request,
-      legacyReferenceImageUrl: legacy || undefined,
+    if (usePPrompt) {
+      const request = buildCanonicalVideoRequestFromBody({
+        ...input.body,
+        prompt: resolvedPrompt.prompt,
+        sessionId,
+        nodeId,
+      })
+      const legacy = bodyReference(input.body)
+      return {
+        request,
+        legacyReferenceImageUrl: legacy || undefined,
+      }
     }
   }
 

@@ -61,6 +61,19 @@ describe('resolveVideoStartRequest', () => {
     expect(request.videoSettings.duration).toBe(15)
   })
 
+  it('keeps body prompt when canvas exists but video node and P block are absent', () => {
+    const { request } = resolveVideoStartRequest({
+      body: { prompt: 'body prompt' },
+      sessionId: 's1',
+      nodeId: 'video-v',
+      canvas: {
+        nodes: [canvasNode('image-i0', 'image', { prompt: 'I0' })],
+        edges: [],
+      },
+    })
+    expect(request.prompt).toBe('body prompt')
+  })
+
   it('replaces video node snapshot with live text-p prompt', () => {
     const { request } = resolveVideoStartRequest({
       body: { prompt: 'OLD' },
