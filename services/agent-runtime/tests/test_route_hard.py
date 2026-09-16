@@ -12,6 +12,8 @@ from app.graph.route_precedence import PRECEDENCE_RULES
 _APPENDIX_A_HARD_IDS = (
     "modify_existing_plan",
     "regen_no_checkpoint",
+    "composition_confirm",
+    "composition_structure",
     "sidebar_img2img",
     "checkpoint_regen",
     "product_visual_explicit",

@@ -31,6 +31,7 @@ class RouteContext(TypedDict, total=False):
     focus_node_id: str | None
     requested_skill_id: str | None
     checkpoint: RouteCheckpoint
+    composition_pending: Any
 
 
 def assemble_route_context(state: dict[str, Any]) -> RouteContext:
@@ -46,7 +47,7 @@ def assemble_route_context(state: dict[str, Any]) -> RouteContext:
         "plan_draft": str(state.get("plan_draft") or "").strip() or None,
         "flow_mode_prev": str(state.get("flow_mode") or "").strip() or None,
     }
-    return {
+    ctx: RouteContext = {
         "utterance": utterance,
         "mentioned_keys": normalize_mentioned_keys(mentioned),
         "sidebar_attachments": attachments,
@@ -54,3 +55,6 @@ def assemble_route_context(state: dict[str, Any]) -> RouteContext:
         "requested_skill_id": requested,
         "checkpoint": checkpoint,
     }
+    if "composition_pending" in state:
+        ctx["composition_pending"] = state.get("composition_pending")
+    return ctx

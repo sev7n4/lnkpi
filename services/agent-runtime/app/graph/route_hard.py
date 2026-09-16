@@ -19,6 +19,8 @@ from app.graph.route_precedence import PRECEDENCE_RULES
 HARD_SHORTCIRCUIT_RULE_IDS: tuple[str, ...] = (
     "modify_existing_plan",
     "regen_no_checkpoint",
+    "composition_confirm",
+    "composition_structure",
     "sidebar_img2img",
     "checkpoint_regen",
     "product_visual_explicit",
