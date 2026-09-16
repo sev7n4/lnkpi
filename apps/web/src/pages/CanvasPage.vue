@@ -174,6 +174,7 @@ interface CanvasEdge {
 const nodes = ref<EditableFlowNode[]>([])
 const edges = ref<CanvasEdge[]>([])
 const compositionRunGroup = ref<CompositionRunGroup | null>(null)
+const lastKnownCompositionRunGroup = ref<CompositionRunGroup | null>(null)
 
 /** 受控模式：:nodes + apply-default=false，由 onNodesChange 落地变更，避免内部/外部状态互相覆盖 */
 const flowNodes = computed(() => nodes.value as unknown as Node[])
@@ -1191,6 +1192,9 @@ function handleAgentActions(actions: unknown[]) {
   // Fix #3: also start generation polling so any record-id-bearing nodes
   // (status:generating now) get polled to terminal state.
   startPollingForGeneratingRecords()
+  // Hydrate run-group extras as soon as actions land (not only loadSession),
+  // so persistUserEdit cannot PUT canvas without compositionRunGroup.
+  void hydrateCompositionRunGroupFromSession()
   // 勿 persistUserEdit：Nest Agent tools 已写 Session.canvasData；
   // 用本地旧图 + 部分 action 回写会抹掉追加拆图节点。
 }
@@ -3102,16 +3106,42 @@ function openPublish() {
   showPublish.value = true
 }
 
+async function hydrateCompositionRunGroupFromSession() {
+  try {
+    const { data } = await api.get<{
+      data: { canvasData?: { compositionRunGroup?: CompositionRunGroup } }
+    }>(`/sessions/${sessionId.value}`)
+    const group = data.data.canvasData?.compositionRunGroup
+    if (!group) return
+    lastKnownCompositionRunGroup.value = group
+    if (!compositionRunGroup.value) compositionRunGroup.value = group
+  } catch {
+    // demo mode
+  }
+}
+
 async function saveCanvas() {
   saving.value = true
   try {
+    const canvasData = flowToCanvasData(
+      nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
+      edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
+      {
+        compositionRunGroup: compositionRunGroup.value ?? undefined,
+        previousCanvas: lastKnownCompositionRunGroup.value
+          ? { compositionRunGroup: lastKnownCompositionRunGroup.value }
+          : undefined,
+      },
+    )
+    if (canvasData.compositionRunGroup) {
+      lastKnownCompositionRunGroup.value = canvasData.compositionRunGroup
+      if (!compositionRunGroup.value) {
+        compositionRunGroup.value = canvasData.compositionRunGroup
+      }
+    }
     await api.put(`/sessions/${sessionId.value}`, {
       title: sessionTitle.value,
-      canvasData: flowToCanvasData(
-        nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
-        edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
-        { compositionRunGroup: compositionRunGroup.value ?? undefined },
-      ),
+      canvasData,
     })
   } catch {
     // demo mode
@@ -3270,6 +3300,7 @@ async function loadSession() {
       )
       nodeCounter = nextNodeCounterFromNodes(nodes.value)
       compositionRunGroup.value = data.data.canvasData.compositionRunGroup ?? null
+      lastKnownCompositionRunGroup.value = data.data.canvasData.compositionRunGroup ?? null
     } else {
       nodes.value = [{
         id: 'prompt-1',
@@ -3279,6 +3310,7 @@ async function loadSession() {
       }]
       nodeCounter = 1
       compositionRunGroup.value = null
+      lastKnownCompositionRunGroup.value = null
     }
   } catch (e) {
     nodes.value = [{
@@ -3289,6 +3321,7 @@ async function loadSession() {
     }]
     nodeCounter = 1
     compositionRunGroup.value = null
+    lastKnownCompositionRunGroup.value = null
   }
   generationFieldsCache.clear()
   for (const n of nodes.value) {

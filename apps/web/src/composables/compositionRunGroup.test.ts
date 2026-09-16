@@ -128,4 +128,18 @@ describe('flowToCanvasData compositionRunGroup', () => {
     )
     expect(data.compositionRunGroup).toBeUndefined()
   })
+
+  it('keeps previous compositionRunGroup when extras omit the group', () => {
+    const group = {
+      nodeIds: ['image-i0', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    }
+    const data = flowToCanvasData(
+      [{ id: 'image-i0', type: 'image', position: { x: 0, y: 0 }, data: {} }],
+      [],
+      { previousCanvas: { compositionRunGroup: group } },
+    )
+    expect(data.compositionRunGroup).toEqual(group)
+  })
 })

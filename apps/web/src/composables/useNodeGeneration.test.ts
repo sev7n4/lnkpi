@@ -29,6 +29,7 @@ vi.mock('@/services/studio-api', () => ({
     confirmPlatformFallback: vi.fn(),
     cancelPlatformFallback: vi.fn(),
     cancelGeneration: vi.fn(),
+    getGeneration: vi.fn(),
   },
 }))
 
@@ -124,6 +125,16 @@ describe('useNodeGeneration', () => {
     )
     vi.mocked(studioApi.generateImage).mockResolvedValue(
       mockAxiosResponse({ data: completedRecord }),
+    )
+    vi.mocked(studioApi.getGeneration).mockImplementation(async (id) =>
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id,
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/out.png',
+        },
+      }),
     )
   })
 
@@ -1815,6 +1826,148 @@ describe('useNodeGeneration', () => {
 
     await api.generateForNode(look0)
 
+    expect(studioApi.generateImage).toHaveBeenCalledTimes(1)
+    expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
+    expect(i0.data?.status).toBe(NODE_GENERATION_STATUS.error)
+  })
+
+  it('does not start look generate while I0 studio status is still generating', async () => {
+    const i0 = createNode('image', { prompt: 'I0' }, 'image-i0')
+    const look0 = createNode('image', { prompt: 'LOOK0' }, 'image-look-0')
+    const video = createNode('video', {
+      prompt: 'OLD',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+    }, 'video-v')
+    const order: string[] = []
+    let releaseI0!: (record: typeof completedRecord) => void
+    const i0Terminal = new Promise<typeof completedRecord>((resolve) => {
+      releaseI0 = resolve
+    })
+    vi.mocked(studioApi.generateImage).mockImplementation(async (prompt) => {
+      order.push(`image:${prompt}`)
+      if (prompt === 'I0') {
+        return mockAxiosResponse({
+          data: {
+            ...completedRecord,
+            id: 'rec-i0-poll',
+            prompt: 'I0',
+            status: NODE_GENERATION_STATUS.generating,
+            url: null,
+          },
+        })
+      }
+      return mockAxiosResponse({
+        data: { ...completedRecord, id: `rec-${prompt}`, prompt },
+      })
+    })
+    vi.mocked(studioApi.getGeneration).mockImplementation(async (id) => {
+      if (id === 'rec-i0-poll') {
+        const record = await i0Terminal
+        return mockAxiosResponse({ data: record })
+      }
+      return mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id,
+          status: NODE_GENERATION_STATUS.completed,
+          url: 'https://example.com/out.png',
+        },
+      })
+    })
+    vi.mocked(studioApi.startVideoGeneration).mockImplementation(async (prompt) => {
+      order.push(`video:${prompt}`)
+      return mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          type: 'video',
+          id: 'rec-video-group',
+          status: NODE_GENERATION_STATUS.generating,
+          generationStartedAt: '2026-08-14T12:00:00.000Z',
+        },
+      })
+    })
+    const compositionRunGroup = ref({
+      nodeIds: ['image-i0', 'image-look-0', 'text-p', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    })
+    const { api, deps } = createDeps(
+      [i0, look0, createNode('text', { prompt: 'SCRIPT' }, 'text-p'), video],
+      { compositionRunGroup },
+    )
+    deps.edges.value = [
+      { id: 'e-i0-l0', source: 'image-i0', target: 'image-look-0' },
+      { id: 'e-l0-v', source: 'image-look-0', target: 'video-v' },
+      { id: 'e-p-v', source: 'text-p', target: 'video-v' },
+    ]
+
+    const run = api.generateForNode(look0)
+    await vi.waitFor(() => expect(order).toEqual(['image:I0']))
+    expect(studioApi.generateImage).toHaveBeenCalledTimes(1)
+    expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
+
+    releaseI0({
+      ...completedRecord,
+      id: 'rec-i0-poll',
+      prompt: 'I0',
+      status: NODE_GENERATION_STATUS.completed,
+      url: 'https://example.com/i0.png',
+    })
+    await run
+
+    expect(order).toEqual(['image:I0', 'image:LOOK0', 'video:SCRIPT'])
+    expect(i0.data?.status).toBe(NODE_GENERATION_STATUS.completed)
+  })
+
+  it('does not start looks when I0 poll ends failed', async () => {
+    const i0 = createNode('image', { prompt: 'I0' }, 'image-i0')
+    const look0 = createNode('image', { prompt: 'LOOK0' }, 'image-look-0')
+    const video = createNode('video', {
+      prompt: 'OLD',
+      videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
+    }, 'video-v')
+    const order: string[] = []
+    vi.mocked(studioApi.generateImage).mockImplementation(async (prompt) => {
+      order.push(`image:${prompt}`)
+      if (prompt === 'I0') {
+        return mockAxiosResponse({
+          data: {
+            ...completedRecord,
+            id: 'rec-i0-fail',
+            prompt: 'I0',
+            status: NODE_GENERATION_STATUS.generating,
+            url: null,
+          },
+        })
+      }
+      return mockAxiosResponse({
+        data: { ...completedRecord, id: `rec-${prompt}`, prompt },
+      })
+    })
+    vi.mocked(studioApi.getGeneration).mockResolvedValue(
+      mockAxiosResponse({
+        data: {
+          ...completedRecord,
+          id: 'rec-i0-fail',
+          prompt: 'I0',
+          status: NODE_GENERATION_STATUS.failed,
+          url: null,
+        },
+      }),
+    )
+    const compositionRunGroup = ref({
+      nodeIds: ['image-i0', 'image-look-0', 'text-p', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    })
+    const { api } = createDeps(
+      [i0, look0, createNode('text', { prompt: 'SCRIPT' }, 'text-p'), video],
+      { compositionRunGroup },
+    )
+
+    await api.generateForNode(look0)
+
+    expect(order).toEqual(['image:I0'])
     expect(studioApi.generateImage).toHaveBeenCalledTimes(1)
     expect(studioApi.startVideoGeneration).not.toHaveBeenCalled()
     expect(i0.data?.status).toBe(NODE_GENERATION_STATUS.error)

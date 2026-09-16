@@ -715,6 +715,61 @@ async function cancelRemoteGeneration(
     return resolved.prompt
   }
 
+  function isRunGroupFailureStatus(status: unknown): boolean {
+    return (
+      status === NODE_GENERATION_STATUS.error ||
+      status === NODE_GENERATION_STATUS.failed
+    )
+  }
+
+  function runGroupMemberHasUsableOutput(node: EditableFlowNode | undefined): boolean {
+    if (!node || node.data?.status !== NODE_GENERATION_STATUS.completed) return false
+    const type = String(node.type)
+    if (type === 'image' || type === 'video') {
+      const url = String(node.data?.url ?? '').trim()
+      const images = node.data?.images
+      return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
+    }
+    if (type === 'text' || type === 'prompt') {
+      return Boolean(String(node.data?.content ?? node.data?.prompt ?? '').trim())
+    }
+    return true
+  }
+
+  async function waitForRunGroupMemberSettled(nodeId: string): Promise<'ok' | 'failed'> {
+    for (;;) {
+      const node = findNodeById(deps.nodes.value, nodeId)
+      const status = node?.data?.status
+      if (isRunGroupFailureStatus(status)) return 'failed'
+      if (runGroupMemberHasUsableOutput(node)) return 'ok'
+
+      const inFlight =
+        isNodeBusy(nodeId) ||
+        isDockGenerateBusy(status) ||
+        status === NODE_GENERATION_STATUS.fallback_pending ||
+        status === 'pending'
+      if (!inFlight) return 'failed'
+
+      const recordId =
+        typeof node?.data?.generationRecordId === 'string' && node.data.generationRecordId.trim()
+          ? node.data.generationRecordId.trim()
+          : ''
+      if (recordId) {
+        try {
+          const { data } = await studioApi.getGeneration(recordId)
+          await resolveStudioRecord(nodeId, data.data)
+        } catch {
+          // retry until terminal status
+        }
+        const after = findNodeById(deps.nodes.value, nodeId)
+        if (isRunGroupFailureStatus(after?.data?.status)) return 'failed'
+        if (runGroupMemberHasUsableOutput(after)) return 'ok'
+      }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 150))
+    }
+  }
+
   async function generateForNode(
     node: EditableFlowNode,
     opts?: { asRunGroupMember?: boolean },
@@ -745,24 +800,32 @@ async function cancelRemoteGeneration(
         for (const id of ids) {
           const member = findNodeById(deps.nodes.value, id)
           if (!member) continue
-          await generateForNode(member, { asRunGroupMember: true })
-          const after = findNodeById(deps.nodes.value, id)
-          if (after?.data?.status === NODE_GENERATION_STATUS.error) return
+          const alreadyInFlight =
+            isNodeBusy(member.id) ||
+            isDockGenerateBusy(member.data?.status) ||
+            member.data?.status === NODE_GENERATION_STATUS.fallback_pending
+          if (!alreadyInFlight) {
+            await generateForNode(member, { asRunGroupMember: true })
+          }
+          const settled = await waitForRunGroupMemberSettled(id)
+          if (settled !== 'ok') return
         }
         return
       }
     }
 
-    if (isNodeBusy(node.id)) {
-      cancelGeneration(node.id)
-      return
-    }
-    if (
-      isDockGenerateBusy(node.data?.status)
-      && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
-    ) {
-      cancelGeneration(node.id)
-      return
+    if (!opts?.asRunGroupMember) {
+      if (isNodeBusy(node.id)) {
+        cancelGeneration(node.id)
+        return
+      }
+      if (
+        isDockGenerateBusy(node.data?.status)
+        && node.data?.status !== NODE_GENERATION_STATUS.fallback_pending
+      ) {
+        cancelGeneration(node.id)
+        return
+      }
     }
 
     const data = node.data ?? {}

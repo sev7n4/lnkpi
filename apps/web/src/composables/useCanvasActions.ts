@@ -107,7 +107,10 @@ export function canvasDataToFlow(data: CanvasData): { nodes: FlowNode[]; edges: 
 export function flowToCanvasData(
   nodes: FlowNode[],
   edges: FlowEdge[],
-  extras?: { compositionRunGroup?: CanvasData['compositionRunGroup'] },
+  extras?: {
+    compositionRunGroup?: CanvasData['compositionRunGroup']
+    previousCanvas?: Pick<CanvasData, 'compositionRunGroup'>
+  },
 ): CanvasData {
   const ids = new Set(nodes.map((n) => n.id))
   const data: CanvasData = {
@@ -126,8 +129,9 @@ export function flowToCanvasData(
         target: e.target,
       })),
   }
-  if (extras?.compositionRunGroup) {
-    data.compositionRunGroup = extras.compositionRunGroup
+  const group = extras?.compositionRunGroup ?? extras?.previousCanvas?.compositionRunGroup
+  if (group) {
+    data.compositionRunGroup = group
   }
   return data
 }
