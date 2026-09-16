@@ -63,4 +63,19 @@ describe('compositionExtract', () => {
     const got = extractCompositionPrimitives(u)
     expect(got).toEqual({ ok: false, code: 'extract_incomplete' })
   })
+
+  it('resumes extract from I1/I2 assignment without @', () => {
+    const got = extractCompositionPrimitives('作为模特换装，服装图 I1 模特 I2 I3 服装')
+    expect(got).toEqual({
+      ok: true,
+      primitives: {
+        identityRef: 'I1',
+        skipI0: false,
+        garmentRefs: ['I2', 'I3'],
+        otherRefs: [],
+        wantVideo: false,
+        sequence: [],
+      },
+    })
+  })
 })

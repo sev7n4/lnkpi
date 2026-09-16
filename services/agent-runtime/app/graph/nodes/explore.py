@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
-from app.graph.composition_route import is_composition_structure_utterance
+from app.graph.composition_route import (
+    is_composition_structure_utterance,
+    is_live_composition_pending,
+)
 from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
@@ -286,7 +290,9 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     extra["composition_dump_hash"] = landed_hash
             return _chip_out(COMPOSITION_LANDED_REPLY, cmds or None, extra_state=extra)
 
-        if is_composition_structure_utterance(user_text) or state.get("composition_pending"):
+        pending_raw = state.get("composition_pending")
+        live_pending = is_live_composition_pending(pending_raw, user_text)
+        if is_composition_structure_utterance(user_text) or live_pending:
             preview = getattr(nest, "preview_composition", None)
             if callable(preview):
                 try:
@@ -296,7 +302,10 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     extra = {}
                     if COMPOSITION_EXTRACT_INCOMPLETE in msg:
                         extra["composition_pending"] = json.dumps(
-                            {"utterance": user_text},
+                            {
+                                "utterance": user_text,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            },
                             ensure_ascii=False,
                         )
                     return _chip_out(msg or COMPOSITION_NO_PREVIEW_REPLY, extra_state=extra)
@@ -318,6 +327,10 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     additional_kwargs=additional,
                     extra_state=extra,
                 )
+
+        clear_pending: dict[str, Any] = {}
+        if pending_raw and not live_pending:
+            clear_pending["composition_pending"] = None
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:
@@ -345,6 +358,8 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             }
             if mandatory.canvas_commands:
                 out["canvas_commands"] = mandatory.canvas_commands
+            if clear_pending:
+                out.update(clear_pending)
             return out
 
         record_explore_dispatch(intent, "llm")
@@ -543,6 +558,8 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         }
         if canvas_commands:
             out["canvas_commands"] = canvas_commands
+        if clear_pending:
+            out.update(clear_pending)
         return out
 
     return explore

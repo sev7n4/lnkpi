@@ -132,8 +132,17 @@ export function summarizeCompositionDump(
     parts.push('沿用 I1 作为 I0')
   }
 
+  const lookCount = ids.filter((id) => id.startsWith('image-look-')).length
+  if (lookCount > 0) {
+    parts.push(`服装扇出 ${lookCount}`)
+  }
+  if (ids.includes('text-p') && ids.includes('video-v')) {
+    parts.push('P+V')
+  }
+
   parts.push(`保留 ${opts.existingNodeCount}`)
   parts.push(`新增 ${added}`)
+  parts.push('生成请用 Dock 生成工作流')
   return parts.join('\n')
 }
 

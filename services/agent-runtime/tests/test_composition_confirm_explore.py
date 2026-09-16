@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -163,7 +165,9 @@ async def test_extract_incomplete_sets_pending_no_instantiate():
     assert result["messages"][0].content == "请指明哪张是模特、哪张是服装。"
     pending = result.get("composition_pending")
     assert pending
-    assert "utterance" in str(pending)
+    parsed = json.loads(pending) if isinstance(pending, str) else pending
+    assert parsed.get("utterance")
+    assert parsed.get("ts")
 
 
 @pytest.mark.asyncio
@@ -242,3 +246,70 @@ def test_runtime_state_keeps_composition_checkpoint_keys():
     hints = AgentRuntimeState.__annotations__
     assert "composition_pending" in hints
     assert "composition_dump_hash" in hints
+
+
+def _stale_pending() -> str:
+    return json.dumps(
+        {
+            "utterance": "作为模特换装，服装图",
+            "ts": (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat(),
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_stale_pending_skips_preview_and_clears():
+    llm = _llm()
+    llm.ainvoke = AsyncMock(return_value=AIMessage(content="好的"))
+    nest = _nest()
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content="继续刚才那个")],
+        "composition_pending": _stale_pending(),
+    })
+    nest.preview_composition.assert_not_called()
+    assert result.get("composition_pending") is None
+
+
+@pytest.mark.asyncio
+async def test_pending_qing_tryon_skips_preview_and_clears():
+    llm = _llm()
+    llm.ainvoke = AsyncMock(return_value=AIMessage(content="好的"))
+    nest = _nest()
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content="@I1 模特 @I2 @I3 产品，请让模特穿上，保持构图不变")],
+        "composition_pending": '{"utterance":"作为模特换装，服装图"}',
+    })
+    nest.preview_composition.assert_not_called()
+    assert result.get("composition_pending") is None
+
+
+@pytest.mark.asyncio
+async def test_pending_chat_skips_preview_and_clears():
+    llm = _llm()
+    llm.ainvoke = AsyncMock(return_value=AIMessage(content="你好"))
+    nest = _nest()
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content="你好")],
+        "composition_pending": '{"identityRef":"I1"}',
+    })
+    nest.preview_composition.assert_not_called()
+    assert result.get("composition_pending") is None
+
+
+@pytest.mark.asyncio
+async def test_pending_bare_i_assignment_previews():
+    llm = _llm()
+    nest = _nest()
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content="I1 模特 I2 I3 服装")],
+        "composition_pending": '{"utterance":"作为模特换装，服装图"}',
+    })
+    nest.preview_composition.assert_awaited_once_with("I1 模特 I2 I3 服装")
+    llm.ainvoke.assert_not_called()
+    nest.instantiate_recipe.assert_not_called()
+    assert HITL_CONFIRM in result["messages"][0].content
+    assert result.get("composition_pending") is None

@@ -14,6 +14,7 @@ from app.graph.atomic_intent import (
 from app.graph.composition_route import (
     is_composition_confirm_chip,
     is_composition_structure_utterance,
+    is_live_composition_pending,
 )
 from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
@@ -271,7 +272,9 @@ def _rule_composition_confirm(
 def _rule_composition_structure(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if is_composition_structure_utterance(intent.utterance) or ctx.get("composition_pending"):
+    if is_composition_structure_utterance(intent.utterance) or is_live_composition_pending(
+        ctx.get("composition_pending"), intent.utterance
+    ):
         return _base_decision(
             ctx,
             flow_mode="canvas_agent",

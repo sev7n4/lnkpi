@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from datetime import datetime, timedelta, timezone
+
 from app.graph.atomic_intent_ir import resolve_atomic_intent
 from app.graph.composition_route import GOLD_COMPOSE_1
 from app.graph.route_context import assemble_route_context
@@ -147,3 +150,69 @@ def test_assemble_copies_composition_pending():
         }
     )
     assert ctx.get("composition_pending") == '{"a":1}'
+
+
+def _stale_pending() -> str:
+    return json.dumps(
+        {
+            "utterance": "作为模特换装，服装图",
+            "ts": (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat(),
+        }
+    )
+
+
+def test_stale_pending_does_not_route_structure():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "继续刚才那个"}],
+            "composition_pending": _stale_pending(),
+        }
+    )
+    assert d["precedence_rule_id"] != "composition_structure"
+
+
+def test_pending_plus_qing_tryon_stays_img2img():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": THREE_IMG_QING}],
+            "composition_pending": '{"identityRef":"I1"}',
+            "sidebar_mentioned_keys": ["I1", "I2", "I3"],
+            "sidebar_attachments": [
+                {"mediaType": "image", "url": "https://a/1.jpg"},
+                {"mediaType": "image", "url": "https://a/2.jpg"},
+                {"mediaType": "image", "url": "https://a/3.jpg"},
+            ],
+        }
+    )
+    assert d["precedence_rule_id"] == "sidebar_img2img"
+
+
+def test_pending_plus_chat_does_not_route_structure():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "你好"}],
+            "composition_pending": '{"identityRef":"I1"}',
+        }
+    )
+    assert d["precedence_rule_id"] != "composition_structure"
+
+
+def test_pending_plus_bare_generate_does_not_route_structure():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "生成一张猫"}],
+            "composition_pending": '{"identityRef":"I1"}',
+        }
+    )
+    assert d["precedence_rule_id"] != "composition_structure"
+
+
+def test_pending_bare_i_assignment_routes_structure():
+    d = _decide(
+        {
+            "messages": [{"role": "user", "content": "I1 模特 I2 I3 服装"}],
+            "composition_pending": '{"utterance":"作为模特换装，服装图"}',
+        }
+    )
+    assert d["precedence_rule_id"] == "composition_structure"
+    assert d["flow_mode"] == "canvas_agent"

@@ -55,13 +55,15 @@ export function extractCompositionPrimitives(
 }
 
 function collectIRefs(text: string): string[] {
-  return [...text.matchAll(/@I([0-9]+)/g)].map((m) => `I${m[1]}`)
+  const fromAt = [...text.matchAll(/@I([0-9]+)/g)].map((m) => `I${m[1]}`)
+  const fromBare = [...text.matchAll(/(?<![\w@])I([0-9]+)\b/g)].map((m) => `I${m[1]}`)
+  return unique([...fromAt, ...fromBare])
 }
 
 function findIdentityRef(text: string): string | undefined {
-  const asModel = text.match(/@I([0-9]+)\s*作为模特/)
+  const asModel = text.match(/@?I([0-9]+)\s*(?:作为模特|是模特|模特)/)
   if (asModel) return `I${asModel[1]}`
-  const asProduct = text.match(/@I([0-9]+)\s*是产品/)
+  const asProduct = text.match(/@?I([0-9]+)\s*是产品/)
   if (asProduct) return `I${asProduct[1]}`
   const afterAssign = text.match(/(?:模特|产品)[^@]{0,24}@I([0-9]+)/)
   if (afterAssign) return `I${afterAssign[1]}`
@@ -76,13 +78,13 @@ function findOtherRefs(
   const seen = new Set<string>()
   if (identityRef) seen.add(identityRef)
 
-  for (const m of text.matchAll(/@I([0-9]+)\s*是使用场景/g)) {
+  for (const m of text.matchAll(/@?I([0-9]+)\s*是使用场景/g)) {
     const ref = `I${m[1]}`
     if (seen.has(ref)) continue
     seen.add(ref)
     refs.push({ ref, role: 'scene' })
   }
-  for (const m of text.matchAll(/@I([0-9]+)\s*是产品/g)) {
+  for (const m of text.matchAll(/@?I([0-9]+)\s*是产品/g)) {
     const ref = `I${m[1]}`
     if (seen.has(ref)) continue
     seen.add(ref)
@@ -101,7 +103,7 @@ function findGarmentRefs(
   if (identityRef) exclude.add(identityRef)
 
   const fromCluster: string[] = []
-  for (const m of text.matchAll(/((?:@I[0-9]+\s*)+)(?:这两个|这些)?是?服装/g)) {
+  for (const m of text.matchAll(/((?:@?I[0-9]+\s*)+)(?:这两个|这些)?是?服装/g)) {
     fromCluster.push(...collectIRefs(m[1]))
   }
   const clustered = unique(fromCluster.filter((ref) => !exclude.has(ref)))
