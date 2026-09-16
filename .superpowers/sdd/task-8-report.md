@@ -1,73 +1,75 @@
-# Task 8 Report: M4 — Retire production `explore_canvas_signal` + docs
+# Task 8 Report: Explore deterministic preview + confirm short-circuit
 
-## Status
+**Status:** DONE  
+**Branch:** `feature/generic-canvas-compose-spec`  
+**Commit:** `feat(agent): deterministic composition preview and confirm import`
 
-**DONE.** Production `_rule_explore` removed from `PRECEDENCE_RULES`. `explore_canvas_signal` marked deprecated / test-only. Former explore noun utterances fall through to `canvas_agent` (`default_chat`) under flag=off; hard short-circuit + gen lanes unchanged. Docs: Phase 2b narrow-bind / explore noun **Retired**; CS-3 updated to `canvas_agent` + ToolPlan. Merge does **not** require `LNKPI_ROUTE_LLM_PRIMARY=1`.
+## What shipped
 
-## Commit
+Explore, **before** LLM / planner instantiate:
+
+1. Cancel chip `先不改` → `COMPOSITION_CANCEL_REPLY` (`已取消落到画布。`), no Nest write.
+2. Confirm chip `确认落到画布` → `nest.confirm_composition(dump_hash)` where hash is `state["composition_dump_hash"]` or last AIMessage `additional_kwargs["composition_dump_hash"]`. No hash → `COMPOSITION_NO_PREVIEW_REPLY` (`请先确认构图，再落到画布。`). **Never** `instantiate_recipe`, even if `planner_preview_args` exist. Success → `COMPOSITION_LANDED_REPLY` (`已按构图落到画布。`) and `extract_canvas_commands` forwarded.
+3. Structure utterance **or** truthy `composition_pending` → `nest.preview_composition(utterance)`. Success stamps AIMessage kwargs `{kind: composition, composition_dump_hash}` and graph `composition_dump_hash`, clears pending, **does not ainvoke**. `extract_incomplete` 400 → Nest `请指明哪张是模特、哪张是服装。` + non-empty `composition_pending` JSON. Lint/compile 400 → that `userMessage`, no ainvoke.
+
+`NestCanvasClient.preview_composition` / `confirm_composition` POST `/agent/internal/preview-composition` and `/agent/internal/confirm-composition` with `sessionId` + `userId`.
+
+`select_narrow_write_tools`: planner bind (`_is_planner_utterance` / `_PLANNER_CONFIRM` instantiate) removed. Import anchors kept. Structure (GOLD) → `frozenset()`. Confirm chip does not include `instantiate_workflow_template`.
+
+Task 7 leftover: `composition_pending` and `composition_dump_hash` added to `AgentRuntimeState`. Planner copy constants kept; composition constants added beside them.
+
+## TDD evidence
+
+### RED (tests only; explore still instantiated planner recipes)
+
+Command: `cd services/agent-runtime && python3 -m pytest tests/test_composition_confirm_explore.py -q`
 
 ```
-refactor(agent-runtime): retire explore noun-verb production routing
+FAILED test_gold_preview_does_not_call_llm
+  AssertionError: Expected preview_composition to have been awaited once. Awaited 0 times.
+
+FAILED test_confirm_chip_imports_composition_not_instantiate
+  AssertionError: Expected confirm_composition to have been awaited once. Awaited 0 times.
+
+FAILED test_confirm_without_preview_uses_composition_copy
+  AssertionError: assert '请先规划并确认模板改动，再落到画布。' == '请先确认构图，再落到画布。'
+
+FAILED test_gold_structure_binds_no_planner_writes
+  Extra items: preview_workflow_template, promote_workflow_template, match_workflow_templates
+
+FAILED test_confirm_chip_does_not_bind_instantiate
+  AssertionError: 'instantiate_workflow_template' in planner confirm bind set
+
+5 failed, 1 warning
 ```
 
-Hash: `52e51cf6` — on `feature/codex-style-tool-plan-harness` (base HEAD was `2a44b02e`).
+Failure reason: missing Nest composition methods / still using planner instantiate + planner tool bind — not typos.
 
-## Files Changed
+### GREEN (after Nest methods + explore short-circuit + unbind)
 
-| File | Action |
-|------|--------|
-| `services/agent-runtime/app/graph/route_precedence.py` | Drop `_rule_explore` / `_explore_match` from production list |
-| `services/agent-runtime/app/graph/explore_route.py` | Deprecate `explore_canvas_signal` (test/fixture only) |
-| `services/agent-runtime/app/graph/route_decide.py` | Comment: explore retired → canvas_agent |
-| `services/agent-runtime/skills/atomic-create/eval-route-set.yaml` | rt-explore-* gold → `canvas_agent` |
-| `services/agent-runtime/tests/test_route_precedence.py` | Explore → canvas_agent assertion |
-| `services/agent-runtime/tests/test_route_decide_explore.py` | Soft canvas ops → `canvas_agent` |
-| `services/agent-runtime/tests/test_explore_route.py` | Fixture-only note on signal tests |
-| `docs/.../2026-08-08-agent-canvas-control-surface-design.md` | CS-3 → canvas_agent + ToolPlan |
-| `docs/.../2026-08-09-explore-tool-reliability-phase2-design.md` | Phase 2b narrow-bind **Retired** |
-| `docs/.../2026-09-13-explore-import-workflow-placement-design.md` | explore_canvas_signal production gate **Retired** |
-| `docs/.../2026-09-14-codex-style-tool-plan-harness-design.md` | §7 Retired status for noun gate / narrow-bind |
+Command: `cd services/agent-runtime && python3 -m pytest tests/test_composition_confirm_explore.py tests/test_explore_narrow_bind.py tests/test_planner_confirm_instantiate.py tests/test_planner_copy.py tests/test_composition_route.py tests/test_composition_l0.py -q`
 
-## Test Results
-
-```bash
-# Gate (brief) — primary=1; soft paths fall back to canvas_agent without live LLM
-LNKPI_ROUTE_LLM_PRIMARY=1 python -m pytest tests/test_eval_route_set.py \
-  tests/test_decide_lane.py tests/test_canvas_agent_multiturn_export.py \
-  tests/test_tool_plan.py tests/test_tool_search_rebind.py \
-  tests/test_tool_placement_invariants.py -v
-# → 22 passed
-
-# Default flag=off regression
-python -m pytest tests/test_route_precedence.py tests/test_route_decide_explore.py \
-  tests/test_explore_route.py tests/test_route_hard.py tests/test_eval_route_set.py \
-  tests/test_graph_routes.py tests/test_decide_lane.py -v
-# → 82 passed
+```
+67 passed, 1 warning in 4.91s
 ```
 
-(Used main-repo `.venv` at `lnkpi/services/agent-runtime/.venv`.)
+Related: `tests/test_nest_client.py` composition POSTs + broader explore/planner suite → `199 passed`.
 
-## Concerns / Notes
+Covered cases:
 
-1. **~~False-positive `media_create_high`~~ (fixed follow-up):** bare `文案` in `text_default_keywords` / `TEXT_DEFAULT_KEYWORDS` forced `utterance_suggests_atomic_create` → `atomic_generate`. Removed bare keyword; added longer create hints (`生成文案` / `写一段文案` / `输出文案`). Canvas edits like `看看画布文案节点` / `查询 text-40 文案节点…` → `canvas_agent`. Did **not** re-add `_rule_explore`. IR modality may still see `文案` for create classification.
-2. **`explore_explicit_intent` / node-id helpers** remain for explore dispatch / features — only the production precedence rule + noun∧verb gate were retired.
-3. Default `LNKPI_ROUTE_LLM_PRIMARY=0` is OK for merge: hard + `canvas_agent` default work without explore noun gate; primary-on is optional and does not need live LLM for this gate (fallback = agent).
+- GOLD structure → `preview_composition`, no LLM, no instantiate, HITL contains `请确认是否把构图落到画布`, kwargs dump hash
+- Confirm chip with stamped hash → `confirm_composition`, canvas_commands forwarded, `已按构图落到画布。`
+- Confirm without hash → `请先确认构图，再落到画布。` (not `未能更新节点` / not planner no-preview)
+- extract_incomplete sets `composition_pending`; lint fail returns Nest message without pending
+- Pending state without structure keywords still previews
+- GOLD / confirm chip never bind planner instantiate tools
+- Import `import_workflow` / `导入工作流` still exclusive
 
-## Follow-up fix (bare 文案)
+## Not in this task
 
-**Commit:** `fix(agent-runtime): stop bare 文案 hint forcing atomic after explore retirement`
+- Web confirm chips / Dock `compositionRunGroup` generate (Task 9)
+- Deleting unused planner copy constants (kept by spec)
 
-| File | Change |
-|------|--------|
-| `skills/atomic-create/intent-taxonomy.yaml` | Drop bare `文案` from `text_default_keywords`; add longer create hints |
-| `app/graph/atomic_intent.py` | Align fallbacks with taxonomy |
-| `tests/test_route_decide_explore.py` | Regression: canvas 文案节点 → canvas_agent; 生成文案 still create-ish |
-| `tests/test_route_precedence.py` | Same via `apply_route_precedence` |
+## Concerns
 
-```bash
-python -m pytest tests/test_route_decide_explore.py tests/test_route_precedence.py \
-  tests/test_route_hard.py tests/test_decide_lane.py -v
-# → 60 passed
-```
-
-Explore contract utterances containing `文案` (`set_node_prompt`, `set_node_content`) route to `canvas_agent`.
+Planner LLM HITL (`preview_workflow_template` + `planner_preview_args`) no longer lands on confirm. Confirm without a composition dump hash always uses composition no-preview copy. Structure utterances that previously went to recipe planner (e.g. `帮我规划一个角色三视图工作流`) now call Nest preview instead.

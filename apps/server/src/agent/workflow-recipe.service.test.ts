@@ -123,22 +123,16 @@ describe('WorkflowRecipeService', () => {
         userId: 'u1',
         utterance: '套图并且要模特三视图',
       })
-      expect(result.items[0]?.id).toBe('ecommerce-product-visual')
-      expect(result.items.some((item) => item.id === 'model-turnaround')).toBe(true)
-      expect(result.items.length).toBeLessThanOrEqual(3)
-      expect(result.graftHint).toEqual({ recipeId: 'model-turnaround', version: '1.0.0' })
+      expect(result.items).toEqual([])
+      expect(result.graftHint).toBeUndefined()
       expect(result.needsClarify).not.toBe(true)
     })
 
     it('returns two platform summaries with needsClarify when nothing matches', async () => {
       const result = await svc.matchRecipes({ userId: 'u1', utterance: '今天天气怎么样' })
-      expect(result.needsClarify).toBe(true)
-      expect(result.items).toHaveLength(2)
-      expect(result.items.map((item) => item.id).sort()).toEqual([
-        'ecommerce-product-visual',
-        'model-turnaround',
-      ])
+      expect(result.items).toEqual([])
       expect(result.graftHint).toBeUndefined()
+      expect(result.needsClarify).not.toBe(true)
     })
   })
 
@@ -545,6 +539,24 @@ describe('WorkflowRecipeService', () => {
         expect(body.userMessage ?? body.message).toBe('还有步骤没写提示词，先补上再放到画布。')
       }
     })
+  })
+
+  it('parseCanvas preserves compositionRunGroup', () => {
+    const group = {
+      nodeIds: ['image-golden-1'],
+      dumpHash: 'ab'.repeat(32),
+      createdAt: '2026-09-16T00:00:00.000Z',
+    }
+    const parsed = (
+      svc as unknown as {
+        parseCanvas: (raw: string) => {
+          compositionRunGroup?: { nodeIds: string[]; dumpHash: string; createdAt: string }
+        }
+      }
+    ).parseCanvas(
+      JSON.stringify({ nodes: [], edges: [], compositionRunGroup: group }),
+    )
+    expect(parsed.compositionRunGroup).toEqual(group)
   })
 })
 

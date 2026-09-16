@@ -9,9 +9,10 @@ from typing import Any, Literal
 
 from app.errors import AgentToolError
 from app.graph.canvas_commands import extract_canvas_commands
-from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
+from app.graph.composition_route import is_composition_structure_utterance
 from app.graph.explore_route import has_canvas_node_id_reference
 from app.graph.node_ref import resolve_node_ref, resolve_node_refs
+from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 ExploreIntent = Literal[
     "ui_command",
     "lifecycle",
@@ -84,12 +85,6 @@ _PLANNER_ANCHORS = (
     "这份工作流更像哪一种",
 )
 _PLANNER_CONFIRM = "确认落到画布"
-_PLANNER_WRITE_TOOLS = frozenset({
-    "preview_workflow_template",
-    "match_workflow_templates",
-    "promote_workflow_template",
-})
-_PLANNER_INSTANTIATE_TOOLS = _PLANNER_WRITE_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
 _DEFAULT_NARROW_WRITE = frozenset({
     "set_node_prompt",
@@ -245,20 +240,20 @@ def select_narrow_write_tools(
     this_turn_new_image_keys: Sequence[str] = (),
     mentioned_keys: Sequence[str] = (),
 ) -> frozenset[str]:
-    """Keyword bind for workflow import vs recipe planner vs media propose (≤5 write tools).
+    """Keyword bind for workflow import vs composition vs media propose (≤5 write tools).
 
-    Strong import anchors win so planner keywords never steal
+    Strong import anchors win so other keywords never steal
     ``请用 import_workflow 导入`` / ``导入工作流``.
-    Media propose is after planner/import so those sets stay exclusive.
+    Composition structure binds no writes (preview/confirm are Nest HTTP, not tools).
+    P0 never binds match/preview/instantiate/promote workflow template tools.
+    Sidebar-media propose (#353) runs only after composition/import lose.
     """
     text = utterance or ""
     low = text.lower()
     if "import_workflow" in low or "导入工作流" in text:
         return _IMPORT_WRITE_TOOLS
-    if _PLANNER_CONFIRM in text:
-        return _PLANNER_INSTANTIATE_TOOLS
-    if _is_planner_utterance(text):
-        return _PLANNER_WRITE_TOOLS
+    if is_composition_structure_utterance(text):
+        return frozenset()
     if _is_workflow_import_utterance(text):
         return _IMPORT_WRITE_TOOLS
     ref_keys = resolve_sidebar_image_ref_keys(

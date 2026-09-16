@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.graph.nodes.explore import make_explore_node
 from app.graph.planner_copy import (
+    COMPOSITION_NO_PREVIEW_REPLY,
     format_planner_preview_hitl,
     is_machine_payload_reply,
     is_planner_cancel_chip,
@@ -109,6 +110,21 @@ class _Nest:
         self.last_user_utterance = None
         self.sidebar_attachments = []
         self.get_canvas_summary = AsyncMock(return_value={"nodes": []})
+        self.preview_composition = AsyncMock(
+            return_value={
+                "userMessage": "相对构图预览。请确认是否把构图落到画布",
+                "dumpHash": "ab" * 32,
+                "nodeTitles": ["定妆"],
+            }
+        )
+        self.confirm_composition = AsyncMock(
+            return_value={
+                "addedNodeIds": ["image-1"],
+                "canvasCommands": [{"type": "focus_nodes", "nodeIds": ["image-1"]}],
+                "dumpHash": "ab" * 32,
+            }
+        )
+        self.instantiate_recipe = AsyncMock(return_value={"addedNodeIds": ["image-1"]})
 
 
 @pytest.mark.asyncio
@@ -118,15 +134,15 @@ async def test_explore_sanitizes_planner_jargon_reply():
     llm.ainvoke = AsyncMock(return_value=AIMessage(content=PROD_CONFIRM))
     nest = _Nest()
     explore = make_explore_node(llm=llm, nest=nest)
-    with patch("app.graph.nodes.explore.classify_explore_intent", return_value="open_query"):
-        result = await explore({
-            "messages": [HumanMessage(content="帮我规划一个角色三视图工作流")],
-        })
+    result = await explore({
+        "messages": [HumanMessage(content="帮我规划一个角色三视图工作流")],
+    })
+    llm.ainvoke.assert_not_called()
+    nest.instantiate_recipe.assert_not_called()
+    nest.preview_composition.assert_awaited()
     text = result["messages"][0].content
+    assert "请确认是否把构图落到画布" in text
     assert "种子" not in text
-    assert "t2i" not in text.lower()
-    assert "i2i" not in text.lower()
-    assert "模特定妆" in text
     assert nest.last_user_utterance == "帮我规划一个角色三视图工作流"
 
 
@@ -165,33 +181,23 @@ async def test_explore_preview_reply_uses_diff_ssot_not_llm_walkthrough():
             AIMessage(content="1. 正面视图\n2. 侧面视图\n3. 背面视图\n请确认是否把改动落到画布"),
         ]
     )
-    preview = MagicMock()
-    preview.name = "preview_workflow_template"
-    preview.ainvoke = AsyncMock(
+    nest = _Nest()
+    nest.preview_composition = AsyncMock(
         return_value={
-            "parentTitle": "角色三视图",
-            "title": "角色三视图",
-            "diffLines": [],
-            "userMessages": [],
+            "userMessage": "相对构图，按步骤落到画布。\n请确认是否把构图落到画布",
+            "dumpHash": "cd" * 32,
+            "nodeTitles": ["角色三视图"],
         }
     )
-    nest = _Nest()
-    import app.graph.nodes.explore as explore_mod
-
-    original = explore_mod.build_explore_tools
-    explore_mod.build_explore_tools = lambda _nest: [preview]
-    try:
-        explore = make_explore_node(llm=llm, nest=nest)
-        result = await explore({
-            "messages": [HumanMessage(content="帮我规划一个角色三视图工作流")],
-        })
-    finally:
-        explore_mod.build_explore_tools = original
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content="帮我规划一个角色三视图工作流")],
+    })
+    llm.ainvoke.assert_not_called()
     text = result["messages"][0].content
-    assert "原模板" in text
-    assert "角色三视图" in text
-    assert "请确认是否把改动落到画布" in text
+    assert "请确认是否把构图落到画布" in text
     assert "侧面视图" not in text
+    assert result["messages"][0].additional_kwargs.get("composition_dump_hash") == "cd" * 32
 
 
 @pytest.mark.asyncio
@@ -200,7 +206,6 @@ async def test_explore_drops_tool_search_json_after_instantiate():
     llm.bind_tools = MagicMock(side_effect=lambda tools: llm)
     llm.ainvoke = AsyncMock()
     nest = _Nest()
-    nest.instantiate_recipe = AsyncMock(return_value={"addedNodeIds": ["image-1"]})
     explore = make_explore_node(llm=llm, nest=nest)
     result = await explore({
         "messages": [
@@ -218,10 +223,13 @@ async def test_explore_drops_tool_search_json_after_instantiate():
         ],
     })
     llm.ainvoke.assert_not_called()
+    nest.instantiate_recipe.assert_not_called()
+    nest.confirm_composition.assert_not_called()
     text = result["messages"][0].content
+    assert text == COMPOSITION_NO_PREVIEW_REPLY
     assert "loaded" not in text
     assert "get_image_edit_capabilities" not in text
-    assert "落到画布" in text
+    assert "未能更新节点" not in text
 
 
 def test_confirm_chip_trim_exact_only():

@@ -27,13 +27,14 @@ import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { applyActionsToFlow, flowToCanvasData } from '@/composables/useCanvasActions'
+import { applyActionsToFlow, extrasForCanvasSave, flowToCanvasData } from '@/composables/useCanvasActions'
 import { annotateEdgesForSelection } from '@/utils/edgeHighlight'
 import { useShotPolling } from '@/composables/useShotPolling'
 import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseRecordUrl, parseRecordUrls, parseRecordLastFrameUrl, type GenerationPollTask } from '@/composables/useGenerationPolling'
 import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
+import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
 import { canvasApi } from '@/services/canvas-api'
@@ -172,6 +173,8 @@ interface CanvasEdge {
 
 const nodes = ref<EditableFlowNode[]>([])
 const edges = ref<CanvasEdge[]>([])
+const compositionRunGroup = ref<CompositionRunGroup | null>(null)
+const lastKnownCompositionRunGroup = ref<CompositionRunGroup | null>(null)
 
 /** 受控模式：:nodes + apply-default=false，由 onNodesChange 落地变更，避免内部/外部状态互相覆盖 */
 const flowNodes = computed(() => nodes.value as unknown as Node[])
@@ -1177,7 +1180,7 @@ function addNode(
   return id
 }
 
-function handleAgentActions(actions: unknown[]) {
+async function handleAgentActions(actions: unknown[]) {
   const result = applyActionsToFlow(
     nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
     edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
@@ -1189,6 +1192,9 @@ function handleAgentActions(actions: unknown[]) {
   // Fix #3: also start generation polling so any record-id-bearing nodes
   // (status:generating now) get polled to terminal state.
   startPollingForGeneratingRecords()
+  // Hydrate run-group extras as soon as actions land (not only loadSession),
+  // so persistUserEdit cannot PUT canvas without compositionRunGroup.
+  await hydrateCompositionRunGroupFromSession()
   // 勿 persistUserEdit：Nest Agent tools 已写 Session.canvasData；
   // 用本地旧图 + 部分 action 回写会抹掉追加拆图节点。
 }
@@ -3100,15 +3106,56 @@ function openPublish() {
   showPublish.value = true
 }
 
+async function hydrateCompositionRunGroupFromSession() {
+  try {
+    const { data } = await api.get<{
+      data: { canvasData?: { compositionRunGroup?: CompositionRunGroup } }
+    }>(`/sessions/${sessionId.value}`)
+    const group = data.data.canvasData?.compositionRunGroup
+    if (!group) return
+    lastKnownCompositionRunGroup.value = group
+    if (!compositionRunGroup.value) compositionRunGroup.value = group
+  } catch {
+    // demo mode
+  }
+}
+
 async function saveCanvas() {
   saving.value = true
   try {
+    let serverGroup: CompositionRunGroup | undefined
+    if (!compositionRunGroup.value && !lastKnownCompositionRunGroup.value) {
+      try {
+        const { data } = await api.get<{
+          data: { canvasData?: { compositionRunGroup?: CompositionRunGroup } }
+        }>(`/sessions/${sessionId.value}`)
+        serverGroup = data.data.canvasData?.compositionRunGroup
+        if (serverGroup) {
+          lastKnownCompositionRunGroup.value = serverGroup
+          if (!compositionRunGroup.value) compositionRunGroup.value = serverGroup
+        }
+      } catch {
+        // demo mode
+      }
+    }
+    const canvasData = flowToCanvasData(
+      nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
+      edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
+      extrasForCanvasSave({
+        current: compositionRunGroup.value,
+        lastKnown: lastKnownCompositionRunGroup.value,
+        server: serverGroup,
+      }),
+    )
+    if (canvasData.compositionRunGroup) {
+      lastKnownCompositionRunGroup.value = canvasData.compositionRunGroup
+      if (!compositionRunGroup.value) {
+        compositionRunGroup.value = canvasData.compositionRunGroup
+      }
+    }
     await api.put(`/sessions/${sessionId.value}`, {
       title: sessionTitle.value,
-      canvasData: flowToCanvasData(
-        nodes.value as unknown as import('@/composables/useCanvasActions').FlowNode[],
-        edges.value as unknown as import('@/composables/useCanvasActions').FlowEdge[],
-      ),
+      canvasData,
     })
   } catch {
     // demo mode
@@ -3155,6 +3202,7 @@ const {
   onInsufficientPoints: () => {
     showMembership.value = true
   },
+  compositionRunGroup,
 })
 
 function retryNodeGeneration(nodeId: string) {
@@ -3239,7 +3287,13 @@ function hydrateCanvasEdges(
 
 async function loadSession() {
   try {
-    const { data } = await api.get<{ data: { title: string; userId?: string; canvasData?: { nodes: Node[]; edges: Edge[] } } }>(
+    const { data } = await api.get<{
+      data: {
+        title: string
+        userId?: string
+        canvasData?: { nodes: Node[]; edges: Edge[]; compositionRunGroup?: CompositionRunGroup }
+      }
+    }>(
       `/sessions/${sessionId.value}`,
     )
     sessionTitle.value = data.data.title
@@ -3259,6 +3313,8 @@ async function loadSession() {
         nodes.value,
       )
       nodeCounter = nextNodeCounterFromNodes(nodes.value)
+      compositionRunGroup.value = data.data.canvasData.compositionRunGroup ?? null
+      lastKnownCompositionRunGroup.value = data.data.canvasData.compositionRunGroup ?? null
     } else {
       nodes.value = [{
         id: 'prompt-1',
@@ -3267,6 +3323,8 @@ async function loadSession() {
         data: { prompt: '描述你的创意场景...' },
       }]
       nodeCounter = 1
+      compositionRunGroup.value = null
+      lastKnownCompositionRunGroup.value = null
     }
   } catch (e) {
     nodes.value = [{
@@ -3276,6 +3334,8 @@ async function loadSession() {
       data: { prompt: '描述你的创意场景...' },
     }]
     nodeCounter = 1
+    compositionRunGroup.value = null
+    lastKnownCompositionRunGroup.value = null
   }
   generationFieldsCache.clear()
   for (const n of nodes.value) {

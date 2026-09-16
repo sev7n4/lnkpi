@@ -1,5 +1,6 @@
-"""Explore write-tool narrow bind: planner/import exclusive sets + media-propose set."""
+"""Explore write-tool narrow bind: import exclusive + media-propose; no planner tools."""
 
+from app.graph.composition_route import GOLD_COMPOSE_1
 from app.graph.explore_dispatch import classify_explore_intent, select_narrow_write_tools
 from app.tools.tool_plan import build_tool_plan
 
@@ -8,8 +9,14 @@ _PLANNER_TOOLS = frozenset({
     "match_workflow_templates",
     "promote_workflow_template",
 })
-_PLANNER_CONFIRM_TOOLS = _PLANNER_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_ONLY = frozenset({"import_workflow"})
+_DEFAULT_WRITE = frozenset({
+    "set_node_prompt",
+    "set_node_content",
+    "attach_refs",
+    "duplicate_node",
+    "upsert_prompt_node",
+})
 GOLD_BARE_GEN = "帮我生成一张蓝色天空产品主图"
 MEDIA_WRITE = frozenset({
     "upsert_media_node",
@@ -50,40 +57,44 @@ def test_plan_visible_ignores_utterance_keywords():
     assert "set_node_prompt" in plan.visible_names
 
 
-def test_planner_utterance_binds_preview_and_instantiate_not_only_import():
+def test_planner_utterance_does_not_bind_planner_tools():
     tools = select_narrow_write_tools("帮我规划一个电商套图工作流，接到角色三视图")
-    assert "preview_workflow_template" in tools
+    assert "preview_workflow_template" not in tools
     assert "instantiate_workflow_template" not in tools
-    assert "match_workflow_templates" in tools
-    assert tools != _IMPORT_ONLY
+    assert "match_workflow_templates" not in tools
+    assert tools != _PLANNER_TOOLS
+    assert tools in (frozenset(), _DEFAULT_WRITE)
     assert len(tools) <= 5
-    assert tools == _PLANNER_TOOLS
 
 
-def test_plan_a_workflow_without_consecutive_anchor_binds_planner():
+def test_plan_a_workflow_structure_binds_no_writes():
     tools = select_narrow_write_tools("帮我规划一个角色三视图工作流")
-    assert tools == _PLANNER_TOOLS
+    assert tools == frozenset()
     assert "import_workflow" not in tools
     assert "set_node_prompt" not in tools
+    assert "instantiate_workflow_template" not in tools
 
 
-def test_confirm_canvas_bind_includes_instantiate():
+def test_confirm_canvas_bind_excludes_instantiate():
     tools = select_narrow_write_tools("确认落到画布")
-    assert tools == _PLANNER_CONFIRM_TOOLS
-    assert "instantiate_workflow_template" in tools
+    assert "instantiate_workflow_template" not in tools
+    assert tools != _PLANNER_TOOLS
+    assert tools in (frozenset(), _DEFAULT_WRITE)
 
 
 def test_import_workflow_utterance_still_binds_only_import():
     assert select_narrow_write_tools("请用 import_workflow 导入") == _IMPORT_ONLY
 
 
-def test_planner_keywords_bind_planner_tools():
+def test_planner_keywords_do_not_bind_planner_tools():
     for keyword in ("规划工作流", "接到", "改版", "新模板", "存成一套"):
         tools = select_narrow_write_tools(f"请帮我{keyword}")
-        assert "preview_workflow_template" in tools
+        assert "preview_workflow_template" not in tools
         assert "instantiate_workflow_template" not in tools
-        assert tools == _PLANNER_TOOLS
-        assert tools != _IMPORT_ONLY
+        assert "match_workflow_templates" not in tools
+        assert "promote_workflow_template" not in tools
+        assert tools != _PLANNER_TOOLS
+        assert tools in (frozenset(), _DEFAULT_WRITE)
 
 
 def test_import_workflow_chinese_still_binds_only_import():
@@ -91,7 +102,7 @@ def test_import_workflow_chinese_still_binds_only_import():
     assert select_narrow_write_tools("导入工作流") == _IMPORT_ONLY
 
 
-def test_promote_phrases_bind_promote_not_only_import():
+def test_promote_phrases_do_not_bind_planner_tools():
     for phrase in (
         "存成一套新模板",
         "保存为当前模板的改版",
@@ -100,13 +111,20 @@ def test_promote_phrases_bind_promote_not_only_import():
         "这份工作流更像哪一种？",
     ):
         tools = select_narrow_write_tools(phrase)
-        assert "promote_workflow_template" in tools
-        assert tools != _IMPORT_ONLY
+        assert "promote_workflow_template" not in tools
+        assert "instantiate_workflow_template" not in tools
+        assert tools != _PLANNER_TOOLS
+        assert tools in (frozenset(), _DEFAULT_WRITE, _IMPORT_ONLY)
         assert len(tools) <= 5
-        assert tools == _PLANNER_TOOLS
 
 
-def test_live_explore_bind_uses_narrow_planner_writes():
+def test_gold_compose_binds_empty_writes():
+    tools = select_narrow_write_tools(GOLD_COMPOSE_1)
+    assert tools == frozenset()
+    assert tools != _PLANNER_TOOLS
+
+
+def test_live_explore_bind_does_not_bind_planner_writes():
     from unittest.mock import MagicMock
     from app.graph.nodes.explore import _bind_plan_tools
     from app.tools.definitions import EXPLORE_WRITE_TOOLS
@@ -123,10 +141,10 @@ def test_live_explore_bind_uses_narrow_planner_writes():
         tool.name = name
     _bind_plan_tools(FakeLlm(), tools_by_name, [], "帮我规划一个角色三视图工作流")
     bound = set(captured[0])
-    assert "preview_workflow_template" in bound
-    assert "import_workflow" not in bound
-    assert "set_node_prompt" not in bound
+    assert "preview_workflow_template" not in bound
+    assert "match_workflow_templates" not in bound
     assert "instantiate_workflow_template" not in bound
+    assert "promote_workflow_template" not in bound
 
 
 def test_p1_gold_sentence_binds_media_narrow_set():
@@ -253,15 +271,18 @@ def test_s5_what_is_i1_does_not_bind_propose():
         assert "upsert_media_node" not in tools
 
 
-def test_s6_planner_plus_chips_stays_planner():
+def test_s6_planner_plus_chips_stays_composition():
+    """Structure intent wins over #353 sidebar bind; confirm is Nest HTTP, not planner tools."""
     tools = select_narrow_write_tools(
         "帮我规划一个电商套图工作流，接到角色三视图",
         sidebar_image_keys=("I1", "I2"),
         mentioned_keys=("I1", "I2"),
         this_turn_new_image_keys=("I1", "I2"),
     )
-    assert tools == _PLANNER_TOOLS
+    assert tools == frozenset()
     assert "propose_generation" not in tools
+    assert "preview_workflow_template" not in tools
+    assert "instantiate_workflow_template" not in tools
 
 
 def test_s1_bare_gen_plus_chips_uses_sidebar_set_not_attach_refs():

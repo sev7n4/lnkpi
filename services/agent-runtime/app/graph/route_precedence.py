@@ -11,6 +11,10 @@ from app.graph.atomic_intent import (
     regenerate_phrase_intent,
     resolve_intake_route,
 )
+from app.graph.composition_route import (
+    is_composition_confirm_chip,
+    is_composition_structure_utterance,
+)
 from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
 from app.graph.intent import focus_gen_intent, modify_intent
@@ -240,6 +244,40 @@ def _rule_regen_no_checkpoint(
             reason="regen_no_checkpoint",
             confidence=0.95,
             precedence_rule_id="regen_no_checkpoint",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_composition_confirm(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if is_composition_confirm_chip(intent.utterance):
+        return _base_decision(
+            ctx,
+            flow_mode="canvas_agent",
+            reason="composition_confirm",
+            confidence=0.97,
+            precedence_rule_id="composition_confirm",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_composition_structure(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if is_composition_structure_utterance(intent.utterance) or ctx.get("composition_pending"):
+        return _base_decision(
+            ctx,
+            flow_mode="canvas_agent",
+            reason="composition_structure",
+            confidence=0.96,
+            precedence_rule_id="composition_structure",
             guard_veto=_guard_veto(ctx),
             intent=intent,
             features=features,
@@ -504,6 +542,8 @@ def _rule_default_chat(
 PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("modify_existing_plan", _rule_modify_existing_plan),
     ("regen_no_checkpoint", _rule_regen_no_checkpoint),
+    ("composition_confirm", _rule_composition_confirm),
+    ("composition_structure", _rule_composition_structure),
     ("sidebar_img2img", _rule_sidebar_img2img),
     ("checkpoint_regen", _rule_checkpoint_regen),
     ("product_visual_explicit", _rule_product_visual_explicit),

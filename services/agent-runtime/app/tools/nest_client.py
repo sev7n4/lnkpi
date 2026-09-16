@@ -707,6 +707,28 @@ class NestCanvasClient:
             },
         )
 
+    async def preview_composition(self, utterance: str, copy: dict | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "utterance": utterance,
+        }
+        if copy is not None:
+            body["copy"] = copy
+        if self.sidebar_attachments:
+            body["attachments"] = self.sidebar_attachments
+        return await self._post("/agent/internal/preview-composition", body)
+
+    async def confirm_composition(self, dump_hash: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/confirm-composition",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "dumpHash": dump_hash,
+            },
+        )
+
     async def instantiate_recipe(
         self,
         *,
