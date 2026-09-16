@@ -304,15 +304,18 @@ class NestCanvasClient:
         self,
         *,
         node_ids: list[str],
-        attachments: list[dict],
+        attachments: list[dict] | None = None,
         ref_order: list[str] | None,
         mode: str,
         mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
+        atts = attachments if attachments else list(self.sidebar_attachments or [])
+        if not atts:
+            return {"ok": False, "error": "没有侧栏附件"}
         body = {
             "sessionId": self._session_id,
             "nodeIds": node_ids,
-            "attachments": attachments,
+            "attachments": atts,
             "refOrder": ref_order or [],
             "mode": mode,
         }
