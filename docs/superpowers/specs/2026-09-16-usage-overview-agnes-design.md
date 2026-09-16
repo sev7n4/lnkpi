@@ -111,7 +111,7 @@ lnk π 卖的是积分不是 Token；`PointTransaction` 没有 Token / 张数 / 
 - 无 consume 的日不占空行（与折线补 0 不同）
 - 日期新→旧
 - 点一行展开当天流水；同时只允许展开一行；再点同一行收起
-- 展开后再请求流水，不预拉 30 天
+- 展开后再请求流水，不预拉 30 天。默认 `limit=50`；超过则在展开区内「加载更多」（沿用 `cursor`）
 - 「积分消耗」含 `other` 净消耗；文本/图片/音频/视频四列不含 other。四列之和可以小于积分消耗。不加「其他」列
 - 第一版无「导出」
 
@@ -153,6 +153,8 @@ netConsumedTotal = Σ net(text|image|audio|video|other)
 `grant` 不计入任何消耗分子。年历格子、折线「积分消耗」、表明细「积分消耗」都用净消耗。
 
 年历某日净消耗为 0：格子当空。若该日有过 consume 后又退净，明细仍可有行。
+
+按日净消耗只消化**同一天**的 refund。跨日退款（今天退昨天的消耗）不会把昨天的格子抹掉，也不会在退款日画出负值。这是刻意简化：年历表示「那天有没有真正跑过」，不是总账重放。累计五卡仍按全窗口净消耗，所以总数字和格子之和可以不一致。
 
 ### 3.2 生成次数
 
@@ -225,7 +227,7 @@ interface UsageDaysResponse {
 
 ### 4.3 `GET /membership/transactions?day=YYYY-MM-DD`
 
-新增 `day`。传入时**忽略** `range`，按该上海日 `[00:00, 次日 00:00)` 过滤。`kind` / `category` / `cursor` / `limit` 仍可用。
+新增 `day`。传入时**忽略** `range`（`range` 变为可选），按该上海日 `[00:00, 次日 00:00)` 过滤。`kind` / `category` / `cursor` / `limit` 仍可用。无 `day` 时行为与现在完全一致（`range` 默认 `month`）。
 
 非法日期（非 `YYYY-MM-DD` 或不存在的日）→ 400。
 
@@ -233,8 +235,12 @@ interface UsageDaysResponse {
 
 ### 4.4 实现约束
 
-- 按日聚合在 SQL / Prisma groupBy，不要把用户全部流水拉进 Node 再 bucket。`usage` 累计可用 `groupBy kind+category` + 去重 `generationId`；年历扫描近 6 个月 consume/refund。
-- 已有索引 `(userId, createdAt)`、`(userId, kind, category, createdAt)` 够用则不加字段。
+- 数据库是 **SQLite**。Prisma `groupBy` 不能按上海日历日切。按日聚合用 `$queryRaw`：`date(datetime(createdAt, '+8 hours'))`（`createdAt` 按 UTC 存）。**禁止**为了 bucket 把该用户全部 `PointTransaction` `findMany` 进 Node。
+- 累计净消耗：现有 Prisma `groupBy(['kind','category'])` 即可，不必按日。
+- 累计生成次数：`COUNT(DISTINCT generationId)`（`kind=consume` 且 ID 非空）+ `COUNT(*)`（`kind=consume` 且 ID 空）。
+- 累计活跃天：`COUNT(DISTINCT date(datetime(createdAt, '+8 hours')))` where `kind=consume`。
+- 年历 / `usage-days`：同一条按日 raw SQL，在 Node 里把 kind/category 收成净消耗。扫描范围必须带 `userId` + `createdAt` 窗口；单用户全历史 scan 可接受，禁止全站 scan。
+- 已有索引 `(userId, createdAt)`、`(userId, kind, category, createdAt)` 够用，不加字段、不加 generated column。
 - 前端：`membershipApi.usage()`、`membershipApi.usageDays(range)`、`transactions` 增加 `day?`。
 - 仅在用量 Tab 激活时请求 `usage` / `usage-days`；切回账户不停轮询。切趋势 range 只重打 `usage-days`。
 - `points-summary` 行为不变，本页不调用。
@@ -259,7 +265,7 @@ interface UsageDaysResponse {
 
 时间分段与系列切换用暗色胶囊，选中 `bg-white/12`，不要账单旧紫 `#6366f1`。
 
-键盘：分段按钮可 Tab；年历格子 hover/focus 给同一套说明（桌面 title 或小提示）。窄屏：年历和表横向滚动。
+键盘：时间/系列分段可 Tab。年历是只读图，**不要** 180 个 tab stop；容器可聚焦，hover 用原生 `title` 或单一 tooltip。窄屏：年历和表横向滚动。
 
 ---
 
@@ -307,7 +313,8 @@ interface UsageDaysResponse {
 - [ ] 生成次数：去重 ID、无 ID、退款不计
 - [ ] `usage` 不随 range 变化（无 range 参数）
 - [ ] `usage-days` 补齐空日；表侧过滤无 consume 日
-- [ ] `transactions?day=` 忽略 range；非法 day 400
+- [ ] `transactions?day=` 忽略 range；非法 day 400；展开区分页
+- [ ] SQLite 按日 raw SQL 与上海日边界（UTC 晚上 vs 上海凌晨）
 - [ ] Profile：Tab「用量」；`?tab=billing` 打开用量
 - [ ] 切 近 7 天 / 30 天 / 本月 不重新请求 `usage`
 - [ ] 同时只展开一行；展开才打 `day` 请求
@@ -321,3 +328,4 @@ interface UsageDaysResponse {
 | 日期 | 说明 |
 |------|------|
 | 2026-09-16 | 初稿：Agnes 结构 + 暗色；五卡积分口径；6 个月年历；双接口；流水按日下钻 |
+| 2026-09-16 | 审核补丁：SQLite `$queryRaw` 按日；跨日退款不回放；展开分页；年历非 180 tab stop |
