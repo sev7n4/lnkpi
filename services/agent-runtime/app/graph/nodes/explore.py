@@ -30,6 +30,7 @@ from app.graph.planner_copy import (
 )
 from app.graph.recent_turns import compress_recent_turns
 from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
+from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
 from app.tools.tool_plan import META_TOOL_NAME, build_tool_plan
@@ -303,6 +304,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "")
                 args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
                 tool_call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
+                await maybe_emit_tool_sse(
+                    nest,
+                    {
+                        "type": "tool_call",
+                        "data": {
+                            "name": str(name),
+                            "arguments": cap_tool_sse_payload(args or {}, kind="arguments"),
+                        },
+                    },
+                )
                 tool = tools_by_name.get(name)
                 called_tools.add(str(name))
                 if tool is None:
@@ -324,6 +335,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                             "error_type": err["error_type"],
                             "retry_hint": err.get("retry_hint"),
                         }
+                await maybe_emit_tool_sse(
+                    nest,
+                    {
+                        "type": "tool_result",
+                        "data": {
+                            "name": str(name),
+                            "result": cap_tool_sse_payload(result, kind="result"),
+                        },
+                    },
+                )
                 for cmd in extract_canvas_commands(result):
                     if cmd not in canvas_commands:
                         canvas_commands.append(cmd)
