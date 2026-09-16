@@ -836,7 +836,12 @@ describe('useNodeGeneration', () => {
     const textP = createNode('text', { prompt: 'NEW SCRIPT' }, 'text-p')
     const i0 = createNode('image', { prompt: 'I0', url: 'https://example.com/i0.png' }, 'image-i0')
     const look = createNode('image', { prompt: 'LOOK', url: 'https://example.com/look.png' }, 'image-look-0')
-    const { api } = createDeps([i0, look, textP, video])
+    const compositionRunGroup = ref({
+      nodeIds: ['image-i0', 'image-look-0', 'text-p', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    })
+    const { api } = createDeps([i0, look, textP, video], { compositionRunGroup })
     vi.mocked(studioApi.startVideoGeneration).mockResolvedValue(
       mockAxiosResponse({
         data: {
@@ -860,7 +865,12 @@ describe('useNodeGeneration', () => {
       videoSettings: { duration: 15, aspectRatio: '16:9', resolution: '720p', crop: 'none' },
     }, 'video-v')
     const textP = createNode('text', { prompt: '   ' }, 'text-p')
-    const { api, deps } = createDeps([textP, video])
+    const compositionRunGroup = ref({
+      nodeIds: ['text-p', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    })
+    const { api, deps } = createDeps([textP, video], { compositionRunGroup })
 
     await api.generateForNode(video)
 
@@ -885,7 +895,12 @@ describe('useNodeGeneration', () => {
       },
     }, 'video-v')
     const textP = createNode('text', { prompt: 'NEW SCRIPT' }, 'text-p')
-    const { api, deps } = createDeps([shot, video, textP])
+    const compositionRunGroup = ref({
+      nodeIds: ['text-p', 'video-v'],
+      dumpHash: 'h',
+      createdAt: '2026-09-16T00:00:00.000Z',
+    })
+    const { api, deps } = createDeps([shot, video, textP], { compositionRunGroup })
     deps.edges.value = [{ id: 'e1', source: 'shot-1', target: 'video-v' }]
     vi.mocked(canvasApi.generateVideo).mockResolvedValue(mockAxiosResponse({ data: { id: 'mat-1' } }))
 
