@@ -126,3 +126,72 @@ async def test_instantiate_error_shows_nest_user_message():
     assert text == "还有步骤没写提示词，先补上再放到画布。"
     assert "未能更新节点" not in text
     llm.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_confirm_uses_stamped_preview_args_from_explore_hitl_reply():
+    """Prod shape: checkpoint keeps HITL AIMessage, not preview tool_calls."""
+    llm = _llm()
+    llm.ainvoke = AsyncMock(
+        side_effect=[
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "preview_workflow_template",
+                    "args": {
+                        "parent_id": "model-turnaround",
+                        "parent_version": "1.0.0",
+                        "delta": {},
+                    },
+                    "id": "p1",
+                }],
+            ),
+            AIMessage(content="walkthrough that should be replaced"),
+        ]
+    )
+    preview = MagicMock()
+    preview.name = "preview_workflow_template"
+    preview.ainvoke = AsyncMock(
+        return_value={
+            "parentTitle": "角色三视图",
+            "diffLines": [],
+            "userMessages": [],
+        }
+    )
+    nest = _nest()
+    import app.graph.nodes.explore as explore_mod
+
+    original = explore_mod.build_explore_tools
+    explore_mod.build_explore_tools = lambda _nest: [preview]
+    try:
+        explore = make_explore_node(llm=llm, nest=nest)
+        planned = await explore({
+            "messages": [HumanMessage(content="帮我规划一个角色三视图工作流")],
+        })
+        hitl = planned["messages"][0]
+        assert hitl.additional_kwargs.get("planner_preview_args") == {
+            "parent_id": "model-turnaround",
+            "parent_version": "1.0.0",
+            "delta": {},
+        }
+        llm.ainvoke.reset_mock()
+        nest.instantiate_recipe.reset_mock()
+        confirmed = await explore({
+            "messages": [
+                HumanMessage(content="帮我规划一个角色三视图工作流"),
+                hitl,
+                HumanMessage(content="确认落到画布"),
+            ],
+        })
+    finally:
+        explore_mod.build_explore_tools = original
+
+    llm.ainvoke.assert_not_called()
+    nest.instantiate_recipe.assert_awaited_once_with(
+        parent_id="model-turnaround",
+        parent_version="1.0.0",
+        delta={},
+    )
+    assert confirmed["messages"][0].content == PLANNER_INSTANTIATED_REPLY
+    assert confirmed["canvas_commands"] == [{"type": "focus_node", "nodeId": "image-1"}]
+    assert "未能更新节点" not in confirmed["messages"][0].content

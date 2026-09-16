@@ -46,6 +46,7 @@ _CHIP_PREFIXES = (
     "将锁定这些核心步骤",
 )
 _PREVIEW_TOOL = "preview_workflow_template"
+PLANNER_PREVIEW_ARGS_KW = "planner_preview_args"
 
 PLANNER_CONFIRM_CHIP = "确认落到画布"
 PLANNER_CANCEL_CHIP = "先不改"
@@ -93,10 +94,21 @@ def _normalize_preview_args(args: Any) -> dict[str, Any] | None:
 
 
 def last_successful_preview_args(messages: list[Any] | None) -> dict[str, Any] | None:
-    """Latest successful preview_workflow_template call args from raw thread messages."""
+    """Latest successful preview args from raw thread messages.
+
+    Explore only checkpoints the final HITL ``AIMessage``, not the in-process
+    tool-call / ToolMessage pair. Successful preview turns stamp normalized
+    args on ``additional_kwargs[PLANNER_PREVIEW_ARGS_KW]`` so the confirm
+    chip can recover them next turn.
+    """
     pending: dict[str, dict[str, Any]] = {}
     successes: list[dict[str, Any]] = []
     for msg in messages or []:
+        extra = _tool_field(msg, "additional_kwargs") or {}
+        if isinstance(extra, dict):
+            stamped = _normalize_preview_args(extra.get(PLANNER_PREVIEW_ARGS_KW))
+            if stamped:
+                successes.append(stamped)
         for tc in _tool_field(msg, "tool_calls") or []:
             if _tool_field(tc, "name") != _PREVIEW_TOOL:
                 continue
