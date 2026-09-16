@@ -30,6 +30,16 @@ const videoGenerate = vi.fn(async (_prompt: string, _opts?: Record<string, unkno
 const audioGenerate = vi.fn(async () => ({ url: 'https://example.com/a.mp3' }))
 const textGenerate = vi.fn(async (prompt: string) => ({ text: `ok:${prompt}` }))
 
+function stubSessionCanvas(svc: StudioService, canvas: unknown) {
+  const prisma = (
+    svc as unknown as { prisma: { session: { findUnique: (args?: unknown) => Promise<unknown> } } }
+  ).prisma
+  prisma.session.findUnique = async () => ({
+    id: 's1',
+    canvasData: JSON.stringify(canvas),
+  })
+}
+
 vi.mock('@lnkpi/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@lnkpi/agent')>()
   return {
@@ -445,6 +455,73 @@ describe('StudioService integration (provider params)', () => {
       videoMode: 'reference_to_video',
       referenceAudios: ['https://example.com/ref.mp3'],
     })
+  })
+
+  it('keeps incoming prompt when session canvas has neither text-p nor the video node', async () => {
+    stubSessionCanvas(svc, {
+      nodes: [{ id: 'image-i0', type: 'image', position: { x: 0, y: 0 }, data: { prompt: 'I0' } }],
+      edges: [],
+    })
+
+    const record = await svc.generateVideo(
+      'u1',
+      'body prompt',
+      'seedance-2.0-min',
+      5,
+      '16:9',
+      [],
+      [],
+      '720p',
+      'none',
+      undefined,
+      { sessionId: 's1', nodeId: 'video-v' },
+    )
+
+    expect(record.prompt).toContain('body prompt')
+    await vi.waitFor(() => expect(videoGenerate).toHaveBeenCalled())
+    expect(videoGenerate.mock.calls[0]?.[0]).toContain('body prompt')
+  })
+
+  it('throws when composition text-p is empty', async () => {
+    stubSessionCanvas(svc, {
+      nodes: [
+        { id: 'text-p', type: 'text', position: { x: 0, y: 0 }, data: { prompt: '' } },
+        { id: 'video-v', type: 'video', position: { x: 0, y: 0 }, data: { prompt: 'OLD' } },
+      ],
+      edges: [],
+    })
+
+    await expect(
+      svc.generateVideo(
+        'u1',
+        'body prompt',
+        'seedance-2.0-min',
+        5,
+        '16:9',
+        [],
+        [],
+        '720p',
+        'none',
+        undefined,
+        { sessionId: 's1', nodeId: 'video-v' },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException)
+    await expect(
+      svc.generateVideo(
+        'u1',
+        'body prompt',
+        'seedance-2.0-min',
+        5,
+        '16:9',
+        [],
+        [],
+        '720p',
+        'none',
+        undefined,
+        { sessionId: 's1', nodeId: 'video-v' },
+      ),
+    ).rejects.toThrow('分镜还是空的，写好后再生成视频。')
+    expect(videoGenerate).not.toHaveBeenCalled()
   })
 
   it('passes built audio options (model, voice, speed) to audio provider', async () => {

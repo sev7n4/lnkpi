@@ -27,7 +27,7 @@ export type VideoStartBody = {
   nodeId?: string
 }
 
-function hasCompositionPBlock(canvas: CanvasData): boolean {
+export function hasCompositionPBlock(canvas: CanvasData): boolean {
   if (canvas.nodes.some((node) => node.id === 'text-p')) return true
   const ids = canvas.compositionRunGroup?.nodeIds
   if (!ids?.length) return false

@@ -104,6 +104,7 @@ import {
   readImageBuffer,
 } from '../media/composite-unmasked'
 import { UploadService } from '../upload/upload.service'
+import { hasCompositionPBlock } from './video-generation-request.util'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -1587,7 +1588,9 @@ export class StudioService {
         if ('error' in livePrompt) {
           throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
         }
-        prompt = livePrompt.prompt
+        if (hasCompositionPBlock(canvas)) {
+          prompt = livePrompt.prompt
+        }
       }
     }
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
