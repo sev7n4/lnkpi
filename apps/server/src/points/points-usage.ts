@@ -40,7 +40,7 @@ export interface UsageOverviewResponse {
 }
 
 export interface UsageDaysResponse {
-  range: '7d' | '30d' | 'month'
+  range: '7d' | '30d' | 'month' | 'all'
   from: string
   to: string
   days: UsageDayPoint[]
@@ -149,6 +149,10 @@ export function foldDailyUsage(
         otherNetConsumed: net.otherNetConsumed,
       }
     })
+}
+
+export function isUsageActivityDay(day: UsageDayPoint): boolean {
+  return day.generationCount > 0 || day.netConsumed > 0
 }
 
 export function fillCalendarDays(fromKey: string, toKey: string, days: UsageDayPoint[]): UsageDayPoint[] {

@@ -35,3 +35,11 @@ it('uses native SVG title tooltips for hover date and value', () => {
   expect(titles).toContain('2026-09-15 · 2')
   expect(titles).toContain('2026-09-16 · 0')
 })
+
+it('renders y ticks and x date labels', () => {
+  const wrapper = mount(UsageTrend, { props: { range: '7d', days } })
+  expect(wrapper.find('[data-y-tick]').exists()).toBe(true)
+  expect(wrapper.find('[data-x-tick]').exists()).toBe(true)
+  expect(wrapper.text()).toContain('9/15')
+  expect(wrapper.text()).toContain('9/16')
+})

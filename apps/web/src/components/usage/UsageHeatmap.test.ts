@@ -14,3 +14,17 @@ it('renders active day copy and does not use buttons for cells', () => {
   expect(wrapper.text()).toContain('1 个活跃日')
   expect(wrapper.findAll('button').length).toBe(0)
 })
+
+it('renders a month label and stretches cells across the card', () => {
+  const wrapper = mount(UsageHeatmap, {
+    props: {
+      from: '2026-08-31',
+      to: '2026-09-16',
+      activeDays: 0,
+      days: [],
+    },
+  })
+  expect(wrapper.text()).toMatch(/8月|9月/)
+  expect(wrapper.find('[data-heatmap-grid]').classes()).toContain('w-full')
+  expect(wrapper.find('[data-cell]').classes().join(' ')).not.toContain('h-3')
+})

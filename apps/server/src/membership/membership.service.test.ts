@@ -216,4 +216,18 @@ describe('MembershipService', () => {
     expect(result.days[0]).toMatchObject({ date: '2026-09-10', netConsumed: 0, generationCount: 0 })
     vi.useRealTimers()
   })
+
+  it('usageDays all returns sparse activity days without filling the calendar', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-16T12:00:00.000Z'))
+    $queryRaw
+      .mockResolvedValueOnce([{ day: '2026-09-16', kind: 'consume', category: 'video', amountSum: -40 }])
+      .mockResolvedValueOnce([{ day: '2026-09-16', distinctGens: 1, nullGens: 0 }])
+
+    const result = await service.usageDays('u1', 'all')
+    expect(result.range).toBe('all')
+    expect(result.days).toHaveLength(1)
+    expect(result.days[0]).toMatchObject({ date: '2026-09-16', netConsumed: 40, generationCount: 1 })
+    vi.useRealTimers()
+  })
 })

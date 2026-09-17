@@ -1,22 +1,29 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { UsageDayPoint, UsageDaysRangeKey } from '@/services/users-api'
+import type { UsageDayPoint, UsageTrendRangeKey } from '@/services/users-api'
+import {
+  formatTrendXLabel,
+  trendPlot,
+  trendPoint,
+  trendXTickIndexes,
+  trendYTicks,
+} from './usageTrendAxis'
 
 type SeriesKey = 'generationCount' | 'netConsumed' | 'text' | 'image' | 'audio' | 'video'
 
 const props = defineProps<{
-  range: UsageDaysRangeKey
+  range: UsageTrendRangeKey
   days: UsageDayPoint[]
   loading?: boolean
 }>()
 
 const emit = defineEmits<{
-  'update:range': [UsageDaysRangeKey]
+  'update:range': [UsageTrendRangeKey]
 }>()
 
 const series = ref<SeriesKey>('generationCount')
 
-const RANGES: { key: UsageDaysRangeKey; label: string }[] = [
+const RANGES: { key: UsageTrendRangeKey; label: string }[] = [
   { key: '7d', label: '近 7 天' },
   { key: '30d', label: '近 30 天' },
   { key: 'month', label: '本月' },
@@ -37,19 +44,27 @@ function seriesValue(day: UsageDayPoint, key: SeriesKey): number {
   return day.byCategory[key]
 }
 
-const points = computed(() => {
-  const values = props.days.map((day) => seriesValue(day, series.value))
-  const max = Math.max(1, ...values)
-  const n = values.length
-  return props.days.map((day, i) => {
-    const v = values[i]
-    const x = n === 1 ? 320 : (i / (n - 1)) * 640
-    const y = 200 - (v / max) * 180 - 10
+const values = computed(() => props.days.map((day) => seriesValue(day, series.value)))
+const maxValue = computed(() => Math.max(0, ...values.value))
+const yTicks = computed(() => trendYTicks(maxValue.value))
+const xTicks = computed(() => trendXTickIndexes(props.range, props.days.length))
+
+const points = computed(() =>
+  props.days.map((day, i) => {
+    const v = values.value[i]
+    const { x, y } = trendPoint(i, props.days.length, v, maxValue.value)
     return { date: day.date, value: v, x, y }
-  })
-})
+  }),
+)
 
 const polylinePoints = computed(() => points.value.map((p) => `${p.x},${p.y}`).join(' '))
+
+const yScale = computed(() => {
+  const { height, pad } = trendPlot
+  const plotH = height - pad.t - pad.b
+  const peak = Math.max(1, maxValue.value)
+  return (value: number) => pad.t + plotH - (value / peak) * plotH
+})
 
 function capsuleClass(selected: boolean) {
   return selected
@@ -92,7 +107,47 @@ function capsuleClass(selected: boolean) {
     </header>
 
     <div v-if="loading" class="h-48 animate-pulse bg-white/5" />
-    <svg v-else viewBox="0 0 640 200" class="h-48 w-full" aria-hidden="true">
+    <svg
+      v-else
+      :viewBox="`0 0 ${trendPlot.width} ${trendPlot.height}`"
+      class="h-52 w-full"
+      role="img"
+      aria-label="用量趋势"
+    >
+      <line
+        v-for="tick in yTicks"
+        :key="`g-${tick}`"
+        :x1="trendPlot.pad.l"
+        :x2="trendPlot.width - trendPlot.pad.r"
+        :y1="yScale(tick)"
+        :y2="yScale(tick)"
+        stroke="rgba(255,255,255,0.08)"
+      />
+      <text
+        v-for="tick in yTicks"
+        :key="`y-${tick}`"
+        data-y-tick
+        :x="trendPlot.pad.l - 6"
+        :y="yScale(tick)"
+        text-anchor="end"
+        dominant-baseline="middle"
+        fill="rgba(255,255,255,0.45)"
+        font-size="10"
+      >
+        {{ tick }}
+      </text>
+      <text
+        v-for="index in xTicks"
+        :key="`x-${index}`"
+        data-x-tick
+        :x="points[index]?.x"
+        :y="trendPlot.height - 8"
+        text-anchor="middle"
+        fill="rgba(255,255,255,0.45)"
+        font-size="10"
+      >
+        {{ formatTrendXLabel(days[index]?.date ?? '') }}
+      </text>
       <polyline
         :points="polylinePoints"
         fill="none"

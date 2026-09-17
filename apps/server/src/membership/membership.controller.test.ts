@@ -27,6 +27,10 @@ describe('usage query parsers', () => {
     expect(parseUsageDaysRange('nope')).toBe('7d')
   })
 
+  it('usage-days accepts all', () => {
+    expect(parseUsageDaysRange('all')).toBe('all')
+  })
+
   it('rejects invalid shanghai day', () => {
     expect(parseShanghaiDay('2026-02-31')).toBeNull()
   })

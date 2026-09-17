@@ -12,6 +12,7 @@ import {
   fillCalendarDays,
   filterHeatmapDays,
   foldDailyUsage,
+  isUsageActivityDay,
   generationCountFromParts,
   netFromKindCategorySums,
   coerceDayKey,
@@ -362,11 +363,15 @@ export class MembershipService {
       this.queryDailyAmountRows(userId, window.from, window.to),
       this.queryDailyGenerationRows(userId, window.from, window.to),
     ])
+    const folded = foldDailyUsage(amountRows, generationRows)
     return {
       range,
       from: window.fromKey,
       to: window.toKey,
-      days: fillCalendarDays(window.fromKey, window.toKey, foldDailyUsage(amountRows, generationRows)),
+      days:
+        range === 'all'
+          ? folded.filter(isUsageActivityDay)
+          : fillCalendarDays(window.fromKey, window.toKey, folded),
     }
   }
 }

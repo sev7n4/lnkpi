@@ -79,6 +79,25 @@ const usageDaysPayload = {
   },
 }
 
+const allDaysPayload = {
+  data: {
+    data: {
+      range: 'all',
+      from: '1970-01-01',
+      to: '2026-09-16',
+      days: [
+        {
+          date: '2026-09-16',
+          generationCount: 2,
+          netConsumed: 20,
+          byCategory: { text: 0, image: 20, audio: 0, video: 0 },
+          otherNetConsumed: 0,
+        },
+      ],
+    },
+  },
+}
+
 function usageDaysWithMarker(range: string, from: string, to: string, date: string, generationCount: number) {
   return {
     data: {
@@ -135,16 +154,22 @@ async function mountUsageWithOverlappingDaysRequests() {
   })
 
   membershipMocks.usageDays
-    .mockImplementationOnce(() => stale7dRequest)
-    .mockImplementationOnce(() => pending30d)
+    .mockImplementationOnce((range?: string) => {
+      if (range === 'all') return Promise.resolve(allDaysPayload)
+      return stale7dRequest
+    })
+    .mockImplementation((range?: string) => {
+      if (range === 'all') return Promise.resolve(allDaysPayload)
+      return pending30d
+    })
 
   routeQuery.tab = 'usage'
   const wrapper = await mountProfile()
-  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(1)
+  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
 
   await wrapper.get('[data-range="30d"]').trigger('click')
   await flushPromises()
-  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
+  expect(membershipMocks.usageDays).toHaveBeenCalledTimes(3)
   expect(membershipMocks.usageDays).toHaveBeenLastCalledWith('30d')
 
   return { wrapper, settleStale7d, rejectStale7d, settle30d }
@@ -166,7 +191,10 @@ describe('ProfilePage', () => {
       data: { data: { nickname: '测', phone: '172****8608', points: 34, membership: 'free' } },
     })
     membershipMocks.usage.mockResolvedValue(usagePayload)
-    membershipMocks.usageDays.mockResolvedValue(usageDaysPayload)
+    membershipMocks.usageDays.mockImplementation((range?: string) => {
+      if (range === 'all') return Promise.resolve(allDaysPayload)
+      return Promise.resolve(usageDaysPayload)
+    })
     membershipMocks.transactions.mockResolvedValue({
       data: { data: { items: [], nextCursor: null, from: null, to: new Date().toISOString() } },
     })
@@ -181,13 +209,13 @@ describe('ProfilePage', () => {
     expect(wrapper.text()).toContain('充值')
   })
 
-  it('left-aligns the account column without mx-auto', async () => {
+  it('stretches account cards to the same max width as usage', async () => {
     const wrapper = await mountProfile()
-    const identity = wrapper.find('.max-w-3xl')
+    const identity = wrapper.find('[data-account-cards]')
 
     expect(identity.exists()).toBe(true)
-    expect(identity.classes()).toContain('max-w-3xl')
-    expect(identity.classes()).not.toContain('mx-auto')
+    expect(identity.classes()).not.toContain('max-w-3xl')
+    expect(wrapper.find('.max-w-6xl').exists()).toBe(true)
   })
 
   it('renders usage overview on billing and usage query tabs', async () => {
@@ -200,7 +228,9 @@ describe('ProfilePage', () => {
     expect(wrapper.text()).not.toContain('积分账单')
     expect(wrapper.text()).not.toContain('单日峰值')
     expect(membershipMocks.usage).toHaveBeenCalledTimes(1)
-    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(1)
+    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
+    expect(membershipMocks.usageDays).toHaveBeenCalledWith('7d')
+    expect(membershipMocks.usageDays).toHaveBeenCalledWith('all')
   })
 
   it('treats tab=usage as the usage panel', async () => {
@@ -230,18 +260,20 @@ describe('ProfilePage', () => {
     expect(membershipMocks.usageDays).not.toHaveBeenCalled()
   })
 
-  it('refetches only usageDays when the trend range changes', async () => {
+  it('refetches only the trend window when the range changes', async () => {
     routeQuery.tab = 'billing'
     const wrapper = await mountProfile()
     expect(membershipMocks.usage).toHaveBeenCalledTimes(1)
-    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(1)
+    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
+    expect(membershipMocks.usageDays).toHaveBeenCalledWith('all')
 
     await wrapper.get('[data-range="30d"]').trigger('click')
     await flushPromises()
 
     expect(membershipMocks.usage).toHaveBeenCalledTimes(1)
-    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(2)
+    expect(membershipMocks.usageDays).toHaveBeenCalledTimes(3)
     expect(membershipMocks.usageDays).toHaveBeenLastCalledWith('30d')
+    expect(membershipMocks.usageDays.mock.calls.filter((call) => call[0] === 'all')).toHaveLength(1)
   })
 
   it('ignores a stale 7d usageDays success after switching to 30d', async () => {

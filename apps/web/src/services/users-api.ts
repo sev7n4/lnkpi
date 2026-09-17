@@ -62,7 +62,8 @@ export interface PointsSummary {
   insights: PointsInsights
 }
 
-export type UsageDaysRangeKey = '7d' | '30d' | 'month'
+export type UsageDaysRangeKey = '7d' | '30d' | 'month' | 'all'
+export type UsageTrendRangeKey = Exclude<UsageDaysRangeKey, 'all'>
 
 export interface UsageCategoryBreakdown {
   text: number

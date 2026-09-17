@@ -58,3 +58,20 @@ export function buildHeatmapGrid(input: {
   }
   return [0, 1, 2, 3, 4, 5, 6].map((row) => columns.map((col) => col[row]))
 }
+
+export function heatmapMonthLabels(columns: HeatmapCell[][]): { week: number; label: string }[] {
+  const labels: { week: number; label: string }[] = []
+  let prev: { year: number; month: number } | null = null
+  columns.forEach((col, week) => {
+    const cell = col.find((item) => item.inRange)
+    if (!cell) return
+    const [year, month] = cell.date.split('-').map(Number)
+    if (prev && prev.year === year && prev.month === month) return
+    labels.push({
+      week,
+      label: !prev || prev.year !== year ? `${year}年${month}月` : `${month}月`,
+    })
+    prev = { year, month }
+  })
+  return labels
+}

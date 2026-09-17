@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { UsageHeatmapDay } from '@/services/users-api'
-import { buildHeatmapGrid, type HeatmapCell, type HeatmapLevel } from './usageHeatmapGrid'
+import { buildHeatmapGrid, heatmapMonthLabels, type HeatmapCell, type HeatmapLevel } from './usageHeatmapGrid'
 
 const LEVEL_COLORS: Record<Exclude<HeatmapLevel, 0>, string> = {
   1: '#0e4429',
@@ -9,6 +9,8 @@ const LEVEL_COLORS: Record<Exclude<HeatmapLevel, 0>, string> = {
   3: '#26a641',
   4: '#39d353',
 }
+
+const WEEKDAY_LABELS = ['周一', '', '周三', '', '周五', '', '']
 
 const props = defineProps<{
   from: string
@@ -29,6 +31,14 @@ const columns = computed(() => {
     cols.push(rows.map((row) => row[week]))
   }
   return cols
+})
+
+const monthByWeek = computed(() => {
+  const map = new Map<number, string>()
+  for (const item of heatmapMonthLabels(columns.value)) {
+    map.set(item.week, item.label)
+  }
+  return map
 })
 
 function isEmptyCell(cell: HeatmapCell) {
@@ -72,40 +82,38 @@ function cellTitle(cell: HeatmapCell) {
       </div>
     </header>
 
-    <div class="overflow-x-auto">
-      <div class="flex w-max min-w-full gap-2">
-        <div
-          class="grid shrink-0 grid-rows-7 gap-[3px] text-[10px] leading-3 text-white/35"
+    <div
+      data-heatmap-grid
+      class="grid w-full gap-[3px]"
+      :style="{
+        gridTemplateColumns: `auto repeat(${columns.length}, minmax(0, 1fr))`,
+      }"
+    >
+      <div class="h-4" aria-hidden="true" />
+      <div
+        v-for="week in columns.length"
+        :key="`month-${week}`"
+        class="h-4 overflow-visible whitespace-nowrap text-[10px] leading-4 text-white/35"
+      >
+        {{ monthByWeek.get(week - 1) ?? '' }}
+      </div>
+      <template v-for="(row, rowIndex) in grid" :key="rowIndex">
+        <span
+          class="flex items-center pr-2 text-[10px] leading-none text-white/35"
           aria-hidden="true"
         >
-          <span class="flex h-3 items-center">周一</span>
-          <span class="h-3" />
-          <span class="flex h-3 items-center">周三</span>
-          <span class="h-3" />
-          <span class="flex h-3 items-center">周五</span>
-          <span class="h-3" />
-          <span class="h-3" />
-        </div>
+          {{ WEEKDAY_LABELS[rowIndex] }}
+        </span>
         <div
-          class="grid gap-[3px]"
-          :style="{
-            gridTemplateRows: 'repeat(7, 1fr)',
-            gridAutoFlow: 'column',
-            gridAutoColumns: 'max-content',
-          }"
-        >
-          <template v-for="(col, week) in columns" :key="week">
-            <div
-              v-for="cell in col"
-              :key="cell.date"
-              class="h-3 w-3 rounded-[3px]"
-              :class="isEmptyCell(cell) ? 'bg-white/[0.06]' : undefined"
-              :style="cellStyle(cell)"
-              :title="cellTitle(cell)"
-            />
-          </template>
-        </div>
-      </div>
+          v-for="cell in row"
+          :key="cell.date"
+          data-cell
+          class="aspect-square w-full rounded-[3px]"
+          :class="isEmptyCell(cell) ? 'bg-white/[0.06]' : undefined"
+          :style="cellStyle(cell)"
+          :title="cellTitle(cell)"
+        />
+      </template>
     </div>
   </section>
 </template>

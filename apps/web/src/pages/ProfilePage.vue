@@ -12,7 +12,7 @@ import { api } from '@/services/api'
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import { BRAND_LOGO_URL } from '@/constants/brand'
 import type { User } from '@lnkpi/shared'
-import type { UsageDaysRangeKey, UsageDaysResponse, UsageOverviewResponse } from '@/services/users-api'
+import type { UsageDaysResponse, UsageOverviewResponse, UsageTrendRangeKey } from '@/services/users-api'
 
 const router = useRouter()
 const route = useRoute()
@@ -38,17 +38,21 @@ function closeProfile() {
 const profile = ref<User | null>(null)
 const usage = ref<UsageOverviewResponse | null>(null)
 const usageDays = ref<UsageDaysResponse | null>(null)
-const usageRange = ref<UsageDaysRangeKey>('7d')
+const usageAllDays = ref<UsageDaysResponse | null>(null)
+const usageRange = ref<UsageTrendRangeKey>('7d')
 const usageError = ref('')
 const daysError = ref('')
+const allDaysError = ref('')
 const usageLoading = ref(false)
 const daysLoading = ref(false)
+const allDaysLoading = ref(false)
 const showMembership = ref(false)
 const inviteCopied = ref(false)
 
 /** Independent generations; stale overview / days responses are discarded. */
 let usageFetchGeneration = 0
 let daysFetchGeneration = 0
+let allDaysFetchGeneration = 0
 
 function bumpUsageFetchGeneration() {
   usageFetchGeneration += 1
@@ -58,6 +62,11 @@ function bumpUsageFetchGeneration() {
 function bumpDaysFetchGeneration() {
   daysFetchGeneration += 1
   return daysFetchGeneration
+}
+
+function bumpAllDaysFetchGeneration() {
+  allDaysFetchGeneration += 1
+  return allDaysFetchGeneration
 }
 
 const membershipLabel = computed(() => {
@@ -119,9 +128,37 @@ async function loadUsageDays() {
   }
 }
 
+async function loadUsageAllDays() {
+  const gen = bumpAllDaysFetchGeneration()
+  allDaysLoading.value = true
+  allDaysError.value = ''
+  try {
+    const response = await membershipApi.usageDays('all')
+    if (gen !== allDaysFetchGeneration) return
+    usageAllDays.value = response.data.data
+  } catch {
+    if (gen !== allDaysFetchGeneration) return
+    allDaysError.value = '用量明细加载失败，请稍后重试'
+  } finally {
+    if (gen === allDaysFetchGeneration) {
+      allDaysLoading.value = false
+    }
+  }
+}
+
 const daysViewLoading = computed(
   () => daysLoading.value || (!usageDays.value && !daysError.value),
 )
+
+const allDaysViewLoading = computed(
+  () => allDaysLoading.value || (!usageAllDays.value && !allDaysError.value),
+)
+
+const tableTotals = computed(() => ({
+  generationCount: usage.value?.overview.generationCount ?? 0,
+  netConsumed: usage.value?.overview.netConsumedTotal ?? 0,
+  byCategory: usage.value?.overview.byCategory ?? { text: 0, image: 0, audio: 0, video: 0 },
+}))
 
 const usageViewLoading = computed(
   () => usageLoading.value || (!usage.value && !usageError.value),
@@ -140,6 +177,7 @@ async function loadProfile() {
 function loadBillingUsage() {
   void loadUsage()
   void loadUsageDays()
+  void loadUsageAllDays()
 }
 
 watch(activeTab, (tab) => {
@@ -191,7 +229,7 @@ onMounted(() => {
       </button>
     </div>
 
-    <div v-if="profile && activeTab === 'account'" class="max-w-3xl space-y-4">
+    <div v-if="profile && activeTab === 'account'" data-account-cards class="space-y-4">
       <section class="rounded-2xl border border-white/8 bg-[#16161C] p-6">
         <div class="flex items-center gap-4">
           <div class="profile-avatar flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full">
@@ -264,10 +302,24 @@ onMounted(() => {
         {{ daysError }}
         <button type="button" class="ml-2 underline" @click="loadUsageDays">重新加载</button>
       </div>
-      <template v-else>
-        <UsageTrend :range="usageRange" :days="usageDays?.days ?? []" :loading="daysViewLoading" @update:range="usageRange = $event" />
-        <UsageDayTable :days="usageDays?.days ?? []" :loading="daysViewLoading" />
-      </template>
+      <UsageTrend
+        v-else
+        :range="usageRange"
+        :days="usageDays?.days ?? []"
+        :loading="daysViewLoading"
+        @update:range="usageRange = $event"
+      />
+
+      <div v-if="allDaysError" class="rounded-2xl border border-red-400/15 p-6 text-sm text-red-300/80">
+        {{ allDaysError }}
+        <button type="button" class="ml-2 underline" @click="loadUsageAllDays">重新加载</button>
+      </div>
+      <UsageDayTable
+        v-else
+        :days="usageAllDays?.days ?? []"
+        :loading="allDaysViewLoading"
+        :totals="tableTotals"
+      />
     </div>
 
     <MembershipModal v-model="showMembership" />
