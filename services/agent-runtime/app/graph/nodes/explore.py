@@ -307,7 +307,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     result = await preview(user_text)
                 except AgentToolError as exc:
                     msg = str(exc.error.get("message") or "")
-                    extra = {}
+                    extra: dict[str, Any] = {"composition_dump_hash": None}
                     if COMPOSITION_EXTRACT_INCOMPLETE in msg:
                         extra["composition_pending"] = json.dumps(
                             {
