@@ -82,7 +82,8 @@ describe('CompositionService', () => {
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
     expect(out.userMessage).toContain('请确认是否把构图落到画布')
-    expect(out.userMessage).toContain('生成请用 Dock 生成工作流')
+    expect(out.userMessage).toContain('选中构图里要生成的节点，用 Dock 生成，会按运行组排队')
+    expect(out.userMessage).not.toContain('Dock 生成工作流')
     expect(importWorkflow).not.toHaveBeenCalled()
   })
 
