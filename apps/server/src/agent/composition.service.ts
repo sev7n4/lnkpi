@@ -186,6 +186,18 @@ export class CompositionService {
       }
     }
 
+    const slotKey = preview.slotKey ?? compositionSlotKey(preview.primitives)
+    if (
+      preview.lastImportedSlotKey === slotKey &&
+      (preview.lastAddedNodeIds?.length ?? 0) > 0 &&
+      preview.lastImportedHash !== input.dumpHash
+    ) {
+      await this.canvasTools.removeNodes({
+        sessionId: input.sessionId,
+        nodeIds: preview.lastAddedNodeIds!,
+      })
+    }
+
     const imported = await this.canvasTools.importWorkflow({
       sessionId: input.sessionId,
       userId: input.userId,
@@ -209,6 +221,7 @@ export class CompositionService {
           ...preview,
           lastImportedHash: input.dumpHash,
           lastAddedNodeIds: imported.addedNodeIds,
+          lastImportedSlotKey: slotKey,
           lastCanvasCommands: imported.canvasCommands,
         }),
       },

@@ -395,4 +395,88 @@ describe('CompositionService', () => {
     })
     expect(sessions.get('s1')!.canvasData).toBe('{not-json')
   })
+
+  it('E-B4 same slotKey second confirm replaces rather than stacking', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = mockImportWritingCanvas(sessions)
+    const removeNodes = vi.fn(async ({ nodeIds }: { nodeIds: string[] }) => {
+      const row = sessions.get('s1')!
+      const canvas = JSON.parse(row.canvasData || '{"nodes":[],"edges":[]}')
+      canvas.nodes = canvas.nodes.filter((n: { id: string }) => !nodeIds.includes(n.id))
+      row.canvasData = JSON.stringify(canvas)
+      return { actions: [] }
+    })
+    const svc = new CompositionService(prisma, { importWorkflow, removeNodes } as never)
+    const atts = GOLD_SIDEBAR_ATTACHMENTS
+    const firstUtterance =
+      '@I1 作为模特，@I2 @I3 这两个是服装图，设计一段模特换装的工作流并做好连线，写入画布'
+    const first = await svc.preview({
+      sessionId: 's1', userId: 'u1', utterance: firstUtterance, existingNodeCount: 0, attachments: atts,
+    })
+    const landed = await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: first.dumpHash })
+    const second = await svc.preview({
+      sessionId: 's1', userId: 'u1', utterance: GOLD_COMPOSE_1, existingNodeCount: 3, attachments: atts,
+    })
+    expect(second.dumpHash).not.toBe(first.dumpHash) // wantVideo added
+    await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: second.dumpHash })
+    expect(removeNodes).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 's1', nodeIds: landed.addedNodeIds }),
+    )
+    expect(importWorkflow).toHaveBeenCalledTimes(2)
+  })
+
+  it('E-B6 different identity overlays', async () => {
+    const { prisma, sessions } = createPrisma()
+    const importWorkflow = mockImportWritingCanvas(sessions)
+    const removeNodes = vi.fn(async ({ nodeIds }: { nodeIds: string[] }) => {
+      const row = sessions.get('s1')!
+      const canvas = JSON.parse(row.canvasData || '{"nodes":[],"edges":[]}')
+      canvas.nodes = canvas.nodes.filter((n: { id: string }) => !nodeIds.includes(n.id))
+      row.canvasData = JSON.stringify(canvas)
+      return { actions: [] }
+    })
+    const svc = new CompositionService(prisma, { importWorkflow, removeNodes } as never)
+    const first = await svc.preview({
+      sessionId: 's1',
+      userId: 'u1',
+      utterance: GOLD_COMPOSE_1,
+      existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
+    })
+    await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: first.dumpHash })
+    const secondAtts = [
+      {
+        id: 'att-i6',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'I6',
+        url: 'https://cdn.example/i6.png',
+      },
+      {
+        id: 'att-i4',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'I4',
+        url: 'https://cdn.example/i4.png',
+      },
+      {
+        id: 'att-i5',
+        mediaType: 'image' as const,
+        sourceKind: 'upload' as const,
+        label: 'I5',
+        url: 'https://cdn.example/i5.png',
+      },
+    ]
+    const second = await svc.preview({
+      sessionId: 's1',
+      userId: 'u1',
+      utterance:
+        '@I6 作为模特，@I4 @I5 这两个是服装图，设计一段模特换装的工作流并做好连线，写入画布',
+      existingNodeCount: 3,
+      attachments: secondAtts,
+    })
+    await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: second.dumpHash })
+    expect(removeNodes).not.toHaveBeenCalled()
+    expect(importWorkflow).toHaveBeenCalledTimes(2)
+  })
 })
