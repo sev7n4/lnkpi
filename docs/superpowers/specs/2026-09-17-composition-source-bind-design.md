@@ -1,7 +1,8 @@
 # 构图源图绑定 / 近重复替换
 
 > 日期：2026-09-17  
-> 状态：**待审阅**（切片规格；已吸收 2026-09-17 PM 审阅补丁）  
+> 状态：**已批准**（对话锁定 + 2026-09-17 PM 审阅补丁）  
+> 实现 plan：[2026-09-17-composition-source-bind.md](../plans/2026-09-17-composition-source-bind.md)  
 > 产品：超创平台（lnkpi）无限画布 / Agent 侧栏构图  
 > 父规格：[2026-09-16-generic-canvas-compose-design.md](./2026-09-16-generic-canvas-compose-design.md)  
 > 问题清单：[2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md) **P0 ×2**  

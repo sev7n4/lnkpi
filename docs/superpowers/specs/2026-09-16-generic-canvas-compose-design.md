@@ -10,7 +10,7 @@
 > - [2026-09-12-workflow-import-placement-design.md](./2026-09-12-workflow-import-placement-design.md)  
 > - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
 > - [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)（生产换装 HITL 问题清单；**不**改本文已批准决策）  
-> - [2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（P0 切片：源图绑定 + 同槽位替换；待审阅，含 2026-09-17 PM 补丁）
+> - [2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（P0 切片：源图绑定 + 同槽位替换；已批准；plan [2026-09-17-composition-source-bind.md](../plans/2026-09-17-composition-source-bind.md)）
 
 ## 0. 决策摘要
 
