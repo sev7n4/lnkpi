@@ -8,11 +8,12 @@ import {
 } from './points-usage-range'
 
 describe('parseUsageDaysRange', () => {
-  it('accepts 7d, 30d, month and falls back to 7d', () => {
+  it('accepts 7d, 30d, month, all and falls back to 7d', () => {
     expect(parseUsageDaysRange('7d')).toBe('7d')
     expect(parseUsageDaysRange('30d')).toBe('30d')
     expect(parseUsageDaysRange('month')).toBe('month')
-    expect(parseUsageDaysRange('all')).toBe('7d')
+    expect(parseUsageDaysRange('all')).toBe('all')
+    expect(parseUsageDaysRange('nope')).toBe('7d')
     expect(parseUsageDaysRange()).toBe('7d')
   })
 })
@@ -39,6 +40,15 @@ describe('resolveUsageDaysRange', () => {
     expect(r.toKey).toBe('2026-09-16')
     expect(r.from.toISOString()).toBe('2026-08-31T16:00:00.000Z')
     expect(r.to).toBe(now)
+  })
+
+  it('all starts at unix epoch shanghai day through now', () => {
+    const now = new Date('2026-09-16T12:00:00.000Z')
+    const r = resolveUsageDaysRange('all', now)
+    expect(r.from.toISOString()).toBe('1970-01-01T00:00:00.000Z')
+    expect(r.to).toBe(now)
+    expect(r.toKey).toBe('2026-09-16')
+    expect(r.fromKey).toBe('1970-01-01')
   })
 })
 

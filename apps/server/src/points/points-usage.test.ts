@@ -5,6 +5,7 @@ import {
   filterHeatmapDays,
   foldDailyUsage,
   generationCountFromParts,
+  isUsageActivityDay,
   netFromKindCategorySums,
 } from './points-usage'
 
@@ -77,6 +78,22 @@ describe('foldDailyUsage', () => {
         otherNetConsumed: 0,
       },
     ])
+  })
+})
+
+describe('isUsageActivityDay', () => {
+  const empty = {
+    date: '2026-09-15',
+    generationCount: 0,
+    netConsumed: 0,
+    byCategory: { text: 0, image: 0, audio: 0, video: 0 },
+    otherNetConsumed: 0,
+  }
+
+  it('keeps consume-only and generation-only days, drops empty calendar days', () => {
+    expect(isUsageActivityDay(empty)).toBe(false)
+    expect(isUsageActivityDay({ ...empty, netConsumed: 10 })).toBe(true)
+    expect(isUsageActivityDay({ ...empty, generationCount: 1 })).toBe(true)
   })
 })
 

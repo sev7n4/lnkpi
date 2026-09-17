@@ -1,11 +1,11 @@
 import { shanghaiDayKey } from './points-insights'
 
-export type UsageDaysRangeKey = '7d' | '30d' | 'month'
+export type UsageDaysRangeKey = '7d' | '30d' | 'month' | 'all'
 
 const SH_OFFSET_MS = 8 * 60 * 60 * 1000
 
 export function parseUsageDaysRange(raw?: string): UsageDaysRangeKey {
-  return raw === '30d' || raw === 'month' ? raw : '7d'
+  return raw === '30d' || raw === 'month' || raw === 'all' ? raw : '7d'
 }
 
 export function shanghaiMidnight(y: number, month0: number, day: number): Date {
@@ -39,6 +39,10 @@ export function resolveUsageDaysRange(
   now = new Date(),
 ): { from: Date; to: Date; fromKey: string; toKey: string } {
   const toKey = shanghaiDayKey(now)
+  if (range === 'all') {
+    const from = new Date(0)
+    return { from, to: now, fromKey: shanghaiDayKey(from), toKey }
+  }
   const { y, m, day } = shanghaiParts(now)
   if (range === 'month') {
     const from = shanghaiMidnight(y, m, 1)

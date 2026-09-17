@@ -2,10 +2,12 @@
 import { computed, ref } from 'vue'
 import { membershipApi } from '@/services/users-api'
 import type { PointCategory, PointKind, PointTransactionItem, UsageDayPoint } from '@/services/users-api'
+import { buildUsageDayTableCsv, isUsageActivityDay, usageCsvFileName, type UsageTableTotals } from './usageDayTableCsv'
 
 const props = defineProps<{
   days: UsageDayPoint[]
   loading?: boolean
+  totals: UsageTableTotals
 }>()
 
 const COLUMNS = ['日期', '生成次数', '积分消耗', '文本', '图片', '音频', '视频'] as const
@@ -26,7 +28,7 @@ const categoryLabels: Record<PointCategory, string> = {
 
 const rows = computed(() =>
   props.days
-    .filter((day) => day.generationCount > 0)
+    .filter(isUsageActivityDay)
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date)),
 )
@@ -121,11 +123,33 @@ function onRowKeydown(event: KeyboardEvent, day: string) {
   event.preventDefault()
   void toggleDay(day)
 }
+
+function exportCsv() {
+  if (!rows.value.length) return
+  const blob = new Blob([buildUsageDayTableCsv(props.days, props.totals)], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = usageCsvFileName()
+  link.click()
+  URL.revokeObjectURL(url)
+}
 </script>
 
 <template>
   <section class="rounded-2xl border border-white/8 bg-[#16161C] p-5 text-white">
-    <h2 class="mb-3 text-sm font-medium">用量明细</h2>
+    <header class="mb-3 flex items-center justify-between gap-3">
+      <h2 class="text-sm font-medium">用量明细</h2>
+      <button
+        type="button"
+        data-export
+        class="rounded-full border border-white/10 px-3 py-1 text-xs text-white/70 transition hover:bg-white/[0.04] hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="!rows.length"
+        @click="exportCsv"
+      >
+        导出 CSV
+      </button>
+    </header>
 
     <div v-if="loading" class="h-40 animate-pulse rounded-xl bg-white/5" />
 
@@ -226,6 +250,17 @@ function onRowKeydown(event: KeyboardEvent, day: string) {
             </tr>
           </template>
         </tbody>
+        <tfoot>
+          <tr data-total class="border-t border-white/12 text-white/90">
+            <td class="px-3 py-3 font-medium">合计</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.generationCount }}</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.netConsumed }}</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.byCategory.text }}</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.byCategory.image }}</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.byCategory.audio }}</td>
+            <td class="px-3 py-3 tabular-nums">{{ totals.byCategory.video }}</td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   </section>

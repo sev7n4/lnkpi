@@ -48,6 +48,20 @@ const ledgerItem = {
   status: null,
 }
 
+const consumeNoGenDay: UsageDayPoint = {
+  date: '2026-09-13',
+  generationCount: 0,
+  netConsumed: 8,
+  byCategory: { text: 0, image: 8, audio: 0, video: 0 },
+  otherNetConsumed: 0,
+}
+
+const tableTotals = {
+  generationCount: 99,
+  netConsumed: 100,
+  byCategory: { text: 1, image: 20, audio: 3, video: 40 },
+}
+
 function mockLedger(options?: { items?: typeof ledgerItem[]; nextCursor?: string | null }) {
   transactions.mockResolvedValue({
     data: {
@@ -61,7 +75,7 @@ function mockLedger(options?: { items?: typeof ledgerItem[]; nextCursor?: string
 
 function mountTable(days: UsageDayPoint[], loading?: boolean) {
   return mount(UsageDayTable, {
-    props: loading === undefined ? { days } : { days, loading },
+    props: loading === undefined ? { days, totals: tableTotals } : { days, loading, totals: tableTotals },
     global: {
       stubs: {
         RouterLink: {
@@ -89,15 +103,41 @@ it('renders columns 日期 / 生成次数 / 积分消耗 / 文本 / 图片 / 音
   expect(wrapper.text()).toContain('视频')
 })
 
-it('hides zero-generation days and sorts date desc', () => {
-  const wrapper = mountTable([zeroDay, olderDay, consumeDay])
+it('hides empty days, keeps consume-only days, and sorts date desc', () => {
+  const wrapper = mountTable([zeroDay, olderDay, consumeDay, consumeNoGenDay])
   expect(wrapper.text()).toContain('2026-09-16')
   expect(wrapper.text()).toContain('2026-09-14')
+  expect(wrapper.text()).toContain('2026-09-13')
   expect(wrapper.text()).not.toContain('2026-09-15')
   expect(wrapper.findAll('[data-day]').map((row) => row.attributes('data-day'))).toEqual([
     '2026-09-16',
     '2026-09-14',
+    '2026-09-13',
   ])
+})
+
+it('footer uses overview totals rather than summing visible rows', () => {
+  const wrapper = mountTable([consumeDay, olderDay])
+  const total = wrapper.get('[data-total]').text()
+  expect(total).toContain('合计')
+  expect(total).toContain('99')
+  expect(total).toContain('100')
+  expect(total).toContain('1')
+  expect(total).toContain('20')
+  expect(total).toContain('3')
+  expect(total).toContain('40')
+})
+
+it('enables CSV export when there are activity rows', () => {
+  const wrapper = mountTable([consumeDay])
+  const button = wrapper.get('[data-export]')
+  expect(button.text()).toContain('导出 CSV')
+  expect(button.attributes('disabled')).toBeUndefined()
+})
+
+it('disables CSV export in the empty state', () => {
+  const wrapper = mountTable([zeroDay])
+  expect(wrapper.get('[data-export]').attributes('disabled')).toBeDefined()
 })
 
 it('empty state contains the copy and /workflow', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildHeatmapGrid, heatmapLevel } from './usageHeatmapGrid'
+import { buildHeatmapGrid, heatmapLevel, heatmapMonthLabels } from './usageHeatmapGrid'
 
 describe('heatmapLevel', () => {
   it('maps 0 and empty max to level 0 and quarters to 1-4', () => {
@@ -25,5 +25,17 @@ describe('buildHeatmapGrid', () => {
     expect(inRange[0].date).toBe('2026-09-16')
     expect(inRange[0].level).toBe(4)
     expect(grid.flat().some((c) => !c.inRange)).toBe(true)
+  })
+
+  it('emits a month label on the first week and when the month changes', () => {
+    const grid = buildHeatmapGrid({
+      from: '2026-08-31',
+      to: '2026-09-16',
+      days: [],
+    })
+    const columns = grid[0].map((_, week) => grid.map((row) => row[week]))
+    const labels = heatmapMonthLabels(columns)
+    expect(labels[0]?.label).toMatch(/2026年8月|8月/)
+    expect(labels.some((item) => item.label.includes('9月'))).toBe(true)
   })
 })
