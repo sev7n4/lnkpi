@@ -1,6 +1,6 @@
 import 'reflect-metadata'
 import { describe, expect, it, vi } from 'vitest'
-import { GOLD_COMPOSE_1 } from '@lnkpi/shared'
+import { COMPOSITION_BIND_MISSING, GOLD_COMPOSE_1 } from '@lnkpi/shared'
 import { PrismaService } from '../prisma/prisma.service'
 import { CompositionService } from './composition.service'
 
@@ -17,6 +17,30 @@ const CONFIRM_ID_MAP = {
   'image-look-0': 'n-look0',
   'image-src-I1': 'n-src1',
 }
+
+const GOLD_SIDEBAR_ATTACHMENTS = [
+  {
+    id: 'att-i1',
+    mediaType: 'image' as const,
+    sourceKind: 'upload' as const,
+    label: 'I1',
+    url: 'https://cdn.example/i1.png',
+  },
+  {
+    id: 'att-i2',
+    mediaType: 'image' as const,
+    sourceKind: 'upload' as const,
+    label: 'I2',
+    url: 'https://cdn.example/i2.png',
+  },
+  {
+    id: 'att-i3',
+    mediaType: 'image' as const,
+    sourceKind: 'upload' as const,
+    label: 'I3',
+    url: 'https://cdn.example/i3.png',
+  },
+]
 
 function createPrisma() {
   const sessions = new Map<string, SessionRow>()
@@ -71,7 +95,7 @@ function mockImportWritingCanvas(sessions: Map<string, SessionRow>) {
 
 describe('CompositionService', () => {
   it('preview gold 1 persists hash and does not import', async () => {
-    const { prisma } = createPrisma()
+    const { prisma, sessions } = createPrisma()
     const importWorkflow = vi.fn()
     const svc = new CompositionService(prisma, { importWorkflow } as never)
     const out = await svc.preview({
@@ -79,12 +103,24 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
     expect(out.userMessage).toContain('请确认是否把构图落到画布')
     expect(out.userMessage).toContain('选中构图里要生成的节点，用 Dock 生成，会按运行组排队')
     expect(out.userMessage).not.toContain('Dock 生成工作流')
     expect(importWorkflow).not.toHaveBeenCalled()
+    const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
+      dump: {
+        graph: {
+          nodes: Array<{ id: string; data?: { localRefs?: Array<{ url?: string }> } }>
+        }
+      }
+    }
+    for (const id of ['image-src-I1', 'image-src-I2', 'image-src-I3']) {
+      const node = stored.dump.graph.nodes.find((item) => item.id === id)
+      expect(node?.data?.localRefs?.[0]?.url).toBeTruthy()
+    }
   })
 
   it('confirm imports dump once then idempotent', async () => {
@@ -96,6 +132,7 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     const storedHash = out.dumpHash
     const first = await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: storedHash })
@@ -121,6 +158,45 @@ describe('CompositionService', () => {
     ).rejects.toMatchObject({ response: { userMessage: '请先确认构图，再落到画布。' } })
   })
 
+  it('E-B2 preview without attachments does not persist confirmable hash', async () => {
+    const { prisma, sessions } = createPrisma()
+    const svc = new CompositionService(prisma, { importWorkflow: vi.fn() } as never)
+    sessions.get('s1')!.compositionPreview = JSON.stringify({
+      dump: { version: '1', graph: { nodes: [], edges: [] } },
+      hash: 'ab'.repeat(32),
+      primitives: {},
+      ts: new Date().toISOString(),
+      lastImportedHash: 'old',
+      lastAddedNodeIds: ['keep-me'],
+      lastImportedSlotKey: 'I1::I2,I3::0',
+    })
+    await expect(
+      svc.preview({ sessionId: 's1', userId: 'u1', utterance: GOLD_COMPOSE_1, existingNodeCount: 0 }),
+    ).rejects.toMatchObject({ response: { userMessage: COMPOSITION_BIND_MISSING } })
+    const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
+      hash?: string
+      dump?: unknown
+      lastAddedNodeIds?: string[]
+    }
+    expect(stored.hash).toBeUndefined()
+    expect(stored.dump).toBeUndefined()
+    expect(stored.lastAddedNodeIds).toEqual(['keep-me'])
+    expect(COMPOSITION_BIND_MISSING).not.toContain('请确认是否把构图落到画布')
+  })
+
+  it('E-B8 confirm after bind-fail persist_missing', async () => {
+    const { prisma } = createPrisma()
+    const importWorkflow = vi.fn()
+    const svc = new CompositionService(prisma, { importWorkflow } as never)
+    await expect(
+      svc.preview({ sessionId: 's1', userId: 'u1', utterance: GOLD_COMPOSE_1, existingNodeCount: 0 }),
+    ).rejects.toMatchObject({ response: { userMessage: COMPOSITION_BIND_MISSING } })
+    await expect(
+      svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: 'ab'.repeat(32) }),
+    ).rejects.toMatchObject({ response: { userMessage: '请先确认构图，再落到画布。' } })
+    expect(importWorkflow).not.toHaveBeenCalled()
+  })
+
   it('extract incomplete writes pending and does not import', async () => {
     const { prisma, sessions } = createPrisma()
     const importWorkflow = vi.fn()
@@ -138,28 +214,12 @@ describe('CompositionService', () => {
     const { prisma, sessions } = createPrisma()
     const importWorkflow = mockImportWritingCanvas(sessions)
     const svc = new CompositionService(prisma, { importWorkflow } as never)
-    const attachments = [
-      {
-        id: 'att-i1',
-        mediaType: 'image' as const,
-        sourceKind: 'upload' as const,
-        label: 'I1',
-        url: 'https://cdn.example/i1.png',
-      },
-      {
-        id: 'att-i2',
-        mediaType: 'image' as const,
-        sourceKind: 'upload' as const,
-        label: 'I2',
-        url: 'https://cdn.example/i2.png',
-      },
-    ]
     const out = await svc.preview({
       sessionId: 's1',
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
-      attachments,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     const stored = JSON.parse(sessions.get('s1')!.compositionPreview!) as {
       dump: {
@@ -177,6 +237,11 @@ describe('CompositionService', () => {
     expect(srcI2?.data?.localRefs?.[0]).toMatchObject({
       id: 'att-i2',
       url: 'https://cdn.example/i2.png',
+    })
+    const srcI3 = stored.dump.graph.nodes.find((node) => node.id === 'image-src-I3')
+    expect(srcI3?.data?.localRefs?.[0]).toMatchObject({
+      id: 'att-i3',
+      url: 'https://cdn.example/i3.png',
     })
     await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: out.dumpHash })
     expect(importWorkflow).toHaveBeenCalledTimes(1)
@@ -200,6 +265,7 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: 'I1 模特 I2 I3 服装',
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
     expect(sessions.get('s1')!.compositionPending).toBeNull()
@@ -253,6 +319,7 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     expect(out.dumpHash).toMatch(/^[a-f0-9]{64}$/)
     expect(sessions.get('s1')!.compositionPending).toBeNull()
@@ -273,6 +340,7 @@ describe('CompositionService', () => {
         userId: 'u1',
         utterance: GOLD_COMPOSE_1,
         existingNodeCount: 0,
+        attachments: GOLD_SIDEBAR_ATTACHMENTS,
         copy: { promptSlots: { 'look-0': 'data:image/png;base64,aaaa' } },
       }),
     ).rejects.toMatchObject({
@@ -290,6 +358,7 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     await svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: out.dumpHash })
     const saved = JSON.parse(sessions.get('s1')!.canvasData!) as {
@@ -317,6 +386,7 @@ describe('CompositionService', () => {
       userId: 'u1',
       utterance: GOLD_COMPOSE_1,
       existingNodeCount: 0,
+      attachments: GOLD_SIDEBAR_ATTACHMENTS,
     })
     await expect(
       svc.confirm({ sessionId: 's1', userId: 'u1', dumpHash: out.dumpHash }),
