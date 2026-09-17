@@ -7,7 +7,7 @@
 > 对照：[2026-09-16-canvas-operator-2e-design.md](./2026-09-16-canvas-operator-2e-design.md)（2e.3 口语搭骨架 ≠ 本清单；构图口令仍走 #355 HTTP）  
 > 生产会话：[`cmu4kmyy6000fo301p08o6zjn`](http://119.29.173.89:8888/workflow/cmu4kmyy6000fo301p08o6zjn)（画布标题 `h8-2d3-bare-3e4767`）
 
-本文只钉「看见了什么、哪条规格仍成立、下一刀不该碰什么」。修复方案需另开切片规格，批准后再写 plan。
+本文只钉「看见了什么、哪条规格仍成立、下一刀不该碰什么」。P0 切片规格：[2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（待审阅）。
 
 ---
 
@@ -118,11 +118,11 @@ P+V
 
 ## 4. 建议切片顺序（未批准）
 
-只作 backlog，实施前另写切片规格。
+只作 backlog。刀 1 规格已写，待审阅后再 plan。
 
 | 顺序 | 刀 | 做 | 不做 |
 |------|----|----|------|
-| **1** | 源图绑定 + 近重复不叠加 | 本轮 `@I*` → 构图源节点；无绑定不出确认卡；槽位未变确认幂等或询问替换 | 不改路由；不手搭；不扩词 |
+| **1** | 源图绑定 + 同槽位替换 | 见 [source-bind 规格](./2026-09-17-composition-source-bind-design.md)：无绑定不出确认卡；同 slotKey 替换上一套 | 不改路由；不手搭；不扩词；本刀不问「替换/叠加」chip |
 | **2** | 确认后一键运行组 | 本次新增可生成节点排队（I0→looks→V，P 排除）；Dock 或按节点 HITL | 不 `run_*`；不确认前 propose；不静默扣点 |
 | **3** | 识图与 copy | 按 `@I*` 逐张，cap 与 `MAX_GARMENTS` 对齐；P/look 随件数 | 识图改指派；holistic 复读当成功 |
 
@@ -134,4 +134,4 @@ P+V
 - 不用 2e.3 `upsert_media_node`×n + `connect_nodes` 顶替换装展开代数
 - 不把 `import_workflow` / `instantiate_workflow_template` 当本句绿
 - 不 mandatory `propose`；Agent 不可见 `run_*`
-- 不把本清单当已批准设计；无切片规格不得开工
+- 不把本清单当已批准设计；无切片规格不得开工（刀 1 见 source-bind 规格）
