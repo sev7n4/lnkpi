@@ -61,7 +61,7 @@ function collectIRefs(text: string): string[] {
 }
 
 function findIdentityRef(text: string): string | undefined {
-  const asModel = text.match(/@?I([0-9]+)\s*(?:作为模特|是模特|模特)/)
+  const asModel = text.match(/@?I([0-9]+)\s*(?:作为模特|这个是模特|是模特|模特)/)
   if (asModel) return `I${asModel[1]}`
   const asProduct = text.match(/@?I([0-9]+)\s*是产品/)
   if (asProduct) return `I${asProduct[1]}`
@@ -103,7 +103,7 @@ function findGarmentRefs(
   if (identityRef) exclude.add(identityRef)
 
   const fromCluster: string[] = []
-  for (const m of text.matchAll(/((?:@?I[0-9]+\s*)+)(?:这两个|这些)?是?服装/g)) {
+  for (const m of text.matchAll(/((?:@?I[0-9]+\s*)+)(?:这两个|这些|这几个)?是?服装/g)) {
     fromCluster.push(...collectIRefs(m[1]))
   }
   const clustered = unique(fromCluster.filter((ref) => !exclude.has(ref)))
