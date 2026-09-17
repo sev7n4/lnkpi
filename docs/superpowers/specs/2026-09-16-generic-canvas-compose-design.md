@@ -8,7 +8,8 @@
 > - [2026-09-16-planner-confirm-instantiate-gate-design.md](./2026-09-16-planner-confirm-instantiate-gate-design.md)（确认 chip 短路机制复用；落盘目标改为 composition dump）  
 > - [2026-09-12-agent-import-workflow-design.md](./2026-09-12-agent-import-workflow-design.md)  
 > - [2026-09-12-workflow-import-placement-design.md](./2026-09-12-workflow-import-placement-design.md)  
-> - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)
+> - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
+> - [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)（生产换装 HITL 问题清单；**不**改本文已批准决策）
 
 ## 0. 决策摘要
 
@@ -416,3 +417,9 @@ P0 产品目录、match、Explore **不再列出**四套内置配方。仓库 JS
 | 晋升 / 用户配方 Nest API | 可保留，Agent P0 不绑定 |
 
 规划器确认短路代码可复用（chip 整句、闸门豁免、转发 canvas_commands），但查找目标从 `planner_preview_args` 改为会话 `compositionPreview`。
+
+---
+
+## 14. 生产开放缺口（2026-09-17）
+
+已批准决策（G1–G16 / 金标 1–2）不变。生产换装会话暴露的绑定、叠加、确认后一键、识图 cap、copy 件数问题记在 [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)。修复须另开切片规格，不得用 2e.3 手搭或扩词顶替构图代数。
