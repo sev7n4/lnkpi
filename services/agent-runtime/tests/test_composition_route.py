@@ -43,6 +43,16 @@ def test_structure_keyword_pairs():
     assert is_composition_structure_utterance("改画布上那个节点的提示词") is False
 
 
+GOLD_V1 = (
+    "我期望的工作流不是全都是提示词节点，我期望通过画布的各类节点骨架连接好直接生图生视频，提示词自动填入到dock"
+)
+
+
+def test_v1_oral_skeleton_is_not_composition_structure():
+    assert is_composition_structure_utterance(GOLD_V1) is False
+    assert is_composition_structure_utterance("做一个图生视频工作流") is True
+
+
 def test_confirm_chip_exact_trim():
     assert is_composition_confirm_chip("确认落到画布") is True
     assert is_composition_confirm_chip("  确认落到画布\n") is True

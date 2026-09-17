@@ -109,7 +109,7 @@ describe('detectAgentChipSet', () => {
     ).toBe('recipe_confirm')
     expect(
       detectAgentChipSet(
-        '请确认是否把构图落到画布\n新建白底三视图\n服装扇出 2\nP+V\n保留 0\n新增 6\n生成请用 Dock 生成工作流',
+        '请确认是否把构图落到画布\n新建白底三视图\n服装扇出 2\nP+V\n保留 0\n新增 6\n选中构图里要生成的节点，用 Dock 生成，会按运行组排队',
       ),
     ).toBe('recipe_confirm')
   })

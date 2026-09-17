@@ -440,6 +440,9 @@ def test_s1_bind_plan_tools_tryon_includes_sidebar_writes():
 
 
 def test_e6_v1_gold_bind_includes_operator_skeleton_tools():
+    from app.graph.composition_route import is_composition_structure_utterance
+
+    assert is_composition_structure_utterance(GOLD_V1) is False
     tools = select_narrow_write_tools(GOLD_V1)
     assert OPERATOR_WRITE <= tools
     assert "upsert_media_node" in tools
