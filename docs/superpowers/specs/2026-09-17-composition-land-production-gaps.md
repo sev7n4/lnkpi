@@ -122,7 +122,7 @@ P+V
 
 | 顺序 | 刀 | 做 | 不做 |
 |------|----|----|------|
-| **1** | 源图绑定 + 同槽位替换 | 见 [source-bind 规格](./2026-09-17-composition-source-bind-design.md)：无绑定不出确认卡；同 slotKey 替换上一套 | 不改路由；不手搭；不扩词；本刀不问「替换/叠加」chip |
+| **1** | 源图绑定 + 同槽位替换 | 见 [source-bind 规格](./2026-09-17-composition-source-bind-design.md)（已吸收审阅补丁）：只绑侧栏芯片/线程快照，不扫画布；绑失败作废旧 persist；同 slotKey 替换 | 不改路由；不手搭；不扩词 |
 | **2** | 确认后一键运行组 | 本次新增可生成节点排队（I0→looks→V，P 排除）；Dock 或按节点 HITL | 不 `run_*`；不确认前 propose；不静默扣点 |
 | **3** | 识图与 copy | 按 `@I*` 逐张，cap 与 `MAX_GARMENTS` 对齐；P/look 随件数 | 识图改指派；holistic 复读当成功 |
 
