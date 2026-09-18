@@ -1,172 +1,151 @@
-# Task 6 Report: Video generate reads live P text
+# Task 6 report: Stop — no canvas walk, no prod V1, no copy/parse work
 
-**Status:** DONE_WITH_CONCERNS  
-**Branch:** `feature/generic-canvas-compose-spec`  
-**Commit:** `e2d19349` `feat(studio): video generate reads composition storyboard node text`
+Branch: `feature/composition-source-bind`  
+HEAD: `2772b7ff` `fix(agent): always forward composition attachments and void dump hash on bind fail`  
+Compared to: `origin/main...HEAD`  
+Date: 2026-09-17
 
-## What shipped
+Gate is **clean**. No violation commit. Working tree has only untracked `deploy/__pycache__/` (not committed).
 
-Shared helper `resolveCompositionVideoPrompt(canvas, videoNodeId)` in `packages/shared/src/canvas/compositionVideo.ts`, re-exported from `packages/shared/src/index.ts`.
+---
 
-Priority:
+## Step 1 — forbidden files not in branch diff — **PASS**
 
-1. Node id `text-p` → `data.prompt` or `data.content` (trim). Empty → `{ error: 'empty_p_block_v' }` even if the video node still has `OLD`.
-2. Else first `type === 'text'` node whose id appears in `compositionRunGroup.nodeIds` (same prompt/content rule).
-3. Else the video node’s own `data.prompt` (trim). Missing video node and no P block → `{ prompt: '' }` (not `empty_p_block_v`).
+Command:
 
-Call sites:
-
-- **Web** `useNodeGeneration.ts`: before `studioApi.startVideoGeneration` (canvas V) and shot-child `canvasApi.generateVideo`. Empty P patches the video node `status: error` with `分镜还是空的，写好后再生成视频。` and returns without calling the API. Success passes `resolved.prompt` as the request prompt; the node’s stored prompt is not overwritten with P text.
-- **Nest** `resolveVideoStartRequest` (`POST /studio/video/start`): when `canvas` and `nodeId` are present, replaces `request.prompt`. Empty P → `BadRequestException('分镜还是空的，写好后再生成视频。')`.
-- **Nest** `StudioService.generateVideo`: when `scope.sessionId` and `scope.nodeId` are set, loads session canvas and resolves before charging. Standalone VideoStudioPage (no canvas scope) is unchanged.
-
-Client canvas passed to the helper is `{ nodes: deps.nodes.value mapped to {id,type,data} }`. `compositionRunGroup` is omitted on the client (Task 9 / `flowToCanvasData` not expanded). Server session canvas already persists `compositionRunGroup`.
-
-## TDD evidence
-
-### Shared `compositionVideo.test.ts`
-
-**RED** (test file only, module missing):
-
-```
-FAIL  src/canvas/compositionVideo.test.ts
-Error: Cannot find module './compositionVideo'
+```bash
+git diff --name-only origin/main...HEAD
 ```
 
-**GREEN** after implement + re-export:
+Output (name-only list):
 
 ```
-✓ src/canvas/compositionVideo.test.ts (7 tests)
-Test Files  1 passed (1)
+apps/server/src/agent/agent-canvas-tools.service.test.ts
+apps/server/src/agent/agent-canvas-tools.service.ts
+apps/server/src/agent/composition.service.test.ts
+apps/server/src/agent/composition.service.ts
+docs/superpowers/plans/2026-09-17-composition-source-bind.md
+docs/superpowers/specs/2026-09-16-generic-canvas-compose-design.md
+docs/superpowers/specs/2026-09-17-composition-land-production-gaps.md
+docs/superpowers/specs/2026-09-17-composition-source-bind-design.md
+packages/shared/src/canvas/compositionBind.test.ts
+packages/shared/src/canvas/compositionBind.ts
+packages/shared/src/index.ts
+packages/shared/src/canvas/compositionExtract.test.ts
+packages/shared/src/canvas/compositionExtract.ts
+services/agent-runtime/app/graph/nodes/explore.py
+services/agent-runtime/app/tools/nest_client.py
+services/agent-runtime/tests/test_composition_confirm_explore.py
+services/agent-runtime/tests/test_nest_client.py
 ```
 
-Includes the brief case: nodes `image-i0`, `image-look-0`, `text-p` prompt `NEW SCRIPT`, `video-v` prompt `OLD` → `{ prompt: 'NEW SCRIPT' }`. Empty `text-p` → `empty_p_block_v`. Also covers run-group text fallback, video-node fallback, missing video node → `{ prompt: '' }`, and `content` when `prompt` is empty.
+Forbidden filenames checked (must **not** appear):
 
-### Nest `video-generation-request.util.test.ts`
+- `deploy/prod-phase-v2-bare-gen-verify.py`
+- `deploy/prod-phase-2d3-h8-verify.py`
+- 2e.1 / 2e.3 harnesses (`prod-phase-2e*`)
+- `compositionCopy.ts`
+- `sidebar_media_parse.py` (`MAX_PARSE_IMAGE_URLS`)
 
-**RED** (tests added, util not wired):
+Second command:
 
-```
-× replaces video node snapshot with live text-p prompt
-  expected 'OLD' to be 'NEW SCRIPT'
-× throws when composition text-p is empty
-  expected function to throw an error, but it didn't
-```
-
-**GREEN** after wiring `resolveCompositionVideoPrompt` in `resolveVideoStartRequest`:
-
-```
-✓ src/studio/video-generation-request.util.test.ts (6 tests)
+```bash
+git diff --name-only origin/main...HEAD | rg 'prod-phase-v2-bare-gen-verify|prod-phase-2d3-h8-verify|prod-phase-2e|2e1|2e3|compositionCopy|sidebar_media_parse'
 ```
 
-### Web `useNodeGeneration.test.ts`
+Output: empty → `PASS: no forbidden filenames`
 
-**RED:**
+Also checked every commit on `origin/main..HEAD` for those paths: none.
 
-```
-× canvas video generate reads live text-p instead of video snapshot
-  expected 'OLD' to be 'NEW SCRIPT'
-× blocks video generate when text-p is empty
-  expected spy not to be called, but called 1 times with "OLD"
-× shot-linked video generate reads live text-p prompt
-  expected canvasApi.generateVideo prompt 'NEW SCRIPT', received 'OLD'
-```
+Constraint strings `MAX_PARSE_IMAGE_URLS` / `prefix_assistant_reply` / `P_SKELETON_PROMPT` / `MEDIA_CREATE_HINTS` appear only in **docs** (plan + gap spec “do not change”), not in code diffs.
 
-**GREEN** after wiring:
+---
 
-```
-✓ src/composables/useNodeGeneration.test.ts (57 tests)
+## Step 2 — no canvas walk / completed-image fallback in composition bind — **PASS**
+
+Command:
+
+```bash
+git diff origin/main...HEAD | rg -n 'canvas\.nodes\.filter|completed-image|completed image fallback|scrape canvas completed'
 ```
 
-## Commands run (focused, as dispatched)
+Grep hits:
 
-```
-pnpm --filter @lnkpi/shared test src/canvas/compositionVideo.test.ts
-pnpm --filter @lnkpi/server test src/studio/video-generation-request.util.test.ts
-pnpm --filter @lnkpi/web test src/composables/useNodeGeneration.test.ts
-```
+| Line in diff | Match | Verdict |
+|---|---|---|
+| `+      canvas.nodes = canvas.nodes.filter((n: { id: string }) => !nodeIds.includes(n.id))` (×2) | `apps/server/src/agent/composition.service.test.ts` E-B4 / E-B6 | Test mock of `removeNodes` for **same-slot replace**. Deletes by id. Does **not** fill `I*` from completed images. |
+| `+- Do not scrape canvas completed nodes to fill \`I*\`` | plan Global Constraints | Docs restating the ban. |
+| `+    canvas.nodes = canvas.nodes.filter(...)` | plan Task 3 snippet | Same test helper copied into the plan. |
+| `+- [ ] **Step 2:** Grep the diff for \`canvas.nodes.filter\` / completed-image fallback...` | plan Task 6 | This gate itself. |
 
-Did not run the full studio integration suite.
+Scoped implementation check:
 
-## Self-review
-
-- Shared resolver matches the dispatch contract; `text-p` wins over video snapshot.
-- Canvas V uses `startVideoGeneration`, not shot `generateVideo` ~1074. Both canvas V and shot-child video paths resolve live P.
-- Empty P is rejected on client (no API) and on Nest start/generate (400) before points consume.
-- Did not implement Dock run-group, L0, Explore, or `flowToCanvasData` extras.
-
-## Concerns
-
-1. **Client omits `compositionRunGroup`.** Live P still works via node id `text-p`. Run-group fallback is covered on the server (session canvas) and in the shared unit tests. Client fallback without `text-p` would use the video node prompt until Task 9 lands run-group on the client canvas.
-2. **`VideoGenerationOrchestrator.start` still persists `request.prompt` onto the video node** (`update_node` with `prompt`). That can copy live P onto V after start. Subsequent generates still prefer live `text-p`, so this does not restore snapshot-as-source-of-truth. Out of scope to change persist.
-3. **Shot-node `generateShot` (~1074) is unchanged.** Composition V is a video node, not a shot generate.
-4. **Prisma mock** `createPrismaMock()` now includes `session.findUnique → null` so `generateVideo` with canvas scope does not throw in unit tests that lack a session row.
-
-## Files
-
-- Create: `packages/shared/src/canvas/compositionVideo.ts`
-- Create: `packages/shared/src/canvas/compositionVideo.test.ts`
-- Modify: `packages/shared/src/index.ts`
-- Modify: `apps/server/src/studio/video-generation-request.util.ts`
-- Modify: `apps/server/src/studio/video-generation-request.util.test.ts`
-- Modify: `apps/server/src/studio/studio.service.ts`
-- Modify: `apps/server/src/studio/studio.test-utils.ts`
-- Modify: `apps/web/src/composables/useNodeGeneration.ts`
-- Modify: `apps/web/src/composables/useNodeGeneration.test.ts`
-
-## Fix
-
-**Problem:** `resolveVideoStartRequest` called `resolveCompositionVideoPrompt` whenever `canvas && nodeId`. Missing video node and no P block returns `{ prompt: '' }`, which overwrote the body prompt instead of falling through. `startVideoGeneration` always passes a parsed canvas (empty if JSON is missing), so the client live prompt was wiped and the orchestrator reported `节点缺少 prompt`.
-
-**Change:** Only replace `request.prompt` when a composition P block is actually used (`text-p` or a run-group text node). If the video node is missing and there is no P, keep the original body-prompt fallback. Empty P still throws `empty_p_block_v` / `分镜还是空的，写好后再生成视频。`.
-
-**Test added:** canvas exists, `nodeId` not in canvas, body has a prompt → resolved request keeps that prompt.
-
-### Covering tests
-
-- `apps/server/src/studio/video-generation-request.util.test.ts`
-- `packages/shared/src/canvas/compositionVideo.test.ts`
-
-### Commands + output
-
-```
-pnpm --filter @lnkpi/server test src/studio/video-generation-request.util.test.ts
+```bash
+git diff origin/main...HEAD -- \
+  packages/shared/src/canvas/compositionBind.ts \
+  packages/shared/src/canvas/compositionBind.test.ts \
+  apps/server/src/agent/composition.service.ts \
+  | rg -n 'canvas\.nodes\.filter|completed.?image|scrape'
 ```
 
-RED (test only, before util change):
+Output: empty → **no canvas-walk fallback in bind implementation**.
 
-```
- ❯ src/studio/video-generation-request.util.test.ts (7 tests | 1 failed)
-   × resolveVideoStartRequest > keeps body prompt when canvas exists but video node and P block are absent
-     → expected '' to be 'body prompt'
- Test Files  1 failed (1)
-      Tests  1 failed | 6 passed (7)
-```
+Bind path uses only sidebar attachments:
 
-GREEN after util change:
+- `localRefsByRefFromSidebarAttachments(utterance, input.attachments)` → chip-key then unlabeled index fallback on **attachments**, never canvas nodes.
+- `compositionSourcesBound` requires `localRefs[].url` on required `I*`.
+- `importWorkflow` change copies `localRefs[0].url` from the **imported dump graph** into persist (Task 4 / B1), not from live completed canvas images.
 
-```
- RUN  v3.2.7 /Users/4seven/workspace/lnkpi/apps/server
+---
 
- ✓ src/studio/video-generation-request.util.test.ts (7 tests) 8ms
+## Step 3 — do not run production oral against H8 session — **CONFIRMED (not run)**
 
- Test Files  1 passed (1)
-      Tests  7 passed (7)
-   Start at  21:00:26
-   Duration  1.81s (transform 475ms, setup 0ms, collect 1.14s, tests 8ms, environment 0ms, prepare 170ms)
-```
+Did **not** run production oral against `cmu4kmyy6000fo301p08o6zjn`.  
+Did **not** invoke V2 / H8 / 2e.1 / 2e.3 harnesses in this task.
 
-```
-pnpm --filter @lnkpi/shared test src/canvas/compositionVideo.test.ts
-```
+Post-merge reminder (unchanged): new canvas + real sidebar chips; never reuse H8 session `cmu4kmyy6000fo301p08o6zjn`.
 
-```
- RUN  v3.2.7 /Users/4seven/workspace/lnkpi/packages/shared
+Historical note (this worktree was reused): older terminals from 2026-09-14–16 ran other prod harnesses (2b / V2). V2 used session `cmu4gcz9t0004mw01x5ud5wmv`, not H8. Not part of this knife.
 
- ✓ src/canvas/compositionVideo.test.ts (7 tests) 12ms
+---
 
- Test Files  1 passed (1)
-      Tests  7 passed (7)
-   Start at  21:00:29
-   Duration  794ms (transform 118ms, setup 0ms, collect 100ms, tests 12ms, environment 0ms, prepare 242ms)
-```
+## Files changed (this task)
+
+None. No revert. No commit.
+
+Untracked (left alone, not staged):
+
+- `deploy/__pycache__/prod-phase-2e3-v1-verify.cpython-311.pyc` (mtime 2026-09-17 03:38)
+
+---
+
+## Self-review (author)
+
+1. **Spec coverage (plan map):** B1 → Task 2+4. B2 chip-key + no canvas + reuse-via-state attachments → Task 1+5. B3 void persist + clear hash → Task 2+5. B4/B5/B6 slot replace/overlay → Task 3. B7 → Task 5 narrow-write. **B8 → this Task 6 (no extra work).** B9 gold-1 tests → Task 2. E-B5 oral extract → Task 1. E-B8 → Task 2+5. Mapping holds; this task adds no product code.
+
+2. **Placeholder scan:** no `TBD` / `FIXME` / `XXX` in code diffs (`*.ts` / `*.py`).
+
+3. **Types / names:** `compositionSlotKey`, `COMPOSITION_BIND_MISSING`, `removeNodes` consistent across `compositionBind.ts`, `packages/shared/src/index.ts` (`export * from './canvas/compositionBind'`), `composition.service.ts`, and tests. `slotKey` formula has no `wantVideo`. Bind-fail copy is verbatim; tests assert it does not contain `请确认是否把构图落到画布`.
+
+4. **import url gap:** Task 4 is present (`37f0809c` persist `localRefs` url on import). Confirm still would show「上传图片」without it; that commit is on the branch.
+
+B8 “不做” items not started: no one-click run-group **change**, no parse cap / `MAX_PARSE_IMAGE_URLS`, no P/look copy, no HITL rewrite, no dirty-canvas wipe, no canvas scrape for bind. Existing `compositionRunGroup` write on confirm is **pre-existing on `origin/main`**, not introduced here.
+
+---
+
+## Issues / concerns
+
+- Untracked `deploy/__pycache__/prod-phase-2e3-v1-verify.cpython-311.pyc` is leftover bytecode from compiling the 2e.3 harness on this reused worktree. Source harness is **not** in `origin/main...HEAD`. Do not commit.
+- `canvas.nodes.filter` **does** appear in the branch diff, but only as E-B4/E-B6 `removeNodes` test mocks (and the plan quoting that helper). Not a completed-image bind fallback. Calling this out so a literal “any filter in the diff” reading is not confused with a gate fail.
+- This PR still must not gold-run live; post-deploy use a **new** canvas.
+
+---
+
+## Verdict
+
+| Step | Result |
+|------|--------|
+| 1 name-only forbidden files | PASS |
+| 2 composition-bind canvas walk | PASS |
+| 3 no prod oral vs H8 | CONFIRMED (not run) |
+| Fix/commit | none (gate clean) |
