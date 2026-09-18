@@ -1375,9 +1375,10 @@ async def stream_run_events(
             if isinstance(post_presentation, dict):
                 done_payload["presentation"] = post_presentation
             # Task J-3: include executionTrace so Nest persists it
+            # NOTE: post_vals may lack journey_trace (not checkpointed); use emit_vals which has resolved trace
             try:
                 exec_trace = _emit_done_execution_trace(
-                    post_vals.get("journey_trace"),
+                    _resolve_journey_trace(post_vals),
                     updated_at=int(time.time() * 1000),
                 )
                 if exec_trace.get("events"):
