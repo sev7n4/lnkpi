@@ -108,6 +108,7 @@ export class CompositionService {
     const byRef = localRefsByRefFromSidebarAttachments(utterance, input.attachments)
     const required = requiredCompositionRefKeys(extracted.primitives)
     const previous = parseLandedMeta(session.compositionPreview)
+    console.log(`[COMPOSITION-DIAG] session=${input.sessionId} attLen=${(input.attachments || []).length} byRefKeys=${JSON.stringify(Object.keys(byRef))} required=${JSON.stringify(required)}`)
     if (!compositionSourcesBound(required, byRef)) {
       await this.prisma.session.update({
         where: { id: session.id },
