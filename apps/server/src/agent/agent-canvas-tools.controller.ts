@@ -944,6 +944,21 @@ class SaveContextSnapshotDto {
   messageCount?: number
 }
 
+@Controller('agent/debug')
+export class AgentCanvasToolsDebugController {
+  @Post('preview-composition-debug')
+  previewCompositionDebug(@Body() body: any) {
+    return {
+      code: 0,
+      data: {
+        attachmentsLen: (body?.attachments || []).length,
+        firstAttachmentKeys: body?.attachments?.[0] ? Object.keys(body.attachments[0]) : [],
+        sessionId: body?.sessionId,
+      },
+    };
+  }
+}
+
 @Controller('agent/internal')
 @UseGuards(AgentInternalGuard)
 export class AgentCanvasToolsController {
