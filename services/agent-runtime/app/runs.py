@@ -351,6 +351,15 @@ class NestEventProxy:
         self._inner = inner
         self._emit = emit
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Forward attribute writes to the inner NestCanvasClient so
+        # `nest.sidebar_attachments = [...]` updates the underlying
+        # client (where preview_composition reads them), not just this proxy.
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._inner, name, value)
+
     async def close(self) -> None:
         close = getattr(self._inner, "close", None)
         if close is not None:
