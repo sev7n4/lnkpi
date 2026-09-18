@@ -228,13 +228,15 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     // 主 loop
     while (true) {
       if (abortCtrl.signal.aborted) {
-        // §13.2 telemetry: plan rejected via abort
-        reportBatchEvent('selection_batch_plan_rejected', {
-          sessionId: batchSessionId,
-          reason: summaryAbortReason === 'user_stopped' ? 'pending_confirm' : summaryAbortReason as 'pending_confirm' | 'limit_24',
-          candidateCount: plan.run.length,
-          blockedCount: plan.blockedBy.length,
-        })
+        // §13.2 telemetry: plan rejected — only pending_confirm / limit_24 qualify
+        if (summaryAbortReason === 'pending_confirm' || summaryAbortReason === 'limit_24') {
+          reportBatchEvent('selection_batch_plan_rejected', {
+            sessionId: batchSessionId,
+            reason: summaryAbortReason as 'pending_confirm' | 'limit_24',
+            candidateCount: plan.run.length,
+            blockedCount: plan.blockedBy.length,
+          })
+        }
         for (const id of queue) {
           skippedMap.set(id, { nodeId: id, reason: 'user_stopped' })
           progress.value.skipped++; summarySkipped++

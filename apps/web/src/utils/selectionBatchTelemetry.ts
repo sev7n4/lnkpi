@@ -29,6 +29,6 @@ export function reportBatchEvent(name: BatchEvent['name'], payload: BatchEvent['
     // eslint-disable-next-line no-console
     console.debug('[telemetry]', name, payload)
   }
-  // prod 路径：stub（notifyGenerationSaveLocalHint 签名不兼容，退化为 no-op）
+  // prod 路径：V1 dev-only stub — 无 prod channel
   return
 }
