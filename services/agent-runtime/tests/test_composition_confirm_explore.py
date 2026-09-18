@@ -195,6 +195,33 @@ async def test_lint_fail_returns_user_message_no_ainvoke():
 
 
 @pytest.mark.asyncio
+async def test_bind_fail_clears_dump_hash_and_has_no_confirm_chip():
+    from app.errors import AgentToolError
+    llm = _llm()
+    nest = _nest()
+    nest.preview_composition = AsyncMock(
+        side_effect=AgentToolError({
+            "error_type": "param_error",
+            "tool_name": "previewComposition",
+            "message": "参考图还没挂到构图上。请确认侧栏 @I1 起仍在本轮，或先把图加入 Agent 引用。",
+            "retry_hint": "请检查参数后重试",
+        })
+    )
+    explore = make_explore_node(llm=llm, nest=nest)
+    result = await explore({
+        "messages": [HumanMessage(content=GOLD_COMPOSE_1)],
+        "composition_dump_hash": DUMP_HASH,
+    })
+    text = result["messages"][0].content
+    assert HITL_CONFIRM not in text
+    assert "参考图还没挂到构图上" in text
+    assert result["messages"][0].additional_kwargs.get("composition_dump_hash") in (None, "")
+    assert result.get("composition_dump_hash") in (None, "")
+    assert "composition_dump_hash" in result
+    llm.ainvoke.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_pending_state_previews_without_structure_keywords():
     llm = _llm()
     nest = _nest()
@@ -231,6 +258,7 @@ def test_gold_structure_binds_no_planner_writes():
     assert tools != _PLANNER_TOOLS
     assert "instantiate_workflow_template" not in tools
     assert "match_workflow_templates" not in tools
+    assert tools.isdisjoint({"propose_generation", "upsert_media_node"})
 
 
 def test_confirm_chip_does_not_bind_instantiate():

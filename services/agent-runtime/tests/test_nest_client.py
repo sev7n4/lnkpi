@@ -368,7 +368,15 @@ async def test_preview_composition(nest_client, captured):
         "sessionId": SESSION_ID,
         "userId": USER_ID,
         "utterance": "设计一段模特换装的工作流并做好连线，写入画布",
+        "attachments": [],
     }
+
+
+@pytest.mark.asyncio
+async def test_preview_composition_sends_empty_attachments_list(nest_client, captured):
+    nest_client.sidebar_attachments = []
+    await nest_client.preview_composition("设计一段模特换装的工作流并做好连线，写入画布")
+    assert _last(captured)["json"]["attachments"] == []
 
 
 @pytest.mark.asyncio

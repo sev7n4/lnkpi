@@ -78,4 +78,22 @@ describe('compositionExtract', () => {
       },
     })
   })
+
+  it('production oral 这个是模特 / 这几个是服装 extracts I1 + I2-I5', () => {
+    const u =
+      '@I1 这个是模特， @I2  @I3  @I4  @I5 这几个是服装，请帮我设计一套模特换装工作流方案，含一键生图生视频'
+    expect(isCompositionStructureUtterance(u)).toBe(true)
+    const got = extractCompositionPrimitives(u)
+    expect(got).toEqual({
+      ok: true,
+      primitives: {
+        identityRef: 'I1',
+        skipI0: false,
+        garmentRefs: ['I2', 'I3', 'I4', 'I5'],
+        otherRefs: [],
+        wantVideo: true,
+        sequence: [],
+      },
+    })
+  })
 })

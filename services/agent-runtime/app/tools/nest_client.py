@@ -715,8 +715,7 @@ class NestCanvasClient:
         }
         if copy is not None:
             body["copy"] = copy
-        if self.sidebar_attachments:
-            body["attachments"] = self.sidebar_attachments
+        body["attachments"] = list(self.sidebar_attachments or [])
         return await self._post("/agent/internal/preview-composition", body)
 
     async def confirm_composition(self, dump_hash: str) -> dict[str, Any]:

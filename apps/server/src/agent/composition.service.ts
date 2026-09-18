@@ -6,16 +6,20 @@ import {
   NotFoundException,
 } from '@nestjs/common'
 import {
+  COMPOSITION_BIND_MISSING,
+  compositionSlotKey,
+  compositionSourcesBound,
   expandComposition,
   extractCompositionPrimitives,
   hashCompositionDump,
   isCompositionStructureUtterance,
   lintCompositionDump,
+  localRefsByRefFromSidebarAttachments,
   renderCompositionCopy,
+  requiredCompositionRefKeys,
   summarizeCompositionDump,
   type CanvasData,
   type CompositionIR,
-  type LocalRefBinding,
   type SidebarAttachment,
   type WorkflowDocument,
 } from '@lnkpi/shared'
@@ -32,14 +36,19 @@ type CompositionCopy = NonNullable<CompositionIR['copy']>
 
 type CanvasCommand = { type: 'focus_nodes'; nodeIds: string[] }
 
-type StoredPreview = {
+type LandedMeta = {
+  lastImportedHash?: string
+  lastAddedNodeIds?: string[]
+  lastImportedSlotKey?: string
+  lastCanvasCommands?: CanvasCommand[]
+}
+
+type StoredPreview = LandedMeta & {
   dump: WorkflowDocument
   hash: string
   primitives: CompositionIR['primitives']
+  slotKey?: string
   ts: string
-  lastImportedHash?: string
-  lastAddedNodeIds?: string[]
-  lastCanvasCommands?: CanvasCommand[]
 }
 
 export type PreviewCompositionInput = {
@@ -96,30 +105,47 @@ export class CompositionService {
       throw new BadRequestException({ userMessage: EXTRACT_INCOMPLETE })
     }
 
+    const byRef = localRefsByRefFromSidebarAttachments(utterance, input.attachments)
+    const required = requiredCompositionRefKeys(extracted.primitives)
+    const previous = parseLandedMeta(session.compositionPreview)
+    if (!compositionSourcesBound(required, byRef)) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: {
+          compositionPreview: JSON.stringify({
+            lastImportedHash: previous?.lastImportedHash,
+            lastAddedNodeIds: previous?.lastAddedNodeIds,
+            lastImportedSlotKey: previous?.lastImportedSlotKey,
+            ts,
+          }),
+          compositionPending: JSON.stringify({ utterance, primitivesPartial: {}, ts }),
+        },
+      })
+      throw new BadRequestException({ userMessage: COMPOSITION_BIND_MISSING })
+    }
+
     const rendered = renderCompositionCopy({
       version: '1',
       primitives: extracted.primitives,
       copy: asCopy(input.copy),
     })
-    const dump = expandComposition(
-      rendered,
-      localRefsByRefFromSidebarAttachments(utterance, input.attachments),
-    )
+    const dump = expandComposition(rendered, byRef)
     const lint = lintCompositionDump(dump)
     if (!lint.ok) {
       throw new BadRequestException({ userMessage: lint.message || COMPILE_FAILED })
     }
 
     const hash = hashCompositionDump(dump)
-    const previous = parseStoredPreview(session.compositionPreview)
     const preview: StoredPreview = {
       dump,
       hash,
       primitives: extracted.primitives,
+      slotKey: compositionSlotKey(extracted.primitives),
       ts,
     }
     if (previous?.lastImportedHash) preview.lastImportedHash = previous.lastImportedHash
     if (previous?.lastAddedNodeIds) preview.lastAddedNodeIds = previous.lastAddedNodeIds
+    if (previous?.lastImportedSlotKey) preview.lastImportedSlotKey = previous.lastImportedSlotKey
     if (previous?.lastCanvasCommands) preview.lastCanvasCommands = previous.lastCanvasCommands
 
     await this.prisma.session.update({
@@ -146,7 +172,7 @@ export class CompositionService {
     idempotent?: boolean
   }> {
     const session = await this.loadOwnedSession(input.sessionId, input.userId)
-    const preview = parseStoredPreview(session.compositionPreview)
+    const preview = parseConfirmablePreview(session.compositionPreview)
     if (!preview || preview.hash !== input.dumpHash) {
       throw new BadRequestException({ userMessage: PERSIST_MISSING })
     }
@@ -158,6 +184,18 @@ export class CompositionService {
         dumpHash: input.dumpHash,
         idempotent: true,
       }
+    }
+
+    const slotKey = preview.slotKey ?? compositionSlotKey(preview.primitives)
+    if (
+      preview.lastImportedSlotKey === slotKey &&
+      (preview.lastAddedNodeIds?.length ?? 0) > 0 &&
+      preview.lastImportedHash !== input.dumpHash
+    ) {
+      await this.canvasTools.removeNodes({
+        sessionId: input.sessionId,
+        nodeIds: preview.lastAddedNodeIds!,
+      })
     }
 
     const imported = await this.canvasTools.importWorkflow({
@@ -183,6 +221,7 @@ export class CompositionService {
           ...preview,
           lastImportedHash: input.dumpHash,
           lastAddedNodeIds: imported.addedNodeIds,
+          lastImportedSlotKey: slotKey,
           lastCanvasCommands: imported.canvasCommands,
         }),
       },
@@ -237,43 +276,6 @@ function resolvePreviewUtterance(
   return `${original} ${incoming.trim()}`.trim()
 }
 
-function attachmentToLocalRef(
-  attachment: Partial<SidebarAttachment> & { media_type?: string },
-): LocalRefBinding | null {
-  const id = String(attachment.id || attachment.url || '').trim()
-  const label = String(attachment.label || '图').trim() || '图'
-  if (!id) return null
-  return {
-    id,
-    mediaType: 'image',
-    sourceKind: attachment.sourceKind === 'asset' ? 'asset' : 'upload',
-    label,
-    ...(attachment.url ? { url: attachment.url } : {}),
-    ...(attachment.text ? { text: attachment.text } : {}),
-  }
-}
-
-function localRefsByRefFromSidebarAttachments(
-  utterance: string,
-  attachments: PreviewCompositionInput['attachments'],
-): Record<string, LocalRefBinding[]> {
-  const images = (attachments ?? []).filter((item) => {
-    const media = String(item.mediaType || item.media_type || '')
-    return media === 'image'
-  })
-  const mentioned = new Set(
-    [...utterance.matchAll(/@I([0-9]+)/g)].map((match) => `I${match[1]}`),
-  )
-  const map: Record<string, LocalRefBinding[]> = {}
-  images.forEach((attachment, index) => {
-    const key = `I${index + 1}`
-    if (mentioned.size > 0 && !mentioned.has(key)) return
-    const binding = attachmentToLocalRef(attachment)
-    if (binding) map[key] = [binding]
-  })
-  return map
-}
-
 function countCanvasNodes(raw: string | null | undefined): number {
   if (!raw) return 0
   try {
@@ -304,7 +306,18 @@ function parseCanvas(raw: string | null | undefined): CanvasData {
   }
 }
 
-function parseStoredPreview(raw: string | null | undefined): StoredPreview | null {
+function parseLandedMeta(raw: string | null | undefined): LandedMeta | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as LandedMeta
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function parseConfirmablePreview(raw: string | null | undefined): StoredPreview | null {
   if (!raw) return null
   try {
     const parsed = JSON.parse(raw) as StoredPreview
