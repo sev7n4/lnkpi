@@ -1,15 +1,16 @@
 # 通用画布构图器
 
 > 日期：2026-09-16  
-> 状态：**P0 + P0.5 已交付**（#355 / #360）；出图 SSOT = Dock 运行组（组内节点点生成即整组），**禁止** Agent `run_*`  
+> 状态：**已批准**（对话锁定 §1–§4 + 2026-09-16 评审补丁）  
 > 产品：超创平台（lnkpi）无限画布 / Agent 侧栏  
 > 相关：  
 > - [2026-09-15-workflow-recipe-planner-design.md](./2026-09-15-workflow-recipe-planner-design.md)（本文 **P0 覆盖**其 §14.5 Agent 认亲路由与确认 instantiate）  
 > - [2026-09-16-planner-confirm-instantiate-gate-design.md](./2026-09-16-planner-confirm-instantiate-gate-design.md)（确认 chip 短路机制复用；落盘目标改为 composition dump）  
-> - [2026-09-16-canvas-operator-2e-design.md](./2026-09-16-canvas-operator-2e-design.md)（2e.1 确认出图；2e.3 V1 口语骨架 ≠ 本文结构口令）  
 > - [2026-09-12-agent-import-workflow-design.md](./2026-09-12-agent-import-workflow-design.md)  
 > - [2026-09-12-workflow-import-placement-design.md](./2026-09-12-workflow-import-placement-design.md)  
-> - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)
+> - [2026-09-12-canvas-workflow-exchange-design.md](./2026-09-12-canvas-workflow-exchange-design.md)  
+> - [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)（生产换装 HITL 问题清单；**不**改本文已批准决策）  
+> - [2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（P0 切片：源图绑定 + 同槽位替换；已批准；plan [2026-09-17-composition-source-bind.md](../plans/2026-09-17-composition-source-bind.md)）
 
 ## 0. 决策摘要
 
@@ -31,17 +32,15 @@
 | **G14** | 结构意图本轮 **确定性预览**（不赌模型点工具）。copy 润色超时则骨架仍出 chip。 |
 | **G15** | 抽不全：`pending_composition_extract` 续跑，不要求用户再说一遍「设计工作流」。 |
 | **G16** | 本文 P0 **覆盖**规划器规格 §14.5 的 Agent 认亲与确认 instantiate。规划 Nest API 可留；Agent 默认路径以本文为准。 |
-| **G17** | 出图 SSOT = 画布 `compositionRunGroup` + Dock：点组内生成节点即按拓扑排队整组。**没有**名为「生成工作流」的按钮。Agent 说「开始生图/生视频」**不得** `run_*`、不得 `upsert_media_node` 另起炉灶。2e.3 V1 金标长句不是结构口令。 |
 
 ### 0.1 切片
 
 | 切片 | 做 | 不做 |
 |------|----|------|
-| **P0（已交付 #355）** | 构图 E2E、L0+Explore 路由、确认门、运行组、下线四套认亲、金标 eval | 运营 CMS、模板市场页、Agent 点名加载、审核队列、Nest 独立 preview 缓存服务 |
-| **P0.5（已交付 #360）** | HITL 摘要（服装扇出 / P+V）、pending 15min TTL 与离支作废、无 `@` 的 I 指派续抽 | Agent 开跑运行组、九件套政策、模板 CMS |
+| **P0（本文实现）** | 构图 E2E、L0+Explore 路由、确认门、运行组、下线四套认亲、金标 eval | 运营 CMS、模板市场页、Agent 点名加载、审核队列、Nest 独立 preview 缓存服务 |
 | **P1** | 运营页一键、我的模板页、提交审核、状态机落地 | 社区分成、跨账号市场 |
 
-第一份换装模板：金标在**生产**跑通（含 Dock 运行组出图观感）后由 **运营发布** 构图展开的同构结果。禁止 CI 静默写平台库，禁止手写与编译器分叉的 `try-on.json`。骨架提示词未评审前 **禁止**入库。
+第一份换装模板：金标在预发/生产跑通后由 **运营发布** 构图展开的同构结果。禁止 CI 静默写平台库，禁止手写与编译器分叉的 `try-on.json`。
 
 ---
 
@@ -78,7 +77,6 @@
 | 话术 | 行为 |
 |------|------|
 | 金标句 1 / 「做一个图生视频工作流」 | 结构意图 → 构图（后者 `wantVideo=true`，**不**套内置 i2v） |
-| 2e.3 V1：「我期望的工作流不是全都是提示词节点…连接好直接生图生视频…」 | **不是**结构口令；走口语搭骨架（upsert + connect + propose）。检测器保持封闭，不扩词去抢转述 |
 | 「生图生视频」单独出现、无结构意图 | 不是路由开关；走现有二创/出图，**不**构图、**不**认亲 |
 | 「改画布上那个节点的提示词」 | 二创窄写 |
 | 「请用 import_workflow 导入」 | 仅 `import_workflow`（压过结构意图） |
@@ -255,8 +253,8 @@ stamp 前 lint（共享层）：DAG 无环、类型边合法、全部 `autoGener
 | 0 | chip 确认 / 先不改 | **短路、不调 LLM**。读会话 compositionPreview；P0 **永不** instantiate。仅有旧 `planner_preview_args` → 当无 persist。 |
 | 1 | 强导入锚点 | 仅 `import_workflow` |
 | 2 | 结构意图，或 `pending_composition_extract` 续跑 | 确定性构图预览；写工具集 **空**（预览已完成） |
-| 3 | 有未确认 preview 且话术改 copy/分镜 | **未实现**（有用户证据再开）。不得因此把 2e.3 口语改骨架吸进构图 |
-| 4 | 确认后用户说「开始生图/生视频」 | **不得** `run_*`，不得 propose 新节点、不再 compile。出图只走 Dock 运行组（见 §6） |
+| 3 | 有未确认 preview 且话术改 copy/分镜 | 只改 copy、重 compile、换 stamp |
+| 4 | 确认后「开始生图/生视频」 | 跑 **当前运行组**，不 propose 新节点、不再 compile |
 | 5 | 其余 | 现有二创 / 媒体 propose |
 
 P0 **不得**绑定：`match_workflow_templates`、`preview_workflow_template`、`instantiate_workflow_template`、`promote_workflow_template`。
@@ -292,11 +290,7 @@ P0 **不得**绑定：`match_workflow_templates`、`preview_workflow_template`�
 | 先不改 | `已取消落到画布。` | 写画布 |
 | Nest/lint 失败 | 服务端 `userMessage`（否则 §8） | 节点 id 追问 |
 
-HITL 固定句：**请确认是否把构图落到画布**（替换规划器「请确认是否把改动落到画布」）。摘要由 dump 生成，必含：I0 新建或沿用 I1；服装扇出；有视频则 P+V；非空则保留 N、新增 M；以及生成入口句：
-
-> 选中构图里要生成的节点，用 Dock 生成，会按运行组排队
-
-禁止写「Dock 生成工作流」——画布上没有这个按钮。
+HITL 固定句：**请确认是否把构图落到画布**（替换规划器「请确认是否把改动落到画布」）。摘要由 dump 生成，必含：I0 新建或沿用 I1；服装扇出；有视频则 P+V；非空则保留 N、新增 M。
 
 chip 回合豁免 `node_write` 空工具闸门。成功必须转发 `canvas_commands`（focus 新增节点），同规划器 C11。
 
@@ -310,19 +304,17 @@ import 成功后，把本次 **生成类** `addedNodeIds`（排除 I1/I2/I3 等�
 compositionRunGroup: { nodeIds: string[], dumpHash: string, createdAt: string }
 ```
 
-出图入口：**点运行组内任意生成节点的 Dock 普通生成**，`compositionGenerateIdsForClick` 扩成整组拓扑排队。**没有**单独的「生成工作流」按钮。Agent **永不** `run_image_generation` / `run_video_generation` 开跑该组。
-
-新 hash 确认成功则整份运行组替换。
+Dock「生成工作流」与 Agent「开始生图」读 **同一份**。新 hash 确认成功则整份替换。
 
 | 规则 | 说明 |
 |------|------|
 | 换装+视频队列 | **I0 → A/B（可并行）→ V**。P 不进队列。上游失败不往下冲。 |
 | 金标 2 | 白底 → 场景 |
-| 单节点生成 | 组外节点仍可单独点；组内节点点生成 = 整组 |
+| 单节点生成 | 始终保留（新旧节点均可单独点） |
 | 再构图确认 | 默认生成指向 **最新**运行组 |
 | 积分 | 只扣队列里实际开跑的节点；确认预览不扣 |
 
-确认后用户若说「开始生图/生视频」：不得 `upsert_media_node` 另起炉灶，也不得 Agent `run_*`。应提示走 Dock（组内节点点生成）。
+确认后用户说「开始生图/生视频」：跑运行组，禁止 `upsert_media_node` 另起炉灶。
 
 ---
 
@@ -373,9 +365,7 @@ P0 产品目录、match、Explore **不再列出**四套内置配方。仓库 JS
 - Chat 多模态；`product_visual` Skill 当换装引擎  
 - 新确认 chip 文案以外的按钮（仍用「确认落到画布」「先不改」）  
 - 为构图再开子 Agent / campaign / `await_topo`  
-- `parentId=model-turnaround` 或第五份 `try-on.json`  
-- Agent 一键跑运行组（`run_*`）；名为「生成工作流」的 Dock 按钮（未证明用户找不到出图之前）  
-- 扩结构口令去覆盖 2e.3 V1 转述；或让「做一个图生视频工作流」走口语手搭
+- `parentId=model-turnaround` 或第五份 `try-on.json`
 
 ---
 
@@ -431,14 +421,14 @@ P0 产品目录、match、Explore **不再列出**四套内置配方。仓库 JS
 
 ---
 
-## 14. 生产复测（P0 完成门禁，非开发故事）
+## 14. 生产开放缺口（2026-09-17）
 
-拓扑/路由测试仍禁止打真实模型。下列在**生产或预发**用真实会话走：
+已批准决策（G1–G16 / 金标 1–2）不变。生产换装缺口见 [问题清单](./2026-09-17-composition-land-production-gaps.md)。P0 切片 [源图绑定 / 同槽位替换](./2026-09-17-composition-source-bind-design.md) 待审阅。不得用 2e.3 手搭或扩词顶替构图代数。
 
-1. 金标句 1：预览摘要含 I0 / 服装扇出 / P+V / Dock 入口句 → 确认落到画布 → 节点符合 §1.1 → 选中 I0 或换装节点点 Dock 生成 → 运行组排队，无 `run_*`。  
-2. 金标句 2：两张生成图、无时装 I0/P/V；Dock 生成跑白底→场景。  
-3. 「做一个图生视频工作流」→ 构图 preview，不 instantiate i2v，不走 V1 手搭。  
-4. 2e.3 V1 原文 → **不**构图；可见 upsert + connect + propose。  
-5. `#353`「@I1 模特 @I2 产品，让模特穿上，保持构图不变」→ 侧栏 propose，不是构图。  
+---
 
-未完成上表出图观感评审前，运营 **不得**把 dump 发布为平台换装模板。
+## 15. 生产开放缺口（2026-09-17）
+
+已批准决策（G1–G16 / 金标 1–2）不变。生产换装会话暴露的绑定、叠加、确认后一键、识图 cap、copy 件数问题记在 [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)。
+
+修复须另开切片规格，不得用 2e.3 手搭或扩词顶替构图代数。详见 [2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（B1–B9）。
