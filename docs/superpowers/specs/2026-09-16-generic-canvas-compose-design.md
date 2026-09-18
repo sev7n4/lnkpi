@@ -424,3 +424,11 @@ P0 产品目录、match、Explore **不再列出**四套内置配方。仓库 JS
 ## 14. 生产开放缺口（2026-09-17）
 
 已批准决策（G1–G16 / 金标 1–2）不变。生产换装缺口见 [问题清单](./2026-09-17-composition-land-production-gaps.md)。P0 切片 [源图绑定 / 同槽位替换](./2026-09-17-composition-source-bind-design.md) 待审阅。不得用 2e.3 手搭或扩词顶替构图代数。
+
+---
+
+## 15. 生产开放缺口（2026-09-17）
+
+已批准决策（G1–G16 / 金标 1–2）不变。生产换装会话暴露的绑定、叠加、确认后一键、识图 cap、copy 件数问题记在 [2026-09-17-composition-land-production-gaps.md](./2026-09-17-composition-land-production-gaps.md)。
+
+修复须另开切片规格，不得用 2e.3 手搭或扩词顶替构图代数。详见 [2026-09-17-composition-source-bind-design.md](./2026-09-17-composition-source-bind-design.md)（B1–B9）。

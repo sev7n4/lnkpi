@@ -4,6 +4,10 @@ const COMPILE_FAILED_MESSAGE = '这版构图还不能放到画布，请稍后再
 const MAX_DUMP_NODES = 24
 const SOURCE_ID = /^image-src-/
 
+/** HITL generate hint: Dock has no 「生成工作流」button; click a run-group node. */
+export const COMPOSITION_DOCK_GENERATE_HINT =
+  '选中构图里要生成的节点，用 Dock 生成，会按运行组排队'
+
 export type CompositionLintOk = { ok: true }
 export type CompositionLintFail = {
   ok: false
@@ -142,7 +146,7 @@ export function summarizeCompositionDump(
 
   parts.push(`保留 ${opts.existingNodeCount}`)
   parts.push(`新增 ${added}`)
-  parts.push('生成请用 Dock 生成工作流')
+  parts.push(COMPOSITION_DOCK_GENERATE_HINT)
   return parts.join('\n')
 }
 

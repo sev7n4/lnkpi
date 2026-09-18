@@ -37,7 +37,7 @@
 | 导入 | `import_workflow` 字面量、`导入工作流`、`导入`+`工作流`/`workflow`/`lnkpi.workflow` | `import_workflow` |
 | 规划 recipe 工具 | — | **#355 P0：永不 bind** `match_workflow_templates` / `preview_workflow_template` / `promote_workflow_template` / `instantiate_workflow_template`。确认芯片走 `confirm_composition` HTTP。 |
 | composition 结构口令 | `is_composition_structure_utterance` | **空写集**（不减 CORE 只读；不给九件套，避免手搭抢 HTTP preview） |
-| 禁止当独占谓词 | `图生视频`、单独的 `工作流`、`分镜`、`生图生视频` | 不得因此拿走 §0.1（V1 金标不是 composition 结构口令） |
+| 禁止当独占谓词 | `图生视频`、单独的 `工作流`、`分镜`、`生图生视频` | 不得因此拿走 §0.1（V1 金标不是 composition 结构口令；「做一个图生视频工作流」仍是构图，见构图规格 G17） |
 
 导入弱锚点（无工作流标记的「导入+URL」）保持现网「不抢 upload」行为；**不得**因此清空操作集。
 
