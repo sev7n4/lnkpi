@@ -6,7 +6,7 @@ const props = defineProps<{
   screenPosition: { x: number; y: number } | null
   canGenerateVideo?: boolean
   canUngroup?: boolean
-  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' }
+  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' | 'done' }
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +32,14 @@ function closeExportMenu() {
 
 function closeLayoutMenu() {
   layoutMenuOpen.value = false
+}
+
+function onGenerateClick() {
+  if (props.selectionBatch && props.selectionBatch.state === 'idle' && props.selectionBatch.runCount > 0) {
+    emit('generateSelection')
+  } else {
+    emit('stopSelection')
+  }
 }
 
 function onExport(mode: 'full_package' | 'lightweight' | 'media_list_only') {
@@ -91,7 +99,7 @@ onUnmounted(() => {
         class="toolbar-action accent"
         data-testid="selection-batch-generate"
         :disabled="!selectionBatch || selectionBatch.runCount === 0 || selectionBatch.state !== 'idle'"
-        @click="emit(selectionBatch.state === 'idle' && selectionBatch.runCount > 0 ? 'generateSelection' : 'stopSelection')"
+        @click="onGenerateClick"
       >
         {{ selectionBatch.state === 'running' ? '停止全部' : `生成 · ${selectionBatch.runCount}` }}
       </button>

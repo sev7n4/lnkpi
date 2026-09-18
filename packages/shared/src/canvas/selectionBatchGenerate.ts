@@ -34,7 +34,7 @@ export interface PlanSelectionGenerateInput {
     nodes: ReadonlyArray<{ id: string; type: string; parentNode?: string; data?: Record<string, unknown> }>
     edges: ReadonlyArray<{ id: string; source: string; target: string }>
   }
-  hasUsableOutput: (node: { type: string; data?: Record<string, unknown> }) => boolean
+  hasUsableOutput: (node: { id: string; type: string; data?: Record<string, unknown> }) => boolean
   isInFlight?: (nodeId: string) => boolean
 }
 

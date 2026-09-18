@@ -8,7 +8,7 @@ const props = defineProps<{
   selectedIds: string[]
   canGenerateVideo?: boolean
   canUngroup?: boolean
-  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' }
+  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' | 'done' }
 }>()
 
 const emit = defineEmits<{

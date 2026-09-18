@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
@@ -979,7 +979,7 @@ const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => {
 const selectionBatchApi = useSelectionGenerate({
   nodes: nodes as Ref<EditableFlowNode[]>,
   edges: edges as Ref<CanvasEdgeLike[]>,
-  generateForNode: (node, opts) => generateForNode(node, opts),
+  generateForNode: (node) => (generateForNode as any)(node, { asRunGroupMember: true }),
   hasUsableOutput: (n) => {
     const status = (n.data as Record<string, unknown>).status
     if (status !== NODE_GENERATION_STATUS.completed) return false

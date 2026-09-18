@@ -69,7 +69,6 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
   let creditCost = 0
   let abortCtrl: AbortController
   let batchTimeoutHandle: ReturnType<typeof setTimeout> | null = null
-  const batchStartTs = Date.now()
   let summaryDone = 0, summaryFailed = 0, summaryCancelled = 0, summaryTimeout = 0, summarySkipped = 0
   let summaryAbortReason: AbortReason = 'none'
   let batchSessionId = ''
@@ -229,10 +228,13 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     while (true) {
       if (abortCtrl.signal.aborted) {
         // §13.2 telemetry: plan rejected — only pending_confirm / limit_24 qualify
-        if (summaryAbortReason === 'pending_confirm' || summaryAbortReason === 'limit_24') {
+        const planRejectReason = (['pending_confirm', 'limit_24'] as const).includes(summaryAbortReason as 'pending_confirm' | 'limit_24')
+          ? summaryAbortReason as 'pending_confirm' | 'limit_24'
+          : null
+        if (planRejectReason) {
           reportBatchEvent('selection_batch_plan_rejected', {
             sessionId: batchSessionId,
-            reason: summaryAbortReason as 'pending_confirm' | 'limit_24',
+            reason: planRejectReason,
             candidateCount: plan.run.length,
             blockedCount: plan.blockedBy.length,
           })
