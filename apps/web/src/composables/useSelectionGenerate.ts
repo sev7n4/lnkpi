@@ -4,8 +4,8 @@
  */
 import { ref, type Ref } from 'vue'
 import type { EditableFlowNode } from './useSelectedNodeEditor'
-import type { CanvasEdgeLike } from './useNodeGeneration'
-import type { PlanSelectionGenerateResult, SkipReason } from '@lnkpi/shared'
+import type { CanvasEdgeLike } from './useUpstreamNodeContext'
+import type { PlanSelectionGenerateResult } from '@lnkpi/shared'
 
 export type SettleKind =
   | 'ok' | 'failed' | 'insufficient_points' | 'cancelled' | 'timeout'
