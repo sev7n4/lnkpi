@@ -185,6 +185,24 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
       if (deps.isInFlight(id)) {
         skippedMap.set(id, { nodeId: id, reason: 'in_flight' })
         progress.value.skipped++; summarySkipped++
+
+        // Mark all in-selection downstream as upstream_in_flight
+        const downstreamOfInFlight = new Set<string>()
+        const stack = [id]
+        while (stack.length > 0) {
+          const current = stack.pop()!
+          for (const e of deps.edges.value) {
+            if (e.source === current && runSet.has(e.target) && !skippedMap.has(e.target)) {
+              downstreamOfInFlight.add(e.target)
+              stack.push(e.target)
+            }
+          }
+        }
+        for (const d of downstreamOfInFlight) {
+          skippedMap.set(d, { nodeId: d, reason: 'upstream_in_flight', ref: id })
+          progress.value.skipped++; summarySkipped++
+        }
+
         releaseDownstream(id)
         continue
       }
