@@ -6,6 +6,7 @@ import { ref, type Ref } from 'vue'
 import type { EditableFlowNode } from './useSelectedNodeEditor'
 import type { CanvasEdgeLike } from './useUpstreamNodeContext'
 import type { PlanSelectionGenerateResult, SkipReason } from '@lnkpi/shared'
+import { reportBatchEvent } from '@/utils/selectionBatchTelemetry'
 
 export type SettleKind =
   | 'ok' | 'failed' | 'insufficient_points' | 'cancelled' | 'timeout'
@@ -71,6 +72,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
   const batchStartTs = Date.now()
   let summaryDone = 0, summaryFailed = 0, summaryCancelled = 0, summaryTimeout = 0, summarySkipped = 0
   let summaryAbortReason: AbortReason = 'none'
+  let batchSessionId = ''
 
   function findNode(id: string): EditableFlowNode | undefined {
     return deps.nodes.value.find(n => n.id === id)
@@ -103,6 +105,9 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     // telemetry 上报（Task 14 接入真实通道；这里先 console）
     // eslint-disable-next-line no-console
     console.debug('[sel-batch] node_settled', { id, kind, durationMs })
+    reportBatchEvent('selection_batch_node_settled', {
+      sessionId: batchSessionId, nodeId: id, kind, durationMs,
+    })
 
     if (kind === 'ok') { progress.value.done++; summaryDone++; creditCost += 1 }
     else if (kind === 'failed' || kind === 'insufficient_points') {
@@ -143,6 +148,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
 
   async function start(plan: PlanSelectionGenerateResult): Promise<BatchSummary> {
     state.value = 'running'
+    batchSessionId = crypto.randomUUID()
     abortCtrl = new AbortController()
     inFlight = new Map()
     waitingMap = new Map()
@@ -155,6 +161,16 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     summaryAbortReason = 'none'
     progress.value = { done: 0, failed: 0, cancelled: 0, timeout: 0, skipped: 0, total: plan.run.length, abortReason: 'none' }
     const startTs = Date.now()
+
+    // §13.2 telemetry: selection_batch_started
+    reportBatchEvent('selection_batch_started', {
+      sessionId: batchSessionId,
+      runCount: plan.run.length,
+      skipCount: plan.skip.length,
+      total: plan.run.length + plan.skip.length,
+      triggerSource: 'multi_select_toolbar',
+      flagOn: true,
+    })
 
     const runSet = new Set(plan.run)
 
@@ -212,6 +228,13 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     // 主 loop
     while (true) {
       if (abortCtrl.signal.aborted) {
+        // §13.2 telemetry: plan rejected via abort
+        reportBatchEvent('selection_batch_plan_rejected', {
+          sessionId: batchSessionId,
+          reason: summaryAbortReason === 'user_stopped' ? 'pending_confirm' : summaryAbortReason as 'pending_confirm' | 'limit_24',
+          candidateCount: plan.run.length,
+          blockedCount: plan.blockedBy.length,
+        })
         for (const id of queue) {
           skippedMap.set(id, { nodeId: id, reason: 'user_stopped' })
           progress.value.skipped++; summarySkipped++
@@ -249,6 +272,22 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
       summaryAbortReason = 'insufficient_points'
       progress.value.abortReason = 'insufficient_points'
     }
+
+    // §13.2 telemetry: selection_batch_completed
+    reportBatchEvent('selection_batch_completed', {
+      sessionId: batchSessionId,
+      total: plan.run.length + plan.skip.length,
+      done: summaryDone,
+      failed: summaryFailed,
+      cancelled: summaryCancelled,
+      timeout: summaryTimeout,
+      skipped: summarySkipped,
+      durationMs: Date.now() - startTs,
+      creditCost,
+      pointsExhausted,
+      runCountAtStart: plan.run.length,
+      abortReason: summaryAbortReason,
+    })
 
     return {
       abortReason: summaryAbortReason,
