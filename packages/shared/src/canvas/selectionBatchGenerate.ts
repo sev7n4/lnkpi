@@ -105,6 +105,56 @@ function getDownstreamNodes(
   return downstream
 }
 
+function kahnTopologicalSort(
+  toRun: RawNode[],
+  edges: ReadonlyArray<{ id: string; source: string; target: string }>,
+): { run: string[]; blockedBy: PlanSelectionGenerateResult['blockedBy'] } {
+  const runSet = new Set(toRun.map(n => n.id))
+  const inDegree = new Map<string, number>(toRun.map(n => [n.id, 0]))
+  const adj = new Map<string, string[]>(toRun.map(n => [n.id, []]))
+
+  // 仅在选区内的边
+  for (const e of edges) {
+    if (runSet.has(e.source) && runSet.has(e.target)) {
+      adj.get(e.source)!.push(e.target)
+      inDegree.set(e.target, (inDegree.get(e.target) ?? 0) + 1)
+    }
+  }
+
+  // 稳定排序：按 id 字典序入队
+  const ready = toRun.map(n => n.id).filter(id => (inDegree.get(id) ?? 0) === 0).sort()
+  const run: string[] = []
+  while (ready.length > 0) {
+    const id = ready.shift()!
+    run.push(id)
+    for (const next of adj.get(id) ?? []) {
+      const newDeg = (inDegree.get(next) ?? 0) - 1
+      inDegree.set(next, newDeg)
+      if (newDeg === 0) {
+        // 插入到 sorted position
+        const insertAt = ready.findIndex(r => r > next)
+        if (insertAt < 0) ready.push(next)
+        else ready.splice(insertAt, 0, next)
+      }
+    }
+  }
+
+  // 环：剩余 inDegree > 0 的节点
+  const blockedBy: PlanSelectionGenerateResult['blockedBy'] = []
+  const remaining = toRun.map(n => n.id).filter(id => (inDegree.get(id) ?? 0) > 0)
+  for (const id of remaining) {
+    run.push(id)
+    // 记录环的边（任意 in 边即可）
+    for (const e of edges) {
+      if (runSet.has(e.source) && e.target === id) {
+        blockedBy.push({ source: e.source, target: e.target, reason: 'cycle' })
+        break
+      }
+    }
+  }
+  return { run, blockedBy }
+}
+
 export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSelectionGenerateResult {
   const skip: SkipReason[] = []
   const groupExpanded: PlanSelectionGenerateResult['groupExpanded'] = []
@@ -116,7 +166,6 @@ export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSe
     throw new SelectionBatchPendingConfirmError(pending.length)
   }
 
-  // fallback_pending skip
   const toRun: RawNode[] = []
   for (const n of candidates) {
     const status = String(n.data?.status ?? '')
@@ -150,6 +199,6 @@ export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSe
   }
   const finalToRun = toRun.filter(n => !inFlightDownstream.has(n.id))
 
-  const run = finalToRun.map(n => n.id)
-  return { run, skip, blockedBy: [], groupExpanded }
+  const { run, blockedBy } = kahnTopologicalSort(finalToRun, input.canvas.edges)
+  return { run, skip, blockedBy, groupExpanded }
 }

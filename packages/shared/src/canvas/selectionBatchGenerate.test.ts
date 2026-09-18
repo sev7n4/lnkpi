@@ -167,3 +167,96 @@ describe('planner: 状态过滤', () => {
     expect(result.run).not.toContain('v-1')
   })
 })
+
+describe('planner: Kahn 拓扑', () => {
+  it('独立节点任意稳定顺序（按 id 排序）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['c', 'a', 'b'],
+      canvas: {
+        nodes: [
+          { id: 'a', type: 'image', data: {} },
+          { id: 'b', type: 'image', data: {} },
+          { id: 'c', type: 'image', data: {} },
+        ],
+        edges: [],
+      },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['a', 'b', 'c'])
+  })
+
+  it('链 prompt→image→video 全 draft → 串行', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['p', 'i', 'v'],
+      canvas: {
+        nodes: [
+          { id: 'p', type: 'prompt', data: {} },
+          { id: 'i', type: 'image', data: {} },
+          { id: 'v', type: 'video', data: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'p', target: 'i' },
+          { id: 'e2', source: 'i', target: 'v' },
+        ],
+      },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['p', 'i', 'v'])
+  })
+
+  it('环 A→B→A 不死锁，追加到 run 末尾', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['A', 'B'],
+      canvas: {
+        nodes: [
+          { id: 'A', type: 'image', data: {} },
+          { id: 'B', type: 'image', data: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'A', target: 'B' },
+          { id: 'e2', source: 'B', target: 'A' },
+        ],
+      },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(new Set(result.run)).toEqual(new Set(['A', 'B']))
+    expect(result.run).toHaveLength(2)
+    expect(result.blockedBy.some(b => b.reason === 'cycle')).toBe(true)
+  })
+
+  it('跨选区上游有结果 → 候选节点正常入 run', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['v'],
+      canvas: {
+        nodes: [
+          { id: 'ext-i', type: 'image', data: { url: 'https://x/y.png' } }, // 选区外
+          { id: 'v', type: 'video', data: {} },
+        ],
+        edges: [{ id: 'e1', source: 'ext-i', target: 'v' }],
+      },
+      hasUsableOutput: (n) => !!n.data?.url,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['v'])
+    expect(result.skip.find(s => s.nodeId === 'v')).toBeUndefined()
+  })
+
+  it('跨选区上游无结果 → candidate 不进 run（执行器报 missing_upstream）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['v'],
+      canvas: {
+        nodes: [
+          { id: 'ext-i', type: 'image', data: {} }, // 选区外，无 url
+          { id: 'v', type: 'video', data: {} },
+        ],
+        edges: [{ id: 'e1', source: 'ext-i', target: 'v' }],
+      },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['v']) // planner 不报 missing_upstream
+  })
+})
