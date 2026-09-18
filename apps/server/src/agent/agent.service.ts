@@ -10,6 +10,7 @@ import type {
   CanvasAction,
   CanvasData,
   JourneyTraceSnapshot,
+  ExecutionTraceState,
   LinkedCanvasOutput,
   SidebarAttachment,
 } from '@lnkpi/shared'
