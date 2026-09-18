@@ -4,7 +4,7 @@ import { CanvasModule } from '../canvas/canvas.module'
 import { ProviderModule } from '../provider/provider.module'
 import { SessionsModule } from '../sessions/sessions.module'
 import { StudioModule } from '../studio/studio.module'
-import { AgentCanvasToolsController, AgentCanvasToolsDebugController } from './agent-canvas-tools.controller'
+import { AgentCanvasToolsController } from './agent-canvas-tools.controller'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentController } from './agent.controller'
 import { AgentInternalGuard } from './agent-internal.guard'
@@ -14,7 +14,7 @@ import { WorkflowRecipeService } from './workflow-recipe.service'
 
 @Module({
   imports: [CanvasModule, ProviderModule, SessionsModule, StudioModule, AssetsModule],
-  controllers: [AgentController, AgentCanvasToolsController, AgentCanvasToolsDebugController],
+  controllers: [AgentController, AgentCanvasToolsController],
   providers: [
     AgentService,
     AgentCanvasToolsService,

@@ -108,7 +108,6 @@ export class CompositionService {
     const byRef = localRefsByRefFromSidebarAttachments(utterance, input.attachments)
     const required = requiredCompositionRefKeys(extracted.primitives)
     const previous = parseLandedMeta(session.compositionPreview)
-    console.log(`[COMPOSITION-DIAG] session=${input.sessionId} attLen=${(input.attachments || []).length} byRefKeys=${JSON.stringify(Object.keys(byRef))} required=${JSON.stringify(required)}`)
     if (!compositionSourcesBound(required, byRef)) {
       await this.prisma.session.update({
         where: { id: session.id },
@@ -122,9 +121,7 @@ export class CompositionService {
           compositionPending: JSON.stringify({ utterance, primitivesPartial: {}, ts }),
         },
       })
-      const _diag = `[DIAG att=${(input.attachments || []).length} byRef=${JSON.stringify(Object.keys(byRef))} req=${required.join(',')} bound=false]`
-      console.log(_diag)
-      throw new BadRequestException({ userMessage: COMPOSITION_BIND_MISSING + ' ' + _diag })
+      throw new BadRequestException({ userMessage: COMPOSITION_BIND_MISSING })
     }
 
     const rendered = renderCompositionCopy({

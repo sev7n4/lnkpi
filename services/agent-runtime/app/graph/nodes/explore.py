@@ -244,9 +244,6 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         if hasattr(nest, "last_user_utterance"):
             nest.last_user_utterance = slot_utterance
         attachments = state.get("sidebar_attachments") or []
-        print(f"[EXPLORE-DIAG] session={state.get('session_id')} attachmentsLen={len(attachments)}", flush=True)
-        for i, a in enumerate(attachments[:5]):
-            print(f"[EXPLORE-DIAG]   [{i}] id={a.get('id')} label={a.get('label')} has_url={bool(a.get('url'))}", flush=True)
         if hasattr(nest, "sidebar_attachments"):
             nest.sidebar_attachments = list(attachments)
         parse = state.get("sidebar_media_parse")
