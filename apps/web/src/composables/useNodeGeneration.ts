@@ -154,7 +154,12 @@ function audioOnlyVideoRefError(refs: StudioRefPayload[], refImage: string): str
   return null
 }
 
-function findNodeById(nodes: EditableFlowNode[], id: string) {
+// ─────────────────────────────────────────────────────────────────
+// v3 SB-§4.5 SSOT 暴露：useSelectionGenerate 复用
+// 行为不变；新增 export 不修改函数体。如修改函数体，先确认 selectionBatchGenerate 单测仍绿（drift 监测）。
+// ─────────────────────────────────────────────────────────────────
+
+export function findNodeById(nodes: EditableFlowNode[], id: string) {
   for (const node of nodes) {
     if (node.id === id) return node
   }
