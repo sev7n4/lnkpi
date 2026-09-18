@@ -122,7 +122,9 @@ export class CompositionService {
           compositionPending: JSON.stringify({ utterance, primitivesPartial: {}, ts }),
         },
       })
-      throw new BadRequestException({ userMessage: COMPOSITION_BIND_MISSING })
+      const _diag = `[DIAG att=${(input.attachments || []).length} byRef=${JSON.stringify(Object.keys(byRef))} req=${required.join(',')} bound=false]`
+      console.log(_diag)
+      throw new BadRequestException({ userMessage: COMPOSITION_BIND_MISSING + ' ' + _diag })
     }
 
     const rendered = renderCompositionCopy({
