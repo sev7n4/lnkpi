@@ -44,7 +44,60 @@ export interface PlanSelectionGenerateResult {
   groupExpanded: Array<{ groupId: string; childIds: string[] }>
 }
 
-// 占位实现（Task 4-6 逐步替换）
-export function planSelectionGenerate(_input: PlanSelectionGenerateInput): PlanSelectionGenerateResult {
-  return { run: [], skip: [], blockedBy: [], groupExpanded: [] }
+const UNSUPPORTED_TYPES = new Set(['mediaInput', 'sceneComposer', 'videoComposition', 'worldModel', 'group'])
+const SUPPORTED_TYPES = new Set(['image', 'video', 'audio', 'prompt', 'text', 'shot'])
+
+interface RawNode { id: string; type: string; parentNode?: string; data?: Record<string, unknown> }
+
+function expandSelection(
+  selectedIds: string[],
+  nodes: ReadonlyArray<RawNode>,
+  skip: SkipReason[],
+  groupExpanded: PlanSelectionGenerateResult['groupExpanded'],
+): RawNode[] {
+  const nodeById = new Map(nodes.map(n => [n.id, n]))
+  const result: RawNode[] = []
+  for (const id of selectedIds) {
+    const node = nodeById.get(id)
+    if (!node) {
+      // 选中的节点不在 canvas（已删）→ 当作 disappeared
+      skip.push({ nodeId: id, reason: 'node_disappeared' })
+      continue
+    }
+    if (node.type === 'group') {
+      // 展开 group 子节点（childIds 来自 data，复用 groupChildIds 模式）
+      const childIds = Array.isArray((node.data as { childIds?: string[] })?.childIds)
+        ? (node.data as { childIds: string[] }).childIds
+        : []
+      groupExpanded.push({ groupId: id, childIds })
+      skip.push({ nodeId: id, reason: 'unsupported_type', type: node.type })
+      for (const cid of childIds) {
+        const child = nodeById.get(cid)
+        if (child) result.push(child)
+        else skip.push({ nodeId: cid, reason: 'node_disappeared' })
+      }
+    } else if (UNSUPPORTED_TYPES.has(node.type)) {
+      skip.push({ nodeId: id, reason: 'unsupported_type', type: node.type })
+    } else if (SUPPORTED_TYPES.has(node.type)) {
+      result.push(node)
+    } else {
+      // 未知 type 视为 unsupported（防漂移）
+      skip.push({ nodeId: id, reason: 'unsupported_type', type: node.type })
+    }
+  }
+  return result
+}
+
+export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSelectionGenerateResult {
+  const skip: SkipReason[] = []
+  const groupExpanded: PlanSelectionGenerateResult['groupExpanded'] = []
+  const candidates = expandSelection(input.selectedIds, input.canvas.nodes, skip, groupExpanded)
+  // Task 5/6 会接 status filter + Kahn
+  const run = candidates.filter(n => !input.hasUsableOutput(n)).map(n => n.id)
+  for (const n of candidates) {
+    if (input.hasUsableOutput(n)) {
+      skip.push({ nodeId: n.id, reason: 'already_done' })
+    }
+  }
+  return { run, skip, blockedBy: [], groupExpanded }
 }
