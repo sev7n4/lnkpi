@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   selectedIds: string[]
   screenPosition: { x: number; y: number } | null
   canGenerateVideo?: boolean
   canUngroup?: boolean
+  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' }
 }>()
 
 const emit = defineEmits<{
@@ -18,6 +19,8 @@ const emit = defineEmits<{
   addAgentRef: []
   duplicate: []
   duplicateUpstream: []
+  generateSelection: []
+  stopSelection: []
 }>()
 
 const exportMenuOpen = ref(false)
@@ -81,6 +84,16 @@ onUnmounted(() => {
         @click="emit('generateVideo')"
       >
         生成视频
+      </button>
+      <button
+        v-if="selectionBatch && selectedIds.length >= 2"
+        type="button"
+        class="toolbar-action accent"
+        data-testid="selection-batch-generate"
+        :disabled="!selectionBatch || selectionBatch.runCount === 0 || selectionBatch.state !== 'idle'"
+        @click="emit(selectionBatch.state === 'idle' && selectionBatch.runCount > 0 ? 'generateSelection' : 'stopSelection')"
+      >
+        {{ selectionBatch.state === 'running' ? '停止全部' : `生成 · ${selectionBatch.runCount}` }}
       </button>
       <button
         v-if="canUngroup"
