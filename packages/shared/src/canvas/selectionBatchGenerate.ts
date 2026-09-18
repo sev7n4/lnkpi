@@ -3,6 +3,7 @@
  * 纯函数；无副作用；不依赖 web/vue。
  */
 
+import { getGroupChildIds, type GroupChildNode } from './groupChildIds'
 export class SelectionBatchLimitError extends Error {
   readonly code = 'SelectionBatchLimitError'
   constructor(public readonly actualCount: number) {
@@ -65,10 +66,7 @@ function expandSelection(
       continue
     }
     if (node.type === 'group') {
-      // 展开 group 子节点（childIds 来自 data，复用 groupChildIds 模式）
-      const childIds = Array.isArray((node.data as { childIds?: string[] })?.childIds)
-        ? (node.data as { childIds: string[] }).childIds
-        : []
+      const childIds = getGroupChildIds(nodes as GroupChildNode[], id)
       groupExpanded.push({ groupId: id, childIds })
       skip.push({ nodeId: id, reason: 'unsupported_type', type: node.type })
       for (const cid of childIds) {

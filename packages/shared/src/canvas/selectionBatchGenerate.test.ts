@@ -76,4 +76,27 @@ describe('planner: 选区展开', () => {
     expect(result.skip.find(s => s.nodeId === 'wm-1')?.reason).toBe('unsupported_type')
     expect(result.run).toEqual(['i-1'])
   })
+
+
+  it('通过 parentNode 路径展开 group 子节点（无 data.childIds）', () => {
+    // spec v3 §4.3 #1: getGroupChildIds 同时覆盖 data.childIds 和 parentNode 链路
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['group-1'],
+      canvas: {
+        nodes: [
+          { id: 'group-1', type: 'group', data: {} }, // 无 childIds
+          { id: 'img-1', type: 'image', parentNode: 'group-1', data: {} },
+          { id: 'img-2', type: 'image', parentNode: 'group-1', data: {} },
+        ],
+        edges: [],
+      },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    // group-1 自身进 skip (unsupported_type)
+    expect(result.skip.find(s => s.nodeId === 'group-1')?.reason).toBe('unsupported_type')
+    // 通过 parentNode 链路找到子节点，进 run
+    expect(result.groupExpanded).toContainEqual({ groupId: 'group-1', childIds: ['img-1', 'img-2'] })
+    expect(result.run).toEqual(['img-1', 'img-2'])
+  })
 })
