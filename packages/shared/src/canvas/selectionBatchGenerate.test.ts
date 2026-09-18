@@ -100,3 +100,70 @@ describe('planner: 选区展开', () => {
     expect(result.run).toEqual(['img-1', 'img-2'])
   })
 })
+
+describe('planner: 状态过滤', () => {
+  it('pending_confirm 整批拒绝（任一即抛错）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1', 'i-2'],
+      canvas: {
+        nodes: [
+          { id: 'i-1', type: 'image', data: { status: 'pending_confirm' } },
+          { id: 'i-2', type: 'image', data: {} },
+        ],
+        edges: [],
+      },
+      hasUsableOutput: () => false,
+    }
+    expect(() => planSelectionGenerate(input)).toThrow(SelectionBatchPendingConfirmError)
+  })
+
+  it('fallback_pending 进 skip，不弹确认框', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1'],
+      canvas: { nodes: [{ id: 'i-1', type: 'image', data: { status: 'fallback_pending' } }], edges: [] },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual([])
+    expect(result.skip[0]?.reason).toBe('fallback_pending')
+  })
+
+  it('24 + 1 = 抛 SelectionBatchLimitError', () => {
+    const nodes = Array.from({ length: 25 }, (_, i) => ({
+      id: `i-${i}`,
+      type: 'image' as const,
+      data: {},
+    }))
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: nodes.map(n => n.id),
+      canvas: { nodes, edges: [] },
+      hasUsableOutput: () => false,
+    }
+    expect(() => planSelectionGenerate(input)).toThrow(SelectionBatchLimitError)
+  })
+
+  it('isInFlight 节点 + 下游：in-flight 节点 skip in_flight，下游 skip upstream_in_flight', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['p-1', 'i-1', 'v-1'],
+      canvas: {
+        nodes: [
+          { id: 'p-1', type: 'prompt', data: {} },
+          { id: 'i-1', type: 'image', data: {} },
+          { id: 'v-1', type: 'video', data: {} },
+        ],
+        edges: [
+          { id: 'e1', source: 'p-1', target: 'i-1' },
+          { id: 'e2', source: 'i-1', target: 'v-1' },
+        ],
+      },
+      hasUsableOutput: () => false,
+      isInFlight: (id) => id === 'i-1',
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.skip.find(s => s.nodeId === 'i-1')?.reason).toBe('in_flight')
+    expect(result.skip.find(s => s.nodeId === 'v-1')?.reason).toBe('upstream_in_flight')
+    // p-1 入度 0，仍可跑
+    expect(result.run).toContain('p-1')
+    expect(result.run).not.toContain('v-1')
+  })
+})

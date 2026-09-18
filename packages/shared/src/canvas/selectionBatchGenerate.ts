@@ -86,16 +86,70 @@ function expandSelection(
   return result
 }
 
+// Find all nodes downstream of a given node by following edges
+function getDownstreamNodes(
+  nodeId: string,
+  edges: ReadonlyArray<{ id: string; source: string; target: string }>,
+): Set<string> {
+  const downstream = new Set<string>()
+  const queue = [nodeId]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const edge of edges) {
+      if (edge.source === current && !downstream.has(edge.target)) {
+        downstream.add(edge.target)
+        queue.push(edge.target)
+      }
+    }
+  }
+  return downstream
+}
+
 export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSelectionGenerateResult {
   const skip: SkipReason[] = []
   const groupExpanded: PlanSelectionGenerateResult['groupExpanded'] = []
   const candidates = expandSelection(input.selectedIds, input.canvas.nodes, skip, groupExpanded)
-  // Task 5/6 会接 status filter + Kahn
-  const run = candidates.filter(n => !input.hasUsableOutput(n)).map(n => n.id)
+
+  // pending_confirm 整批拒绝（SB-D3 / §4.3 #2）
+  const pending = candidates.filter(n => String(n.data?.status ?? '') === 'pending_confirm')
+  if (pending.length > 0) {
+    throw new SelectionBatchPendingConfirmError(pending.length)
+  }
+
+  // fallback_pending skip
+  const toRun: RawNode[] = []
   for (const n of candidates) {
-    if (input.hasUsableOutput(n)) {
+    const status = String(n.data?.status ?? '')
+    if (status === 'fallback_pending') {
+      skip.push({ nodeId: n.id, reason: 'fallback_pending' })
+    } else if (input.hasUsableOutput(n)) {
       skip.push({ nodeId: n.id, reason: 'already_done' })
+    } else if (input.isInFlight?.(n.id) === true) {
+      skip.push({ nodeId: n.id, reason: 'in_flight' })
+      // Mark all downstream nodes as upstream_in_flight
+      const downstream = getDownstreamNodes(n.id, input.canvas.edges)
+      for (const downstreamId of downstream) {
+        skip.push({ nodeId: downstreamId, reason: 'upstream_in_flight', ref: n.id })
+      }
+    } else {
+      toRun.push(n)
     }
   }
+
+  // 24 上限（SB-D7 / §4.3 #6）
+  if (toRun.length > 24) {
+    throw new SelectionBatchLimitError(toRun.length)
+  }
+
+  // Remove downstream nodes that were already added to toRun (they should be skipped as upstream_in_flight)
+  const inFlightDownstream = new Set<string>()
+  for (const s of skip) {
+    if (s.reason === 'upstream_in_flight') {
+      inFlightDownstream.add(s.nodeId)
+    }
+  }
+  const finalToRun = toRun.filter(n => !inFlightDownstream.has(n.id))
+
+  const run = finalToRun.map(n => n.id)
   return { run, skip, blockedBy: [], groupExpanded }
 }
