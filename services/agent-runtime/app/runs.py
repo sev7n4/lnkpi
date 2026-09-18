@@ -65,6 +65,36 @@ async def emit_journey_update(emit: EmitFn, state: dict[str, Any]) -> None:
         await emit({"type": "journey_update", "data": {"snapshot": snap}})
 
 
+def _emit_done_execution_trace(
+    journey_trace: dict[str, Any] | None,
+    *,
+    updated_at: int,
+) -> dict[str, Any]:
+    """Build executionTrace snapshot from journey_trace for done envelope.
+
+    Task J-3 of fix/journey-trace-important-issues (final-review #1).
+    Returns {"events": [...], "updatedAt": updated_at}.
+    """
+    if not isinstance(journey_trace, dict):
+        return {"events": [], "updatedAt": updated_at}
+    events: list[dict[str, Any]] = []
+    for step in journey_trace.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        if step.get("status") != "done":
+            continue
+        events.append({
+            "kind": "journey_step",
+            "ts": updated_at,
+            "payload": {
+                "id": step.get("id"),
+                "label": step.get("label"),
+                "summary": step.get("summary"),
+            },
+        })
+    return {"events": events, "updatedAt": updated_at}
+
+
 def _resolve_journey_trace(vals: dict[str, Any]) -> dict[str, Any] | None:
     """Return journey_trace merged with current phase (never return a stale checkpoint snap)."""
     snap = vals.get("journey_trace")

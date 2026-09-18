@@ -1319,8 +1319,15 @@ async function refreshThreadCheckpoint() {
       macroSelections.value = [...json.data.selectedMacroSchemeIds]
     }
     if (json.data?.journeyTrace) {
-      threadJourneyTrace.value = json.data.journeyTrace
-      agent.trackJourneyUpdate(json.data.journeyTrace)
+      // Spec §4.2 (issue #4): merge by updatedAt, newer wins
+      const incoming = json.data.journeyTrace
+      const current = threadJourneyTrace.value
+      const incomingTs = incoming?.updatedAt ? Date.parse(incoming.updatedAt) : 0
+      const currentTs = current?.updatedAt ? Date.parse(current.updatedAt) : 0
+      if (!current || incomingTs >= currentTs) {
+        threadJourneyTrace.value = incoming
+        agent.trackJourneyUpdate(incoming)
+      }
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
@@ -1765,8 +1772,15 @@ async function reconnectStream() {
       macroSelections.value = [...json.data.selectedMacroSchemeIds]
     }
     if (json.data?.journeyTrace) {
-      threadJourneyTrace.value = json.data.journeyTrace
-      agent.trackJourneyUpdate(json.data.journeyTrace)
+      // Spec §4.2 (issue #4): merge by updatedAt, newer wins
+      const incoming = json.data.journeyTrace
+      const current = threadJourneyTrace.value
+      const incomingTs = incoming?.updatedAt ? Date.parse(incoming.updatedAt) : 0
+      const currentTs = current?.updatedAt ? Date.parse(current.updatedAt) : 0
+      if (!current || incomingTs >= currentTs) {
+        threadJourneyTrace.value = incoming
+        agent.trackJourneyUpdate(incoming)
+      }
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
