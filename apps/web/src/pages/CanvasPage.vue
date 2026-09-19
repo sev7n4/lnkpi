@@ -952,16 +952,20 @@ const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => {
       hasUsableOutput: (n) => {
         const full = nodes.value.find(x => x.id === n.id)
         if (!full) return false
-        const status = (full.data as Record<string, unknown>).status
+        // data 可能是 undefined（新建的 group / sceneComposer / mediaInput 等节点），
+        // 这些节点没有 status 字段，按"未完成"处理
+        const data = full.data as Record<string, unknown> | undefined
+        if (!data) return false
+        const status = data.status
         if (status !== NODE_GENERATION_STATUS.completed) return false
         const type = String(full.type)
         if (type === 'image' || type === 'video') {
-          const url = String((full.data as Record<string, unknown>).url ?? '').trim()
-          const images = (full.data as Record<string, unknown>).images
+          const url = String(data.url ?? '').trim()
+          const images = data.images
           return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
         }
         if (type === 'text' || type === 'prompt') {
-          return Boolean(String((full.data as Record<string, unknown>).content ?? (full.data as Record<string, unknown>).prompt ?? '').trim())
+          return Boolean(String(data.content ?? data.prompt ?? '').trim())
         }
         return true
       },
@@ -974,7 +978,10 @@ const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => {
     if (e instanceof SelectionBatchPendingConfirmError) {
       return null
     }
-    throw e
+    // 其他意外错误（典型：节点 data 为 undefined 导致 hasUsableOutput 抛 TypeError）
+    // 不 re-throw，否则 Vue 静默吞掉导致按钮看起来无反应
+    console.error('[multiSelectPlan] unexpected error', e)
+    return { run: [], skip: [], blockedBy: [], groupExpanded: [] }
   }
 })
 
