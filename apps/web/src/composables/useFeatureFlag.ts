@@ -1,12 +1,13 @@
 /**
  * v3 SB-D16 / §13.1 Feature Flag
  *
- * V1 实现：内存 Map 注入；默认全 off。
+ * V1.2: 默认 on 配合内网直连 URL 验证（http://119.29.173.89:8888）
+ *      V2 接远程 config 后改回 false（按 SB-D16 灰度计划）
  * 灰度通过 setFlag() 在启动时配置；后续接 Vite env / 后台 config 时只改这一处。
  */
 
 const flags = new Map<string, boolean>([
-  ['selection_batch_generate', false], // SB-D16 默认 off
+  ['selection_batch_generate', true], // SB-D16 默认 off (V1.2 临时 on)
 ])
 
 export function isFeatureOn(key: string): boolean {
@@ -20,7 +21,7 @@ export function setFlag(key: string, on: boolean): void {
 /** 在测试中重置所有 flag（**仅** test 入口使用） */
 export function _resetFlagsForTest(): void {
   flags.clear()
-  flags.set('selection_batch_generate', false)
+  flags.set('selection_batch_generate', true)  // V1.2 临时默认 on
 }
 
 /**
