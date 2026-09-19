@@ -142,7 +142,7 @@ def modify_intent(text: str) -> bool:
     return any(h in lowered for h in MODIFY_HINTS)
 
 
-def single_node_gen_intent(text: str) -> bool:
+def focus_gen_intent(text: str) -> bool:
     """Quick-gen one canvas node — must pair with focus_node_id in intake."""
     lowered = (text or "").strip().lower()
     if not lowered:

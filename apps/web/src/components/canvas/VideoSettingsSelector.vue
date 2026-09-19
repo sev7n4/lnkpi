@@ -46,6 +46,15 @@ const showNegativePrompt = computed(() => nativeParams.value.negativePrompt)
 
 const showCrop = computed(() => nativeParams.value.crop)
 
+const durationBounds = computed(() => ({
+  min: props.capabilities?.minDuration ?? 4,
+  max: props.capabilities?.maxDuration ?? 15,
+}))
+
+const durationMarks = computed(() =>
+  VIDEO_DURATION_MARKS.filter((mark) => mark >= durationBounds.value.min && mark <= durationBounds.value.max),
+)
+
 const durationBelowMinHint = computed(() => {
   const min = props.capabilities?.minDuration
   if (min == null || props.modelValue.duration >= min) return null
@@ -62,22 +71,27 @@ const resolutionOptions = computed(() => {
   return videoResolutionOptionsForCapabilities(props.capabilities)
 })
 
-function ensureAllowedAspectAndResolution() {
-  if (!props.capabilities) return
+function ensureAllowedSettings() {
   const partial: Partial<VideoSettings> = {}
-  const arOpts = aspectRatioOptions.value
-  if (
-    arOpts.length > 0
-    && !arOpts.some((o) => o.value === props.modelValue.aspectRatio)
-  ) {
-    partial.aspectRatio = arOpts[0].value as VideoAspectRatio
+  if (props.capabilities) {
+    const arOpts = aspectRatioOptions.value
+    if (
+      arOpts.length > 0
+      && !arOpts.some((o) => o.value === props.modelValue.aspectRatio)
+    ) {
+      partial.aspectRatio = arOpts[0].value as VideoAspectRatio
+    }
+    const resOpts = resolutionOptions.value
+    if (
+      resOpts.length > 0
+      && !resOpts.some((o) => o.value === props.modelValue.resolution)
+    ) {
+      partial.resolution = resOpts[0].value as VideoResolution
+    }
   }
-  const resOpts = resolutionOptions.value
-  if (
-    resOpts.length > 0
-    && !resOpts.some((o) => o.value === props.modelValue.resolution)
-  ) {
-    partial.resolution = resOpts[0].value as VideoResolution
+  const clamped = clampVideoDuration(props.modelValue.duration, durationBounds.value)
+  if (clamped !== props.modelValue.duration) {
+    partial.duration = clamped
   }
   if (Object.keys(partial).length > 0) {
     patch(partial)
@@ -110,24 +124,20 @@ useClickOutside(rootRef, () => {
 function patch(partial: Partial<VideoSettings>) {
   const next = { ...DEFAULT_VIDEO_SETTINGS, ...props.modelValue, ...partial }
   if ('duration' in partial) {
-    next.duration = clampVideoDuration(next.duration)
+    next.duration = clampVideoDuration(next.duration, durationBounds.value)
   }
   emit('update:modelValue', next)
 }
 
 watch(open, (isOpen) => {
   if (!isOpen) return
-  ensureAllowedAspectAndResolution()
-  const clamped = clampVideoDuration(props.modelValue.duration)
-  if (clamped !== props.modelValue.duration) {
-    patch({ duration: clamped })
-  }
+  ensureAllowedSettings()
 })
 
 watch(
   () => [props.capabilities, props.modelValue.aspectRatio, props.modelValue.resolution] as const,
   () => {
-    ensureAllowedAspectAndResolution()
+    ensureAllowedSettings()
   },
 )
 </script>
@@ -200,16 +210,16 @@ watch(
         </p>
         <input
           type="range"
-          min="4"
-          max="15"
+          :min="durationBounds.min"
+          :max="durationBounds.max"
           step="1"
           class="w-full accent-[var(--neo-accent)]"
           :value="modelValue.duration"
-          @input="patch({ duration: clampVideoDuration(($event.target as HTMLInputElement).value) })"
+          @input="patch({ duration: clampVideoDuration(($event.target as HTMLInputElement).value, durationBounds) })"
         />
         <div class="mt-1 flex justify-between text-[10px]">
           <button
-            v-for="mark in VIDEO_DURATION_MARKS"
+            v-for="mark in durationMarks"
             :key="mark"
             type="button"
             class="text-[var(--neo-text-muted)]"

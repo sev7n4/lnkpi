@@ -112,6 +112,7 @@ import MentionInput, { type MentionOption } from '@/components/canvas/MentionInp
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import { useClickOutside } from '@/composables/useClickOutside'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
+import { catalogModelKeyFromValue, isDeepSeekV4Model } from '@/constants/studioModels'
 import {
   AGENT_SKILLS,
   agentInputPlaceholder,
@@ -980,6 +981,31 @@ const speech = useSpeechRecognition()
 
 const { preferences, load: loadProviderBootstrap } = useProviderBootstrap()
 const planningModel = ref(preferences.value?.defaultTextModel ?? '')
+/** DeepSeek 深度思考：默认关，Dock 可开（与文本节点对齐） */
+const planningThinking = ref(false)
+const planningThinkingEffort = ref<'high' | 'max'>('high')
+const showPlanningThinkingControls = computed(() =>
+  isDeepSeekV4Model(catalogModelKeyFromValue(planningModel.value || '')),
+)
+
+watch(showPlanningThinkingControls, (show) => {
+  if (!show) {
+    planningThinking.value = false
+  }
+})
+
+function setPlanningThinking(enabled: boolean) {
+  planningThinking.value = enabled
+  if (!enabled) return
+  if (planningThinkingEffort.value !== 'high' && planningThinkingEffort.value !== 'max') {
+    planningThinkingEffort.value = 'high'
+  }
+}
+
+function setPlanningThinkingEffort(effort: 'high' | 'max') {
+  planningThinkingEffort.value = effort
+  planningThinking.value = true
+}
 
 /* ---- 技能选择（显式 Skill；默认自动 / 平台路由） ---- */
 const activeSkillId = ref<string | null>(null)
@@ -1293,8 +1319,15 @@ async function refreshThreadCheckpoint() {
       macroSelections.value = [...json.data.selectedMacroSchemeIds]
     }
     if (json.data?.journeyTrace) {
-      threadJourneyTrace.value = json.data.journeyTrace
-      agent.trackJourneyUpdate(json.data.journeyTrace)
+      // Spec §4.2 (issue #4): merge by updatedAt, newer wins
+      const incoming = json.data.journeyTrace
+      const current = threadJourneyTrace.value
+      const incomingTs = incoming?.updatedAt ? Date.parse(incoming.updatedAt) : 0
+      const currentTs = current?.updatedAt ? Date.parse(current.updatedAt) : 0
+      if (!current || incomingTs >= currentTs) {
+        threadJourneyTrace.value = incoming
+        agent.trackJourneyUpdate(incoming)
+      }
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
@@ -1614,6 +1647,11 @@ async function sendMessage(message: string, userDecision?: 'confirm' | 'revise')
         userDecision,
         skillId: activeSkillId.value ?? undefined,
         model: planningModel.value || undefined,
+        thinking: showPlanningThinkingControls.value ? planningThinking.value : false,
+        thinkingEffort:
+          showPlanningThinkingControls.value && planningThinking.value
+            ? planningThinkingEffort.value
+            : undefined,
         focusNodeId: props.selectedNodeId || undefined,
         attachments: attachments.length ? attachments : undefined,
         refOrder: refOrder.length ? refOrder : undefined,
@@ -1734,8 +1772,15 @@ async function reconnectStream() {
       macroSelections.value = [...json.data.selectedMacroSchemeIds]
     }
     if (json.data?.journeyTrace) {
-      threadJourneyTrace.value = json.data.journeyTrace
-      agent.trackJourneyUpdate(json.data.journeyTrace)
+      // Spec §4.2 (issue #4): merge by updatedAt, newer wins
+      const incoming = json.data.journeyTrace
+      const current = threadJourneyTrace.value
+      const incomingTs = incoming?.updatedAt ? Date.parse(incoming.updatedAt) : 0
+      const currentTs = current?.updatedAt ? Date.parse(current.updatedAt) : 0
+      if (!current || incomingTs >= currentTs) {
+        threadJourneyTrace.value = incoming
+        agent.trackJourneyUpdate(incoming)
+      }
     }
     if (json.data?.shotManifest) {
       syncShotManifest(json.data.shotManifest)
@@ -3111,6 +3156,42 @@ defineExpose({
                   </div>
 
                   <UniversalModelSelector v-model="planningModel" type="text" ghost />
+
+                  <div
+                    v-if="showPlanningThinkingControls"
+                    class="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2 py-1"
+                  >
+                    <button
+                      type="button"
+                      class="dock-seg-btn rounded-md px-1.5 py-1"
+                      :class="{ 'is-on': planningThinking }"
+                      :disabled="props.readOnly"
+                      title="深度思考（DeepSeek V4）"
+                      @click="setPlanningThinking(!planningThinking)"
+                    >
+                      深度思考 {{ planningThinking ? '开' : '关' }}
+                    </button>
+                    <template v-if="planningThinking">
+                      <button
+                        type="button"
+                        class="dock-seg-btn"
+                        :class="{ 'is-on': planningThinkingEffort === 'high' }"
+                        :disabled="props.readOnly"
+                        @click="setPlanningThinkingEffort('high')"
+                      >
+                        high
+                      </button>
+                      <button
+                        type="button"
+                        class="dock-seg-btn"
+                        :class="{ 'is-on': planningThinkingEffort === 'max' }"
+                        :disabled="props.readOnly"
+                        @click="setPlanningThinkingEffort('max')"
+                      >
+                        max
+                      </button>
+                    </template>
+                  </div>
 
                   <div ref="skillMenuRef" class="relative">
                   <button

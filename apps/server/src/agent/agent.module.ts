@@ -9,12 +9,19 @@ import { AgentCanvasToolsService } from './agent-canvas-tools.service'
 import { AgentController } from './agent.controller'
 import { AgentInternalGuard } from './agent-internal.guard'
 import { AgentService } from './agent.service'
+import { CompositionService } from './composition.service'
 import { WorkflowRecipeService } from './workflow-recipe.service'
 
 @Module({
   imports: [CanvasModule, ProviderModule, SessionsModule, StudioModule, AssetsModule],
   controllers: [AgentController, AgentCanvasToolsController],
-  providers: [AgentService, AgentCanvasToolsService, AgentInternalGuard, WorkflowRecipeService],
+  providers: [
+    AgentService,
+    AgentCanvasToolsService,
+    AgentInternalGuard,
+    WorkflowRecipeService,
+    CompositionService,
+  ],
   exports: [AgentService, AgentCanvasToolsService],
 })
 export class AgentModule {}

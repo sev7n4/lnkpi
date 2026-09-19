@@ -12,6 +12,7 @@ import logging
 from typing import Any, Sequence, TypedDict
 
 from app.graph.atomic_parse_llm import extract_json_object
+from app.graph.legacy_lane import LEGACY_LANE_SHIM, map_legacy_lane
 from app.graph.route_features import RouteFeatures
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,6 @@ ALLOWED_LANES: tuple[str, ...] = (
     "clarify_route",
 )
 
-_RETIRED_LANES_TO_AGENT = frozenset({"atomic_create", "atomic_regenerate", "single_node"})
-
 _DECIDE_LANE_SYSTEM = """你是 Lnkpi 画布会话的 lane 路由器。根据用户 utterance、压缩多轮上下文与路由特征，输出 JSON（不要 markdown 代码块）。
 
 输出 schema：
@@ -41,11 +40,11 @@ _DECIDE_LANE_SYSTEM = """你是 Lnkpi 画布会话的 lane 路由器。根据用
 硬约束：
 - 无明确编排 hard 信号时偏向 canvas_agent（有工具控制面；闲聊也可）
 - 明确「生成一张/来一张」类单点创作 → canvas_agent（由 agent 工具摆盘 + propose）
-- 「重新生成/再试一次」或焦点节点快速生成 → canvas_agent（禁止 atomic_regenerate / single_node）
+- 「重新生成/再试一次」或焦点节点快速生成 → canvas_agent
 - 营销/详情页多节点编排 → campaign 或 clarify_route
 - 歧义且无法安全偏向 agent → clarify_route，并给出 clarify_question
 - confidence 为 0–1；不确定时降低 confidence
-- 禁止输出 lane=atomic_create / atomic_regenerate / single_node（已退役）
+- 已退役 lane（atomic_create / atomic_regenerate / single_node）无效，禁止输出
 """
 
 
@@ -71,10 +70,11 @@ def parse_decide_lane_json(raw: str) -> DecideLaneResult | None:
     lane = str(data.get("lane") or "").strip()
     if lane == "chat" or lane == "explore_canvas":
         lane = "canvas_agent"
-    # Phase 2d / 2d.2: map retired lanes before ALLOWED check
-    if lane in _RETIRED_LANES_TO_AGENT:
-        logger.info("decide_lane mapped %s → canvas_agent (phase 2d.2)", lane)
-        lane = "canvas_agent"
+    # Phase 2d.3 D4: map retired lanes via LEGACY_LANE_SHIM before ALLOWED check
+    mapped = map_legacy_lane(lane)
+    if mapped != lane:
+        logger.info("decide_lane mapped %s → canvas_agent (legacy shim)", lane)
+        lane = mapped or lane
     if lane not in ALLOWED_LANES:
         return None
     conf = _clamp_confidence(data.get("confidence"))
@@ -172,7 +172,7 @@ def apply_decide_lane_postprocess(result: DecideLaneResult) -> DecideLaneResult:
     lane = result.get("lane") or "canvas_agent"
     conf = _clamp_confidence(result.get("confidence"))
     # Treat retired lanes as graph lanes for low-confidence clarify,
-    # then map any surviving retired lane → canvas_agent (Phase 2d / 2d.2).
+    # then map any surviving retired lane → canvas_agent (Phase 2d.3 shim).
     if conf < CONFIDENCE_TAU and lane not in ("canvas_agent", "clarify_route"):
         return DecideLaneResult(
             lane="clarify_route",
@@ -181,10 +181,10 @@ def apply_decide_lane_postprocess(result: DecideLaneResult) -> DecideLaneResult:
             clarify_question=result.get("clarify_question")
             or "请确认：出图创作，还是画布控制面操作？",
         )
-    if lane in _RETIRED_LANES_TO_AGENT:
+    if lane in LEGACY_LANE_SHIM:
         logger.info("decide_lane postprocess mapped %s → canvas_agent", lane)
         return DecideLaneResult(
-            lane="canvas_agent",
+            lane=map_legacy_lane(lane) or "canvas_agent",
             confidence=conf,
             reason=str(result.get("reason") or "decide_lane"),
             clarify_question=result.get("clarify_question"),

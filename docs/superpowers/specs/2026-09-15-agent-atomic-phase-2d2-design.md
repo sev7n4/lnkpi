@@ -105,10 +105,10 @@
 
 ---
 
-## 5. 后续（未授权）
+## 5. 后续
 
-- **2d.3 / 清扫：** `RouteFlowMode` 等字面量删除；残余 soft 信号与文档金标再收敛。
-- **Phase 3：** campaign / product_visual 工具化（单独规格 + plan + H6 门禁）。
+- **2d.3（已授权）：** 见 [2026-09-16-agent-atomic-phase-2d3-design.md](./2026-09-16-agent-atomic-phase-2d3-design.md)（方案 C：字面量清零 + soft 改名 + 兼容垫片 + split_manifest 卫生）。  
+- **2d.4 / Phase 3：** 另开。
 
 ---
 

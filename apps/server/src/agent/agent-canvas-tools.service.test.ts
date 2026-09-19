@@ -2181,6 +2181,66 @@ describe('AgentCanvasToolsService', () => {
       expect(result.addedNodeIds).toHaveLength(2)
     })
 
+    it('persists source url from localRefs when data.url is missing', async () => {
+      persistRemote.mockImplementation(async ({ url }: { url: string }) => ({
+        persistedUrl: url,
+      }))
+
+      const localRefsOnlyWorkflow = {
+        format: 'lnkpi.workflow',
+        version: '1.0.0',
+        exportedAt: '2026-09-17T01:00:00.000Z',
+        mode: 'full',
+        exportMode: 'lightweight',
+        graph: {
+          nodes: [
+            {
+              id: 'image-src-1',
+              type: 'image',
+              position: { x: 0, y: 0 },
+              data: {
+                localRefs: [
+                  {
+                    id: 'a',
+                    mediaType: 'image',
+                    sourceKind: 'upload',
+                    label: 'I1',
+                    url: 'https://cdn.example/i1.png',
+                  },
+                ],
+              },
+              mediaRole: 'uploaded',
+            },
+          ],
+          edges: [],
+        },
+        mediaIndex: [],
+      }
+
+      const result = await svc.importWorkflow({
+        sessionId: 's1',
+        userId: 'u1',
+        workflow: localRefsOnlyWorkflow,
+      })
+
+      expect(persistRemote).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://cdn.example/i1.png', kind: 'image' }),
+      )
+      expect(result.mediaOk).toBe(1)
+      expect(canvas.nodes).toHaveLength(1)
+      const node = canvas.nodes[0]
+      expect(node.data.url).toBe('https://cdn.example/i1.png')
+      expect(node.data.localRefs).toEqual([
+        {
+          id: 'a',
+          mediaType: 'image',
+          sourceKind: 'upload',
+          label: 'I1',
+          url: 'https://cdn.example/i1.png',
+        },
+      ])
+    })
+
     describe('default along-edges layout', () => {
       const stackedChainWorkflow = {
         format: 'lnkpi.workflow',

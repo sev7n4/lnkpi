@@ -6,14 +6,19 @@ import re
 from typing import Any, Callable
 
 from app.graph.atomic_intent import (
-    atomic_regenerate_intent,
     is_regenerate_new_variant,
+    regen_intent,
     regenerate_phrase_intent,
     resolve_intake_route,
 )
-from app.graph.atomic_intent_ir import AtomicIntent, intent_suggests_atomic_create, is_ref_media_generation
+from app.graph.composition_route import (
+    is_composition_confirm_chip,
+    is_composition_structure_utterance,
+    is_live_composition_pending,
+)
+from app.graph.atomic_intent_ir import AtomicIntent, is_ref_media_generation
 from app.graph.clarify_reply import ClarifyReplyResult, classify_clarify_reply
-from app.graph.intent import modify_intent, single_node_gen_intent
+from app.graph.intent import focus_gen_intent, modify_intent
 from app.graph.l0_action import (
     SIDEBAR_SINGLE_EDIT_VERBS,
     TRANSFORM_VERBS,
@@ -214,7 +219,7 @@ def _rule_modify_existing_plan(
         checkpoint.get("user_brief")
         and checkpoint.get("plan_draft")
         and modify_intent(utterance)
-        and not single_node_gen_intent(utterance)
+        and not focus_gen_intent(utterance)
     ):
         return _base_decision(
             ctx,
@@ -233,7 +238,7 @@ def _rule_modify_existing_plan(
 def _rule_regen_no_checkpoint(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if not features.get("has_atomic_checkpoint") and regenerate_phrase_intent(intent.utterance):
+    if not features.get("has_regen_checkpoint") and regenerate_phrase_intent(intent.utterance):
         return _base_decision(
             ctx,
             flow_mode="clarify_route",
@@ -247,10 +252,46 @@ def _rule_regen_no_checkpoint(
     return None
 
 
+def _rule_composition_confirm(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if is_composition_confirm_chip(intent.utterance):
+        return _base_decision(
+            ctx,
+            flow_mode="canvas_agent",
+            reason="composition_confirm",
+            confidence=0.97,
+            precedence_rule_id="composition_confirm",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
+def _rule_composition_structure(
+    intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
+) -> dict[str, Any] | None:
+    if is_composition_structure_utterance(intent.utterance) or is_live_composition_pending(
+        ctx.get("composition_pending"), intent.utterance
+    ):
+        return _base_decision(
+            ctx,
+            flow_mode="canvas_agent",
+            reason="composition_structure",
+            confidence=0.96,
+            precedence_rule_id="composition_structure",
+            guard_veto=_guard_veto(ctx),
+            intent=intent,
+            features=features,
+        )
+    return None
+
+
 def _rule_checkpoint_regen(
     intent: AtomicIntent, features: RouteFeatures, ctx: RouteContext, valid_skill_ids: set[str] | None
 ) -> dict[str, Any] | None:
-    if features.get("has_atomic_checkpoint") and atomic_regenerate_intent(intent.utterance):
+    if features.get("has_regen_checkpoint") and regen_intent(intent.utterance):
         return _base_decision(
             ctx,
             # Phase 2d.2: keep rule id; live flow → canvas_agent (no atomic_regenerate subgraph).
@@ -308,7 +349,7 @@ def _rule_focus_gen(
     if (
         focus
         and route == "single_node"
-        and single_node_gen_intent(utterance)
+        and focus_gen_intent(utterance)
         and not modify_intent(utterance)
     ):
         return _base_decision(
@@ -504,6 +545,8 @@ def _rule_default_chat(
 PRECEDENCE_RULES: list[tuple[str, RuleFn]] = [
     ("modify_existing_plan", _rule_modify_existing_plan),
     ("regen_no_checkpoint", _rule_regen_no_checkpoint),
+    ("composition_confirm", _rule_composition_confirm),
+    ("composition_structure", _rule_composition_structure),
     ("sidebar_img2img", _rule_sidebar_img2img),
     ("checkpoint_regen", _rule_checkpoint_regen),
     ("product_visual_explicit", _rule_product_visual_explicit),

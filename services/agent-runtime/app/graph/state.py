@@ -137,15 +137,12 @@ class AgentRuntimeState(TypedDict, total=False):
     prompt_version: str | None  # W19: active skill prompt template version
     flow_mode: Literal[
         "campaign",
-        "single_node",
-        "atomic_create",
-        "atomic_regenerate",
         "product_visual",
         "explore_canvas",
         "canvas_agent",
         "chat",  # compat alias → canvas_agent
         "clarify_route",
-    ] | None  # W28/W29/P4 / M2a
+    ] | None  # W28/W29/P4 / M2a; retired atomic_*/single_node → canvas_agent via LEGACY_LANE_SHIM
     focus_node_id: str | None  # W28: canvas node for single-node gen
     tool_plan_loaded: list[str] | None  # M1/M2: deferred tools loaded this thread
     previous_lane: str | None  # M2: last resolved lane for multi-turn / decide_lane
@@ -219,6 +216,8 @@ class AgentRuntimeState(TypedDict, total=False):
     # explore_canvas path (Phase 2)
     explore_summary: dict | None
     canvas_commands: list[dict] | None
+    composition_pending: str | None
+    composition_dump_hash: str | None
 
     # ecommerce-product-visual (Phase 1 image-only)
     product_visual_plan: dict | None

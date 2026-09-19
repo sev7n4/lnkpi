@@ -112,6 +112,14 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
     params: IMAGE_PARAMS,
   },
   {
+    modelKey: 'agnes-image-2.5-flash',
+    displayName: 'Agnes Image 2.5 Flash',
+    gatewayModelId: 'agnes-image-2.5-flash',
+    modality: 'image',
+    providerBinding: 'gateway-openai-compat',
+    params: IMAGE_PARAMS,
+  },
+  {
     modelKey: 'image2',
     displayName: 'Image2',
     gatewayModelId: 'gpt-image-2-official',
@@ -163,6 +171,17 @@ export const STUDIO_MODEL_CATALOG: StudioModelEntry[] = [
       ...VIDEO_PARAMS,
       seed: 'native',
       negativePrompt: 'native',
+    },
+  },
+  {
+    modelKey: 'agnes-video-2.5-flash',
+    displayName: 'Agnes Video 2.5 Flash',
+    gatewayModelId: 'agnes-video-2.5-flash',
+    modality: 'video',
+    providerBinding: 'gateway-openai-compat',
+    params: {
+      ...VIDEO_PARAMS,
+      seed: 'native',
     },
   },
   {

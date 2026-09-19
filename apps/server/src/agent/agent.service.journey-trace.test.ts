@@ -2,7 +2,7 @@ import 'reflect-metadata'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { JourneyTraceSnapshot } from '@lnkpi/shared'
 import { JOURNEY_STEP_LABELS } from '@lnkpi/shared'
-import { AgentService } from './agent.service'
+import { AgentService, buildTurnMetadata } from './agent.service';
 import { AgentRuntimeClient } from './agent-runtime.client'
 
 const JOURNEY_STEP_ORDER = [
@@ -172,5 +172,40 @@ describe('AgentService journey trace persistence', () => {
       (assistantCreate![0] as { data: { metadata: string } }).data.metadata,
     ) as { journeyTrace?: JourneyTraceSnapshot }
     expect(metadata.journeyTrace?.current).toBe('generating')
+  })
+})
+
+describe('buildTurnMetadata executionTrace', () => {
+  it('writes executionTrace to metadata when present', () => {
+    const executionTrace = {
+      events: [{ kind: 'text_stage' as const, ts: 1, payload: { text: 'hi' } }],
+      updatedAt: 1,
+    }
+    const md = buildTurnMetadata({ executionTrace })
+    expect(md?.executionTrace).toEqual(executionTrace)
+  })
+
+  it('omits executionTrace when absent', () => {
+    const md = buildTurnMetadata({ journeyTrace: undefined })
+    expect(md?.executionTrace).toBeUndefined()
+  })
+
+  it('coexists with journeyTrace and presentation', () => {
+    const executionTrace = {
+      events: [{ kind: 'canvas' as const, ts: 5, payload: { nodeId: 'n1' } }],
+      updatedAt: 5,
+    }
+    const journeyTrace = {
+      version: 1 as const,
+      flowMode: 'product_visual' as const,
+      steps: [],
+      current: 'done' as const,
+      startedAt: '2026-09-18T00:00:00.000Z',
+      updatedAt: '2026-09-18T00:01:00.000Z',
+    }
+    const md = buildTurnMetadata({ executionTrace, journeyTrace, presentation: { foo: 1 } })
+    expect(md?.executionTrace).toEqual(executionTrace)
+    expect(md?.journeyTrace).toEqual(journeyTrace)
+    expect(md?.presentation).toEqual({ foo: 1 })
   })
 })

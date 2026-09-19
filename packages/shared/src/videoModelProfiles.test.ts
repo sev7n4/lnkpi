@@ -25,6 +25,20 @@ describe('resolveVideoModelProfile', () => {
     expect(p.maxImageRefs).toBe(8)
   })
 
+  it('maps agnes-video-2.5-flash to 720p seconds protocol', () => {
+    const p = resolveVideoModelProfile('agnes-video-2.5-flash', 'agnes-video-2.5-flash')
+    expect(p.responseMode).toBe('agnes_poll')
+    expect(p.sizeWire).toBe('ratio_duration')
+    expect(p.refWire).toBe('agnes_single_image')
+    expect(p.minDuration).toBe(4)
+    expect(p.maxDuration).toBe(12)
+    expect(p.maxImageRefs).toBe(5)
+    expect(p.maxVideoRefs).toBe(0)
+    expect(p.maxAudioRefs).toBe(0)
+    expect(p.allowedResolutions).toEqual(['720p'])
+    expect(p.allowedAspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'])
+  })
+
   it('resolves h3-max-turbo profile', () => {
     const p = resolveVideoModelProfile('h3-max-turbo', 'minimax/h3-max-turbo')
     expect(p.refWire).toBe('fal_h3_max')

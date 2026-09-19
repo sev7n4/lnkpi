@@ -184,10 +184,12 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
         need = uncached_urls(urls, cache, provider_ref=provider_ref)
 
         if not need:
+            parse = _parse_from_cache(
+                urls, cache, model, provider_ref=provider_ref
+            )
+            parse["this_turn_uncached_image_urls"] = []
             return {
-                "sidebar_media_parse": _parse_from_cache(
-                    urls, cache, model, provider_ref=provider_ref
-                ),
+                "sidebar_media_parse": parse,
                 "sidebar_media_parse_cache": cache,
             }
 
@@ -196,10 +198,12 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
             rec = _failure_record(need=need, error_class=gate, model=model)
             for url in need:
                 cache[media_parse_cache_key(url, provider_ref)] = rec
+            parse_out = _parse_from_cache(
+                urls, cache, model, provider_ref=provider_ref
+            )
+            parse_out["this_turn_uncached_image_urls"] = list(need)
             return {
-                "sidebar_media_parse": _parse_from_cache(
-                    urls, cache, model, provider_ref=provider_ref
-                ),
+                "sidebar_media_parse": parse_out,
                 "sidebar_media_parse_cache": cache,
             }
 
@@ -219,6 +223,8 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                 if error_class is None:
                     error_class = classify_vision_error(reason="timeout")
                 break
+            remaining = VISION_WALL_BUDGET_SEC - elapsed
+            http_timeout = min(120.0, max(1.0, remaining))
             attempt += 1
             try:
                 raw = await nest.run_vision_qa(
@@ -230,6 +236,7 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                     api_key=fields["api_key"],
                     base_url=fields["base_url"],
                     source=fields["source"],
+                    timeout=http_timeout,
                 )
                 data = raw if isinstance(raw, dict) else {}
                 vision_used = _vision_used(data)
@@ -298,6 +305,7 @@ def make_parse_sidebar_media_node(*, nest: Any, vision_creds: dict | None, skill
                 ephemeral[media_parse_cache_key(url, provider_ref)] = rec
             parse_out = _parse_from_cache(urls, ephemeral, model, provider_ref=provider_ref)
 
+        parse_out["this_turn_uncached_image_urls"] = list(need)
         return {
             "sidebar_media_parse": parse_out,
             "sidebar_media_parse_cache": cache,

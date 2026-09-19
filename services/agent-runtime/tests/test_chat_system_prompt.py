@@ -47,3 +47,56 @@ def test_chat_system_routes_upscale_to_tool_not_run_star():
     assert "upscale_image" in _SYSTEM
     assert "upsert_media_node" in _SYSTEM
     assert "禁止" in _SYSTEM or "不要调用 run_*" in _SYSTEM
+
+
+def test_chat_system_says_not_to_search_core_media_tools():
+    assert "tool_search" in _SYSTEM
+    assert "upsert_media_node" in _SYSTEM
+    assert "propose_generation" in _SYSTEM
+    assert "不要用 tool_search" in _SYSTEM or "勿用 tool_search" in _SYSTEM
+
+
+def test_chat_system_sidebar_chips_are_not_canvas_ids():
+    assert "@I1" in _SYSTEM or "侧栏芯片" in _SYSTEM
+    assert "不是画布节点" in _SYSTEM or "不是画布" in _SYSTEM
+    assert "apply_sidebar_attachments" in _SYSTEM
+
+
+def test_chat_system_hang_identity_chips_vs_canvas_ids():
+    assert "apply_sidebar_attachments" in _SYSTEM
+    assert "attach_refs" in _SYSTEM
+    assert "芯片" in _SYSTEM
+    assert "image-*" in _SYSTEM or "画布节点" in _SYSTEM
+
+
+def test_chat_system_idle_must_not_require_propose():
+    assert "谢谢" in _SYSTEM or "闲聊" in _SYSTEM
+    assert "propose_generation" in _SYSTEM
+
+
+def test_chat_system_instantiate_only_after_confirm_canvas():
+    assert "确认落到画布" in _SYSTEM
+    assert "instantiate_workflow_template" in _SYSTEM
+
+
+def test_chat_system_v1_skeleton_prefers_upsert_connect_propose():
+    assert "connect_nodes" in _SYSTEM
+    assert "upsert_media_node" in _SYSTEM
+    assert "propose_generation" in _SYSTEM
+    assert "生图" in _SYSTEM and "生视频" in _SYSTEM
+    assert "dock" in _SYSTEM.lower() or "填" in _SYSTEM
+    assert "不要压成单个" in _SYSTEM or "不要压成" in _SYSTEM
+
+
+def test_chat_system_v1_skeleton_must_not_prefer_import():
+    assert "import_workflow" in _SYSTEM
+    assert "口语搭骨架" in _SYSTEM or "骨架" in _SYSTEM
+
+
+def test_explore_write_retry_names_operator_skeleton_tools():
+    from app.graph.nodes.explore import _WRITE_RETRY_SYSTEM
+
+    assert "upsert_media_node" in _WRITE_RETRY_SYSTEM
+    assert "connect_nodes" in _WRITE_RETRY_SYSTEM
+    assert "propose_generation" in _WRITE_RETRY_SYSTEM
+    assert "import_workflow" in _WRITE_RETRY_SYSTEM

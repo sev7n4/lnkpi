@@ -1,6 +1,6 @@
 # Agent 侧栏识图 Provider 契约对齐（BYOK 同一真相）— 设计规格
 
-> 状态：**已定稿 / 实现完成（P0+P1）**（2026-09-16）  
+> 状态：**已定稿 / 实现完成（P0+P1）**；**P0.5 重试/预算/错误包收敛见同日计划**（2026-09-16）  
 > 首发范围：**P0 + P1**；**P2 写入本规格、单独排期**  
 > 架构方案：**方案 2 — ProviderContext 直传**（Nest 启 run 唯一 resolve；`run-vision-qa` 禁止二次猜渠道）
 
@@ -242,7 +242,8 @@ Nest agent.service 启 run
 
 - JSON 字段命名（camelCase vs snake_case）随现有 Nest/Runtime 惯例。  
 - Runtime 侧 Python `supports_vision_model` 必须与 Nest `@lnkpi/agent` `supportsVisionTextModel` 继续对齐（侧栏解析 D-5）。  
-- 单次 attempt 超时仍归 `VISION_TIMEOUT`；与 `#334` 单次 httpx 120s 叠加时遵守 **D-BUDGET**：墙钟总预算 **180s**（含重试），耗尽即失败，即使尚未用满 3 次 attempt。
+- 单次 attempt 超时仍归 `VISION_TIMEOUT`；与 `#334` 单次 httpx 120s 叠加时遵守 **D-BUDGET**：墙钟总预算 **180s**（含重试），耗尽即失败，即使尚未用满 3 次 attempt。  
+- **P0.5：** 重试权威在 Runtime（最多 3 attempt）；Nest 识图路径 `generateVisionQaJson({ maxRetries: 0 })`，禁止 Runtime×Nest 双重 429。`nest_client.run_vision_qa` HTTP timeout 为 `min(120, remaining_budget)`。空 LLM content 视为格式异常，立即失败不重试。Nest catch 必须回 `errorClass` + 中性中文 reason。
 
 ---
 

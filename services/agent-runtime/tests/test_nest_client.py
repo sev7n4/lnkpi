@@ -128,6 +128,28 @@ def nest_client(captured):
                     }
                 ),
             )
+        if path.endswith("/preview-composition"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "userMessage": "请确认是否把构图落到画布",
+                        "dumpHash": "ab" * 32,
+                        "nodeTitles": ["定妆", "换装"],
+                    }
+                ),
+            )
+        if path.endswith("/confirm-composition"):
+            return httpx.Response(
+                200,
+                json=_ok(
+                    {
+                        "addedNodeIds": ["image-1"],
+                        "canvasCommands": [{"type": "focus_nodes", "nodeIds": ["image-1"]}],
+                        "dumpHash": "ab" * 32,
+                    }
+                ),
+            )
         if path.endswith("/arrange-nodes-along-edges"):
             return httpx.Response(200, json=_ok({"actions": []}))
         if path.endswith("/grid-slice-image"):
@@ -334,6 +356,71 @@ async def test_instantiate_recipe_ignores_confirm_chip_utterance(nest_client, ca
 
 
 @pytest.mark.asyncio
+async def test_preview_composition(nest_client, captured):
+    result = await nest_client.preview_composition(
+        "设计一段模特换装的工作流并做好连线，写入画布",
+    )
+    assert result["dumpHash"] == "ab" * 32
+    assert "请确认是否把构图落到画布" in result["userMessage"]
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/preview-composition"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "utterance": "设计一段模特换装的工作流并做好连线，写入画布",
+        "attachments": [],
+    }
+
+
+@pytest.mark.asyncio
+async def test_preview_composition_sends_empty_attachments_list(nest_client, captured):
+    nest_client.sidebar_attachments = []
+    await nest_client.preview_composition("设计一段模特换装的工作流并做好连线，写入画布")
+    assert _last(captured)["json"]["attachments"] == []
+
+
+@pytest.mark.asyncio
+async def test_preview_composition_optional_copy(nest_client, captured):
+    copy = {"hitl": "请确认是否把构图落到画布"}
+    await nest_client.preview_composition("规划一套流水线", copy=copy)
+    req = _last(captured)
+    assert req["json"]["copy"] == copy
+    assert req["json"]["sessionId"] == SESSION_ID
+    assert req["json"]["userId"] == USER_ID
+
+
+@pytest.mark.asyncio
+async def test_preview_composition_forwards_sidebar_attachments(nest_client, captured):
+    nest_client.sidebar_attachments = [
+        {
+            "id": "att-i1",
+            "mediaType": "image",
+            "sourceKind": "upload",
+            "label": "I1",
+            "url": "https://cdn.example/i1.png",
+        }
+    ]
+    await nest_client.preview_composition("设计一段模特换装的工作流并做好连线，写入画布")
+    req = _last(captured)
+    assert req["json"]["attachments"] == nest_client.sidebar_attachments
+
+
+@pytest.mark.asyncio
+async def test_confirm_composition(nest_client, captured):
+    dump_hash = "ab" * 32
+    result = await nest_client.confirm_composition(dump_hash)
+    assert result["addedNodeIds"] == ["image-1"]
+    assert result["dumpHash"] == dump_hash
+    req = _last(captured)
+    assert req["url"] == f"{BASE_URL}/agent/internal/confirm-composition"
+    assert req["json"] == {
+        "sessionId": SESSION_ID,
+        "userId": USER_ID,
+        "dumpHash": dump_hash,
+    }
+
+
+@pytest.mark.asyncio
 async def test_upscale_image(nest_client, captured):
     result = await nest_client.upscale_image(node_id="image-1", scale=2)
     assert result["url"] == "https://cdn.example/up.png"
@@ -447,6 +534,34 @@ async def test_run_vision_qa_posts_provider_context(nest_client, captured):
         "baseUrl": "https://api.byok.example/v1",
         "source": "user",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_vision_qa_forwards_explicit_timeout(monkeypatch):
+    from app.tools.nest_client import NestCanvasClient
+
+    captured: dict = {}
+
+    async def fake_post(self, path, body, *, timeout=None, tool_name=None):
+        captured["path"] = path
+        captured["timeout"] = timeout
+        return {"pass": True}
+
+    monkeypatch.setattr(NestCanvasClient, "_post", fake_post)
+    client = NestCanvasClient(
+        base_url=BASE_URL,
+        token=TOKEN,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+    )
+    await client.run_vision_qa(
+        image_urls=["https://cdn.example/a.png"],
+        system_prompt="sys",
+        user_content="usr",
+        timeout=30.0,
+    )
+    assert captured["path"] == "/agent/internal/run-vision-qa"
+    assert captured["timeout"] == 30.0
 
 
 @pytest.mark.asyncio

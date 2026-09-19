@@ -379,6 +379,38 @@ describe('ProviderService', () => {
     expect(byName['kling-v2']).toBe('video')
   })
 
+  it('pullModels retags Agnes 2.5 image/video ids previously stored as text', async () => {
+    const ch = await svc.createChannel('u1', {
+      name: 'agnes-byok',
+      apiFormat: 'openai',
+      baseUrl: 'https://apihub.agnes-ai.cn/v1',
+      apiKey: 'sk-agnes',
+      models: [
+        { name: 'agnes-image-2.5-flash', capability: 'text' },
+        { name: 'agnes-video-2.5-flash', capability: 'text' },
+      ],
+    })
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        data: [
+          { id: 'agnes-image-2.5-flash' },
+          { id: 'agnes-video-2.5-flash' },
+          { id: 'agnes-2.5-flash' },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const updated = await svc.pullModels('u1', ch.id)
+    const byName = Object.fromEntries(updated.models.map((m) => [m.name, m.capability]))
+    expect(byName['agnes-image-2.5-flash']).toBe('image')
+    expect(byName['agnes-video-2.5-flash']).toBe('video')
+    expect(byName['agnes-2.5-flash']).toBe('text')
+  })
+
   it('pullModels from MiniMax /v1 keeps official models URL and injects minimax-h3 video', async () => {
     const ch = await svc.createChannel('u1', {
       name: 'minimax-byok',

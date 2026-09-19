@@ -210,6 +210,14 @@ def build_journey_trace_snapshot(
     if phase == "done":
         snapshot["finishedAt"] = _iso(ts)
         snapshot["totalMs"] = 0
+        # AC-JT-03: done step summary includes delivery count
+        delivery_summary = state.get("delivery_summary")
+        if isinstance(delivery_summary, dict):
+            n = delivery_summary.get("finalized", 0)
+            if n and n > 0 and steps:
+                last = dict(steps[-1])
+                last["summary"] = f"已交付 {n} 张定稿"
+                steps[-1] = last
 
     return snapshot
 

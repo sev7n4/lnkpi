@@ -2,6 +2,25 @@ import { Inject, Injectable, BadRequestException } from '@nestjs/common'
 import { PrismaService } from '../prisma/prisma.service'
 import { PointsRangeKey, resolvePointsRange } from '../points/points-range'
 import { computePointsInsights, type PointsInsights } from '../points/points-insights'
+import {
+  parseShanghaiDay,
+  resolveHeatmapRange,
+  resolveUsageDaysRange,
+  type UsageDaysRangeKey,
+} from '../points/points-usage-range'
+import {
+  fillCalendarDays,
+  filterHeatmapDays,
+  foldDailyUsage,
+  isUsageActivityDay,
+  generationCountFromParts,
+  netFromKindCategorySums,
+  coerceDayKey,
+  type DailyAmountRow,
+  type DailyGenerationRow,
+  type UsageDaysResponse,
+  type UsageOverviewResponse,
+} from '../points/points-usage'
 
 export type PointKind = 'consume' | 'refund' | 'grant'
 export type PointCategory = 'text' | 'image' | 'audio' | 'video' | 'other'
@@ -175,21 +194,36 @@ export class MembershipService {
   async listTransactions(
     userId: string,
     opts: {
-      range: PointsRangeKey
+      range?: PointsRangeKey
+      day?: string
       kind?: PointKind
       category?: PointCategory
       cursor?: string
       limit?: number
     },
   ): Promise<{ items: PointTxDto[]; nextCursor: string | null; from: string | null; to: string }> {
-    const { from, to } = resolvePointsRange(opts.range)
+    let from: Date | null
+    let to: Date
+    let createdAt: { gte?: Date; lte?: Date; lt?: Date }
+    if (opts.day) {
+      const parsed = parseShanghaiDay(opts.day)
+      if (!parsed) throw new BadRequestException('无效日期')
+      from = parsed.from
+      to = parsed.next
+      createdAt = { gte: parsed.from, lt: parsed.next }
+    } else {
+      const resolved = resolvePointsRange(opts.range ?? 'month')
+      from = resolved.from
+      to = resolved.to
+      createdAt = from ? { gte: from, lte: to } : { lte: to }
+    }
     const limit = opts.limit ?? 50
     const rows = await this.prisma.pointTransaction.findMany({
       where: {
         userId,
         ...(opts.kind ? { kind: opts.kind } : {}),
         ...(opts.category ? { category: opts.category } : {}),
-        createdAt: from ? { gte: from, lte: to } : { lte: to },
+        createdAt,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -197,12 +231,147 @@ export class MembershipService {
     })
     const hasMore = rows.length > limit
     const items = rows.slice(0, limit)
-
     return {
       items,
       nextCursor: hasMore ? items.at(-1)?.id ?? null : null,
       from: from?.toISOString() ?? null,
       to: to.toISOString(),
+    }
+  }
+
+  // Prisma SQLite DateTime is unix ms; SQLite datetime(n) treats numbers as seconds.
+  private async queryLifetimeStats(userId: string) {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ distinctGens: number | bigint; nullGens: number | bigint; activeDays: number | bigint }>
+    >`
+    SELECT
+      (SELECT COUNT(DISTINCT generationId) FROM PointTransaction
+        WHERE userId = ${userId} AND kind = 'consume'
+          AND generationId IS NOT NULL AND generationId != '') AS distinctGens,
+      (SELECT COUNT(*) FROM PointTransaction
+        WHERE userId = ${userId} AND kind = 'consume'
+          AND (generationId IS NULL OR generationId = '')) AS nullGens,
+      (SELECT COUNT(DISTINCT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours'))) FROM PointTransaction
+        WHERE userId = ${userId} AND kind = 'consume') AS activeDays
+  `
+    const row = rows[0] ?? { distinctGens: 0, nullGens: 0, activeDays: 0 }
+    return {
+      generationCount: generationCountFromParts({
+        distinctGens: Number(row.distinctGens),
+        nullGens: Number(row.nullGens),
+      }),
+      activeDays: Number(row.activeDays),
+    }
+  }
+
+  private async queryDailyAmountRows(userId: string, from: Date, to: Date): Promise<DailyAmountRow[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ day: string; kind: string; category: string; amountSum: number | bigint }>
+    >`
+    SELECT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours')) AS day,
+           kind,
+           category,
+           SUM(amount) AS amountSum
+    FROM PointTransaction
+    WHERE userId = ${userId} AND createdAt >= ${from} AND createdAt <= ${to}
+    GROUP BY day, kind, category
+  `
+    return rows.flatMap((row) => {
+      const day = coerceDayKey(row.day)
+      if (!day) return []
+      return [
+        {
+          day,
+          kind: row.kind,
+          category: row.category,
+          amountSum: Number(row.amountSum),
+        },
+      ]
+    })
+  }
+
+  private async queryDailyGenerationRows(userId: string, from: Date, to: Date): Promise<DailyGenerationRow[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<{ day: string; distinctGens: number | bigint; nullGens: number | bigint }>
+    >`
+    SELECT date(datetime(createdAt / 1000.0, 'unixepoch', '+8 hours')) AS day,
+           COUNT(DISTINCT CASE WHEN generationId IS NOT NULL AND generationId != '' THEN generationId END) AS distinctGens,
+           SUM(CASE WHEN generationId IS NULL OR generationId = '' THEN 1 ELSE 0 END) AS nullGens
+    FROM PointTransaction
+    WHERE userId = ${userId} AND kind = 'consume'
+      AND createdAt >= ${from} AND createdAt <= ${to}
+    GROUP BY day
+  `
+    return rows.flatMap((row) => {
+      const day = coerceDayKey(row.day)
+      if (!day) return []
+      return [
+        {
+          day,
+          distinctGens: Number(row.distinctGens),
+          nullGens: Number(row.nullGens),
+        },
+      ]
+    })
+  }
+
+  async usage(userId: string, now = new Date()): Promise<UsageOverviewResponse> {
+    const heatmapRange = resolveHeatmapRange(now)
+    const [grouped, lifetime, amountRows, generationRows] = await Promise.all([
+      this.prisma.pointTransaction.groupBy({
+        by: ['kind', 'category'],
+        where: { userId },
+        _sum: { amount: true },
+      }),
+      this.queryLifetimeStats(userId),
+      this.queryDailyAmountRows(userId, heatmapRange.from, heatmapRange.to),
+      this.queryDailyGenerationRows(userId, heatmapRange.from, heatmapRange.to),
+    ])
+    const net = netFromKindCategorySums(
+      grouped.map((row) => ({
+        kind: row.kind,
+        category: row.category,
+        amountSum: row._sum.amount ?? 0,
+      })),
+    )
+    const folded = foldDailyUsage(amountRows, generationRows)
+    const days = filterHeatmapDays(folded)
+    return {
+      overview: {
+        netConsumedTotal: net.netConsumedTotal,
+        byCategory: net.byCategory,
+        otherNetConsumed: net.otherNetConsumed,
+        generationCount: lifetime.generationCount,
+        activeDays: lifetime.activeDays,
+      },
+      heatmap: {
+        from: heatmapRange.fromKey,
+        to: heatmapRange.toKey,
+        activeDays: days.filter((day) => day.generationCount > 0).length,
+        days,
+      },
+    }
+  }
+
+  async usageDays(
+    userId: string,
+    range: UsageDaysRangeKey,
+    now = new Date(),
+  ): Promise<UsageDaysResponse> {
+    const window = resolveUsageDaysRange(range, now)
+    const [amountRows, generationRows] = await Promise.all([
+      this.queryDailyAmountRows(userId, window.from, window.to),
+      this.queryDailyGenerationRows(userId, window.from, window.to),
+    ])
+    const folded = foldDailyUsage(amountRows, generationRows)
+    return {
+      range,
+      from: window.fromKey,
+      to: window.toKey,
+      days:
+        range === 'all'
+          ? folded.filter(isUsageActivityDay)
+          : fillCalendarDays(window.fromKey, window.toKey, folded),
     }
   }
 }

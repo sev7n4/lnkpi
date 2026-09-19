@@ -104,9 +104,16 @@ export function canvasDataToFlow(data: CanvasData): { nodes: FlowNode[]; edges: 
   }
 }
 
-export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasData {
+export function flowToCanvasData(
+  nodes: FlowNode[],
+  edges: FlowEdge[],
+  extras?: {
+    compositionRunGroup?: CanvasData['compositionRunGroup']
+    previousCanvas?: Pick<CanvasData, 'compositionRunGroup'>
+  },
+): CanvasData {
   const ids = new Set(nodes.map((n) => n.id))
-  return {
+  const data: CanvasData = {
     nodes: nodes.map((n) => ({
       id: n.id,
       type: (n.type ?? 'prompt') as CanvasData['nodes'][0]['type'],
@@ -122,4 +129,27 @@ export function flowToCanvasData(nodes: FlowNode[], edges: FlowEdge[]): CanvasDa
         target: e.target,
       })),
   }
+  const group = extras?.compositionRunGroup ?? extras?.previousCanvas?.compositionRunGroup
+  if (group) {
+    data.compositionRunGroup = group
+  }
+  return data
+}
+
+export type CanvasSaveExtras = {
+  compositionRunGroup?: CanvasData['compositionRunGroup']
+  previousCanvas?: Pick<CanvasData, 'compositionRunGroup'>
+}
+
+/** Prefer in-memory extras; if both are empty, keep a server-side compositionRunGroup. */
+export function extrasForCanvasSave(input: {
+  current?: CanvasData['compositionRunGroup'] | null
+  lastKnown?: CanvasData['compositionRunGroup'] | null
+  server?: CanvasData['compositionRunGroup'] | null
+}): CanvasSaveExtras {
+  const extras: CanvasSaveExtras = {}
+  if (input.current) extras.compositionRunGroup = input.current
+  const previous = input.lastKnown ?? input.server ?? undefined
+  if (previous) extras.previousCanvas = { compositionRunGroup: previous }
+  return extras
 }

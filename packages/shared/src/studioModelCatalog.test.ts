@@ -17,13 +17,16 @@ describe('studioModelCatalog', () => {
     expect(listModels('image').map((m) => m.modelKey)).toEqual([
       'agnes-image-2.0-flash',
       'agnes-image-2.1-flash',
+      'agnes-image-2.5-flash',
       'image2',
       'navo-pro',
       'seedream-5.0-pro',
       'midjourney-8.1',
     ])
-    expect(listModels('video')).toHaveLength(10)
+    expect(listModels('video')).toHaveLength(11)
     expect(listModels('video').map((m) => m.modelKey)).toEqual(expect.arrayContaining([
+      'agnes-video-v2.0',
+      'agnes-video-2.5-flash',
       'h3-max-turbo',
       'h3-max',
       'minimax-h3',

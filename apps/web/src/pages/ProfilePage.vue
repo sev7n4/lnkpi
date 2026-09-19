@@ -2,20 +2,17 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MembershipModal from '@/components/membership/MembershipModal.vue'
+import UsageDayTable from '@/components/usage/UsageDayTable.vue'
+import UsageHeatmap from '@/components/usage/UsageHeatmap.vue'
+import UsageOverviewCards from '@/components/usage/UsageOverviewCards.vue'
+import UsageTrend from '@/components/usage/UsageTrend.vue'
 import { useAuthStore } from '@/stores/auth'
 import { membershipApi } from '@/services/users-api'
 import { api } from '@/services/api'
 import { copyTextToClipboard } from '@/utils/copyToClipboard'
 import { BRAND_LOGO_URL } from '@/constants/brand'
 import type { User } from '@lnkpi/shared'
-import type {
-  PointCategory,
-  PointKind,
-  PointTransactionItem,
-  PointsInsights,
-  PointsRangeKey,
-  PointsSummary,
-} from '@/services/users-api'
+import type { UsageDaysResponse, UsageOverviewResponse, UsageTrendRangeKey } from '@/services/users-api'
 
 const router = useRouter()
 const route = useRoute()
@@ -24,9 +21,9 @@ const auth = useAuthStore()
 type ProfileTab = 'account' | 'billing'
 
 const activeTab = computed<ProfileTab>(() => {
-  const raw = route.query.tab
-  const tab = Array.isArray(raw) ? raw[0] : raw
-  return tab === 'billing' ? 'billing' : 'account'
+  const raw = Array.isArray(route.query.tab) ? route.query.tab[0] : route.query.tab
+  if (raw === 'billing' || raw === 'usage') return 'billing'
+  return 'account'
 })
 
 function setTab(tab: ProfileTab) {
@@ -39,30 +36,38 @@ function closeProfile() {
 }
 
 const profile = ref<User | null>(null)
-const range = ref<PointsRangeKey>('month')
-const summary = ref<PointsSummary | null>(null)
-const transactions = ref<PointTransactionItem[]>([])
-const filterCategory = ref<PointCategory>()
-const filterKind = ref<PointKind>()
-const nextCursor = ref<string | null>(null)
-const isLoading = ref(false)
-const isLoadingMore = ref(false)
-const loadError = ref('')
+const usage = ref<UsageOverviewResponse | null>(null)
+const usageDays = ref<UsageDaysResponse | null>(null)
+const usageAllDays = ref<UsageDaysResponse | null>(null)
+const usageRange = ref<UsageTrendRangeKey>('7d')
+const usageError = ref('')
+const daysError = ref('')
+const allDaysError = ref('')
+const usageLoading = ref(false)
+const daysLoading = ref(false)
+const allDaysLoading = ref(false)
 const showMembership = ref(false)
 const inviteCopied = ref(false)
 
-type BillKindTab = 'all' | 'consume' | 'grant'
+/** Independent generations; stale overview / days responses are discarded. */
+let usageFetchGeneration = 0
+let daysFetchGeneration = 0
+let allDaysFetchGeneration = 0
 
-const billKindTab = ref<BillKindTab>('all')
+function bumpUsageFetchGeneration() {
+  usageFetchGeneration += 1
+  return usageFetchGeneration
+}
 
-watch(billKindTab, (tab) => {
-  filterKind.value = tab === 'all' ? undefined : tab
-})
+function bumpDaysFetchGeneration() {
+  daysFetchGeneration += 1
+  return daysFetchGeneration
+}
 
-watch(filterKind, (kind) => {
-  if (!kind) billKindTab.value = 'all'
-  else if (kind === 'consume' || kind === 'grant') billKindTab.value = kind
-})
+function bumpAllDaysFetchGeneration() {
+  allDaysFetchGeneration += 1
+  return allDaysFetchGeneration
+}
 
 const membershipLabel = computed(() => {
   const m = profile.value?.membership
@@ -72,83 +77,6 @@ const membershipLabel = computed(() => {
 })
 
 const isFreeMembership = computed(() => !profile.value?.membership || profile.value.membership === 'free')
-
-/** Monotonic generation; stale responses are discarded when range/filters change. */
-let fetchGeneration = 0
-
-function bumpFetchGeneration() {
-  fetchGeneration += 1
-  return fetchGeneration
-}
-
-const rangeOptions: Array<{ value: PointsRangeKey; label: string }> = [
-  { value: '7d', label: '近 7 天' },
-  { value: 'month', label: '本月' },
-  { value: 'all', label: '全部' },
-]
-
-const categoryOptions: Array<{
-  value: Exclude<PointCategory, 'other'>
-  label: string
-  accent: string
-}> = [
-  { value: 'text', label: '文本', accent: 'text-sky-300' },
-  { value: 'image', label: '图片', accent: 'text-violet-300' },
-  { value: 'audio', label: '音频', accent: 'text-amber-300' },
-  { value: 'video', label: '视频', accent: 'text-pink-300' },
-]
-
-const kindLabels: Record<PointKind, string> = {
-  consume: '消耗',
-  refund: '退款',
-  grant: '获得',
-}
-
-const categoryLabels: Record<PointCategory, string> = {
-  text: '文本',
-  image: '图片',
-  audio: '音频',
-  video: '视频',
-  other: '其他',
-}
-
-const insightOptions = [
-  { key: 'netConsumedTotal' as const, label: '净消耗' },
-  { key: 'peakDayConsumed' as const, label: '单日峰值' },
-  { key: 'avgDailyConsumed' as const, label: '日均消耗' },
-  { key: 'activeDays' as const, label: '活跃天数' },
-  { key: 'longestStreakDays' as const, label: '最长连续活跃' },
-]
-
-function formatInsightValue(key: keyof PointsInsights, value: number) {
-  if (key === 'avgDailyConsumed') return value < 10 ? value.toFixed(1) : Math.round(value).toString()
-  return String(Math.round(value))
-}
-
-function toggleCategory(category: PointCategory) {
-  filterCategory.value = filterCategory.value === category ? undefined : category
-}
-
-function toggleKind(kind: PointKind) {
-  filterKind.value = filterKind.value === kind ? undefined : kind
-}
-
-function formatCreatedAt(value: string) {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date)
-}
-
-function shortGenerationId(id: string) {
-  return id.length > 16 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id
-}
 
 async function copyInvite() {
   const code = profile.value?.inviteCode
@@ -164,80 +92,118 @@ async function copyInvite() {
   }
 }
 
-async function reload() {
-  const gen = bumpFetchGeneration()
-  isLoading.value = true
-  isLoadingMore.value = false
-  loadError.value = ''
+async function loadUsage() {
+  const gen = bumpUsageFetchGeneration()
+  usageLoading.value = true
+  usageError.value = ''
   try {
-    const [summaryResponse, transactionsResponse] = await Promise.all([
-      membershipApi.pointsSummary(range.value),
-      membershipApi.transactions({
-        range: range.value,
-        category: filterCategory.value,
-        kind: filterKind.value,
-      }),
-    ])
-    if (gen !== fetchGeneration) return
-    summary.value = summaryResponse.data.data
-    transactions.value = transactionsResponse.data.data.items
-    nextCursor.value = transactionsResponse.data.data.nextCursor
+    const response = await membershipApi.usage()
+    if (gen !== usageFetchGeneration) return
+    usage.value = response.data.data
   } catch {
-    if (gen !== fetchGeneration) return
-    loadError.value = '积分账单加载失败，请稍后重试'
+    if (gen !== usageFetchGeneration) return
+    usageError.value = '用量总览加载失败，请稍后重试'
   } finally {
-    if (gen === fetchGeneration) {
-      isLoading.value = false
+    if (gen === usageFetchGeneration) {
+      usageLoading.value = false
     }
   }
 }
 
-async function loadMore() {
-  if (!nextCursor.value || isLoadingMore.value) return
-  const gen = fetchGeneration
-  isLoadingMore.value = true
+async function loadUsageDays() {
+  const gen = bumpDaysFetchGeneration()
+  daysLoading.value = true
+  daysError.value = ''
   try {
-    const response = await membershipApi.transactions({
-      range: range.value,
-      category: filterCategory.value,
-      kind: filterKind.value,
-      cursor: nextCursor.value,
-    })
-    if (gen !== fetchGeneration) return
-    transactions.value.push(...response.data.data.items)
-    nextCursor.value = response.data.data.nextCursor
+    const response = await membershipApi.usageDays(usageRange.value)
+    if (gen !== daysFetchGeneration) return
+    usageDays.value = response.data.data
   } catch {
-    if (gen !== fetchGeneration) return
-    loadError.value = '更多账单加载失败，请稍后重试'
+    if (gen !== daysFetchGeneration) return
+    daysError.value = '用量趋势加载失败，请稍后重试'
   } finally {
-    if (gen === fetchGeneration) {
-      isLoadingMore.value = false
+    if (gen === daysFetchGeneration) {
+      daysLoading.value = false
     }
   }
 }
 
-watch([range, filterCategory, filterKind], () => {
-  void reload()
-})
-
-onMounted(async () => {
-  if (!auth.isLoggedIn) {
-    auth.openLogin()
-    return
+async function loadUsageAllDays() {
+  const gen = bumpAllDaysFetchGeneration()
+  allDaysLoading.value = true
+  allDaysError.value = ''
+  try {
+    const response = await membershipApi.usageDays('all')
+    if (gen !== allDaysFetchGeneration) return
+    usageAllDays.value = response.data.data
+  } catch {
+    if (gen !== allDaysFetchGeneration) return
+    allDaysError.value = '用量明细加载失败，请稍后重试'
+  } finally {
+    if (gen === allDaysFetchGeneration) {
+      allDaysLoading.value = false
+    }
   }
+}
+
+const daysViewLoading = computed(
+  () => daysLoading.value || (!usageDays.value && !daysError.value),
+)
+
+const allDaysViewLoading = computed(
+  () => allDaysLoading.value || (!usageAllDays.value && !allDaysError.value),
+)
+
+const tableTotals = computed(() => ({
+  generationCount: usage.value?.overview.generationCount ?? 0,
+  netConsumed: usage.value?.overview.netConsumedTotal ?? 0,
+  byCategory: usage.value?.overview.byCategory ?? { text: 0, image: 0, audio: 0, video: 0 },
+}))
+
+const usageViewLoading = computed(
+  () => usageLoading.value || (!usage.value && !usageError.value),
+)
+
+async function loadProfile() {
   try {
     const { data } = await api.get<{ data: User }>('/auth/profile')
     profile.value = data.data
     auth.user = data.data
-    await reload()
   } catch {
-    router.push('/workflow')
+    void router.push('/workflow')
+  }
+}
+
+function loadBillingUsage() {
+  void loadUsage()
+  void loadUsageDays()
+  void loadUsageAllDays()
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'billing') {
+    loadBillingUsage()
+  }
+})
+
+watch(usageRange, () => {
+  void loadUsageDays()
+})
+
+onMounted(() => {
+  if (!auth.isLoggedIn) {
+    auth.openLogin()
+    return
+  }
+  void loadProfile()
+  if (activeTab.value === 'billing') {
+    loadBillingUsage()
   }
 })
 </script>
 
 <template>
-  <div class="mx-auto max-w-3xl px-6 py-10">
+  <div class="mx-auto max-w-6xl px-6 py-10">
     <div class="mb-6 flex items-center justify-between gap-4">
       <h1 class="text-2xl font-semibold">个人中心</h1>
       <button
@@ -252,7 +218,7 @@ onMounted(async () => {
 
     <div class="mb-6 inline-flex rounded-full border border-white/8 bg-[#16161C] p-1">
       <button
-        v-for="tab in ([['account', '账户'], ['billing', '账单']] as const)"
+        v-for="tab in ([['account', '账户'], ['billing', '用量']] as const)"
         :key="tab[0]"
         type="button"
         class="rounded-full px-4 py-1.5 text-sm transition"
@@ -263,7 +229,7 @@ onMounted(async () => {
       </button>
     </div>
 
-    <div v-if="profile && activeTab === 'account'" class="space-y-4">
+    <div v-if="profile && activeTab === 'account'" data-account-cards class="space-y-4">
       <section class="rounded-2xl border border-white/8 bg-[#16161C] p-6">
         <div class="flex items-center gap-4">
           <div class="profile-avatar flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full">
@@ -315,189 +281,45 @@ onMounted(async () => {
       </section>
     </div>
 
-    <div v-if="activeTab === 'billing'">
-      <section class="mb-6 rounded-2xl border border-white/8 bg-[#1a1a1a] p-5">
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 class="text-lg font-medium">积分账单</h2>
-            <p class="mt-1 text-xs text-white/40">查看积分消耗、退款与获得记录</p>
-          </div>
-          <div class="flex rounded-xl bg-[#242424] p-1">
-            <button
-              v-for="option in rangeOptions"
-              :key="option.value"
-              type="button"
-              class="rounded-lg px-3 py-2 text-xs transition"
-              :class="range === option.value ? 'bg-[#6366f1] text-white' : 'text-white/50 hover:text-white/80'"
-              @click="range = option.value"
-            >
-              {{ option.label }}
-            </button>
-          </div>
-        </div>
-
-        <div v-if="summary" class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <button
-            v-for="category in categoryOptions"
-            :key="category.value"
-            type="button"
-            class="rounded-xl border p-4 text-left transition hover:bg-white/[0.04]"
-            :class="
-              filterCategory === category.value
-                ? 'border-[#818cf8]/60 bg-[#6366f1]/10'
-                : 'border-white/8 bg-[#242424]'
-            "
-            @click="toggleCategory(category.value)"
-          >
-            <p class="text-xs text-white/45">{{ category.label }}消耗</p>
-            <p class="mt-2 text-xl font-semibold" :class="category.accent">
-              {{ summary.byCategory[category.value] }}
-            </p>
-          </button>
-        </div>
-
-        <div v-if="summary?.insights" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-          <div
-            v-for="item in insightOptions"
-            :key="item.key"
-            class="rounded-xl border border-white/8 bg-[#242424] p-4"
-          >
-            <p class="text-xs text-white/45">{{ item.label }}</p>
-            <p class="mt-2 text-xl font-semibold text-white/85">
-              {{ formatInsightValue(item.key, summary.insights[item.key]) }}
-            </p>
-          </div>
-        </div>
-
-        <div v-if="summary" class="mt-3 grid grid-cols-2 gap-3" :class="{ 'sm:grid-cols-3': summary.otherNetConsumed > 0 }">
-          <button
-            type="button"
-            class="rounded-xl border p-4 text-left transition"
-            :class="
-              filterKind === 'refund'
-                ? 'border-emerald-400/40 bg-emerald-400/10'
-                : 'border-white/8 bg-white/[0.025] hover:bg-white/[0.04]'
-            "
-            @click="toggleKind('refund')"
-          >
-            <p class="text-xs text-white/45">退款积分</p>
-            <p class="mt-1 text-lg font-semibold text-emerald-400">+{{ summary.refundTotal }}</p>
-          </button>
-          <button
-            type="button"
-            class="rounded-xl border p-4 text-left transition"
-            :class="
-              filterKind === 'grant'
-                ? 'border-indigo-400/40 bg-indigo-400/10'
-                : 'border-white/8 bg-white/[0.025] hover:bg-white/[0.04]'
-            "
-            @click="toggleKind('grant')"
-          >
-            <p class="text-xs text-white/45">获得积分</p>
-            <p class="mt-1 text-lg font-semibold text-indigo-300">+{{ summary.grantTotal }}</p>
-          </button>
-          <button
-            v-if="summary.otherNetConsumed > 0"
-            type="button"
-            class="rounded-xl border p-4 text-left transition"
-            :class="
-              filterCategory === 'other'
-                ? 'border-white/30 bg-white/[0.08]'
-                : 'border-white/8 bg-white/[0.025] hover:bg-white/[0.04]'
-            "
-            @click="toggleCategory('other')"
-          >
-            <p class="text-xs text-white/45">其他消耗</p>
-            <p class="mt-1 text-lg font-semibold text-white/70">{{ summary.otherNetConsumed }}</p>
-          </button>
-        </div>
-
-        <div v-if="filterCategory || filterKind" class="mt-4 flex justify-end border-t border-white/8 pt-4">
-          <button
-            type="button"
-            class="text-xs text-white/40 transition hover:text-white/70"
-            @click="filterCategory = undefined; filterKind = undefined"
-          >
-            清除筛选
-          </button>
-        </div>
-      </section>
-
-      <div class="mb-4 flex rounded-xl bg-[#242424] p-1">
-        <button
-          v-for="tab in ([['all', '全部'], ['consume', '消耗'], ['grant', '获得']] as const)"
-          :key="tab[0]"
-          type="button"
-          class="flex-1 rounded-lg px-3 py-2 text-xs transition"
-          :class="billKindTab === tab[0] ? 'bg-[#6366f1] text-white' : 'text-white/50'"
-          @click="billKindTab = tab[0]"
-        >
-          {{ tab[1] }}
-        </button>
+    <div v-if="activeTab === 'billing'" class="space-y-4">
+      <div v-if="usageError" class="rounded-2xl border border-red-400/15 p-6 text-sm text-red-300/80">
+        {{ usageError }}
+        <button type="button" class="ml-2 underline" @click="loadUsage">重新加载</button>
       </div>
+      <UsageOverviewCards v-else-if="usage" :overview="usage.overview" />
+      <div v-else class="h-28 animate-pulse rounded-2xl bg-white/5" />
 
-      <div v-if="isLoading" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-sm text-white/35">
-        正在加载积分账单…
+      <UsageHeatmap
+        v-if="usage && !usageError"
+        :from="usage.heatmap.from"
+        :to="usage.heatmap.to"
+        :active-days="usage.heatmap.activeDays"
+        :days="usage.heatmap.days"
+      />
+      <div v-else-if="usageViewLoading" class="h-48 animate-pulse rounded-2xl bg-white/5" />
+
+      <div v-if="daysError" class="rounded-2xl border border-red-400/15 p-6 text-sm text-red-300/80">
+        {{ daysError }}
+        <button type="button" class="ml-2 underline" @click="loadUsageDays">重新加载</button>
       </div>
-      <div
-        v-else-if="loadError && !transactions.length"
-        class="rounded-2xl border border-red-400/15 bg-red-400/[0.04] py-10 text-center"
-      >
-        <p class="text-sm text-red-300/80">{{ loadError }}</p>
-        <button type="button" class="mt-3 text-xs text-white/50 underline hover:text-white/80" @click="reload">
-          重新加载
-        </button>
+      <UsageTrend
+        v-else
+        :range="usageRange"
+        :days="usageDays?.days ?? []"
+        :loading="daysViewLoading"
+        @update:range="usageRange = $event"
+      />
+
+      <div v-if="allDaysError" class="rounded-2xl border border-red-400/15 p-6 text-sm text-red-300/80">
+        {{ allDaysError }}
+        <button type="button" class="ml-2 underline" @click="loadUsageAllDays">重新加载</button>
       </div>
-      <div v-else class="space-y-3">
-        <div
-          v-for="tx in transactions"
-          :key="tx.id"
-          class="rounded-2xl border border-white/8 bg-[#1a1a1a] p-4"
-        >
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium text-white/80">{{ tx.reason }}</p>
-              <div class="mt-2 flex flex-wrap items-center gap-2">
-                <span class="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/55">
-                  {{ kindLabels[tx.kind] }}
-                </span>
-                <span class="rounded-full bg-white/[0.06] px-2 py-1 text-[11px] text-white/55">
-                  {{ categoryLabels[tx.category] }}
-                </span>
-                <span v-if="tx.model" class="text-[11px] text-white/35">{{ tx.model }}</span>
-              </div>
-            </div>
-            <span class="shrink-0 text-base font-semibold" :class="tx.amount >= 0 ? 'text-green-400' : 'text-red-400'">
-              {{ tx.amount >= 0 ? '+' : '' }}{{ tx.amount }}
-            </span>
-          </div>
-          <div class="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-white/5 pt-3">
-            <time class="text-xs text-white/30" :datetime="tx.createdAt">{{ formatCreatedAt(tx.createdAt) }}</time>
-            <div class="flex items-center gap-3">
-              <span v-if="tx.generationId" class="font-mono text-[11px] text-[#818cf8]/70" :title="tx.generationId">
-                生成 ID · {{ shortGenerationId(tx.generationId) }}
-              </span>
-              <span class="text-xs text-white/35">
-                余额 {{ tx.balanceAfter ?? '—' }}
-              </span>
-            </div>
-          </div>
-        </div>
-        <p v-if="loadError" class="py-2 text-center text-xs text-red-300/70">{{ loadError }}</p>
-        <div v-if="nextCursor" class="pt-2 text-center">
-          <button
-            type="button"
-            class="rounded-xl border border-white/10 px-5 py-2 text-xs text-white/50 transition hover:bg-white/[0.04] hover:text-white/80 disabled:opacity-40"
-            :disabled="isLoadingMore"
-            @click="loadMore"
-          >
-            {{ isLoadingMore ? '加载中…' : '加载更多' }}
-          </button>
-        </div>
-        <p v-if="!transactions.length" class="rounded-2xl border border-white/8 bg-[#1a1a1a] py-12 text-center text-white/30">
-          {{ filterCategory || filterKind ? '该条件下暂无记录' : '暂无该时间范围的账单记录' }}
-        </p>
-      </div>
+      <UsageDayTable
+        v-else
+        :days="usageAllDays?.days ?? []"
+        :loading="allDaysViewLoading"
+        :totals="tableTotals"
+      />
     </div>
 
     <MembershipModal v-model="showMembership" />
@@ -509,4 +331,3 @@ onMounted(async () => {
   background: var(--neo-brand-gradient);
 }
 </style>
-

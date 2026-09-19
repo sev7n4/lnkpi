@@ -10,6 +10,7 @@ from app.errors import (
     circuit_open_error,
     from_http_status,
     from_nest_message,
+    message_from_http_error_body,
     tool_timeout_error,
 )
 from app.metrics import record_tool_call
@@ -134,6 +135,12 @@ class NestCanvasClient:
             raise AgentToolError(tool_timeout_error(name)) from exc
         except httpx.HTTPStatusError as exc:
             err = from_http_status(name, exc.response.status_code)
+            try:
+                body = exc.response.json()
+            except Exception:
+                body = None
+            if isinstance(body, dict):
+                err["message"] = message_from_http_error_body(body, err["message"])
             if err["error_type"] == "downstream_unavailable":
                 self._breaker.record_failure(name)
             record_tool_call(name, success=False)
@@ -297,15 +304,18 @@ class NestCanvasClient:
         self,
         *,
         node_ids: list[str],
-        attachments: list[dict],
+        attachments: list[dict] | None = None,
         ref_order: list[str] | None,
         mode: str,
         mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
+        atts = attachments if attachments else list(self.sidebar_attachments or [])
+        if not atts:
+            return {"ok": False, "error": "没有侧栏附件"}
         body = {
             "sessionId": self._session_id,
             "nodeIds": node_ids,
-            "attachments": attachments,
+            "attachments": atts,
             "refOrder": ref_order or [],
             "mode": mode,
         }
@@ -390,6 +400,7 @@ class NestCanvasClient:
         api_key: str | None = None,
         base_url: str | None = None,
         source: str | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {
             "sessionId": self._session_id,
@@ -412,7 +423,7 @@ class NestCanvasClient:
         return await self._post(
             "/agent/internal/run-vision-qa",
             body,
-            timeout=120.0,
+            timeout=120.0 if timeout is None else timeout,
         )
 
     async def run_text_generation(self, node_id: str) -> dict[str, Any]:
@@ -693,6 +704,27 @@ class NestCanvasClient:
                 "parentId": parent_id,
                 "parentVersion": parent_version,
                 "delta": delta,
+            },
+        )
+
+    async def preview_composition(self, utterance: str, copy: dict | None = None) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "sessionId": self._session_id,
+            "userId": self._user_id,
+            "utterance": utterance,
+        }
+        if copy is not None:
+            body["copy"] = copy
+        body["attachments"] = list(self.sidebar_attachments or [])
+        return await self._post("/agent/internal/preview-composition", body)
+
+    async def confirm_composition(self, dump_hash: str) -> dict[str, Any]:
+        return await self._post(
+            "/agent/internal/confirm-composition",
+            {
+                "sessionId": self._session_id,
+                "userId": self._user_id,
+                "dumpHash": dump_hash,
             },
         )
 

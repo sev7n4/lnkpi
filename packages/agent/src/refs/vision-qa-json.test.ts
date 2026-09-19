@@ -32,6 +32,23 @@ describe('generateVisionQaJson', () => {
     expect(body.messages[1].content[0]).toEqual({ type: 'text', text: '用户上传 1 张图' })
   })
 
+  it('does not retry on empty content even when maxRetries is 2 (format error)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '   ' } }] }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      generateVisionQaJson('sys', 'user', ['https://example.com/a.jpg'], {
+        apiKey: 'k',
+        model: 'gpt-4o',
+        maxRetries: 2,
+      }),
+    ).rejects.toThrow(/空内容/)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('does not retry on 500 (D-RETRY: 5xx hard fail)', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'err' })
     vi.stubGlobal('fetch', fetchMock)

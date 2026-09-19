@@ -3,26 +3,50 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from app.errors import AgentToolError, from_exception
 from app.graph.canvas_commands import extract_canvas_commands
+from app.graph.composition_route import (
+    is_composition_structure_utterance,
+    is_live_composition_pending,
+)
 from app.graph.explore_dispatch import (
     MANDATORY_INTENTS,
     classify_explore_intent,
+    mentioned_keys_for_sidebar_bind,
     run_mandatory_explore,
     select_narrow_write_tools,
+    sidebar_image_keys_from_attachments,
+    this_turn_new_image_keys_from_parse,
 )
 from app.graph.planner_copy import (
+    COMPOSITION_CANCEL_REPLY,
+    COMPOSITION_DUMP_HASH_KW,
+    COMPOSITION_EXTRACT_INCOMPLETE,
+    COMPOSITION_KIND,
+    COMPOSITION_LANDED_REPLY,
+    COMPOSITION_NO_PREVIEW_REPLY,
+    PLANNER_INSTANTIATED_REPLY,
+    PLANNER_PREVIEW_ARGS_KW,
     format_planner_preview_hitl,
     is_machine_payload_reply,
+    is_planner_cancel_chip,
+    is_planner_confirm_chip,
+    last_successful_preview_args,
     pick_planner_slot_utterance,
     sanitize_planner_reply,
 )
 from app.graph.recent_turns import compress_recent_turns
-from app.graph.sidebar_media_parse import format_parse_context_block, prefix_assistant_reply
+from app.graph.sidebar_media_parse import (
+    format_parse_context_block,
+    parse_block_asks_unknown,
+    prefix_assistant_reply,
+)
+from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 from app.metrics import record_explore_dispatch
 from app.tools.definitions import EXPLORE_WRITE_TOOLS, build_explore_tools
 from app.tools.tool_plan import META_TOOL_NAME, build_tool_plan
@@ -34,7 +58,8 @@ _PLANNER_CONFIRM_LINE = "请确认是否把改动落到画布"
 _PLANNER_PROMOTE_LINE = "这份工作流更像哪一种？"
 _PLANNER_SYSTEM = (
     "规划工作流时：先 match_workflow_templates 再 preview_workflow_template。"
-    "覆盖上面规则5：禁止用 connect_nodes 或 import_workflow 手搭规划拓扑。"
+    "用户已说「确认落到画布」后用 instantiate_workflow_template，不要用手搭替代已确认的 instantiate。"
+    "未确认落到画布时不要 instantiate；口语搭骨架（多节点+连线+填 dock）用 upsert_media_node 与 connect_nodes。"
     "instantiate_workflow_template 只在用户确认落到画布之后调用，"
     "只传 parent_id、parent_version、delta，不要传完整模板。"
     "对用户只用「模板」「核心步骤」「改版」「接到另一套模板」；"
@@ -69,11 +94,31 @@ _EXPLORE_SYSTEM = (
     "（禁止调用任何 run_*）。真正出图/出视频须等用户在 UI 确认后由系统执行。\n"
     "4. 用户要创建图片/视频/文本/音频节点或明确「生成一张…」时：用 upsert_media_node"
     "创建或更新节点（可带 prompt），按需再用 set_node_prompt 填参、用 connect_nodes 连线，"
-    "然后调用 propose_generation，并等待用户确认；不要假装已出图。\n"
-    "5. 工作流类请求（骨架 + 生成 + 填 dock）：优先摆多个节点并用连线（connect_nodes）"
-    "串起来，不要压成单个 atomic 式节点。\n"
-    "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。\n"
-    "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。\n"
+    "然后调用 propose_generation，并等待用户确认；不要假装已出图。"
+    "有侧栏参考图要出结果图时：用 upsert_media_node 新建一张图节点（用户明确要求改某个"
+    "image-* 除外），再 apply_sidebar_attachments（mode=localRefs，mentioned_keys 用 I1/I2"
+    "芯片序），必要时 set_node_prompt，然后 propose_generation。此路径不要 connect_nodes、"
+    "不要 attach_refs。"
+    "挂参分工：侧栏 @I* / I1 只用 apply_sidebar_attachments（mode=localRefs）；"
+    "画布已有 image-* / video-* 才用 attach_refs 或 connect_nodes。"
+    "禁止 attach_refs 吃芯片 key；禁止 connect_nodes 连芯片。"
+    "闲聊、谢谢、纯识图问句、「重新生成一张」即使工具可见也不得 upsert_media_node / propose_generation。"
+    "无「确认落到画布」不得 instantiate_workflow_template。"
+    "一致性写在提示词和 ref 顺序（先身份后衣服/产品），不要再搭工作流。\n"
+    "5. 口语搭骨架（含「生图生视频」、多节点+连线+填 dock）：至少 upsert_media_node 两个媒体节点"
+    "（一张 image 与一条 video，或 image→video 链），每个可生成节点 prompt 非空（创建时带 prompt 或 set_node_prompt），"
+    "用 connect_nodes 连 canvas 节点 id，再对每个可生成节点 propose_generation。"
+    "不要压成单个 atomic 式节点；不要 import_workflow / instantiate_workflow_template 顶替本句；"
+    "不要把 @I* 芯片连成边。确认前不要 run_*、不要声称已出图。\n"
+    "6. 若需要当前未绑定的能力，先调用 tool_search 加载 deferred 工具。"
+    "upsert_media_node / propose_generation 在「生成一张」类口语下应已绑定，不要用 tool_search 找 CORE。"
+    "connect_nodes 已绑定，不要用 tool_search 找 CORE 写工具。"
+    "有侧栏参考图要出结果图时 upsert_media_node / apply_sidebar_attachments / propose_generation"
+    "应已绑定，不要用 tool_search 找 CORE。\n"
+    "7. 若已提供【侧栏参考图解析】，不得声称只能看到文件名或画布节点标题。"
+    "@I1/@I2 是侧栏芯片 key，不是画布节点 id。禁止问「I1 对应画布哪张图」；禁止把芯片映射到"
+    "已有画布节点（除非用户明确要求改该节点）。侧栏图≥3 且未 @、或只有旧图且未 @：先问用哪几张"
+    "或请 @I1，不要对闲聊新建节点。\n"
     "8. import_workflow / instantiate_workflow_template 已在服务端对 addedNodeIds "
     "默认顺连线；成功后不要为同一批 id 再调 arrange_nodes_along_edges"
     "（除非用户明确要求再整理）。"
@@ -93,6 +138,27 @@ _PARSE_FAIL_NO_EMPTY_LISTING = (
 )
 
 _NODE_WRITE_CLARIFY = "未能更新节点，请提供节点 id（如 prompt-1）。"
+_WRITE_RETRY_SYSTEM = (
+    "必须调用写入类工具完成操作（如 upsert_media_node、connect_nodes、"
+    "set_node_prompt、propose_generation）。"
+    "口语搭骨架不要改用 import_workflow。"
+)
+
+
+def _last_composition_dump_hash(state: dict[str, Any], messages: list[Any]) -> str:
+    hashed = str(state.get("composition_dump_hash") or "").strip()
+    if hashed:
+        return hashed
+    for msg in reversed(messages or []):
+        extra = getattr(msg, "additional_kwargs", None)
+        if extra is None and isinstance(msg, dict):
+            extra = msg.get("additional_kwargs")
+        if not isinstance(extra, dict):
+            continue
+        hashed = str(extra.get(COMPOSITION_DUMP_HASH_KW) or "").strip()
+        if hashed:
+            return hashed
+    return ""
 
 
 def _latest_user_text(messages: list[Any]) -> str:
@@ -122,9 +188,18 @@ def _bind_plan_tools(
     tools_by_name: dict[str, Any],
     loaded: list[str],
     utterance: str,
+    *,
+    sidebar_image_keys: tuple[str, ...] = (),
+    this_turn_new_image_keys: tuple[str, ...] = (),
+    mentioned_keys: tuple[str, ...] = (),
 ) -> tuple[Any, frozenset[str]]:
     plan = build_tool_plan(loaded=loaded)
-    narrow_writes = select_narrow_write_tools(utterance)
+    narrow_writes = select_narrow_write_tools(
+        utterance,
+        sidebar_image_keys=sidebar_image_keys,
+        this_turn_new_image_keys=this_turn_new_image_keys,
+        mentioned_keys=mentioned_keys,
+    )
     visible: set[str] = set()
     for name in plan.ordered_visible:
         if name in EXPLORE_WRITE_TOOLS:
@@ -168,7 +243,102 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         slot_utterance = pick_planner_slot_utterance(human_texts) or user_text
         if hasattr(nest, "last_user_utterance"):
             nest.last_user_utterance = slot_utterance
+        attachments = state.get("sidebar_attachments") or []
+        if hasattr(nest, "sidebar_attachments"):
+            nest.sidebar_attachments = list(attachments)
         parse = state.get("sidebar_media_parse")
+
+        def _chip_out(
+            text: str,
+            canvas_commands: list[dict[str, Any]] | None = None,
+            *,
+            additional_kwargs: dict[str, Any] | None = None,
+            extra_state: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            payload: dict[str, Any] = {
+                "phase": "done",
+                "skill_id": None,
+                "user_decision": "none",
+                "messages": [
+                    AIMessage(
+                        content=prefix_assistant_reply(text, parse),
+                        additional_kwargs=additional_kwargs or {},
+                    )
+                ],
+                "explore_summary": summary if isinstance(summary, dict) else None,
+                "tool_plan_loaded": list(loaded),
+            }
+            if canvas_commands:
+                payload["canvas_commands"] = canvas_commands
+            if extra_state:
+                payload.update(extra_state)
+            return payload
+
+        if is_planner_cancel_chip(user_text):
+            return _chip_out(COMPOSITION_CANCEL_REPLY)
+        if is_planner_confirm_chip(user_text):
+            dump_hash = _last_composition_dump_hash(state, messages)
+            if not dump_hash:
+                return _chip_out(COMPOSITION_NO_PREVIEW_REPLY)
+            confirm = getattr(nest, "confirm_composition", None)
+            if not callable(confirm):
+                return _chip_out(COMPOSITION_NO_PREVIEW_REPLY)
+            try:
+                result = await confirm(dump_hash)
+            except AgentToolError as exc:
+                return _chip_out(str(exc.error.get("message") or COMPOSITION_NO_PREVIEW_REPLY))
+            except Exception as exc:
+                err = from_exception("confirm_composition", exc)
+                return _chip_out(err["message"])
+            cmds = extract_canvas_commands(result if isinstance(result, dict) else {})
+            extra: dict[str, Any] = {"composition_pending": None}
+            if isinstance(result, dict):
+                landed_hash = str(result.get("dumpHash") or result.get("dump_hash") or dump_hash).strip()
+                if landed_hash:
+                    extra["composition_dump_hash"] = landed_hash
+            return _chip_out(COMPOSITION_LANDED_REPLY, cmds or None, extra_state=extra)
+
+        pending_raw = state.get("composition_pending")
+        live_pending = is_live_composition_pending(pending_raw, user_text)
+        if is_composition_structure_utterance(user_text) or live_pending:
+            preview = getattr(nest, "preview_composition", None)
+            if callable(preview):
+                try:
+                    result = await preview(user_text)
+                except AgentToolError as exc:
+                    msg = str(exc.error.get("message") or "")
+                    extra: dict[str, Any] = {"composition_dump_hash": None}
+                    if COMPOSITION_EXTRACT_INCOMPLETE in msg:
+                        extra["composition_pending"] = json.dumps(
+                            {
+                                "utterance": user_text,
+                                "ts": datetime.now(timezone.utc).isoformat(),
+                            },
+                            ensure_ascii=False,
+                        )
+                    return _chip_out(msg or COMPOSITION_NO_PREVIEW_REPLY, extra_state=extra)
+                except Exception as exc:
+                    err = from_exception("preview_composition", exc)
+                    return _chip_out(err["message"])
+                user_message = ""
+                dump_hash = ""
+                if isinstance(result, dict):
+                    user_message = str(result.get("userMessage") or result.get("user_message") or "")
+                    dump_hash = str(result.get("dumpHash") or result.get("dump_hash") or "").strip()
+                additional: dict[str, Any] = {"kind": COMPOSITION_KIND}
+                extra = {"composition_pending": None}
+                if dump_hash:
+                    additional[COMPOSITION_DUMP_HASH_KW] = dump_hash
+                    extra["composition_dump_hash"] = dump_hash
+                return _chip_out(
+                    user_message or COMPOSITION_NO_PREVIEW_REPLY,
+                    additional_kwargs=additional,
+                    extra_state=extra,
+                )
+
+        clear_pending: dict[str, Any] = {}
+        if pending_raw and not live_pending:
+            clear_pending["composition_pending"] = None
 
         intent = classify_explore_intent(user_text, summary=summary if isinstance(summary, dict) else None)
         if intent in MANDATORY_INTENTS:
@@ -178,6 +348,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 user_text,
                 summary=summary if isinstance(summary, dict) else {},
                 tools_by_name=tools_by_name,
+                event_sink=nest,
             )
             out: dict[str, Any] = {
                 "phase": "done",
@@ -195,17 +366,35 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             }
             if mandatory.canvas_commands:
                 out["canvas_commands"] = mandatory.canvas_commands
+            if clear_pending:
+                out.update(clear_pending)
             return out
 
         record_explore_dispatch(intent, "llm")
-        attachments = state.get("sidebar_attachments") or []
-        if hasattr(nest, "sidebar_attachments"):
-            nest.sidebar_attachments = list(attachments)
-        llm_bound, visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+        image_keys = sidebar_image_keys_from_attachments(attachments)
+        new_keys = this_turn_new_image_keys_from_parse(attachments, parse)
+        mention_keys = mentioned_keys_for_sidebar_bind(
+            user_text, state.get("sidebar_mentioned_keys")
+        )
+
+        def bind() -> tuple[Any, frozenset[str]]:
+            return _bind_plan_tools(
+                llm,
+                tools_by_name,
+                loaded,
+                user_text,
+                sidebar_image_keys=image_keys,
+                this_turn_new_image_keys=new_keys,
+                mentioned_keys=mention_keys,
+            )
+
+        llm_bound, visible = bind()
 
         system_content = _EXPLORE_SYSTEM.format(summary=_serialize_tool_result(summary))
         if parse:
-            system_content = system_content + "\n\n" + format_parse_context_block(parse)
+            system_content = system_content + "\n\n" + format_parse_context_block(
+                parse, ask_unknown=parse_block_asks_unknown(user_text)
+            )
             if not parse.get("vision_used"):
                 system_content = system_content + "\n" + _PARSE_FAIL_NO_EMPTY_LISTING
         if "preview_workflow_template" in visible or "match_workflow_templates" in visible:
@@ -237,14 +426,11 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and not write_retry_done
                 ):
                     write_retry_done = True
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+                    llm_bound, _visible = bind()
                     convo.append(ai)
                     convo.append(
                         SystemMessage(
-                            content=(
-                                "必须调用写入类工具完成操作（如 set_node_prompt、"
-                                "import_workflow、upload_media_to_canvas 等）。"
-                            )
+                            content=_WRITE_RETRY_SYSTEM
                         )
                     )
                     continue
@@ -255,6 +441,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", "")
                 args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
                 tool_call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
+                await maybe_emit_tool_sse(
+                    nest,
+                    {
+                        "type": "tool_call",
+                        "data": {
+                            "name": str(name),
+                            "arguments": cap_tool_sse_payload(args or {}, kind="arguments"),
+                        },
+                    },
+                )
                 tool = tools_by_name.get(name)
                 called_tools.add(str(name))
                 if tool is None:
@@ -276,6 +472,16 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                             "error_type": err["error_type"],
                             "retry_hint": err.get("retry_hint"),
                         }
+                await maybe_emit_tool_sse(
+                    nest,
+                    {
+                        "type": "tool_result",
+                        "data": {
+                            "name": str(name),
+                            "result": cap_tool_sse_payload(result, kind="result"),
+                        },
+                    },
+                )
                 for cmd in extract_canvas_commands(result):
                     if cmd not in canvas_commands:
                         canvas_commands.append(cmd)
@@ -300,7 +506,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
                     and isinstance(result, dict)
                     and result.get("loaded")
                 ):
-                    llm_bound, _visible = _bind_plan_tools(llm, tools_by_name, loaded, user_text)
+                    llm_bound, _visible = bind()
         else:
             final_reply = str(getattr(convo[-1], "content", "") or "").strip()
 
@@ -323,7 +529,7 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
             if preview_hitl and "instantiate_workflow_template" not in called_tools:
                 final_reply = preview_hitl
             elif "instantiate_workflow_template" in called_tools:
-                final_reply = "已按模板落到画布。"
+                final_reply = PLANNER_INSTANTIATED_REPLY
             else:
                 final_reply = "已完成操作。"
 
@@ -337,16 +543,28 @@ def make_explore_node(*, llm: Any, nest: Any) -> Callable:
         if not final_reply:
             final_reply = "已查询画布信息。如需继续操作，请说明具体节点或任务。"
 
+        additional: dict[str, Any] = {}
+        preview_persist = last_successful_preview_args(convo)
+        if preview_persist:
+            additional[PLANNER_PREVIEW_ARGS_KW] = preview_persist
+
         out = {
             "phase": "done",
             "skill_id": None,
             "user_decision": "none",
-            "messages": [AIMessage(content=prefix_assistant_reply(final_reply, parse))],
+            "messages": [
+                AIMessage(
+                    content=prefix_assistant_reply(final_reply, parse),
+                    additional_kwargs=additional,
+                )
+            ],
             "explore_summary": summary if isinstance(summary, dict) else None,
             "tool_plan_loaded": list(loaded),
         }
         if canvas_commands:
             out["canvas_commands"] = canvas_commands
+        if clear_pending:
+            out.update(clear_pending)
         return out
 
     return explore

@@ -55,7 +55,9 @@ import {
   type MediaRefPreflight,
   type StudioModality,
   type VideoGenerationMode,
+  type CanvasData,
   assertMiniMaxH3ReferenceLimits,
+  resolveCompositionVideoPrompt,
 } from '@lnkpi/shared'
 import {
   alreadyRefunded,
@@ -102,6 +104,7 @@ import {
   readImageBuffer,
 } from '../media/composite-unmasked'
 import { UploadService } from '../upload/upload.service'
+import { hasCompositionPBlock } from './video-generation-request.util'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
 
@@ -338,6 +341,37 @@ function withCanvasScope(scope?: CanvasGenerationScope) {
   }
 }
 
+function parseSessionCanvas(raw: string | null | undefined): CanvasData | undefined {
+  if (!raw) return undefined
+  try {
+    const parsed = JSON.parse(raw) as CanvasData
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !Array.isArray(parsed.nodes)) {
+      return undefined
+    }
+    return parsed
+  } catch {
+    return undefined
+  }
+}
+
+const EMPTY_P_BLOCK_V_MESSAGE = '分镜还是空的，写好后再生成视频。'
+
+/** Map generateVisionQaJson throws to structured errorClass + neutral Chinese reason. */
+function classifyVisionCatch(err: unknown): { errorClass: string; reason: string } {
+  const raw = err instanceof Error ? err.message : String(err)
+  const lower = raw.toLowerCase()
+  if (/\b429\b/.test(raw) || lower.includes('rate limit')) {
+    return { errorClass: 'VISION_RATE_LIMIT', reason: '识图请求过于频繁，请稍后再试' }
+  }
+  if (lower.includes('timeout') || lower.includes('timed out') || raw.includes('超时')) {
+    return { errorClass: 'VISION_TIMEOUT', reason: '识图超时，请稍后重试' }
+  }
+  if (lower.includes('fetch failed') || lower.includes('download')) {
+    return { errorClass: 'VISION_FETCH_FAILED', reason: '参考图读取失败，请重新上传' }
+  }
+  return { errorClass: 'VISION_UPSTREAM', reason: '识图失败' }
+}
+
 @Injectable()
 export class StudioService {
   constructor(
@@ -532,12 +566,12 @@ export class StudioService {
         model: provider.model,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
-        maxRetries: 2,
+        maxRetries: 0,
       })
     } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err)
+      const { errorClass, reason } = classifyVisionCatch(err)
       return {
-        text: JSON.stringify({ pass: false, reason, product_summary: '' }),
+        text: JSON.stringify({ pass: false, reason, errorClass, product_summary: '' }),
         visionUsed: false,
       }
     }
@@ -1546,6 +1580,19 @@ export class StudioService {
     seed?: number,
     negativePrompt?: string,
   ) {
+    if (scope?.sessionId && scope?.nodeId) {
+      const session = await this.prisma.session.findUnique({ where: { id: scope.sessionId } })
+      const canvas = parseSessionCanvas(session?.canvasData)
+      if (canvas) {
+        const livePrompt = resolveCompositionVideoPrompt(canvas, scope.nodeId)
+        if ('error' in livePrompt) {
+          throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
+        }
+        if (hasCompositionPBlock(canvas, scope.nodeId)) {
+          prompt = livePrompt.prompt
+        }
+      }
+    }
     const videoRefs: GenerationRefPayload[] = (refs ?? []).map((ref) => ({
       ...ref,
       mediaType: ref.mediaType as GenerationRefPayload['mediaType'],

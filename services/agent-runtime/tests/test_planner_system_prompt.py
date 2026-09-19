@@ -12,7 +12,11 @@ def test_planner_system_uses_user_facing_copy():
     assert "种子链" in _PLANNER_SYSTEM
     assert "t2i" in _PLANNER_SYSTEM
     assert "i2i" in _PLANNER_SYSTEM
-    assert "覆盖上面规则5" in _PLANNER_SYSTEM
+    assert "覆盖上面规则5" not in _PLANNER_SYSTEM
+    assert "禁止用 connect_nodes" not in _PLANNER_SYSTEM
+    assert "connect_nodes" in _PLANNER_SYSTEM
+    assert "upsert_media_node" in _PLANNER_SYSTEM
+    assert "不要用手搭替代已确认的 instantiate" in _PLANNER_SYSTEM
     assert "recipe id" in _PLANNER_SYSTEM
 
 

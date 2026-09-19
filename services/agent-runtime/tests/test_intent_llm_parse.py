@@ -62,7 +62,7 @@ async def test_llm_parse_intent_generate_image():
     payload = {
         "action": "generate",
         "scope": "atomic",
-        "route": "atomic_create",
+        "route": "canvas_agent",
         "structure": "single",
         "items": [
             {
@@ -79,4 +79,25 @@ async def test_llm_parse_intent_generate_image():
     llm = FakeLLM(json.dumps(payload))
     result = await llm_parse_intent(llm, "生成一张蓝牙耳机主图")
     assert result is not None
+    assert result["route"] == "canvas_agent"
     assert result["items"][0]["target_type"] == "image"
+
+
+@pytest.mark.asyncio
+async def test_llm_parse_intent_maps_retired_route():
+    payload = {
+        "action": "generate",
+        "scope": "atomic",
+        "route": "atomic_create",
+        "structure": "single",
+        "items": [
+            {"target_type": "image", "title": "主图", "prompt": "主图", "confirm_gate": False}
+        ],
+        "confidence": 0.9,
+        "needs_clarify": False,
+        "reason": "legacy model emission",
+    }
+    llm = FakeLLM(json.dumps(payload))
+    result = await llm_parse_intent(llm, "生成一张主图")
+    assert result is not None
+    assert result["route"] == "canvas_agent"

@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.config import settings
 from app.checkpoint_observability import checkpoint_diagnostics
 from app.errors import AgentToolError, error_to_sse_payload, from_exception
+from app.llm_thinking import apply_agent_llm_thinking_policy
 from app.graph.builder import build_agent_graph
 from app.graph.hitl_resume import (
     GATE_RESUME_AS_NODE,
@@ -62,6 +63,36 @@ async def emit_journey_update(emit: EmitFn, state: dict[str, Any]) -> None:
     snap = state.get("journey_trace")
     if isinstance(snap, dict) and snap.get("flowMode") == "product_visual":
         await emit({"type": "journey_update", "data": {"snapshot": snap}})
+
+
+def _emit_done_execution_trace(
+    journey_trace: dict[str, Any] | None,
+    *,
+    updated_at: int,
+) -> dict[str, Any]:
+    """Build executionTrace snapshot from journey_trace for done envelope.
+
+    Task J-3 of fix/journey-trace-important-issues (final-review #1).
+    Returns {"events": [...], "updatedAt": updated_at}.
+    """
+    if not isinstance(journey_trace, dict):
+        return {"events": [], "updatedAt": updated_at}
+    events: list[dict[str, Any]] = []
+    for step in journey_trace.get("steps", []):
+        if not isinstance(step, dict):
+            continue
+        if step.get("status") != "done":
+            continue
+        events.append({
+            "kind": "journey_step",
+            "ts": updated_at,
+            "payload": {
+                "id": step.get("id"),
+                "label": step.get("label"),
+                "summary": step.get("summary"),
+            },
+        })
+    return {"events": events, "updatedAt": updated_at}
 
 
 def _resolve_journey_trace(vals: dict[str, Any]) -> dict[str, Any] | None:
@@ -295,6 +326,9 @@ class RunRequest(BaseModel):
         default=None,
         validation_alias="mentioned_keys",
     )
+    # Agent Dock「深度思考」；默认关。DeepSeek + tools 开启时需 reasoning_content 回传。
+    thinking: bool = False
+    thinking_effort: str | None = None
 
 
 class CancelRunRequest(BaseModel):
@@ -316,6 +350,15 @@ class NestEventProxy:
     def __init__(self, inner: Any, emit: EmitFn) -> None:
         self._inner = inner
         self._emit = emit
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        # Forward attribute writes to the inner NestCanvasClient so
+        # `nest.sidebar_attachments = [...]` updates the underlying
+        # client (where preview_composition reads them), not just this proxy.
+        if name.startswith("_"):
+            object.__setattr__(self, name, value)
+            return
+        setattr(self._inner, name, value)
 
     async def close(self) -> None:
         close = getattr(self._inner, "close", None)
@@ -409,15 +452,20 @@ class NestEventProxy:
         self,
         *,
         node_ids: list[str],
-        attachments: list[dict[str, Any]],
+        attachments: list[dict[str, Any]] | None = None,
         ref_order: list[str] | None,
         mode: str,
         mentioned_keys: list[str] | None = None,
     ) -> dict[str, Any]:
+        atts = attachments if attachments else list(
+            getattr(self._inner, "sidebar_attachments", None) or []
+        )
+        if not atts:
+            return {"ok": False, "error": "没有侧栏附件"}
         return await self._forward_actions(
             await self._inner.apply_sidebar_attachments(
                 node_ids=node_ids,
-                attachments=attachments,
+                attachments=atts,
                 ref_order=ref_order,
                 mode=mode,
                 mentioned_keys=mentioned_keys,
@@ -556,16 +604,25 @@ def resolve_skills_dir(skills_dir: str | Path | None = None) -> Path:
     return Path(__file__).resolve().parents[1] / raw
 
 
-def default_llm() -> Any:
-    return ChatOpenAI(
-        api_key=settings.openai_api_key or "sk-placeholder",
-        base_url=settings.openai_base_url,
-        model=settings.openai_chat_model or "gpt-4o",
-        temperature=0.4,
+def default_llm(*, thinking: bool = False, thinking_effort: str | None = None) -> Any:
+    model = settings.openai_chat_model or "gpt-4o"
+    kwargs = apply_agent_llm_thinking_policy(
+        model,
+        {
+            "api_key": settings.openai_api_key or "sk-placeholder",
+            "base_url": settings.openai_base_url,
+            "model": model,
+            "temperature": 0.4,
+        },
+        thinking=thinking,
+        thinking_effort=thinking_effort,
     )
+    return ChatOpenAI(**kwargs)
 
 
 def resolve_llm(req: RunRequest) -> Any:
+    thinking = bool(req.thinking)
+    effort = req.thinking_effort
     if req.llm_model and req.llm_api_key:
         kwargs: dict[str, Any] = {
             "api_key": req.llm_api_key,
@@ -574,16 +631,29 @@ def resolve_llm(req: RunRequest) -> Any:
         }
         if req.llm_base_url:
             kwargs["base_url"] = req.llm_base_url
-        return ChatOpenAI(**kwargs)
+        return ChatOpenAI(
+            **apply_agent_llm_thinking_policy(
+                req.llm_model,
+                kwargs,
+                thinking=thinking,
+                thinking_effort=effort,
+            )
+        )
     if req.llm_model:
         return ChatOpenAI(
-            api_key=settings.openai_api_key or "sk-placeholder",
-            base_url=settings.openai_base_url,
-            model=req.llm_model,
-            temperature=0.4,
+            **apply_agent_llm_thinking_policy(
+                req.llm_model,
+                {
+                    "api_key": settings.openai_api_key or "sk-placeholder",
+                    "base_url": settings.openai_base_url,
+                    "model": req.llm_model,
+                    "temperature": 0.4,
+                },
+                thinking=thinking,
+                thinking_effort=effort,
+            )
         )
-    return default_llm()
-
+    return default_llm(thinking=thinking, thinking_effort=effort)
 
 def default_nest(*, session_id: str, user_id: str) -> NestCanvasClient:
     return NestCanvasClient(
@@ -1304,6 +1374,17 @@ async def stream_run_events(
             post_presentation = post_vals.get("presentation")
             if isinstance(post_presentation, dict):
                 done_payload["presentation"] = post_presentation
+            # Task J-3: include executionTrace so Nest persists it
+            # Always emit executionTrace (even empty) so Nest can persist the signal.
+            # Use _resolve_journey_trace since post_vals may lack journey_trace (not checkpointed).
+            try:
+                exec_trace = _emit_done_execution_trace(
+                    _resolve_journey_trace(post_vals),
+                    updated_at=int(time.time() * 1000),
+                )
+                done_payload["executionTrace"] = exec_trace
+            except Exception as _exec_err:  # noqa: BLE001
+                pass  # never fail done emission for trace issues
             emit_vals = _sync_journey_trace(post_vals)
             await emit_journey_update(emit, emit_vals)
             await emit({"type": "done", "data": done_payload})

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from app.errors import AgentToolError
 from app.graph.canvas_commands import extract_canvas_commands
+from app.graph.composition_route import is_composition_structure_utterance
 from app.graph.explore_route import has_canvas_node_id_reference
 from app.graph.node_ref import resolve_node_ref, resolve_node_refs
+from app.graph.tool_sse import cap_tool_sse_payload, maybe_emit_tool_sse
 ExploreIntent = Literal[
     "ui_command",
     "lifecycle",
@@ -82,20 +85,97 @@ _PLANNER_ANCHORS = (
     "这份工作流更像哪一种",
 )
 _PLANNER_CONFIRM = "确认落到画布"
-_PLANNER_WRITE_TOOLS = frozenset({
-    "preview_workflow_template",
-    "match_workflow_templates",
-    "promote_workflow_template",
-})
-_PLANNER_INSTANTIATE_TOOLS = _PLANNER_WRITE_TOOLS | frozenset({"instantiate_workflow_template"})
 _IMPORT_WRITE_TOOLS = frozenset({"import_workflow"})
-_DEFAULT_NARROW_WRITE = frozenset({
+_OPERATOR_WRITE = frozenset({
+    "upsert_media_node",
+    "propose_generation",
     "set_node_prompt",
     "set_node_content",
+    "upsert_prompt_node",
+    "connect_nodes",
+    "apply_sidebar_attachments",
     "attach_refs",
     "duplicate_node",
-    "upsert_prompt_node",
 })
+
+
+def resolve_sidebar_image_ref_keys(
+    *,
+    image_keys: Sequence[str] = (),
+    this_turn_new_image_keys: Sequence[str] = (),
+    mentioned_keys: Sequence[str] = (),
+) -> list[str] | None:
+    images = [str(k).strip().upper() for k in image_keys if str(k).strip()]
+    image_set = set(images)
+    if not images:
+        return None
+    mentioned_i = [
+        str(k).strip().upper()
+        for k in mentioned_keys
+        if str(k).strip().upper().startswith("I") and str(k).strip().upper() in image_set
+    ]
+    # de-dupe mention order
+    seen: set[str] = set()
+    mentioned_i = [k for k in mentioned_i if not (k in seen or seen.add(k))]
+    if mentioned_i:
+        return mentioned_i
+    new_keys = {str(k).strip().upper() for k in this_turn_new_image_keys if str(k).strip()}
+    if new_keys == image_set and len(images) in (1, 2):
+        return list(images)
+    return None
+
+
+def utterance_binds_sidebar_media_propose(
+    text: str, ref_keys: list[str] | None
+) -> bool:
+    from app.graph.atomic_intent import (
+        CAMPAIGN_OVERRIDE_PHRASES,
+        regen_intent,
+        regenerate_phrase_intent,
+    )
+    from app.graph.media_utterance import (
+        media_directed_question,
+        suspected_media_create,
+        suspected_vision_qa,
+    )
+
+    if not ref_keys:
+        return False
+    t = text or ""
+    if regen_intent(t) or regenerate_phrase_intent(t):
+        return False
+    if any(p in t for p in CAMPAIGN_OVERRIDE_PHRASES):
+        return False
+    if suspected_vision_qa(t) or media_directed_question(t):
+        return False
+    if not suspected_media_create(t) and ("是什么" in t or "是啥" in t):
+        return False
+    return True
+
+
+def utterance_binds_media_propose(text: str) -> bool:
+    """True when explore should bind upsert_media_node + propose_generation."""
+    from app.graph.atomic_intent import (
+        CAMPAIGN_OVERRIDE_PHRASES,
+        MEDIA_CREATE_HINTS,
+        regen_intent,
+        regenerate_phrase_intent,
+    )
+    from app.graph.media_utterance import (
+        normalize_colloquial_create_verbs,
+        strong_generate_media,
+    )
+
+    t = text or ""
+    if not t.strip():
+        return False
+    if regen_intent(t) or regenerate_phrase_intent(t):
+        return False
+    if any(p in t for p in CAMPAIGN_OVERRIDE_PHRASES):
+        return False
+    if any(h in t for h in MEDIA_CREATE_HINTS):
+        return True
+    return strong_generate_media(normalize_colloquial_create_verbs(t))
 
 
 def _has_strong_workflow_import_anchor(text: str, low: str) -> bool:
@@ -140,28 +220,95 @@ def _is_planner_utterance(text: str) -> bool:
         return True
     if _PLANNER_CONFIRM in text:
         return True
-    if "分镜" in text or "图生视频" in text:
-        return True
     return "规划" in text and "工作流" in text
 
 
-def select_narrow_write_tools(utterance: str) -> frozenset[str]:
-    """Keyword bind for workflow import vs recipe planner (≤5 write tools).
+def select_narrow_write_tools(
+    utterance: str,
+    *,
+    sidebar_image_keys: Sequence[str] = (),
+    this_turn_new_image_keys: Sequence[str] = (),
+    mentioned_keys: Sequence[str] = (),
+) -> frozenset[str]:
+    """Default operator set; import overlays add; composition structure binds no writes.
 
-    Strong import anchors win so planner keywords never steal
-    ``请用 import_workflow 导入`` / ``导入工作流``.
+    Composition preview/confirm are Nest HTTP (#355). P0 never binds
+    match/preview/instantiate/promote workflow template tools.
+    Sidebar kwargs are kept for API compatibility and do not shrink visibility.
     """
+    visible = set(_OPERATOR_WRITE)
     text = utterance or ""
     low = text.lower()
     if "import_workflow" in low or "导入工作流" in text:
-        return _IMPORT_WRITE_TOOLS
-    if _PLANNER_CONFIRM in text:
-        return _PLANNER_INSTANTIATE_TOOLS
-    if _is_planner_utterance(text):
-        return _PLANNER_WRITE_TOOLS
+        visible |= _IMPORT_WRITE_TOOLS
+        return frozenset(visible)
+    if is_composition_structure_utterance(text):
+        return frozenset()
     if _is_workflow_import_utterance(text):
-        return _IMPORT_WRITE_TOOLS
-    return _DEFAULT_NARROW_WRITE
+        if _has_strong_workflow_import_anchor(text, low):
+            visible |= _IMPORT_WRITE_TOOLS
+        return frozenset(visible)
+    return frozenset(visible)
+
+
+def sidebar_image_keys_from_attachments(attachments: list | None) -> tuple[str, ...]:
+    from app.graph.sidebar_attachments import REF_PREFIX
+
+    counters = {k: 0 for k in REF_PREFIX}
+    keys: list[str] = []
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("mediaType") or item.get("media_type") or "").strip()
+        prefix = REF_PREFIX.get(media_type)
+        if not prefix:
+            continue
+        counters[media_type] += 1
+        key = f"{prefix}{counters[media_type]}"
+        url = str(item.get("url") or "").strip()
+        if prefix == "I" and url:
+            keys.append(key)
+    return tuple(keys)
+
+
+def this_turn_new_image_keys_from_parse(
+    attachments: list | None, parse: dict | None
+) -> tuple[str, ...]:
+    raw = (parse or {}).get("this_turn_uncached_image_urls") if isinstance(parse, dict) else None
+    urls = {str(u).strip() for u in (raw or []) if str(u).strip()}
+    if not urls:
+        return ()
+    from app.graph.sidebar_attachments import REF_PREFIX
+
+    counters = {k: 0 for k in REF_PREFIX}
+    keys: list[str] = []
+    for item in attachments or []:
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("mediaType") or item.get("media_type") or "").strip()
+        prefix = REF_PREFIX.get(media_type)
+        if not prefix:
+            continue
+        counters[media_type] += 1
+        key = f"{prefix}{counters[media_type]}"
+        url = str(item.get("url") or "").strip()
+        if prefix == "I" and url in urls:
+            keys.append(key)
+    return tuple(keys)
+
+
+def mentioned_keys_for_sidebar_bind(
+    user_text: str, request_keys: list | None
+) -> tuple[str, ...]:
+    from app.graph.sidebar_attachments import (
+        normalize_mentioned_keys,
+        parse_mentioned_keys_from_text,
+    )
+
+    from_text = parse_mentioned_keys_from_text(user_text)
+    if from_text:
+        return tuple(from_text)
+    return tuple(normalize_mentioned_keys(request_keys))
 
 
 def classify_explore_intent(user_text: str, *, summary: dict | None = None) -> ExploreIntent:
@@ -276,7 +423,18 @@ async def _invoke_tool(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> Any:
+    await maybe_emit_tool_sse(
+        event_sink,
+        {
+            "type": "tool_call",
+            "data": {
+                "name": str(name),
+                "arguments": cap_tool_sse_payload(args or {}, kind="arguments"),
+            },
+        },
+    )
     tool = tools_by_name.get(name)
     if tool is None:
         result: Any = {"error": f"unknown tool: {name}"}
@@ -290,6 +448,16 @@ async def _invoke_tool(
                 "error_type": err["error_type"],
                 "retry_hint": err.get("retry_hint"),
             }
+    await maybe_emit_tool_sse(
+        event_sink,
+        {
+            "type": "tool_result",
+            "data": {
+                "name": str(name),
+                "result": cap_tool_sse_payload(result, kind="result"),
+            },
+        },
+    )
     tools_called.append(name)
     tool_results.append(result)
     for cmd in extract_canvas_commands(result):
@@ -304,6 +472,7 @@ async def run_mandatory_explore(
     *,
     summary: dict,
     tools_by_name: dict[str, Any],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     """Direct tool dispatch without LLM (UI / lifecycle / asset_read)."""
     canvas_commands: list[dict[str, Any]] = []
@@ -318,6 +487,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     if intent == "lifecycle":
@@ -328,6 +498,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     if intent == "asset_read":
@@ -337,6 +508,7 @@ async def run_mandatory_explore(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
 
     return MandatoryExploreResult(
@@ -355,6 +527,7 @@ async def _mandatory_ui(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     u = user_text or ""
 
@@ -362,6 +535,7 @@ async def _mandatory_ui(
         await _invoke_tool(
             tools_by_name, "redo", {}, canvas_commands=canvas_commands,
             tool_results=tool_results, tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -374,6 +548,7 @@ async def _mandatory_ui(
         await _invoke_tool(
             tools_by_name, "undo", {}, canvas_commands=canvas_commands,
             tool_results=tool_results, tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -395,6 +570,7 @@ async def _mandatory_ui(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -416,6 +592,7 @@ async def _mandatory_ui(
             canvas_commands=canvas_commands,
             tool_results=tool_results,
             tools_called=tools_called,
+            event_sink=event_sink,
         )
         return MandatoryExploreResult(
             tool_results=tool_results,
@@ -438,6 +615,7 @@ async def _mandatory_ui(
                 canvas_commands=canvas_commands,
                 tool_results=tool_results,
                 tools_called=tools_called,
+                event_sink=event_sink,
             )
             reply = f"已将视口定位到节点 {node_ids[0]}。"
         else:
@@ -448,6 +626,7 @@ async def _mandatory_ui(
                 canvas_commands=canvas_commands,
                 tool_results=tool_results,
                 tools_called=tools_called,
+                event_sink=event_sink,
             )
             reply = f"已将视口定位到 {len(node_ids)} 个节点。"
         return MandatoryExploreResult(
@@ -468,6 +647,7 @@ async def _mandatory_lifecycle(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     node_id = resolve_node_ref(user_text, summary)
     if not node_id:
@@ -493,6 +673,7 @@ async def _mandatory_lifecycle(
         canvas_commands=canvas_commands,
         tool_results=tool_results,
         tools_called=tools_called,
+        event_sink=event_sink,
     )
     err_msg = _lifecycle_user_message(result)
     reply = err_msg if err_msg else ok_msg
@@ -511,6 +692,7 @@ async def _mandatory_asset(
     canvas_commands: list[dict[str, Any]],
     tool_results: list[Any],
     tools_called: list[str],
+    event_sink: Any | None = None,
 ) -> MandatoryExploreResult:
     u = user_text or ""
     tool_name = "list_public_assets" if "公共" in u else "list_user_assets"
@@ -521,6 +703,7 @@ async def _mandatory_asset(
         canvas_commands=canvas_commands,
         tool_results=tool_results,
         tools_called=tools_called,
+        event_sink=event_sink,
     )
     return MandatoryExploreResult(
         tool_results=tool_results,

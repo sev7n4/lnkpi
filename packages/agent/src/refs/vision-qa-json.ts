@@ -187,8 +187,7 @@ export async function generateVisionQaJson(
         const json = (await res.json()) as { choices: Array<{ message: { content: string } }> }
         const text = json.choices[0]?.message?.content?.trim()
         if (!text) {
-          lastError = 'Vision LLM 返回空内容'
-          continue
+          throw new Error('Vision LLM 返回空内容')
         }
         return { text, visionUsed: true }
       }

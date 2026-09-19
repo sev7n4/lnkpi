@@ -67,9 +67,9 @@ function parseCanvas(raw: string | null | undefined): CanvasData {
   try {
     const parsed = JSON.parse(raw) as CanvasData
     return {
+      ...parsed,
       nodes: Array.isArray(parsed.nodes) ? parsed.nodes : [],
       edges: Array.isArray(parsed.edges) ? parsed.edges : [],
-      viewport: parsed.viewport,
     }
   } catch {
     return { nodes: [], edges: [] }
@@ -2133,6 +2133,16 @@ export class AgentCanvasToolsService {
         }
       }
     }
+    for (const node of remapped.graph.nodes) {
+      const refs = node.data?.localRefs
+      if (Array.isArray(refs) && refs[0] && typeof refs[0] === 'object') {
+        const refUrl = String((refs[0] as { url?: string }).url ?? '').trim()
+        if (refUrl.startsWith('data:image')) continue
+        if (refUrl && !urlByNodeId.has(node.id)) {
+          urlByNodeId.set(node.id, { url: refUrl, kind: inferPersistKind(node.type) })
+        }
+      }
+    }
 
     let mediaOk = 0
     let mediaFail = 0
@@ -2767,7 +2777,7 @@ export class AgentCanvasToolsService {
       await tx.session.update({
         where: { id: input.sessionId },
         data: {
-          canvasData: JSON.stringify(updated),
+          canvasData: JSON.stringify({ ...current, ...updated }),
           stagedActions: null,
           stagedAt: null,
         },
@@ -2935,11 +2945,12 @@ export class AgentCanvasToolsService {
       }
       const current = parseCanvas(session.canvasData)
       const updated = applyCanvasActions(current, actions)
+      const merged: CanvasData = { ...current, ...updated }
       await tx.session.update({
         where: { id: sessionId },
-        data: { canvasData: JSON.stringify(updated) },
+        data: { canvasData: JSON.stringify(merged) },
       })
-      return updated
+      return merged
     })
   }
 }

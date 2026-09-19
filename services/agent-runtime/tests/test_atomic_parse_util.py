@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.graph.atomic_intent import atomic_create_intent
+from app.graph.atomic_intent import utterance_suggests_media_create
 from app.graph.atomic_parse_util import (
     build_atomic_spec_enriched,
     dedupe_atomic_title,
@@ -20,8 +20,8 @@ SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 
 
 def test_confirm_gen_not_atomic_create():
-    assert not atomic_create_intent("确认出图")
-    assert not atomic_create_intent("开始出图")
+    assert not utterance_suggests_media_create("确认出图")
+    assert not utterance_suggests_media_create("开始出图")
 
 
 def test_extract_atomic_prompt_strips_prefix():
@@ -83,12 +83,12 @@ def test_parse_atomic_multi_items_color_variants_with_ref():
     assert "变体 1/7" in items[0]["prompt"]
 
 
-def test_atomic_create_intent_batch_image_count():
-    from app.graph.atomic_intent import atomic_create_intent
+def test_utterance_suggests_media_create_batch_image_count():
+    from app.graph.atomic_intent import utterance_suggests_media_create
 
-    assert atomic_create_intent("@I1 ，参考这个图，生成7中不同颜色的7张图")
-    assert atomic_create_intent("生成3张场景图")
-    assert not atomic_create_intent("今天天气不错")
+    assert utterance_suggests_media_create("@I1 ，参考这个图，生成7中不同颜色的7张图")
+    assert utterance_suggests_media_create("生成3张场景图")
+    assert not utterance_suggests_media_create("今天天气不错")
 
 
 def test_intake_routes_batch_color_variants_to_atomic():

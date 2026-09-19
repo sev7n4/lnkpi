@@ -111,6 +111,20 @@ describe('buildVideoProviderOptions', () => {
     expect(r.image).toBeUndefined()
   })
 
+  it('uses agnes keyframes for 2+ images on agnes-video-2.5-flash', () => {
+    const bundle = buildVideoReferenceBundle([
+      { refKey: 'I1', mediaType: 'image', url: 'https://cdn/a.png' },
+      { refKey: 'I2', mediaType: 'image', url: 'https://cdn/b.png' },
+    ])
+    const r = buildVideoProviderOptions({
+      modelKey: 'agnes-video-2.5-flash',
+      referenceBundle: bundle,
+    })
+    expect(r.meta.refWire).toBe('agnes_keyframes')
+    expect(r.providerOptions.referenceImages).toHaveLength(2)
+    expect(r.providerOptions.duration).toBeGreaterThanOrEqual(4)
+  })
+
   it('keeps referenceImages backward compatibility', () => {
     const r = buildVideoProviderOptions({
       modelKey: 'agnes-video-v2.0',

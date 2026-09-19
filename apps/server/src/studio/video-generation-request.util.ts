@@ -1,10 +1,13 @@
+import { BadRequestException } from '@nestjs/common'
 import type {
   CanvasData,
   CanonicalVideoGenerationRequest,
   GenerationRefPayload,
   VideoGenerationMode,
 } from '@lnkpi/shared'
-import { resolveCanonicalVideoRequest } from '@lnkpi/shared'
+import { resolveCanonicalVideoRequest, resolveCompositionVideoPrompt } from '@lnkpi/shared'
+
+const EMPTY_P_BLOCK_V_MESSAGE = '分镜还是空的，写好后再生成视频。'
 
 export type VideoStartBody = {
   prompt: string
@@ -22,6 +25,15 @@ export type VideoStartBody = {
   mentionedKeys?: string[]
   sessionId?: string
   nodeId?: string
+}
+
+export function hasCompositionPBlock(canvas: CanvasData, videoNodeId?: string): boolean {
+  const ids = canvas.compositionRunGroup?.nodeIds
+  if (!ids?.length) return false
+  if (videoNodeId && !ids.includes(videoNodeId)) return false
+  if (canvas.nodes.some((node) => node.id === 'text-p')) return true
+  const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
+  return ids.some((id) => byId.get(id)?.type === 'text')
 }
 
 function inferVideoMode(explicit: unknown, refs: GenerationRefPayload[]): VideoGenerationMode {
@@ -80,6 +92,12 @@ export function resolveVideoStartRequest(input: {
   const nodeId = input.nodeId ?? input.body.nodeId ?? ''
 
   if (input.canvas && nodeId) {
+    const resolvedPrompt = resolveCompositionVideoPrompt(input.canvas, nodeId)
+    if ('error' in resolvedPrompt) {
+      throw new BadRequestException(EMPTY_P_BLOCK_V_MESSAGE)
+    }
+
+    const usePPrompt = hasCompositionPBlock(input.canvas, nodeId)
     const node = input.canvas.nodes.find((n) => n.id === nodeId)
     if (node) {
       const request = resolveCanonicalVideoRequest({
@@ -87,8 +105,25 @@ export function resolveVideoStartRequest(input: {
         canvas: input.canvas,
         sessionId,
       })
+      if (usePPrompt) {
+        request.prompt = resolvedPrompt.prompt
+      }
       const legacy = String(node.data?.referenceImageUrl ?? bodyReference(input.body)).trim() || undefined
       return { request, legacyReferenceImageUrl: legacy }
+    }
+
+    if (usePPrompt) {
+      const request = buildCanonicalVideoRequestFromBody({
+        ...input.body,
+        prompt: resolvedPrompt.prompt,
+        sessionId,
+        nodeId,
+      })
+      const legacy = bodyReference(input.body)
+      return {
+        request,
+        legacyReferenceImageUrl: legacy || undefined,
+      }
     }
   }
 

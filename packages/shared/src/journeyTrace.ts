@@ -28,7 +28,7 @@ export interface JourneyTraceSnapshot {
 
 export interface AgentMessageMetadata {
   journeyTrace?: JourneyTraceSnapshot
-  executionTrace?: Record<string, unknown>
+  executionTrace?: ExecutionTraceState
   presentation?: Record<string, unknown>
   executionEvents?: Array<{ type: string; data: unknown }>
 }
@@ -43,4 +43,22 @@ export const JOURNEY_STEP_LABELS: Record<JourneyStepId, string> = {
   generating: '出图中',
   delivery: '选定稿',
   done: '交付完成',
+}
+
+export type ExecutionEventKind =
+  | 'text_stage'
+  | 'canvas'
+  | 'task'
+  | 'tool_call'
+  | 'macro_select'
+
+export interface ExecutionEvent {
+  kind: ExecutionEventKind
+  ts: number
+  payload: Record<string, unknown>
+}
+
+export interface ExecutionTraceState {
+  events: ExecutionEvent[]
+  updatedAt: number
 }

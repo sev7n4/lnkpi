@@ -69,10 +69,14 @@ def test_taxonomy_confirm_flags_match_d2(taxonomy_doc: dict):
 
 
 def test_taxonomy_has_regenerate_priority(taxonomy_doc: dict):
+    # Phase 2d.3: retired flow_mode routes removed from intake SSOT;
+    # regenerate / media-create remain soft hints only.
     priority = taxonomy_doc.get("intake_priority") or []
     ids = [p.get("id") for p in priority]
-    assert "atomic_regenerate" in ids
-    assert ids.index("atomic_regenerate") < ids.index("atomic_create")
+    assert "atomic_regenerate" not in ids
+    assert "atomic_create" not in ids
+    assert taxonomy_doc.get("atomic_regenerate_hints")
+    assert taxonomy_doc.get("media_create_hints")
 
 
 def test_modality_coverage(eval_doc: dict):
