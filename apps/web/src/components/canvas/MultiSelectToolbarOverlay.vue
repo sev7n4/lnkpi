@@ -8,6 +8,7 @@ const props = defineProps<{
   selectedIds: string[]
   canGenerateVideo?: boolean
   canUngroup?: boolean
+  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' | 'done' }
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +21,8 @@ const emit = defineEmits<{
   addAgentRef: []
   duplicate: []
   duplicateUpstream: []
+  generateSelection: []
+  stopSelection: []
 }>()
 
 const { viewport, nodes: flowNodes } = useVueFlow()
@@ -90,6 +93,7 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     :can-generate-video="canGenerateVideo"
     :can-ungroup="canUngroup"
     :screen-position="screenPosition"
+    :selection-batch="selectionBatch"
     @group="emit('group')"
     @ungroup="emit('ungroup')"
     @delete="emit('delete')"
@@ -99,5 +103,7 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @add-agent-ref="emit('addAgentRef')"
     @duplicate="emit('duplicate')"
     @duplicate-upstream="emit('duplicateUpstream')"
+    @generate-selection="emit('generateSelection')"
+    @stop-selection="emit('stopSelection')"
   />
 </template>

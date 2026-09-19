@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
@@ -21,8 +21,8 @@ import { Background } from '@vue-flow/background'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
-import type { Session, CanvasAction, ImageVersionEntry } from '@lnkpi/shared'
-import { appendEditVersion, revertImageVersion, seedImageVersions } from '@lnkpi/shared'
+import type { Session, CanvasAction, ImageVersionEntry, PlanSelectionGenerateResult } from '@lnkpi/shared'
+import { appendEditVersion, revertImageVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError } from '@lnkpi/shared'
 import { ElMessage } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -34,6 +34,8 @@ import { useGenerationPolling, parseRecordPromptContent, parseRecordText, parseR
 import { buildNodeMediaInfoSummary, buildMaterialMediaInfoSummary, useMediaInspector } from '@/composables/useMediaInspector'
 import type { GenerationRecord } from '@/services/studio-api'
 import { useNodeGeneration } from '@/composables/useNodeGeneration'
+import { useSelectionGenerate } from '@/composables/useSelectionGenerate'
+import { isFeatureOn } from '@/composables/useFeatureFlag'
 import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
 import { studioApi } from '@/services/studio-api'
@@ -148,6 +150,7 @@ import PublishNeoTVDialog from '@/components/works/PublishNeoTVDialog.vue'
 import AgentSideRail from '@/components/agent/AgentSideRail.vue'
 import { mergeCanvasNodesFromServer } from '@/pages/canvas/canvasNodeMerge'
 import { useSelectedNodeEditor, type EditableFlowNode, EDITABLE_NODE_TYPES } from '@/composables/useSelectedNodeEditor'
+import type { CanvasEdgeLike } from '@/composables/useUpstreamNodeContext'
 import { buildPollingFailurePatch } from '@/utils/generationDiagnostic'
 
 const PlayCanvasView = defineAsyncComponent(
@@ -934,6 +937,103 @@ const multiSelectCanGenerateVideo = computed(() => {
   }
   return hasText && hasImage
 })
+
+// 派生：plan（懒计算，仅当选区 ≥ 2 时）
+const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => {
+  if (!isFeatureOn('selection_batch_generate')) return null
+  if (multiSelectedIds.value.length < 2) return null
+  try {
+    return planSelectionGenerate({
+      selectedIds: multiSelectedIds.value,
+      canvas: {
+        nodes: nodes.value.map(n => ({ id: n.id, type: String(n.type ?? ''), data: n.data as Record<string, unknown> })),
+        edges: edges.value as Array<{ id: string; source: string; target: string }>,
+      },
+      hasUsableOutput: (n) => {
+        const full = nodes.value.find(x => x.id === n.id)
+        if (!full) return false
+        const status = (full.data as Record<string, unknown>).status
+        if (status !== NODE_GENERATION_STATUS.completed) return false
+        const type = String(full.type)
+        if (type === 'image' || type === 'video') {
+          const url = String((full.data as Record<string, unknown>).url ?? '').trim()
+          const images = (full.data as Record<string, unknown>).images
+          return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
+        }
+        if (type === 'text' || type === 'prompt') {
+          return Boolean(String((full.data as Record<string, unknown>).content ?? (full.data as Record<string, unknown>).prompt ?? '').trim())
+        }
+        return true
+      },
+      isInFlight: (id) => isNodeBusy(id),
+    })
+  } catch (e) {
+    if (e instanceof SelectionBatchLimitError) {
+      return { run: [], skip: [{ nodeId: '', reason: 'unsupported_type', type: 'limit_24' }], blockedBy: [], groupExpanded: [] }
+    }
+    if (e instanceof SelectionBatchPendingConfirmError) {
+      return null
+    }
+    throw e
+  }
+})
+
+// 选择 batch API
+const selectionBatchApi = useSelectionGenerate({
+  nodes: nodes as Ref<EditableFlowNode[]>,
+  edges: edges as Ref<CanvasEdgeLike[]>,
+  generateForNode: (node) => (generateForNode as any)(node, { asRunGroupMember: true }),
+  hasUsableOutput: (n) => {
+    const status = (n.data as Record<string, unknown>).status
+    if (status !== NODE_GENERATION_STATUS.completed) return false
+    const type = String(n.type)
+    if (type === 'image' || type === 'video') {
+      const url = String((n.data as Record<string, unknown>).url ?? '').trim()
+      const images = (n.data as Record<string, unknown>).images
+      return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
+    }
+    if (type === 'text' || type === 'prompt') {
+      return Boolean(String((n.data as Record<string, unknown>).content ?? (n.data as Record<string, unknown>).prompt ?? '').trim())
+    }
+    return true
+  },
+  resolveUpstreamIds: (n) => {
+    // 简化：仅从 edges 推上游
+    return edges.value.filter(e => e.target === n.id).map(e => e.source)
+  },
+  cancelGeneration: (id) => cancelGeneration(id),
+  isInFlight: (id) => isNodeBusy(id),
+  toast: (msg, kind) => {
+    if (kind === 'error') ElMessage.error(msg)
+    else if (kind === 'warn') ElMessage.warning(msg)
+    else ElMessage.info(msg)
+  },
+})
+
+// 给工具栏的 selectionBatch prop
+const selectionBatchProp = computed(() => {
+  if (!isFeatureOn('selection_batch_generate')) return undefined
+  return {
+    runCount: multiSelectPlan.value?.run.length ?? 0,
+    state: selectionBatchApi.state.value,
+  }
+})
+
+// 处理点击
+async function handleSelectionBatchGenerate() {
+  const plan = multiSelectPlan.value
+  if (!plan || plan.run.length === 0) return
+  await selectionBatchApi.start(plan)
+  // 收尾 toast
+  const p = selectionBatchApi.progress.value
+  ElMessage.info(
+    `完成 ${p.done}，失败 ${p.failed}，取消 ${p.cancelled}，超时 ${p.timeout}，跳过 ${p.skipped}`,
+  )
+}
+
+function handleSelectionBatchStop() {
+  selectionBatchApi.stop()
+}
 
 const nodeTypes = {
   prompt: CanvasNodePrompt,
@@ -3664,6 +3764,7 @@ onUnmounted(() => {
             :selected-ids="multiSelectedIds"
             :can-generate-video="multiSelectCanGenerateVideo"
             :can-ungroup="multiSelectCanUngroup"
+            :selection-batch="selectionBatchProp"
             @group="handleGroupSelection"
             @ungroup="handleUngroupSelection"
             @delete="handleDeleteSelection"
@@ -3673,8 +3774,9 @@ onUnmounted(() => {
             @add-agent-ref="handleAddToAgentRefs()"
             @duplicate="handleKeyboardDuplicate"
             @duplicate-upstream="handleToolbarDuplicateUpstream"
+            @generate-selection="handleSelectionBatchGenerate"
+            @stop-selection="handleSelectionBatchStop"
           />
-
           <SelectionActionBar
             v-if="selectionUpscaleNode"
             :node="selectionUpscaleNode as FlowNode"

@@ -29,3 +29,42 @@ describe('MultiSelectToolbar layout menu', () => {
     wrapper.unmount()
   })
 })
+
+describe('MultiSelectToolbar: 生成 · N 按钮', () => {
+  it('当 selectionBatch.runCount=0 时按钮禁用', () => {
+    const wrapper = mount(MultiSelectToolbar, {
+      props: {
+        selectedIds: ['a', 'b'],
+        screenPosition: { x: 0, y: 0 },
+        selectionBatch: { runCount: 0, state: 'idle' },
+      },
+    })
+    const btn = wrapper.find('[data-testid="selection-batch-generate"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('disabled')).toBeDefined()
+  })
+
+  it('当 selectionBatch.runCount=3 时按钮文案 = "生成 · 3"', () => {
+    const wrapper = mount(MultiSelectToolbar, {
+      props: {
+        selectedIds: ['a', 'b', 'c'],
+        screenPosition: { x: 0, y: 0 },
+        selectionBatch: { runCount: 3, state: 'idle' },
+      },
+    })
+    const btn = wrapper.find('[data-testid="selection-batch-generate"]')
+    expect(btn.text()).toBe('生成 · 3')
+  })
+
+  it('点击按钮 emit generateSelection', async () => {
+    const wrapper = mount(MultiSelectToolbar, {
+      props: {
+        selectedIds: ['a', 'b', 'c'],
+        screenPosition: { x: 0, y: 0 },
+        selectionBatch: { runCount: 3, state: 'idle' },
+      },
+    })
+    await wrapper.find('[data-testid="selection-batch-generate"]').trigger('click')
+    expect(wrapper.emitted('generateSelection')).toBeTruthy()
+  })
+})
