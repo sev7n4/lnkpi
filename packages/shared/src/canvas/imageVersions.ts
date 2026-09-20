@@ -1,3 +1,5 @@
+import { randomId } from '../randomId'
+
 export type ImageVersionSource = 'generate' | 'upload' | 'edit'
 
 export interface ImageVersionEntry {
@@ -31,7 +33,7 @@ export function seedImageVersions(
   opts?: { id?: string; now?: string; source?: ImageVersionSource },
 ): ImageVersionState {
   if (!state.url || (state.imageVersions?.length ?? 0) > 0) return state
-  const id = opts?.id ?? crypto.randomUUID()
+  const id = opts?.id ?? randomId()
   const createdAt = opts?.now ?? new Date().toISOString()
   const source = opts?.source ?? 'generate'
   const entry: ImageVersionEntry = {

@@ -38,6 +38,7 @@ import { useSelectionGenerate } from '@/composables/useSelectionGenerate'
 import { isFeatureOn } from '@/composables/useFeatureFlag'
 import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
+import { randomId } from '@/utils/randomId'
 import { studioApi } from '@/services/studio-api'
 import { canvasApi } from '@/services/canvas-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -1023,7 +1024,12 @@ const selectionBatchProp = computed(() => {
 async function handleSelectionBatchGenerate() {
   const plan = multiSelectPlan.value
   if (!plan || plan.run.length === 0) return
-  await selectionBatchApi.start(plan)
+  try {
+    await selectionBatchApi.start(plan)
+  } catch {
+    // start() 内部已 toast 并把状态回落 idle，这里只吞掉 rejection，避免 unhandled rejection
+    return
+  }
   // 收尾 toast
   const p = selectionBatchApi.progress.value
   ElMessage.info(
@@ -2825,7 +2831,7 @@ function handleRefineApply(payload: { url: string; prompt: string; recordId?: st
   const sessionBeforeUrl = String(canvasEditor.imageTarget?.url ?? '')
   if (!shouldApplyRefineToNode({ nodeUrl, sessionBeforeUrl })) return
   const next = appendEditVersion(imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>), {
-    id: crypto.randomUUID(),
+    id: randomId(),
     url: payload.url,
     createdAt: new Date().toISOString(),
     generationRecordId: payload.recordId,

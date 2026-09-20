@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { useSelectionGenerate, type UseSelectionGenerateDeps } from './useSelectionGenerate'
 import type { CanvasEdgeLike } from './useUpstreamNodeContext'
@@ -82,5 +82,59 @@ describe('start(): initialization', () => {
     // i 在 batch 启动时还在飞 → 仍记 in_flight skip（与 planner 一致）
     // v 的上游 i 还在飞 → upstream_in_flight
     expect(api.progress.value.skipped).toBeGreaterThanOrEqual(2)
+  })
+})
+
+// 回归：生产 CVM 用明文 http://ip:port 访问，crypto.randomUUID 在非安全上下文不存在。
+// 修复前 start() 会在此抛 TypeError，且因为 state 已置为 'running'，状态机永久卡死：
+// 工具栏按钮显示「停止全部」并被 disabled，用户点击毫无反应（只能刷新页面）。
+describe('start(): 明文 HTTP（crypto.randomUUID 不可用）', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('无 randomUUID 也能正常启动并跑完，状态不会卡在 running', async () => {
+    vi.stubGlobal('crypto', {})
+    const generated: string[] = []
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async (n) => { generated.push(n.id) },
+    })
+    const api = useSelectionGenerate(deps)
+    const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(generated).toEqual(['i'])
+    expect(api.state.value).toBe('done')
+    expect(summary.done).toBe(1)
+  })
+
+  it('初始化抛错时状态回落 idle（不卡死），且可再次启动', async () => {
+    const toasts: string[] = []
+    let failing = true
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      isInFlight: () => {
+        if (failing) throw new Error('boom')
+        return false
+      },
+      toast: (msg) => { toasts.push(msg) },
+    })
+    const api = useSelectionGenerate(deps)
+
+    await expect(
+      api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] }),
+    ).rejects.toThrow('boom')
+    // 关键回归点：不能停在 running / stopping（按钮会变成 disabled 的「停止全部」）
+    expect(api.state.value).toBe('idle')
+    expect(toasts.some((m) => m.includes('boom'))).toBe(true)
+
+    failing = false
+    await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(api.state.value).toBe('done')
   })
 })
