@@ -2866,10 +2866,10 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
   }
 }
 
-async function handleGridSliceQuick(n: number) {
+async function handleGridSliceSlice(cols: number, rows: number) {
   const node = selectionGridSliceNode.value
   if (!node || gridSliceEntryDisabled.value) return
-  await executeGridSlice(node, n, n)
+  await executeGridSlice(node, cols, rows)
 }
 
 function closeGridSliceWorkbench() {
@@ -3872,7 +3872,7 @@ onUnmounted(() => {
             :grid-slice-disabled-title="gridSliceDisabledTitle"
             @upscale="handleSelectionUpscale"
             @edit="openRefineForSelected"
-            @quick-slice="handleGridSliceQuick"
+            @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
           />
 

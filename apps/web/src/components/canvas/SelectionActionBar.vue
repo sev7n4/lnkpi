@@ -21,7 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   upscale: []
   edit: []
-  'quick-slice': [n: number]
+  slice: [cols: number, rows: number]
   'open-custom': []
 }>()
 
@@ -112,7 +112,7 @@ function onUpscale() {
             :disabled="gridSliceDisabled"
             :loading="gridSliceLoading"
             :disabled-title="gridSliceDisabledTitle"
-            @quick-slice="emit('quick-slice', $event)"
+            @slice="(c: number, r: number) => emit('slice', c, r)"
             @open-custom="emit('open-custom')"
           />
           <button
