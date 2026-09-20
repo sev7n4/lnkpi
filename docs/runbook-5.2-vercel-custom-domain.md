@@ -26,9 +26,46 @@
 
 > 教训：`.cn` 的 RDAP 误报了 404，**RDAP 结果必须用注册局 WHOIS 交叉验证**，尤其是 ccTLD。
 
+### 免费选项（过渡期首选）：DigitalPlat FreeDomain（¥0）
+
+非营利项目 DigitalPlat 提供**真·DNS 委托**的免费二级域名（不是 URL 跳转、不是动态 DNS），后缀有 `.dpdns.org`、`.us.kg`、`.qzz.io`、`.xx.kg`、`.qd.je`。2026 年仍在稳定运营，已注册 50 万+ 域名，可正常绑 Vercel / Cloudflare。
+
+**策略结论**：**过渡用免费的 `lnkpi.dpdns.org`，将来切路线 B 时再买可备案的 `lnkpi.net`** —— 两步不冲突，免费域名届时直接弃用即可。
+
+| 后缀 | 挂靠 | 评价 |
+|---|---|---|
+| `.dpdns.org` | `.org`（Verisign 运营） | ✅ **推荐**，观感最正经、母域最稳 |
+| `.us.kg` | `.kg`（吉尔吉斯斯坦） | 短好记 |
+| `.qzz.io` | `.io` | 极客味 |
+| `.xx.kg` / `.qd.je` | — | 备选 |
+
+**免费方案的固有代价**（接受即可用）：
+
+- ⚠️ 这些后缀**永远不可备案** → 纯过渡没问题，路线 B 必须换正式域名
+- 免费**无 SLA**、需**手动续期**（过期即回收）、滥用监控严格（违规即删）
+- 观感上是"免费域名"，不适合对外品牌露出
+- 每账号限 3 个免费名额
+
 ---
 
-## 1. 【人工】注册域名（唯一需要你操作的步骤）
+## 1. 【人工二选一】拿到域名（唯一需要你操作的步骤）
+
+### 路径 A · 免费：注册 `lnkpi.dpdns.org`（推荐，5 分钟）
+
+1. 打开 `https://dash.domain.digitalplat.org` → 注册
+   - 密码需 **≥12 位且同时含大小写字母+特殊字符**
+   - **姓名字段必须包含空格**（否则报错）
+2. **GitHub KYC**：Sign in with GitHub 授权，账号才算激活
+3. Register → 搜索 `lnkpi` → 选 `.dpdns.org` → 确认可注册 → Register
+4. **Nameservers 填 Vercel 的**：
+   ```
+   ns1.vercel-dns.com
+   ns2.vercel-dns.com
+   ```
+   DigitalPlat **不托管 DNS**，必须填外部 NS。用 Vercel DNS 可省掉再注册 Cloudflare 账号这一步（若 Vercel 拒绝该 NS，退而用 Cloudflare：加站点拿两个 NS 填回 DigitalPlat，再在 Cloudflare 加解析记录）
+5. 完成后告诉我一声 → 剩下（Vercel 绑定 + 证书 + 验收）我来
+
+### 路径 B · 付费：注册 `lnkpi.net`（¥90/年，为路线 B 铺路）
 
 腾讯云控制台 → **域名注册** → 搜索 `lnkpi.net` → 加入购物车
 
@@ -116,7 +153,8 @@ echo | openssl s_client -connect lnkpi.net:443 -servername lnkpi.net 2>/dev/null
 
 - [x] PR #374 合并（Vercel 代理上游 5100→8888），`/api/health` 从 8s 超时降到 ~1.6s
 - [x] 域名可注册性实测（发现 `.com`/`.cn` 均被占，避免白跑）
+- [x] 增加免费过渡路径（DigitalPlat FreeDomain，¥0）
 - [x] 本清单落库
-- [ ] **⏳ 等待：用户注册 `lnkpi.net` 并完成实名**
+- [ ] **⏳ 等待：用户选路径 A（免费 `lnkpi.dpdns.org`）或路径 B（付费 `lnkpi.net`）并完成注册**
 - [ ] Vercel 绑定 + DNS 记录
 - [ ] 验收
