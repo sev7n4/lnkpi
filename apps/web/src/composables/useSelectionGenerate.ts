@@ -236,7 +236,8 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
 
     // 全批 30min timer
     batchTimeoutHandle = setTimeout(() => {
-      if (state.value === 'done') return
+      // 批次已结束（idle）则不再触发；running/stopping 期间仍可超时中止
+      if (state.value !== 'running' && state.value !== 'stopping') return
       summaryAbortReason = 'batch_timeout'
       progress.value.abortReason = 'batch_timeout'
       abortCtrl.abort('batch_timeout')
@@ -288,7 +289,10 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     await Promise.allSettled([...inFlight.values()])
     if (batchTimeoutHandle) clearTimeout(batchTimeoutHandle)
 
-    state.value = 'done'
+    // 批次结束（正常完成或用户取消）必须回到 idle：
+    // 工具栏仅在 idle 时 emit generateSelection/generateRegen，stop() 仅在 running 时生效；
+    // 若停留在终态，后续所有批量点击都会静默无反应（回归：PR #387 后用户实测）。
+    state.value = 'idle'
 
     // 汇总 pointsExhausted → abortReason
     if (summaryAbortReason === 'none' && pointsExhausted) {

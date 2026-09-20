@@ -47,7 +47,7 @@ describe('start(): initialization', () => {
     const result = await api.start({ run: ['p', 'i'], skip: [], blockedBy: [], groupExpanded: [] })
     // p ok 一次后 done = 1；i 缺上游也跑（因为 hasUsableOutput 假）
     // 这里只验证"不崩、最终 state=done"
-    expect(api.state.value).toBe('done')
+    expect(api.state.value).toBe('idle')
     expect(result.abortReason).toBe('none')
   })
 
@@ -61,7 +61,7 @@ describe('start(): initialization', () => {
     })
     const api = useSelectionGenerate(deps)
     await api.start({ run: ['i', 'ghost'], skip: [], blockedBy: [], groupExpanded: [] })
-    expect(api.state.value).toBe('done')
+    expect(api.state.value).toBe('idle')
     expect(api.progress.value.skipped).toBeGreaterThanOrEqual(1)
   })
 
@@ -106,7 +106,7 @@ describe('start(): 明文 HTTP（crypto.randomUUID 不可用）', () => {
     const api = useSelectionGenerate(deps)
     const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
     expect(generated).toEqual(['i'])
-    expect(api.state.value).toBe('done')
+    expect(api.state.value).toBe('idle')
     expect(summary.done).toBe(1)
   })
 
@@ -135,7 +135,7 @@ describe('start(): 明文 HTTP（crypto.randomUUID 不可用）', () => {
 
     failing = false
     await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
-    expect(api.state.value).toBe('done')
+    expect(api.state.value).toBe('idle')
   })
 })
 
@@ -211,5 +211,60 @@ describe('runOneNode: waitForNodeSettled 等待真实终态', () => {
     const api = useSelectionGenerate(deps)
     const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
     expect(summary.done).toBe(1)
+  })
+})
+
+// 回归：runBatch 结束（含用户取消）把 state 置为终态 'done' 后再无转移回 'idle'，
+// 而工具栏点击仅在 idle 时 emit generateSelection/generateRegen、stop() 仅在 running 时生效
+// → 任何一批跑完/取消后，后续批量点击全部静默无反应。
+describe('start(): 批次结束后状态必须回到 idle（可再次启动）', () => {
+  it('正常跑完 → state 回 idle，第二次 start 可再次执行', async () => {
+    const generated: string[][] = []
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async (n) => { generated.push([n.id]) },
+    })
+    const api = useSelectionGenerate(deps)
+    await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(api.state.value).toBe('idle')
+    await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(api.state.value).toBe('idle')
+    expect(generated.length).toBe(2)
+  })
+
+  it('用户取消（stop）→ state 回 idle，第二次 start 可再次执行', async () => {
+    let firstRunStarted = () => {}
+    let releaseFirstRun = () => {}
+    const gate = new Promise<void>((resolve) => { releaseFirstRun = resolve })
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+        { id: 'j', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async (n) => {
+        if (n.id === 'i') {
+          firstRunStarted()
+          await gate // 挂起直到被取消
+        }
+      },
+      // 真实实现中 cancelGeneration 会 abort 让 generateForNode settle；
+      // 这里在取消时释放挂起的 gate 模拟该行为
+      cancelGeneration: () => { releaseFirstRun() },
+    })
+    const api = useSelectionGenerate(deps)
+    const first = api.start({ run: ['i', 'j'], skip: [], blockedBy: [], groupExpanded: [] })
+    await firstRunStarted
+    api.stop()
+    await first
+    expect(api.state.value).toBe('idle')
+
+    // 第二次启动必须能正常跑完
+    const second = await api.start({ run: ['j'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(api.state.value).toBe('idle')
+    expect(second.done).toBe(1)
   })
 })
