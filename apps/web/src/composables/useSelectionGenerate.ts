@@ -6,6 +6,7 @@ import { ref, type Ref } from 'vue'
 import type { EditableFlowNode } from './useSelectedNodeEditor'
 import type { CanvasEdgeLike } from './useUpstreamNodeContext'
 import type { PlanSelectionGenerateResult, SkipReason } from '@lnkpi/shared'
+import { randomId } from '@/utils/randomId'
 import { reportBatchEvent } from '@/utils/selectionBatchTelemetry'
 
 export type SettleKind =
@@ -145,22 +146,8 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     for (const id of inFlight.keys()) deps.cancelGeneration(id)
   }
 
-  async function start(plan: PlanSelectionGenerateResult): Promise<BatchSummary> {
-    state.value = 'running'
-    batchSessionId = crypto.randomUUID()
-    abortCtrl = new AbortController()
-    inFlight = new Map()
-    waitingMap = new Map()
-    queue = []
-    skippedMap = new Map()
-    semaphore = SEMAPHORE
-    pointsExhausted = false
-    creditCost = 0
-    summaryDone = summaryFailed = summaryCancelled = summaryTimeout = summarySkipped = 0
-    summaryAbortReason = 'none'
-    progress.value = { done: 0, failed: 0, cancelled: 0, timeout: 0, skipped: 0, total: plan.run.length, abortReason: 'none' }
-    const startTs = Date.now()
-
+  /** 主流程。前置状态由 start() 初始化；任何异常都会被 start() 兜底。 */
+  async function runBatch(plan: PlanSelectionGenerateResult, startTs: number): Promise<BatchSummary> {
     // §13.2 telemetry: selection_batch_started
     reportBatchEvent('selection_batch_started', {
       sessionId: batchSessionId,
@@ -316,6 +303,43 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
       done: summaryDone, failed: summaryFailed, cancelled: summaryCancelled,
       timeout: summaryTimeout, skipped: summarySkipped,
       durationMs: Date.now() - startTs, creditCost,
+    }
+  }
+
+  async function start(plan: PlanSelectionGenerateResult): Promise<BatchSummary> {
+    // 所有初始化都必须发生在 state='running' 之前。
+    // 一旦状态置为 running，MultiSelectToolbar 会把主按钮切成「停止全部」并禁用
+    // （disabled 判定为 state !== 'idle'）；若此刻抛错又没人复位，状态机就永久卡死：
+    // 按钮显示「停止全部」且点击毫无反应，只能刷新页面。
+    // 历史上 batchSessionId = crypto.randomUUID() 在明文 HTTP（非安全上下文）下抛
+    // TypeError，正是踩了这个坑。
+    abortCtrl = new AbortController()
+    batchSessionId = randomId()
+    inFlight = new Map()
+    waitingMap = new Map()
+    queue = []
+    skippedMap = new Map()
+    semaphore = SEMAPHORE
+    pointsExhausted = false
+    creditCost = 0
+    summaryDone = summaryFailed = summaryCancelled = summaryTimeout = summarySkipped = 0
+    summaryAbortReason = 'none'
+    progress.value = { done: 0, failed: 0, cancelled: 0, timeout: 0, skipped: 0, total: plan.run.length, abortReason: 'none' }
+    const startTs = Date.now()
+    state.value = 'running'
+
+    try {
+      return await runBatch(plan, startTs)
+    } catch (err) {
+      // 兜底：任何未预期异常都不允许把状态机留在 running
+      if (state.value === 'running' || state.value === 'stopping') state.value = 'idle'
+      deps.toast(`批量生成异常终止：${err instanceof Error ? err.message : String(err)}`, 'error')
+      throw err
+    } finally {
+      if (batchTimeoutHandle) {
+        clearTimeout(batchTimeoutHandle)
+        batchTimeoutHandle = null
+      }
     }
   }
 

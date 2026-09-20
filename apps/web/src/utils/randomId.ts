@@ -1,7 +1,7 @@
-/** UUID when secure context allows; fallback for HTTP production hosts. */
-export function randomId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 11)}`
-}
+/**
+ * UUID when secure context allows; fallback for HTTP production hosts.
+ *
+ * 实现统一收敛到 `@lnkpi/shared`，避免 web 与 shared 各自维护一份降级逻辑
+ * （shared 内部也需要同能力，见 `seedImageVersions`）。
+ */
+export { randomId } from '@lnkpi/shared'
