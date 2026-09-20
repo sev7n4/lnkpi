@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import {
   getEditIntent,
   resolveImageEditProfile,
@@ -33,7 +32,6 @@ import {
   resolvePointMaskRgba,
 } from './pointSegmentSession'
 
-const REFINE_DEFAULT_W = 400
 const REFINE_COLLAPSED_W = 44
 
 const props = defineProps<{
@@ -45,6 +43,12 @@ const props = defineProps<{
   generationRecordId?: string
   width?: number
   height?: number
+  /** Shared workbench panel width (px) — owned by useWorkbenchPanel, passed down. */
+  panelWidth: number
+  /** Shared collapsed flag — owned by useWorkbenchPanel, passed down. */
+  collapsed: boolean
+  /** Shared narrow (<640px) flag — owned by useWorkbenchPanel, passed down. */
+  isNarrow: boolean
 }>()
 
 const emit = defineEmits<{
@@ -52,6 +56,8 @@ const emit = defineEmits<{
   apply: [payload: { url: string; prompt: string; recordId?: string }]
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
+  'update:collapsed': [value: boolean]
+  'update:panel-width': [value: number]
 }>()
 
 const editor = useCanvasEditorStore()
@@ -85,19 +91,6 @@ const lastRecordId = ref<string | undefined>()
 const compareMode = ref<CompareMode>('split')
 const wipeRatio = ref(0.5)
 
-function requestClose() {
-  if (editor.compareLightboxOpen) {
-    editor.setCompareLightboxOpen(false)
-    return
-  }
-  if (!busy.value) emit('close')
-}
-
-const { panelWidth, collapsed, isNarrow, setCollapsed } = useWorkbenchPanel({
-  defaultWidth: REFINE_DEFAULT_W,
-  busy: () => busy.value,
-  onClose: requestClose,
-})
 let abortController: AbortController | null = null
 const pointSession = createPointSegmentSession()
 
@@ -123,16 +116,16 @@ const wipeLocked = computed(() => wipeCompareLocked(canApply.value))
 const loupeMenuOpen = computed(() => loupeSubcontrolsVisible(editor.refineLoupeOn))
 const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
 const panelStyle = computed(() => {
-  const width = collapsed.value
+  const width = props.collapsed
     ? REFINE_COLLAPSED_W
-    : isNarrow.value
+    : props.isNarrow
       ? undefined
-      : panelWidth.value
+      : props.panelWidth
   return {
     top: '0',
     right: '0',
     bottom: '0',
-    width: isNarrow.value ? '100%' : `${width}px`,
+    width: props.isNarrow ? '100%' : `${width}px`,
   }
 })
 
@@ -270,7 +263,7 @@ function onApply() {
 }
 
 function toggleCollapsed() {
-  setCollapsed(!collapsed.value)
+  emit('update:collapsed', !props.collapsed)
 }
 
 async function onPointSelect({ x, y }: { x: number; y: number }) {
