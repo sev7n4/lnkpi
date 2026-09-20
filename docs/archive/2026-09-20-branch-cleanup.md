@@ -8,9 +8,21 @@
 
 | 项 | 清理前 | 清理后 |
 |---|---|---|
-| 本地分支 | 99 | 29（含 main） |
+| 本地分支 | 99 | 18（含 main） |
 | 远端分支 | 77 | 13（不含 main） |
-| worktree 记录 | 31 | 6 |
+| worktree 记录 | 31 | 3 |
+
+## 执行分两阶段
+
+**阶段一 · 可证明已交付的分支**：按下面的 A/B 规则删除本地 70 个、远端 63 个，并 `git worktree prune` 清掉 25 条目录已不存在的 worktree 记录
+（`main` 曾被其中一条 prunable 记录占用，清理后才能正常切回）。
+
+**阶段二 · 本 PR 合并后执行**：
+1. 本 PR 记录的 7 个纯设计文档分支 + `cursor/gitignore-local-tool-dirs` 删除（文档内容已在 main，差异见附录 C）。
+2. 移除 `/private/tmp` 下 3 个干净（无未提交改动）的 worktree —— `feature-flag-url`、`feature-sbg`、`fix-data-undefined`，
+   并删除其对应分支 `feature/feature-flag-url-toggle`、`feature/selection-batch-generate`、`fix/vite-optimizedeps-shared`
+   （三者内容均已交付 main；其中两个远端分支已随阶段一删除）。
+3. `/private/tmp/build-main`（detached HEAD，有 5 个未提交文件）与 `/private/tmp/dev-server`（`fix/vercel-proxy-default-8888`，有 OPEN PR #374）**保留不动**。
 
 ## 判定规则
 
@@ -34,7 +46,7 @@
 | `fix/scene-composer-h3-credits` | #303 | 开着 6 天 |
 | `docs/explore-phase2-impl-plan` | #190 | 远端存在、本地无；开着 42 天，建议推进或关闭 |
 
-### 含未合并代码（14 个，待人工评估）
+### 含未合并代码（13 个，待人工评估）
 
 | 分支 | 独有提交 | 改动文件 | 其中代码 | PR |
 |---|---|---|---|---|
@@ -51,7 +63,6 @@
 | `chore/vision-qa-diagnostics` | 1 | 7 | 6 | #231 已关闭未合并 |
 | `feature/video-composition-c2-c3` | 1 | 5 | 4 | 无 PR |
 | `pr-63-head` | 1 | 3 | 3 | 无 PR（疑似临时验证分支） |
-| `fix/vite-optimizedeps-shared` | 1 | 1 | 1 | 内容已交付，但仍被 `/private/tmp/fix-data-undefined` worktree 占用，本次未删本地引用 |
 
 > 远端另有 3 个无本地对应分支的未合并分支，同样保留：
 > `origin/feature/agent-execution-trace-p1-p2`（#153 已关闭）、
