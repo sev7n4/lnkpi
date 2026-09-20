@@ -90,6 +90,7 @@ import {
 } from '@/composables/useCanvasGrouping'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import MultiSelectToolbarOverlay from '@/components/canvas/MultiSelectToolbarOverlay.vue'
+import SelectionBatchProgressCard from '@/components/canvas/SelectionBatchProgressCard.vue'
 import MultiSelectConnectOverlay from '@/components/canvas/MultiSelectConnectOverlay.vue'
 import BatchConnectPickerLine from '@/components/canvas/BatchConnectPickerLine.vue'
 import EdgeScissorsOverlay from '@/components/canvas/EdgeScissorsOverlay.vue'
@@ -945,8 +946,35 @@ const multiSelectCanGenerateVideo = computed(() => {
 interface MultiSelectBatchMeta {
   plan: PlanSelectionGenerateResult | null
   regenPlan: PlanSelectionGenerateResult | null
-  blocked: 'pending_confirm' | 'limit_24' | null
+  blocked: 'pending_confirm' | 'limit_24' | 'missing_prompt' | null
   blockedCount: number
+  /** 缺提示词（无可尝试输入）节点数 */
+  missingCount: number
+}
+
+/** 节点是否有可尝试的生成输入：本地提示词/内容，或上游可用输出可作参考（与 generateForNode 的静默跳过条件对齐）。 */
+function nodeHasAttemptableInput(id: string): boolean {
+  const node = findNodeById(id)
+  if (!node) return false
+  const d = (node.data ?? {}) as Record<string, unknown>
+  if (String(d.prompt ?? d.content ?? '').trim()) return true
+  const upstreamIds = edges.value.filter(e => e.target === id).map(e => e.source)
+  return upstreamIds.some(uid => {
+    const u = findNodeById(uid)
+    if (!u) return false
+    const status = (u.data as Record<string, unknown>).status
+    if (status !== NODE_GENERATION_STATUS.completed) return false
+    const type = String(u.type)
+    if (type === 'image' || type === 'video') {
+      const url = String((u.data as Record<string, unknown>).url ?? '').trim()
+      const images = (u.data as Record<string, unknown>).images
+      return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
+    }
+    if (type === 'text' || type === 'prompt') {
+      return Boolean(String((u.data as Record<string, unknown>).content ?? (u.data as Record<string, unknown>).prompt ?? '').trim())
+    }
+    return true
+  })
 }
 
 const multiSelectBatchMeta = computed<MultiSelectBatchMeta | null>(() => {
@@ -975,16 +1003,20 @@ const multiSelectBatchMeta = computed<MultiSelectBatchMeta | null>(() => {
       return true
     },
     isInFlight: (id) => isNodeBusy(id),
+    hasAttemptableInput: (n) => nodeHasAttemptableInput(n.id),
     regenerate,
   })
   try {
-    return { plan: build(false), regenPlan: build(true), blocked: null, blockedCount: 0 }
+    const plan = build(false)
+    const regenPlan = build(true)
+    const missingCount = plan.skip.filter(s => s.reason === 'missing_prompt').length
+    return { plan, regenPlan, blocked: null, blockedCount: 0, missingCount }
   } catch (e) {
     if (e instanceof SelectionBatchLimitError) {
-      return { plan: null, regenPlan: null, blocked: 'limit_24', blockedCount: e.actualCount }
+      return { plan: null, regenPlan: null, blocked: 'limit_24', blockedCount: e.actualCount, missingCount: 0 }
     }
     if (e instanceof SelectionBatchPendingConfirmError) {
-      return { plan: null, regenPlan: null, blocked: 'pending_confirm', blockedCount: countPendingInSelection() }
+      return { plan: null, regenPlan: null, blocked: 'pending_confirm', blockedCount: countPendingInSelection(), missingCount: 0 }
     }
     throw e
   }
@@ -1017,6 +1049,8 @@ const selectionBatchApi = useSelectionGenerate({
   nodes: nodes as Ref<EditableFlowNode[]>,
   edges: edges as Ref<CanvasEdgeLike[]>,
   generateForNode: (node) => (generateForNode as any)(node, { asRunGroupMember: true }),
+  // 等待节点真正 settle（completed/error）再计数，修复"任务未完成就弹完成汇总"
+  waitForNodeSettled: (id) => waitForRunGroupMemberSettled(id),
   hasUsableOutput: (n) => {
     const status = (n.data as Record<string, unknown>).status
     if (status !== NODE_GENERATION_STATUS.completed) return false
@@ -1055,13 +1089,27 @@ const selectionBatchProp = computed(() => {
     state: selectionBatchApi.state.value,
     blocked: meta.blocked ?? undefined,
     blockedCount: meta.blockedCount || undefined,
+    missingCount: meta.missingCount || undefined,
   }
 })
+
+// 最近一次批量是否为重新生成（进度卡标题区分用）
+const lastBatchRegenerate = ref(false)
+
+/** 计划中缺提示词节点数 → 点名提示（这些节点不会执行） */
+function warnMissingPrompt(plan: PlanSelectionGenerateResult) {
+  const missing = plan.skip.filter(s => s.reason === 'missing_prompt').length
+  if (missing > 0) {
+    ElMessage.warning(`${missing} 个节点未写提示词且无可用上游输出，未执行`)
+  }
+}
 
 // 处理点击
 async function handleSelectionBatchGenerate() {
   const plan = multiSelectPlan.value
   if (!plan || plan.run.length === 0) return
+  lastBatchRegenerate.value = false
+  warnMissingPrompt(plan)
   try {
     await selectionBatchApi.start(plan)
   } catch {
@@ -1080,6 +1128,8 @@ async function handleSelectionBatchRegenerate() {
   const meta = multiSelectBatchMeta.value
   const plan = meta?.regenPlan
   if (!plan || plan.run.length === 0) return
+  lastBatchRegenerate.value = true
+  warnMissingPrompt(plan)
   try {
     await ElMessageBox.confirm(
       `将重新生成 ${plan.run.length} 个节点，覆盖现有产物（不可撤销），并可能消耗积分。`,
@@ -1100,14 +1150,28 @@ async function handleSelectionBatchRegenerate() {
   )
 }
 
-/** 阻断态点击：pending_confirm → 定位选中待确认节点；超上限 → toast 提示。 */
-function handleSelectionBatchBlocked(reason: 'pending_confirm' | 'limit_24') {
+/** 阻断态点击：pending_confirm → 定位待确认节点；超上限 → toast；缺提示词 → 定位第一个问题节点。 */
+function handleSelectionBatchBlocked(reason: 'pending_confirm' | 'limit_24' | 'missing_prompt') {
   if (reason === 'pending_confirm') {
     ElMessage.info('选区包含待确认节点，请先在侧栏确认生成')
     const pendingId = multiSelectedIds.value
       .map(findNodeById)
       .find(n => n && String((n.data as Record<string, unknown> | undefined)?.status ?? '') === 'pending_confirm')
     if (pendingId) selectOnlyNode(pendingId.id)
+    return
+  }
+  if (reason === 'missing_prompt') {
+    ElMessage.warning('选区节点均未写提示词且无可用上游输出，已定位第一个问题节点')
+    const problemId = multiSelectedIds.value
+      .flatMap(id => {
+        const node = findNodeById(id)
+        if (node && String(node.type ?? '') === 'group') {
+          return getGroupChildIds(nodes.value as unknown as GroupChildNode[], id)
+        }
+        return [id]
+      })
+      .find(id => !nodeHasAttemptableInput(id))
+    if (problemId) selectOnlyNode(problemId)
     return
   }
   ElMessage.warning('选区可执行节点超过 24 个上限，请减少选区后重试')
@@ -3350,6 +3414,7 @@ const {
   isNodeBusy,
   cancelGeneration,
   generateForNode,
+  waitForRunGroupMemberSettled,
   saveSceneComposer,
   expandSceneComposer,
   batchGenerateSceneComposer,
@@ -3860,6 +3925,12 @@ onUnmounted(() => {
             @generate-regen="handleSelectionBatchRegenerate"
             @stop-selection="handleSelectionBatchStop"
             @blocked-hint="handleSelectionBatchBlocked"
+          />
+          <SelectionBatchProgressCard
+            :state="selectionBatchApi.state.value"
+            :regenerate="lastBatchRegenerate"
+            :progress="selectionBatchApi.progress.value"
+            @stop="handleSelectionBatchStop"
           />
           <SelectionActionBar
             v-if="selectionUpscaleNode"

@@ -138,3 +138,78 @@ describe('start(): 明文 HTTP（crypto.randomUUID 不可用）', () => {
     expect(api.state.value).toBe('done')
   })
 })
+
+// 回归：generateForNode 对图片/视频节点在"任务提交+转入后台轮询"时就 resolve，
+// 执行器若直接计 done 会提前弹「完成 X」。新增 waitForNodeSettled 依赖后，
+// 执行器必须等到节点真正 settle（completed/error）才计数。
+describe('runOneNode: waitForNodeSettled 等待真实终态', () => {
+  it('generateForNode 立即 resolve 但节点未 settle → 不提前计 done，settle 为 ok 后计 done', async () => {
+    let settled = false
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async () => {}, // 提交即返回（模拟现网提交后转后台轮询）
+      waitForNodeSettled: async () => {
+        // 模拟后台轮询期间：先等一拍才算 settle
+        await new Promise(r => setTimeout(r, 30))
+        return settled ? 'ok' : 'ok'
+      },
+    })
+    const api = useSelectionGenerate(deps)
+    const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(summary.done).toBe(1)
+    expect(summary.failed).toBe(0)
+    void settled
+  })
+
+  it('waitForNodeSettled 返回 failed → 计 failed 而非 done', async () => {
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async () => {},
+      waitForNodeSettled: async () => 'failed',
+    })
+    const api = useSelectionGenerate(deps)
+    const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(summary.done).toBe(0)
+    expect(summary.failed).toBe(1)
+  })
+
+  it('提交本身抛错（如 insufficient_points）→ 仍按 classifyError 计数，不调 waitForNodeSettled', async () => {
+    let settleCalls = 0
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async () => {
+        const err = new Error('no points') as Error & { code?: string }
+        err.code = 'insufficient_points'
+        throw err
+      },
+      waitForNodeSettled: async () => { settleCalls++; return 'ok' },
+    })
+    const api = useSelectionGenerate(deps)
+    const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(summary.done).toBe(0)
+    expect(summary.failed).toBe(1)
+    expect(settleCalls).toBe(0)
+  })
+
+  it('未传 waitForNodeSettled（旧调用方）→ 行为与旧版一致（提交即计 done）', async () => {
+    const deps = makeDeps({
+      nodes: ref([
+        { id: 'i', type: 'image', data: {}, position: { x: 0, y: 0 } } as EditableFlowNode,
+      ]),
+      hasUsableOutput: () => false,
+      generateForNode: async () => {},
+    })
+    const api = useSelectionGenerate(deps)
+    const summary = await api.start({ run: ['i'], skip: [], blockedBy: [], groupExpanded: [] })
+    expect(summary.done).toBe(1)
+  })
+})

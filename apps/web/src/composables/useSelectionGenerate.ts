@@ -42,6 +42,12 @@ export interface UseSelectionGenerateDeps {
   nodes: Ref<EditableFlowNode[]>
   edges: Ref<CanvasEdgeLike[]>
   generateForNode: (node: EditableFlowNode, opts: { asRunGroupMember: true }) => Promise<void>
+  /**
+   * 等待节点真正 settle（completed=ok / error=failed）。
+   * generateForNode 对图片/视频是"提交即返回"，不等待会把后台轮询中的任务提前计成 done。
+   * 缺省不传 = 旧行为（提交即计 done）。
+   */
+  waitForNodeSettled?: (nodeId: string) => Promise<'ok' | 'failed'>
   hasUsableOutput: (node: EditableFlowNode) => boolean
   resolveUpstreamIds: (node: EditableFlowNode) => string[]
   cancelGeneration: (nodeId: string) => void
@@ -126,7 +132,13 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     let timerHandle: ReturnType<typeof setTimeout> | null = null
     try {
       const settlePromise = deps.generateForNode(node, { asRunGroupMember: true })
-        .then(() => 'ok' as SettleKind)
+        .then(async () => {
+          if (!deps.waitForNodeSettled) return 'ok' as SettleKind
+          const r = await deps.waitForNodeSettled(node.id)
+          if (r === 'ok') return 'ok' as SettleKind
+          // 等待期间用户停止/批量超时 → 计取消而非失败
+          return abortCtrl.signal.aborted ? 'cancelled' as SettleKind : 'failed' as SettleKind
+        })
         .catch(err => classifyError(err))
       const timeoutPromise = new Promise<SettleKind>(resolve => {
         timerHandle = setTimeout(() => resolve('timeout'), MAX_WAIT_PER_NODE_MS)

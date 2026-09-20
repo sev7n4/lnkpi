@@ -1443,6 +1443,7 @@ async function cancelRemoteGeneration(
     isNodeBusy,
     cancelGeneration,
     generateForNode,
+    waitForRunGroupMemberSettled,
     saveSceneComposer,
     expandSceneComposer,
     batchGenerateSceneComposer,
