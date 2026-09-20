@@ -22,6 +22,7 @@ export interface MediaPreviewTarget {
   generationRecordId?: string
   assetMediaInfo?: MediaInfo
   assetMeta?: Record<string, unknown>
+  nodeId?: string
 }
 
 export type RefineMaskHandle = {

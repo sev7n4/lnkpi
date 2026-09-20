@@ -175,4 +175,13 @@ describe('canvasEditor refine target', () => {
     expect(editor.refineTool).toBe('brush')
     expect(editor.refineMaskOp).toBe('add')
   })
+
+  it('opens editor from preview target carrying nodeId, guarded by refineBusy', () => {
+    const editor = useCanvasEditorStore()
+    editor.openMediaPreview({ url: 'https://cdn/a.png', kind: 'image', nodeId: 'n1' })
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    expect(editor.imageTarget?.nodeId).toBe('n1')
+    editor.closeImageEditor()
+    expect(editor.imageTarget).toBeNull()
+  })
 })

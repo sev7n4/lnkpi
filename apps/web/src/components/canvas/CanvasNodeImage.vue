@@ -75,6 +75,7 @@ function openPreview() {
     kind: 'image',
     label: props.data.label ?? props.data.prompt,
     generationRecordId: props.data.generationRecordId,
+    nodeId: props.id,
   })
 }
 
