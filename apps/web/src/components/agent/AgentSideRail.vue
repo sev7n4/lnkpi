@@ -51,9 +51,9 @@ import {
   confirmProposeGeneration as runConfirmProposeGeneration,
   detectAgentChipSet,
   canvasHasRecipeParent,
-  extractProposeGenerationNodeId,
   resolveAtomicConfirmNodeId,
   resolvePendingConfirmNodeId,
+  resolveProposeChipNodeId,
 } from '@/components/agent/agentChipSet'
 import { buildGenerationProposePresentation } from '@/components/agent/generationProposePresentation'
 import {
@@ -479,11 +479,13 @@ const lastAssistantMessage = computed(() =>
   [...agent.messages].reverse().find((m) => m.role === 'assistant'),
 )
 
-const proposeGenerationNodeId = computed(() => {
-  const fromTools = extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls)
-  if (fromTools) return fromTools
-  return resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
-})
+const proposeGenerationNodeId = computed(() =>
+  resolveProposeChipNodeId({
+    toolCalls: lastAssistantMessage.value?.toolCalls,
+    canvasNodes: props.canvasNodes,
+    selectedNodeId: props.selectedNodeId,
+  }),
+)
 
 function proposeChipKey(msgId: string, nodeId: string): string {
   return `${msgId}:${nodeId}`
@@ -495,9 +497,15 @@ function proposeLatchKey(nodeId: string): string {
 }
 
 const chipSet = computed(() => {
-  const proposeId =
-    extractProposeGenerationNodeId(lastAssistantMessage.value?.toolCalls) ??
-    resolvePendingConfirmNodeId(props.canvasNodes, props.selectedNodeId)
+  // SSOT 优先：画布 pending_confirm 是真相源，确认一张后下一张立即顶上；
+  // toolCalls 提取仅覆盖「提案已返回、画布节点尚未落库」的竞态窗口。
+  // （旧写法 extract ?? SSOT 会在最后一轮消息含 propose toolCalls 时把卡片
+  // 钉死在已确认节点上，latch + ?? 短路使下一张卡死等 agent 下一轮 turn。）
+  const proposeId = resolveProposeChipNodeId({
+    toolCalls: lastAssistantMessage.value?.toolCalls,
+    canvasNodes: props.canvasNodes,
+    selectedNodeId: props.selectedNodeId,
+  })
 
   // Interrupt overrides propose — except Phase 2c.3: pending beats await_atomic_confirm.
   const fromInterrupt = chipSetFromInterrupt(interruptGate.value)
