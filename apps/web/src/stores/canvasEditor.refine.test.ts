@@ -163,6 +163,7 @@ describe('canvasEditor refine target', () => {
   })
 
   it('no longer exposes floating chrome state', () => {
+    setActivePinia(createPinia())
     const editor = useCanvasEditorStore()
     expect('refineChrome' in editor).toBe(false)
     expect('refinePanelWidth' in editor).toBe(false)

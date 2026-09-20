@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import {
   getEditIntent,
   resolveImageEditProfile,
@@ -83,9 +84,20 @@ const compareBeforeUrl = ref(props.beforeUrl)
 const lastRecordId = ref<string | undefined>()
 const compareMode = ref<CompareMode>('split')
 const wipeRatio = ref(0.5)
-const panelWidth = ref(REFINE_DEFAULT_W)
-const panelCollapsed = ref(false)
-const isNarrow = ref(false)
+
+function requestClose() {
+  if (editor.compareLightboxOpen) {
+    editor.setCompareLightboxOpen(false)
+    return
+  }
+  if (!busy.value) emit('close')
+}
+
+const { panelWidth, collapsed, isNarrow, setCollapsed } = useWorkbenchPanel({
+  defaultWidth: REFINE_DEFAULT_W,
+  busy: () => busy.value,
+  onClose: requestClose,
+})
 let abortController: AbortController | null = null
 const pointSession = createPointSegmentSession()
 
@@ -107,7 +119,6 @@ const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
-const collapsed = computed(() => panelCollapsed.value && !isNarrow.value)
 const wipeLocked = computed(() => wipeCompareLocked(canApply.value))
 const loupeMenuOpen = computed(() => loupeSubcontrolsVisible(editor.refineLoupeOn))
 const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
@@ -259,22 +270,7 @@ function onApply() {
 }
 
 function toggleCollapsed() {
-  if (isNarrow.value) return
-  panelCollapsed.value = !panelCollapsed.value
-}
-
-function syncNarrow() {
-  isNarrow.value = window.innerWidth < 640
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return
-  if (editor.compareLightboxOpen) {
-    editor.setCompareLightboxOpen(false)
-    event.preventDefault()
-    return
-  }
-  if (!busy.value) emit('close')
+  setCollapsed(!collapsed.value)
 }
 
 async function onPointSelect({ x, y }: { x: number; y: number }) {
@@ -399,16 +395,11 @@ async function runRefine() {
 
 onMounted(() => {
   registerRefinePointSelectHandler(onPointSelect)
-  syncNarrow()
-  window.addEventListener('resize', syncNarrow)
-  window.addEventListener('keydown', onKeydown)
 })
 
 onBeforeUnmount(() => {
   registerRefinePointSelectHandler(null)
   resetPointFallbackState()
-  window.removeEventListener('resize', syncNarrow)
-  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
