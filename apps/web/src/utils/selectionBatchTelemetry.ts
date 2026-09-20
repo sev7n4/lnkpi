@@ -5,7 +5,7 @@
  */
 
 export type BatchEvent =
-  | { name: 'selection_batch_started'; payload: { sessionId: string; runCount: number; skipCount: number; total: number; triggerSource: string; flagOn: boolean } }
+  | { name: 'selection_batch_started'; payload: { sessionId: string; runCount: number; skipCount: number; total: number; triggerSource: string; flagOn: boolean; regenerate?: boolean } }
   | { name: 'selection_batch_node_settled'; payload: { sessionId: string; nodeId: string; kind: string; durationMs: number } }
   | { name: 'selection_batch_plan_rejected'; payload: { sessionId: string; reason: 'pending_confirm' | 'limit_24'; candidateCount: number; blockedCount: number } }
   | { name: 'selection_batch_completed'; payload: {
@@ -21,6 +21,7 @@ export type BatchEvent =
       pointsExhausted: boolean
       runCountAtStart: number
       abortReason: string
+      regenerate?: boolean
     } }
 
 export function reportBatchEvent(name: BatchEvent['name'], payload: BatchEvent['payload']): void {

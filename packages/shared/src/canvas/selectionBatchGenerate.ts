@@ -36,6 +36,12 @@ export interface PlanSelectionGenerateInput {
   }
   hasUsableOutput: (node: { id: string; type: string; data?: Record<string, unknown> }) => boolean
   isInFlight?: (nodeId: string) => boolean
+  /**
+   * 批量重新生成：already_done 节点不再 skip，进 run（覆盖式重新生成）。
+   * pending_confirm 整批拒绝（SB-D3）与 24 上限计数均不受影响。
+   * 缺省 false，保持既有行为。
+   */
+  regenerate?: boolean
 }
 
 export interface PlanSelectionGenerateResult {
@@ -171,7 +177,7 @@ export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSe
     const status = String(n.data?.status ?? '')
     if (status === 'fallback_pending') {
       skip.push({ nodeId: n.id, reason: 'fallback_pending' })
-    } else if (input.hasUsableOutput(n)) {
+    } else if (input.hasUsableOutput(n) && !input.regenerate) {
       skip.push({ nodeId: n.id, reason: 'already_done' })
     } else if (input.isInFlight?.(n.id) === true) {
       skip.push({ nodeId: n.id, reason: 'in_flight' })

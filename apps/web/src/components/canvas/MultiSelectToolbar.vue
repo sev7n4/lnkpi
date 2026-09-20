@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref, computed } from 'vue'
 
 const props = defineProps<{
   selectedIds: string[]
   screenPosition: { x: number; y: number } | null
   canGenerateVideo?: boolean
   canUngroup?: boolean
-  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' | 'done' }
+  selectionBatch?: {
+    runCount: number
+    /** 已完成节点的可重新生成数量（planner regenerate 模式） */
+    regenCount?: number
+    state: 'idle' | 'running' | 'stopping' | 'done'
+    /** 整批阻断态：任一 pending_confirm 或超过 24 上限 */
+    blocked?: 'pending_confirm' | 'limit_24'
+    blockedCount?: number
+  }
 }>()
 
 const emit = defineEmits<{
@@ -20,7 +28,9 @@ const emit = defineEmits<{
   duplicate: []
   duplicateUpstream: []
   generateSelection: []
+  generateRegen: []
   stopSelection: []
+  blockedHint: [reason: 'pending_confirm' | 'limit_24']
 }>()
 
 const exportMenuOpen = ref(false)
@@ -41,6 +51,36 @@ function onGenerateClick() {
     emit('stopSelection')
   }
 }
+
+function onRegenClick() {
+  if (props.selectionBatch && props.selectionBatch.state === 'idle') {
+    emit('generateRegen')
+  } else {
+    emit('stopSelection')
+  }
+}
+
+const batchBlocked = computed(() => props.selectionBatch?.blocked ?? null)
+const batchBlockedCount = computed(() => props.selectionBatch?.blockedCount ?? 0)
+const batchRunCount = computed(() => props.selectionBatch?.runCount ?? 0)
+const batchRegenCount = computed(() => props.selectionBatch?.regenCount ?? 0)
+const showGenerateButton = computed(() => batchRunCount.value > 0 || (batchRegenCount.value === 0 && !batchBlocked.value))
+const showRegenButton = computed(() => batchRegenCount.value > 0 && !batchBlocked.value)
+const batchRunning = computed(() => props.selectionBatch?.state === 'running' || props.selectionBatch?.state === 'stopping')
+
+function onBlockedClick() {
+  if (batchBlocked.value) emit('blockedHint', batchBlocked.value)
+}
+
+const blockedTitle = computed(() => {
+  if (batchBlocked.value === 'pending_confirm') {
+    return '选区包含待确认节点，点击定位；请先在侧栏确认生成'
+  }
+  if (batchBlocked.value === 'limit_24') {
+    return '选区可执行节点超过 24 个上限，请减少选区后重试'
+  }
+  return ''
+})
 
 function onExport(mode: 'full_package' | 'lightweight' | 'media_list_only') {
   exportMenuOpen.value = false
@@ -94,14 +134,35 @@ onUnmounted(() => {
         生成视频
       </button>
       <button
-        v-if="selectionBatch && selectedIds.length >= 2"
+        v-if="batchBlocked"
+        type="button"
+        class="toolbar-action warn"
+        data-testid="selection-batch-blocked"
+        :title="blockedTitle"
+        @click="onBlockedClick"
+      >
+        {{ batchBlocked === 'pending_confirm' ? `待确认 · ${batchBlockedCount}` : `超上限 · ${batchBlockedCount}` }}
+      </button>
+      <button
+        v-if="showGenerateButton"
         type="button"
         class="toolbar-action accent"
         data-testid="selection-batch-generate"
-        :disabled="!selectionBatch || selectionBatch.runCount === 0 || selectionBatch.state !== 'idle'"
+        :disabled="!selectionBatch || (selectionBatch.state === 'idle' && selectionBatch.runCount === 0)"
         @click="onGenerateClick"
       >
-        {{ selectionBatch.state === 'running' ? '停止全部' : `生成 · ${selectionBatch.runCount}` }}
+        {{ batchRunning ? '停止全部' : `生成 · ${selectionBatch?.runCount ?? 0}` }}
+      </button>
+      <button
+        v-if="showRegenButton"
+        type="button"
+        class="toolbar-action accent"
+        data-testid="selection-batch-regenerate"
+        :disabled="!selectionBatch"
+        :title="`覆盖式重新生成 ${batchRegenCount} 个已完成节点，将覆盖现有产物并可能消耗积分`"
+        @click="onRegenClick"
+      >
+        {{ batchRunning ? '停止全部' : `重新生成 · ${batchRegenCount}` }}
       </button>
       <button
         v-if="canUngroup"
@@ -236,6 +297,12 @@ onUnmounted(() => {
 }
 .toolbar-action.accent {
   color: var(--neo-accent-text);
+}
+.toolbar-action.warn {
+  color: #fbbf24;
+}
+.toolbar-action.warn:hover {
+  color: #fcd34d;
 }
 .export-menu {
   background: var(--neo-chrome-bg, rgba(20, 20, 24, 0.96));

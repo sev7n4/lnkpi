@@ -22,8 +22,8 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction, ImageVersionEntry, PlanSelectionGenerateResult } from '@lnkpi/shared'
-import { appendEditVersion, revertImageVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError } from '@lnkpi/shared'
-import { ElMessage } from 'element-plus'
+import { appendEditVersion, revertImageVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
@@ -940,44 +940,77 @@ const multiSelectCanGenerateVideo = computed(() => {
 })
 
 // 派生：plan（懒计算，仅当选区 ≥ 2 时）
-const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => {
+// meta 同时承载 regenerate 版 plan 与整批阻断态（pending_confirm / 24 上限），
+// 供工具栏显示「重新生成 · M」「待确认 · N」「超上限 · N」。
+interface MultiSelectBatchMeta {
+  plan: PlanSelectionGenerateResult | null
+  regenPlan: PlanSelectionGenerateResult | null
+  blocked: 'pending_confirm' | 'limit_24' | null
+  blockedCount: number
+}
+
+const multiSelectBatchMeta = computed<MultiSelectBatchMeta | null>(() => {
   if (!isFeatureOn('selection_batch_generate')) return null
   if (multiSelectedIds.value.length < 2) return null
+  const build = (regenerate: boolean) => planSelectionGenerate({
+    selectedIds: multiSelectedIds.value,
+    canvas: {
+      nodes: nodes.value.map(n => ({ id: n.id, type: String(n.type ?? ''), data: n.data as Record<string, unknown> })),
+      edges: edges.value as Array<{ id: string; source: string; target: string }>,
+    },
+    hasUsableOutput: (n) => {
+      const full = nodes.value.find(x => x.id === n.id)
+      if (!full) return false
+      const status = (full.data as Record<string, unknown>).status
+      if (status !== NODE_GENERATION_STATUS.completed) return false
+      const type = String(full.type)
+      if (type === 'image' || type === 'video') {
+        const url = String((full.data as Record<string, unknown>).url ?? '').trim()
+        const images = (full.data as Record<string, unknown>).images
+        return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
+      }
+      if (type === 'text' || type === 'prompt') {
+        return Boolean(String((full.data as Record<string, unknown>).content ?? (full.data as Record<string, unknown>).prompt ?? '').trim())
+      }
+      return true
+    },
+    isInFlight: (id) => isNodeBusy(id),
+    regenerate,
+  })
   try {
-    return planSelectionGenerate({
-      selectedIds: multiSelectedIds.value,
-      canvas: {
-        nodes: nodes.value.map(n => ({ id: n.id, type: String(n.type ?? ''), data: n.data as Record<string, unknown> })),
-        edges: edges.value as Array<{ id: string; source: string; target: string }>,
-      },
-      hasUsableOutput: (n) => {
-        const full = nodes.value.find(x => x.id === n.id)
-        if (!full) return false
-        const status = (full.data as Record<string, unknown>).status
-        if (status !== NODE_GENERATION_STATUS.completed) return false
-        const type = String(full.type)
-        if (type === 'image' || type === 'video') {
-          const url = String((full.data as Record<string, unknown>).url ?? '').trim()
-          const images = (full.data as Record<string, unknown>).images
-          return Boolean(url) || (Array.isArray(images) && images.some((item) => String(item ?? '').trim()))
-        }
-        if (type === 'text' || type === 'prompt') {
-          return Boolean(String((full.data as Record<string, unknown>).content ?? (full.data as Record<string, unknown>).prompt ?? '').trim())
-        }
-        return true
-      },
-      isInFlight: (id) => isNodeBusy(id),
-    })
+    return { plan: build(false), regenPlan: build(true), blocked: null, blockedCount: 0 }
   } catch (e) {
     if (e instanceof SelectionBatchLimitError) {
-      return { run: [], skip: [{ nodeId: '', reason: 'unsupported_type', type: 'limit_24' }], blockedBy: [], groupExpanded: [] }
+      return { plan: null, regenPlan: null, blocked: 'limit_24', blockedCount: e.actualCount }
     }
     if (e instanceof SelectionBatchPendingConfirmError) {
-      return null
+      return { plan: null, regenPlan: null, blocked: 'pending_confirm', blockedCount: countPendingInSelection() }
     }
     throw e
   }
 })
+
+/** 选区内（含 group 展开）pending_confirm 节点计数，用于阻断态提示。 */
+function countPendingInSelection(): number {
+  let count = 0
+  for (const id of multiSelectedIds.value) {
+    const node = findNodeById(id)
+    if (!node) continue
+    const type = String(node.type ?? '')
+    if (type === 'group') {
+      const childIds = getGroupChildIds(nodes.value as unknown as GroupChildNode[], id)
+      for (const cid of childIds) {
+        const child = findNodeById(cid)
+        if (child && String((child.data as Record<string, unknown> | undefined)?.status ?? '') === 'pending_confirm') count++
+      }
+      continue
+    }
+    if (String((node.data as Record<string, unknown> | undefined)?.status ?? '') === 'pending_confirm') count++
+  }
+  return count
+}
+
+const multiSelectPlan = computed<PlanSelectionGenerateResult | null>(() => multiSelectBatchMeta.value?.plan ?? null)
 
 // 选择 batch API
 const selectionBatchApi = useSelectionGenerate({
@@ -1014,9 +1047,14 @@ const selectionBatchApi = useSelectionGenerate({
 // 给工具栏的 selectionBatch prop
 const selectionBatchProp = computed(() => {
   if (!isFeatureOn('selection_batch_generate')) return undefined
+  const meta = multiSelectBatchMeta.value
+  if (!meta) return undefined
   return {
-    runCount: multiSelectPlan.value?.run.length ?? 0,
+    runCount: meta.plan?.run.length ?? 0,
+    regenCount: meta.regenPlan?.run.length ?? 0,
     state: selectionBatchApi.state.value,
+    blocked: meta.blocked ?? undefined,
+    blockedCount: meta.blockedCount || undefined,
   }
 })
 
@@ -1035,6 +1073,44 @@ async function handleSelectionBatchGenerate() {
   ElMessage.info(
     `完成 ${p.done}，失败 ${p.failed}，取消 ${p.cancelled}，超时 ${p.timeout}，跳过 ${p.skipped}`,
   )
+}
+
+/** 批量重新生成：确认弹窗（覆盖产物 + 积分提示）→ 与普通批量共用同一执行器。 */
+async function handleSelectionBatchRegenerate() {
+  const meta = multiSelectBatchMeta.value
+  const plan = meta?.regenPlan
+  if (!plan || plan.run.length === 0) return
+  try {
+    await ElMessageBox.confirm(
+      `将重新生成 ${plan.run.length} 个节点，覆盖现有产物（不可撤销），并可能消耗积分。`,
+      '批量重新生成',
+      { confirmButtonText: '重新生成', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await selectionBatchApi.start(plan, { regenerate: true })
+  } catch {
+    return
+  }
+  const p = selectionBatchApi.progress.value
+  ElMessage.info(
+    `完成 ${p.done}，失败 ${p.failed}，取消 ${p.cancelled}，超时 ${p.timeout}，跳过 ${p.skipped}`,
+  )
+}
+
+/** 阻断态点击：pending_confirm → 定位选中待确认节点；超上限 → toast 提示。 */
+function handleSelectionBatchBlocked(reason: 'pending_confirm' | 'limit_24') {
+  if (reason === 'pending_confirm') {
+    ElMessage.info('选区包含待确认节点，请先在侧栏确认生成')
+    const pendingId = multiSelectedIds.value
+      .map(findNodeById)
+      .find(n => n && String((n.data as Record<string, unknown> | undefined)?.status ?? '') === 'pending_confirm')
+    if (pendingId) selectOnlyNode(pendingId.id)
+    return
+  }
+  ElMessage.warning('选区可执行节点超过 24 个上限，请减少选区后重试')
 }
 
 function handleSelectionBatchStop() {
@@ -3781,7 +3857,9 @@ onUnmounted(() => {
             @duplicate="handleKeyboardDuplicate"
             @duplicate-upstream="handleToolbarDuplicateUpstream"
             @generate-selection="handleSelectionBatchGenerate"
+            @generate-regen="handleSelectionBatchRegenerate"
             @stop-selection="handleSelectionBatchStop"
+            @blocked-hint="handleSelectionBatchBlocked"
           />
           <SelectionActionBar
             v-if="selectionUpscaleNode"

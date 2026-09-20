@@ -260,3 +260,78 @@ describe('planner: Kahn 拓扑', () => {
     expect(result.run).toEqual(['v']) // planner 不报 missing_upstream
   })
 })
+
+describe('planner: regenerate 模式', () => {
+  const doneNodes = [
+    { id: 'i-1', type: 'image', data: { url: 'https://x/1.png' } },
+    { id: 'i-2', type: 'image', data: { url: 'https://x/2.png' } },
+  ]
+
+  it('regenerate: true 时 already_done 节点进 run（覆盖式重新生成）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1', 'i-2'],
+      canvas: { nodes: doneNodes, edges: [] },
+      hasUsableOutput: (n) => !!n.data?.url,
+      regenerate: true,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['i-1', 'i-2'])
+    expect(result.skip.find(s => s.nodeId === 'i-1')).toBeUndefined()
+  })
+
+  it('regenerate 缺省（false）时行为不变：already_done 仍 skip', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1', 'i-2'],
+      canvas: { nodes: doneNodes, edges: [] },
+      hasUsableOutput: (n) => !!n.data?.url,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual([])
+    expect(result.skip.find(s => s.nodeId === 'i-1')?.reason).toBe('already_done')
+    expect(result.skip.find(s => s.nodeId === 'i-2')?.reason).toBe('already_done')
+  })
+
+  it('regenerate: true 时 pending_confirm 仍整批拒绝（红线不变）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1', 'p-1'],
+      canvas: {
+        nodes: [
+          ...doneNodes,
+          { id: 'p-1', type: 'image', data: { status: 'pending_confirm' } },
+        ],
+        edges: [],
+      },
+      hasUsableOutput: (n) => !!n.data?.url,
+      regenerate: true,
+    }
+    expect(() => planSelectionGenerate(input)).toThrow(SelectionBatchPendingConfirmError)
+  })
+
+  it('regenerate: true 时 24 上限计数包含 already_done 节点', () => {
+    const nodes = Array.from({ length: 25 }, (_, i) => ({
+      id: `i-${i}`,
+      type: 'image' as const,
+      data: { url: `https://x/${i}.png` },
+    }))
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: nodes.map(n => n.id),
+      canvas: { nodes, edges: [] },
+      hasUsableOutput: (n) => !!n.data?.url,
+      regenerate: true,
+    }
+    expect(() => planSelectionGenerate(input)).toThrow(SelectionBatchLimitError)
+  })
+
+  it('regenerate: true 时 in_flight 的已完成节点仍被跳过', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['i-1', 'i-2'],
+      canvas: { nodes: doneNodes, edges: [] },
+      hasUsableOutput: (n) => !!n.data?.url,
+      isInFlight: (id) => id === 'i-1',
+      regenerate: true,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['i-2'])
+    expect(result.skip.find(s => s.nodeId === 'i-1')?.reason).toBe('in_flight')
+  })
+})

@@ -73,6 +73,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
   let summaryDone = 0, summaryFailed = 0, summaryCancelled = 0, summaryTimeout = 0, summarySkipped = 0
   let summaryAbortReason: AbortReason = 'none'
   let batchSessionId = ''
+  let batchRegenerate = false
 
   function findNode(id: string): EditableFlowNode | undefined {
     return deps.nodes.value.find(n => n.id === id)
@@ -156,6 +157,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
       total: plan.run.length + plan.skip.length,
       triggerSource: 'multi_select_toolbar',
       flagOn: true,
+      regenerate: batchRegenerate,
     })
 
     const runSet = new Set(plan.run)
@@ -296,6 +298,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
       pointsExhausted,
       runCountAtStart: plan.run.length,
       abortReason: summaryAbortReason,
+      regenerate: batchRegenerate,
     })
 
     return {
@@ -306,7 +309,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     }
   }
 
-  async function start(plan: PlanSelectionGenerateResult): Promise<BatchSummary> {
+  async function start(plan: PlanSelectionGenerateResult, opts?: { regenerate?: boolean }): Promise<BatchSummary> {
     // 所有初始化都必须发生在 state='running' 之前。
     // 一旦状态置为 running，MultiSelectToolbar 会把主按钮切成「停止全部」并禁用
     // （disabled 判定为 state !== 'idle'）；若此刻抛错又没人复位，状态机就永久卡死：
@@ -315,6 +318,7 @@ export function useSelectionGenerate(deps: UseSelectionGenerateDeps) {
     // TypeError，正是踩了这个坑。
     abortCtrl = new AbortController()
     batchSessionId = randomId()
+    batchRegenerate = opts?.regenerate === true
     inFlight = new Map()
     waitingMap = new Map()
     queue = []
