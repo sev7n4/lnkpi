@@ -28,4 +28,45 @@ describe('SelectionActionBar', () => {
     expect(wrapper.emitted('slice')).toEqual([[3, 2]])
     wrapper.unmount()
   })
+
+  it('emits download and save-asset, hides them without url', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    await wrapper.get('[data-action="download"]').trigger('click')
+    await wrapper.get('[data-action="save-asset"]').trigger('click')
+    expect(wrapper.emitted('download')).toBeTruthy()
+    expect(wrapper.emitted('save-asset')).toBeTruthy()
+    await wrapper.setProps({ hasUrl: false })
+    expect(wrapper.find('[data-action="download"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('disables 放大 without capability and emits upscale', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: false, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    const upscale = wrapper.findAll('button').find((b) => b.text().includes('放大'))!
+    expect(upscale.attributes('disabled')).toBeDefined()
+    await wrapper.setProps({ imageUpscale: true, loading: true })
+    expect(upscale.attributes('disabled')).toBeDefined()
+    expect(upscale.attributes('title')).toBe('放大中…')
+    await wrapper.setProps({ loading: false })
+    await upscale.trigger('click')
+    expect(wrapper.emitted('upscale')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('emits edit', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    const edit = wrapper.findAll('button').find((b) => b.text().includes('编辑'))!
+    await edit.trigger('click')
+    expect(wrapper.emitted('edit')).toBeTruthy()
+    wrapper.unmount()
+  })
 })

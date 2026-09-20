@@ -105,7 +105,7 @@ import {
   type CanvasSnapshot,
   type GenerationFieldsCache,
 } from '@/composables/useCanvasUndoStack'
-import { detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import { detectFileKind, setupCanvasMediaHandlers, downloadMediaFile, mediaDownloadName, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import {
   exportWorkflowPackage,
   importWorkflowPackage,
@@ -140,6 +140,8 @@ import { runGridSlice } from '@/composables/useGridSlice'
 import { clampGridDims, GRID_SLICE_LAYOUT_GAP, layoutSliceChildPositions } from '@/utils/gridSlice'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { canUpscaleNode } from '@/utils/upscaleNode'
+import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
+import { resolveMediaUrl } from '@/services/api-base'
 import { apiErrorMessage } from '@/utils/apiError'
 import {
   duplicateSubgraph,
@@ -3077,6 +3079,33 @@ function findNodeById(id: string) {
   return null
 }
 
+/** 选中条「下载」与右键「下载图片」共用：从节点取 url 触发浏览器下载 */
+function downloadNodeImage(nodeId: string) {
+  const node = findNodeById(nodeId)
+  const url = String((node?.data as Record<string, unknown> | undefined)?.url ?? '').trim()
+  if (url) {
+    void downloadMediaFile(resolveMediaUrl(url), mediaDownloadName(url, 'image'), { sessionId: sessionId.value })
+  }
+}
+
+/** 选中条「存库」与右键「存入资产库」共用：把节点媒体存进全局资产库 */
+function saveNodeAsset(nodeId: string) {
+  const node = findNodeById(nodeId)
+  const data = (node?.data ?? {}) as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
+  if (url) {
+    void saveAssetToLibrary({
+      kind: 'image',
+      url: resolveMediaUrl(url),
+      label: typeof data.label === 'string' ? data.label : undefined,
+      prompt: typeof data.prompt === 'string' ? data.prompt : undefined,
+      sourceNodeId: nodeId,
+      sessionId: sessionId.value,
+      generationRecordId: typeof data.generationRecordId === 'string' ? data.generationRecordId : undefined,
+    })
+  }
+}
+
 function onNodeContextMenu(event: NodeMouseEvent) {
   event.event.preventDefault()
   const { x, y } = getEventCoords(event.event)
@@ -3225,6 +3254,16 @@ function handleContextAction(action: string) {
 
   if (action === 'upscale-image' && menu.nodeId) {
     void handleUpscaleForNode(menu.nodeId)
+    return
+  }
+
+  if (action === 'download-image' && menu.nodeId) {
+    downloadNodeImage(menu.nodeId)
+    return
+  }
+
+  if (action === 'save-asset' && menu.nodeId) {
+    saveNodeAsset(menu.nodeId)
     return
   }
 
@@ -3870,10 +3909,13 @@ onUnmounted(() => {
             :grid-slice-loading="gridSliceBusy"
             :grid-slice-disabled="gridSliceEntryDisabled"
             :grid-slice-disabled-title="gridSliceDisabledTitle"
+            :has-url="Boolean(selectionUpscaleNode?.data?.url)"
             @upscale="handleSelectionUpscale"
             @edit="openRefineForSelected"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
+            @download="selectionUpscaleNode && downloadNodeImage(selectionUpscaleNode.id)"
+            @save-asset="selectionUpscaleNode && saveNodeAsset(selectionUpscaleNode.id)"
           />
 
           <MultiSelectConnectOverlay

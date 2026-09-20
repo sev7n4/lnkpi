@@ -8,14 +8,26 @@ import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
  * 随 VueFlow viewport 缩放/平移，避免屏幕坐标贴 bbox 在缩放时错位。
  */
+interface ActionBarNode {
+  id: string
+  type?: string | null
+  data?: Record<string, unknown>
+}
+
 const props = defineProps<{
-  node: FlowNode
+  node: ActionBarNode
   imageUpscale: boolean
   loading?: boolean
   gridSlice?: boolean
   gridSliceLoading?: boolean
   gridSliceDisabled?: boolean
   gridSliceDisabledTitle?: string
+  /** 文件组（下载/存库）是否渲染：节点有可访问的 url 时为真 */
+  hasUrl?: boolean
+  /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
+  zoom?: number
+  /** 放大积分角标文案；M1 不传（积分体系接入后填入，M3 落地），仅预留样式 */
+  creditHint?: string
 }>()
 
 const emit = defineEmits<{
@@ -23,6 +35,8 @@ const emit = defineEmits<{
   edit: []
   slice: [cols: number, rows: number]
   'open-custom': []
+  download: []
+  'save-asset': []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
@@ -83,6 +97,8 @@ const barStyle = computed(() => {
   }
 })
 
+const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
+
 const upscaleDisabled = computed(() => !props.imageUpscale || Boolean(props.loading))
 const upscaleTitle = computed(() => {
   if (props.loading) return '放大中…'
@@ -104,9 +120,11 @@ function onUpscale() {
     <div class="origin-top-left" :style="transformStyle">
       <div class="pointer-events-auto absolute" :style="barStyle">
         <div
-          class="neo-chrome flex items-center justify-center gap-1 rounded-xl px-1.5 py-1"
+          class="neo-chrome flex items-center gap-0.5 rounded-xl px-1.5 py-1"
+          :class="{ 'labels-hidden': labelsHidden }"
           @click.stop
         >
+          <!-- 切分组 -->
           <GridSliceDropdown
             v-if="gridSlice"
             :disabled="gridSliceDisabled"
@@ -115,6 +133,9 @@ function onUpscale() {
             @slice="(c: number, r: number) => emit('slice', c, r)"
             @open-custom="emit('open-custom')"
           />
+          <span v-if="gridSlice" class="mx-1 h-4 w-px bg-current opacity-10" aria-hidden="true" />
+
+          <!-- AI 一键组：抠图位预留（matting-ready，M2 点亮，注释标记，不渲染死按钮） -->
           <button
             type="button"
             class="toolbar-action accent"
@@ -122,7 +143,14 @@ function onUpscale() {
             :title="upscaleTitle"
             @click="onUpscale"
           >
-            {{ loading ? '放大中…' : '放大' }}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M15 3h6v6" />
+              <path d="M9 21H3v-6" />
+              <path d="M21 3l-7 7" />
+              <path d="M3 21l7-7" />
+            </svg>
+            <span class="label">放大</span>
+            <span v-if="creditHint" class="credit-chip">{{ creditHint }}</span>
           </button>
           <button
             type="button"
@@ -130,7 +158,43 @@ function onUpscale() {
             title="编辑图像"
             @click="emit('edit')"
           >
-            编辑
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+            <span class="label">编辑</span>
+          </button>
+
+          <span class="mx-1 h-4 w-px bg-current opacity-10" aria-hidden="true" />
+
+          <!-- 文件组：纯图标 + tooltip -->
+          <button
+            v-if="hasUrl"
+            type="button"
+            class="toolbar-action icon-only"
+            title="下载图片"
+            data-action="download"
+            @click="emit('download')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M12 15V3" />
+            </svg>
+          </button>
+          <button
+            v-if="hasUrl"
+            type="button"
+            class="toolbar-action icon-only"
+            title="存入资产库"
+            data-action="save-asset"
+            @click="emit('save-asset')"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M12 8v8" />
+              <path d="M8 12h8" />
+            </svg>
           </button>
         </div>
       </div>
@@ -140,12 +204,16 @@ function onUpscale() {
 
 <style scoped>
 .toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border-radius: 0.5rem;
   padding: 0.25rem 0.625rem;
   font-size: 11px;
   line-height: 1.25;
   color: var(--neo-text);
   transition: background 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
 }
 .toolbar-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--neo-text) 8%, transparent);
@@ -157,5 +225,23 @@ function onUpscale() {
 .toolbar-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+/* 文件组：纯图标按钮，缩小左右内边距 */
+.toolbar-action.icon-only {
+  padding: 0.25rem 0.4rem;
+}
+/* 视口缩放 < 0.5 时隐藏文字标签，仅留图标（缩放是 transform，@media 不适用） */
+.labels-hidden .label {
+  display: none;
+}
+/* 放大积分角标：M1 不渲染（creditHint 未传），仅预留样式 */
+.credit-chip {
+  margin-left: 0.25rem;
+  padding: 0 0.3rem;
+  font-size: 10px;
+  line-height: 1.4;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--neo-accent, #5b8def) 18%, transparent);
+  color: var(--neo-accent, #5b8def);
 }
 </style>
