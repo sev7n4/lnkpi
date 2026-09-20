@@ -24,6 +24,7 @@ export type SkipReason =
   | { nodeId: string; reason: 'fallback_pending' }
   | { nodeId: string; reason: 'missing_upstream'; ref: string }
   | { nodeId: string; reason: 'in_flight' }
+  | { nodeId: string; reason: 'missing_prompt' }
   | { nodeId: string; reason: 'upstream_in_flight'; ref: string }
   | { nodeId: string; reason: 'node_disappeared' }
   | { nodeId: string; reason: 'user_stopped' }
@@ -36,6 +37,12 @@ export interface PlanSelectionGenerateInput {
   }
   hasUsableOutput: (node: { id: string; type: string; data?: Record<string, unknown> }) => boolean
   isInFlight?: (nodeId: string) => boolean
+  /**
+   * 可尝试输入预检：节点是否有本地提示词/内容，或上游可用输出可作参考输入。
+   * 不满足的节点进 skip（missing_prompt），避免"点击生成实际不执行"的静默失败。
+   * 缺省不传 = 不做该预检（旧行为）。
+   */
+  hasAttemptableInput?: (node: { id: string; type: string; data?: Record<string, unknown> }) => boolean
   /**
    * 批量重新生成：already_done 节点不再 skip，进 run（覆盖式重新生成）。
    * pending_confirm 整批拒绝（SB-D3）与 24 上限计数均不受影响。
@@ -186,6 +193,8 @@ export function planSelectionGenerate(input: PlanSelectionGenerateInput): PlanSe
       for (const downstreamId of downstream) {
         skip.push({ nodeId: downstreamId, reason: 'upstream_in_flight', ref: n.id })
       }
+    } else if (input.hasAttemptableInput && !input.hasAttemptableInput(n)) {
+      skip.push({ nodeId: n.id, reason: 'missing_prompt' })
     } else {
       toRun.push(n)
     }

@@ -335,3 +335,64 @@ describe('planner: regenerate 模式', () => {
     expect(result.skip.find(s => s.nodeId === 'i-1')?.reason).toBe('in_flight')
   })
 })
+
+describe('planner: hasAttemptableInput（missing_prompt 预检）', () => {
+  it('无本地提示词且上游无可用输出的节点 → skip missing_prompt，不进 run', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['a', 'b'],
+      canvas: {
+        nodes: [
+          { id: 'a', type: 'image', data: {} },
+          { id: 'b', type: 'prompt', data: { content: '写一只猫' } },
+        ],
+        edges: [],
+      },
+      hasUsableOutput: () => false,
+      hasAttemptableInput: (n) => Boolean(String((n.data?.content as string) ?? '').trim()),
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['b'])
+    expect(result.skip.find(s => s.nodeId === 'a')?.reason).toBe('missing_prompt')
+  })
+
+  it('无可尝试输入的节点被 skip，不进 run（即使上游边存在）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['down'],
+      canvas: {
+        nodes: [
+          { id: 'up', type: 'image', data: {} }, // 选区外上游
+          { id: 'down', type: 'video', data: {} },
+        ],
+        edges: [{ id: 'e1', source: 'up', target: 'down' }],
+      },
+      hasUsableOutput: (n) => n.id === 'up',
+      // 实现层（CanvasPage）会检查"上游有可用输出"，这里模拟该判定通过
+      hasAttemptableInput: (n) => n.id === 'down',
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['down'])
+    expect(result.skip.find(s => s.nodeId === 'down')).toBeUndefined()
+  })
+
+  it('已完成的节点即使无可尝试输入也保持 already_done（不误报 missing_prompt）', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['done'],
+      canvas: { nodes: [{ id: 'done', type: 'image', data: { url: 'https://x/1.png' } }], edges: [] },
+      hasUsableOutput: () => true,
+      hasAttemptableInput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual([])
+    expect(result.skip.find(s => s.nodeId === 'done')?.reason).toBe('already_done')
+  })
+
+  it('缺省不传 hasAttemptableInput → 行为与旧版完全一致', () => {
+    const input: PlanSelectionGenerateInput = {
+      selectedIds: ['a'],
+      canvas: { nodes: [{ id: 'a', type: 'image', data: {} }], edges: [] },
+      hasUsableOutput: () => false,
+    }
+    const result = planSelectionGenerate(input)
+    expect(result.run).toEqual(['a'])
+  })
+})

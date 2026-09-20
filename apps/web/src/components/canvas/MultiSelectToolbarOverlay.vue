@@ -12,8 +12,9 @@ const props = defineProps<{
     runCount: number
     regenCount?: number
     state: 'idle' | 'running' | 'stopping' | 'done'
-    blocked?: 'pending_confirm' | 'limit_24'
+    blocked?: 'pending_confirm' | 'limit_24' | 'missing_prompt'
     blockedCount?: number
+    missingCount?: number
   }
 }>()
 
@@ -30,7 +31,7 @@ const emit = defineEmits<{
   generateSelection: []
   generateRegen: []
   stopSelection: []
-  blockedHint: [reason: 'pending_confirm' | 'limit_24']
+  blockedHint: [reason: 'pending_confirm' | 'limit_24' | 'missing_prompt']
 }>()
 
 const { viewport, nodes: flowNodes } = useVueFlow()
