@@ -25,37 +25,24 @@ describe('decideAgentOpenWhileRefine', () => {
       decideAgentOpenWhileRefine({
         refineOpen: false,
         refineBusy: false,
-        refineChrome: 'docked',
       }),
     ).toBe('allow')
   })
 
-  it('allows when refine is floating', () => {
-    expect(
-      decideAgentOpenWhileRefine({
-        refineOpen: true,
-        refineBusy: true,
-        refineChrome: 'floating',
-      }),
-    ).toBe('allow')
-  })
-
-  it('dismisses idle docked refine', () => {
+  it('dismisses idle refine', () => {
     expect(
       decideAgentOpenWhileRefine({
         refineOpen: true,
         refineBusy: false,
-        refineChrome: 'docked',
       }),
     ).toBe('dismiss-refine')
   })
 
-  it('blocks busy docked refine', () => {
+  it('blocks busy refine', () => {
     expect(
       decideAgentOpenWhileRefine({
         refineOpen: true,
         refineBusy: true,
-        refineChrome: 'docked',
       }),
     ).toBe('block')
   })

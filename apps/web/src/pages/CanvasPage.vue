@@ -3701,7 +3701,6 @@ function canOpenAgentPanel(): boolean {
   const d = decideAgentOpenWhileRefine({
     refineOpen: Boolean(canvasEditor.imageTarget),
     refineBusy: canvasEditor.refineBusy,
-    refineChrome: canvasEditor.refineChrome,
   })
   if (d === 'block') {
     ElMessage.warning('精修进行中，请先取消')

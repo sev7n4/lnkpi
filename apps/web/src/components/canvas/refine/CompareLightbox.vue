@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CompareMode } from '@/utils/refineChrome'
-import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import CompareView from './CompareView.vue'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 import { refineWorkInsetRight } from './refineWorkLayout'
@@ -20,7 +19,6 @@ const emit = defineEmits<{
   'update:wipeRatio': [value: number]
 }>()
 
-const editor = useCanvasEditorStore()
 const scale = ref(1)
 const panX = ref(0)
 const panY = ref(0)
@@ -31,9 +29,8 @@ let lastY = 0
 const insetRight = computed(() =>
   refineWorkInsetRight({
     innerWidth: typeof window === 'undefined' ? 1280 : window.innerWidth,
-    chrome: editor.refineChrome,
-    collapsed: editor.refinePanelCollapsed,
-    panelWidth: editor.refinePanelWidth,
+    collapsed: false,
+    panelWidth: 400,
   }),
 )
 const frameStyle = computed(() => ({

@@ -32,9 +32,8 @@ let ro: ResizeObserver | null = null
 const insetRight = computed(() =>
   refineWorkInsetRight({
     innerWidth: typeof window !== 'undefined' ? window.innerWidth : 1280,
-    chrome: editor.refineChrome,
-    collapsed: editor.refinePanelCollapsed,
-    panelWidth: editor.refinePanelWidth,
+    collapsed: false,
+    panelWidth: 400,
   }),
 )
 

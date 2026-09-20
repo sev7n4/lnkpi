@@ -30,7 +30,6 @@ const isNarrow = ref(false)
 const insetRight = computed(() =>
   refineWorkInsetRight({
     innerWidth: typeof window !== 'undefined' ? window.innerWidth : 1280,
-    chrome: 'docked',
     collapsed: collapsed.value,
     panelWidth: panelWidth.value,
   }),
