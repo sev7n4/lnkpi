@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 
-const GRID_SLICE_SQUARE_PRESETS = [2, 3, 4, 5, 6, 7] as const
+const GRID_PICKER_MAX = 7 // 与 packages/shared/src/gridSlice.ts 的 MAX_GRID 对齐
 
 const props = withDefaults(
   defineProps<{
@@ -17,12 +17,14 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  'quick-slice': [n: number]
+  slice: [cols: number, rows: number]
   'open-custom': []
 }>()
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
+const hover = ref<{ cols: number; rows: number } | null>(null)
+const lastTapped = ref<string | null>(null)
 
 const blocked = computed(() => props.disabled || props.loading)
 
@@ -34,6 +36,10 @@ const triggerTitle = computed(() => {
   return '宫格裁剪'
 })
 
+const label = computed(() =>
+  hover.value ? `${hover.value.cols} × ${hover.value.rows} · 共 ${hover.value.cols * hover.value.rows} 张` : '悬停选择切分规格',
+)
+
 function close() {
   open.value = false
 }
@@ -43,10 +49,27 @@ function toggle() {
   open.value = !open.value
 }
 
-function pickPreset(n: number) {
+function isPreset(c: number, r: number) {
+  return (c === 2 && r === 2) || (c === 3 && r === 3)
+}
+
+function onCellEnter(cols: number, rows: number, pointerType: string) {
+  if (pointerType === 'touch') return
+  hover.value = { cols, rows }
+}
+
+function onCellClick(cols: number, rows: number, pointerType: string | undefined) {
+  const key = `${cols}-${rows}`
+  // touch 无 pointerenter：无 hover 且无 pointerType 时，首次点击视为触摸点选
+  const isTouch = pointerType === 'touch' || (pointerType === undefined && !hover.value)
+  if (isTouch && lastTapped.value !== key) {
+    lastTapped.value = key
+    hover.value = { cols, rows }
+    return
+  }
   if (blocked.value) return
   close()
-  emit('quick-slice', n)
+  emit('slice', cols, rows)
 }
 
 function pickCustom() {
@@ -90,25 +113,24 @@ onUnmounted(() => {
     >
       {{ triggerLabel }}
     </button>
-    <div
-      v-if="open && !blocked"
-      class="neo-chrome grid-slice-menu absolute left-0 top-full z-[2] mt-1 min-w-[7.5rem] rounded-xl py-1"
-      role="menu"
-      @click.stop
-    >
-      <button
-        v-for="n in GRID_SLICE_SQUARE_PRESETS"
-        :key="n"
-        type="button"
-        class="grid-slice-item"
-        role="menuitem"
-        @click="pickPreset(n)"
-      >
-        {{ n }}×{{ n }}
-      </button>
-      <button type="button" class="grid-slice-item custom" role="menuitem" @click="pickCustom">
-        自定义…
-      </button>
+    <div v-if="open && !blocked" class="neo-chrome grid-slice-menu absolute left-0 top-full z-[2] mt-1 rounded-xl p-2" role="menu" @click.stop>
+      <div class="grid" style="grid-template-columns: repeat(7, 22px); gap: 3px">
+        <template v-for="r in GRID_PICKER_MAX" :key="`row-${r}`">
+          <button
+            v-for="c in GRID_PICKER_MAX"
+            :key="`cell-${c}-${r}`"
+            type="button"
+            class="grid-cell"
+            :data-cell="`${c}-${r}`"
+            :data-active="hover && c <= hover.cols && r <= hover.rows ? 'true' : 'false'"
+            :class="{ preset: isPreset(c, r) }"
+            @pointerenter="onCellEnter(c, r, $event.pointerType)"
+            @click="onCellClick(c, r, $event.pointerType)"
+          />
+        </template>
+      </div>
+      <p class="grid-slice-label">{{ label }}</p>
+      <button type="button" class="grid-slice-item custom" role="menuitem" @click="pickCustom">精确输入…</button>
     </div>
   </div>
 </template>
@@ -132,6 +154,26 @@ onUnmounted(() => {
 }
 .grid-slice-menu {
   min-width: 100%;
+}
+.grid-cell {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
+  background: transparent;
+  padding: 0;
+}
+.grid-cell[data-active='true'] {
+  background: color-mix(in srgb, var(--neo-accent, #5b8def) 28%, transparent);
+  border-color: var(--neo-accent, #5b8def);
+}
+.grid-cell.preset {
+  border-style: dashed;
+}
+.grid-slice-label {
+  margin: 6px 2px 2px;
+  font-size: 11px;
+  color: var(--neo-text);
 }
 .grid-slice-item {
   display: block;
