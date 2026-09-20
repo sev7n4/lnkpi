@@ -293,3 +293,24 @@ export function detectAgentChipSet(
 
   return null
 }
+
+/**
+ * propose 卡片节点解析：画布 pending_confirm SSOT 优先，toolCalls 提取兜底。
+ *
+ * 回归背景（2026-09-21）：多节点 propose 场景下确认卡片出卡时序不稳定——
+ * 旧优先级（extract ?? SSOT）在最后一轮消息含 propose toolCalls 时，
+ * 确认该节点后 extract 仍返回同一 nodeId，latch 命中且 ?? 短路使 SSOT
+ * 永不被咨询 → 下一张卡片死等 agent 下一轮 turn（几十秒到几分钟）。
+ * 现改为 SSOT 优先：确认一张后节点状态离开 pending_confirm，computed
+ * 立即重算出下一张；extract 仅覆盖「toolCalls 已返回、画布节点尚未落库」
+ * 的竞态窗口。
+ */
+export function resolveProposeChipNodeId(input: {
+  toolCalls?: AgentToolCallLike[] | null
+  canvasNodes?: CanvasNodeLike[] | null
+  selectedNodeId?: string | null
+}): string | null {
+  const fromCanvas = resolvePendingConfirmNodeId(input.canvasNodes, input.selectedNodeId)
+  if (fromCanvas) return fromCanvas
+  return extractProposeGenerationNodeId(input.toolCalls)
+}

@@ -1,6 +1,7 @@
 /** @vitest-environment node */
 import { describe, expect, it, vi } from 'vitest'
 import {
+  resolveProposeChipNodeId,
   applyAtomicProposeChipPriority,
   confirmAtomicGeneration,
   confirmProposeGeneration,
@@ -431,5 +432,55 @@ describe('detectAgentChipSet', () => {
         detectAgentChipSet('好的，正在基于当前方案调整…', { latestUserText: 'c' }),
       ).toBe(null)
     })
+  })
+})
+
+// 回归：多节点 propose 场景下确认卡片出卡时序不稳定。
+// 旧行为 chipSet 优先取「最后一条 assistant 消息的 propose toolCalls」，
+// 仅当其为 null 才兜底画布 pending_confirm SSOT：
+// - 最后一轮消息含 toolCalls 时，确认该节点后 extract 仍返回同一 nodeId，
+//   latch 命中且 ?? 短路使 SSOT 永不被咨询 → 下一张卡片死等 agent 下一轮 turn。
+// 修复：SSOT（画布 pending_confirm 真相源）优先，extract 仅作画布未落节点的竞态兜底。
+describe('resolveProposeChipNodeId: SSOT 优先、extract 兜底', () => {
+  const nodes = (ids: string[]) =>
+    ids.map((id) => ({ id, data: { status: 'pending_confirm', updatedAt: 1000 } }))
+
+  it('画布有 pending_confirm → 直接返回（即使最后消息的 toolCalls 指向另一节点）', () => {
+    const toolCalls = [
+      { name: 'propose_generation', result: { status: 'pending_confirm', nodeId: 'stale' } },
+    ]
+    expect(
+      resolveProposeChipNodeId({
+        toolCalls,
+        canvasNodes: nodes(['fresh-1', 'fresh-2']),
+        selectedNodeId: null,
+      }),
+    ).toBe('fresh-2') // newest updatedAt wins
+  })
+
+  it('确认后该节点离开 pending → 下一张立即由 SSOT 给出（不再被旧 toolCalls 钉死）', () => {
+    const toolCalls = [
+      { name: 'propose_generation', result: { status: 'pending_confirm', nodeId: 'a' } },
+    ]
+    // a 已确认（状态离开 pending），画布只剩 b
+    const canvas = [{ id: 'a', data: { status: 'generating' } }, { id: 'b', data: { status: 'pending_confirm', updatedAt: 900 } }]
+    expect(
+      resolveProposeChipNodeId({ toolCalls, canvasNodes: canvas, selectedNodeId: null }),
+    ).toBe('b')
+  })
+
+  it('画布尚未落节点（竞态窗口）→ 回退 extract 的 toolCalls 结果', () => {
+    const toolCalls = [
+      { name: 'propose_generation', result: { status: 'pending_confirm', nodeId: 'race-node' } },
+    ]
+    expect(
+      resolveProposeChipNodeId({ toolCalls, canvasNodes: [], selectedNodeId: null }),
+    ).toBe('race-node')
+  })
+
+  it('两处都没有 → null', () => {
+    expect(
+      resolveProposeChipNodeId({ toolCalls: [], canvasNodes: [], selectedNodeId: null }),
+    ).toBe(null)
   })
 })
