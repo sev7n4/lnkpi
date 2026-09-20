@@ -36,6 +36,6 @@ apps/server/prisma/*.db-journal
 # 部署验证脚本产出的一次性结果
 deploy/*-verify-result.json
 
-# 品牌设计工作稿（设计工具产出，非源码）
-lnkpi-logo-concepts/
+# 品牌设计工作稿/产出目录（设计工具产出的临时稿，非源码；正式资源在 apps/web/public/brand/）
+lnkpi-logo*/
 *.miora
