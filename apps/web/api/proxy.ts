@@ -6,7 +6,12 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http'
  * module resolution (which previously caused FUNCTION_INVOCATION_FAILED).
  */
 
-const API_ORIGIN = process.env.LNKPI_API_ORIGIN ?? 'http://119.29.173.89:5100'
+// V1.3: 默认走内网 nginx (119.29.173.89:8888) 而非直连 CVM (5100)。
+//   原因：Vercel 公网出口 → 119.29.173.89:5100 受限（公网到国内 IP），8s 超时。
+//   119.29.173.89:8888 是内网 nginx 反代到 CVM，已验证通。
+// Vercel dashboard 推荐设置 LNKPI_API_ORIGIN=http://119.29.173.89:8888（更鲁棒）。
+// 想直连 CVM 5100 时显式设 env var 覆盖。
+const API_ORIGIN = process.env.LNKPI_API_ORIGIN ?? 'http://119.29.173.89:8888'
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 20_000
 const MAX_ATTEMPTS = 3
 
