@@ -39,6 +39,10 @@ const showEditImage = computed(
 
 const showUpscale = computed(() => showEditImage.value)
 
+const showImageFileActions = computed(
+  () => Boolean(props.hasUrl) && props.mediaKind === 'image',
+)
+
 const upscaleDisabled = computed(() => !props.imageUpscale)
 const upscaleTitle = computed(() =>
   props.imageUpscale ? '放大 2×' : '当前环境未启用图像放大',
@@ -81,6 +85,9 @@ function runUpscale() {
     >
       编辑图像
     </button>
+
+    <button v-if="showImageFileActions" class="neo-popover-item block w-full px-4 py-2 text-left text-xs" @click="run('download-image')">下载图片</button>
+    <button v-if="showImageFileActions" class="neo-popover-item block w-full px-4 py-2 text-left text-xs" @click="run('save-asset')">存入资产库</button>
 
     <button
       v-if="nodeType === 'group'"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { refineWorkInsetRight } from '@/components/canvas/refine/refineWorkLayout'
+import { ref } from 'vue'
 import { clampGridDims } from '@/utils/gridSlice'
+import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import GridSliceSidePanel from './GridSliceSidePanel.vue'
 import GridSliceWorkViewport from './GridSliceWorkViewport.vue'
 
@@ -23,23 +23,17 @@ const emit = defineEmits<{
 }>()
 
 const applied = ref(clampGridDims(3, 3))
-const panelWidth = ref(PANEL_DEFAULT_W)
-const collapsed = ref(false)
-const isNarrow = ref(false)
 
-const insetRight = computed(() =>
-  refineWorkInsetRight({
-    innerWidth: typeof window !== 'undefined' ? window.innerWidth : 1280,
-    chrome: 'docked',
-    collapsed: collapsed.value,
-    panelWidth: panelWidth.value,
-  }),
-)
-
-function syncNarrow() {
-  isNarrow.value = typeof window !== 'undefined' && window.innerWidth < 640
-  if (isNarrow.value) collapsed.value = false
+function onClose() {
+  if (props.busy) return
+  emit('close')
 }
+
+const { panelWidth, collapsed, isNarrow, insetRight, setPanelWidth, setCollapsed } = useWorkbenchPanel({
+  defaultWidth: PANEL_DEFAULT_W,
+  busy: () => props.busy,
+  onClose,
+})
 
 function onApplyGrid(dims: { cols: number; rows: number }) {
   applied.value = clampGridDims(dims.cols, dims.rows)
@@ -49,29 +43,6 @@ function onConfirm(dims: { cols: number; rows: number }) {
   if (props.busy) return
   emit('confirm', clampGridDims(dims.cols, dims.rows))
 }
-
-function onClose() {
-  if (props.busy) return
-  emit('close')
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return
-  if (props.busy) return
-  event.preventDefault()
-  emit('close')
-}
-
-onMounted(() => {
-  syncNarrow()
-  window.addEventListener('resize', syncNarrow)
-  window.addEventListener('keydown', onKeydown)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('resize', syncNarrow)
-  window.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>
@@ -96,8 +67,8 @@ onBeforeUnmount(() => {
       @apply-grid="onApplyGrid"
       @confirm="onConfirm"
       @close="onClose"
-      @update:collapsed="collapsed = $event"
-      @update:panel-width="panelWidth = $event"
+      @update:collapsed="setCollapsed($event)"
+      @update:panel-width="setPanelWidth($event)"
     />
   </div>
 </template>

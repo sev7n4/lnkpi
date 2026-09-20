@@ -1,13 +1,9 @@
-import type { RefineChromeMode } from '@/utils/refineChrome'
-
 export function refineWorkInsetRight(input: {
   innerWidth: number
-  chrome: RefineChromeMode
   collapsed: boolean
   panelWidth: number
 }): number {
   if (input.innerWidth < 640) return 0
-  if (input.chrome === 'floating' && !input.collapsed) return 0
   if (input.collapsed) return 44
   return input.panelWidth
 }

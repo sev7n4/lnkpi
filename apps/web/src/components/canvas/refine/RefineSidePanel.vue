@@ -32,9 +32,6 @@ import {
   resolvePointMaskRgba,
 } from './pointSegmentSession'
 
-const REFINE_MIN_W = 360
-const REFINE_MAX_W = 560
-const REFINE_DEFAULT_W = 400
 const REFINE_COLLAPSED_W = 44
 
 const props = defineProps<{
@@ -46,6 +43,14 @@ const props = defineProps<{
   generationRecordId?: string
   width?: number
   height?: number
+  /** Shared workbench panel width (px) — owned by useWorkbenchPanel, passed down. */
+  panelWidth: number
+  /** Shared collapsed flag — owned by useWorkbenchPanel, passed down. */
+  collapsed: boolean
+  /** Shared narrow (<640px) flag — owned by useWorkbenchPanel, passed down. */
+  isNarrow: boolean
+  /** Shared right inset (px) — owned by useWorkbenchPanel, passed down to CompareLightbox. */
+  insetRight: number
 }>()
 
 const emit = defineEmits<{
@@ -53,6 +58,9 @@ const emit = defineEmits<{
   apply: [payload: { url: string; prompt: string; recordId?: string }]
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
+  'update:collapsed': [value: boolean]
+  /** 面板宽度调整预留（M2/M3）：当前 resize handle 已移除，暂无生产者；保留 emit + @update:panel-width 接线 */
+  'update:panel-width': [value: number]
 }>()
 
 const editor = useCanvasEditorStore()
@@ -85,13 +93,8 @@ const compareBeforeUrl = ref(props.beforeUrl)
 const lastRecordId = ref<string | undefined>()
 const compareMode = ref<CompareMode>('split')
 const wipeRatio = ref(0.5)
-const panelWidth = ref(REFINE_DEFAULT_W)
-const floatPos = ref({ x: 0, y: 0 })
-const isNarrow = ref(false)
+
 let abortController: AbortController | null = null
-let resizing = false
-let dragging = false
-let dragOffset = { x: 0, y: 0 }
 const pointSession = createPointSegmentSession()
 
 function resetPointFallbackState() {
@@ -112,39 +115,24 @@ const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
-const floating = computed(() => editor.refineChrome === 'floating')
-const collapsed = computed(() => editor.refinePanelCollapsed && !isNarrow.value)
 const wipeLocked = computed(() => wipeCompareLocked(canApply.value))
 const loupeMenuOpen = computed(() => loupeSubcontrolsVisible(editor.refineLoupeOn))
 const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
 const panelStyle = computed(() => {
-  const width = collapsed.value
+  const width = props.collapsed
     ? REFINE_COLLAPSED_W
-    : isNarrow.value
+    : props.isNarrow
       ? undefined
-      : panelWidth.value
-  if (floating.value && !isNarrow.value) {
-    return {
-      left: collapsed.value ? undefined : `${floatPos.value.x}px`,
-      right: collapsed.value ? '0px' : undefined,
-      top: collapsed.value ? '0px' : `${floatPos.value.y}px`,
-      width: `${collapsed.value ? REFINE_COLLAPSED_W : panelWidth.value}px`,
-      height: collapsed.value ? '100vh' : 'calc(100vh - 72px)',
-    }
-  }
+      : props.panelWidth
   return {
     top: '0',
     right: '0',
     bottom: '0',
-    width: isNarrow.value ? '100%' : `${width}px`,
+    width: props.isNarrow ? '100%' : `${width}px`,
   }
 })
 
 watch(busy, (value) => emit('busy', value), { immediate: true })
-
-watch(panelWidth, (width) => {
-  if (!editor.refinePanelCollapsed) editor.setRefinePanelWidth(width)
-}, { immediate: true })
 
 watch(
   () => props.beforeUrl,
@@ -277,82 +265,8 @@ function onApply() {
   emit('apply', payload)
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n))
-}
-
-function toggleFloating() {
-  if (isNarrow.value) return
-  if (editor.refineChrome === 'floating') {
-    editor.setRefineChrome('docked')
-    return
-  }
-  floatPos.value = {
-    x: Math.max(16, window.innerWidth - panelWidth.value - 40),
-    y: 56,
-  }
-  editor.setRefineChrome('floating')
-}
-
 function toggleCollapsed() {
-  if (isNarrow.value) return
-  editor.setRefinePanelCollapsed(!editor.refinePanelCollapsed)
-}
-
-function startResize(event: MouseEvent) {
-  event.preventDefault()
-  resizing = true
-  window.addEventListener('mousemove', onResize)
-  window.addEventListener('mouseup', stopResize)
-}
-
-function onResize(event: MouseEvent) {
-  if (!resizing) return
-  panelWidth.value = clamp(window.innerWidth - event.clientX, REFINE_MIN_W, REFINE_MAX_W)
-}
-
-function stopResize() {
-  resizing = false
-  window.removeEventListener('mousemove', onResize)
-  window.removeEventListener('mouseup', stopResize)
-}
-
-function startDrag(event: MouseEvent) {
-  if (editor.refineChrome !== 'floating') return
-  if ((event.target as HTMLElement).closest('button')) return
-  dragging = true
-  dragOffset = { x: event.clientX - floatPos.value.x, y: event.clientY - floatPos.value.y }
-  window.addEventListener('mousemove', onDrag)
-  window.addEventListener('mouseup', stopDrag)
-}
-
-function onDrag(event: MouseEvent) {
-  if (!dragging) return
-  floatPos.value = {
-    x: Math.max(8, event.clientX - dragOffset.x),
-    y: Math.max(8, event.clientY - dragOffset.y),
-  }
-}
-
-function stopDrag() {
-  dragging = false
-  window.removeEventListener('mousemove', onDrag)
-  window.removeEventListener('mouseup', stopDrag)
-}
-
-function syncNarrow() {
-  isNarrow.value = window.innerWidth < 640
-  if (isNarrow.value && editor.refineChrome === 'floating') editor.setRefineChrome('docked')
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key !== 'Escape') return
-  if (editor.compareLightboxOpen) {
-    editor.setCompareLightboxOpen(false)
-    event.preventDefault()
-    return
-  }
-  if (!busy.value) emit('close')
+  emit('update:collapsed', !props.collapsed)
 }
 
 async function onPointSelect({ x, y }: { x: number; y: number }) {
@@ -477,18 +391,11 @@ async function runRefine() {
 
 onMounted(() => {
   registerRefinePointSelectHandler(onPointSelect)
-  syncNarrow()
-  window.addEventListener('resize', syncNarrow)
-  window.addEventListener('keydown', onKeydown)
 })
 
 onBeforeUnmount(() => {
   registerRefinePointSelectHandler(null)
   resetPointFallbackState()
-  window.removeEventListener('resize', syncNarrow)
-  window.removeEventListener('keydown', onKeydown)
-  stopResize()
-  stopDrag()
 })
 </script>
 
@@ -496,15 +403,12 @@ onBeforeUnmount(() => {
   <Teleport to="body">
     <aside
       class="refine-side"
-      :class="{ 'is-floating': floating && !isNarrow && !collapsed, 'is-collapsed': collapsed }"
+      :class="{ 'is-collapsed': collapsed }"
       :style="panelStyle"
       @click.stop
     >
-      <div v-if="!collapsed" class="refine-resize" title="拖拉调整宽度" @mousedown="startResize" />
       <header
         class="refine-side__head"
-        :class="{ 'cursor-move': floating && !isNarrow && !collapsed }"
-        @mousedown="startDrag"
       >
         <div class="flex min-w-0 items-center gap-1">
           <button
@@ -525,22 +429,6 @@ onBeforeUnmount(() => {
           <span v-if="!collapsed" class="refine-side__title">精修</span>
         </div>
         <div v-if="!collapsed" class="flex items-center gap-1">
-          <button
-            v-if="!isNarrow"
-            type="button"
-            class="refine-side__icon-btn"
-            :title="floating ? '停靠回侧栏' : '切换为浮动窗口'"
-            @click="toggleFloating"
-          >
-            <svg v-if="!floating" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
-              <path stroke-linecap="round" d="M20 9V5.5A1.5 1.5 0 0 0 18.5 4H5.5A1.5 1.5 0 0 0 4 5.5v10A1.5 1.5 0 0 0 5.5 17H9" />
-              <rect x="12" y="12" width="9" height="8" rx="1.5" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path stroke-linecap="round" d="M15 4v16" />
-            </svg>
-          </button>
           <button type="button" class="refine-side__icon-btn" :title="backLabel" @click="onBackOrCancel">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75">
               <path v-if="busy" stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
@@ -813,6 +701,7 @@ onBeforeUnmount(() => {
     :after-url="afterUrl"
     :mode="compareMode"
     :wipe-ratio="wipeRatio"
+    :inset-right="insetRight"
     @close="editor.setCompareLightboxOpen(false)"
     @update:mode="compareMode = $event"
     @update:wipe-ratio="wipeRatio = $event"
@@ -833,13 +722,6 @@ onBeforeUnmount(() => {
 
 .refine-side.is-collapsed {
   overflow: hidden;
-}
-
-.refine-side.is-floating {
-  z-index: 70;
-  border: 1px solid var(--neo-border);
-  border-radius: 12px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
 }
 
 .refine-side.is-collapsed .refine-side__head {
@@ -865,16 +747,6 @@ onBeforeUnmount(() => {
 .refine-side__collapse:hover {
   background: var(--neo-hover-bg);
   color: var(--neo-text-primary);
-}
-
-.refine-resize {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 3;
-  width: 6px;
-  cursor: ew-resize;
 }
 
 .refine-side__head {

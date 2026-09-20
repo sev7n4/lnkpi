@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { mount } from '@vue/test-utils'
-import SelectionActionBar from './SelectionActionBar.vue'
 
 vi.mock('@vue-flow/core', () => ({
   useVueFlow: () => ({
@@ -10,73 +9,80 @@ vi.mock('@vue-flow/core', () => ({
     findNode: () => undefined,
   }),
 }))
+vi.mock('@/composables/useCanvasGrouping', () => ({
+  getAbsolutePosition: () => ({ x: 100, y: 100 }),
+  getNodeSize: () => ({ w: 200, h: 200 }),
+}))
+
+import SelectionActionBar from './SelectionActionBar.vue'
 
 describe('SelectionActionBar', () => {
-  const node = {
-    id: 'img-1',
-    type: 'image',
-    position: { x: 100, y: 80 },
-    data: { url: 'https://cdn/a.png' },
-  }
-
-  it('renders 放大 and 编辑; disables upscale with tooltip when capability off', async () => {
+  it('forwards grid picker slice(cols, rows)', async () => {
     const wrapper = mount(SelectionActionBar, {
-      props: {
-        node: node as never,
-        imageUpscale: false,
-        loading: false,
-      },
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true },
+      global: { stubs: { teleport: true } },
     })
+    await wrapper.get('button').trigger('click')
+    await wrapper.get('[data-cell="3-2"]').trigger('pointerenter', { pointerType: 'mouse' })
+    await wrapper.get('[data-cell="3-2"]').trigger('click')
+    expect(wrapper.emitted('slice')).toEqual([[3, 2]])
+    wrapper.unmount()
+  })
 
-    const buttons = wrapper.findAll('button')
-    expect(buttons.map((b) => b.text())).toEqual(['放大', '编辑'])
+  it('emits download and save-asset, hides them without url', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    await wrapper.get('[data-action="download"]').trigger('click')
+    await wrapper.get('[data-action="save-asset"]').trigger('click')
+    expect(wrapper.emitted('download')).toBeTruthy()
+    expect(wrapper.emitted('save-asset')).toBeTruthy()
+    await wrapper.setProps({ hasUrl: false })
+    expect(wrapper.find('[data-action="download"]').exists()).toBe(false)
+    expect(wrapper.find('[data-action="save-asset"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
 
-    const upscale = buttons[0]
+  it('renders exactly the expected action buttons (no extra/missing)', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    const actions = wrapper.findAll('.toolbar-action')
+    expect(actions).toHaveLength(5)
+    const labeled = actions.map((b) => b.text().trim()).filter(Boolean).sort((a, b) => a.localeCompare(b))
+    expect(labeled).toEqual(['宫格裁剪 ▾', '放大', '编辑'])
+    // icon-only file-group buttons carry stable data-action hooks
+    expect(wrapper.find('[data-action="download"]').exists()).toBe(true)
+    expect(wrapper.find('[data-action="save-asset"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('disables 放大 without capability and emits upscale', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: false, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    const upscale = wrapper.findAll('button').find((b) => b.text().includes('放大'))!
     expect(upscale.attributes('disabled')).toBeDefined()
-    expect(upscale.attributes('title')).toContain('未启用')
-
+    await wrapper.setProps({ imageUpscale: true, loading: true })
+    expect(upscale.attributes('disabled')).toBeDefined()
+    expect(upscale.attributes('title')).toBe('放大中…')
+    await wrapper.setProps({ loading: false })
     await upscale.trigger('click')
-    expect(wrapper.emitted('upscale')).toBeUndefined()
-
-    await buttons[1].trigger('click')
-    expect(wrapper.emitted('edit')).toHaveLength(1)
+    expect(wrapper.emitted('upscale')).toBeTruthy()
     wrapper.unmount()
   })
 
-  it('emits upscale when enabled; shows loading label', async () => {
+  it('emits edit', async () => {
     const wrapper = mount(SelectionActionBar, {
-      props: {
-        node: node as never,
-        imageUpscale: true,
-        loading: false,
-      },
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
     })
-
-    await wrapper.get('button.accent').trigger('click')
-    expect(wrapper.emitted('upscale')).toHaveLength(1)
-
-    await wrapper.setProps({ loading: true })
-    expect(wrapper.get('button.accent').text()).toContain('放大中')
-    expect(wrapper.get('button.accent').attributes('disabled')).toBeDefined()
-    wrapper.unmount()
-  })
-
-  it('forwards grid-slice events when enabled', async () => {
-    const wrapper = mount(SelectionActionBar, {
-      props: {
-        node: node as never,
-        imageUpscale: true,
-        gridSlice: true,
-      },
-    })
-
-    const trigger = wrapper.findAll('button').find((b) => b.text().includes('宫格裁剪'))
-    expect(trigger).toBeTruthy()
-    await trigger!.trigger('click')
-    const threeByThree = wrapper.findAll('button').find((b) => b.text() === '3×3')
-    expect(threeByThree).toBeTruthy()
-    await threeByThree!.trigger('click')
-    expect(wrapper.emitted('quick-slice')).toEqual([[3]])
+    const edit = wrapper.findAll('button').find((b) => b.text().includes('编辑'))!
+    await edit.trigger('click')
+    expect(wrapper.emitted('edit')).toBeTruthy()
     wrapper.unmount()
   })
 })

@@ -9,6 +9,7 @@ import {
   mediaDownloadName,
   UPSTREAM_MEDIA_DOWNLOAD_HINT,
 } from '@/composables/useCanvasMedia'
+import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 
 const editor = useCanvasEditorStore()
 const { openInspector } = useMediaInspector()
@@ -27,6 +28,30 @@ const downloadTitle = computed(() => {
   if (!target.value) return '下载'
   return isUpstreamMediaUrl(target.value.url) ? UPSTREAM_MEDIA_DOWNLOAD_HINT : '下载'
 })
+
+const canEdit = computed(() => target.value?.kind === 'image' && Boolean(target.value?.nodeId))
+
+function openEditorFromPreview() {
+  const t = target.value
+  if (!t?.nodeId || t.kind !== 'image') return
+  editor.closeMediaPreview()
+  editor.openImageEditor({ nodeId: t.nodeId, url: t.url })
+}
+
+async function savePreviewToLibrary() {
+  const t = target.value
+  if (!t?.nodeId) return
+  // 音频暂无资产库入库通道，落到 video/image 映射前提前返回
+  if (t.kind === 'audio') return
+  await saveAssetToLibrary({
+    kind: t.kind === 'video' ? 'video' : 'image',
+    url: t.url,
+    label: t.label,
+    sourceNodeId: t.nodeId,
+    generationRecordId: t.generationRecordId,
+    sessionId: sessionId.value,
+  })
+}
 
 function close() {
   editor.closeMediaPreview()
@@ -75,6 +100,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
       >
         <!-- 顶部操作栏 -->
         <div class="absolute right-4 top-4 z-10 flex items-center gap-2">
+          <button
+            v-if="canEdit"
+            type="button"
+            class="preview-ctl preview-ctl-text preview-ctl-accent"
+            @click.stop="openEditorFromPreview"
+          >
+            编辑
+          </button>
+          <button
+            v-if="target?.nodeId"
+            type="button"
+            class="preview-ctl preview-ctl-text"
+            @click.stop="savePreviewToLibrary"
+          >
+            存入资产库
+          </button>
           <button
             v-if="canOpenInspector"
             type="button"
@@ -188,6 +229,11 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
   width: auto;
   padding: 0 12px;
   font-size: 12px;
+}
+
+.preview-ctl-accent {
+  color: #7cc4ff;
+  font-weight: 500;
 }
 
 .preview-fade-enter-active,

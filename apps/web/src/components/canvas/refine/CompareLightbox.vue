@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CompareMode } from '@/utils/refineChrome'
-import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import CompareView from './CompareView.vue'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
-import { refineWorkInsetRight } from './refineWorkLayout'
 
 const props = defineProps<{
   open: boolean
@@ -12,6 +10,8 @@ const props = defineProps<{
   afterUrl?: string
   mode: CompareMode
   wipeRatio: number
+  /** 右侧内缩（px）：由 RefineWorkbench 经 RefineSidePanel 下发，与精修侧栏宽度/折叠态一致 */
+  insetRight: number
 }>()
 
 const emit = defineEmits<{
@@ -20,7 +20,6 @@ const emit = defineEmits<{
   'update:wipeRatio': [value: number]
 }>()
 
-const editor = useCanvasEditorStore()
 const scale = ref(1)
 const panX = ref(0)
 const panY = ref(0)
@@ -28,16 +27,8 @@ const draggingPan = ref(false)
 let lastX = 0
 let lastY = 0
 
-const insetRight = computed(() =>
-  refineWorkInsetRight({
-    innerWidth: typeof window === 'undefined' ? 1280 : window.innerWidth,
-    chrome: editor.refineChrome,
-    collapsed: editor.refinePanelCollapsed,
-    panelWidth: editor.refinePanelWidth,
-  }),
-)
 const frameStyle = computed(() => ({
-  right: `${insetRight.value}px`,
+  right: `${props.insetRight}px`,
 }))
 const transformStyle = computed(() => ({
   transform: `translate(${panX.value}px, ${panY.value}px) scale(${scale.value})`,

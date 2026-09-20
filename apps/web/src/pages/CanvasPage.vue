@@ -106,7 +106,7 @@ import {
   type CanvasSnapshot,
   type GenerationFieldsCache,
 } from '@/composables/useCanvasUndoStack'
-import { detectFileKind, setupCanvasMediaHandlers, type MediaFilePayload } from '@/composables/useCanvasMedia'
+import { detectFileKind, setupCanvasMediaHandlers, downloadMediaFile, mediaDownloadName, type MediaFilePayload } from '@/composables/useCanvasMedia'
 import {
   exportWorkflowPackage,
   importWorkflowPackage,
@@ -129,8 +129,7 @@ import {
 import { useCanvasRefPickMode } from '@/composables/useCanvasRefPickMode'
 import { useAgentMobileLayout } from '@/composables/useAgentMobileLayout'
 import type { CanvasAssetItem } from '@/components/canvas/CanvasAssetPanel.vue'
-import RefineSidePanel from '@/components/canvas/refine/RefineSidePanel.vue'
-import RefineWorkViewport from '@/components/canvas/refine/RefineWorkViewport.vue'
+import RefineWorkbench from '@/components/canvas/refine/RefineWorkbench.vue'
 import MediaPreviewOverlay from '@/components/canvas/MediaPreviewOverlay.vue'
 import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
@@ -141,6 +140,8 @@ import { runGridSlice } from '@/composables/useGridSlice'
 import { clampGridDims, GRID_SLICE_LAYOUT_GAP, layoutSliceChildPositions } from '@/utils/gridSlice'
 import { useCapabilities } from '@/composables/useCapabilities'
 import { canUpscaleNode } from '@/utils/upscaleNode'
+import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
+import { resolveMediaUrl } from '@/services/api-base'
 import { apiErrorMessage } from '@/utils/apiError'
 import {
   duplicateSubgraph,
@@ -2930,10 +2931,10 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
   }
 }
 
-async function handleGridSliceQuick(n: number) {
+async function handleGridSliceSlice(cols: number, rows: number) {
   const node = selectionGridSliceNode.value
   if (!node || gridSliceEntryDisabled.value) return
-  await executeGridSlice(node, n, n)
+  await executeGridSlice(node, cols, rows)
 }
 
 function closeGridSliceWorkbench() {
@@ -3141,6 +3142,39 @@ function findNodeById(id: string) {
   return null
 }
 
+/** 选中条「下载」与右键「下载图片」共用：从节点取 url 触发浏览器下载 */
+function downloadNodeImage(nodeId: string) {
+  const node = findNodeById(nodeId)
+  const data = (node?.data ?? {}) as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
+  if (url) {
+    const label = data.label ?? data.prompt
+    void downloadMediaFile(
+      resolveMediaUrl(url),
+      mediaDownloadName(url, 'image', label === undefined ? undefined : String(label)),
+      { sessionId: sessionId.value },
+    )
+  }
+}
+
+/** 选中条「存库」与右键「存入资产库」共用：把节点媒体存进全局资产库 */
+function saveNodeAsset(nodeId: string) {
+  const node = findNodeById(nodeId)
+  const data = (node?.data ?? {}) as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
+  if (url) {
+    void saveAssetToLibrary({
+      kind: 'image',
+      url: resolveMediaUrl(url),
+      label: typeof data.label === 'string' ? data.label : undefined,
+      prompt: typeof data.prompt === 'string' ? data.prompt : undefined,
+      sourceNodeId: nodeId,
+      sessionId: sessionId.value,
+      generationRecordId: typeof data.generationRecordId === 'string' ? data.generationRecordId : undefined,
+    })
+  }
+}
+
 function onNodeContextMenu(event: NodeMouseEvent) {
   event.event.preventDefault()
   const { x, y } = getEventCoords(event.event)
@@ -3289,6 +3323,16 @@ function handleContextAction(action: string) {
 
   if (action === 'upscale-image' && menu.nodeId) {
     void handleUpscaleForNode(menu.nodeId)
+    return
+  }
+
+  if (action === 'download-image' && menu.nodeId) {
+    downloadNodeImage(menu.nodeId)
+    return
+  }
+
+  if (action === 'save-asset' && menu.nodeId) {
+    saveNodeAsset(menu.nodeId)
     return
   }
 
@@ -3727,7 +3771,6 @@ function canOpenAgentPanel(): boolean {
   const d = decideAgentOpenWhileRefine({
     refineOpen: Boolean(canvasEditor.imageTarget),
     refineBusy: canvasEditor.refineBusy,
-    refineChrome: canvasEditor.refineChrome,
   })
   if (d === 'block') {
     ElMessage.warning('精修进行中，请先取消')
@@ -3941,10 +3984,13 @@ onUnmounted(() => {
             :grid-slice-loading="gridSliceBusy"
             :grid-slice-disabled="gridSliceEntryDisabled"
             :grid-slice-disabled-title="gridSliceDisabledTitle"
+            :has-url="Boolean(selectionUpscaleNode?.data?.url)"
             @upscale="handleSelectionUpscale"
             @edit="openRefineForSelected"
-            @quick-slice="handleGridSliceQuick"
+            @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
+            @download="selectionUpscaleNode && downloadNodeImage(selectionUpscaleNode.id)"
+            @save-asset="selectionUpscaleNode && saveNodeAsset(selectionUpscaleNode.id)"
           />
 
           <MultiSelectConnectOverlay
@@ -3986,17 +4032,11 @@ onUnmounted(() => {
         </VueFlow>
         <PlayCanvasView v-else class="h-full" :nodes="playCanvasNodes" />
 
-        <RefineWorkViewport
-          v-if="refinePanelNode"
-          v-show="!canvasEditor.compareLightboxOpen"
-          :url="refineBeforeUrl"
-          :width="refineMediaWidth"
-          :height="refineMediaHeight"
-        />
-        <RefineSidePanel
+        <RefineWorkbench
           v-if="refinePanelNode"
           :node-id="refinePanelNode.id"
           :before-url="refineBeforeUrl"
+          :url="refineBeforeUrl"
           :versions="refineVersions"
           :current-version-id="refineCurrentVersionId"
           :session-id="sessionId"

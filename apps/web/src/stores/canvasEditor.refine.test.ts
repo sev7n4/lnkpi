@@ -38,17 +38,6 @@ describe('canvasEditor refine target', () => {
     expect(editor.imageTarget?.url).toBe('https://cdn/a.png')
   })
 
-  it('defaults chrome to docked and resets on close', () => {
-    setActivePinia(createPinia())
-    const editor = useCanvasEditorStore()
-    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
-    editor.setRefineChrome('floating')
-    expect(editor.refineChrome).toBe('floating')
-    editor.closeImageEditor()
-    expect(editor.imageTarget).toBeNull()
-    expect(editor.refineChrome).toBe('docked')
-  })
-
   it('resets overlay tool state when the session closes', () => {
     setActivePinia(createPinia())
     const editor = useCanvasEditorStore()
@@ -78,18 +67,16 @@ describe('canvasEditor refine target', () => {
     expect(editor.getRefineMask()).toBeNull()
   })
 
-  it('resets loupe and panel width when the session closes', () => {
+  it('resets loupe state when the session closes', () => {
     setActivePinia(createPinia())
     const editor = useCanvasEditorStore()
     editor.setRefineLoupe(true)
     editor.setRefineLoupeShape('rect')
-    editor.setRefinePanelWidth(520)
     editor.setRefineMaskMenuOpen(true)
     editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
     editor.closeImageEditor()
     expect(editor.refineLoupeOn).toBe(false)
     expect(editor.refineLoupeShape).toBe('circle')
-    expect(editor.refinePanelWidth).toBe(400)
     expect(editor.refineLoupeZoom).toBe(2.5)
     expect(editor.refineBrushColor).toBe('#22d3ee')
     expect(editor.refineMaskMenuOpen).toBe(false)
@@ -113,16 +100,6 @@ describe('canvasEditor refine target', () => {
     expect(editor.refineLoupeZoom).toBe(6)
     editor.setRefineBrushColor('#ff0000')
     expect(editor.refineBrushColor).toBe('#ff0000')
-  })
-
-  it('resets panel collapsed state when the session closes', () => {
-    setActivePinia(createPinia())
-    const editor = useCanvasEditorStore()
-    editor.setRefinePanelCollapsed(true)
-    expect(editor.refinePanelCollapsed).toBe(true)
-    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
-    editor.closeImageEditor()
-    expect(editor.refinePanelCollapsed).toBe(false)
   })
 
   it('resets wand tolerance when the session closes', () => {
@@ -174,5 +151,22 @@ describe('canvasEditor refine target', () => {
     editor.closeImageEditor()
     expect(editor.refineTool).toBe('brush')
     expect(editor.refineMaskOp).toBe('add')
+  })
+
+  it('opens editor from preview target carrying nodeId, guarded by refineBusy', () => {
+    const editor = useCanvasEditorStore()
+    editor.openMediaPreview({ url: 'https://cdn/a.png', kind: 'image', nodeId: 'n1' })
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    expect(editor.imageTarget?.nodeId).toBe('n1')
+    editor.closeImageEditor()
+    expect(editor.imageTarget).toBeNull()
+  })
+
+  it('no longer exposes floating chrome state', () => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    expect('refineChrome' in editor).toBe(false)
+    expect('refinePanelWidth' in editor).toBe(false)
+    expect('refinePanelCollapsed' in editor).toBe(false)
   })
 })

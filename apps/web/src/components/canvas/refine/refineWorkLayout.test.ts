@@ -6,7 +6,6 @@ describe('refineWorkInsetRight', () => {
     expect(
       refineWorkInsetRight({
         innerWidth: 1280,
-        chrome: 'docked',
         collapsed: false,
         panelWidth: 400,
       }),
@@ -14,15 +13,13 @@ describe('refineWorkInsetRight', () => {
     expect(
       refineWorkInsetRight({
         innerWidth: 1280,
-        chrome: 'docked',
         collapsed: true,
         panelWidth: 400,
       }),
     ).toBe(44)
     expect(
       refineWorkInsetRight({
-        innerWidth: 1280,
-        chrome: 'floating',
+        innerWidth: 480,
         collapsed: false,
         panelWidth: 400,
       }),

@@ -5,12 +5,14 @@ import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
 import { dispatchRefinePointSelect } from './maskRemote'
-import { containRect, refineWorkInsetRight } from './refineWorkLayout'
+import { containRect } from './refineWorkLayout'
 
 const props = defineProps<{
   url: string
   width?: number
   height?: number
+  /** Right inset (px) — owned by useWorkbenchPanel in the parent workbench. */
+  insetRight: number
 }>()
 
 const editor = useCanvasEditorStore()
@@ -28,15 +30,6 @@ let dragging = false
 let lastX = 0
 let lastY = 0
 let ro: ResizeObserver | null = null
-
-const insetRight = computed(() =>
-  refineWorkInsetRight({
-    innerWidth: typeof window !== 'undefined' ? window.innerWidth : 1280,
-    chrome: editor.refineChrome,
-    collapsed: editor.refinePanelCollapsed,
-    panelWidth: editor.refinePanelWidth,
-  }),
-)
 
 const film = computed(() => containRect(stageW.value, stageH.value, imgW.value || 1, imgH.value || 1))
 const worldStyle = computed(() => ({

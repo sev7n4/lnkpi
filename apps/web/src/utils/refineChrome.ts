@@ -1,4 +1,3 @@
-export type RefineChromeMode = 'docked' | 'floating'
 export type CompareMode = 'split' | 'wipe'
 /** Left workspace: mask on Before vs expanded compare. Shared by future edit tools. */
 export type CompareWorkspace = 'work' | 'compare'
@@ -13,10 +12,8 @@ export function clampWipeRatio(n: number): number {
 export function decideAgentOpenWhileRefine(input: {
   refineOpen: boolean
   refineBusy: boolean
-  refineChrome: RefineChromeMode
 }): AgentOpenWhileRefine {
   if (!input.refineOpen) return 'allow'
-  if (input.refineChrome === 'floating') return 'allow'
   if (input.refineBusy) return 'block'
   return 'dismiss-refine'
 }
