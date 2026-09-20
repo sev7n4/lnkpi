@@ -8,7 +8,13 @@ const props = defineProps<{
   selectedIds: string[]
   canGenerateVideo?: boolean
   canUngroup?: boolean
-  selectionBatch?: { runCount: number; state: 'idle' | 'running' | 'stopping' | 'done' }
+  selectionBatch?: {
+    runCount: number
+    regenCount?: number
+    state: 'idle' | 'running' | 'stopping' | 'done'
+    blocked?: 'pending_confirm' | 'limit_24'
+    blockedCount?: number
+  }
 }>()
 
 const emit = defineEmits<{
@@ -22,7 +28,9 @@ const emit = defineEmits<{
   duplicate: []
   duplicateUpstream: []
   generateSelection: []
+  generateRegen: []
   stopSelection: []
+  blockedHint: [reason: 'pending_confirm' | 'limit_24']
 }>()
 
 const { viewport, nodes: flowNodes } = useVueFlow()
@@ -104,6 +112,8 @@ const visible = computed(() => props.selectedIds.length >= 2 || !!props.canUngro
     @duplicate="emit('duplicate')"
     @duplicate-upstream="emit('duplicateUpstream')"
     @generate-selection="emit('generateSelection')"
+    @generate-regen="emit('generateRegen')"
     @stop-selection="emit('stopSelection')"
+    @blocked-hint="emit('blockedHint', $event)"
   />
 </template>
