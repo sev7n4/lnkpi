@@ -49,6 +49,8 @@ const props = defineProps<{
   collapsed: boolean
   /** Shared narrow (<640px) flag — owned by useWorkbenchPanel, passed down. */
   isNarrow: boolean
+  /** Shared right inset (px) — owned by useWorkbenchPanel, passed down to CompareLightbox. */
+  insetRight: number
 }>()
 
 const emit = defineEmits<{
@@ -57,6 +59,7 @@ const emit = defineEmits<{
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
   'update:collapsed': [value: boolean]
+  /** 面板宽度调整预留（M2/M3）：当前 resize handle 已移除，暂无生产者；保留 emit + @update:panel-width 接线 */
   'update:panel-width': [value: number]
 }>()
 
@@ -698,6 +701,7 @@ onBeforeUnmount(() => {
     :after-url="afterUrl"
     :mode="compareMode"
     :wipe-ratio="wipeRatio"
+    :inset-right="insetRight"
     @close="editor.setCompareLightboxOpen(false)"
     @update:mode="compareMode = $event"
     @update:wipe-ratio="wipeRatio = $event"

@@ -63,6 +63,7 @@ const { panelWidth, collapsed, isNarrow, insetRight, setPanelWidth, setCollapsed
     :panel-width="panelWidth"
     :collapsed="collapsed"
     :is-narrow="isNarrow"
+    :inset-right="insetRight"
     @close="emit('close')"
     @apply="emit('apply', $event)"
     @revert="emit('revert', $event)"

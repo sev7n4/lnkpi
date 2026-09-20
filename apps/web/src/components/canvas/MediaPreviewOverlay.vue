@@ -41,6 +41,8 @@ function openEditorFromPreview() {
 async function savePreviewToLibrary() {
   const t = target.value
   if (!t?.nodeId) return
+  // 音频暂无资产库入库通道，落到 video/image 映射前提前返回
+  if (t.kind === 'audio') return
   await saveAssetToLibrary({
     kind: t.kind === 'video' ? 'video' : 'image',
     url: t.url,

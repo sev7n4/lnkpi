@@ -42,6 +42,9 @@ const label = computed(() =>
 
 function close() {
   open.value = false
+  // 重置选择态，避免重开后残留高亮 / 触摸两次点选跨次不一致
+  hover.value = null
+  lastTapped.value = null
 }
 
 function toggle() {

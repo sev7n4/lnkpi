@@ -3081,9 +3081,15 @@ function findNodeById(id: string) {
 /** 选中条「下载」与右键「下载图片」共用：从节点取 url 触发浏览器下载 */
 function downloadNodeImage(nodeId: string) {
   const node = findNodeById(nodeId)
-  const url = String((node?.data as Record<string, unknown> | undefined)?.url ?? '').trim()
+  const data = (node?.data ?? {}) as Record<string, unknown>
+  const url = String(data.url ?? '').trim()
   if (url) {
-    void downloadMediaFile(resolveMediaUrl(url), mediaDownloadName(url, 'image'), { sessionId: sessionId.value })
+    const label = data.label ?? data.prompt
+    void downloadMediaFile(
+      resolveMediaUrl(url),
+      mediaDownloadName(url, 'image', label === undefined ? undefined : String(label)),
+      { sessionId: sessionId.value },
+    )
   }
 }
 

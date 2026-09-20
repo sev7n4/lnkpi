@@ -173,6 +173,7 @@ function onUpscale() {
             type="button"
             class="toolbar-action icon-only"
             title="下载图片"
+            aria-label="下载图片"
             data-action="download"
             @click="emit('download')"
           >
@@ -187,6 +188,7 @@ function onUpscale() {
             type="button"
             class="toolbar-action icon-only"
             title="存入资产库"
+            aria-label="存入资产库"
             data-action="save-asset"
             @click="emit('save-asset')"
           >

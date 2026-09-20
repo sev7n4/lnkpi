@@ -40,6 +40,22 @@ describe('SelectionActionBar', () => {
     expect(wrapper.emitted('save-asset')).toBeTruthy()
     await wrapper.setProps({ hasUrl: false })
     expect(wrapper.find('[data-action="download"]').exists()).toBe(false)
+    expect(wrapper.find('[data-action="save-asset"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('renders exactly the expected action buttons (no extra/missing)', async () => {
+    const wrapper = mount(SelectionActionBar, {
+      props: { node: { id: 'n1', type: 'image' }, imageUpscale: true, gridSlice: true, hasUrl: true },
+      global: { stubs: { teleport: true } },
+    })
+    const actions = wrapper.findAll('.toolbar-action')
+    expect(actions).toHaveLength(5)
+    const labeled = actions.map((b) => b.text().trim()).filter(Boolean).sort((a, b) => a.localeCompare(b))
+    expect(labeled).toEqual(['宫格裁剪 ▾', '放大', '编辑'])
+    // icon-only file-group buttons carry stable data-action hooks
+    expect(wrapper.find('[data-action="download"]').exists()).toBe(true)
+    expect(wrapper.find('[data-action="save-asset"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
