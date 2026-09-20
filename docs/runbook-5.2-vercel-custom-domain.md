@@ -30,14 +30,28 @@
 
 非营利项目 DigitalPlat 提供**真·DNS 委托**的免费二级域名（不是 URL 跳转、不是动态 DNS），后缀有 `.dpdns.org`、`.us.kg`、`.qzz.io`、`.xx.kg`、`.qd.je`。2026 年仍在稳定运营，已注册 50 万+ 域名，可正常绑 Vercel / Cloudflare。
 
-**策略结论**：**过渡用免费的 `lnkpi.dpdns.org`，将来切路线 B 时再买可备案的 `lnkpi.net`** —— 两步不冲突，免费域名届时直接弃用即可。
+**策略结论**：**过渡用免费的 `lnkpi.us.kg`（最短后缀），将来切路线 B 时再买可备案的 `lnkpi.net`** —— 两步不冲突，免费域名届时直接弃用即可。
 
-| 后缀 | 挂靠 | 评价 |
+### 免费后缀怎么选（按总长度排序，均为 DigitalPlat 可注册）
+
+| 完整域名 | 长度 | 挂靠 | 评价 |
+|---|---|---|---|
+| **`lnkpi.us.kg`** | **11 字符** | `.kg`（吉尔吉斯斯坦） | ✅ **推荐**：DigitalPlat 里最短，无 DNS 记录（实测未被占） |
+| `lnkpi.qd.je` | 12 字符 | — | 无记录（实测未被占），但后缀冷门 |
+| `lnkpi.qzz.io` | 12 字符 | `.io` | 无记录（实测未被占），极客味 |
+| `lnkpi.dpdns.org` | 15 字符 | `.org`（Verisign 运营） | 最长，但母域最稳、观感最正经 |
+| `lnkpi.xx.kg` | 11 字符 | `.kg` | 无记录（实测未被占），`.xx.` 观感差 |
+
+### 其他免费项目核查结论（都不如上面）
+
+| 项目 | 域名示例 | 结论 |
 |---|---|---|
-| `.dpdns.org` | `.org`（Verisign 运营） | ✅ **推荐**，观感最正经、母域最稳 |
-| `.us.kg` | `.kg`（吉尔吉斯斯坦） | 短好记 |
-| `.qzz.io` | `.io` | 极客味 |
-| `.xx.kg` / `.qd.je` | — | 备选 |
+| **js.org** | `lnkpi.js.org` | 人类 PR 审核；仅限 **JS 生态相关内容**（明确排除产品/无关站），通过与否看审核者心情，**不推荐赌** |
+| **is-a.dev** | `lnkpi.is-a.dev` | 定位「开发者个人网站」；后缀 14 字符反而**更长**，还需 PR 审核 |
+| **pp.ua** | `lnkpi.pp.ua` | 乌克兰 NIC.UA 注册，流程绑定该国注册商，长期稳定性存疑 |
+| **eu.org** | `lnkpi.eu.org` | 免费但人工审核**动辄数周甚至数月**，等不起 |
+
+> 结论：想「更短更干净」，在 DigitalPlat 体系内把 `.dpdns.org` 换成 `.us.kg` 即可——**同一个账号、同一条流程、同一批限制**，只是后缀更短。真正的「干净」（`lnkpi.com` 这类）没有免费渠道。
 
 **免费方案的固有代价**（接受即可用）：
 
@@ -50,13 +64,13 @@
 
 ## 1. 【人工二选一】拿到域名（唯一需要你操作的步骤）
 
-### 路径 A · 免费：注册 `lnkpi.dpdns.org`（推荐，5 分钟）
+### 路径 A · 免费：注册 `lnkpi.us.kg`（推荐，5 分钟）
 
 1. 打开 `https://dash.domain.digitalplat.org` → 注册
    - 密码需 **≥12 位且同时含大小写字母+特殊字符**
    - **姓名字段必须包含空格**（否则报错）
 2. **GitHub KYC**：Sign in with GitHub 授权，账号才算激活
-3. Register → 搜索 `lnkpi` → 选 `.dpdns.org` → 确认可注册 → Register
+3. Register → 搜索 `lnkpi` → **选 `.us.kg`**（最短好记；若被占则退选 `.qzz.io` / `.dpdns.org`）→ 确认可注册 → Register
 4. **Nameservers 填 Vercel 的**：
    ```
    ns1.vercel-dns.com
@@ -155,6 +169,6 @@ echo | openssl s_client -connect lnkpi.net:443 -servername lnkpi.net 2>/dev/null
 - [x] 域名可注册性实测（发现 `.com`/`.cn` 均被占，避免白跑）
 - [x] 增加免费过渡路径（DigitalPlat FreeDomain，¥0）
 - [x] 本清单落库
-- [ ] **⏳ 等待：用户选路径 A（免费 `lnkpi.dpdns.org`）或路径 B（付费 `lnkpi.net`）并完成注册**
+- [ ] **⏳ 等待：用户选路径 A（免费 `lnkpi.us.kg`）或路径 B（付费 `lnkpi.net`）并完成注册**
 - [ ] Vercel 绑定 + DNS 记录
 - [ ] 验收
