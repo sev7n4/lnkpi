@@ -26,3 +26,16 @@ apps/server/prisma/*.db-journal
 
 # Trae IDE
 .trae/
+
+# pnpm 本地内容寻址存储（约 600MB / 3.5 万文件，绝不入库）
+.pnpm-store/
+
+# Agent 工作区状态（记忆/日志，属本地态）
+.workbuddy/
+
+# 部署验证脚本产出的一次性结果
+deploy/*-verify-result.json
+
+# 品牌设计工作稿（设计工具产出，非源码）
+lnkpi-logo-concepts/
+*.miora
