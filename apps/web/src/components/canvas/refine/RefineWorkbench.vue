@@ -5,6 +5,7 @@ import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPan
 import type { ImageVersionEntry } from '@lnkpi/shared'
 import RefineWorkViewport from './RefineWorkViewport.vue'
 import RefineSidePanel from './RefineSidePanel.vue'
+import { useNaturalImageSize } from './useNaturalImageSize'
 
 const props = defineProps<{
   nodeId: string
@@ -30,6 +31,13 @@ const editor = useCanvasEditorStore()
 /** 节点已产出「处理后」版本（edit 来源）时，左栏对照两项才可点（spec P0-4）。
  *  仅依据已下发的 versions，不重复版本派生逻辑。 */
 const hasAfter = computed(() => props.versions.some((v) => v.source === 'edit'))
+
+/** 尺寸兜底（follow-up #4）：mediaInfo 缺宽高时探测图片自然尺寸，dock 才能显示 宽×高 · 比例 */
+const mediaSize = useNaturalImageSize({
+  url: () => props.url,
+  width: () => props.width,
+  height: () => props.height,
+})
 
 /** Escape→close guard: mirror RefineSidePanel's requestClose, but keep the
  *  source of truth for collapsed/width in the shared composable. */
@@ -64,8 +72,8 @@ const { panelWidth, collapsed, isNarrow, insetRight, setPanelWidth, setCollapsed
     :current-version-id="currentVersionId"
     :session-id="sessionId"
     :generation-record-id="generationRecordId"
-    :width="width"
-    :height="height"
+    :width="mediaSize.width.value"
+    :height="mediaSize.height.value"
     :panel-width="panelWidth"
     :collapsed="collapsed"
     :is-narrow="isNarrow"

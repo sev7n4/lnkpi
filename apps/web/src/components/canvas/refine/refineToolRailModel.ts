@@ -81,3 +81,10 @@ export function compareModeLabel(mode: CompareMode): string {
 export function refineWorkspaceLabel(input: { compareOpen: boolean; compareMode: CompareMode }): string {
   return input.compareOpen ? `对照 · ${compareModeLabel(input.compareMode)}` : '工作图'
 }
+
+/** 「适配」菜单里的即时缩放动作（follow-up #10）：只改视图层级，不产生任何数据 */
+export const REFINE_ZOOM_ACTIONS = [
+  { id: 'zoom-in', label: '放大', hint: '视图放大一级' },
+  { id: 'zoom-out', label: '缩小', hint: '视图缩小一级' },
+] as const
+export type RefineZoomActionId = (typeof REFINE_ZOOM_ACTIONS)[number]['id']

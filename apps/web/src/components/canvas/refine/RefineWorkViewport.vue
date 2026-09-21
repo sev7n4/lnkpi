@@ -101,6 +101,8 @@ function onPanUp() {
 
 function onKeyDown(event: KeyboardEvent) {
   if (event.code !== 'Space' || event.repeat) return
+  // 全屏对照打开时视口被 v-show 隐藏，空格语义归 CompareView（按住看原图），不再抢平移
+  if (editor.compareLightboxOpen) return
   const tag = (event.target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
   spaceDown.value = true
@@ -120,6 +122,35 @@ function zoomOneToOne() {
   scale.value = oneToOneScale.value
   panX.value = 0
   panY.value = 0
+}
+
+/** 适配菜单的放大 / 缩小（follow-up #10）：transform-origin 是中心，直接乘层级即可 */
+const ZOOM_MIN = 0.1
+const ZOOM_MAX = 8
+function zoomStep(factor: number) {
+  scale.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, scale.value * factor))
+}
+
+/* 蒙版撤销 / 重做（follow-up #13）：rail 按钮 + ⌘Z / ⇧⌘Z 快捷键 */
+const maskCanUndo = ref(false)
+const maskCanRedo = ref(false)
+function onMaskHistory(depth: { undo: number; redo: number }) {
+  maskCanUndo.value = depth.undo > 0
+  maskCanRedo.value = depth.redo > 0
+}
+function runUndo() { maskRef.value?.undo() }
+function runRedo() { maskRef.value?.redo() }
+function isEditableTarget(target: EventTarget | null): boolean {
+  const tag = (target as HTMLElement | null)?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
+  return (target as HTMLElement | null)?.isContentEditable === true
+}
+function onHistoryKeydown(event: KeyboardEvent) {
+  if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return
+  if (isEditableTarget(event.target)) return
+  event.preventDefault()
+  if (event.shiftKey) runRedo()
+  else runUndo()
 }
 
 watch(
@@ -165,12 +196,14 @@ onMounted(() => {
   }
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
+  window.addEventListener('keydown', onHistoryKeydown)
 })
 
 onBeforeUnmount(() => {
   ro?.disconnect()
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
+  window.removeEventListener('keydown', onHistoryKeydown)
   onPanUp()
   editor.registerRefineMask(null)
 })
@@ -180,7 +213,17 @@ onBeforeUnmount(() => {
   <section class="refine-work" :style="{ right: `${insetRight}px` }">
     <!-- 左栏：输入工具（产出选区 / 蒙版）+ 查看工具（只看不改） -->
     <div class="refine-work__rail">
-      <RefineToolRail :has-after="props.hasAfter ?? true" @fit="resetView" @actual-size="zoomOneToOne" />
+      <RefineToolRail
+        :has-after="props.hasAfter ?? true"
+        :can-undo="maskCanUndo"
+        :can-redo="maskCanRedo"
+        @fit="resetView"
+        @actual-size="zoomOneToOne"
+        @zoom-in="zoomStep(1.25)"
+        @zoom-out="zoomStep(0.8)"
+        @undo="runUndo"
+        @redo="runRedo"
+      />
     </div>
 
     <div class="refine-work__col">
@@ -211,6 +254,7 @@ onBeforeUnmount(() => {
                 :disabled="editor.refineBusy || spaceDown"
                 @coverage="(p) => { editor.refineCoverage = p.ratio }"
                 @point-select="dispatchRefinePointSelect"
+                @history="onMaskHistory"
               />
             </ImageLoupe>
           </div>

@@ -36,6 +36,8 @@ const props = withDefaults(
 const emit = defineEmits<{
   coverage: [payload: { ratio: number; width: number; height: number }]
   pointSelect: [payload: { x: number; y: number }]
+  /** 撤销 / 重做栈深变化（rail 的撤销重做按钮据此置灰） */
+  history: [payload: { undo: number; redo: number }]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -53,6 +55,47 @@ let sizeToken = 0
 let imageRgba: Uint8ClampedArray | null = null
 let polygonPoints: Array<{ x: number; y: number }> = []
 const polygonPreview = ref<Array<{ x: number; y: number }> | null>(null)
+
+/** 蒙版历史栈：每次「落笔生效」前压栈，供 rail 撤销 / 重做（follow-up 需求 #13） */
+const MASK_HISTORY_LIMIT = 30
+const maskUndoStack: ImageData[] = []
+const maskRedoStack: ImageData[] = []
+const historyDepth = ref({ undo: 0, redo: 0 })
+
+function notifyMaskHistory() {
+  historyDepth.value = { undo: maskUndoStack.length, redo: maskRedoStack.length }
+  emit('history', { ...historyDepth.value })
+}
+
+function pushMaskHistory(ctx: CanvasRenderingContext2D) {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  maskUndoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+  if (maskUndoStack.length > MASK_HISTORY_LIMIT) maskUndoStack.shift()
+  maskRedoStack.length = 0
+}
+
+function undoMask() {
+  const canvas = canvasRef.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx || !maskUndoStack.length) return
+  cancelPolygonDraft()
+  maskRedoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+  ctx.putImageData(maskUndoStack.pop()!, 0, 0)
+  emitCoverage()
+  notifyMaskHistory()
+}
+
+function redoMask() {
+  const canvas = canvasRef.value
+  const ctx = canvas?.getContext('2d')
+  if (!canvas || !ctx || !maskRedoStack.length) return
+  cancelPolygonDraft()
+  maskUndoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
+  ctx.putImageData(maskRedoStack.pop()!, 0, 0)
+  emitCoverage()
+  notifyMaskHistory()
+}
 
 function cancelPolygonDraft() {
   polygonPoints = []
@@ -73,6 +116,7 @@ function commitPolygon(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement)
     fillRgb: parseFillHex(props.color),
     mode: props.maskOp === 'subtract' ? 'subtract' : 'add',
   })
+  pushMaskHistory(ctx)
   putRgba(ctx, next, canvas.width, canvas.height)
   cancelPolygonDraft()
   emitCoverage()
@@ -90,6 +134,7 @@ function clearCanvas() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
+  pushMaskHistory(ctx)
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   emitCoverage()
 }
@@ -104,6 +149,10 @@ function resizeCanvas(width: number, height: number) {
   canvas.width = nextWidth
   canvas.height = nextHeight
   sizeReady.value = true
+  // 位图尺寸变了，旧快照尺寸不匹配，历史栈必须作废
+  maskUndoStack.length = 0
+  maskRedoStack.length = 0
+  notifyMaskHistory()
   emitCoverage()
   loadImageRgba(nextWidth, nextHeight)
 }
@@ -221,6 +270,7 @@ function invertCanvas() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
+  pushMaskHistory(ctx)
   const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
   putRgba(ctx, invertMaskRgba(mask.data), canvas.width, canvas.height)
   emitCoverage()
@@ -238,6 +288,7 @@ function onPointerDown(event: PointerEvent) {
   }
   if (props.tool === 'wand') {
     if (!imageRgba) return
+    pushMaskHistory(ctx)
     const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
     const filled = floodFillMask({
       width: canvas.width,
@@ -269,10 +320,12 @@ function onPointerDown(event: PointerEvent) {
   lastY = pt.y
   applyToolStyle(ctx)
   if (props.tool === 'rect') {
+    pushMaskHistory(ctx)
     snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height)
     rectStart = pt
     return
   }
+  pushMaskHistory(ctx)
   paintDot(ctx, pt.x, pt.y)
 }
 
@@ -367,6 +420,9 @@ defineExpose({
   clear: clearCanvas,
   invert: invertCanvas,
   cancelPolygonDraft,
+  undo: undoMask,
+  redo: redoMask,
+  historyDepth,
 })
 </script>
 

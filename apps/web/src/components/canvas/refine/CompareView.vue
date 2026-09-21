@@ -155,7 +155,10 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+    <!-- 「按住查看原图」（follow-up #3）：紧凑模式（右栏固定对照带）下不渲染 —— P0-6 对照带只留 ⛶ 一枚动作；
+         空格按住仍生效。全屏对照（lightbox）里保留这枚眼睛。 -->
     <button
+      v-if="!compact"
       type="button"
       class="compare-view__original"
       title="按住查看原图"

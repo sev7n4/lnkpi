@@ -31,13 +31,25 @@ const editor = useCanvasEditorStore()
       </button>
     </div>
 
+    <!-- follow-up #8：没有「处理后」版本时 After 侧占位，不再拿 Before 顶替（否则用户会误以为已生成） -->
     <CompareView
+      v-if="afterUrl"
       :before-url="beforeUrl"
       :after-url="afterUrl"
       mode="split"
+      compact
       :wipe-ratio="editor.refineWipeRatio"
       @update:wipe-ratio="editor.setRefineWipeRatio($event)"
     />
+    <div
+      v-else
+      class="compare-band__placeholder"
+      data-testid="compare-band-placeholder"
+    >
+      <span class="compare-band__placeholder-tag">Before</span>
+      <span class="compare-band__placeholder-tag">After · 待生成</span>
+      <p>在画布上圈选区域并生成后，这里显示左右对照</p>
+    </div>
   </section>
 </template>
 
@@ -53,4 +65,14 @@ const editor = useCanvasEditorStore()
 }
 .compare-band__max:hover { background: var(--neo-hover-bg); }
 .compare-band__max.is-active { background: rgba(0, 89, 179, .18); color: #7cc0ff; }
+.compare-band__placeholder {
+  position: relative; display: flex; min-height: 96px; align-items: center; justify-content: center;
+  border: 1px dashed var(--neo-border); border-radius: 12px; background: #0a0a0a; padding: 10px 14px;
+}
+.compare-band__placeholder p { margin: 0; color: var(--neo-text-muted); font-size: 11px; text-align: center; }
+.compare-band__placeholder-tag {
+  position: absolute; top: 6px; color: var(--neo-text-muted); font-size: 10.5px;
+}
+.compare-band__placeholder-tag:first-child { left: 8px; }
+.compare-band__placeholder-tag:last-child { right: 8px; }
 </style>

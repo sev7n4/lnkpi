@@ -94,7 +94,51 @@ describe('RefineToolRail', () => {
     expect(w.emitted('actualSize')).toHaveLength(1)
   })
 
-  it('左栏不存在「细节放大」入口', () => {
-    expect(mountRail().text()).not.toContain('细节放大')
+  it('适配：二级菜单含放大 / 缩小（follow-up #10），分别 emit zoomIn / zoomOut', async () => {
+    const w = mountRail()
+    await w.find('[data-testid="rail-view-fit"]').trigger('click')
+    await w.find('[data-testid="rail-zoom-zoom-in"]').trigger('click')
+    await w.find('[data-testid="rail-zoom-zoom-out"]').trigger('click')
+    expect(w.emitted('zoomIn')).toHaveLength(1)
+    expect(w.emitted('zoomOut')).toHaveLength(1)
+  })
+
+  it('细节放大入口回归左栏（follow-up #9，P0-5 回退）：点击切换 store.refineLoupeOn 并高亮', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    const loupe = w.find('[data-testid="rail-view-loupe"]')
+    expect(loupe.exists()).toBe(true)
+    expect(store.refineLoupeOn).toBe(false)
+    await loupe.trigger('click')
+    expect(store.refineLoupeOn).toBe(true)
+    expect(w.find('[data-testid="rail-view-loupe"]').classes()).toContain('is-active')
+    await w.find('[data-testid="rail-view-loupe"]').trigger('click')
+    expect(store.refineLoupeOn).toBe(false)
+  })
+
+  it('撤销 / 重做（follow-up #13）：栈空禁用，可用时 emit undo / redo', async () => {
+    const w = mountRail()
+    expect(w.find('[data-testid="rail-undo"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="rail-redo"]').attributes('disabled')).toBeDefined()
+
+    const w2 = mountRail({ canUndo: true, canRedo: true })
+    await w2.find('[data-testid="rail-undo"]').trigger('click')
+    await w2.find('[data-testid="rail-redo"]').trigger('click')
+    expect(w2.emitted('undo')).toHaveLength(1)
+    expect(w2.emitted('redo')).toHaveLength(1)
+  })
+
+  it('二级菜单工具项只留图标（follow-up #11/#12）：无文字、带 aria-label', async () => {
+    const w = mountRail()
+    await w.find('[data-testid="rail-input-paint"]').trigger('click')
+    const brush = w.find('[data-testid="rail-variant-brush"]')
+    expect(brush.exists()).toBe(true)
+    expect(brush.attributes('aria-label')).toBe('画笔')
+    expect(brush.text()).not.toContain('画笔')
+    expect(brush.find('svg').exists()).toBe(true)
+  })
+
+  it('「查看」分组不再渲染文字标签（follow-up #5），只留发丝分隔线', () => {
+    expect(mountRail().find('.refine-rail__seplabel').exists()).toBe(false)
   })
 })
