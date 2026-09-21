@@ -14,13 +14,12 @@ import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
-import type { CompareMode } from '@/utils/refineChrome'
-import { loupeSubcontrolsVisible, maskSubcontrolsVisible, nextCompareWorkspace, wipeCompareLocked } from '@/utils/refineChrome'
+import { maskSubcontrolsVisible } from '@/utils/refineChrome'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { syncRefineUrls } from './syncRefineUrls'
 import CompareLightbox from './CompareLightbox.vue'
-import CompareView from './CompareView.vue'
+import RefineCompareBand from './RefineCompareBand.vue'
 import VersionStrip from './VersionStrip.vue'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
@@ -91,8 +90,9 @@ const afterUrl = ref(props.beforeUrl)
 const errorMessage = ref('')
 const compareBeforeUrl = ref(props.beforeUrl)
 const lastRecordId = ref<string | undefined>()
-const compareMode = ref<CompareMode>('split')
-const wipeRatio = ref(0.5)
+// 对照状态已提升到 store（Task 1）：侧栏只读取，写入交由 CompareLightbox / 对照带。
+const compareMode = computed(() => editor.refineCompareMode)
+const wipeRatio = computed(() => editor.refineWipeRatio)
 
 let abortController: AbortController | null = null
 const pointSession = createPointSegmentSession()
@@ -115,8 +115,6 @@ const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
-const wipeLocked = computed(() => wipeCompareLocked(canApply.value))
-const loupeMenuOpen = computed(() => loupeSubcontrolsVisible(editor.refineLoupeOn))
 const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
 const panelStyle = computed(() => {
   const width = props.collapsed
@@ -199,12 +197,6 @@ function clearEditIntent() {
   editIntentPickerOpen.value = false
 }
 
-function onLoupeZoomInput(event: Event) {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) return
-  editor.setRefineLoupeZoom(Number(target.value))
-}
-
 function onBrushColorInput(event: Event) {
   const target = event.target
   if (!(target instanceof HTMLInputElement)) return
@@ -226,11 +218,6 @@ function onSelectVersion(versionId: string) {
 function onRevert(payload: { versionId: string }) {
   if (busy.value) return
   emit('revert', payload)
-}
-
-function toggleCompareWorkspace() {
-  const next = nextCompareWorkspace(editor.compareLightboxOpen ? 'compare' : 'work')
-  editor.setCompareLightboxOpen(next === 'compare')
 }
 
 function onBrushParentClick() {
@@ -438,74 +425,8 @@ onBeforeUnmount(() => {
         </div>
       </header>
       <div v-show="!collapsed" class="refine-side__body">
+        <RefineCompareBand :before-url="compareBeforeUrl" :after-url="afterUrl" />
         <div class="refine-side__toolbar">
-          <div class="refine-side__icon-row">
-            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': compareMode === 'split' }" title="左右对照" @click="compareMode = 'split'">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <rect x="3" y="5" width="7" height="14" rx="1.5" />
-                <rect x="14" y="5" width="7" height="14" rx="1.5" />
-              </svg>
-            </button>
-            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': compareMode === 'wipe' }" title="重叠滑竿" :disabled="wipeLocked" @click="compareMode = 'wipe'">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <rect x="3" y="5" width="18" height="14" rx="1.5" />
-                <path stroke-linecap="round" d="M12 5v14" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="refine-side__icon-btn"
-              :class="{ 'is-active': editor.compareLightboxOpen }"
-              :title="editor.compareLightboxOpen ? '回到工作图' : '最大化对照'"
-              @click="toggleCompareWorkspace"
-            >
-              <svg v-if="!editor.compareLightboxOpen" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 4H5v4M15 4h4v4M5 15v4h4M19 15v4h-4" />
-              </svg>
-              <svg v-else viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M9 9H5V5M15 9h4V5M5 15v4h4M19 15v4h-4" />
-              </svg>
-            </button>
-            <span class="refine-side__divider" />
-            <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeOn }" title="放大镜" @click="editor.setRefineLoupe(!editor.refineLoupeOn)">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <circle cx="11" cy="11" r="6" />
-                <path stroke-linecap="round" d="m20 20-3.5-3.5" />
-              </svg>
-            </button>
-            <template v-if="loupeMenuOpen">
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeShape === 'circle' }" title="圆形放大区" @click="editor.setRefineLoupeShape('circle')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <circle cx="12" cy="12" r="7" />
-                </svg>
-              </button>
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineLoupeShape === 'rect' }" title="矩形放大区" @click="editor.setRefineLoupeShape('rect')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <rect x="5" y="6" width="14" height="12" rx="2" />
-                </svg>
-              </button>
-              <label class="refine-side__slider" title="放大镜倍数">
-                <input
-                  type="range"
-                  min="1.5"
-                  max="6"
-                  step="0.5"
-                  :value="editor.refineLoupeZoom"
-                  @input="onLoupeZoomInput"
-                >
-                <span>×{{ editor.refineLoupeZoom }}</span>
-              </label>
-            </template>
-          </div>
-
-          <CompareView
-            :before-url="compareBeforeUrl"
-            :after-url="afterUrl"
-            :mode="compareMode"
-            :wipe-ratio="wipeRatio"
-            @update:wipe-ratio="wipeRatio = $event"
-          />
-
           <div class="refine-side__icon-row">
             <button
               type="button"
@@ -703,8 +624,8 @@ onBeforeUnmount(() => {
     :wipe-ratio="wipeRatio"
     :inset-right="insetRight"
     @close="editor.setCompareLightboxOpen(false)"
-    @update:mode="compareMode = $event"
-    @update:wipe-ratio="wipeRatio = $event"
+    @update:mode="editor.setRefineCompareMode($event)"
+    @update:wipe-ratio="editor.setRefineWipeRatio($event)"
   />
 </template>
 
