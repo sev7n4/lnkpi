@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import type { ImageVersionEntry } from '@lnkpi/shared'
+import type { RefineApplyPayload } from './compareViewModel'
 import RefineWorkViewport from './RefineWorkViewport.vue'
 import RefineSidePanel from './RefineSidePanel.vue'
 import { useNaturalImageSize } from './useNaturalImageSize'
@@ -21,7 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  apply: [payload: { url: string; prompt: string; recordId?: string }]
+  apply: [payload: RefineApplyPayload]
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
 }>()

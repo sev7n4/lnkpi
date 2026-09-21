@@ -19,7 +19,7 @@ import { maskCoverageMessage } from '@/utils/maskCoverage'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { syncRefineUrls } from './syncRefineUrls'
-import { baseCanvasFromMetadata, type RefineCompareMetadata } from './compareViewModel'
+import { baseCanvasFromMetadata, type RefineApplyPayload, type RefineCompareMetadata } from './compareViewModel'
 import CompareLightbox from './CompareLightbox.vue'
 import RefineCompareBand from './RefineCompareBand.vue'
 import RefineDock from './RefineDock.vue'
@@ -60,7 +60,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  apply: [payload: { url: string; prompt: string; recordId?: string }]
+  apply: [payload: RefineApplyPayload]
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
   'update:collapsed': [value: boolean]

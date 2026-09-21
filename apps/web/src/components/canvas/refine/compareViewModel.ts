@@ -31,6 +31,18 @@ export interface CompareBaseCanvas {
 }
 
 /**
+ * 「应用到节点」载荷（M2 T9）：在既有 url/prompt/recordId 之上，
+ * 携带当前工作版本的 metadata（Task 2 契约字段同形）——
+ * 应用链路据此判断是否为扩图版本并做中心锚定重排；普通精修版本无 metadata，不动 position。
+ */
+export interface RefineApplyPayload {
+  url: string
+  prompt: string
+  recordId?: string
+  metadata?: RefineCompareMetadata
+}
+
+/**
  * 扩图版本的基准画布（Task 8）：以新画布 outpaintTo 为基准，Before 居中贴图——
  * 偏移取 (to - from) / 2（metadata 只记录两侧尺寸，无锚点信息，规格 §3 语义即居中）。
  * 非扩图版本或缺几何字段时返回 undefined（普通对照渲染不受影响）。

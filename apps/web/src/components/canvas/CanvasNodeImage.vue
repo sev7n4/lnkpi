@@ -26,6 +26,8 @@ const props = defineProps<{
     generationRecordId?: string
     materialId?: string
     mediaInfo?: NodeMediaInfoSummary
+    /** T9：扩图应用链路写入的节点卡显示尺寸（缺省走 neoNodeMeta 默认 280×280） */
+    nodeSize?: { width: number; height: number }
   }
 }>()
 
@@ -95,7 +97,14 @@ function openMediaInspector(e: Event) {
 </script>
 
 <template>
-  <NeoBaseNode node-type="image" :selected="selected" :data="data" :status="data.status">
+  <NeoBaseNode
+    node-type="image"
+    :selected="selected"
+    :data="data"
+    :status="data.status"
+    :width="data.nodeSize?.width"
+    :height="data.nodeSize?.height"
+  >
     <template v-if="showMediaSummary && data.mediaInfo" #footer>
       <MediaInfoSummary v-bind="data.mediaInfo" />
     </template>
