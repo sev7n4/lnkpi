@@ -22,6 +22,8 @@ const props = defineProps<{
   gridSliceLoading?: boolean
   gridSliceDisabled?: boolean
   gridSliceDisabledTitle?: string
+  /** 宫格切分原图像素尺寸；用于 64px 单格下限禁用判定 */
+  gridSliceImage?: { width: number; height: number } | null
   /** 文件组（下载/存库）是否可用：节点有可访问的 url 时为真 */
   hasUrl?: boolean
   /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
@@ -174,6 +176,7 @@ const TOOL_ICONS: Record<string, string> = {
             :disabled="gridSliceDisabled"
             :loading="gridSliceLoading"
             :disabled-title="gridSliceDisabledTitle"
+            :image="gridSliceImage"
             @slice="(c: number, r: number) => emit('slice', c, r)"
             @open-custom="emit('open-custom')"
           />

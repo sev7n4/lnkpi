@@ -811,6 +811,16 @@ const gridSliceEntryDisabled = computed(() => {
   return isNodeGenerating(data.status) || data.status === 'uploading'
 })
 
+/** 宫格切分原图尺寸（mediaInfo）：供 64px 单格下限禁用判定 */
+const gridSliceImageSize = computed(() => {
+  const info = selectionGridSliceNode.value?.data?.mediaInfo as
+    | { kind?: string; width?: number; height?: number }
+    | undefined
+  if (!info || info.kind !== 'image') return null
+  if (typeof info.width !== 'number' || typeof info.height !== 'number') return null
+  return { width: info.width, height: info.height }
+})
+
 const gridSliceDisabledTitle = computed(() => {
   if (gridSliceBusy.value) return '裁剪中…'
   const node = selectionGridSliceNode.value
@@ -3966,6 +3976,7 @@ onUnmounted(() => {
             :grid-slice-loading="gridSliceBusy"
             :grid-slice-disabled="gridSliceEntryDisabled"
             :grid-slice-disabled-title="gridSliceDisabledTitle"
+            :grid-slice-image="gridSliceImageSize"
             :has-url="Boolean(selectionActionBarNode?.data?.url)"
             @edit="openRefineForSelected"
             @slice="handleGridSliceSlice"

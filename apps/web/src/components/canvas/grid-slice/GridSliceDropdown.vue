@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import {
+  canSliceAtCell,
+  gridSlicePresetOptions,
+  resolveDropdownPlacement,
+} from '@/utils/gridSlice'
 
 const GRID_PICKER_MAX = 7 // 与 packages/shared/src/gridSlice.ts 的 MAX_GRID 对齐
+/** 右面板（标题 + 7×7 格阵 + 预览入口）估算高度，用于弹出方向判定 */
+const MENU_ESTIMATED_HEIGHT = 260
 
 const props = withDefaults(
   defineProps<{
     disabled?: boolean
     loading?: boolean
     disabledTitle?: string
+    /** 原图像素尺寸；缺省时不做 64px 下限拦截 */
+    image?: { width: number; height: number } | null
   }>(),
   {
     disabled: false,
     loading: false,
     disabledTitle: '',
+    image: null,
   },
 )
 
@@ -23,26 +33,57 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
+const placement = ref<'bottom' | 'top'>('bottom')
+const showCustom = ref(false)
 const hover = ref<{ cols: number; rows: number } | null>(null)
 const lastTapped = ref<string | null>(null)
 
 const blocked = computed(() => props.disabled || props.loading)
 
-const triggerLabel = computed(() => (props.loading ? '裁剪中…' : '宫格裁剪 ▾'))
+const presetOptions = computed(() => gridSlicePresetOptions())
+
+const triggerLabel = computed(() => (props.loading ? '切分中…' : '宫格切分 ▾'))
 
 const triggerTitle = computed(() => {
-  if (props.loading) return '裁剪中…'
-  if (props.disabled) return props.disabledTitle || '当前图片不可裁剪'
-  return '宫格裁剪'
+  if (props.loading) return '切分中…'
+  if (props.disabled) return props.disabledTitle || '当前图片不可切分'
+  return '宫格切分'
 })
 
-const label = computed(() =>
-  hover.value ? `${hover.value.cols} × ${hover.value.rows} · 共 ${hover.value.cols * hover.value.rows} 张` : '悬停选择切分规格',
-)
+const readout = computed(() => (hover.value ? `${hover.value.cols} x ${hover.value.rows}` : '—'))
+
+const disabledHint = computed(() => `单格不足 ${64}px，无法切分`)
+
+function presetCols(n: number) {
+  return Math.sqrt(n)
+}
+
+function isPresetDisabled(n: number) {
+  if (!props.image) return false
+  const c = presetCols(n)
+  return !canSliceAtCell(props.image, c, c)
+}
+
+function isCellDisabled(cols: number, rows: number) {
+  if (!props.image) return false
+  return !canSliceAtCell(props.image, cols, rows)
+}
+
+function updatePlacement() {
+  const root = rootRef.value
+  if (!root) return
+  const rect = root.getBoundingClientRect()
+  placement.value = resolveDropdownPlacement(
+    window.innerHeight - rect.bottom,
+    rect.top,
+    MENU_ESTIMATED_HEIGHT,
+  )
+}
 
 function close() {
   open.value = false
   // 重置选择态，避免重开后残留高亮 / 触摸两次点选跨次不一致
+  showCustom.value = false
   hover.value = null
   lastTapped.value = null
 }
@@ -50,10 +91,19 @@ function close() {
 function toggle() {
   if (blocked.value) return
   open.value = !open.value
+  if (open.value) updatePlacement()
 }
 
-function isPreset(c: number, r: number) {
-  return (c === 2 && r === 2) || (c === 3 && r === 3)
+function pickPreset(n: number) {
+  if (blocked.value || isPresetDisabled(n)) return
+  const c = presetCols(n)
+  close()
+  emit('slice', c, c)
+}
+
+function openCustomPanel() {
+  if (blocked.value) return
+  showCustom.value = true
 }
 
 function onCellEnter(cols: number, rows: number, pointerType: string) {
@@ -62,6 +112,7 @@ function onCellEnter(cols: number, rows: number, pointerType: string) {
 }
 
 function onCellClick(cols: number, rows: number, pointerType: string | undefined) {
+  if (isCellDisabled(cols, rows)) return
   const key = `${cols}-${rows}`
   // touch 无 pointerenter：无 hover 且无 pointerType 时，首次点击视为触摸点选
   const isTouch = pointerType === 'touch' || (pointerType === undefined && !hover.value)
@@ -75,7 +126,7 @@ function onCellClick(cols: number, rows: number, pointerType: string | undefined
   emit('slice', cols, rows)
 }
 
-function pickCustom() {
+function pickPreview() {
   if (blocked.value) return
   close()
   emit('open-custom')
@@ -116,24 +167,71 @@ onUnmounted(() => {
     >
       {{ triggerLabel }}
     </button>
-    <div v-if="open && !blocked" class="neo-chrome grid-slice-menu absolute left-0 top-full z-[2] mt-1 rounded-xl p-2" role="menu" @click.stop>
-      <div class="grid" style="grid-template-columns: repeat(7, 22px); gap: 3px">
-        <template v-for="r in GRID_PICKER_MAX" :key="`row-${r}`">
-          <button
-            v-for="c in GRID_PICKER_MAX"
-            :key="`cell-${c}-${r}`"
-            type="button"
-            class="grid-cell"
-            :data-cell="`${c}-${r}`"
-            :data-active="hover && c <= hover.cols && r <= hover.rows ? 'true' : 'false'"
-            :class="{ preset: isPreset(c, r) }"
-            @pointerenter="onCellEnter(c, r, $event.pointerType)"
-            @click="onCellClick(c, r, $event.pointerType)"
-          />
-        </template>
+    <div
+      v-if="open && !blocked"
+      class="neo-chrome grid-slice-menu grid-slice-solid absolute left-0 z-[2] flex rounded-xl p-2"
+      :class="placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1'"
+      role="menu"
+      @click.stop
+    >
+      <!-- 左面板：预设文字列表 -->
+      <div class="grid-slice-panel" data-panel="presets">
+        <button
+          v-for="opt in presetOptions"
+          :key="opt.n"
+          type="button"
+          class="grid-slice-item"
+          role="menuitem"
+          :data-preset="opt.n"
+          :disabled="isPresetDisabled(opt.n)"
+          :title="isPresetDisabled(opt.n) ? disabledHint : opt.label"
+          @click="pickPreset(opt.n)"
+        >
+          {{ opt.label }}
+        </button>
+        <button
+          type="button"
+          class="grid-slice-item custom"
+          role="menuitem"
+          data-testid="custom-toggle"
+          :data-active="showCustom ? 'true' : 'false'"
+          @pointerenter="openCustomPanel"
+          @click="openCustomPanel"
+        >
+          自定义 ›
+        </button>
       </div>
-      <p class="grid-slice-label">{{ label }}</p>
-      <button type="button" class="grid-slice-item custom" role="menuitem" @click="pickCustom">精确输入…</button>
+      <!-- 右面板：hover 自定义后出现的 7×7 格阵 + 实时读数 -->
+      <div v-if="showCustom" class="grid-slice-panel grid-slice-panel-custom" data-panel="custom">
+        <div class="grid-slice-panel-head">
+          <span class="grid-slice-panel-title">自定义宫格</span>
+          <span class="grid-slice-readout" data-testid="readout">{{ readout }}</span>
+        </div>
+        <div class="grid" style="grid-template-columns: repeat(7, 22px); gap: 3px">
+          <template v-for="r in GRID_PICKER_MAX" :key="`row-${r}`">
+            <button
+              v-for="c in GRID_PICKER_MAX"
+              :key="`cell-${c}-${r}`"
+              type="button"
+              class="grid-cell"
+              :data-cell="`${c}-${r}`"
+              :data-active="hover && c <= hover.cols && r <= hover.rows ? 'true' : 'false'"
+              :disabled="isCellDisabled(c, r)"
+              :title="isCellDisabled(c, r) ? disabledHint : `${c} x ${r}`"
+              @pointerenter="onCellEnter(c, r, $event.pointerType)"
+              @click="onCellClick(c, r, $event.pointerType)"
+            />
+          </template>
+        </div>
+        <button
+          type="button"
+          class="grid-slice-item preview"
+          data-testid="preview-entry"
+          @click="pickPreview"
+        >
+          预览切分效果…
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -155,8 +253,38 @@ onUnmounted(() => {
   cursor: not-allowed;
   opacity: 0.45;
 }
-.grid-slice-menu {
-  min-width: 100%;
+/* 实底背景：随浮层 counter-scale 后保持恒定尺寸，杜绝图片透出混叠 */
+.grid-slice-solid {
+  min-width: 200px;
+  background: var(--neo-chrome-bg);
+  box-shadow: var(--neo-chrome-shadow);
+}
+.grid-slice-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+}
+.grid-slice-panel-custom {
+  margin-left: 0.5rem;
+  padding-left: 0.6rem;
+  border-left: 1px solid color-mix(in srgb, var(--neo-text) 12%, transparent);
+}
+.grid-slice-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 2px 2px 6px;
+}
+.grid-slice-panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--neo-text);
+}
+.grid-slice-readout {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--neo-accent, #5b8def);
 }
 .grid-cell {
   width: 22px;
@@ -170,13 +298,9 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--neo-accent, #5b8def) 28%, transparent);
   border-color: var(--neo-accent, #5b8def);
 }
-.grid-cell.preset {
-  border-style: dashed;
-}
-.grid-slice-label {
-  margin: 6px 2px 2px;
-  font-size: 11px;
-  color: var(--neo-text);
+.grid-cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
 }
 .grid-slice-item {
   display: block;
@@ -187,13 +311,27 @@ onUnmounted(() => {
   line-height: 1.25;
   color: var(--neo-text);
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
-.grid-slice-item:hover {
+.grid-slice-item:hover:not(:disabled) {
   background: color-mix(in srgb, var(--neo-text) 8%, transparent);
+}
+.grid-slice-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 .grid-slice-item.custom {
   margin-top: 0.15rem;
   border-top: 1px solid color-mix(in srgb, var(--neo-text) 12%, transparent);
   padding-top: 0.4rem;
+}
+.grid-slice-item.custom[data-active='true'] {
+  background: color-mix(in srgb, var(--neo-accent, #5b8def) 14%, transparent);
+}
+.grid-slice-item.preview {
+  margin-top: 0.4rem;
+  border-top: 1px solid color-mix(in srgb, var(--neo-text) 12%, transparent);
+  padding-top: 0.4rem;
+  color: color-mix(in srgb, var(--neo-text) 72%, transparent);
 }
 </style>

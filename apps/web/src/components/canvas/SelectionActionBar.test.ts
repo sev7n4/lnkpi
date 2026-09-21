@@ -28,6 +28,7 @@ describe('SelectionActionBar', () => {
   it('forwards grid picker slice(cols, rows)', async () => {
     const wrapper = mountBar()
     await wrapper.get('button').trigger('click')
+    await wrapper.get('[data-testid="custom-toggle"]').trigger('pointerenter', { pointerType: 'mouse' })
     await wrapper.get('[data-cell="3-2"]').trigger('pointerenter', { pointerType: 'mouse' })
     await wrapper.get('[data-cell="3-2"]').trigger('click')
     expect(wrapper.emitted('slice')).toEqual([[3, 2]])
