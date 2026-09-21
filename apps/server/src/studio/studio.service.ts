@@ -1374,6 +1374,7 @@ export class StudioService {
       userPrompt: input.prompt,
       imageUrl: input.imageUrl,
       maskUrl: input.maskUrl,
+      sizeOverride: input.size,
     })
     const outpaintMeta =
       editMode === 'outpaint'
