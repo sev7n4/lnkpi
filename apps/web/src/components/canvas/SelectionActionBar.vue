@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
 import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.vue'
+import { buildSelectionTools, clampCounterScale, resolveBarPlacement, type SelectionToolDef } from './selectionToolModel'
 
 /**
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
- * 随 VueFlow viewport 缩放/平移，避免屏幕坐标贴 bbox 在缩放时错位。
+ * 随 VueFlow viewport 缩放/平移；浮层本体做 counter-scale，
+ * 使其在屏幕上保持恒定尺寸，不再被 viewport zoom 拉伸。
  */
 interface ActionBarNode {
   id: string
@@ -20,7 +22,7 @@ const props = defineProps<{
   gridSliceLoading?: boolean
   gridSliceDisabled?: boolean
   gridSliceDisabledTitle?: string
-  /** 文件组（下载/存库）是否渲染：节点有可访问的 url 时为真 */
+  /** 文件组（下载/存库）是否可用：节点有可访问的 url 时为真 */
   hasUrl?: boolean
   /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
   zoom?: number
@@ -36,7 +38,21 @@ const emit = defineEmits<{
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 
+/** bar 与节点边缘的屏幕间距（px） */
+const BAR_GAP_PX = 8
+
+const tools = computed(() => buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }))
+
+function onToolClick(tool: SelectionToolDef) {
+  if (tool.disabled) return
+  if (tool.id === 'refine') emit('edit')
+  else if (tool.id === 'download') emit('download')
+  else if (tool.id === 'save-asset') emit('save-asset')
+}
+
 const flowPos = ref<{ x: number; y: number } | null>(null)
+const placement = ref<'top' | 'bottom'>('top')
+const barEl = ref<HTMLElement | null>(null)
 
 function updatePosition() {
   const allNodes = flowNodes.value as unknown as FlowNode[]
@@ -44,10 +60,30 @@ function updatePosition() {
   const type = String(props.node.type ?? '')
   const sizeNode = flowNode ?? ({ ...props.node, type } as FlowNode)
   const abs = getAbsolutePosition(sizeNode, allNodes)
-  const { w } = getNodeSize(sizeNode)
+  const { w, h } = getNodeSize(sizeNode)
+  const zoom = props.zoom ?? viewport.value.zoom
+  const cs = clampCounterScale(zoom)
+  // bar 屏幕尺寸 = 布局尺寸（节点坐标系）× zoom × counter-scale
+  const barW = (barEl.value?.offsetWidth ?? 0) * zoom * cs
+  const barH = (barEl.value?.offsetHeight ?? 0) * zoom * cs
+  const anchorX = viewport.value.x + (abs.x + w / 2) * zoom
+  const nodeTopY = viewport.value.y + abs.y * zoom
+  const barBox = {
+    x: anchorX - barW / 2,
+    y: nodeTopY - BAR_GAP_PX - barH,
+    w: barW,
+    h: barH,
+  }
+  placement.value = resolveBarPlacement(barBox, { x: 0, y: 0, w: window.innerWidth, h: window.innerHeight })
+  // 屏幕间距恒定 → 节点坐标系间距 = GAP / zoom
+  const gapNode = BAR_GAP_PX / zoom
   flowPos.value = {
     x: abs.x + w / 2,
-    y: abs.y - 44,
+    y: placement.value === 'top' ? abs.y - gapNode : abs.y + h + gapNode,
+  }
+  if (!barEl.value) {
+    // 首帧 bar 尚未渲染（尺寸为 0），下一帧补测并复核翻转
+    scheduleUpdate()
   }
 }
 
@@ -66,6 +102,12 @@ watch(
 )
 watch(viewport, scheduleUpdate, { deep: true })
 watch(flowNodes, scheduleUpdate, { deep: true })
+watch(
+  () => [props.gridSlice, props.hasUrl],
+  () => {
+    nextTick(scheduleUpdate)
+  },
+)
 
 onMounted(() => {
   scheduleUpdate()
@@ -88,11 +130,28 @@ const barStyle = computed(() => {
     left: `${flowPos.value.x}px`,
     top: `${flowPos.value.y}px`,
     width: 'max-content',
-    transform: 'translate(-50%, 0)',
+    transform: placement.value === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
   }
 })
 
-const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
+const counterScaleStyle = computed(() => ({
+  transform: `scale(${clampCounterScale(effectiveZoom.value)})`,
+  transformOrigin: placement.value === 'top' ? '50% 100%' : '50% 0%',
+}))
+
+const labelsHidden = computed(() => effectiveZoom.value < 0.5)
+
+/** 生效缩放：优先外部传入的 zoom prop（无响应式 viewport 源的宿主） */
+const effectiveZoom = computed(() => props.zoom ?? viewport.value.zoom)
+
+const TOOL_ICONS: Record<string, string> = {
+  refine: '<path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />',
+  matting: '<circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.12 15.88" /><path d="M14.47 14.48L20 20" /><path d="M8.12 8.12L12 12" />',
+  crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" />',
+  rotate: '<path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />',
+  'save-asset': '<rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 8v8" /><path d="M8 12h8" />',
+}
 </script>
 
 <template>
@@ -101,10 +160,12 @@ const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
     class="selection-action-bar-layer pointer-events-none absolute inset-0 z-[46] overflow-visible"
   >
     <div class="origin-top-left" :style="transformStyle">
-      <div class="pointer-events-auto absolute" :style="barStyle">
+      <div ref="barEl" class="pointer-events-auto absolute" :style="barStyle">
         <div
+          data-testid="bar-inner"
           class="neo-chrome flex items-center gap-0.5 rounded-xl px-1.5 py-1"
           :class="{ 'labels-hidden': labelsHidden }"
+          :style="counterScaleStyle"
           @click.stop
         >
           <!-- 切分组 -->
@@ -118,53 +179,38 @@ const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
           />
           <span v-if="gridSlice" class="mx-1 h-4 w-px bg-current opacity-10" aria-hidden="true" />
 
-          <!-- AI 一键组：抠图位预留（matting-ready，M2 点亮，注释标记，不渲染死按钮） -->
-          <button
-            type="button"
-            class="toolbar-action"
-            title="编辑图像"
-            @click="emit('edit')"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-            <span class="label">编辑</span>
-          </button>
-
-          <span class="mx-1 h-4 w-px bg-current opacity-10" aria-hidden="true" />
-
-          <!-- 文件组：纯图标 + tooltip -->
-          <button
-            v-if="hasUrl"
-            type="button"
-            class="toolbar-action icon-only"
-            title="下载图片"
-            aria-label="下载图片"
-            data-action="download"
-            @click="emit('download')"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <path d="M7 10l5 5 5-5" />
-              <path d="M12 15V3" />
-            </svg>
-          </button>
-          <button
-            v-if="hasUrl"
-            type="button"
-            class="toolbar-action icon-only"
-            title="存入资产库"
-            aria-label="存入资产库"
-            data-action="save-asset"
-            @click="emit('save-asset')"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M12 8v8" />
-              <path d="M8 12h8" />
-            </svg>
-          </button>
+          <!-- 快捷工具组（config 驱动）：精修可用，其余为禁用占位，后续翻标志点亮 -->
+          <template v-for="(tool, index) in tools" :key="tool.id">
+            <span
+              v-if="index > 0 && tools[index - 1].group !== tool.group"
+              class="mx-1 h-4 w-px bg-current opacity-10"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              class="toolbar-action"
+              :class="{ 'icon-only': tool.group === 'file' }"
+              :data-action="tool.id"
+              :title="tool.disabled ? (tool.disabledReason ?? tool.title) : tool.title"
+              :aria-label="tool.title"
+              :disabled="tool.disabled"
+              @click="onToolClick(tool)"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                v-html="TOOL_ICONS[tool.icon]"
+              />
+              <span class="label">{{ tool.title }}</span>
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -187,10 +233,6 @@ const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
 .toolbar-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--neo-text) 8%, transparent);
 }
-.toolbar-action.accent {
-  color: var(--neo-accent, #5b8def);
-  font-weight: 600;
-}
 .toolbar-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -202,15 +244,5 @@ const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
 /* 视口缩放 < 0.5 时隐藏文字标签，仅留图标（缩放是 transform，@media 不适用） */
 .labels-hidden .label {
   display: none;
-}
-/* 放大积分角标：M1 不渲染（creditHint 未传），仅预留样式 */
-.credit-chip {
-  margin-left: 0.25rem;
-  padding: 0 0.3rem;
-  font-size: 10px;
-  line-height: 1.4;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--neo-accent, #5b8def) 18%, transparent);
-  color: var(--neo-accent, #5b8def);
 }
 </style>
