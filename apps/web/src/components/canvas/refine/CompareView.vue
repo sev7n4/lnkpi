@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+
+defineOptions({ name: 'CompareView' })
 import type { CompareMode } from '@/utils/refineChrome'
 import { clampWipeRatio } from '@/utils/refineChrome'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'

@@ -3,6 +3,7 @@ import { ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
+import { clampWipeRatio, type CompareMode } from '@/utils/refineChrome'
 
 export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
 export type RefineMaskOp = 'add' | 'subtract'
@@ -36,6 +37,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const previewTarget = ref<MediaPreviewTarget | null>(null)
   const refineBusy = ref(false)
   const compareLightboxOpen = ref(false)
+  /** 精修对照方式。左栏工具条与右栏对照带都读它，所以归属 store（spec P1-7）。 */
+  const refineCompareMode = ref<CompareMode>('split')
+  /** 滑竿对照的分割线位置，0..1 */
+  const refineWipeRatio = ref(0.5)
   const refineTool = ref<RefineMaskTool>('brush')
   const refineBrushSize = ref(24)
   const refineCoverage = ref(0)
@@ -50,6 +55,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
 
   function resetRefineChromeState() {
     compareLightboxOpen.value = false
+    refineCompareMode.value = 'split'
+    refineWipeRatio.value = 0.5
     refineTool.value = 'brush'
     refineBrushSize.value = 24
     refineCoverage.value = 0
@@ -81,6 +88,14 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
 
   function setCompareLightboxOpen(open: boolean) {
     compareLightboxOpen.value = open
+  }
+
+  function setRefineCompareMode(mode: CompareMode) {
+    refineCompareMode.value = mode
+  }
+
+  function setRefineWipeRatio(ratio: number) {
+    refineWipeRatio.value = clampWipeRatio(ratio)
   }
 
   function registerRefineMask(handle: RefineMaskHandle | null) {
@@ -133,6 +148,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     imageTarget,
     refineBusy,
     compareLightboxOpen,
+    refineCompareMode,
+    refineWipeRatio,
     refineTool,
     refineBrushSize,
     refineCoverage,
@@ -147,6 +164,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     closeImageEditor,
     setRefineBusy,
     setCompareLightboxOpen,
+    setRefineCompareMode,
+    setRefineWipeRatio,
     registerRefineMask,
     getRefineMask,
     setRefineLoupe,

@@ -1,0 +1,60 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createPinia, getActivePinia, setActivePinia, type Pinia } from 'pinia'
+import RefineCompareBand from './RefineCompareBand.vue'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
+
+const mountBand = (props: { beforeUrl: string; afterUrl?: string } = { beforeUrl: 'blob:before' }) => {
+  // R8: share the single active pinia with the mounted component so the test's
+  // useCanvasEditorStore() reads the same store instance the component uses.
+  const pinia = getActivePinia() as Pinia
+  return mount(RefineCompareBand, { props, global: { plugins: [pinia] } })
+}
+
+describe('RefineCompareBand', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('顶部固定带：标题 + 默认态说明 + 去全屏按钮', () => {
+    const w = mountBand()
+    expect(w.find('[data-testid="refine-compare-band"]').exists()).toBe(true)
+    expect(w.text()).toContain('对照预览')
+    expect(w.text()).toContain('默认左右')
+    expect(w.find('[data-testid="compare-band-maximize"]').exists()).toBe(true)
+  })
+
+  it('去全屏按钮切换 store 的 compareLightboxOpen', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountBand()
+    await w.find('[data-testid="compare-band-maximize"]').trigger('click')
+    expect(store.compareLightboxOpen).toBe(true)
+    await w.find('[data-testid="compare-band-maximize"]').trigger('click')
+    expect(store.compareLightboxOpen).toBe(false)
+  })
+
+  it('不再有左右 / 滑竿两枚模式按钮（默认态即唯一态）', () => {
+    const w = mountBand()
+    expect(w.find('[title="左右对照"]').exists()).toBe(false)
+    expect(w.find('[title="重叠滑竿"]').exists()).toBe(false)
+  })
+
+  it('不再有放大镜按钮及其子控件', () => {
+    const w = mountBand()
+    expect(w.find('[title="放大镜"]').exists()).toBe(false)
+    expect(w.find('[title="圆形放大区"]').exists()).toBe(false)
+    expect(w.find('[title="矩形放大区"]').exists()).toBe(false)
+    expect(w.find('[title="放大镜倍数"]').exists()).toBe(false)
+  })
+
+  it('预览本体锁定左右对照：即使 store 里是对滑竿，CompareView 仍收到 split', () => {
+    const store = useCanvasEditorStore()
+    store.setRefineCompareMode('wipe')
+    const w = mountBand({ beforeUrl: 'blob:before', afterUrl: 'blob:after' })
+    const compareView = w.findComponent({ name: 'CompareView' })
+    expect(compareView.exists()).toBe(true)
+    expect(compareView.props('mode')).toBe('split')
+    expect(compareView.props('beforeUrl')).toBe('blob:before')
+    expect(compareView.props('afterUrl')).toBe('blob:after')
+  })
+})

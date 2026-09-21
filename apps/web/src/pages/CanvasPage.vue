@@ -61,6 +61,7 @@ import NodePanelDock from '@/components/canvas/NodePanelDock.vue'
 import DockStudioToolbar from '@/components/canvas/DockStudioToolbar.vue'
 import CanvasFloatingChrome from '@/components/canvas/CanvasFloatingChrome.vue'
 import CanvasAccountChrome from '@/components/canvas/CanvasAccountChrome.vue'
+import RefineCanvasBack from '@/components/canvas/RefineCanvasBack.vue'
 import MembershipModal from '@/components/membership/MembershipModal.vue'
 import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftControls.vue'
 import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
@@ -69,6 +70,7 @@ import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
 import { decideAgentOpenWhileRefine, shouldApplyRefineToNode } from '@/utils/refineChrome'
+import { shouldHideCanvasChrome } from '@/utils/canvasChromeVisibility'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
 import type { StudioModality } from '@/constants/studioModels'
@@ -763,6 +765,14 @@ const refinePanelNode = computed((): EditableFlowNode | null => {
   if (!target) return null
   return findNodeById(target.nodeId)
 })
+
+/** 精修 / 宫格切分工作台打开时，画布级 chrome 全部让位（spec §7） */
+const canvasChromeHidden = computed(() =>
+  shouldHideCanvasChrome({
+    refineOpen: !!refinePanelNode.value,
+    gridSliceOpen: !!gridSlicePanelNode.value,
+  }),
+)
 
 /** 单选 + 可放大图像节点时显示选中浮层（多选不出现） */
 const selectionUpscaleNode = computed((): EditableFlowNode | null => {
@@ -3891,12 +3901,20 @@ onUnmounted(() => {
           @done="pickMode.deactivate()"
         />
         <CanvasFloatingChrome
+          v-if="!canvasChromeHidden"
           :title="sessionTitle"
           :saving="saving"
           @update:title="sessionTitle = $event"
           @save="saveCanvas"
           @storyboard="showStoryboard = true"
           @publish="openPublish"
+        />
+
+        <RefineCanvasBack
+          v-if="refinePanelNode"
+          class="absolute left-3 top-3 z-[50]"
+          :disabled="canvasEditor.refineBusy"
+          @back="closeRefineWorkbench"
         />
 
         <VueFlow
@@ -4081,6 +4099,7 @@ onUnmounted(() => {
         />
 
         <NodePanelDock
+          v-if="!canvasChromeHidden"
           @add="handleDockAdd"
           @open-settings="showModelSettings = true"
           @asset-apply="handleAssetApply"
@@ -4089,7 +4108,7 @@ onUnmounted(() => {
           @history-retry="handleHistoryRetry"
         />
 
-        <div class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
+        <div v-if="!canvasChromeHidden" class="pointer-events-none absolute right-3 top-3 z-[50] flex items-center gap-2">
           <button
             type="button"
             class="canvas-theme-toggle neo-chrome pointer-events-auto flex h-9 items-center justify-center rounded-xl px-3 text-xs transition"
