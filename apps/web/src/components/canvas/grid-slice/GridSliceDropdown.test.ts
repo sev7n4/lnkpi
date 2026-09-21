@@ -115,6 +115,10 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
     await wrapper.setProps({ disabled: false, loading: true })
     await wrapper.get('button').trigger('click')
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    // 请求级 loading 文案钉死（单请求，无 n/N 进度）
+    expect(wrapper.get('button').text()).toContain('切分中')
+    expect(wrapper.get('button').text()).toContain('大图约需数十秒')
+    expect(wrapper.get('button').attributes('title')).toContain('大图约需数十秒')
     wrapper.unmount()
   })
 })

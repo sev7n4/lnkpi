@@ -42,10 +42,14 @@ const blocked = computed(() => props.disabled || props.loading)
 
 const presetOptions = computed(() => gridSlicePresetOptions())
 
-const triggerLabel = computed(() => (props.loading ? '切分中…' : '宫格切分 ▾'))
+const GRID_SLICE_LOADING_TEXT = '切分中 · 大图约需数十秒'
+
+const triggerLabel = computed(() =>
+  props.loading ? GRID_SLICE_LOADING_TEXT : '宫格切分 ▾',
+)
 
 const triggerTitle = computed(() => {
-  if (props.loading) return '切分中…'
+  if (props.loading) return GRID_SLICE_LOADING_TEXT
   if (props.disabled) return props.disabledTitle || '当前图片不可切分'
   return '宫格切分'
 })

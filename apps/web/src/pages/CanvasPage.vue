@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, type Ref } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, h, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
@@ -822,7 +822,7 @@ const gridSliceImageSize = computed(() => {
 })
 
 const gridSliceDisabledTitle = computed(() => {
-  if (gridSliceBusy.value) return '裁剪中…'
+  if (gridSliceBusy.value) return '切分中 · 大图约需数十秒'
   const node = selectionGridSliceNode.value
   if (!node) return '当前图片不可裁剪'
   const data = (node.data ?? {}) as Record<string, unknown>
@@ -2858,6 +2858,60 @@ function selectNodeIds(ids: string[]) {
   selectedNodeId.value = ids[0]
 }
 
+/** 撤回切分：移除单个切片子节点及其关联边（纯前端状态操作，不调后端） */
+function removeSliceChildNode(id: string) {
+  if (!findNodeById(id)) return
+  nodes.value = nodes.value.filter((entry) => entry.id !== id)
+  edges.value = edges.value.filter((edge) => edge.source !== id && edge.target !== id)
+  if (multiSelectedIds.value.includes(id)) {
+    const rest = multiSelectedIds.value.filter((v) => v !== id)
+    multiSelectedIds.value = rest
+    if (selectedNodeId.value === id) {
+      if (rest.length === 1) selectOnlyNode(rest[0]!)
+      else clearSelection()
+    }
+  }
+  persistUserEdit()
+}
+
+/** 切分结果提示：无 action 走普通 success，有 action 用 VNode 挂「撤回本次切分」按钮 */
+function showSliceResultToast(msg: string, actions?: Array<{ label: string; onClick: () => void }>) {
+  if (!actions?.length) {
+    ElMessage.success(msg)
+    return
+  }
+  let toast: { close: () => void } | null = null
+  toast = ElMessage.success({
+    message: h('span', { class: 'grid-slice-toast' }, [
+      h('span', null, msg),
+      ...actions.map((action) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            style: {
+              marginLeft: '10px',
+              padding: '0',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--el-color-primary)',
+              font: 'inherit',
+              cursor: 'pointer',
+            },
+            onClick: () => {
+              toast?.close()
+              action.onClick()
+            },
+          },
+          action.label,
+        ),
+      ),
+    ]),
+    duration: 6000,
+    showClose: true,
+  })
+}
+
 async function executeGridSlice(node: EditableFlowNode, cols: number, rows: number) {
   const data = (node.data ?? {}) as Record<string, unknown>
   const sourceUrl = String(data.url ?? '').trim()
@@ -2885,8 +2939,10 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
         ),
       addEdge,
       layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds, dims.cols),
+      getNode: (id) => findNodeById(id) ?? undefined,
+      removeNode: removeSliceChildNode,
+      notify: showSliceResultToast,
     })
-    ElMessage.success(`已裁剪为 ${result.nodeIds.length} 张`)
     selectNodeIds(result.nodeIds)
     void persistUserEditAsync()
     return result
