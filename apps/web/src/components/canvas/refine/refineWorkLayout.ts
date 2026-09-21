@@ -28,6 +28,15 @@ export function containRect(
   }
 }
 
+/**
+ * 原始比例 1:1 的缩放系数：按图片像素对显示宽度的倍率，夹在 1–8 之间。
+ * 抽成纯函数便于单测（jsdom 无真实布局，film.width 常为 0，组件内退化成 1）。
+ */
+export function oneToOneScaleOf(imgW: number, filmW: number): number {
+  if (filmW <= 0 || imgW <= 0) return 1
+  return Math.min(8, Math.max(1, imgW / filmW))
+}
+
 export function clampLoupeZoom(n: number): number {
   if (!Number.isFinite(n)) return 2.5
   return Math.min(6, Math.max(1.5, n))

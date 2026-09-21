@@ -4,8 +4,10 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
+import RefineModeBar from './RefineModeBar.vue'
+import RefineToolRail from './RefineToolRail.vue'
 import { dispatchRefinePointSelect } from './maskRemote'
-import { containRect } from './refineWorkLayout'
+import { containRect, oneToOneScaleOf } from './refineWorkLayout'
 
 const props = defineProps<{
   url: string
@@ -42,10 +44,7 @@ const filmStyle = computed(() => ({
   height: `${film.value.height}px`,
 }))
 
-const oneToOneScale = computed(() => {
-  if (film.value.width <= 0 || imgW.value <= 0) return 1
-  return Math.min(8, Math.max(1, imgW.value / film.value.width))
-})
+const oneToOneScale = computed(() => oneToOneScaleOf(imgW.value, film.value.width))
 
 function measure() {
   const el = stageRef.value
@@ -158,8 +157,10 @@ watch([maskRef], async () => {
 
 onMounted(() => {
   measure()
-  ro = new ResizeObserver(() => measure())
-  if (stageRef.value) ro.observe(stageRef.value)
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver(() => measure())
+    if (stageRef.value) ro.observe(stageRef.value)
+  }
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
 })
@@ -175,44 +176,42 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="refine-work" :style="{ right: `${insetRight}px` }">
-    <header class="refine-work__bar">
-      <span>工作图</span>
-      <span class="refine-work__hint">滚轮缩放 · 空格拖移</span>
-      <button type="button" class="refine-work__btn" title="适应窗口" @click="resetView">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75">
-          <rect x="4" y="5" width="16" height="14" rx="2" />
-          <path stroke-linecap="round" d="M9 12h6M12 9v6" />
-        </svg>
-      </button>
-      <button type="button" class="refine-work__btn" title="原始比例 1:1" @click="zoomOneToOne">1:1</button>
-    </header>
-    <div
-      ref="stageRef"
-      class="refine-work__stage"
-      :class="{ 'is-pan': spaceDown }"
-      @wheel.prevent="onWheel"
-      @pointerdown="onPointerDown"
-    >
-      <div class="refine-work__world" :style="worldStyle">
-        <div class="refine-work__film" :style="filmStyle">
-          <ImageLoupe :src="url" :active="editor.refineLoupeOn" :shape="editor.refineLoupeShape" :zoom="editor.refineLoupeZoom">
-            <img class="refine-work__img" :src="url" alt="" draggable="false">
-            <MaskEditor
-              ref="maskRef"
-              surface="node"
-              :url="url"
-              :width="imgW || undefined"
-              :height="imgH || undefined"
-              :tool="editor.refineTool"
-              :brush-size="editor.refineBrushSize"
-              :color="editor.refineBrushColor"
-              :wand-tolerance="editor.refineWandTolerance"
-              :mask-op="editor.refineMaskOp"
-              :disabled="editor.refineBusy || spaceDown"
-              @coverage="(p) => { editor.refineCoverage = p.ratio }"
-              @point-select="dispatchRefinePointSelect"
-            />
-          </ImageLoupe>
+    <!-- 左栏：输入工具（产出选区 / 蒙版）+ 查看工具（只看不改） -->
+    <div class="refine-work__rail">
+      <RefineToolRail @fit="resetView" @actual-size="zoomOneToOne" />
+    </div>
+
+    <div class="refine-work__col">
+      <RefineModeBar />
+      <div
+        ref="stageRef"
+        class="refine-work__stage"
+        :class="{ 'is-pan': spaceDown }"
+        title="滚轮缩放 · 空格拖动平移"
+        @wheel.prevent="onWheel"
+        @pointerdown="onPointerDown"
+      >
+        <div class="refine-work__world" :style="worldStyle">
+          <div class="refine-work__film" :style="filmStyle">
+            <ImageLoupe :src="url" :active="editor.refineLoupeOn" :shape="editor.refineLoupeShape" :zoom="editor.refineLoupeZoom">
+              <img class="refine-work__img" :src="url" alt="" draggable="false">
+              <MaskEditor
+                ref="maskRef"
+                surface="node"
+                :url="url"
+                :width="imgW || undefined"
+                :height="imgH || undefined"
+                :tool="editor.refineTool"
+                :brush-size="editor.refineBrushSize"
+                :color="editor.refineBrushColor"
+                :wand-tolerance="editor.refineWandTolerance"
+                :mask-op="editor.refineMaskOp"
+                :disabled="editor.refineBusy || spaceDown"
+                @coverage="(p) => { editor.refineCoverage = p.ratio }"
+                @point-select="dispatchRefinePointSelect"
+              />
+            </ImageLoupe>
+          </div>
         </div>
       </div>
     </div>
@@ -226,39 +225,20 @@ onBeforeUnmount(() => {
   z-index: 40;
   display: flex;
   min-width: 0;
-  flex-direction: column;
   background: rgba(8, 8, 8, 0.72);
   backdrop-filter: blur(8px);
 }
 
-.refine-work__bar {
+.refine-work__rail {
+  position: relative;
+  z-index: 1;
+}
+
+.refine-work__col {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  color: var(--neo-text-secondary);
-  font-size: 12px;
-}
-
-.refine-work__hint {
+  min-width: 0;
   flex: 1;
-  color: var(--neo-text-muted);
-  font-size: 11px;
-}
-
-.refine-work__btn {
-  display: inline-flex;
-  height: 24px;
-  min-width: 24px;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  border: 1px solid var(--neo-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--neo-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
+  flex-direction: column;
 }
 
 .refine-work__stage {
