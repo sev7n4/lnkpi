@@ -11,6 +11,7 @@ import { ImageSliceService } from './image-slice.service'
 import { StudioService } from './studio.service'
 import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
 import { resolveVideoStartRequest, type VideoStartBody } from './video-generation-request.util'
+import { IMAGE2_EDIT_SIZES, IMAGE_EDIT_MODEL_KEYS } from '@lnkpi/shared'
 import type { CanvasData } from '@lnkpi/shared'
 
 class StudioRefDto {
@@ -251,6 +252,18 @@ class ImageEditDto extends CanvasScopeFields {
   maskUrl!: string
 
   @IsOptional()
+  @IsIn([...IMAGE_EDIT_MODEL_KEYS])
+  model?: string
+
+  @IsOptional()
+  @IsIn([...IMAGE2_EDIT_SIZES])
+  size?: string
+
+  @IsOptional()
+  @IsIn(['inpaint', 'outpaint'])
+  mode?: 'inpaint' | 'outpaint'
+
+  @IsOptional()
   @IsString()
   parentRecordId?: string
 
@@ -392,6 +405,9 @@ export class StudioController {
         prompt: dto.prompt,
         imageUrl: dto.imageUrl,
         maskUrl: dto.maskUrl,
+        model: dto.model,
+        size: dto.size,
+        mode: dto.mode,
         sessionId: dto.sessionId,
         nodeId: dto.nodeId,
         parentRecordId: dto.parentRecordId,
