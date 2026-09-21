@@ -16,8 +16,6 @@ interface ActionBarNode {
 
 const props = defineProps<{
   node: ActionBarNode
-  imageUpscale: boolean
-  loading?: boolean
   gridSlice?: boolean
   gridSliceLoading?: boolean
   gridSliceDisabled?: boolean
@@ -26,12 +24,9 @@ const props = defineProps<{
   hasUrl?: boolean
   /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
   zoom?: number
-  /** 放大积分角标文案；M1 不传（积分体系接入后填入，M3 落地），仅预留样式 */
-  creditHint?: string
 }>()
 
 const emit = defineEmits<{
-  upscale: []
   edit: []
   slice: [cols: number, rows: number]
   'open-custom': []
@@ -98,18 +93,6 @@ const barStyle = computed(() => {
 })
 
 const labelsHidden = computed(() => (props.zoom ?? viewport.value.zoom) < 0.5)
-
-const upscaleDisabled = computed(() => !props.imageUpscale || Boolean(props.loading))
-const upscaleTitle = computed(() => {
-  if (props.loading) return '放大中…'
-  if (!props.imageUpscale) return '当前环境未启用图像放大'
-  return '放大 2×'
-})
-
-function onUpscale() {
-  if (upscaleDisabled.value) return
-  emit('upscale')
-}
 </script>
 
 <template>
@@ -136,22 +119,6 @@ function onUpscale() {
           <span v-if="gridSlice" class="mx-1 h-4 w-px bg-current opacity-10" aria-hidden="true" />
 
           <!-- AI 一键组：抠图位预留（matting-ready，M2 点亮，注释标记，不渲染死按钮） -->
-          <button
-            type="button"
-            class="toolbar-action accent"
-            :disabled="upscaleDisabled"
-            :title="upscaleTitle"
-            @click="onUpscale"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M15 3h6v6" />
-              <path d="M9 21H3v-6" />
-              <path d="M21 3l-7 7" />
-              <path d="M3 21l7-7" />
-            </svg>
-            <span class="label">放大</span>
-            <span v-if="creditHint" class="credit-chip">{{ creditHint }}</span>
-          </button>
           <button
             type="button"
             class="toolbar-action"

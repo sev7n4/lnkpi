@@ -139,11 +139,8 @@ import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
 import GridSliceWorkbench from '@/components/canvas/grid-slice/GridSliceWorkbench.vue'
-import { useImageUpscale } from '@/composables/useImageUpscale'
 import { runGridSlice } from '@/composables/useGridSlice'
 import { clampGridDims, GRID_SLICE_LAYOUT_GAP, layoutSliceChildPositions } from '@/utils/gridSlice'
-import { useCapabilities } from '@/composables/useCapabilities'
-import { canUpscaleNode } from '@/utils/upscaleNode'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 import { resolveMediaUrl } from '@/services/api-base'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -750,8 +747,6 @@ const editorNode = computed((): EditableFlowNode | null => {
   return null
 })
 
-const { imageUpscale: imageUpscaleCapability } = useCapabilities()
-const { loading: upscaleLoading, runUpscale } = useImageUpscale()
 const gridSliceBusy = ref(false)
 const gridSlicePanelNodeId = ref<string | null>(null)
 
@@ -776,8 +771,8 @@ const canvasChromeHidden = computed(() =>
   }),
 )
 
-/** 单选 + 可放大图像节点时显示选中浮层（多选不出现） */
-const selectionUpscaleNode = computed((): EditableFlowNode | null => {
+/** 单选 + 可操作图像节点时显示选中浮层（多选不出现） */
+const selectionActionBarNode = computed((): EditableFlowNode | null => {
   if (refinePanelNode.value || gridSlicePanelNode.value) return null
   if (multiSelectedIds.value.length !== 1) return null
   const node = findNodeById(multiSelectedIds.value[0])
@@ -785,7 +780,7 @@ const selectionUpscaleNode = computed((): EditableFlowNode | null => {
   const data = (node.data ?? {}) as Record<string, unknown>
   if (!String(data.url ?? '').trim()) return null
   if (
-    !canUpscaleNode({
+    !canOpenRefineForNode({
       type: String(node.type ?? ''),
       mediaKind: typeof data.mediaKind === 'string' ? data.mediaKind : null,
       mimeType: typeof data.mimeType === 'string' ? data.mimeType : null,
@@ -2819,56 +2814,6 @@ function openRefineForSelected() {
   openRefineForNode(editorNode.value)
 }
 
-async function handleUpscaleForNode(nodeId: string) {
-  if (!imageUpscaleCapability.value || upscaleLoading.value) return
-  const node = findNodeById(nodeId)
-  if (!node) return
-  const data = (node.data ?? {}) as Record<string, unknown>
-  const imageUrl = String(data.url ?? '').trim()
-  if (!imageUrl) return
-
-  try {
-    await runUpscale({
-      sessionId: sessionId.value,
-      nodeId: node.id,
-      imageUrl,
-      scale: 2,
-      onSuccess: ({ url }) => {
-        const { w } = getNodeSize(node as FlowNode)
-        const childId = addNode(
-          'image',
-          {
-            url,
-            status: 'completed',
-            title: '放大 2×',
-            prompt: '',
-            imageModel: getProviderConfig('image').model,
-          },
-          {
-            position: { x: node.position.x + w + 36, y: node.position.y },
-          },
-        )
-        addEdge({
-          id: `e-${node.id}-${childId}`,
-          source: node.id,
-          target: childId,
-        })
-        selectOnlyNode(childId)
-        void persistUserEditAsync()
-        void focusNodeById(childId)
-      },
-    })
-  } catch (err) {
-    ElMessage.error(apiErrorMessage(err, '放大失败'))
-  }
-}
-
-function handleSelectionUpscale() {
-  const node = selectionUpscaleNode.value
-  if (!node) return
-  void handleUpscaleForNode(node.id)
-}
-
 function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[], cols: number) {
   const { w: sourceW } = getNodeSize(source as FlowNode)
   const origin = {
@@ -3354,11 +3299,6 @@ function handleContextAction(action: string) {
 
   if (action === 'edit-image' && menu.nodeId) {
     openRefineForNode(findNodeById(menu.nodeId))
-    return
-  }
-
-  if (action === 'upscale-image' && menu.nodeId) {
-    void handleUpscaleForNode(menu.nodeId)
     return
   }
 
@@ -4020,21 +3960,18 @@ onUnmounted(() => {
             @stop="handleSelectionBatchStop"
           />
           <SelectionActionBar
-            v-if="selectionUpscaleNode"
-            :node="selectionUpscaleNode as FlowNode"
-            :image-upscale="imageUpscaleCapability"
-            :loading="upscaleLoading"
+            v-if="selectionActionBarNode"
+            :node="selectionActionBarNode as FlowNode"
             :grid-slice="Boolean(selectionGridSliceNode)"
             :grid-slice-loading="gridSliceBusy"
             :grid-slice-disabled="gridSliceEntryDisabled"
             :grid-slice-disabled-title="gridSliceDisabledTitle"
-            :has-url="Boolean(selectionUpscaleNode?.data?.url)"
-            @upscale="handleSelectionUpscale"
+            :has-url="Boolean(selectionActionBarNode?.data?.url)"
             @edit="openRefineForSelected"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
-            @download="selectionUpscaleNode && downloadNodeImage(selectionUpscaleNode.id)"
-            @save-asset="selectionUpscaleNode && saveNodeAsset(selectionUpscaleNode.id)"
+            @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"
+            @save-asset="selectionActionBarNode && saveNodeAsset(selectionActionBarNode.id)"
           />
 
           <MultiSelectConnectOverlay
@@ -4270,7 +4207,6 @@ onUnmounted(() => {
       :has-url="contextMenu.hasUrl"
       :media-kind="contextMenu.mediaKind"
       :mime-type="contextMenu.mimeType"
-      :image-upscale="imageUpscaleCapability"
       :multi-selected-count="
         contextMenu.nodeId &&
         multiSelectedIds.includes(contextMenu.nodeId) &&

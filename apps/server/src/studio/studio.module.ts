@@ -8,7 +8,6 @@ import { UploadModule } from '../upload/upload.module'
 import { ImageSliceService } from './image-slice.service'
 import { StudioController } from './studio.controller'
 import { StudioService } from './studio.service'
-import { UpscaleService } from './upscale.service'
 import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
 
 @Module({
@@ -21,7 +20,7 @@ import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
     UploadModule,
   ],
   controllers: [StudioController],
-  providers: [StudioService, UpscaleService, VideoGenerationOrchestrator, ImageSliceService],
-  exports: [StudioService, UpscaleService, VideoGenerationOrchestrator, ImageSliceService],
+  providers: [StudioService, VideoGenerationOrchestrator, ImageSliceService],
+  exports: [StudioService, VideoGenerationOrchestrator, ImageSliceService],
 })
 export class StudioModule {}
