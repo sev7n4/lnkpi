@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
 import RefineSidePanel from './RefineSidePanel.vue'
 
 const baseProps = {
@@ -83,5 +84,10 @@ describe('RefineSidePanel 三段式', () => {
   it('右栏头部的收起钮仍在', () => {
     mountPanel()
     expect(q('.refine-side__collapse')).not.toBeNull()
+  })
+
+  it('模型 chip 显示精修通道真实模型（来自 shared，不写死）', () => {
+    mountPanel()
+    expect(q('[data-testid="dock-model-chip"]')!.textContent).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
   })
 })

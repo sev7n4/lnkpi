@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getEditIntent,
+  IMAGE_EDIT_GATEWAY_MODEL_ID,
   resolveImageEditProfile,
   type ImageVersionEntry,
 } from '@lnkpi/shared'
@@ -106,8 +107,9 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
 }
 
 const credits = computed(() => estimateImageCredits(1))
-/** 精修通道模型由服务端写死（studio.service.ts 的 P1_IMAGE_EDIT_MODEL_KEY），前端只做展示。 */
-const editModelLabel = computed(() => 'gpt-image-1')
+/** 精修通道模型由服务端写死（studio.service.ts 的 P1_IMAGE_EDIT_MODEL_KEY），前端只做展示。
+ *  展示值直接取 shared 的网关模型 id，不写死，避免与真实通道漂移。 */
+const editModelLabel = IMAGE_EDIT_GATEWAY_MODEL_ID
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)

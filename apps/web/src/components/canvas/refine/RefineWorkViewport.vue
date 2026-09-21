@@ -15,6 +15,8 @@ const props = defineProps<{
   height?: number
   /** Right inset (px) — owned by useWorkbenchPanel in the parent workbench. */
   insetRight: number
+  /** 是否已有「处理后」版本；由 RefineWorkbench 依据节点 versions 计算后下发（spec P0-4）。 */
+  hasAfter?: boolean
 }>()
 
 const editor = useCanvasEditorStore()
@@ -178,7 +180,7 @@ onBeforeUnmount(() => {
   <section class="refine-work" :style="{ right: `${insetRight}px` }">
     <!-- 左栏：输入工具（产出选区 / 蒙版）+ 查看工具（只看不改） -->
     <div class="refine-work__rail">
-      <RefineToolRail @fit="resetView" @actual-size="zoomOneToOne" />
+      <RefineToolRail :has-after="props.hasAfter ?? true" @fit="resetView" @actual-size="zoomOneToOne" />
     </div>
 
     <div class="refine-work__col">

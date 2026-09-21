@@ -1,11 +1,12 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import type { ImageVersionEntry } from '@lnkpi/shared'
 import RefineWorkViewport from './RefineWorkViewport.vue'
 import RefineSidePanel from './RefineSidePanel.vue'
 
-defineProps<{
+const props = defineProps<{
   nodeId: string
   beforeUrl: string
   versions: ImageVersionEntry[]
@@ -25,6 +26,10 @@ const emit = defineEmits<{
 }>()
 
 const editor = useCanvasEditorStore()
+
+/** 节点已产出「处理后」版本（edit 来源）时，左栏对照两项才可点（spec P0-4）。
+ *  仅依据已下发的 versions，不重复版本派生逻辑。 */
+const hasAfter = computed(() => props.versions.some((v) => v.source === 'edit'))
 
 /** Escape→close guard: mirror RefineSidePanel's requestClose, but keep the
  *  source of truth for collapsed/width in the shared composable. */
@@ -50,6 +55,7 @@ const { panelWidth, collapsed, isNarrow, insetRight, setPanelWidth, setCollapsed
     :width="width"
     :height="height"
     :inset-right="insetRight"
+    :has-after="hasAfter"
   />
   <RefineSidePanel
     :node-id="nodeId"

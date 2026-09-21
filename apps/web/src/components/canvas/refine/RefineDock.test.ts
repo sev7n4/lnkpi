@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
 import RefineDock from './RefineDock.vue'
 
 const mountDock = (props: Record<string, unknown> = {}) =>
   mount(RefineDock, {
-    props: { prompt: '', credits: 10, beforeUrl: 'blob:before', modelLabel: 'gpt-image-1', width: 1280, height: 720, ...props },
+    props: { prompt: '', credits: 10, beforeUrl: 'blob:before', modelLabel: IMAGE_EDIT_GATEWAY_MODEL_ID, width: 1280, height: 720, ...props },
     global: { stubs: { GuidePickerPopover: { template: '<div class="guide-picker-stub" />' } } },
   })
 
@@ -26,7 +27,7 @@ describe('RefineDock', () => {
 
   it('模型与尺寸是只读状态位，不是可点控件', () => {
     const w = mountDock()
-    expect(w.find('[data-testid="dock-model-chip"]').text()).toContain('gpt-image-1')
+    expect(w.find('[data-testid="dock-model-chip"]').text()).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
     expect(w.find('[data-testid="dock-size-chip"]').text()).toContain('1280×720')
     expect(w.find('[data-testid="dock-size-chip"]').element.tagName).not.toBe('BUTTON')
   })
