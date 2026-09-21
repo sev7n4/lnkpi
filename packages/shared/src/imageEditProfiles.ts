@@ -22,7 +22,7 @@ export const IMAGE2_EDIT_SIZES: readonly string[] = ['auto']
 /** image edit 模型白名单（单一真源，服务端与前端共享）。 */
 export const IMAGE_EDIT_MODEL_KEYS: readonly string[] = ['image2']
 
-/** 按模型定价表，单位：分。 */
+/** 按模型定价表，单位：积分。 */
 export const IMAGE_EDIT_MODEL_PRICING: Readonly<Record<string, number>> = {
   image2: 10,
 }
