@@ -241,6 +241,14 @@ class ImageVariationDto extends CanvasScopeFields {
   model?: string
 }
 
+class ImageEditDimsDto {
+  @IsNumber()
+  width!: number
+
+  @IsNumber()
+  height!: number
+}
+
 class ImageEditDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
@@ -262,6 +270,16 @@ class ImageEditDto extends CanvasScopeFields {
   @IsOptional()
   @IsIn(['inpaint', 'outpaint'])
   mode?: 'inpaint' | 'outpaint'
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageEditDimsDto)
+  outpaintFrom?: { width: number; height: number }
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageEditDimsDto)
+  outpaintTo?: { width: number; height: number }
 
   @IsOptional()
   @IsString()

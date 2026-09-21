@@ -1319,6 +1319,8 @@ export class StudioService {
       model?: string
       size?: string
       mode?: 'inpaint' | 'outpaint'
+      outpaintFrom?: { width: number; height: number }
+      outpaintTo?: { width: number; height: number }
       sessionId?: string
       nodeId?: string
       parentRecordId?: string
@@ -1376,9 +1378,14 @@ export class StudioService {
     const outpaintMeta =
       editMode === 'outpaint'
         ? {
-            outpaintFrom: { width: baseDims.width, height: baseDims.height },
-            // TODO(M2): outpaintTo 几何/锚点待 DTO 携带扩展意图后计算；本期 size 仅 auto
-            outpaintTo: { width: baseDims.width, height: baseDims.height },
+            outpaintFrom: input.outpaintFrom ?? {
+              width: baseDims.width,
+              height: baseDims.height,
+            },
+            outpaintTo: input.outpaintTo ?? {
+              width: baseDims.width,
+              height: baseDims.height,
+            },
           }
         : {}
     const editMeta = {

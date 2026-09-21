@@ -165,4 +165,17 @@ describe('editImage 参数化与定价', () => {
     expect(meta.outpaintFrom).toEqual({ width: 64, height: 64 })
     expect(meta.outpaintTo).toEqual({ width: 64, height: 64 })
   })
+
+  it('mode=outpaint 且携带 outpaintFrom/outpaintTo 时透传进 metadata', async () => {
+    const record = await svc.editImage('u1', {
+      ...baseInput,
+      mode: 'outpaint',
+      outpaintFrom: { width: 512, height: 512 },
+      outpaintTo: { width: 1024, height: 768 },
+    })
+
+    const meta = JSON.parse(String(record.metadata))
+    expect(meta.outpaintFrom).toEqual({ width: 512, height: 512 })
+    expect(meta.outpaintTo).toEqual({ width: 1024, height: 768 })
+  })
 })
