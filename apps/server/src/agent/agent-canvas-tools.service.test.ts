@@ -7,7 +7,6 @@ import { PrismaService } from '../prisma/prisma.service'
 import { PersistRemoteService } from '../assets/persist-remote.service'
 import { StudioService } from '../studio/studio.service'
 import { ImageSliceService } from '../studio/image-slice.service'
-import { UpscaleService } from '../studio/upscale.service'
 import { VideoGenerationOrchestrator } from '../studio/video-generation.orchestrator'
 import { MaterialService } from '../canvas/material.service'
 import { AgentCanvasToolsService } from './agent-canvas-tools.service'
@@ -38,7 +37,6 @@ describe('AgentCanvasToolsService', () => {
   const confirmPlatformFallbackMaterial = vi.fn()
   const materialFindFirst = vi.fn()
   const persistRemote = vi.fn()
-  const upscale = vi.fn()
   const sliceImage = vi.fn()
   const userWorkflowRecipeCreate = vi.fn()
 
@@ -132,12 +130,6 @@ describe('AgentCanvasToolsService', () => {
     })
     cancelPlatformFallbackMaterial.mockResolvedValue({ id: 'mat-1', status: 'failed' })
     materialFindFirst.mockResolvedValue(null)
-    upscale.mockResolvedValue({
-      url: 'https://cdn.example/upscaled.png',
-      scale: 2,
-      providerId: 'fal',
-      recordId: 'up-1',
-    })
     sliceImage.mockResolvedValue({
       urls: [
         'https://cdn.example/slice-1.png',
@@ -224,10 +216,6 @@ describe('AgentCanvasToolsService', () => {
         {
           provide: PersistRemoteService,
           useValue: { persistRemote },
-        },
-        {
-          provide: UpscaleService,
-          useValue: { upscale },
         },
         {
           provide: ImageSliceService,
@@ -1587,31 +1575,6 @@ describe('AgentCanvasToolsService', () => {
       const copy = canvas.nodes.find((node) => node.id === result.nodeIds[0])
       expect(copy?.data?.generationRecordId).toBeUndefined()
       expect(copy?.data?.url).toBe('https://cdn.example/gen.png')
-    })
-
-    it('upscaleImage calls UpscaleService with mapped providerId', async () => {
-      const result = await svc.upscaleImage({
-        sessionId: 's1',
-        userId: 'u1',
-        nodeId: 'img-1',
-        imageUrl: 'https://cdn.example/src.png',
-        scale: 2,
-        provider: 'fal',
-      })
-      expect(upscale).toHaveBeenCalledWith({
-        userId: 'u1',
-        sessionId: 's1',
-        nodeId: 'img-1',
-        imageUrl: 'https://cdn.example/src.png',
-        scale: 2,
-        providerId: 'fal',
-      })
-      expect(result).toEqual({
-        url: 'https://cdn.example/upscaled.png',
-        scale: 2,
-        providerId: 'fal',
-        recordId: 'up-1',
-      })
     })
 
     it('gridSliceImage prefers sourceUrl and delegates to ImageSliceService', async () => {

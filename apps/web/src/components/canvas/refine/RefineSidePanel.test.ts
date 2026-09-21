@@ -1,8 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
+import { studioApi } from '@/services/studio-api'
+import { persistMediaUrl } from '@/composables/useMediaUpload'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 import RefineSidePanel from './RefineSidePanel.vue'
+
+vi.mock('@/services/studio-api', () => ({
+  studioApi: {
+    editImage: vi.fn(async () => ({ data: { data: { url: 'blob:after', id: 'rec1' } } })),
+    segmentImage: vi.fn(async () => ({ data: { data: { maskUrl: 'blob:mask' } } })),
+  },
+}))
+
+vi.mock('@/composables/useMediaUpload', () => ({
+  persistMediaUrl: vi.fn(async () => 'https://up/mask.png'),
+}))
+
+vi.mock('./outpaintRender', () => ({
+  renderOutpaintPngs: vi.fn(async () => ({
+    baseBlob: new Blob(['base'], { type: 'image/png' }),
+    maskBlob: new Blob(['mask'], { type: 'image/png' }),
+  })),
+}))
 
 const baseProps = {
   nodeId: 'n1', beforeUrl: 'blob:before', versions: [], sessionId: 's1',
@@ -35,8 +57,18 @@ const q = (sel: string) => document.body.querySelector(sel)
 const qa = (sel: string) => Array.from(document.body.querySelectorAll(sel))
 
 describe('RefineSidePanel 三段式', () => {
-  beforeEach(() => { pinia = createPinia(); setActivePinia(pinia) })
-  afterEach(() => { current?.unmount(); current = null })
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    // jsdom 未实现 URL.createObjectURL，runRefine 依赖它生成 fallbackUrl。
+    if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:fallback')
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    current?.unmount()
+    current = null
+    vi.clearAllMocks()
+  })
 
   it('段落顺序：head → 对照带 → 工具箱 → dock', () => {
     mountPanel()
@@ -86,8 +118,120 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('.refine-side__collapse')).not.toBeNull()
   })
 
-  it('模型 chip 显示精修通道真实模型（来自 shared，不写死）', () => {
+  it('模型选择器渲染精修通道真实模型（来自 shared，不写死）', async () => {
     mountPanel()
-    expect(q('[data-testid="dock-model-chip"]')!.textContent).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
+    const trigger = q('[data-testid="dock-model-select"]')
+    expect(trigger).not.toBeNull()
+    trigger!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const opt = q('[data-testid="dock-model-option"][data-model-key="image2"]')
+    expect(opt).not.toBeNull()
+    expect(opt!.textContent).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
+  })
+
+  it('runRefine 请求体带 model / size / mode（按 shared 白名单与定价）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineCoverage = 0.5
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(['x'], { type: 'image/png' }),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    mountPanel()
+    const runBtn = q('[data-testid="dock-run"]')
+    expect(runBtn).not.toBeNull()
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    const body = call[0]
+    expect(body.model).toBe('image2')
+    expect(body.size).toBe('auto')
+    expect(body.mode).toBe('edit')
+  })
+
+  it('扩图提交：合成两张 PNG persist 后走 editImage（mode:outpaint / size:auto / outpaintFrom·To）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 0, y: 0, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    expect(runBtn).not.toBeNull()
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    const persist = (persistMediaUrl as ReturnType<typeof vi.fn>)
+    expect(persist).toHaveBeenCalledTimes(2)
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    const body = call[0]
+    expect(body.mode).toBe('outpaint')
+    expect(body.size).toBe('auto')
+    expect(body.imageUrl).toBe('https://up/mask.png')
+    expect(body.maskUrl).toBe('https://up/mask.png')
+    expect(body.outpaintFrom).toEqual({ width: 400, height: 300 })
+    expect(body.outpaintTo).toEqual({ width: 800, height: 600 })
+  })
+
+  it('扩图空 prompt 时请求体 prompt=兜底英文', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 0, y: 0, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    expect(call[0].prompt).toBe(OUTPAINT_FALLBACK_PROMPT)
+  })
+
+  it('扩图模式下 dock 尺寸选择器隐藏（mode 钩子）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    mountPanel({ width: 400, height: 300 })
+    expect(q('[data-testid="dock-size-select"]')).toBeNull()
+    editor.refineMode = 'select'
+    await flushPromises()
+    expect(q('[data-testid="dock-size-select"]')).not.toBeNull()
+  })
+
+  it('扩图成功后：对照带进入基准画布模式（Before 居中贴图 + 扩出区斜纹占位）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 100, y: 50, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    // 对照带以扩图元数据消费（T2 契约 editMode/outpaintFrom/outpaintTo），CompareView 渲染基准画布
+    const stage = q('[data-testid="compare-base-stage"]')
+    expect(stage).not.toBeNull()
+    expect(stage!.getAttribute('style')).toContain('800')
+    expect(stage!.getAttribute('style')).toContain('600')
+    expect(q('[data-testid="compare-base-hatch"]')).not.toBeNull()
+  })
+
+  it('普通精修成功后：对照带不进入基准画布模式', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineCoverage = 0.5
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(['x'], { type: 'image/png' }),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    mountPanel()
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(q('[data-testid="compare-base-stage"]')).toBeNull()
+    expect(q('[data-testid="compare-base-hatch"]')).toBeNull()
   })
 })

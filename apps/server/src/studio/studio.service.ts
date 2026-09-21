@@ -40,6 +40,9 @@ import {
   evaluateMediaRefPreflight,
   mapMessageToErrorCode,
   P1_IMAGE_EDIT_MODEL_KEY,
+  IMAGE_EDIT_MODEL_PRICING,
+  IMAGE_EDIT_MODEL_KEYS,
+  resolveImageEditProfile,
   redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
@@ -229,7 +232,7 @@ function parseMeta(raw: string | null | undefined): Record<string, unknown> {
 
 function studioPointCategory(type: string): PointCategory {
   if (type === 'text' || type === 'prompt') return 'text'
-  if (type === 'image' || type === 'image_edit' || type === 'image_upscale') return 'image'
+  if (type === 'image' || type === 'image_edit') return 'image'
   if (type === 'audio' || type === 'video') return type
   return 'other'
 }
@@ -1313,6 +1316,11 @@ export class StudioService {
       prompt: string
       imageUrl: string
       maskUrl: string
+      model?: string
+      size?: string
+      mode?: 'inpaint' | 'outpaint'
+      outpaintFrom?: { width: number; height: number }
+      outpaintTo?: { width: number; height: number }
       sessionId?: string
       nodeId?: string
       parentRecordId?: string
@@ -1320,18 +1328,30 @@ export class StudioService {
     },
     cancel?: CancelFlag,
   ) {
-    const cost = 10
     const chargeReason = '图像精修'
     const scope = { sessionId: input.sessionId, nodeId: input.nodeId }
 
+    const editModelKey = input.model ?? P1_IMAGE_EDIT_MODEL_KEY
+    const editMode: 'inpaint' | 'outpaint' = input.mode ?? 'inpaint'
+    let profile: ReturnType<typeof resolveImageEditProfile>
+    try {
+      profile = resolveImageEditProfile(editModelKey)
+    } catch {
+      throw new BadRequestException(
+        `未知的精修模型：${input.model ?? '(默认)'}；仅支持 ${IMAGE_EDIT_MODEL_KEYS.join(', ')}`,
+      )
+    }
+    const cost = IMAGE_EDIT_MODEL_PRICING[editModelKey] ?? 10
+
     let base: Buffer
     let mask: Buffer
+    let baseDims = { width: 0, height: 0 }
     try {
       ;[base, mask] = await Promise.all([
         readImageBuffer(input.imageUrl),
         readImageBuffer(input.maskUrl),
       ])
-      await assertSameDimensions(base, mask)
+      baseDims = await assertSameDimensions(base, mask)
     } catch (err) {
       if (err instanceof MaskDimensionMismatchError) {
         throw new BadRequestException(err.message)
@@ -1343,20 +1363,36 @@ export class StudioService {
       userId,
       cost,
       chargeReason,
-      consumeMeta('image', { model: P1_IMAGE_EDIT_MODEL_KEY, generationId: null }),
+      consumeMeta('image', { model: editModelKey, generationId: null }),
     )
     const resolved = await this.resolver.resolveForGeneration(
       userId,
-      P1_IMAGE_EDIT_MODEL_KEY,
+      editModelKey,
       'image',
     )
     const built = buildImageEditRequest({
       userPrompt: input.prompt,
       imageUrl: input.imageUrl,
       maskUrl: input.maskUrl,
+      sizeOverride: input.size,
     })
+    const outpaintMeta =
+      editMode === 'outpaint'
+        ? {
+            outpaintFrom: input.outpaintFrom ?? {
+              width: baseDims.width,
+              height: baseDims.height,
+            },
+            outpaintTo: input.outpaintTo ?? {
+              width: baseDims.width,
+              height: baseDims.height,
+            },
+          }
+        : {}
     const editMeta = {
-      editMode: 'inpaint' as const,
+      editMode,
+      editModelKey,
+      editSize: input.size ?? profile.size,
       composited: false,
       baseImageUrl: input.imageUrl,
       maskUrl: input.maskUrl,
@@ -1366,13 +1402,14 @@ export class StudioService {
       channelId: resolved.channelId,
       modelKey: built.meta.modelKey,
       gatewayModelId: built.meta.gatewayModelId,
+      ...outpaintMeta,
     }
     const record = await this.prisma.generationRecord.create({
       data: {
         userId,
         type: 'image_edit',
         prompt: input.prompt,
-        model: P1_IMAGE_EDIT_MODEL_KEY,
+        model: editModelKey,
         status: 'generating',
         metadata: JSON.stringify(applyChargeMeta(editMeta, cost)),
         ...withCanvasScope(scope),
@@ -1482,7 +1519,7 @@ export class StudioService {
           status: 'completed',
           metadata: JSON.stringify({
             ...meta,
-            editMode: 'inpaint',
+            editMode,
             composited: true,
             baseImageUrl: input.imageUrl,
             maskUrl: input.maskUrl,
@@ -2327,9 +2364,7 @@ export class StudioService {
           ? '图像生成'
           : record.type === 'image_edit'
             ? '图像精修'
-            : record.type === 'image_upscale'
-              ? '图像放大'
-              : '生成'
+            : '生成'
     let updatedMeta: Record<string, unknown> = { ...meta, cancelled: true }
     if (cost > 0 && !alreadyRefunded(meta)) {
       await this.points.refund(

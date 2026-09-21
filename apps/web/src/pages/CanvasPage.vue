@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, type Ref } from 'vue'
+import { ref, onMounted, onUnmounted, computed, defineAsyncComponent, nextTick, provide, watch, h, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   VueFlow,
@@ -70,6 +70,8 @@ import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
 import { decideAgentOpenWhileRefine, shouldApplyRefineToNode } from '@/utils/refineChrome'
+import { centerExpandPosition, containFitSize } from '@/utils/centerExpand'
+import type { RefineApplyPayload } from '@/components/canvas/refine/compareViewModel'
 import { shouldHideCanvasChrome } from '@/utils/canvasChromeVisibility'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
@@ -137,11 +139,8 @@ import MediaInspectorDrawer from '@/components/media/MediaInspectorDrawer.vue'
 import CanvasContextMenu from '@/components/canvas/CanvasContextMenu.vue'
 import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
 import GridSliceWorkbench from '@/components/canvas/grid-slice/GridSliceWorkbench.vue'
-import { useImageUpscale } from '@/composables/useImageUpscale'
 import { runGridSlice } from '@/composables/useGridSlice'
 import { clampGridDims, GRID_SLICE_LAYOUT_GAP, layoutSliceChildPositions } from '@/utils/gridSlice'
-import { useCapabilities } from '@/composables/useCapabilities'
-import { canUpscaleNode } from '@/utils/upscaleNode'
 import { saveAssetToLibrary } from '@/composables/useAssetLibrary'
 import { resolveMediaUrl } from '@/services/api-base'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -748,8 +747,6 @@ const editorNode = computed((): EditableFlowNode | null => {
   return null
 })
 
-const { imageUpscale: imageUpscaleCapability } = useCapabilities()
-const { loading: upscaleLoading, runUpscale } = useImageUpscale()
 const gridSliceBusy = ref(false)
 const gridSlicePanelNodeId = ref<string | null>(null)
 
@@ -774,8 +771,8 @@ const canvasChromeHidden = computed(() =>
   }),
 )
 
-/** 单选 + 可放大图像节点时显示选中浮层（多选不出现） */
-const selectionUpscaleNode = computed((): EditableFlowNode | null => {
+/** 单选 + 可操作图像节点时显示选中浮层（多选不出现） */
+const selectionActionBarNode = computed((): EditableFlowNode | null => {
   if (refinePanelNode.value || gridSlicePanelNode.value) return null
   if (multiSelectedIds.value.length !== 1) return null
   const node = findNodeById(multiSelectedIds.value[0])
@@ -783,7 +780,7 @@ const selectionUpscaleNode = computed((): EditableFlowNode | null => {
   const data = (node.data ?? {}) as Record<string, unknown>
   if (!String(data.url ?? '').trim()) return null
   if (
-    !canUpscaleNode({
+    !canOpenRefineForNode({
       type: String(node.type ?? ''),
       mediaKind: typeof data.mediaKind === 'string' ? data.mediaKind : null,
       mimeType: typeof data.mimeType === 'string' ? data.mimeType : null,
@@ -814,8 +811,18 @@ const gridSliceEntryDisabled = computed(() => {
   return isNodeGenerating(data.status) || data.status === 'uploading'
 })
 
+/** 宫格切分原图尺寸（mediaInfo）：供 64px 单格下限禁用判定 */
+const gridSliceImageSize = computed(() => {
+  const info = selectionGridSliceNode.value?.data?.mediaInfo as
+    | { kind?: string; width?: number; height?: number }
+    | undefined
+  if (!info || info.kind !== 'image') return null
+  if (typeof info.width !== 'number' || typeof info.height !== 'number') return null
+  return { width: info.width, height: info.height }
+})
+
 const gridSliceDisabledTitle = computed(() => {
-  if (gridSliceBusy.value) return '裁剪中…'
+  if (gridSliceBusy.value) return '切分中 · 大图约需数十秒'
   const node = selectionGridSliceNode.value
   if (!node) return '当前图片不可裁剪'
   const data = (node.data ?? {}) as Record<string, unknown>
@@ -2817,56 +2824,6 @@ function openRefineForSelected() {
   openRefineForNode(editorNode.value)
 }
 
-async function handleUpscaleForNode(nodeId: string) {
-  if (!imageUpscaleCapability.value || upscaleLoading.value) return
-  const node = findNodeById(nodeId)
-  if (!node) return
-  const data = (node.data ?? {}) as Record<string, unknown>
-  const imageUrl = String(data.url ?? '').trim()
-  if (!imageUrl) return
-
-  try {
-    await runUpscale({
-      sessionId: sessionId.value,
-      nodeId: node.id,
-      imageUrl,
-      scale: 2,
-      onSuccess: ({ url }) => {
-        const { w } = getNodeSize(node as FlowNode)
-        const childId = addNode(
-          'image',
-          {
-            url,
-            status: 'completed',
-            title: '放大 2×',
-            prompt: '',
-            imageModel: getProviderConfig('image').model,
-          },
-          {
-            position: { x: node.position.x + w + 36, y: node.position.y },
-          },
-        )
-        addEdge({
-          id: `e-${node.id}-${childId}`,
-          source: node.id,
-          target: childId,
-        })
-        selectOnlyNode(childId)
-        void persistUserEditAsync()
-        void focusNodeById(childId)
-      },
-    })
-  } catch (err) {
-    ElMessage.error(apiErrorMessage(err, '放大失败'))
-  }
-}
-
-function handleSelectionUpscale() {
-  const node = selectionUpscaleNode.value
-  if (!node) return
-  void handleUpscaleForNode(node.id)
-}
-
 function layoutGridSliceChildren(source: EditableFlowNode, childIds: string[], cols: number) {
   const { w: sourceW } = getNodeSize(source as FlowNode)
   const origin = {
@@ -2901,6 +2858,60 @@ function selectNodeIds(ids: string[]) {
   selectedNodeId.value = ids[0]
 }
 
+/** 撤回切分：移除单个切片子节点及其关联边（纯前端状态操作，不调后端） */
+function removeSliceChildNode(id: string) {
+  if (!findNodeById(id)) return
+  nodes.value = nodes.value.filter((entry) => entry.id !== id)
+  edges.value = edges.value.filter((edge) => edge.source !== id && edge.target !== id)
+  if (multiSelectedIds.value.includes(id)) {
+    const rest = multiSelectedIds.value.filter((v) => v !== id)
+    multiSelectedIds.value = rest
+    if (selectedNodeId.value === id) {
+      if (rest.length === 1) selectOnlyNode(rest[0]!)
+      else clearSelection()
+    }
+  }
+  persistUserEdit()
+}
+
+/** 切分结果提示：无 action 走普通 success，有 action 用 VNode 挂「撤回本次切分」按钮 */
+function showSliceResultToast(msg: string, actions?: Array<{ label: string; onClick: () => void }>) {
+  if (!actions?.length) {
+    ElMessage.success(msg)
+    return
+  }
+  let toast: { close: () => void } | null = null
+  toast = ElMessage.success({
+    message: h('span', { class: 'grid-slice-toast' }, [
+      h('span', null, msg),
+      ...actions.map((action) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            style: {
+              marginLeft: '10px',
+              padding: '0',
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--el-color-primary)',
+              font: 'inherit',
+              cursor: 'pointer',
+            },
+            onClick: () => {
+              toast?.close()
+              action.onClick()
+            },
+          },
+          action.label,
+        ),
+      ),
+    ]),
+    duration: 6000,
+    showClose: true,
+  })
+}
+
 async function executeGridSlice(node: EditableFlowNode, cols: number, rows: number) {
   const data = (node.data ?? {}) as Record<string, unknown>
   const sourceUrl = String(data.url ?? '').trim()
@@ -2928,8 +2939,10 @@ async function executeGridSlice(node: EditableFlowNode, cols: number, rows: numb
         ),
       addEdge,
       layoutChildren: (childIds) => layoutGridSliceChildren(node, childIds, dims.cols),
+      getNode: (id) => findNodeById(id) ?? undefined,
+      removeNode: removeSliceChildNode,
+      notify: showSliceResultToast,
     })
-    ElMessage.success(`已裁剪为 ${result.nodeIds.length} 张`)
     selectNodeIds(result.nodeIds)
     void persistUserEditAsync()
     return result
@@ -2973,7 +2986,7 @@ function closeRefineWorkbench() {
   canvasEditor.closeImageEditor()
 }
 
-function handleRefineApply(payload: { url: string; prompt: string; recordId?: string }) {
+function handleRefineApply(payload: RefineApplyPayload) {
   const nodeId = canvasEditor.imageTarget?.nodeId
   if (!nodeId) return
   const node = findNodeById(nodeId)
@@ -2995,7 +3008,31 @@ function handleRefineApply(payload: { url: string; prompt: string; recordId?: st
     generationRecordId: next.generationRecordId,
     status: 'completed',
   })
+  applyOutpaintCenterAnchor(node, payload.metadata)
   persistUserEdit()
+}
+
+/**
+ * T9（规格 §3.4）：扩图版本应用到节点时以原图中心锚定——节点按新画布尺寸居中放大
+ * （position = oldCenter − newSize/2），与其他节点的重叠按画布既有 z 序处理，不做避让。
+ * 普通精修版本无 metadata，尺寸不变、position 不动。
+ * 节点显示尺寸取 data.nodeSize（此前应用链路写入）否则图片卡默认 280×280（neoNodeMeta），
+ * 新尺寸按新画布等比 contain 进旧框，保证整张扩图画布在节点内完整可见。
+ */
+function applyOutpaintCenterAnchor(
+  node: EditableFlowNode,
+  metadata: RefineApplyPayload['metadata'],
+) {
+  const { editMode, outpaintFrom, outpaintTo } = metadata ?? {}
+  if (editMode !== 'outpaint' || !outpaintFrom || !outpaintTo) return
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const stored = data.nodeSize as { width: number; height: number } | undefined
+  const oldSize =
+    stored && stored.width > 0 && stored.height > 0 ? stored : { width: 280, height: 280 }
+  const newSize = containFitSize(oldSize, outpaintTo)
+  if (newSize.width === oldSize.width && newSize.height === oldSize.height) return
+  node.position = centerExpandPosition(node.position, oldSize, newSize)
+  patchNodeData(node.id, { nodeSize: newSize })
 }
 
 function handleRefineRevert(payload: { versionId: string }) {
@@ -3328,11 +3365,6 @@ function handleContextAction(action: string) {
 
   if (action === 'edit-image' && menu.nodeId) {
     openRefineForNode(findNodeById(menu.nodeId))
-    return
-  }
-
-  if (action === 'upscale-image' && menu.nodeId) {
-    void handleUpscaleForNode(menu.nodeId)
     return
   }
 
@@ -3994,21 +4026,19 @@ onUnmounted(() => {
             @stop="handleSelectionBatchStop"
           />
           <SelectionActionBar
-            v-if="selectionUpscaleNode"
-            :node="selectionUpscaleNode as FlowNode"
-            :image-upscale="imageUpscaleCapability"
-            :loading="upscaleLoading"
+            v-if="selectionActionBarNode"
+            :node="selectionActionBarNode as FlowNode"
             :grid-slice="Boolean(selectionGridSliceNode)"
             :grid-slice-loading="gridSliceBusy"
             :grid-slice-disabled="gridSliceEntryDisabled"
             :grid-slice-disabled-title="gridSliceDisabledTitle"
-            :has-url="Boolean(selectionUpscaleNode?.data?.url)"
-            @upscale="handleSelectionUpscale"
+            :grid-slice-image="gridSliceImageSize"
+            :has-url="Boolean(selectionActionBarNode?.data?.url)"
             @edit="openRefineForSelected"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
-            @download="selectionUpscaleNode && downloadNodeImage(selectionUpscaleNode.id)"
-            @save-asset="selectionUpscaleNode && saveNodeAsset(selectionUpscaleNode.id)"
+            @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"
+            @save-asset="selectionActionBarNode && saveNodeAsset(selectionActionBarNode.id)"
           />
 
           <MultiSelectConnectOverlay
@@ -4244,7 +4274,6 @@ onUnmounted(() => {
       :has-url="contextMenu.hasUrl"
       :media-kind="contextMenu.mediaKind"
       :mime-type="contextMenu.mimeType"
-      :image-upscale="imageUpscaleCapability"
       :multi-selected-count="
         contextMenu.nodeId &&
         multiSelectedIds.includes(contextMenu.nodeId) &&

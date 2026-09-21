@@ -772,30 +772,6 @@ class ApplyLayoutOpsDto {
   ops!: Array<Record<string, unknown>>
 }
 
-class UpscaleImageDto {
-  @IsString()
-  sessionId!: string
-
-  @IsString()
-  userId!: string
-
-  @IsOptional()
-  @IsString()
-  nodeId?: string
-
-  @IsOptional()
-  @IsString()
-  imageUrl?: string
-
-  @IsOptional()
-  @IsIn([2, 4])
-  scale?: 2 | 4
-
-  @IsOptional()
-  @IsString()
-  provider?: string
-}
-
 class GridSliceImageDto {
   @IsString()
   sessionId!: string
@@ -1306,12 +1282,6 @@ export class AgentCanvasToolsController {
   @Post('get-image-edit-capabilities')
   async getImageEditCapabilities(@Body() dto: SessionNodeDto) {
     const data = await this.tools.getImageEditCapabilities(dto)
-    return { code: 0, message: 'ok', data }
-  }
-
-  @Post('upscale-image')
-  async upscaleImage(@Body() dto: UpscaleImageDto) {
-    const data = await this.tools.upscaleImage(dto)
     return { code: 0, message: 'ok', data }
   }
 

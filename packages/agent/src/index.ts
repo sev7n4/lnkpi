@@ -3,11 +3,6 @@ export { createImageProvider, PlaceholderImageProvider, OpenAIImageProvider } fr
 export { createImageEditProvider, ApimartImageEditProvider } from './tools/image-edit-provider'
 export { createSegmentProvider } from './tools/segment-provider'
 export {
-  createUpscaleProviders,
-  FalEsrganUpscaleProvider,
-  SPEC_CONNECTED_UPSCALE_PROVIDERS,
-} from './tools/upscale-provider'
-export {
   createTextProvider,
   PlaceholderTextProvider,
   OpenAITextProvider,
@@ -34,11 +29,6 @@ export { createAudioProvider, PlaceholderAudioProvider, OpenAITTSProvider, Fallb
 export type { ImageProvider, ProviderCredentialOpts, ImageGenerateOptions } from './tools/image-provider'
 export type { ImageEditProvider, ImageEditInput } from './tools/image-edit-provider'
 export type { SegmentProvider, SegmentPointInput } from './tools/segment-provider'
-export type {
-  UpscaleProvider,
-  UpscaleInput,
-  UpscaleResult,
-} from './tools/upscale-provider'
 export type { TextProvider, TextGenerateOptions, TextThinkingEffort } from './tools/text-provider'
 export type { VideoProvider } from './tools/video-provider'
 export type { AudioProvider, AudioGenerateOptions } from './tools/audio-provider'

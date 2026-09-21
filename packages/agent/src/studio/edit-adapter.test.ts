@@ -22,6 +22,27 @@ describe('buildImageEditRequest', () => {
     expect(JSON.stringify(built)).not.toContain('【参考图一致性】')
   })
 
+  it('passes sizeOverride through to the upstream body', () => {
+    const built = buildImageEditRequest({
+      userPrompt: '更换背景',
+      imageUrl: 'https://cdn/base.png',
+      maskUrl: 'https://cdn/mask.png',
+      sizeOverride: '1536x1024',
+    })
+    expect(built.body.size).toBe('1536x1024')
+    expect(built.meta.size).toBe('1536x1024')
+  })
+
+  it('defaults size to profile auto when sizeOverride is absent', () => {
+    const built = buildImageEditRequest({
+      userPrompt: '锐化细节',
+      imageUrl: 'https://cdn/base.png',
+      maskUrl: 'https://cdn/mask.png',
+    })
+    expect(built.body.size).toBe('auto')
+    expect(built.meta.size).toBe('auto')
+  })
+
   it('does not reuse generate consistency block', () => {
     const generateBlock = buildImageRefConsistencyBlock([
       { refKey: 'I1', label: 'I1' },

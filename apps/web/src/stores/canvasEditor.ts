@@ -4,6 +4,7 @@ import type { MediaInfo } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 import { clampWipeRatio, type CompareMode } from '@/utils/refineChrome'
+import type { OutpaintRect } from '@/components/canvas/refine/outpaintGeometry'
 
 export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
 export type RefineMaskOp = 'add' | 'subtract'
@@ -32,6 +33,9 @@ export type RefineMaskHandle = {
   invert: () => void
 }
 
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）。 */
+export type RefineMode = 'select' | 'outpaint'
+
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
   const previewTarget = ref<MediaPreviewTarget | null>(null)
@@ -52,6 +56,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineMaskMenuOpen = ref(false)
   const refineWandTolerance = ref(24)
   const refineMaskOp = ref<RefineMaskOp>('add')
+  /** 工作区模式：select 普通精修 / outpaint 扩图（Task 7）。 */
+  const refineMode = ref<RefineMode>('select')
+  /** 扩图模式下当前 clamp 后的新画布矩形（base 贴位 + 扩出区）。null 表示未进入扩图或未产生合法 rect。 */
+  const refineOutpaintRect = ref<OutpaintRect | null>(null)
 
   function resetRefineChromeState() {
     compareLightboxOpen.value = false
@@ -68,6 +76,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskMenuOpen.value = false
     refineWandTolerance.value = 24
     refineMaskOp.value = 'add'
+    refineMode.value = 'select'
+    refineOutpaintRect.value = null
   }
 
   function openImageEditor(target: ImageEditTarget) {
@@ -136,6 +146,23 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     else if (tool === 'brush' || tool === 'rect') refineMaskOp.value = 'add'
   }
 
+  /** 进入 / 退出扩图模式。退出时重置扩图矩形（拖拽状态不进蒙版历史栈，退出即重置）。busy 时禁止切换。 */
+  function setRefineMode(mode: RefineMode) {
+    if (refineBusy.value) return
+    if (mode === 'select') refineOutpaintRect.value = null
+    refineMode.value = mode
+  }
+
+  /** 在 select / outpaint 之间切换（rail 扩图按钮用）。 */
+  function toggleRefineMode() {
+    setRefineMode(refineMode.value === 'outpaint' ? 'select' : 'outpaint')
+  }
+
+  /** 写入当前扩图矩形（由 RefineOutpaintCanvas 拖拽时实时调用）。 */
+  function setRefineOutpaintRect(rect: OutpaintRect | null) {
+    refineOutpaintRect.value = rect
+  }
+
   function openMediaPreview(target: MediaPreviewTarget) {
     previewTarget.value = target
   }
@@ -160,6 +187,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskMenuOpen,
     refineWandTolerance,
     refineMaskOp,
+    refineMode,
+    refineOutpaintRect,
     openImageEditor,
     closeImageEditor,
     setRefineBusy,
@@ -175,6 +204,9 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineMaskMenuOpen,
     setRefineWandTolerance,
     setRefineTool,
+    setRefineMode,
+    toggleRefineMode,
+    setRefineOutpaintRect,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { clampGridDims, equalSliceRects, layoutSliceChildPositions } from './gridSlice'
+import {
+  canSliceAtCell,
+  clampGridDims,
+  equalSliceRects,
+  gridSlicePresetOptions,
+  layoutSliceChildPositions,
+  resolveDropdownPlacement,
+} from './gridSlice'
 
 describe('clampGridDims', () => {
   it('clamps 0 to 1', () => {
@@ -57,6 +64,58 @@ describe('equalSliceRects', () => {
         expect(coverage[y][x], `pixel ${x},${y}`).toBe(1)
       }
     }
+  })
+})
+
+describe('gridSlicePresetOptions', () => {
+  it('lists 4/9/16/25 presets with n×n labels', () => {
+    expect(gridSlicePresetOptions()).toEqual([
+      { n: 4, label: '4宫格 (2×2)' },
+      { n: 9, label: '9宫格 (3×3)' },
+      { n: 16, label: '16宫格 (4×4)' },
+      { n: 25, label: '25宫格 (5×5)' },
+    ])
+  })
+})
+
+describe('canSliceAtCell', () => {
+  it('rejects 7×7 on a 300×200 image (min cell 64px)', () => {
+    expect(canSliceAtCell({ width: 300, height: 200 }, 7, 7)).toBe(false)
+  })
+
+  it('accepts 3×3 on a 1024×1024 image', () => {
+    expect(canSliceAtCell({ width: 1024, height: 1024 }, 3, 3)).toBe(true)
+  })
+
+  it('rejects when only one edge falls below the minimum', () => {
+    // 320/2=160 ok but 120/2=60 < 64
+    expect(canSliceAtCell({ width: 320, height: 120 }, 2, 2)).toBe(false)
+  })
+
+  it('accepts exactly 64px cells (boundary inclusive)', () => {
+    expect(canSliceAtCell({ width: 128, height: 128 }, 2, 2)).toBe(true)
+  })
+
+  it('honours a custom minCellPx', () => {
+    expect(canSliceAtCell({ width: 300, height: 300 }, 7, 7, 32)).toBe(true)
+  })
+})
+
+describe('resolveDropdownPlacement', () => {
+  it('opens downward by default', () => {
+    expect(resolveDropdownPlacement(500, 300, 240)).toBe('bottom')
+  })
+
+  it('flips upward when space below is insufficient and above is larger', () => {
+    expect(resolveDropdownPlacement(100, 400, 240)).toBe('top')
+  })
+
+  it('flips upward whenever above is larger, even if neither side fits', () => {
+    expect(resolveDropdownPlacement(100, 120, 240)).toBe('top')
+  })
+
+  it('keeps downward when spaces are equal', () => {
+    expect(resolveDropdownPlacement(120, 120, 240)).toBe('bottom')
   })
 })
 

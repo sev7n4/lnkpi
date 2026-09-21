@@ -11,6 +11,7 @@ import { ImageSliceService } from './image-slice.service'
 import { StudioService } from './studio.service'
 import { VideoGenerationOrchestrator } from './video-generation.orchestrator'
 import { resolveVideoStartRequest, type VideoStartBody } from './video-generation-request.util'
+import { IMAGE2_EDIT_SIZES, IMAGE_EDIT_MODEL_KEYS } from '@lnkpi/shared'
 import type { CanvasData } from '@lnkpi/shared'
 
 class StudioRefDto {
@@ -240,6 +241,14 @@ class ImageVariationDto extends CanvasScopeFields {
   model?: string
 }
 
+class ImageEditDimsDto {
+  @IsNumber()
+  width!: number
+
+  @IsNumber()
+  height!: number
+}
+
 class ImageEditDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
@@ -249,6 +258,28 @@ class ImageEditDto extends CanvasScopeFields {
 
   @IsString()
   maskUrl!: string
+
+  @IsOptional()
+  @IsIn([...IMAGE_EDIT_MODEL_KEYS])
+  model?: string
+
+  @IsOptional()
+  @IsIn([...IMAGE2_EDIT_SIZES])
+  size?: string
+
+  @IsOptional()
+  @IsIn(['inpaint', 'outpaint'])
+  mode?: 'inpaint' | 'outpaint'
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageEditDimsDto)
+  outpaintFrom?: { width: number; height: number }
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ImageEditDimsDto)
+  outpaintTo?: { width: number; height: number }
 
   @IsOptional()
   @IsString()
@@ -392,6 +423,9 @@ export class StudioController {
         prompt: dto.prompt,
         imageUrl: dto.imageUrl,
         maskUrl: dto.maskUrl,
+        model: dto.model,
+        size: dto.size,
+        mode: dto.mode,
         sessionId: dto.sessionId,
         nodeId: dto.nodeId,
         parentRecordId: dto.parentRecordId,

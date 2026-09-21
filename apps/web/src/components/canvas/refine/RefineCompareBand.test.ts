@@ -4,7 +4,13 @@ import { createPinia, getActivePinia, setActivePinia, type Pinia } from 'pinia'
 import RefineCompareBand from './RefineCompareBand.vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
-const mountBand = (props: { beforeUrl: string; afterUrl?: string } = { beforeUrl: 'blob:before' }) => {
+const mountBand = (
+  props: {
+    beforeUrl: string
+    afterUrl?: string
+    versionMetadata?: Record<string, unknown>
+  } = { beforeUrl: 'blob:before' },
+) => {
   // R8: share the single active pinia with the mounted component so the test's
   // useCanvasEditorStore() reads the same store instance the component uses.
   const pinia = getActivePinia() as Pinia
@@ -70,5 +76,49 @@ describe('RefineCompareBand', () => {
     const ph = w.find('[data-testid="compare-band-placeholder"]')
     expect(ph.exists()).toBe(true)
     expect(ph.text()).toContain('待生成')
+  })
+})
+
+describe('RefineCompareBand 基准画布（扩图版本）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('metadata.editMode=outpaint 时 CompareView 收到以新画布为基准的 baseCanvas（Before 居中偏移）', () => {
+    const w = mountBand({
+      beforeUrl: 'blob:before',
+      afterUrl: 'blob:after',
+      versionMetadata: {
+        editMode: 'outpaint',
+        outpaintFrom: { width: 400, height: 300 },
+        outpaintTo: { width: 800, height: 600 },
+      },
+    })
+    expect(w.findComponent({ name: 'CompareView' }).props('baseCanvas')).toEqual({
+      width: 800,
+      height: 600,
+      beforeOffset: { x: 200, y: 150 },
+    })
+  })
+
+  it('无 metadata 或非扩图版本时不传 baseCanvas（普通对照不受影响）', () => {
+    const plain = mountBand({ beforeUrl: 'blob:before', afterUrl: 'blob:after' })
+    expect(plain.findComponent({ name: 'CompareView' }).props('baseCanvas')).toBeUndefined()
+
+    const edit = mountBand({
+      beforeUrl: 'blob:before',
+      afterUrl: 'blob:after',
+      versionMetadata: { editMode: 'edit' },
+    })
+    expect(edit.findComponent({ name: 'CompareView' }).props('baseCanvas')).toBeUndefined()
+  })
+
+  it('扩图 metadata 缺几何字段时不传 baseCanvas', () => {
+    const w = mountBand({
+      beforeUrl: 'blob:before',
+      afterUrl: 'blob:after',
+      versionMetadata: { editMode: 'outpaint' },
+    })
+    expect(w.findComponent({ name: 'CompareView' }).props('baseCanvas')).toBeUndefined()
   })
 })

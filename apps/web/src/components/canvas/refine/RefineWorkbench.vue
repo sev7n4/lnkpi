@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
 import type { ImageVersionEntry } from '@lnkpi/shared'
+import type { RefineApplyPayload } from './compareViewModel'
 import RefineWorkViewport from './RefineWorkViewport.vue'
 import RefineSidePanel from './RefineSidePanel.vue'
 import { useNaturalImageSize } from './useNaturalImageSize'
@@ -21,7 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  apply: [payload: { url: string; prompt: string; recordId?: string }]
+  apply: [payload: RefineApplyPayload]
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
 }>()
@@ -39,9 +40,14 @@ const mediaSize = useNaturalImageSize({
   height: () => props.height,
 })
 
-/** Escape→close guard: mirror RefineSidePanel's requestClose, but keep the
- *  source of truth for collapsed/width in the shared composable. */
+/** Escape→close guard（分级，与对照同思路）：
+ *  1) 扩图模式优先退出到 select（再按才继续）；2) 对照灯箱打开则先关；3) 关闭精修。
+ *  busy 时 useWorkbenchPanel 已拦截 Esc，故此处无需再判。 */
 function onClose() {
+  if (editor.refineMode === 'outpaint') {
+    editor.setRefineMode('select')
+    return
+  }
   if (editor.compareLightboxOpen) {
     editor.setCompareLightboxOpen(false)
     return

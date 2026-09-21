@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import type { RefineMaskTool } from '@/stores/canvasEditor'
 import {
@@ -28,6 +28,12 @@ const emit = defineEmits<{
 
 const editor = useCanvasEditorStore()
 const railRef = ref<HTMLElement | null>(null)
+
+/** 扩图模式：画笔 / 橡皮禁用，且手柄冻结（规格 §3）。 */
+const outpaintActive = computed(() => editor.refineMode === 'outpaint')
+function toggleOutpaint() {
+  editor.toggleRefineMode()
+}
 
 /** 同一时刻只允许一个二级菜单展开 */
 type OpenMenu = { kind: 'input'; id: RefineInputGroupId } | { kind: 'view'; id: 'compare' | 'fit' } | null
@@ -91,6 +97,26 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 
 <template>
   <nav ref="railRef" class="refine-rail" data-testid="refine-rail" aria-label="画布工具">
+    <!-- 扩图模式入口（Task 7）：激活时高亮；busy 时冻结不可切换；扩图模式禁画笔/橡皮 -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': outpaintActive }"
+        data-testid="rail-mode-outpaint"
+        aria-label="扩图"
+        title="扩图（拖拽手柄扩展画布）"
+        :aria-pressed="outpaintActive"
+        :disabled="editor.refineBusy"
+        @click="toggleOutpaint"
+      >
+        <span class="refine-rail__glyph">⤢</span>
+        <span class="refine-rail__name">扩图</span>
+      </button>
+    </div>
+
+    <div class="refine-rail__hr" />
+
     <!-- 输入组：往图上放东西，只产出选区 / 蒙版 -->
     <div v-for="group in REFINE_INPUT_GROUPS" :key="group.id" class="refine-rail__slot">
       <button
@@ -120,6 +146,7 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
             :data-testid="`rail-variant-${variant.tool}`"
             :title="variant.label"
             :aria-label="variant.label"
+            :disabled="outpaintActive && (variant.tool === 'brush' || variant.tool === 'eraser')"
             @click="pickTool(variant.tool)"
           >
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">

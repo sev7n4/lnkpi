@@ -10,7 +10,7 @@ const OBJECT_STORAGE_ENV_KEYS = [
   'OBJECT_STORAGE_SECRET_KEY',
 ] as const
 
-const CAPABILITY_ENV_KEYS = [...OBJECT_STORAGE_ENV_KEYS, 'FAL_KEY'] as const
+const CAPABILITY_ENV_KEYS = [...OBJECT_STORAGE_ENV_KEYS] as const
 
 function createAgentService() {
   return new AgentService(
@@ -72,16 +72,5 @@ describe('AgentService getCapabilities', () => {
 
     const svc = createAgentService()
     expect(svc.getCapabilities().stsDirectUpload).toBe(false)
-  })
-
-  it('returns imageUpscale false when no upscale providers are registered', () => {
-    const svc = createAgentService()
-    expect(svc.getCapabilities().imageUpscale).toBe(false)
-  })
-
-  it('returns imageUpscale true when FAL_KEY registers upscale providers', () => {
-    process.env.FAL_KEY = 'fal-test-key'
-    const svc = createAgentService()
-    expect(svc.getCapabilities().imageUpscale).toBe(true)
   })
 })

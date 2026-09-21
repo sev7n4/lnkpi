@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import {
+  wipeAfterSrc,
+  wipeHoldRatio,
+  shouldRenderWipe,
+  type CompareBaseCanvas,
+} from './compareViewModel'
+import ImageLoupe from './ImageLoupe.vue'
+
 defineOptions({ name: 'CompareView' })
 import type { CompareMode } from '@/utils/refineChrome'
 import { clampWipeRatio } from '@/utils/refineChrome'
-import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { wipeAfterSrc, wipeHoldRatio, shouldRenderWipe } from './compareViewModel'
-import ImageLoupe from './ImageLoupe.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -16,6 +22,8 @@ const props = withDefaults(
     wipeRatio?: number
     showingOriginal?: boolean
     compact?: boolean
+    /** 基准画布模式（Task 8，扩图版本）：存在时以新画布为基准，Before 按偏移贴入、扩出区渲染斜纹占位。 */
+    baseCanvas?: CompareBaseCanvas
   }>(),
   {
     mode: 'split',
@@ -47,6 +55,46 @@ const handleLeft = computed(() =>
 const afterDisplayUrl = computed(() => {
   if (showingOriginal.value) return props.beforeUrl
   return props.afterUrl || props.beforeUrl
+})
+
+// ---- 基准画布模式（Task 8）：容器=新画布比例，Before 按偏移贴入，扩出区斜纹占位 ----
+const baseCanvas = computed(() => props.baseCanvas)
+
+/** 百分比取 4 位小数，避免无限循环小数导致 DOM 样式串不稳定。 */
+function pct(value: number): string {
+  return `${Number(value.toFixed(4))}%`
+}
+
+/** 基准画布 stage / wipe 容器样式：锁定新画布宽高比。 */
+const stageStyle = computed(() => {
+  const bc = baseCanvas.value
+  if (!bc) return undefined
+  return { aspectRatio: `${bc.width} / ${bc.height}` }
+})
+
+/**
+ * Before 图在新画布内的贴位：beforeOffset 之外按 (canvas − 2×offset) 推导原图框
+ * （metadata 只有两侧尺寸，规格语义即居中贴图）。
+ */
+const beforePlacement = computed(() => {
+  const bc = baseCanvas.value
+  if (!bc) return undefined
+  const { width, height, beforeOffset } = bc
+  return {
+    left: pct((beforeOffset.x / width) * 100),
+    top: pct((beforeOffset.y / height) * 100),
+    width: pct(((width - 2 * beforeOffset.x) / width) * 100),
+    height: pct(((height - 2 * beforeOffset.y) / height) * 100),
+  }
+})
+
+const beforeWipeStyle = computed(() => {
+  const style: Record<string, string> = { clipPath: beforeClip.value }
+  if (baseCanvas.value && beforePlacement.value) {
+    // 覆盖 .compare-view__wipe-img--before 的 inset:0 全幅默认
+    Object.assign(style, beforePlacement.value, { right: 'auto', bottom: 'auto' })
+  }
+  return style
 })
 
 function setHold(value: boolean) {
@@ -117,14 +165,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="compare-view" :class="{ 'compare-view--compact': compact }">
-    <div v-if="useWipe" ref="wipeFrameRef" class="compare-view__wipe">
+    <div v-if="useWipe" ref="wipeFrameRef" class="compare-view__wipe" :style="stageStyle">
       <ImageLoupe :src="wipeAfterUrl" :active="editor.refineLoupeOn" :shape="editor.refineLoupeShape" :zoom="editor.refineLoupeZoom">
-        <img class="compare-view__wipe-img compare-view__wipe-img--after" :src="wipeAfterUrl" alt="">
+        <img
+          class="compare-view__wipe-img compare-view__wipe-img--after"
+          :class="{ 'compare-view__wipe-img--canvas': !!baseCanvas }"
+          :src="wipeAfterUrl"
+          alt=""
+        >
+        <!-- 扩出区斜纹占位：夹在 After 与 Before 之间，clip 与 Before 同步（只在 Before 侧可见） -->
+        <div
+          v-if="baseCanvas"
+          class="compare-view__wipe-hatch"
+          data-testid="compare-base-hatch"
+          :style="{ clipPath: beforeClip }"
+        />
         <img
           class="compare-view__wipe-img compare-view__wipe-img--before"
           :src="beforeUrl"
           alt=""
-          :style="{ clipPath: beforeClip }"
+          :style="beforeWipeStyle"
         >
       </ImageLoupe>
       <div
@@ -140,7 +200,25 @@ onBeforeUnmount(() => {
         <span class="compare-view__label">Before</span>
         <div class="compare-view__frame">
           <slot name="before">
-            <ImageLoupe :src="beforeUrl" :active="editor.refineLoupeOn" :shape="editor.refineLoupeShape" :zoom="editor.refineLoupeZoom">
+            <!-- 基准画布模式：Before 居中贴入新画布框，扩出区斜纹占位 -->
+            <div
+              v-if="baseCanvas && beforePlacement"
+              data-testid="compare-base-stage"
+              class="compare-view__stage"
+              :style="stageStyle"
+            >
+              <div
+                data-testid="compare-base-hatch"
+                class="compare-view__stage-hatch"
+              />
+              <img
+                class="compare-view__stage-img"
+                :src="beforeUrl"
+                alt=""
+                :style="beforePlacement"
+              >
+            </div>
+            <ImageLoupe v-else :src="beforeUrl" :active="editor.refineLoupeOn" :shape="editor.refineLoupeShape" :zoom="editor.refineLoupeZoom">
               <img class="compare-view__image" :src="beforeUrl" alt="">
             </ImageLoupe>
           </slot>
@@ -262,10 +340,72 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+/* 基准画布模式：After 图铺满新画布框（容器 aspect-ratio 已对齐画布比例） */
+.compare-view__wipe-img--canvas {
+  position: absolute;
+  inset: 0;
+  max-height: none;
+  width: 100%;
+  height: 100%;
+}
+
 .compare-view__wipe-img--before {
   position: absolute;
   inset: 0;
   width: 100%;
+  height: 100%;
+  z-index: 2;
+}
+
+/* 扩出区斜纹占位（基准画布模式）：夹在 After 与 Before 之间 */
+.compare-view__wipe-hatch {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.09) 0,
+    rgba(255, 255, 255, 0.09) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+  pointer-events: none;
+}
+
+/* 基准画布 stage（split 模式 Before 侧）：新画布比例的框，原图按偏移贴入 */
+.compare-view__stage {
+  position: relative;
+  width: 100%;
+  max-height: 220px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #0a0a0a;
+}
+
+.compare-view__stage-hatch {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.09) 0,
+    rgba(255, 255, 255, 0.09) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+  pointer-events: none;
+}
+
+.compare-view__stage-img {
+  position: absolute;
+  max-width: none;
+  max-height: none;
+  object-fit: fill;
+  pointer-events: none;
+  user-select: none;
+}
+
+.compare-view--compact .compare-view__stage {
+  max-height: none;
   height: 100%;
 }
 
