@@ -1,7 +1,7 @@
 # 设计规格：Agent 批量确认卡 + 人工/自动双模式（②③）
 
 - 日期：2026-09-21
-- 状态：待评审（brainstorming architectural 路径产出）
+- 状态：评审修订 v2（已并入 PM/架构复审 P0–P2 修订项：turnId 统一定义、busy 回落、中断/失败回流、护栏组合算法、恢复语义、估算基准、二次确认阈值化等）
 - 前置：PR #386（批量重新生成）、#387（settle 等待 + 进度卡 + 缺提示词预检 + 图标化）、#388（状态机回 idle）、#389（确认卡 SSOT 优先）已合并上线
 
 ## 1. 背景与目标
@@ -55,19 +55,27 @@ confirmBatch(nodeIds: string[]): Promise<BatchSummary | { rejected: reason }>
 
 - **single-flight 守卫（执行器内）**：`start()` 首行加 `if (state.value !== 'idle') return { rejected: 'busy' }`（或抛 `BatchBusyError`，两触发器侧 toast「已有批量任务进行中」）。**拒绝必须可见**，禁止静默。
 - 规划器返回 `missing_prompt` 跳过的节点：状态保持 draft（与画布多选行为一致），由调用方 toast 点名数量；被跳过节点不再出确认卡（其 prompt 为空本来也无法确认）。
+- **积分估算基准（②③共用）**：内置每类型**保守定价常数**（图片 / 视频 / 文本，常量可配；视频按时长上界取值），无历史数据时直接使用；该类型有历史 `creditCost` 均值时取 `max(均值, 保守值)` 防低估。§5.2 汇总行与 §6.2 金额护栏共用此基准。
+- **busy 语义（三触发源一致）**：执行器非 idle 时 `confirmBatch` 返回 `{ rejected: 'busy' }`，调用方 toast「已有批量任务进行中」；不排队、不重试（YAGNI）。
 
 ### 4.2 触发源统一
 
 | 触发源 | 入口 | 守卫 |
 |---|---|---|
 | 画布工具栏 | 现有 `handleSelectionBatchGenerate` | 现有逻辑 + 新 busy 拒绝 |
-| ② 批量卡「全部确认」 | `confirmBatch(allPendingIds)` | busy 拒绝 + 弹确认框（成本提示） |
-| ③ 自动模式 | 回合静默状态机（§6）自动调 `confirmBatch` | 护栏全量校验 |
+| ② 批量卡「全部确认」 | `confirmBatch(allPendingIds)` | busy 拒绝；预估积分 > 余额 × 10% 时弹一次确认框 |
+| ③ 自动模式 | 回合静默状态机（§6）自动调 `confirmBatch` | 护栏全量校验（§6.2，含 busy 回落） |
 
 ### 4.3 幂等与并发
 
 - `confirmBatch` 入口重读节点状态（§4.1 第 1 步），已非 pending 的 id 剔除；部分剔除时按剩余集合执行并如实汇报 `N/M`。
 - 多标签页：两页都可能看到 pending；先到先得（状态被清后另一页重读即空），最坏情况是重复 toast，不产生双重扣费（`generateForNode` 只对 status=draft 节点执行一次）。
+
+### 4.4 执行中断与失败回流
+
+- **停止**（侧栏状态行「停止」/ 画布进度卡）：queue 中**未执行**的节点恢复 `pending_confirm`（`patchNodeData` 仅写 `status` 字段），重新进入确认流（人工卡或批量卡）；已完成节点保持不动。
+- **执行失败**（`failed`）：节点保持 failed 状态（与现有画布失败展示一致），不自动重试、不自动恢复 pending；批量汇总点名失败数，由用户决定是否手动重新生成。
+- **超时**（`timeout`）：按 failed 同口径处理。
 
 ## 5. ② 批量确认卡
 
@@ -101,14 +109,16 @@ confirmBatch(nodeIds: string[]): Promise<BatchSummary | { rejected: reason }>
 
 状态：`idle → arming → firing → idle`。
 
+- **回合标识（turnId，全文统一定义）**：以 assistant 消息 id（`lastAssistantMessage.id`）标识一个回合。金额护栏的余额缓存按 turnId 缓存（每回合一次）；②的「逐个挑选」latch 与 §7 遥测同样引用此 turnId。新建对话（threadId 重置）→ 开关复位 off 且 turnId 缓存清空。
+
 - **arming 触发**：自动模式 on 且 `isStreaming` true→false 边沿。进入 arming 后启动静默窗口定时器（1200ms），期间任一新 pending 节点到达或 `isStreaming` 变 true → 重置定时器/回 idle。
 - **firing 前置条件（全部满足才执行）**：`!isStreaming` && `interruptGate === null` && 静默窗口到期 && pending 数 > 0 && flag `agent_auto_confirm` 开。
 - **护栏校验（顺序执行，任一不过 → 整批回落人工单卡 + toast 点名原因）**：
-  1. 数量：pending ≤ 6（**超出处理**：按最新排序取前 6 个自动，其余保持 pending 出人工卡，toast「已自动确认 6 个，其余 N 个需手动确认」）；
-  2. 视频子上限：待确认视频中 ≤ 2 个自动，超出的视频节点回落人工；
-  3. 金额：firing 时取积分余额——优先用本回合开始时 `getPoints()` 的缓存（每回合一次），缓存缺失则现查；预估消耗 > 余额 × 30% → 整批回落人工；余额 < 单次最贵类型成本 → 整批回落人工。执行器内既有的 `insufficient_points` 中止仍作为实时兜底。
+  1. **busy**：执行器非 idle（上一批仍在执行）→ 整批回落人工 + toast「已有批量任务进行中」，不排队不重试（agent 回合节奏可能快于批量执行，此为常见路径而非异常）；
+  2. **数量 + 视频子上限（组合算法）**：将待确认节点按「最新在前」排序（最新提案最贴合用户当前意图，此取舍显式记录）→ 从队首依序取出，取出视频数 > 2 时该视频跳过记入**回落集**并继续向后取，直到取满 6 个或取尽；取出的为自动集，其余（含被跳过视频与未取到的）全部回落人工；toast 如实汇报「已自动确认 X 个，其余 Y 个需手动确认」；
+  3. **金额**：firing 时取积分余额——按 turnId 缓存（每回合一次），缓存缺失则现查；预估消耗（按 §4.1 估算基准）> `min(余额 × 30%, 绝对上限 200 积分（可配）)` → 整批回落人工；余额 < 单次最贵类型成本（视频按保守上界）→ 整批回落人工。执行器内既有的 `insufficient_points` 中止仍作为实时兜底。
 - **执行**：`confirmBatch(通过的 ids)`；节点写 `data.autoConfirmed = true` + `data.autoBatchId`。
-- **失败可见与自断**：批量汇总 `failed > 0` 且含 `insufficient_points` → 自动关闭开关 + toast「积分不足，已切回人工确认」；其他失败仅 toast 点名，**不重试**。
+- **失败可见与自断**：批量汇总 `failed > 0` 且含 `insufficient_points` → 自动关闭开关 + toast「积分不足，已切回人工确认」（遥测记关停原因，§7）；其他失败仅 toast 点名，**不重试**。
 - **QA 门不动**：`interruptGate` 非空时 arming 中止（自然不 fire）；image_qa 等卡片仍人工。
 
 ### 6.3 可见性
@@ -150,6 +160,8 @@ confirmBatch(nodeIds: string[]): Promise<BatchSummary | { rejected: reason }>
 6. 自动运行中切换开关 off → 剩余 pending 节点出现人工卡。
 7. 新建对话 → 开关复位 off。
 8. 余额不足场景（mock）→ 自动开关自动关闭 + 提示。
+9. 批量执行中点侧栏「停止」→ 未执行节点恢复确认卡（人工或批量），已完成节点不动。
+10. 自动执行中 agent 下一回合又提新节点 → 上一批未跑完时新提案整批回落人工卡 + toast（不排队）。
 
 ## 11. 非目标（YAGNI）
 
@@ -161,6 +173,7 @@ confirmBatch(nodeIds: string[]): Promise<BatchSummary | { rejected: reason }>
 |---|---|
 | 三触发源并发踩踏 | §4.1 single-flight 守卫 + busy 可见拒绝（TDD 覆盖） |
 | 半批自动确认 | §6.2 静默窗口 + interruptGate 检查 + 幂等重读 |
+| SSE 断连导致 streaming 假 false、提案晚到超静默窗口 | 幂等重读防重复扣费；最坏退化为「半批自动 + 半批人工」（可接受，不视为缺陷，验收不按 bug 处理） |
 | 积分意外消耗 | 双护栏（数量 + 金额）+ 知情同意 + 停止入口 + 自断 |
 | 批量卡信息过载 | 行内信息单行截断，详情靠行点击定位节点 |
 | 文档漂移 | §13 文档同步清单纳入 PR 验收 |
