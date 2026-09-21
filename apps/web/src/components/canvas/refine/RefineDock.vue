@@ -169,7 +169,8 @@ function toggleVoice() {
           <button type="button" class="refine-dock__primary" data-testid="dock-run" :disabled="runDisabled" @click="emit('run')">
             精修
           </button>
-          <button type="button" class="refine-dock__ghost" disabled title="抠图将走专用通道，尚未接入">抠图</button>
+          <!-- follow-up #2：置灰「抠图」占位按钮已删 —— 规格 §2.2 明确抠图归 M2 能力包（P1-8 不做假 UI）。
+               底排“抠图/裁剪”等实体动作入口随 M2 规格回来，届时进工具箱能力组。 -->
           <button v-if="canApply" type="button" class="refine-dock__ghost" data-testid="dock-apply" :disabled="busy" @click="emit('apply')">
             应用到节点
           </button>

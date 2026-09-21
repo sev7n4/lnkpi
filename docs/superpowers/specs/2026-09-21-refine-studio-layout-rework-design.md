@@ -309,3 +309,30 @@ const canvasChromeHidden = computed(
 | dock 与图片节点 dock 同构 | 用户 "dock 需要的样式和图片节点的dock保持一致，有模型参数，尺寸，上传附件的能力" |
 | 工具参数放顶部模式条 | 本规格开工前的三选一确认 |
 | 本包只做布局重组 | 本规格开工前的三选一确认 |
+
+---
+
+## 14. 修订记录 r2（2026-09-21 晚，部署后目视审查 follow-up，PR fix/refine-studio-followups）
+
+部署后（`a1e36bf0`）用户目视审查发现 1 个 P0 缺陷 + 多项体验问题，经用户逐条拍板修订如下：
+
+| # | 决定 | 落点 |
+|---|---|---|
+| F1 | **「← 返回画布」只留图标**，文字收进 title/aria-label；rail 顶部加 60px padding 避开 chrome 层（修复「返回画布压住智能选择」的 P0 遮挡） | `RefineCanvasBack` / `RefineToolRail` |
+| F2 | **dock 置灰「抠图」占位按钮删除**，归 M2 能力包（回到 §2.2 原裁决） | `RefineDock` |
+| F3 | **「按住查看原图」眼睛只在全屏对照保留**，对照带（compact）不渲染 —— 维持 P0-6「只留 ⛶」；空格按住在对照带仍可用 | `CompareView` / `RefineCompareBand` |
+| F4 | **尺寸链路兜底**：`mediaInfo` 缺宽高时用 Image() 探测自然尺寸，dock 显示 宽×高 · 比例（修复回退文案「原始尺寸」） | `useNaturalImageSize` + `RefineWorkbench` |
+| F5 | **「查看」分组文字标签删除**，只留发丝分隔线（图标语言自解释） | `RefineToolRail` |
+| F6 | **工具箱预置 4 组能力组框架**（抠素材·免费 / 构图·免费 / 改内容·积分 / 提画质·积分），全部禁用 + 图标 + title「M2 能力包」；**P1-8「不预置空能力组」由用户指示修订** —— 框架先立，能力随 M2 逐个点亮 | `RefineToolbox` |
+| F7 | **细节放大入口回归左栏**（**P0-5 部分回退**，用户指示）：toggle `refineLoupeOn`，底层能力一直保留 | `RefineToolRail` |
+| F8 | **放大 / 缩小合入「适配」二级菜单**，viewport 新增 zoomStep（0.1–8 clamp） | `RefineToolRail` / `RefineWorkViewport` |
+| F9 | **左栏补撤销 / 重做**：MaskEditor 新增 30 层蒙版历史栈，rail 按钮 + ⌘Z / ⇧⌘Z 快捷键 | `MaskEditor` / `RefineToolRail` / `RefineWorkViewport` |
+| F10 | 二级菜单工具项**只留图标**（矩形/多边形/画笔/橡皮等），文字进 title | `RefineToolRail` |
+| F11 | 点击高亮：rail 按钮 `:active` 缩放 + `:focus-visible` 描边 + is-active 常亮态 | `RefineToolRail` |
+| F12 | **无「处理后」版本时对照带 After 侧显示占位**（Before / After·待生成），不再拿 Before 顶替 | `RefineCompareBand` |
+
+### F 修订带来的交互排查增量
+
+- 全屏对照打开时精修视口被 v-show 隐藏，但其空格平移监听仍活着 → 加 `compareLightboxOpen` 守卫，空格语义让给 CompareView 的「按住看原图」。
+- 对照 / 适配的二级菜单改向上弹出，避免飞出视口下缘。
+- 已知未修（后续包）：对照带 Before/After 各自 contain 缩放，原图与生成版本分辨率不同时观感不一致；模式条暂不显示当前缩放百分比。

@@ -38,8 +38,18 @@ describe('RefineToolbox', () => {
     expect(w.emitted('revertVersion')).toEqual([['v1']])
   })
 
-  it('不预置任何空的能力组标题（M2 工具到位时再加）', () => {
-    const text = mountBox().text()
-    for (const label of ['抠素材', '构图', '改内容', '提画质']) expect(text).not.toContain(label)
+  it('能力组框架（follow-up #6）：四组占位渲染且全部禁用，等 M2 逐个点亮', () => {
+    const w = mountBox()
+    for (const id of ['matting', 'compose', 'content', 'quality']) {
+      expect(w.find(`[data-testid="toolbox-group-${id}"]`).exists()).toBe(true)
+    }
+    for (const id of ['one-click-matting', 'crop', 'grid-slice', 'inpaint', 'outpaint']) {
+      const chip = w.find(`[data-testid="toolbox-cap-${id}"]`)
+      expect(chip.exists()).toBe(true)
+      expect(chip.attributes('disabled')).toBeDefined()
+      expect(chip.find('svg').exists()).toBe(true)
+    }
+    expect(w.text()).toContain('免费')
+    expect(w.text()).toContain('积分')
   })
 })

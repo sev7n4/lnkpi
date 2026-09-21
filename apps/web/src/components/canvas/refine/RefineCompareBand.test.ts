@@ -57,4 +57,18 @@ describe('RefineCompareBand', () => {
     expect(compareView.props('beforeUrl')).toBe('blob:before')
     expect(compareView.props('afterUrl')).toBe('blob:after')
   })
+
+  it('follow-up #3：对照带里没有「按住查看原图」眼睛（P0-6 只留 ⛶），CompareView 收到 compact', () => {
+    const w = mountBand({ beforeUrl: 'blob:before', afterUrl: 'blob:after' })
+    expect(w.find('.compare-view__original').exists()).toBe(false)
+    expect(w.findComponent({ name: 'CompareView' }).props('compact')).toBe(true)
+  })
+
+  it('follow-up #8：没有「处理后」版本时 After 侧占位，不渲染 CompareView', () => {
+    const w = mountBand({ beforeUrl: 'blob:before' })
+    expect(w.findComponent({ name: 'CompareView' }).exists()).toBe(false)
+    const ph = w.find('[data-testid="compare-band-placeholder"]')
+    expect(ph.exists()).toBe(true)
+    expect(ph.text()).toContain('待生成')
+  })
 })
