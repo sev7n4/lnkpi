@@ -16,6 +16,7 @@ export function buildImageEditRequest(input: {
   imageUrl: string
   maskUrl: string
   modelKey?: string
+  sizeOverride?: string
 }): {
   prompt: string
   body: Record<string, unknown>
@@ -24,10 +25,11 @@ export function buildImageEditRequest(input: {
     modelKey: string
     gatewayModelId: string
     editWire: ImageEditWire
-    size: 'auto'
+    size: string
   }
 } {
   const profile = resolveImageEditProfile(input.modelKey)
+  const size = input.sizeOverride ?? profile.size
   const prompt = buildEditPrompt(input.userPrompt)
   return {
     prompt,
@@ -36,14 +38,14 @@ export function buildImageEditRequest(input: {
       prompt,
       image_urls: [input.imageUrl],
       mask_url: input.maskUrl,
-      size: profile.size,
+      size,
     },
     meta: {
       editMode: 'inpaint',
       modelKey: input.modelKey ?? P1_IMAGE_EDIT_MODEL_KEY,
       gatewayModelId: profile.gatewayModelId,
       editWire: profile.editWire,
-      size: profile.size,
+      size,
     },
   }
 }
