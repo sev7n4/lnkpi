@@ -199,4 +199,39 @@ describe('RefineSidePanel 三段式', () => {
     await flushPromises()
     expect(q('[data-testid="dock-size-select"]')).not.toBeNull()
   })
+
+  it('扩图成功后：对照带进入基准画布模式（Before 居中贴图 + 扩出区斜纹占位）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 100, y: 50, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    // 对照带以扩图元数据消费（T2 契约 editMode/outpaintFrom/outpaintTo），CompareView 渲染基准画布
+    const stage = q('[data-testid="compare-base-stage"]')
+    expect(stage).not.toBeNull()
+    expect(stage!.getAttribute('style')).toContain('800')
+    expect(stage!.getAttribute('style')).toContain('600')
+    expect(q('[data-testid="compare-base-hatch"]')).not.toBeNull()
+  })
+
+  it('普通精修成功后：对照带不进入基准画布模式', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineCoverage = 0.5
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(['x'], { type: 'image/png' }),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    mountPanel()
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(q('[data-testid="compare-base-stage"]')).toBeNull()
+    expect(q('[data-testid="compare-base-hatch"]')).toBeNull()
+  })
 })

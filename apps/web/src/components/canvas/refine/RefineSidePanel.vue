@@ -19,6 +19,7 @@ import { maskCoverageMessage } from '@/utils/maskCoverage'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { syncRefineUrls } from './syncRefineUrls'
+import { baseCanvasFromMetadata, type RefineCompareMetadata } from './compareViewModel'
 import CompareLightbox from './CompareLightbox.vue'
 import RefineCompareBand from './RefineCompareBand.vue'
 import RefineDock from './RefineDock.vue'
@@ -92,6 +93,9 @@ const afterUrl = ref(props.beforeUrl)
 const errorMessage = ref('')
 const compareBeforeUrl = ref(props.beforeUrl)
 const lastRecordId = ref<string | undefined>()
+/** 当前「处理后」版本的对照元数据（Task 8）：扩图成功时快照，普通精修 / 换图时清空。 */
+const outpaintMeta = ref<RefineCompareMetadata | null>(null)
+const compareBaseCanvas = computed(() => baseCanvasFromMetadata(outpaintMeta.value))
 // 对照状态已提升到 store（Task 1）：侧栏只读取，写入交由 CompareLightbox / 对照带。
 const compareMode = computed(() => editor.refineCompareMode)
 const wipeRatio = computed(() => editor.refineWipeRatio)
@@ -154,7 +158,10 @@ watch(
     })
     compareBeforeUrl.value = next.compareBeforeUrl
     afterUrl.value = next.afterUrl
-    if (next.reset) lastRecordId.value = undefined
+    if (next.reset) {
+      lastRecordId.value = undefined
+      outpaintMeta.value = null
+    }
     resetPointFallbackState()
   },
 )
@@ -442,6 +449,13 @@ async function runOutpaint() {
     if (url) {
       afterUrl.value = url
       lastRecordId.value = data.data.id
+      // Task 8：快照本次扩图的对照元数据（与服务端 metadata 契约同形），
+      // 对照带据此进入「基准画布」模式——以新画布为基准、Before 居中贴图。
+      outpaintMeta.value = {
+        editMode: 'outpaint',
+        outpaintFrom: { width: baseW, height: baseH },
+        outpaintTo: { width: rect.width, height: rect.height },
+      }
     }
   } catch (err) {
     const message = formatError(err, '扩图失败，请重试')
@@ -504,6 +518,7 @@ onBeforeUnmount(() => {
         v-if="!collapsed"
         :before-url="compareBeforeUrl"
         :after-url="afterUrl"
+        :version-metadata="outpaintMeta"
       />
 
       <div v-if="!collapsed" class="refine-side__body">
@@ -553,6 +568,7 @@ onBeforeUnmount(() => {
     :open="editor.compareLightboxOpen"
     :before-url="compareBeforeUrl"
     :after-url="afterUrl"
+    :base-canvas="compareBaseCanvas"
     :mode="compareMode"
     :wipe-ratio="wipeRatio"
     :inset-right="insetRight"

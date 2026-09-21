@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { CompareMode } from '@/utils/refineChrome'
+import type { CompareBaseCanvas } from './compareViewModel'
 import CompareView from './CompareView.vue'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 
@@ -10,6 +11,8 @@ const props = defineProps<{
   afterUrl?: string
   mode: CompareMode
   wipeRatio: number
+  /** 基准画布模式（Task 8，扩图版本）：透传给 CompareView，wipe 滑竿同样以新画布为基准。 */
+  baseCanvas?: CompareBaseCanvas
   /** 右侧内缩（px）：由 RefineWorkbench 经 RefineSidePanel 下发，与精修侧栏宽度/折叠态一致 */
   insetRight: number
 }>()

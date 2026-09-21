@@ -1,10 +1,20 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { baseCanvasFromMetadata, type RefineCompareMetadata } from './compareViewModel'
 import CompareView from './CompareView.vue'
 
-defineProps<{ beforeUrl: string; afterUrl?: string }>()
+const props = defineProps<{
+  beforeUrl: string
+  afterUrl?: string
+  /** 工作版本 metadata（Task 2 契约）：editMode==='outpaint' 时对照进入基准画布模式。 */
+  versionMetadata?: RefineCompareMetadata | null
+}>()
 
 const editor = useCanvasEditorStore()
+
+// Task 8：扩图版本对照以新画布为基准——Before 居中贴图、扩出区斜纹占位。
+const baseCanvas = computed(() => baseCanvasFromMetadata(props.versionMetadata))
 </script>
 
 <template>
@@ -38,6 +48,7 @@ const editor = useCanvasEditorStore()
       :after-url="afterUrl"
       mode="split"
       compact
+      :base-canvas="baseCanvas"
       :wipe-ratio="editor.refineWipeRatio"
       @update:wipe-ratio="editor.setRefineWipeRatio($event)"
     />
