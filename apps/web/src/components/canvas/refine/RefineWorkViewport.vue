@@ -6,6 +6,7 @@ import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
 import RefineModeBar from './RefineModeBar.vue'
 import RefineToolRail from './RefineToolRail.vue'
+import RefineOutpaintCanvas from './RefineOutpaintCanvas.vue'
 import { dispatchRefinePointSelect } from './maskRemote'
 import { containRect, oneToOneScaleOf } from './refineWorkLayout'
 
@@ -228,7 +229,9 @@ onBeforeUnmount(() => {
 
     <div class="refine-work__col">
       <RefineModeBar />
+      <!-- 普通工作图（蒙版精修）：非扩图模式显示 -->
       <div
+        v-show="editor.refineMode !== 'outpaint'"
         ref="stageRef"
         class="refine-work__stage"
         :class="{ 'is-pan': spaceDown }"
@@ -260,6 +263,16 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
+      <!-- 扩图画布（Task 7）：扩图模式显示，v-show 切换 -->
+      <RefineOutpaintCanvas
+        v-show="editor.refineMode === 'outpaint'"
+        :base-url="url"
+        :base-width="imgW || props.width || 0"
+        :base-height="imgH || props.height || 0"
+        :busy="editor.refineBusy"
+        :viewport-width="stageW"
+        :viewport-height="stageH"
+      />
     </div>
   </section>
 </template>

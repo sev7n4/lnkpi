@@ -32,6 +32,9 @@ import {
   resetPointSegmentSession,
   resolvePointMaskRgba,
 } from './pointSegmentSession'
+import { computeOutpaintLayers } from './outpaintComposite'
+import { renderOutpaintPngs } from './outpaintRender'
+import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 
 const REFINE_COLLAPSED_W = 44
 
@@ -112,11 +115,17 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
 /** 精修通道模型 / 尺寸改为受控选择器（M2 T4）。默认值取 shared 白名单与定价表，不写死。 */
 const modelKey = ref<string>(P1_IMAGE_EDIT_MODEL_KEY)
 const sizeOverride = ref<string | 'auto'>('auto')
-const mode = ref<'edit' | 'outpaint'>('edit')
+/** dock 的 mode：扩图模式下传 'outpaint' 以隐藏尺寸选择器（Task 7 接线）。 */
+const dockMode = computed<'edit' | 'outpaint'>(() => (editor.refineMode === 'outpaint' ? 'outpaint' : 'edit'))
 /** credits 按 shared 模型定价表动态计算（image2 = 10），模型不可识别时回落到默认估算。 */
 const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
-const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
+/** 扩图模式：仅需一个合法 rect 即可提交（无需圈选覆盖）；普通模式保持原 coverage 校验。 */
+const refineDisabled = computed(() => {
+  if (busy.value) return true
+  if (editor.refineMode === 'outpaint') return !editor.refineOutpaintRect
+  return coverageKind.value === 'empty'
+})
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
 const panelStyle = computed(() => {
@@ -291,6 +300,11 @@ async function onPointSelect({ x, y }: { x: number; y: number }) {
 
 async function runRefine() {
   if (refineDisabled.value) return
+  // 扩图模式走独立提交链路（合成两张 PNG → persist → imageEdit mode:outpaint）。
+  if (editor.refineMode === 'outpaint') {
+    await runOutpaint()
+    return
+  }
   if (activeGuideEditIntentId.value) {
     const gate = applyGuideEditIntent({
       intentId: activeGuideEditIntentId.value,
@@ -333,7 +347,7 @@ async function runRefine() {
         maskUrl,
         model: modelKey.value,
         size: sizeOverride.value,
-        mode: mode.value,
+        mode: dockMode.value,
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
@@ -348,6 +362,89 @@ async function runRefine() {
     }
   } catch (err) {
     const message = formatError(err, '精修失败，请重试')
+    if (message) errorMessage.value = message
+  } finally {
+    busy.value = false
+    abortController = null
+  }
+}
+
+/** 尽量加载原图用于底图贴位；jsdom / 加载失败时不阻塞（扩出区仍可正确合成）。 */
+async function loadBaseImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = url
+    // jsdom 等无 onload 环境：已 complete 则返回，否则兜底 null。
+    setTimeout(() => resolve(img.complete ? img : null), 0)
+  })
+}
+
+/**
+ * 扩图提交链路（Task 7）：由 store 中的 clamp 后 rect 合成底图 + 蒙版两张 PNG，
+ * persist 到服务端（失败回退 blob URL），再走 imageEdit（mode:'outpaint'、size:'auto'），
+ * 并携带 outpaintFrom（原图尺寸）/ outpaintTo（新画布尺寸）几何字段（服务端 DTO 契约）。
+ * 空 prompt 时兜底英文文案。
+ */
+async function runOutpaint() {
+  const rect = editor.refineOutpaintRect
+  if (!rect) return
+  const baseW = Number(props.width) || 0
+  const baseH = Number(props.height) || 0
+  if (!baseW || !baseH) return
+
+  errorMessage.value = ''
+  abortController?.abort()
+  abortController = new AbortController()
+  const signal = abortController.signal
+  busy.value = true
+
+  try {
+    const img = await loadBaseImage(props.beforeUrl)
+    const { baseSpec, maskSpec } = computeOutpaintLayers({ width: baseW, height: baseH }, rect)
+    const { baseBlob, maskBlob } = await renderOutpaintPngs(img, { baseSpec, maskSpec })
+
+    const baseFile = new File([baseBlob], 'outpaint-base.png', { type: 'image/png' })
+    const maskFile = new File([maskBlob], 'outpaint-mask.png', { type: 'image/png' })
+    const baseFallback = URL.createObjectURL(baseFile)
+    const maskFallback = URL.createObjectURL(maskFile)
+    let baseUrl: string = baseFallback
+    let maskUrl: string = maskFallback
+    try {
+      baseUrl = await persistMediaUrl(baseFile, baseFallback)
+      maskUrl = await persistMediaUrl(maskFile, maskFallback)
+    } finally {
+      if (baseUrl !== baseFallback) URL.revokeObjectURL(baseFallback)
+      if (maskUrl !== maskFallback) URL.revokeObjectURL(maskFallback)
+    }
+
+    const promptText = prompt.value.trim() ? prompt.value : OUTPAINT_FALLBACK_PROMPT
+    const { data } = await studioApi.editImage(
+      {
+        prompt: promptText,
+        imageUrl: baseUrl,
+        maskUrl,
+        model: modelKey.value,
+        size: 'auto',
+        mode: 'outpaint',
+        outpaintFrom: { width: baseW, height: baseH },
+        outpaintTo: { width: rect.width, height: rect.height },
+        sessionId: props.sessionId,
+        nodeId: props.nodeId,
+        parentRecordId: props.generationRecordId,
+        parentVersionId: props.currentVersionId,
+      },
+      signal,
+    )
+    const url = data.data.url
+    if (url) {
+      afterUrl.value = url
+      lastRecordId.value = data.data.id
+    }
+  } catch (err) {
+    const message = formatError(err, '扩图失败，请重试')
     if (message) errorMessage.value = message
   } finally {
     busy.value = false
@@ -429,7 +526,7 @@ onBeforeUnmount(() => {
         :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
         :sizes="IMAGE2_EDIT_SIZES"
         :size-override="sizeOverride"
-        :mode="mode"
+        :mode="dockMode"
         :busy="busy"
         :disabled="refineDisabled"
         :can-apply="canApply"

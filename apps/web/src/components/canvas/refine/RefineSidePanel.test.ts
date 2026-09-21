@@ -3,7 +3,9 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
 import { studioApi } from '@/services/studio-api'
+import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 import RefineSidePanel from './RefineSidePanel.vue'
 
 vi.mock('@/services/studio-api', () => ({
@@ -15,6 +17,13 @@ vi.mock('@/services/studio-api', () => ({
 
 vi.mock('@/composables/useMediaUpload', () => ({
   persistMediaUrl: vi.fn(async () => 'https://up/mask.png'),
+}))
+
+vi.mock('./outpaintRender', () => ({
+  renderOutpaintPngs: vi.fn(async () => ({
+    baseBlob: new Blob(['base'], { type: 'image/png' }),
+    maskBlob: new Blob(['mask'], { type: 'image/png' }),
+  })),
 }))
 
 const baseProps = {
@@ -140,5 +149,54 @@ describe('RefineSidePanel 三段式', () => {
     expect(body.model).toBe('image2')
     expect(body.size).toBe('auto')
     expect(body.mode).toBe('edit')
+  })
+
+  it('扩图提交：合成两张 PNG persist 后走 editImage（mode:outpaint / size:auto / outpaintFrom·To）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 0, y: 0, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    expect(runBtn).not.toBeNull()
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    const persist = (persistMediaUrl as ReturnType<typeof vi.fn>)
+    expect(persist).toHaveBeenCalledTimes(2)
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    const body = call[0]
+    expect(body.mode).toBe('outpaint')
+    expect(body.size).toBe('auto')
+    expect(body.imageUrl).toBe('https://up/mask.png')
+    expect(body.maskUrl).toBe('https://up/mask.png')
+    expect(body.outpaintFrom).toEqual({ width: 400, height: 300 })
+    expect(body.outpaintTo).toEqual({ width: 800, height: 600 })
+  })
+
+  it('扩图空 prompt 时请求体 prompt=兜底英文', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.refineOutpaintRect = { x: 0, y: 0, width: 800, height: 600 }
+    mountPanel({ width: 400, height: 300 })
+    const runBtn = q('[data-testid="dock-run"]')
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    expect(call[0].prompt).toBe(OUTPAINT_FALLBACK_PROMPT)
+  })
+
+  it('扩图模式下 dock 尺寸选择器隐藏（mode 钩子）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    mountPanel({ width: 400, height: 300 })
+    expect(q('[data-testid="dock-size-select"]')).toBeNull()
+    editor.refineMode = 'select'
+    await flushPromises()
+    expect(q('[data-testid="dock-size-select"]')).not.toBeNull()
   })
 })

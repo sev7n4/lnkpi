@@ -141,4 +141,45 @@ describe('RefineToolRail', () => {
   it('「查看」分组不再渲染文字标签（follow-up #5），只留发丝分隔线', () => {
     expect(mountRail().find('.refine-rail__seplabel').exists()).toBe(false)
   })
+
+  it('扩图入口存在，点击后激活态（refineMode=outpaint）', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    const btn = w.find('[data-testid="rail-mode-outpaint"]')
+    expect(btn.exists()).toBe(true)
+    expect(store.refineMode).toBe('select')
+    await btn.trigger('click')
+    expect(store.refineMode).toBe('outpaint')
+    expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).toContain('is-active')
+  })
+
+  it('扩图模式 busy 时入口 disabled（冻结，模式不可切换）', () => {
+    const store = useCanvasEditorStore()
+    store.setRefineBusy(true)
+    const w = mountRail()
+    expect(w.find('[data-testid="rail-mode-outpaint"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('扩图模式下画笔/橡皮变体 disabled', async () => {
+    const store = useCanvasEditorStore()
+    store.refineMode = 'outpaint'
+    const w = mountRail()
+    await w.find('[data-testid="rail-input-paint"]').trigger('click')
+    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="rail-variant-eraser"]').attributes('disabled')).toBeDefined()
+    // 矩形（marquee）等仍可用，仅画笔/橡皮被禁
+    await w.find('[data-testid="rail-input-marquee"]').trigger('click')
+    expect(w.find('[data-testid="rail-variant-rect"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('退出扩图模式后画笔/橡皮恢复可用', async () => {
+    const store = useCanvasEditorStore()
+    store.refineMode = 'outpaint'
+    const w = mountRail()
+    await w.find('[data-testid="rail-input-paint"]').trigger('click')
+    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeDefined()
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    expect(store.refineMode).toBe('select')
+    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeUndefined()
+  })
 })

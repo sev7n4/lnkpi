@@ -101,9 +101,9 @@ export const studioApi = {
       size?: string
       /** 通道模式：edit 普通精修 / outpaint 扩图（Task 7 接线）。 */
       mode?: 'edit' | 'outpaint'
-      /** 扩图起止边（Task 7 接线，本期预留）。 */
-      outpaintFrom?: string
-      outpaintTo?: string
+      /** 扩图起止边（Task 7 接线）：原图尺寸 / 新画布尺寸，对象契约对齐服务端 DTO。 */
+      outpaintFrom?: { width: number; height: number }
+      outpaintTo?: { width: number; height: number }
       parentRecordId?: string
       parentVersionId?: string
     } & CanvasGenerationScope,

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import RefineWorkbench from './RefineWorkbench.vue'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
 /** 每个用例共用一个 pinia：测试里取的 store 必须与组件内注入的是同一个实例 */
 let pinia: Pinia
@@ -56,5 +57,27 @@ describe('RefineWorkbench 生产接线', () => {
     await openCompareMenu(w)
     expect(w.find('[data-testid="rail-compare-option-split"]').attributes('disabled')).toBeUndefined()
     expect(w.find('[data-testid="rail-compare-option-wipe"]').attributes('disabled')).toBeUndefined()
+  })
+
+  it('Esc 分级退出：扩图模式先退回 select 且不关闭（再按才关精修）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    const w = mountWorkbench()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(editor.refineMode).toBe('select')
+    expect(w.emitted('close')).toBeUndefined()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.emitted('close')).toHaveLength(1)
+  })
+
+  it('Esc 在普通精修模式下直接关闭', async () => {
+    const w = mountWorkbench()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.emitted('close')).toHaveLength(1)
   })
 })

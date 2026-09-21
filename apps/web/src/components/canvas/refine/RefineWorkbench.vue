@@ -39,9 +39,14 @@ const mediaSize = useNaturalImageSize({
   height: () => props.height,
 })
 
-/** Escape→close guard: mirror RefineSidePanel's requestClose, but keep the
- *  source of truth for collapsed/width in the shared composable. */
+/** Escape→close guard（分级，与对照同思路）：
+ *  1) 扩图模式优先退出到 select（再按才继续）；2) 对照灯箱打开则先关；3) 关闭精修。
+ *  busy 时 useWorkbenchPanel 已拦截 Esc，故此处无需再判。 */
 function onClose() {
+  if (editor.refineMode === 'outpaint') {
+    editor.setRefineMode('select')
+    return
+  }
   if (editor.compareLightboxOpen) {
     editor.setCompareLightboxOpen(false)
     return
