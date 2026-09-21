@@ -3,7 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   getEditIntent,
-  IMAGE_EDIT_GATEWAY_MODEL_ID,
+  IMAGE2_EDIT_SIZES,
+  IMAGE_EDIT_MODEL_KEYS,
+  IMAGE_EDIT_MODEL_PRICING,
+  P1_IMAGE_EDIT_MODEL_KEY,
   resolveImageEditProfile,
   type ImageVersionEntry,
 } from '@lnkpi/shared'
@@ -106,10 +109,12 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
   return img
 }
 
-const credits = computed(() => estimateImageCredits(1))
-/** 精修通道模型由服务端写死（studio.service.ts 的 P1_IMAGE_EDIT_MODEL_KEY），前端只做展示。
- *  展示值直接取 shared 的网关模型 id，不写死，避免与真实通道漂移。 */
-const editModelLabel = IMAGE_EDIT_GATEWAY_MODEL_ID
+/** 精修通道模型 / 尺寸改为受控选择器（M2 T4）。默认值取 shared 白名单与定价表，不写死。 */
+const modelKey = ref<string>(P1_IMAGE_EDIT_MODEL_KEY)
+const sizeOverride = ref<string | 'auto'>('auto')
+const mode = ref<'edit' | 'outpaint'>('edit')
+/** credits 按 shared 模型定价表动态计算（image2 = 10），模型不可识别时回落到默认估算。 */
+const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
@@ -326,6 +331,9 @@ async function runRefine() {
         prompt: prompt.value,
         imageUrl: props.beforeUrl,
         maskUrl,
+        model: modelKey.value,
+        size: sizeOverride.value,
+        mode: mode.value,
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
@@ -417,7 +425,11 @@ onBeforeUnmount(() => {
         :prompt="prompt"
         :credits="credits"
         :before-url="beforeUrl"
-        :model-label="editModelLabel"
+        :model-key="modelKey"
+        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :sizes="IMAGE2_EDIT_SIZES"
+        :size-override="sizeOverride"
+        :mode="mode"
         :busy="busy"
         :disabled="refineDisabled"
         :can-apply="canApply"
@@ -428,6 +440,8 @@ onBeforeUnmount(() => {
         :active-edit-intent-id="activeGuideEditIntentId"
         :ref-role-hints="activeRefRoleHints"
         @update:prompt="prompt = $event"
+        @update:model-key="modelKey = $event"
+        @update:size-override="sizeOverride = $event"
         @run="runRefine"
         @apply="onApply"
         @retry="runRefine"

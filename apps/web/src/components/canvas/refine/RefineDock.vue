@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { resolveImageEditProfile } from '@lnkpi/shared'
+import {
+  IMAGE2_EDIT_SIZES,
+  IMAGE_EDIT_GATEWAY_MODEL_ID,
+  IMAGE_EDIT_MODEL_KEYS,
+  IMAGE_EDIT_MODEL_PRICING,
+  P1_IMAGE_EDIT_MODEL_KEY,
+  resolveImageEditProfile,
+} from '@lnkpi/shared'
 import type { NodeRef } from '@/composables/useNodeRefs'
 import { useSpeechRecognition } from '@/composables/useSpeechRecognition'
+import { useClickOutside } from '@/composables/useClickOutside'
 import DockToolbarShell from '@/components/canvas/dock-studio/shared/DockToolbarShell.vue'
 import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vue'
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
@@ -10,12 +18,24 @@ import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 
+type RefineMode = 'edit' | 'outpaint'
+
 const props = withDefaults(defineProps<{
   prompt: string
   credits: number
   beforeUrl: string
-  /** 该精修通道实际使用的模型（服务端写死，所以是只读状态位） */
-  modelLabel: string
+  /** 当前选中的精修模型 key（受控）。白名单见 availableModelKeys。 */
+  modelKey: string
+  /** 可选尺寸档位（数据驱动；本期单值，后续扩档零改动）。 */
+  sizes: readonly string[]
+  /** 模型白名单（数据驱动；本期仅 image2）。 */
+  availableModelKeys: readonly string[]
+  /** 当前尺寸覆盖（'auto' 表示跟随原图）。扩图模式下由父层传 'auto' 并隐藏选择器。 */
+  sizeOverride: string | 'auto'
+  /** 通道模式：edit 普通精修；outpaint 扩图（Task 7 接线）会隐藏尺寸选择器。 */
+  mode?: RefineMode
+  /** 旧只读状态位的展示值，保留作模型 key 的兜底展示名。 */
+  modelLabel?: string
   busy?: boolean
   disabled?: boolean
   canApply?: boolean
@@ -28,10 +48,18 @@ const props = withDefaults(defineProps<{
 }>(), {
   busy: false, disabled: false, canApply: false, coverageKind: 'ok',
   activeEditIntentId: null, refRoleHints: '',
+  mode: 'edit',
+  modelKey: P1_IMAGE_EDIT_MODEL_KEY,
+  sizes: () => IMAGE2_EDIT_SIZES,
+  availableModelKeys: () => IMAGE_EDIT_MODEL_KEYS,
+  sizeOverride: 'auto',
+  modelLabel: '',
 })
 
 const emit = defineEmits<{
   'update:prompt': [value: string]
+  'update:modelKey': [value: string]
+  'update:sizeOverride': [value: string | 'auto']
   run: []
   apply: []
   retry: []
@@ -45,10 +73,18 @@ const promptSectionRef = ref<InstanceType<typeof DockPromptSection> | null>(null
 const editIntentAnchorRef = ref<HTMLElement | null>(null)
 const editIntentPickerOpen = ref(false)
 
+const modelOpen = ref(false)
+const sizeOpen = ref(false)
+const selectorsRef = ref<HTMLElement | null>(null)
+useClickOutside(selectorsRef, () => {
+  modelOpen.value = false
+  sizeOpen.value = false
+})
+
 /**
- * 精修通道 POST /studio/image/edit 只接受 prompt / imageUrl / maskUrl，
- * 不接受模型、尺寸与参考图（spec §6.1）。所以这里如实呈现为只读状态位，
- * 不做「点了也没用」的控件。
+ * 精修通道 POST /studio/image/edit 本期接受 model / size / mode（spec §6.1 已放开）。
+ * 模型与尺寸从只读状态位升级为数据驱动选择器：白名单/档位均单值，但选择器按多值渲染，
+ * 后续扩档只需追加 shared 常量，UI 零改动。
  */
 function aspectLabel(w: number, h: number): string {
   const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
@@ -64,6 +100,19 @@ const sizeLabel = computed(() => {
   if (!w || !h) return '原始尺寸'
   return `${w}×${h} · ${aspectLabel(w, h)}`
 })
+
+/** 尺寸选项 = ['auto', ...sizes] 去重（auto 既可能在 sizes 中也可能不在）。 */
+const sizeOptions = computed(() => Array.from(new Set(['auto', ...props.sizes])))
+
+/** credits 按 shared 定价表动态显示，模型不可识别时回落到父层传入值。 */
+const creditValue = computed(() => IMAGE_EDIT_MODEL_PRICING[props.modelKey] ?? props.credits)
+
+function modelLabelFor(key: string): string {
+  if (key === P1_IMAGE_EDIT_MODEL_KEY) return IMAGE_EDIT_GATEWAY_MODEL_ID
+  return props.modelLabel || key
+}
+
+const currentModelLabel = computed(() => modelLabelFor(props.modelKey))
 
 const workRefs = computed<NodeRef[]>(() => [{
   refId: 'refine-work-image',
@@ -86,6 +135,16 @@ const guideCapabilities = resolveImageEditProfile().capabilities ?? {
 }
 
 const runDisabled = computed(() => props.busy || props.disabled)
+
+function selectModel(key: string) {
+  emit('update:modelKey', key)
+  modelOpen.value = false
+}
+
+function selectSize(size: string) {
+  emit('update:sizeOverride', size)
+  sizeOpen.value = false
+}
 
 function toggleVoice() {
   if (speech.listening.value) { speech.stop(); return }
@@ -156,16 +215,80 @@ function toggleVoice() {
       </div>
 
       <div class="bottom-toolbar-actions refine-dock__actions">
-        <span class="refine-dock__chip" data-testid="dock-model-chip" :title="`精修通道模型：${modelLabel}`">
-          <span class="refine-dock__chip-k">模型</span>{{ modelLabel }}
-        </span>
-        <span class="refine-dock__chip" data-testid="dock-size-chip" title="输出尺寸跟随原图">
-          <span class="refine-dock__chip-k">尺寸</span>{{ sizeLabel }}
-        </span>
+        <!-- 模型选择器：白名单数据驱动，切模型 emit update:modelKey -->
+        <div ref="selectorsRef" class="refine-dock__select-group">
+          <div class="refine-dock__select">
+            <button
+              type="button"
+              class="refine-dock__select-trigger"
+              data-testid="dock-model-select"
+              :disabled="runDisabled"
+              :aria-expanded="modelOpen"
+              @click="modelOpen = !modelOpen"
+            >
+              <span class="refine-dock__chip-k">模型</span>
+              <span class="refine-dock__select-value">{{ currentModelLabel }}</span>
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" class="refine-dock__select-caret">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-if="modelOpen" class="refine-dock__select-menu" @click.stop>
+              <button
+                v-for="k in availableModelKeys"
+                :key="k"
+                type="button"
+                class="refine-dock__select-item"
+                :class="{ 'is-active': k === modelKey }"
+                :data-model-key="k"
+                data-testid="dock-model-option"
+                @click="selectModel(k)"
+              >
+                {{ modelLabelFor(k) }}
+              </button>
+              <p v-if="!availableModelKeys.length" class="refine-dock__select-empty">暂无可选模型</p>
+            </div>
+          </div>
+
+          <!-- 尺寸选择器：auto + 档位；扩图模式隐藏（mode 钩子，Task 7 接线） -->
+          <div v-if="mode !== 'outpaint'" class="refine-dock__select">
+            <button
+              type="button"
+              class="refine-dock__select-trigger"
+              data-testid="dock-size-select"
+              :disabled="runDisabled"
+              :aria-expanded="sizeOpen"
+              @click="sizeOpen = !sizeOpen"
+            >
+              <span class="refine-dock__chip-k">尺寸</span>
+              <span class="refine-dock__select-value">{{ sizeOverride }}</span>
+              <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" class="refine-dock__select-caret">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div v-if="sizeOpen" class="refine-dock__select-menu" @click.stop>
+              <button
+                v-for="s in sizeOptions"
+                :key="s"
+                type="button"
+                class="refine-dock__select-item"
+                :class="{ 'is-active': s === sizeOverride }"
+                :data-size="s"
+                data-testid="dock-size-option"
+                @click="selectSize(s)"
+              >
+                {{ s }}
+              </button>
+            </div>
+          </div>
+
+          <span class="refine-dock__chip refine-dock__chip--muted" title="输出尺寸跟随原图">
+            <span class="refine-dock__chip-k">原图</span>{{ sizeLabel }}
+          </span>
+        </div>
 
         <div class="ml-auto flex items-center gap-2">
           <DockMicButton :listening="speech.listening.value" :disabled="runDisabled" @toggle="toggleVoice" />
-          <DockCreditBadge :credits="credits" />
+          <DockCreditBadge :credits="creditValue" />
           <button type="button" class="refine-dock__primary" data-testid="dock-run" :disabled="runDisabled" @click="emit('run')">
             精修
           </button>
@@ -200,6 +323,33 @@ function toggleVoice() {
   color: var(--neo-text-secondary); font-size: 11px;
 }
 .refine-dock__chip-k { color: var(--neo-text-muted); }
+
+/* 模型 / 尺寸选择器：沿用 chip 视觉，受控可点 */
+.refine-dock__select-group { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.refine-dock__select { position: relative; display: inline-flex; }
+.refine-dock__select-trigger {
+  display: inline-flex; height: 24px; align-items: center; gap: 4px; padding: 0 8px;
+  border: 1px solid var(--neo-border); border-radius: 8px; background: transparent;
+  color: var(--neo-text-secondary); font-size: 11px; cursor: pointer;
+}
+.refine-dock__select-trigger:disabled { opacity: .5; cursor: not-allowed; }
+.refine-dock__select-value { font-weight: 500; color: var(--neo-text-primary); }
+.refine-dock__select-caret { opacity: .5; }
+.refine-dock__select-menu {
+  position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 50;
+  min-width: 180px; padding: 4px; border: 1px solid var(--neo-border);
+  border-radius: 10px; background: var(--neo-surface, #111);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+}
+.refine-dock__select-item {
+  display: block; width: 100%; text-align: left; padding: 6px 8px;
+  border: none; border-radius: 6px; background: transparent;
+  color: var(--neo-text-secondary); font-size: 11px; cursor: pointer;
+}
+.refine-dock__select-item:hover { background: var(--neo-hover-bg, rgba(255, 255, 255, .06)); color: var(--neo-text-primary); }
+.refine-dock__select-item.is-active { background: var(--neo-hi-bg, #17181d); color: #fff; }
+.refine-dock__select-empty { margin: 0; padding: 6px 8px; color: var(--neo-text-muted); font-size: 11px; }
+.refine-dock__chip--muted { opacity: .8; }
 
 .refine-dock__hint { margin: 0 12px 6px; color: var(--neo-text-muted); font-size: 11px; }
 .refine-dock__hint--warn { color: #e6a23c; }

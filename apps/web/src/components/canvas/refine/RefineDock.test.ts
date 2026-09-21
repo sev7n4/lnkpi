@@ -1,11 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
+import {
+  IMAGE2_EDIT_SIZES,
+  IMAGE_EDIT_GATEWAY_MODEL_ID,
+  IMAGE_EDIT_MODEL_KEYS,
+  IMAGE_EDIT_MODEL_PRICING,
+  P1_IMAGE_EDIT_MODEL_KEY,
+} from '@lnkpi/shared'
 import RefineDock from './RefineDock.vue'
 
 const mountDock = (props: Record<string, unknown> = {}) =>
   mount(RefineDock, {
-    props: { prompt: '', credits: 10, beforeUrl: 'blob:before', modelLabel: IMAGE_EDIT_GATEWAY_MODEL_ID, width: 1280, height: 720, ...props },
+    props: {
+      prompt: '',
+      credits: 10,
+      beforeUrl: 'blob:before',
+      modelKey: P1_IMAGE_EDIT_MODEL_KEY,
+      availableModelKeys: IMAGE_EDIT_MODEL_KEYS,
+      sizes: IMAGE2_EDIT_SIZES,
+      sizeOverride: 'auto',
+      mode: 'edit',
+      width: 1280,
+      height: 720,
+      ...props,
+    },
     global: { stubs: { GuidePickerPopover: { template: '<div class="guide-picker-stub" />' } } },
   })
 
@@ -25,15 +43,50 @@ describe('RefineDock', () => {
     expect(strip.props('showAddUpload')).toBeFalsy()
   })
 
-  it('模型与尺寸是只读状态位，不是可点控件', () => {
+  it('模型是受控选择器，渲染白名单项（本期仅 image2）', async () => {
     const w = mountDock()
-    expect(w.find('[data-testid="dock-model-chip"]').text()).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
-    expect(w.find('[data-testid="dock-size-chip"]').text()).toContain('1280×720')
-    expect(w.find('[data-testid="dock-size-chip"]').element.tagName).not.toBe('BUTTON')
+    expect(w.find('[data-testid="dock-model-select"]').exists()).toBe(true)
+    await w.find('[data-testid="dock-model-select"]').trigger('click')
+    const options = w.findAll('[data-testid="dock-model-option"]')
+    expect(options.map((o) => o.attributes('data-model-key'))).toEqual([...IMAGE_EDIT_MODEL_KEYS])
+    expect(w.find('[data-testid="dock-model-option"][data-model-key="image2"]').text()).toContain(
+      IMAGE_EDIT_GATEWAY_MODEL_ID,
+    )
   })
 
-  it('尺寸位带比例（由宽高推出）', () => {
-    expect(mountDock({ width: 1920, height: 1080 }).find('[data-testid="dock-size-chip"]').text()).toContain('16:9')
+  it('切模型 emit update:modelKey', async () => {
+    const w = mountDock()
+    await w.find('[data-testid="dock-model-select"]').trigger('click')
+    await w.find('[data-testid="dock-model-option"][data-model-key="image2"]').trigger('click')
+    expect(w.emitted('update:modelKey')).toEqual([['image2']])
+  })
+
+  it('尺寸是受控选择器，列 auto + IMAGE2_EDIT_SIZES', async () => {
+    const w = mountDock()
+    await w.find('[data-testid="dock-size-select"]').trigger('click')
+    const options = w.findAll('[data-testid="dock-size-option"]')
+    const expected = Array.from(new Set(['auto', ...IMAGE2_EDIT_SIZES]))
+    expect(options.map((o) => o.attributes('data-size'))).toEqual(expected)
+    expect(options.find((o) => o.attributes('data-size') === 'auto')).toBeTruthy()
+  })
+
+  it('切尺寸 emit update:sizeOverride', async () => {
+    const w = mountDock({ sizes: ['auto', '1024x1024'], sizeOverride: 'auto' })
+    await w.find('[data-testid="dock-size-select"]').trigger('click')
+    await w.find('[data-testid="dock-size-option"][data-size="1024x1024"]').trigger('click')
+    expect(w.emitted('update:sizeOverride')).toEqual([['1024x1024']])
+  })
+
+  it('扩图模式下隐藏尺寸选择器（仅留 mode 感知钩子）', () => {
+    const w = mountDock({ mode: 'outpaint' })
+    expect(w.find('[data-testid="dock-size-select"]').exists()).toBe(false)
+  })
+
+  it('credits 按 shared 定价表动态显示（image2 = 10）', () => {
+    const w = mountDock({ modelKey: 'image2' })
+    expect(w.findComponent({ name: 'DockCreditBadge' }).props('credits')).toBe(
+      IMAGE_EDIT_MODEL_PRICING['image2'],
+    )
   })
 
   it('提示词区双向绑定，回车 submit 触发 run', () => {

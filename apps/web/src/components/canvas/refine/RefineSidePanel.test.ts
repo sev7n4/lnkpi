@@ -1,8 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
+import { studioApi } from '@/services/studio-api'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import RefineSidePanel from './RefineSidePanel.vue'
+
+vi.mock('@/services/studio-api', () => ({
+  studioApi: {
+    editImage: vi.fn(async () => ({ data: { data: { url: 'blob:after', id: 'rec1' } } })),
+    segmentImage: vi.fn(async () => ({ data: { data: { maskUrl: 'blob:mask' } } })),
+  },
+}))
+
+vi.mock('@/composables/useMediaUpload', () => ({
+  persistMediaUrl: vi.fn(async () => 'https://up/mask.png'),
+}))
 
 const baseProps = {
   nodeId: 'n1', beforeUrl: 'blob:before', versions: [], sessionId: 's1',
@@ -35,8 +48,18 @@ const q = (sel: string) => document.body.querySelector(sel)
 const qa = (sel: string) => Array.from(document.body.querySelectorAll(sel))
 
 describe('RefineSidePanel 三段式', () => {
-  beforeEach(() => { pinia = createPinia(); setActivePinia(pinia) })
-  afterEach(() => { current?.unmount(); current = null })
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    // jsdom 未实现 URL.createObjectURL，runRefine 依赖它生成 fallbackUrl。
+    if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:fallback')
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    current?.unmount()
+    current = null
+    vi.clearAllMocks()
+  })
 
   it('段落顺序：head → 对照带 → 工具箱 → dock', () => {
     mountPanel()
@@ -86,8 +109,36 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('.refine-side__collapse')).not.toBeNull()
   })
 
-  it('模型 chip 显示精修通道真实模型（来自 shared，不写死）', () => {
+  it('模型选择器渲染精修通道真实模型（来自 shared，不写死）', async () => {
     mountPanel()
-    expect(q('[data-testid="dock-model-chip"]')!.textContent).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
+    const trigger = q('[data-testid="dock-model-select"]')
+    expect(trigger).not.toBeNull()
+    trigger!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const opt = q('[data-testid="dock-model-option"][data-model-key="image2"]')
+    expect(opt).not.toBeNull()
+    expect(opt!.textContent).toContain(IMAGE_EDIT_GATEWAY_MODEL_ID)
+  })
+
+  it('runRefine 请求体带 model / size / mode（按 shared 白名单与定价）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineCoverage = 0.5
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(['x'], { type: 'image/png' }),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    mountPanel()
+    const runBtn = q('[data-testid="dock-run"]')
+    expect(runBtn).not.toBeNull()
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    const call = (studioApi.editImage as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(call).toBeTruthy()
+    const body = call[0]
+    expect(body.model).toBe('image2')
+    expect(body.size).toBe('auto')
+    expect(body.mode).toBe('edit')
   })
 })

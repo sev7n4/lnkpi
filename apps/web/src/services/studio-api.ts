@@ -95,6 +95,15 @@ export const studioApi = {
       prompt: string
       imageUrl: string
       maskUrl: string
+      /** 精修模型 key（白名单：IMAGE_EDIT_MODEL_KEYS），服务端校验，白名单外 400。 */
+      model?: string
+      /** 输出尺寸档位（白名单：IMAGE2_EDIT_SIZES），'auto' 跟随原图。 */
+      size?: string
+      /** 通道模式：edit 普通精修 / outpaint 扩图（Task 7 接线）。 */
+      mode?: 'edit' | 'outpaint'
+      /** 扩图起止边（Task 7 接线，本期预留）。 */
+      outpaintFrom?: string
+      outpaintTo?: string
       parentRecordId?: string
       parentVersionId?: string
     } & CanvasGenerationScope,
