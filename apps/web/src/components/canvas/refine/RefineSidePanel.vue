@@ -6,21 +6,19 @@ import {
   resolveImageEditProfile,
   type ImageVersionEntry,
 } from '@lnkpi/shared'
-import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
-import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
-import { maskSubcontrolsVisible } from '@/utils/refineChrome'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { syncRefineUrls } from './syncRefineUrls'
 import CompareLightbox from './CompareLightbox.vue'
 import RefineCompareBand from './RefineCompareBand.vue'
-import VersionStrip from './VersionStrip.vue'
+import RefineDock from './RefineDock.vue'
+import RefineToolbox from './RefineToolbox.vue'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
 import { parseFillHex } from './maskWand'
@@ -63,11 +61,8 @@ const emit = defineEmits<{
 }>()
 
 const editor = useCanvasEditorStore()
-const promptRef = ref<HTMLTextAreaElement | null>(null)
-const editIntentAnchorRef = ref<HTMLElement | null>(null)
 const prompt = ref('')
 const activeGuideEditIntentId = ref<string | null>(null)
-const editIntentPickerOpen = ref(false)
 const guideCapabilities =
   resolveImageEditProfile().capabilities ?? {
     transparentBackground: false,
@@ -111,11 +106,12 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
 }
 
 const credits = computed(() => estimateImageCredits(1))
+/** 精修通道模型由服务端写死（studio.service.ts 的 P1_IMAGE_EDIT_MODEL_KEY），前端只做展示。 */
+const editModelLabel = computed(() => 'gpt-image-1')
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 const refineDisabled = computed(() => busy.value || coverageKind.value === 'empty')
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
-const maskMenuOpen = computed(() => maskSubcontrolsVisible(editor.refineMaskMenuOpen))
 const panelStyle = computed(() => {
   const width = props.collapsed
     ? REFINE_COLLAPSED_W
@@ -194,19 +190,6 @@ function applyEditIntent(intentId: string) {
 
 function clearEditIntent() {
   activeGuideEditIntentId.value = null
-  editIntentPickerOpen.value = false
-}
-
-function onBrushColorInput(event: Event) {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) return
-  editor.setRefineBrushColor(target.value)
-}
-
-function onWandToleranceInput(event: Event) {
-  const target = event.target
-  if (!(target instanceof HTMLInputElement)) return
-  editor.setRefineWandTolerance(Number(target.value))
 }
 
 function onSelectVersion(versionId: string) {
@@ -215,23 +198,9 @@ function onSelectVersion(versionId: string) {
   if (version) compareBeforeUrl.value = version.url
 }
 
-function onRevert(payload: { versionId: string }) {
+function onRevert(versionId: string) {
   if (busy.value) return
-  emit('revert', payload)
-}
-
-function onBrushParentClick() {
-  if (busy.value) return
-  if (!editor.refineMaskMenuOpen) {
-    editor.setRefineMaskMenuOpen(true)
-    editor.setRefineTool('brush')
-    return
-  }
-  if (editor.refineTool !== 'brush') {
-    editor.setRefineTool('brush')
-    return
-  }
-  editor.setRefineMaskMenuOpen(false)
+  emit('revert', { versionId })
 }
 
 function onBackOrCancel() {
@@ -424,195 +393,46 @@ onBeforeUnmount(() => {
           </button>
         </div>
       </header>
-      <div v-show="!collapsed" class="refine-side__body">
-        <RefineCompareBand :before-url="compareBeforeUrl" :after-url="afterUrl" />
-        <div class="refine-side__toolbar">
-          <div class="refine-side__icon-row">
-            <button
-              type="button"
-              class="refine-side__icon-btn"
-              :class="{ 'is-active': maskMenuOpen }"
-              title="画笔"
-              :disabled="busy"
-              @click="onBrushParentClick"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 4 20 9 9 20H4v-5L15 4z" />
-              </svg>
-            </button>
-            <template v-if="maskMenuOpen">
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'eraser' }" title="橡皮" :disabled="busy" @click="editor.setRefineTool('eraser')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="m7 17-3-3 8-8 6 6-8 8H7zM14 8l2 2" />
-                </svg>
-              </button>
-              <button type="button" class="refine-side__icon-btn" :class="{ 'is-active': editor.refineTool === 'rect' }" title="矩形选区" :disabled="busy" @click="editor.setRefineTool('rect')">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <rect x="4" y="6" width="16" height="12" rx="1" stroke-dasharray="3 2" />
-                </svg>
-              </button>
-              <label class="refine-side__color" title="选区颜色">
-                <input
-                  type="color"
-                  :value="editor.refineBrushColor"
-                  :disabled="busy"
-                  @input="onBrushColorInput"
-                >
-              </label>
-              <label class="refine-side__slider" title="笔刷粗细">
-                <input v-model.number="editor.refineBrushSize" type="range" min="4" max="80" :disabled="busy">
-                <span>{{ editor.refineBrushSize }}</span>
-              </label>
-              <button type="button" class="refine-side__icon-btn" title="清除选区" :disabled="busy" @click="editor.getRefineMask()?.clear()">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <path stroke-linecap="round" d="M5 7h14M10 7V5h4v2M8 7l1 12h6l1-12" />
-                </svg>
-              </button>
-            </template>
-          </div>
-          <div class="refine-side__icon-row">
-            <button
-              type="button"
-              class="refine-side__icon-btn"
-              :class="{ 'is-active': editor.refineTool === 'wand' }"
-              :title="editor.refineMaskOp === 'subtract' ? '魔棒减选' : '魔棒'"
-              :disabled="busy"
-              @click="editor.setRefineTool('wand')"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linecap="round" d="M7 17 17 7" />
-                <path d="M15.5 5.5 18.5 8.5 9 18H6v-3Z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="refine-side__icon-btn"
-              :class="{ 'is-active': editor.refineTool === 'polygon' }"
-              :title="editor.refineMaskOp === 'subtract' ? '多边形减选' : '多边形选区'"
-              :disabled="busy"
-              @click="editor.setRefineTool('polygon')"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <path stroke-linejoin="round" d="M12 4 20 9.5 17 19H7L4 9.5Z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="refine-side__icon-btn"
-              :class="{ 'is-active': editor.refineTool === 'point' }"
-              :title="editor.refineMaskOp === 'subtract' ? '点选减选' : '点选主体'"
-              :disabled="busy || segmentBusy"
-              @click="editor.setRefineTool('point')"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                <circle cx="12" cy="12" r="3" />
-                <path stroke-linecap="round" d="M12 2v4M12 18v4M2 12h4M18 12h4" />
-              </svg>
-            </button>
-            <template v-if="editor.refineTool === 'wand'">
-              <label class="refine-side__slider" title="魔棒容差">
-                <input
-                  type="range"
-                  min="0"
-                  max="48"
-                  step="1"
-                  :value="editor.refineWandTolerance"
-                  :disabled="busy"
-                  @input="onWandToleranceInput"
-                >
-                <span>{{ editor.refineWandTolerance }}</span>
-              </label>
-              <button type="button" class="refine-side__icon-btn" title="反向选区" :disabled="busy" @click="editor.getRefineMask()?.invert()">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75">
-                  <circle cx="12" cy="12" r="7" />
-                  <path d="M12 5a7 7 0 0 1 0 14Z" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
-            </template>
-          </div>
-        </div>
+      <RefineCompareBand
+        v-if="!collapsed"
+        :before-url="compareBeforeUrl"
+        :after-url="afterUrl"
+      />
 
-        <div class="refine-dock__chips">
-          <button type="button" class="refine-dock__chip" :disabled="busy" @click="applyStainPreset">清除瑕疵</button>
-          <div class="relative">
-            <button
-              ref="editIntentAnchorRef"
-              type="button"
-              class="refine-dock__chip refine-dock__chip--intent"
-              :class="{ 'is-guide-active': activeGuideEditIntentId }"
-              :disabled="busy"
-              aria-label="编辑意图"
-              title="编辑意图"
-              :aria-expanded="editIntentPickerOpen"
-              @click="editIntentPickerOpen = !editIntentPickerOpen"
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                <rect x="4" y="4" width="6" height="6" rx="1" />
-                <rect x="14" y="4" width="6" height="6" rx="1" />
-                <rect x="4" y="14" width="6" height="6" rx="1" />
-                <rect x="14" y="14" width="6" height="6" rx="1" />
-              </svg>
-              <span>{{ activeEditIntent?.label ?? '编辑意图' }}</span>
-              <span
-                v-if="activeGuideEditIntentId"
-                class="refine-dock__intent-dot"
-                aria-hidden="true"
-              />
-            </button>
-            <GuidePickerPopover
-              mode="edit_intent"
-              :active-id="activeGuideEditIntentId"
-              :capabilities="guideCapabilities"
-              :open="editIntentPickerOpen"
-              :ref-image-count="refineRefImageCount"
-              placement="below-end"
-              portal
-              :anchor-el="editIntentAnchorRef"
-              @select="applyEditIntent"
-              @clear="clearEditIntent"
-              @close="editIntentPickerOpen = false"
-            />
-          </div>
-        </div>
-
-        <p v-if="activeRefRoleHints" class="refine-dock__hint">
-          参考图：{{ activeRefRoleHints }}
-        </p>
-
-        <textarea
-          ref="promptRef"
-          v-model="prompt"
-          class="refine-dock__prompt"
-          placeholder="改这里：……"
-          rows="2"
-          :disabled="busy"
-        />
-
-        <p v-if="coverageKind === 'empty'" class="refine-dock__hint">请先圈选要改的区域</p>
-        <p v-else-if="coverageKind === 'full'" class="refine-dock__hint refine-dock__hint--warn">
-          这会改整张图，更像重新生成；可用底部生成栏
-        </p>
-
-        <div v-if="errorMessage" class="refine-dock__error" role="alert">
-          <span>{{ errorMessage }}</span>
-          <button type="button" class="refine-dock__retry" :disabled="busy" @click="runRefine">重试</button>
-        </div>
-
-        <div class="bottom-toolbar-actions refine-dock__actions">
-          <DockCreditBadge :credits="credits" />
-          <button type="button" class="refine-dock__primary" :disabled="refineDisabled" @click="runRefine">精修</button>
-          <button type="button" class="refine-dock__apply" disabled title="抠图将走专用通道，尚未接入">抠图</button>
-          <button v-if="canApply" type="button" class="refine-dock__apply" :disabled="busy" @click="onApply">应用到节点</button>
-        </div>
-
-        <VersionStrip
+      <div v-if="!collapsed" class="refine-side__body">
+        <RefineToolbox
           :versions="versions"
           :current-version-id="currentVersionId"
-          :disabled="busy"
-          @select="onSelectVersion"
-          @revert="onRevert"
+          :busy="busy"
+          @apply-stain-preset="applyStainPreset"
+          @select-version="onSelectVersion"
+          @revert-version="onRevert"
         />
       </div>
+
+      <RefineDock
+        v-if="!collapsed"
+        :prompt="prompt"
+        :credits="credits"
+        :before-url="beforeUrl"
+        :model-label="editModelLabel"
+        :busy="busy"
+        :disabled="refineDisabled"
+        :can-apply="canApply"
+        :error-message="errorMessage"
+        :coverage-kind="coverageKind"
+        :width="width"
+        :height="height"
+        :active-edit-intent-id="activeGuideEditIntentId"
+        :ref-role-hints="activeRefRoleHints"
+        @update:prompt="prompt = $event"
+        @run="runRefine"
+        @apply="onApply"
+        @retry="runRefine"
+        @close="onBackOrCancel"
+        @select-edit-intent="applyEditIntent"
+        @clear-edit-intent="clearEditIntent"
+      />
     </aside>
   </Teleport>
 
@@ -684,32 +504,12 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.refine-side__icon,
-.refine-dock__back {
-  height: 26px;
-  padding: 0 10px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--neo-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.refine-side__icon:hover,
-.refine-dock__back:hover {
-  background: var(--neo-hover-bg);
-  color: var(--neo-text-primary);
-}
-
 .refine-side__body {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
-  overflow: auto;
-  padding: 10px 12px 16px;
+  overflow: hidden;      /* 滚动在 .refine-toolbox__scroll 里，整栏只有一个滚动区 */
 }
 
 .refine-side__icon-btn {
@@ -746,197 +546,5 @@ onBeforeUnmount(() => {
 .refine-side__icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-
-.refine-side__toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.refine-side__icon-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-
-.refine-side__divider {
-  width: 1px;
-  height: 16px;
-  margin: 0 4px;
-  background: var(--neo-border);
-}
-
-.refine-side__slider {
-  display: inline-flex;
-  min-width: 0;
-  flex: 1;
-  align-items: center;
-  gap: 6px;
-  color: var(--neo-text-muted);
-  font-size: 11px;
-}
-
-.refine-side__slider input {
-  min-width: 0;
-  flex: 1;
-}
-
-.refine-side__color {
-  display: inline-flex;
-  height: 28px;
-  width: 28px;
-  overflow: hidden;
-  border: 1px solid var(--neo-border);
-  border-radius: 8px;
-}
-
-.refine-side__color input {
-  height: 36px;
-  width: 36px;
-  margin: -4px;
-  cursor: pointer;
-  border: none;
-  background: none;
-}
-
-.refine-dock__tools,
-.refine-dock__chips,
-.refine-dock__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.refine-dock__tool,
-.refine-dock__chip,
-.refine-dock__retry,
-.refine-dock__apply {
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--neo-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--neo-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.refine-dock__tool.is-active,
-.refine-dock__chip.is-active,
-.refine-dock__chip:hover,
-.refine-dock__tool:hover {
-  border-color: var(--neo-border-strong);
-  color: var(--neo-text-primary);
-}
-
-.refine-dock__chip--intent {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 100%;
-}
-
-.refine-dock__chip--intent > span:not(.refine-dock__intent-dot) {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.refine-dock__chip.is-guide-active {
-  border-color: color-mix(in srgb, rgb(232 121 249) 25%, transparent);
-  background: color-mix(in srgb, rgb(217 70 239) 15%, transparent);
-  color: rgb(240 171 252);
-}
-
-.refine-dock__intent-dot {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  height: 5px;
-  width: 5px;
-  border-radius: 999px;
-  background: rgb(232 121 249);
-}
-
-.refine-dock__tool:disabled,
-.refine-dock__chip:disabled,
-.refine-dock__retry:disabled,
-.refine-dock__apply:disabled,
-.refine-dock__primary:disabled,
-.refine-dock__prompt:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.refine-dock__size {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--neo-text-muted);
-}
-
-.refine-dock__prompt {
-  width: 100%;
-  min-height: 56px;
-  resize: vertical;
-  border: 1px solid var(--neo-border);
-  border-radius: 12px;
-  background: var(--neo-hover-bg);
-  padding: 8px 10px;
-  color: var(--neo-text-primary);
-  font-size: 12px;
-  outline: none;
-}
-
-.refine-dock__hint {
-  margin: 0;
-  font-size: 11px;
-  color: var(--neo-text-muted);
-}
-
-.refine-dock__hint--warn {
-  color: color-mix(in srgb, var(--neo-warm) 80%, white);
-}
-
-.refine-dock__error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 6px 10px;
-  border: 1px solid rgba(248, 113, 113, 0.28);
-  border-radius: 999px;
-  background: rgba(248, 113, 113, 0.1);
-  color: rgba(254, 226, 226, 0.92);
-  font-size: 12px;
-}
-
-.refine-dock__error span {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.refine-dock__primary {
-  height: 28px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 999px;
-  background: var(--neo-hi-bg);
-  color: var(--neo-hi-text);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.refine-dock__actions {
-  justify-content: flex-end;
 }
 </style>
