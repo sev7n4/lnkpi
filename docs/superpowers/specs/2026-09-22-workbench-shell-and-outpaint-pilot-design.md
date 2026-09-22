@@ -90,6 +90,25 @@ export interface WorkbenchToolRegistration {
 5. CTA 文案统一「动词 + 对象」：`扩图生成` / `精修` / `确认切分`（panel 按钮同规范）；
 6. 提示词是可选段：不需要提示词的产出型工具（如免费抠图若走 dock）省略 prompt 段，其余结构不变。
 
+### 4.2 Dock 布局与尺寸规范（2026-09-22 增补：针对线上 dock 过大 / 遮挡滚动区 / CTA 走形）
+
+**布局铁律：dock 永不覆盖滚动区。** 面板骨架 = 对照固定区 → 滚动区（`flex:1`）→ dock（固定底部、自然高度）。三者为 flex 兄弟节点，dock 禁止用绝对定位 / 浮层压在滚动区上；滚动区可独立滚到底，最后一条内容不被 dock 挡住。
+
+**高度预算（panel 落点，右栏 400px 宽）：**
+
+| 段 | 高度 |
+|---|---|
+| dock 默认态总高 | **≤ 148px**（含内边距与段间距） |
+| prompt 聚焦多行展开后 | **≤ 224px**，超出部分 textarea 内部滚动 |
+| 行明细 | 头排（编辑意图 chips + 关闭）28px ｜ 参考图条 32px（可选）｜ 提示词默认 1 行 36px、聚焦最多扩到 3 行 84px ｜ 参数排（模型 / 尺寸 / 原图徽标）28px ｜ 底排（麦克风 + 积分 + CTA）32px |
+| 间距 | 段间 8px，内边距 10–12px |
+
+**主 CTA（两种落点同款）：**
+
+- 形态：**圆形图标按钮**，panel 落点 32×32、floating 落点 36×36；主色底 + 白色 `↑` 图标（16px）。
+- 禁用态：**同形同尺寸**，仅降透明度（≤45%）+ 灰底，**禁止退化为无图标矩形**（线上缺陷：disabled 态丢箭头变白块）。
+- 文案进 `aria-label` / `title`（「精修」「扩图生成」）；文字型胶囊按钮（「应用到节点」等）是**次级动作**，不得占据主 CTA 位。
+
 ## 5. WorkbenchShell 架构
 
 ```
@@ -169,7 +188,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 
 - rail：不变（工具已在左栏）。
 - 右栏滚动区：渲染 select 注册的 `panel` —— 本期即「现状减 Toolbox」。编辑意图 chips 与覆盖率提示**留在 `RefineDock` 内不拆**（它们与生成动作强耦合，拆出无收益）。
-- dock：**保留**（精修是产出型工具，§4.1 有无判据），`dockPlacement: 'panel'` —— 精修的操作焦点是提示词文本（就近原则），`RefineDock` 原样挂在面板底部。
+- dock：**保留并按 §4.2 紧凑化**（精修是产出型工具，§4.1 有无判据），`dockPlacement: 'panel'` —— 精修的操作焦点是提示词文本（就近原则）。「原样」仅指功能与内容编排不变；**布局与尺寸必须收敛到 §4.2 预算**（线上 dock 过大、遮挡滚动区、CTA 禁用态丢箭头三项缺陷随本包修复）。
 - 模式条：不变。
 
 ## 11. 文件级改动清单
@@ -183,6 +202,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 | `components/canvas/refine/RefineOutpaintCanvas.vue` | 修改：手柄形状 / 3×3 网格 / 顶部胶囊读数 / rect 状态源上移 store / 删底部读数条 |
 | `components/canvas/refine/outpaintGeometry.ts` | 修改：新增 §8 三个纯函数 |
 | `components/canvas/refine/RefineSidePanel.vue` | 修改：接 Shell / 按 mode 渲染面板与 dock 落点 / VersionStrip 直挂 |
+| `components/canvas/refine/RefineDock.vue` | 修改：按 §4.2 紧凑化（高度预算 / 圆形箭头 CTA 含禁用态保形 / flex 兄弟布局不遮挡滚动区） |
 | `components/canvas/refine/RefineToolRail.vue` + `refineToolRailModel.ts` | 修改：能力区 |
 | `components/canvas/refine/RefineToolbox.vue` | 删除（能力数据迁 rail 模型） |
 | `stores/canvasEditor.ts` | 修改：§7 |
@@ -196,6 +216,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 - `OutpaintPanel`：chips 激活态、输入同步、守卫提示、禁用态。
 - `RefineOutpaintCanvas`：手柄形状 testid、拖拽中网格与顶部胶囊出现/消失、松手后 rect 持久（多次操作不互相吞 —— PR #398 回归）。
 - `RefineOutpaintDock`：CTA 守卫 / 退出按钮 / busy 态。
+- dock 布局回归（§4.2）：`RefineDock` 与 `RefineOutpaintDock` 渲染快照 / 类断言——主 CTA 为圆形箭头按钮，**disabled 态仍含 `↑` 图标**；dock 与滚动区为 flex 兄弟（无绝对定位重叠）；默认态高度不超预算。
 - rail：能力区渲染、禁用 tooltip、扩图激活。
 - 基线：`pnpm --filter @lnkpi/web test` 全绿（main 基线 976，只增不减）；`vue-tsc -b` 零错误；全仓四条本地验证。
 
@@ -207,7 +228,8 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 4. 改宽 / 高输入：同上。
 5. 未扩展时 CTA 禁用 + 引导文案；扩展后可生成；生成后对照带出现前后对照。
 6. `×` 退出扩图回 select；select 模式右栏无 Toolbox、能力图标在左栏且禁用。
-7. 窄屏 <640px：悬浮 dock 退化为面板底部。
+7. **dock 三查（select 与扩图都过）**：滚动区可滚到底、最后一条内容不被 dock 挡住；dock 默认态 ≤148px、prompt 聚焦展开 ≤224px；主 CTA 为圆形 `↑` 按钮，禁用态形状不变仅变灰。
+8. 窄屏 <640px：悬浮 dock 退化为面板底部。
 
 ## 13. 风险
 
