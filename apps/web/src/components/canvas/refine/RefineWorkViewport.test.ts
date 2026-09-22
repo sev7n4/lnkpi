@@ -60,4 +60,12 @@ describe('RefineWorkViewport 布局', () => {
     await w.find('[data-testid="rail-fit-option-actual-size"]').trigger('click')
     expect(w.find('.refine-work__world').exists()).toBe(true)
   })
+
+  it('回归：扩图画布视口由其自身测量，不得回流 stage 尺寸（stage 在扩图模式下 display:none 测得恒 0）', () => {
+    const w = mountViewport()
+    const canvas = w.findComponent({ name: 'RefineOutpaintCanvas' })
+    expect(canvas.exists()).toBe(true)
+    expect(canvas.props('viewportWidth')).toBeUndefined()
+    expect(canvas.props('viewportHeight')).toBeUndefined()
+  })
 })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { clampOutpaintCanvas, type Anchor, type OutpaintRect, type Size } from './outpaintGeometry'
+import { clampOutpaintCanvas, formatAspectLabel, type Anchor, type OutpaintRect, type Size } from './outpaintGeometry'
 
 const props = withDefaults(
   defineProps<{
@@ -12,11 +12,8 @@ const props = withDefaults(
     baseHeight: number
     /** busy 时手柄冻结、不可拖拽（规格 §3）。 */
     busy?: boolean
-    /** 可用视口尺寸（px），用于自动缩放跟随；缺省按 1:1 逻辑坐标。 */
-    viewportWidth?: number
-    viewportHeight?: number
   }>(),
-  { busy: false, viewportWidth: 0, viewportHeight: 0 },
+  { busy: false },
 )
 
 const editor = useCanvasEditorStore()
@@ -26,6 +23,12 @@ const base = computed<Size>(() => ({ width: Number(props.baseWidth) || 0, height
 const requested = ref<Size>({ width: base.value.width, height: base.value.height })
 /** 当前拖拽锚定（被拖手柄的对侧固定）。 */
 const anchor = ref<Anchor>({ x: 'center', y: 'center' })
+
+/** 基图尺寸晚到（mediaInfo 缺宽高 → 自然尺寸探测回填）时重置请求画布，避免 clamp 出退化矩形。 */
+watch(base, (b) => {
+  requested.value = { width: b.width, height: b.height }
+  anchor.value = { x: 'center', y: 'center' }
+})
 
 /** clamp 后的新画布矩形；极小原图无解时回退到原图尺寸矩形（不抛错，避免拖拽中崩溃）。 */
 const rect = computed<OutpaintRect>(() => {
@@ -38,14 +41,44 @@ const rect = computed<OutpaintRect>(() => {
 
 const MAX_FIT = 4
 const MIN_FIT = 0.02
-/** 自动缩放跟随：扩出区超过可用视口时缩小，使其整片可见（规格 §3 视口自动缩放跟随）。 */
+/** 留白：四周给手柄（出界 7px）留出可见空间，底部给读数条留出空间。 */
+const FIT_PAD_X = 24
+const FIT_PAD_TOP = 24
+const FIT_PAD_BOTTOM = 64
+
+/** 可用视口：组件自身容器的内容盒尺寸。本组件在扩图模式下始终可见，测量恒有效；
+ *  不能依赖外部（父级的 stage 在本模式下 display:none，测得恒 0 → fit 恒 1，见 2026-09-22 缺陷）。 */
+const rootRef = ref<HTMLElement | null>(null)
+const viewport = ref<Size>({ width: 0, height: 0 })
+let resizeObserver: ResizeObserver | null = null
+
+function measure() {
+  const el = rootRef.value
+  if (!el) return
+  viewport.value = { width: el.clientWidth, height: el.clientHeight }
+}
+
+onMounted(() => {
+  measure()
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => measure())
+    if (rootRef.value) resizeObserver.observe(rootRef.value)
+  }
+})
+
+/** 自动缩放跟随：画布超出可用视口时缩小（小图最多放大到 4 倍），手柄与读数不跑出屏幕（规格 §3）。 */
 const fitScale = computed(() => {
-  const vw = props.viewportWidth
-  const vh = props.viewportHeight
+  const vw = viewport.value.width
+  const vh = viewport.value.height
   if (!(vw > 1) || !(vh > 1) || !rect.value.width || !rect.value.height) return 1
-  const s = Math.min(vw / rect.value.width, vh / rect.value.height)
+  // 极小容器兜底：留白后可用区不足容器一半时按容器一半算
+  const availW = Math.max(vw * 0.5, vw - FIT_PAD_X * 2)
+  const availH = Math.max(vh * 0.5, vh - FIT_PAD_TOP - FIT_PAD_BOTTOM)
+  const s = Math.min(availW / rect.value.width, availH / rect.value.height)
   return Math.min(MAX_FIT, Math.max(MIN_FIT, s))
 })
+
+const aspectLabel = computed(() => formatAspectLabel(rect.value.width, rect.value.height))
 
 const displayW = computed(() => Math.round(rect.value.width * fitScale.value))
 const displayH = computed(() => Math.round(rect.value.height * fitScale.value))
@@ -56,11 +89,13 @@ const baseDisplay = computed(() => ({
   height: base.value.height * fitScale.value,
 }))
 
-/** 拖拽状态不进蒙版历史栈；只有进入扩图模式才把 rect 写入 store 供提交 / 视口跟随消费。 */
+/** 拖拽状态不进蒙版历史栈；只有进入扩图模式才把 rect 写入 store 供提交 / 视口跟随消费。
+ *  退化矩形（基图尺寸未知时 clamp 出 0×0）写 null，避免提交按钮被误启用。 */
 watch(
   rect,
   (r) => {
-    if (editor.refineMode === 'outpaint') editor.setRefineOutpaintRect(r)
+    if (editor.refineMode !== 'outpaint') return
+    editor.setRefineOutpaintRect(r.width > 0 && r.height > 0 ? r : null)
   },
   { immediate: true },
 )
@@ -126,6 +161,7 @@ function onDragUp() {
 }
 
 onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
   onDragUp()
   // 退出扩图模式即重置（规格 §3）；组件卸载时清掉 store 中的 rect。
   editor.setRefineOutpaintRect(null)
@@ -134,6 +170,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div
+    ref="rootRef"
     class="refine-outpaint"
     data-testid="refine-outpaint-canvas"
     :data-fit="fitScale"
@@ -169,7 +206,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="refine-outpaint__readout" data-testid="outpaint-readout">
-      {{ rect.width }} × {{ rect.height }}
+      {{ rect.width }} × {{ rect.height }} · {{ aspectLabel }}
       <span class="refine-outpaint__readout-sub">原图 {{ base.width }} × {{ base.height }}</span>
     </div>
   </div>
@@ -177,8 +214,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .refine-outpaint {
-  position: absolute;
-  inset: 0;
+  /* 参与父级 flex 列布局（与普通 stage 同一槽位）：只覆盖工作区，不盖左栏工具条；
+     同时自身就是视口测量源（进入本模式后恒可见）。 */
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -3,6 +3,7 @@ import {
   OUTPAINT_MIN_EDGE,
   OUTPAINT_MAX_AREA_RATIO,
   clampOutpaintCanvas,
+  formatAspectLabel,
 } from './outpaintGeometry'
 
 describe('outpaintGeometry 常量', () => {
@@ -164,5 +165,24 @@ describe('clampOutpaintCanvas 不可行抛错', () => {
         { x: 'start', y: 'start' },
       ),
     ).toThrow()
+  })
+})
+
+describe('formatAspectLabel（读数「宽×高·比例」）', () => {
+  it('常见比例按 2% 容差命中', () => {
+    expect(formatAspectLabel(1024, 1024)).toBe('1:1')
+    expect(formatAspectLabel(1024, 768)).toBe('4:3')
+    expect(formatAspectLabel(1920, 1080)).toBe('16:9')
+    expect(formatAspectLabel(1080, 1920)).toBe('9:16')
+    expect(formatAspectLabel(2865, 2126)).toBe('4:3') // 1.348 ≈ 4:3（差 1.1%）
+  })
+
+  it('非常见比例退化为最简整数比', () => {
+    expect(formatAspectLabel(1000, 600)).toBe('5:3')
+  })
+
+  it('非法尺寸返回占位符', () => {
+    expect(formatAspectLabel(0, 100)).toBe('—')
+    expect(formatAspectLabel(100, 0)).toBe('—')
   })
 })

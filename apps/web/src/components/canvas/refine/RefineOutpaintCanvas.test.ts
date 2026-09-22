@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import RefineOutpaintCanvas from './RefineOutpaintCanvas.vue'
@@ -18,7 +18,7 @@ const drag = async (
   w: ReturnType<typeof mountCanvas>,
   dir: string,
   from: { x: number; y: number },
-  to: { x: number; y: number },
+  to: { x: number, y: number },
 ) => {
   const handle = w.find(`[data-testid="outpaint-handle-${dir}"]`)
   handle.element.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: from.x, clientY: from.y }))
@@ -33,11 +33,41 @@ const readoutDims = (w: ReturnType<typeof mountCanvas>) => {
   return { w: Number(m?.[1]), h: Number(m?.[2]) }
 }
 
+/** 最小 ResizeObserver 替身：记录 observe 的元素，测试里手动触发回调（模拟浏览器布局变化）。 */
+class ResizeObserverStub {
+  static callbacks = new Map<Element, () => void>()
+  private cb: ResizeObserverCallback
+  constructor(cb: ResizeObserverCallback) {
+    this.cb = cb
+  }
+  observe(el: Element) {
+    ResizeObserverStub.callbacks.set(el, () => this.cb([], this as unknown as ResizeObserver))
+  }
+  unobserve(el: Element) {
+    ResizeObserverStub.callbacks.delete(el)
+  }
+  disconnect() {
+    ResizeObserverStub.callbacks.clear()
+  }
+}
+
+/** 给元素钉上「浏览器里可见时的内容盒尺寸」（jsdom 无布局，clientWidth 恒 0）。 */
+const stubClientSize = (el: Element, width: number, height: number) => {
+  Object.defineProperty(el, 'clientWidth', { value: width, configurable: true })
+  Object.defineProperty(el, 'clientHeight', { value: height, configurable: true })
+}
+
 describe('RefineOutpaintCanvas', () => {
   beforeEach(() => {
     pinia = createPinia()
     setActivePinia(pinia)
     useCanvasEditorStore().refineMode = 'outpaint'
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    ResizeObserverStub.callbacks.clear()
   })
 
   it('渲染 8 个拖拽手柄与实时读数', () => {
@@ -86,12 +116,49 @@ describe('RefineOutpaintCanvas', () => {
   })
 
   it('拖拽超出视口时视口自动缩放跟随（fitScale 缩小）', async () => {
-    const w = mountCanvas({ viewportWidth: 400, viewportHeight: 300 })
+    const w = mountCanvas()
+    // 视口从组件自身容器测量（真实浏览器里即扩图画布占据的工作区）
+    const root = w.find('[data-testid="refine-outpaint-canvas"]').element as HTMLElement
+    stubClientSize(root, 400, 300)
+    ResizeObserverStub.callbacks.get(root)?.()
+    await flushPromises()
     const fitBefore = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
-    // 初始 400×300 恰好铺满 400×300 视口 → fit 1
-    expect(fitBefore).toBeCloseTo(1, 5)
+    // 初始 400×300 在 400×300 视口内留白后略缩小 → fit ≤ 1
+    expect(fitBefore).toBeLessThanOrEqual(1)
     await drag(w, 'se', { x: 100, y: 100 }, { x: 2200, y: 2200 })
     const fitAfter = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
     expect(fitAfter).toBeLessThan(fitBefore)
+  })
+
+  it('回归：视口由组件自身容器测量，基图大于容器时自动缩小（不再依赖外部隐藏元素）', async () => {
+    // 复现 2026-09-22 线上缺陷：viewport 曾由父级从 display:none 的 stage 测得 → 恒 0 → fit 恒 1，
+    // 工作图不缩小、8 个手柄整体跑出视口。
+    const w = mountCanvas({ baseWidth: 2048, baseHeight: 2048 })
+    const rootEl = w.find('[data-testid="refine-outpaint-canvas"]').element as HTMLElement
+    stubClientSize(rootEl, 984, 868)
+    ResizeObserverStub.callbacks.get(rootEl)?.()
+    await flushPromises()
+
+    const fit = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
+    expect(fit).toBeLessThan(1)
+
+    const stage = w.find('.refine-outpaint__stage').element as HTMLElement
+    const displayW = Number((stage.style.width || '0').replace('px', ''))
+    const displayH = Number((stage.style.height || '0').replace('px', ''))
+    expect(displayW).toBeLessThanOrEqual(984)
+    expect(displayH).toBeLessThanOrEqual(868)
+  })
+
+  it('回归：基图尺寸晚到（mediaInfo 缺宽高 → 探测后回填）也能得到合法画布', async () => {
+    const w = mountCanvas({ baseWidth: 0, baseHeight: 0 })
+    await w.setProps({ baseWidth: 1024, baseHeight: 768 })
+    await flushPromises()
+    expect(readoutDims(w)).toEqual({ w: 1024, h: 768 })
+  })
+
+  it('读数含新画布宽×高与比例（规格 §3「宽×高·比例」）', () => {
+    const w = mountCanvas()
+    expect(w.find('[data-testid="outpaint-readout"]').text()).toMatch(/400\s*×\s*300/)
+    expect(w.find('[data-testid="outpaint-readout"]').text()).toContain('4:3')
   })
 })
