@@ -749,6 +749,8 @@ const editorNode = computed((): EditableFlowNode | null => {
 
 const gridSliceBusy = ref(false)
 const gridSlicePanelNodeId = ref<string | null>(null)
+/** 浮层一键抠图进行中（防重入 + matting 按钮 loading） */
+const mattingBusy = ref(false)
 
 const gridSlicePanelNode = computed((): EditableFlowNode | null => {
   if (!gridSlicePanelNodeId.value) return null
@@ -3003,6 +3005,44 @@ function handleRefineApply(payload: RefineApplyPayload) {
   else ElMessage.info('该结果已应用过，已为你定位节点')
 }
 
+/**
+ * 浮层一键抠图（Task 9）：不进精修模式，直接调 studioApi.mattingImage 生成下游节点，
+ * 注入/幂等/toast 语义与 handleRefineApply（applyRefineAsChild）完全一致。
+ * 503 → 服务未启用；502/其余 → 服务暂时不可用（文案同精修面板 Task 7）。
+ */
+async function handleFloatingMatting(node: EditableFlowNode) {
+  const data = (node.data ?? {}) as Record<string, unknown>
+  const imageUrl = String(data.url ?? '').trim()
+  if (!imageUrl || mattingBusy.value) return
+  mattingBusy.value = true
+  try {
+    const { data: res } = await studioApi.mattingImage({ imageUrl })
+    const resultUrl = res.data.url
+    const applied = applyRefineAsChild({
+      sourceNode: { id: node.id, position: { ...node.position } },
+      result: {
+        url: resultUrl,
+        prompt: '抠图',
+        appliedKey: `matting:${resultUrl}`,
+      },
+      addNode: (type, childData, opts) =>
+        addNode(type, { prompt: '', imageModel: getProviderConfig('image').model, ...childData } as never, opts),
+      addEdge,
+      findAppliedNode: (key) => nodes.value.find((n) => (n.data as Record<string, unknown>)?.appliedKey === key),
+    })
+    selectNodeIds([applied.nodeId])
+    void persistUserEditAsync()
+    if (applied.created) ElMessage.success('已应用到画布（下游新节点）')
+    else ElMessage.info('该结果已应用过，已为你定位节点')
+  } catch (err) {
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status === 503) ElMessage.warning('抠图服务未启用')
+    else ElMessage.warning('抠图服务暂时不可用')
+  } finally {
+    mattingBusy.value = false
+  }
+}
+
 function handleAgentOpenImageEditor(nodeId: string) {
   const url = String((findNodeById(nodeId)?.data as Record<string, unknown> | undefined)?.url ?? '').trim()
   if (!url) return
@@ -3978,7 +4018,9 @@ onUnmounted(() => {
             :grid-slice-disabled-title="gridSliceDisabledTitle"
             :grid-slice-image="gridSliceImageSize"
             :has-url="Boolean(selectionActionBarNode?.data?.url)"
+            :matting-busy="mattingBusy"
             @edit="openRefineForSelected"
+            @matting="selectionActionBarNode && handleFloatingMatting(selectionActionBarNode)"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
             @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"

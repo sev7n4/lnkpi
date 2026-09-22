@@ -26,6 +26,8 @@ const props = defineProps<{
   gridSliceImage?: { width: number; height: number } | null
   /** 文件组（下载/存库）是否可用：节点有可访问的 url 时为真 */
   hasUrl?: boolean
+  /** 浮层一键抠图进行中：matting 按钮禁用 + loading（CanvasPage 传入，防重入） */
+  mattingBusy?: boolean
   /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
   zoom?: number
 }>()
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   'open-custom': []
   download: []
   'save-asset': []
+  matting: []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
@@ -48,11 +51,18 @@ const BAR_GAP_PX = 8
  */
 const BAR_WIDTH_PX = 384
 
-const tools = computed(() => buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }))
+const tools = computed(() =>
+  buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }).map((tool) =>
+    tool.id === 'matting' && props.mattingBusy
+      ? { ...tool, disabled: true, disabledReason: '抠图进行中' }
+      : tool,
+  ),
+)
 
 function onToolClick(tool: SelectionToolDef) {
   if (tool.disabled) return
   if (tool.id === 'refine') emit('edit')
+  else if (tool.id === 'matting') emit('matting')
   else if (tool.id === 'download') emit('download')
   else if (tool.id === 'save-asset') emit('save-asset')
 }
@@ -194,7 +204,7 @@ const TOOL_ICONS: Record<string, string> = {
             <button
               type="button"
               class="toolbar-action"
-              :class="{ 'icon-only': tool.group === 'file' }"
+              :class="{ 'icon-only': tool.group === 'file', 'is-loading': tool.id === 'matting' && mattingBusy }"
               :data-action="tool.id"
               :title="tool.disabled ? (tool.disabledReason ?? tool.title) : tool.title"
               :aria-label="tool.title"
@@ -211,6 +221,7 @@ const TOOL_ICONS: Record<string, string> = {
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 aria-hidden="true"
+                :class="{ 'animate-spin': tool.id === 'matting' && mattingBusy }"
                 v-html="TOOL_ICONS[tool.icon]"
               />
               <span class="label">{{ tool.title }}</span>
@@ -241,6 +252,10 @@ const TOOL_ICONS: Record<string, string> = {
 .toolbar-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+/* 抠图进行中（与 GridSliceDropdown 的 is-loading 语义对齐）：按钮禁用 + 图标转圈 */
+.toolbar-action.is-loading {
+  opacity: 0.6;
 }
 /* 文件组：纯图标按钮，缩小左右内边距 */
 .toolbar-action.icon-only {

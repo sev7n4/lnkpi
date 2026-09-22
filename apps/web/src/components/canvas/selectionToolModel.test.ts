@@ -35,14 +35,18 @@ describe('buildSelectionTools', () => {
     expect(tools.find((t) => t.id === 'refine')).toMatchObject({ title: '精修', disabled: false })
   })
 
-  it('marks matting/crop/rotate as disabled placeholders with future reasons', () => {
+  it('marks crop/rotate as disabled placeholders with future reasons', () => {
     const tools = buildSelectionTools({ hasUrl: true })
-    for (const id of ['matting', 'crop', 'rotate']) {
+    for (const id of ['crop', 'rotate']) {
       const tool = tools.find((t) => t.id === id)!
       expect(tool.disabled).toBe(true)
       expect(tool.disabledReason).toContain('后续能力包点亮')
     }
-    expect(tools.find((t) => t.id === 'matting')!.disabledReason).toBe('抠图将在后续能力包点亮')
+  })
+
+  it('matting 工具已点亮（非 disabled）', () => {
+    const tools = buildSelectionTools({ hasUrl: true })
+    expect(tools.find((t) => t.id === 'matting')?.disabled).toBe(false)
   })
 
   it('disables file tools without url and enables them with url', () => {
