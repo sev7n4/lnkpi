@@ -1630,31 +1630,35 @@ export class StudioService {
     const isJpeg = buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8
     const contentType = isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'application/octet-stream'
     const dimensions = parsePngDimensions(buffer) ?? parseJpegDimensions(buffer)
-    const width = dimensions?.width ?? 0
-    const height = dimensions?.height ?? 0
-    if (buffer.byteLength > 20 * 1024 * 1024 || width > 4096 || height > 4096) {
+    if (!dimensions) {
+      throw new BadRequestException('不支持的图片格式')
+    }
+    if (buffer.byteLength > 20 * 1024 * 1024 || dimensions.width > 4096 || dimensions.height > 4096) {
       throw new BadRequestException('图片过大（限 20MB / 4096px）')
     }
 
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 30_000)
-    let out: Response
+    let png: Buffer
     try {
-      out = await fetch(`${endpoint.replace(/\/$/, '')}/matting`, {
+      const out = await fetch(`${endpoint.replace(/\/$/, '')}/matting`, {
         method: 'POST',
         body: new Uint8Array(buffer),
         headers: { 'Content-Type': contentType },
         signal: controller.signal,
       })
-    } catch {
+      if (!out.ok) {
+        throw new BadGatewayException('抠图服务暂时不可用')
+      }
+      png = Buffer.from(await out.arrayBuffer())
+    } catch (err) {
+      if (err instanceof BadGatewayException) {
+        throw err
+      }
       throw new BadGatewayException('抠图服务暂时不可用')
     } finally {
       clearTimeout(timer)
     }
-    if (!out.ok) {
-      throw new BadGatewayException('抠图服务暂时不可用')
-    }
-    const png = Buffer.from(await out.arrayBuffer())
     if (png.subarray(1, 4).toString('ascii') !== 'PNG') {
       throw new BadGatewayException('抠图服务暂时不可用')
     }

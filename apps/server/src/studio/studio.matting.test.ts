@@ -12,6 +12,7 @@ import { ProviderResolverService } from '../provider/provider-resolver.service'
 import { MediaProbeService } from '../media/media-probe.service'
 import { UploadService } from '../upload/upload.service'
 import { StudioService } from './studio.service'
+import { readImageBuffer } from '../media/composite-unmasked'
 
 // 1x1 PNG（仅够通过 PNG 签名 / IHDR 尺寸解析，不依赖真实解码）
 const PNG_1X1 = Buffer.concat([
@@ -124,5 +125,52 @@ describe('StudioService.mattingImage', () => {
     await expect(svc.mattingImage('u1', { imageUrl: '' })).rejects.toBeInstanceOf(
       BadRequestException,
     )
+  })
+
+  it('非 PNG/JPEG 源图（WebP）返回 400 不支持的图片格式', async () => {
+    // WebP 魔数（RIFF....WEBP），尺寸解析不了时必须显式拒绝而非跳过校验
+    const webp = Buffer.concat([
+      Buffer.from('RIFF'),
+      Buffer.from([0, 0, 0, 0]),
+      Buffer.from('WEBP'),
+      Buffer.from([0, 0, 0, 1]),
+    ])
+    vi.mocked(readImageBuffer).mockResolvedValueOnce(webp)
+
+    await expect(
+      svc.mattingImage('u1', { imageUrl: 'https://a.webp' }),
+    ).rejects.toMatchObject({
+      status: 400,
+      response: { message: '不支持的图片格式' },
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(saveUserFile).not.toHaveBeenCalled()
+  })
+
+  it('响应体读取超过 30s 超时返回 502', async () => {
+    vi.useFakeTimers()
+    try {
+      fetchMock.mockImplementation(async (_url: string, init?: { signal?: AbortSignal }) => {
+        const signal = init?.signal
+        return {
+          ok: true,
+          arrayBuffer: () =>
+            new Promise<ArrayBuffer>((_resolve, reject) => {
+              signal?.addEventListener('abort', () => reject(new Error('The operation was aborted')))
+            }),
+        }
+      })
+
+      const pending = svc.mattingImage('u1', { imageUrl: 'https://a.png' })
+      const assertion = expect(pending).rejects.toMatchObject({
+        status: 502,
+        response: { message: '抠图服务暂时不可用' },
+      })
+      await vi.advanceTimersByTimeAsync(30_000)
+      await assertion
+      expect(saveUserFile).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
