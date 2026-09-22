@@ -3,6 +3,8 @@ import RefineDock from '@/components/canvas/refine/RefineDock.vue'
 import RefineSelectPanel from '@/components/canvas/refine/RefineSelectPanel.vue'
 import OutpaintPanel from '@/components/canvas/refine/OutpaintPanel.vue'
 import RefineOutpaintDock from '@/components/canvas/refine/RefineOutpaintDock.vue'
+import MattingPanel from '@/components/canvas/refine/MattingPanel.vue'
+import MattingDock from '@/components/canvas/refine/MattingDock.vue'
 import type { RefineMode } from '@/stores/canvasEditor'
 
 /** 左栏图标描述（一级工具的 railItems；本期 select 的图标仍由 RefineToolRail 现行实现承担）。 */
@@ -39,6 +41,12 @@ export const WORKBENCH_TOOL_REGISTRY: Record<string, WorkbenchToolRegistration> 
     panel: OutpaintPanel,
     dock: RefineOutpaintDock,
     dockPlacement: 'floating',
+  },
+  'refine-matting': {
+    id: 'refine-matting',
+    panel: MattingPanel,
+    dock: MattingDock,
+    dockPlacement: 'panel',
   },
 }
 

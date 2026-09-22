@@ -183,12 +183,13 @@ describe('RefineToolRail', () => {
     expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('能力区：分隔线 + 10 项禁用图标（扩图不重复出现在能力区）', () => {
+  it('能力区：分隔线 + 7 项禁用图标（matting 已迁出为 refine-matting 真模式，outpaint 不重复出现在能力区）', () => {
     const w = mountRail()
     expect(w.find('[data-testid="rail-capability-hr"]').exists()).toBe(true)
-    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(10)
-    expect(w.find('[data-testid="rail-capability-one-click-matting"]').attributes('disabled')).toBeDefined()
-    expect(w.find('[data-testid="rail-capability-one-click-matting"]').attributes('title')).toContain('即将上线')
+    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(7)
+    expect(w.find('[data-testid="rail-capability-one-click-matting"]').exists()).toBe(false)
+    expect(w.find('[data-testid="rail-capability-crop"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="rail-capability-crop"]').attributes('title')).toContain('即将上线')
     expect(w.find('[data-testid="rail-capability-outpaint"]').exists()).toBe(false)
   })
 
