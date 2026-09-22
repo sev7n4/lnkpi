@@ -1317,6 +1317,7 @@ const sizeTooltip = computed(() => {
               :aria-expanded="sizeOpen"
               @click="sizeOpen = !sizeOpen"
             >
+```
 
 - `DockToolbarShell` 关闭头排 ×：
 
