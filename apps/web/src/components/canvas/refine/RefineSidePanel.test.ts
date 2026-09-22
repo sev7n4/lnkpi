@@ -490,6 +490,38 @@ describe('RefineSidePanel matting 接线（Task 7）', () => {
     expect(editor.refineSessionResults.length).toBe(0)
   })
 
+  it('matting 400 时透传服务端 message（I-1：图片超限不再误报「暂时不可用」）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    ;(studioApi.mattingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      response: { status: 400, data: { message: '图片过大（限 20MB / 4096px）' } },
+    })
+    mountPanel()
+    await flushPromises()
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledWith('图片过大（限 20MB / 4096px）')
+    expect(editor.refineSessionResults.length).toBe(0)
+  })
+
+  it('matting 400 无服务端 message 时兜底文案', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    ;(studioApi.mattingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      response: { status: 400, data: {} },
+    })
+    mountPanel()
+    await flushPromises()
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledWith('图片不符合要求（限 20MB / 4096px）')
+    expect(editor.refineSessionResults.length).toBe(0)
+  })
+
   it('不再渲染 VersionStrip、revert emit 移除', () => {
     mountPanel()
     expect(q('[data-testid="refine-version-strip"]')).toBeNull()

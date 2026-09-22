@@ -440,10 +440,14 @@ async function runMattingAuto() {
     const url = data.data.url
     if (url) editor.pushRefineSessionResult({ url, prompt: '抠图' })
   } catch (err) {
-    const status = (err as { response?: { status?: number } })?.response?.status
+    const ax = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = ax.response?.status
     if (status === 503) {
       mattingUnavailable.value = true
       ElMessage.warning('抠图服务未启用')
+    } else if (status === 400) {
+      // 服务端对 >20MB / >4096px / 不支持格式返回 400，透传 message 而非「暂时不可用」。
+      ElMessage.warning(ax.response?.data?.message || '图片不符合要求（限 20MB / 4096px）')
     } else {
       ElMessage.warning('抠图服务暂时不可用')
     }

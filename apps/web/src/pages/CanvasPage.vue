@@ -2981,7 +2981,10 @@ function closeRefineWorkbench() {
 function handleRefineApply(payload: RefineApplyPayload) {
   const nodeId = canvasEditor.imageTarget?.nodeId
   const node = nodeId && findNodeById(nodeId)
-  if (!node) return
+  if (!node) {
+    ElMessage.warning('原图节点已不存在')
+    return
+  }
   const appliedKey = payload.recordId ?? `matting:${payload.url}`
   const res = applyRefineAsChild({
     sourceNode: { id: node.id, position: { ...node.position } },
@@ -3035,8 +3038,12 @@ async function handleFloatingMatting(node: EditableFlowNode) {
     if (applied.created) ElMessage.success('已应用到画布（下游新节点）')
     else ElMessage.info('该结果已应用过，已为你定位节点')
   } catch (err) {
-    const status = (err as { response?: { status?: number } })?.response?.status
+    const ax = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = ax.response?.status
     if (status === 503) ElMessage.warning('抠图服务未启用')
+    else if (status === 400)
+      // 服务端对 >20MB / >4096px / 不支持格式返回 400，透传 message 而非「暂时不可用」。
+      ElMessage.warning(ax.response?.data?.message || '图片不符合要求（限 20MB / 4096px）')
     else ElMessage.warning('抠图服务暂时不可用')
   } finally {
     mattingBusy.value = false
