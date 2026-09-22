@@ -4,6 +4,20 @@
 前置：2026-09-21-refine-studio-layout-rework-design.md（已上线）、2026-09-22-refine-m2-capability-pack-design.md
 打样分支约定：实现走 feature 分支 + PR + squash merge（仓库硬约束）。
 
+## 0. 配图索引（结构与视觉两类，均随本文档演进）
+
+本文档的图分两类：**结构图**（流程 / 关系 / 判据，能文本表达）一律以 **Mermaid 内嵌**，随文 diff、无外部依赖；**视觉稿**（布局 / 形状，像素级示意）以 `assets/` 下的 **SVG 附件**承载（markdown 无法内联渲染 SVG，GitHub 会净化内联标签与 data URI），相对路径引用，GitHub 原生渲染。
+
+| 编号 | 形式 | 内容 | 位置 | 用途 |
+|---|---|---|---|---|
+| 图 4 | 内嵌 Mermaid | 新工具接入判据决策树（三问定形） | §4.2 | 新工具接入自检 |
+| 图 5 | 内嵌 Mermaid | WorkbenchShell 槽位与注册表关系 | §5 | 架构契约 |
+| 图 1 | SVG 附件 `assets/workbench-layout-outpaint-pilot.svg` | 工作台整体布局（①-⑤ 标注） | §6 | 布局打样验收基准 |
+| 图 2 | SVG 附件 `assets/outpaint-handle-interaction.svg` | 手柄形状 + 拖拽反馈 | §6 | 手柄交互验收 |
+| 图 6 | 内嵌 Mermaid | 扩图交互状态机 | §6 | 交互流程验收 |
+| 图 3 | SVG 附件 `assets/layer-vs-object-edit.svg` | 图层分层 vs 对象级编辑 | §14.5 | 概念裁决依据 |
+| 图 7 | 内嵌 Mermaid | 对象级编辑三件套数据流 | §14.5 | 能力域结构 |
+
 ## 1. 目标
 
 1. **工具链统一规范**：把「精修工作台」的信息架构固化为可复用的外壳（Shell）+ 工具注册契约，后续每个工具（抠图 / 切图 / 超分……）按契约接入，而不是再长一套固定框架。
@@ -101,6 +115,21 @@ export interface WorkbenchToolRegistration {
 5. CTA 文案统一「动词 + 对象」：`扩图生成` / `精修` / `确认切分`（panel 按钮同规范）；
 6. 提示词是可选段：不需要提示词的产出型工具（如免费抠图若走 dock）省略 prompt 段，其余结构不变。
 
+**图 4 · 新工具接入判据（三问定形：粒度 → 产物类型 → 焦点落点）**
+
+```mermaid
+flowchart TD
+  A["新工具接入"] --> B{"拥有独立 panel + dock？"}
+  B -->|否| C["二级子工具：只在 railItems 声明，共享一级工具的 panel / dock"]
+  B -->|是| D["一级工具：写进 workbenchToolRegistry"]
+  D --> E{"产出型？调模型 / 写提示词 / 花积分"}
+  E -->|是| F["必须提供 dock"]
+  E -->|否| G["dock 置空，主按钮放面板底部"]
+  F --> H{"操作焦点在哪"}
+  H -->|画布直接操纵| I["dockPlacement 取 floating"]
+  H -->|文本 / 参数| J["dockPlacement 取 panel"]
+```
+
 ### 4.3 Dock 布局与尺寸规范（2026-09-22 增补：针对线上 dock 过大 / 遮挡滚动区 / CTA 走形）
 
 **布局铁律：dock 永不覆盖滚动区。** 面板骨架 = 对照固定区 → 滚动区（`flex:1`）→ dock（固定底部、自然高度）。三者为 flex 兄弟节点，dock 禁止用绝对定位 / 浮层压在滚动区上；滚动区可独立滚到底，最后一条内容不被 dock 挡住。
@@ -141,6 +170,17 @@ select 层 ──面板 header ×（busy 时 = 取消任务）/ 左上「← 返
 
 ## 5. WorkbenchShell 架构
 
+```mermaid
+flowchart LR
+  REG["工具注册表 workbenchToolRegistry"] -->|声明三件套| SHELL["WorkbenchShell"]
+  SHELL --> RAIL["左 rail 槽 · railItems"]
+  SHELL --> SCROLL["右栏滚动槽 · 当前工具 panel"]
+  SHELL --> DOCK["dock 槽 · floating / panel / 置空"]
+  SHELL --> FIXED["右栏固定区 · 对照带 + 版本条"]
+```
+*图 5 · Shell 只管槽位与布局，内容全部来自注册表；未注册的工具没有 UI。*
+
+
 ```
 components/canvas/workbench/
 ├── WorkbenchShell.vue          外壳：header 槽 + rail 槽 + viewport 槽 + panel(固定头/滚动槽/版本条槽) + floating-dock 槽
@@ -160,6 +200,25 @@ components/canvas/workbench/
 ![扩图手柄交互细节](assets/outpaint-handle-interaction.svg)
 
 *图 2 · 手柄与拖拽反馈：角圆 / 边胶囊、拖拽时 3×3 网格 + 顶部尺寸胶囊、松手确定范围。*
+
+**图 6 · 扩图交互状态机（松手只定范围，生成归 CTA）**
+
+```mermaid
+flowchart TD
+  SEL["select 精修"] -->|rail 激活 / 入口按钮| OUT["扩图层"]
+  OUT --> DRAG["拖拽手柄调整矩形：松手即确定范围，不生成"]
+  DRAG -->|继续拖其他手柄| DRAG
+  DRAG --> GUARD{"有扩展量？"}
+  GUARD -->|否| HINT["CTA 禁用 + 引导文案"]
+  HINT --> DRAG
+  GUARD -->|是| GEN["点 dock CTA 生成"]
+  GEN --> BUSY["busy：冻结参数 + 可取消"]
+  BUSY --> RES["新版本落版本链"]
+  RES --> NEXT{"下一步"}
+  NEXT -->|继续扩图| DRAG
+  NEXT -->|应用到节点| DONE["回到 select / 画布"]
+  OUT -->|floating dock × / Esc| SEL
+```
 
 ### 6.1 画布交互（`RefineOutpaintCanvas.vue`）
 
@@ -379,6 +438,18 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 | **识别层** | ① 万物分割（点/框提示 → **任意**对象掩码，不止主体）；② 文字检测识别（OCR → 文本行 + 掩码）；③ 对象清单 UI（点中后浮出「识别到：帽子」chip，可复用/切换对象） | **零通道**。但 `components/canvas/refine/maskRemote.ts`（SAM 蒙版 alpha 归一化 + `mergeMaskRgba` 增删合并）**已实现且从未接线**，是现成接入点；`point`/`wand` 目前只有本地容差填充，无模型后端 |
 | **指令层** | 局部重绘（换色 / 改样式 / 替换）、消除替换（移除对象）、文字替换（OCR 掩码 + 新文本，比通用 inpaint 更专门） | 全部已在 §14.2 占位清单（局部重绘 / 消除替换），可复用现有「掩码 → 精修通道」链路 |
 | **索引层** | 识别结果作为**节点级元数据**持久化：`{objectId, label, maskRef, bbox, ocrText, versionId}`；同一对象可连续下多条指令，索引跨版本复用 | 新增，但**不改全局数据模型**（挂在节点 / 版本上，不引入图层树） |
+
+**图 7 · 对象级编辑三件套数据流（识别 → 索引 → 指令 → 生成）**
+
+```mermaid
+flowchart LR
+  IMG["单张整图"] --> SEG["识别层：万物分割 / OCR"]
+  SEG --> IDX["索引层：objectId / label / mask / bbox / ocrText"]
+  IDX --> CMD["指令层：换色 / 移除 / 替换文字"]
+  CMD --> MOD["生成通道：局部重绘 / 消除"]
+  MOD --> NEW["新图落版本链"]
+  NEW -.->|索引复用，可再下指令| IDX
+```
 
 #### 排期建议（对 §14.2 优先级的调整）
 
