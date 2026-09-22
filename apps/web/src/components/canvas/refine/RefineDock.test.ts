@@ -102,6 +102,7 @@ describe('RefineDock', () => {
     const btn = w.find('[data-testid="dock-run"]')
     expect(btn.classes()).toContain('dock-generate-btn')
     expect(btn.attributes('aria-label')).toBe('精修')
+    expect(btn.attributes('title')).toBe('精修')
     expect(btn.find('svg').exists()).toBe(true)
     await btn.trigger('click')
     expect(w.emitted('run')).toHaveLength(1)

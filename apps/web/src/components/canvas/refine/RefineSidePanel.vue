@@ -422,12 +422,6 @@ async function loadBaseImage(url: string): Promise<HTMLImageElement | null> {
 }
 
 /**
- * 扩图提交链路（Task 7）：由 store 中的 clamp 后 rect 合成底图 + 蒙版两张 PNG，
- * persist 到服务端（失败回退 blob URL），再走 imageEdit（mode:'outpaint'、size:'auto'），
- * 并携带 outpaintFrom（原图尺寸）/ outpaintTo（新画布尺寸）几何字段（服务端 DTO 契约）。
- * 空 prompt 时兜底英文文案。
- */
-/**
  * 扩图提交链路（Task 7 / Task 9）：基准取自 store 的 `refineOutpaintBase`，
  * 几何经 `floorOutpaintRect` 落像素（§7：权威草稿含小数，提交侧统一 floor）。
  * 合成底图 + 蒙版两张 PNG → persist 到服务端（失败回退 blob URL）→ imageEdit

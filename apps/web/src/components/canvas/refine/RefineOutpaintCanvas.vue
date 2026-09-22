@@ -65,7 +65,8 @@ watch(base, () => {
 
 const MAX_FIT = 4
 const MIN_FIT = 0.02
-/** 留白：四周给手柄（出界 7px）留出可见空间，底部给读数条留出空间。 */
+/** 留白：四周给手柄（出界 7px）留出可见空间，底部额外留白是视觉呼吸区，
+ *  避免缩放后的画布贴住视口底边。 */
 const FIT_PAD_X = 24
 const FIT_PAD_TOP = 24
 const FIT_PAD_BOTTOM = 64

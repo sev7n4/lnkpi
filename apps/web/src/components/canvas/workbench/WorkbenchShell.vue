@@ -41,8 +41,9 @@ const floatingAvailable = computed(() => !isNarrow.value)
 </template>
 
 <style scoped>
-/* 绝对定位于画布页容器之上（与既有 RefineWorkViewport 同一层），flex 兄弟布局：
-   viewport（flex:1）与 panel 互不覆盖，dock 永远不会压在滚动区上（§4.3 布局铁律）。 */
+/* 绝对定位于画布页容器之上（与既有 RefineWorkViewport 同一层）。Shell 只提供
+   viewport/panel 布局骨架；§4.3 的「dock 不遮挡滚动区」由 RefineSidePanel 的
+   flex 兄弟 + Teleport 保证，本组件不做布局承诺。 */
 .workbench-shell {
   position: absolute;
   inset: 0;

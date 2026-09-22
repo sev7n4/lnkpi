@@ -297,6 +297,7 @@ function toggleVoice() {
             data-testid="dock-run"
             size="md"
             :label="mode === 'outpaint' ? '扩图生成' : '精修'"
+            :title="busy ? '点击取消生成' : (mode === 'outpaint' ? '扩图生成' : '精修')"
             :disabled="runDisabled"
             @generate="emit('run')"
           />

@@ -36,7 +36,7 @@ describe('workbenchToolRegistry', () => {
     expect(toolIdForRefineMode('outpaint')).toBe('refine-outpaint')
   })
 
-  it('注册表自身的完整性：dock 为 null 时 dockPlacement 被忽略（不因此报错）', () => {
+  it('注册表自身的完整性：每个注册项的 dockPlacement 取值合法', () => {
     for (const tool of Object.values(WORKBENCH_TOOL_REGISTRY)) {
       expect(['panel', 'floating']).toContain(tool.dockPlacement)
     }
