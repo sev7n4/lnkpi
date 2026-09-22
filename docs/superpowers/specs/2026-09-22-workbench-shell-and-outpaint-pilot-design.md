@@ -67,7 +67,18 @@ export interface WorkbenchToolRegistration {
 
 规则：**不注册就没有 UI**。右栏滚动区只渲染注册表中当前激活工具的 `panel`，杜绝再出现「固定框架」。
 
-### 4.1 Dock 规范（产出层统一标准，所有工具强制遵循）
+### 4.1 工具粒度规范（什么才有资格进注册表）
+
+**判据：是否拥有独立的 (panel, dock) 组合。**
+
+- **一级工具（WorkbenchTool）**：进全局注册表。判据 = 产物级能力——切换它会改变右栏面板和 / 或 dock（扩图、精修 select、切图、将来的抠图 / 超分……）。
+- **二级子工具（CanvasSubTool）**：不进全局注册表，是一级工具内部的能力域。判据 = 只改变画布交互与工具参数，**不改变 panel / dock**。选区六件套（点选 / 魔棒 / 矩形 / 多边形 / 画笔 / 橡皮）属于精修（select）的子工具：它们共享精修的参数面板与 dock，只有画布行为和模式条参数（笔刷 / 容差）不同。
+- 子工具也走**声明式协议**（图标 / 分组 / 参数渲染器 / 快捷键），即现有 `refineToolRailModel` 的分组模型方向；数据归属上，选区组作为 select 工具注册项的 `railItems` 填报，**本期渲染仍由 `RefineToolRail` 现行实现承担**（交互不变），数据源统一到注册表放后续包。
+- 升级路径：子工具长出独立产物时升为一级工具（例：「点选主体」未来若接一键抠图通道，就从 select 子工具升级为独立注册项，拥有自己的 panel / dock）。
+
+> 一句话：**注册表管「换了面板的动作」，子工具协议管「同一面板下的画布手法」。** 六个选区工具 × 一套 panel/dock，不做六份重复注册。
+
+### 4.2 Dock 规范（产出层统一标准，所有工具强制遵循）
 
 **有无 dock —— 按产物类型判，不按工具逐个拍板：**
 
@@ -90,7 +101,7 @@ export interface WorkbenchToolRegistration {
 5. CTA 文案统一「动词 + 对象」：`扩图生成` / `精修` / `确认切分`（panel 按钮同规范）；
 6. 提示词是可选段：不需要提示词的产出型工具（如免费抠图若走 dock）省略 prompt 段，其余结构不变。
 
-### 4.2 Dock 布局与尺寸规范（2026-09-22 增补：针对线上 dock 过大 / 遮挡滚动区 / CTA 走形）
+### 4.3 Dock 布局与尺寸规范（2026-09-22 增补：针对线上 dock 过大 / 遮挡滚动区 / CTA 走形）
 
 **布局铁律：dock 永不覆盖滚动区。** 面板骨架 = 对照固定区 → 滚动区（`flex:1`）→ dock（固定底部、自然高度）。三者为 flex 兄弟节点，dock 禁止用绝对定位 / 浮层压在滚动区上；滚动区可独立滚到底，最后一条内容不被 dock 挡住。
 
@@ -115,7 +126,7 @@ export interface WorkbenchToolRegistration {
 - 原图尺寸信息归位：作为尺寸选择器的 `title`/tooltip（悬浮可见），或在对照预览区 header 以弱化文本展示，二选一随实现定，dock 内不再出现。
 - 判据：删掉这条信息后用户是否会做出不同动作？不会 → 不属于 dock。扩图的目标画布尺寸不在此列（它是可操作参数，归 `OutpaintPanel`）。
 
-### 4.3 关闭 / 退出语义规范（一屏多个 × 必须可区分）
+### 4.4 关闭 / 退出语义规范（一屏多个 × 必须可区分）
 
 **规则：× 的作用域 = 它所在的容器层级，且必须就近可感知。** 退出链统一 LIFO（后进先出）：
 
@@ -207,7 +218,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 
 - rail：不变（工具已在左栏）。
 - 右栏滚动区：渲染 select 注册的 `panel` —— 本期即「现状减 Toolbox」。编辑意图 chips 与覆盖率提示**留在 `RefineDock` 内不拆**（它们与生成动作强耦合，拆出无收益）。
-- dock：**保留并按 §4.2 紧凑化**（精修是产出型工具，§4.1 有无判据），`dockPlacement: 'panel'` —— 精修的操作焦点是提示词文本（就近原则）。「原样」仅指功能与内容编排不变；**布局与尺寸必须收敛到 §4.2 预算**（线上 dock 过大、遮挡滚动区、CTA 禁用态丢箭头三项缺陷随本包修复）。
+- dock：**保留并按 §4.3 紧凑化**（精修是产出型工具，§4.2 有无判据），`dockPlacement: 'panel'` —— 精修的操作焦点是提示词文本（就近原则）。「原样」仅指功能与内容编排不变；**布局与尺寸必须收敛到 §4.3 预算**（线上 dock 过大、遮挡滚动区、CTA 禁用态丢箭头三项缺陷随本包修复）。
 - 模式条：不变。
 
 ## 11. 文件级改动清单
@@ -221,7 +232,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 | `components/canvas/refine/RefineOutpaintCanvas.vue` | 修改：手柄形状 / 3×3 网格 / 顶部胶囊读数 / rect 状态源上移 store / 删底部读数条 |
 | `components/canvas/refine/outpaintGeometry.ts` | 修改：新增 §8 三个纯函数 |
 | `components/canvas/refine/RefineSidePanel.vue` | 修改：接 Shell / 按 mode 渲染面板与 dock 落点 / VersionStrip 直挂 |
-| `components/canvas/refine/RefineDock.vue` | 修改：按 §4.2 紧凑化（高度预算 / 圆形箭头 CTA 含禁用态保形 / flex 兄弟布局不遮挡滚动区 / 移除「原图 尺寸·比例」静态徽标行）+ §4.3 移除头排 × |
+| `components/canvas/refine/RefineDock.vue` | 修改：按 §4.3 紧凑化（高度预算 / 圆形箭头 CTA 含禁用态保形 / flex 兄弟布局不遮挡滚动区 / 移除「原图 尺寸·比例」静态徽标行）+ §4.4 移除头排 × |
 | `components/canvas/refine/RefineToolRail.vue` + `refineToolRailModel.ts` | 修改：能力区 |
 | `components/canvas/refine/RefineToolbox.vue` | 删除（能力数据迁 rail 模型） |
 | `stores/canvasEditor.ts` | 修改：§7 |
@@ -235,7 +246,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 - `OutpaintPanel`：chips 激活态、输入同步、守卫提示、禁用态。
 - `RefineOutpaintCanvas`：手柄形状 testid、拖拽中网格与顶部胶囊出现/消失、松手后 rect 持久（多次操作不互相吞 —— PR #398 回归）。
 - `RefineOutpaintDock`：CTA 守卫 / 退出按钮 / busy 态。
-- dock 布局回归（§4.2）：`RefineDock` 与 `RefineOutpaintDock` 渲染快照 / 类断言——主 CTA 为圆形箭头按钮，**disabled 态仍含 `↑` 图标**；dock 与滚动区为 flex 兄弟（无绝对定位重叠）；默认态高度不超预算。
+- dock 布局回归（§4.3）：`RefineDock` 与 `RefineOutpaintDock` 渲染快照 / 类断言——主 CTA 为圆形箭头按钮，**disabled 态仍含 `↑` 图标**；dock 与滚动区为 flex 兄弟（无绝对定位重叠）；默认态高度不超预算。
 - rail：能力区渲染、禁用 tooltip、扩图激活。
 - 基线：`pnpm --filter @lnkpi/web test` 全绿（main 基线 976，只增不减）；`vue-tsc -b` 零错误；全仓四条本地验证。
 
