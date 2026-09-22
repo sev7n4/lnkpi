@@ -268,11 +268,13 @@ function onBackOrCancel() {
 function onApply() {
   const result = editor.currentRefineSessionResult
   if (!result) return
-  const payload: { url: string; prompt: string; recordId?: string } = {
+  const payload: RefineApplyPayload = {
     url: result.url,
     prompt: result.prompt,
   }
   if (result.recordId) payload.recordId = result.recordId
+  // 扩图结果的对照元数据随 payload 下传（CanvasPage 据 outpaintTo contain-fit 出 nodeSize）。
+  if (result.metadata) payload.metadata = result.metadata
   emit('apply', payload)
 }
 
@@ -563,14 +565,21 @@ async function runOutpaint() {
     )
     const url = data.data.url
     if (url) {
-      editor.pushRefineSessionResult({ url, recordId: data.data.id, prompt: prompt.value || OUTPAINT_FALLBACK_PROMPT })
       // Task 8：快照本次扩图的对照元数据（与服务端 metadata 契约同形），
-      // 对照带据此进入「基准画布」模式——以新画布为基准、Before 居中贴图。
-      outpaintMeta.value = {
+      // 对照带据此进入「基准画布」模式；同时随会话结果存储，apply 时随 payload 下传
+      // （CanvasPage 据 outpaintTo contain-fit 出下游节点 nodeSize）。
+      const meta: RefineCompareMetadata = {
         editMode: 'outpaint',
         outpaintFrom: { width: baseW, height: baseH },
         outpaintTo: { width: rect.width, height: rect.height },
       }
+      outpaintMeta.value = meta
+      editor.pushRefineSessionResult({
+        url,
+        recordId: data.data.id,
+        prompt: prompt.value || OUTPAINT_FALLBACK_PROMPT,
+        metadata: meta,
+      })
     }
   } catch (err) {
     const message = formatError(err, '扩图失败，请重试')

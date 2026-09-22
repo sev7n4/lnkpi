@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
+import type { RefineCompareMetadata } from '@/components/canvas/refine/compareViewModel'
 import { clampWipeRatio, type CompareMode } from '@/utils/refineChrome'
 import {
   fitRectToAspect,
@@ -45,6 +46,8 @@ export interface RefineSessionResult {
   url: string
   recordId?: string
   prompt: string
+  /** 扩图结果的对照元数据（与 apply payload metadata 契约同形）；普通精修/抠图无此字段。 */
+  metadata?: RefineCompareMetadata
   createdAt: string
 }
 

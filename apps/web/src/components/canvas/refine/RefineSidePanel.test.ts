@@ -327,6 +327,43 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="compare-base-hatch"]')).toBeNull()
   })
 
+  it('扩图会话结果应用：apply payload 携带 metadata.outpaintTo（含落像素，CanvasPage 据此 contain-fit 出 nodeSize）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('outpaint')
+    editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0.4, y: 50.6, width: 400.2, height: 400.9 })
+    mountPanel()
+    await flushPromises()
+    await runOutpaintButton()!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    // 扩图结果入会话时快照了对照元数据（editMode / outpaintFrom / outpaintTo）
+    expect(editor.refineSessionResults[0]!.metadata).toEqual({
+      editMode: 'outpaint',
+      outpaintFrom: { width: 400, height: 300 },
+      outpaintTo: { width: 400, height: 400 },
+    })
+
+    const applyBtn = q('[data-testid="outpaint-dock-apply"]') as HTMLButtonElement | null
+    expect(applyBtn).not.toBeNull()
+    await applyBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const applies = current?.emitted('apply')
+    expect(applies).toBeTruthy()
+    const payload = (applies as unknown[][]).at(-1)![0] as {
+      url: string
+      metadata?: { editMode?: string; outpaintFrom?: { width: number; height: number }; outpaintTo?: { width: number; height: number } }
+    }
+    expect(payload.url).toBe('blob:after')
+    expect(payload.metadata).toEqual({
+      editMode: 'outpaint',
+      outpaintFrom: { width: 400, height: 300 },
+      outpaintTo: { width: 400, height: 400 },
+    })
+  })
+
   it('扩图提交的 outpaintTo 使用落像素后的 rect（不含小数）', async () => {
     const editor = useCanvasEditorStore()
     editor.setRefineMode('outpaint')
