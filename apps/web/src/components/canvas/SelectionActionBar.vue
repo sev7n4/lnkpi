@@ -42,6 +42,11 @@ const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 
 /** bar 与节点边缘的屏幕间距（px） */
 const BAR_GAP_PX = 8
+/**
+ * bar 固定宽度（px）：与 MultiSelectToolbar（框选多节点菜单）的自然宽度 383px 对齐。
+ * 固定宽度后按钮用 space-around 铺满，命中目标比 max-content 时的紧凑排布更大。
+ */
+const BAR_WIDTH_PX = 384
 
 const tools = computed(() => buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }))
 
@@ -131,7 +136,7 @@ const barStyle = computed(() => {
   return {
     left: `${flowPos.value.x}px`,
     top: `${flowPos.value.y}px`,
-    width: 'max-content',
+    width: `${BAR_WIDTH_PX}px`,
     transform: placement.value === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
   }
 })
@@ -140,8 +145,6 @@ const counterScaleStyle = computed(() => ({
   transform: `scale(${clampCounterScale(effectiveZoom.value)})`,
   transformOrigin: placement.value === 'top' ? '50% 100%' : '50% 0%',
 }))
-
-const labelsHidden = computed(() => effectiveZoom.value < 0.5)
 
 /** 生效缩放：优先外部传入的 zoom prop（无响应式 viewport 源的宿主） */
 const effectiveZoom = computed(() => props.zoom ?? viewport.value.zoom)
@@ -165,8 +168,7 @@ const TOOL_ICONS: Record<string, string> = {
       <div ref="barEl" class="pointer-events-auto absolute" :style="barStyle">
         <div
           data-testid="bar-inner"
-          class="neo-chrome flex items-center gap-0.5 rounded-xl px-1.5 py-1"
-          :class="{ 'labels-hidden': labelsHidden }"
+          class="neo-chrome flex items-center justify-around gap-0.5 rounded-xl px-1.5 py-1"
           :style="counterScaleStyle"
           @click.stop
         >
@@ -200,8 +202,8 @@ const TOOL_ICONS: Record<string, string> = {
               @click="onToolClick(tool)"
             >
               <svg
-                width="14"
-                height="14"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -226,7 +228,7 @@ const TOOL_ICONS: Record<string, string> = {
   align-items: center;
   gap: 0.3rem;
   border-radius: 0.5rem;
-  padding: 0.25rem 0.625rem;
+  padding: 0.375rem 0.5rem;
   font-size: 11px;
   line-height: 1.25;
   color: var(--neo-text);
@@ -242,10 +244,11 @@ const TOOL_ICONS: Record<string, string> = {
 }
 /* 文件组：纯图标按钮，缩小左右内边距 */
 .toolbar-action.icon-only {
-  padding: 0.25rem 0.4rem;
+  padding: 0.375rem 0.4rem;
 }
-/* 视口缩放 < 0.5 时隐藏文字标签，仅留图标（缩放是 transform，@media 不适用） */
-.labels-hidden .label {
+/* 与 MultiSelectToolbar（纯图标按钮排布）对齐：文字标签不占宽度，
+   仅保留在 DOM / title 中（无障碍 + 测试可见性），按钮在固定 384px 内 space-around 铺开 */
+.label {
   display: none;
 }
 </style>
