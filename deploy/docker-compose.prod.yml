@@ -30,7 +30,7 @@ services:
     environment:
       PORT: "3001"
       DATABASE_URL: file:/app/apps/server/data/lnkpi.db
-      MATTING_SERVICE_URL: "http://lnkpi-matting:8000"
+      MATTING_SERVICE_URL: ${MATTING_SERVICE_URL:-http://lnkpi-matting:8000}
     ports:
       - "0.0.0.0:5100:3001"
     volumes:
