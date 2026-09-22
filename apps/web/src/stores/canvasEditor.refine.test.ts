@@ -176,6 +176,58 @@ describe('canvasEditor refine target', () => {
   })
 })
 
+describe('refineSessionResults', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
+
+  it('push 后 current 指向新结果，最多保留 8 张挤旧', () => {
+    const editor = useCanvasEditorStore()
+    for (let i = 0; i < 9; i++) editor.pushRefineSessionResult({ url: `u${i}`, prompt: '' })
+    expect(editor.refineSessionResults.length).toBe(8)
+    expect(editor.refineSessionResults[0].url).toBe('u1')
+    expect(editor.refineSessionResults[7].url).toBe('u8')
+    expect(editor.currentRefineSessionResult?.url).toBe('u8')
+  })
+
+  it('selectRefineSessionResult 切换 current', () => {
+    const editor = useCanvasEditorStore()
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.pushRefineSessionResult({ url: 'u1', prompt: '' })
+    const first = editor.refineSessionResults[0]!
+    editor.selectRefineSessionResult(first.id)
+    expect(editor.currentRefineSessionResult?.url).toBe('u0')
+  })
+
+  it('换图/退出清空：clearRefineSessionResults 后为空且 current 为 null', () => {
+    const editor = useCanvasEditorStore()
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.clearRefineSessionResults()
+    expect(editor.refineSessionResults).toEqual([])
+    expect(editor.currentRefineSessionResult).toBeNull()
+  })
+
+  it('挤掉最旧若为 current，current 顺移到新的最旧', () => {
+    const editor = useCanvasEditorStore()
+    for (let i = 0; i < 8; i++) editor.pushRefineSessionResult({ url: `u${i}`, prompt: '' })
+    const oldest = editor.refineSessionResults[0]!
+    editor.selectRefineSessionResult(oldest.id)
+    editor.pushRefineSessionResult({ url: 'u8', prompt: '' })
+    expect(editor.refineSessionResults.length).toBe(8)
+    expect(editor.refineSessionResults.some((r) => r.id === oldest.id)).toBe(false)
+    expect(editor.currentRefineSessionResult?.url).toBe('u1')
+  })
+
+  it('退出精修会话时清空（closeImageEditor）', () => {
+    const editor = useCanvasEditorStore()
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.closeImageEditor()
+    expect(editor.refineSessionResults).toEqual([])
+    expect(editor.currentRefineSessionResult).toBeNull()
+  })
+})
+
 describe('扩图基准与面板动作（§7）', () => {
   const BASE = { width: 400, height: 300 }
 

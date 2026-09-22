@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
@@ -39,6 +39,15 @@ export type RefineMaskHandle = {
   invert: () => void
 }
 
+/** 精修会话内生成的结果（胶片条数据源，最多 8 张挤旧，退出/换图清空）。 */
+export interface RefineSessionResult {
+  id: string
+  url: string
+  recordId?: string
+  prompt: string
+  createdAt: string
+}
+
 /** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）。 */
 export type RefineMode = 'select' | 'outpaint'
 
@@ -70,6 +79,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineOutpaintBase = ref<Size | null>(null)
   /** 扩图手柄拖拽进行中（2026-09-22 用户验收修订）：悬浮 dock 据此隐藏，不挡画布拖拽。 */
   const refineOutpaintDragging = ref(false)
+  /** 精修会话生成结果（胶片条数据源）。 */
+  const refineSessionResults = ref<RefineSessionResult[]>([])
+  /** 当前选中的会话结果 id。 */
+  const refineSessionCurrentId = ref<string | null>(null)
 
   function resetRefineChromeState() {
     compareLightboxOpen.value = false
@@ -90,11 +103,14 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineOutpaintRect.value = null
     refineOutpaintBase.value = null
     refineOutpaintDragging.value = false
+    refineSessionResults.value = []
+    refineSessionCurrentId.value = null
   }
 
   function openImageEditor(target: ImageEditTarget) {
     const currentId = imageTarget.value?.nodeId
     if (refineBusy.value && currentId && currentId !== target.nodeId) return
+    if (currentId && currentId !== target.nodeId) clearRefineSessionResults()
     imageTarget.value = target
   }
 
@@ -165,6 +181,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
       refineOutpaintDragging.value = false
+      clearRefineSessionResults()
     }
     refineMode.value = mode
   }
@@ -213,6 +230,44 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineOutpaintRect.value = initialOutpaintRect(refineOutpaintBase.value!)
   }
 
+  /** 会话结果容量上限：挤旧策略（超出丢最旧）。 */
+  const REFINE_SESSION_RESULTS_MAX = 8
+
+  /** 写入一条会话生成结果：自动补 id/时间；push 后 current 指向它；超过 8 张挤掉最旧，被挤者若是 current 则 current 顺移到新的最旧。 */
+  function pushRefineSessionResult(r: Omit<RefineSessionResult, 'id' | 'createdAt'> & { id?: string }) {
+    const entry: RefineSessionResult = {
+      ...r,
+      id: r.id ?? crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    }
+    refineSessionResults.value.push(entry)
+    let evictedCurrent = false
+    if (refineSessionResults.value.length > REFINE_SESSION_RESULTS_MAX) {
+      const evicted = refineSessionResults.value.shift()
+      if (evicted && refineSessionCurrentId.value === evicted.id) {
+        refineSessionCurrentId.value = refineSessionResults.value[0]?.id ?? null
+        evictedCurrent = true
+      }
+    }
+    if (!evictedCurrent) refineSessionCurrentId.value = entry.id
+  }
+
+  /** 胶片条选中：切换 current。 */
+  function selectRefineSessionResult(id: string) {
+    refineSessionCurrentId.value = refineSessionResults.value.some((r) => r.id === id) ? id : null
+  }
+
+  /** 清空会话结果（退出精修 / 换图时调用）。 */
+  function clearRefineSessionResults() {
+    refineSessionResults.value = []
+    refineSessionCurrentId.value = null
+  }
+
+  /** 当前选中的会话结果（胶片条高亮 / 对照读它）。 */
+  const currentRefineSessionResult = computed<RefineSessionResult | null>(
+    () => refineSessionResults.value.find((r) => r.id === refineSessionCurrentId.value) ?? null,
+  )
+
   function openMediaPreview(target: MediaPreviewTarget) {
     previewTarget.value = target
   }
@@ -241,6 +296,12 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineOutpaintRect,
     refineOutpaintBase,
     refineOutpaintDragging,
+    refineSessionResults,
+    refineSessionCurrentId,
+    currentRefineSessionResult,
+    pushRefineSessionResult,
+    selectRefineSessionResult,
+    clearRefineSessionResults,
     openImageEditor,
     closeImageEditor,
     setRefineBusy,
