@@ -55,12 +55,40 @@ export interface WorkbenchToolRegistration {
   id: string                       // 'refine-select' | 'refine-outpaint' | …
   railItems?: RailItemDescriptor[] // 左栏图标（可选；select 模式的图标由现有 rail 分组承担）
   panel: Component                 // 右栏滚动区参数面板
+  /**
+   * 动作层（dock）。产出型工具必填；确定性变换工具为 null（动作按钮归面板底部，统一样式）。
+   * dock 为 null 时 dockPlacement 被忽略。
+   */
+  dock: Component | null
+  /** 落点就近原则：操作焦点在画布 → 'floating'；在文本/参数 → 'panel'。 */
   dockPlacement: 'panel' | 'floating'
-  dock?: Component                 // 缺省复用共享 Dock 原子件拼装
 }
 ```
 
 规则：**不注册就没有 UI**。右栏滚动区只渲染注册表中当前激活工具的 `panel`，杜绝再出现「固定框架」。
+
+### 4.1 Dock 规范（产出层统一标准，所有工具强制遵循）
+
+**有无 dock —— 按产物类型判，不按工具逐个拍板：**
+
+| 工具类型 | 判据 | dock |
+|---|---|---|
+| 产出型（精修 / 扩图 / 超分 / 局部重绘…） | 调模型 / 写提示词 / 消耗积分生成新图 | 有，`dock` 必填 |
+| 确定性变换（宫格切分 / 裁剪 / 旋转翻转…） | 无模型、无提示词、零积分 | 无（`dock: null`），主按钮放面板底部，样式与 CTA 规范一致 |
+
+**落点 —— 就近原则：**
+
+- 操作焦点在**画布**（拖手柄、直接操纵）→ `floating`：悬浮视口底部，手不离画布即可触发生成（扩图）。
+- 操作焦点在**文本 / 参数**（打提示词、调参）→ `panel`：面板底部常驻，紧邻主输入区（精修）。
+
+**结构不变量（所有 dock 变体，含悬浮与面板两种落点）：**
+
+1. 原子件共享：`DockToolbarShell` / `DockPromptSection` / `DockCreditBadge` / `DockGenerateButton` 等，变体只做编排不造新件；
+2. 主 CTA 永在最右；积分徽标永远紧邻 CTA 左侧；
+3. 守卫统一：不可用 = disabled + 原因文案（tooltip 或邻近 hint），不允许「点了没反应」；
+4. busy 统一：冻结参数输入 + CTA 禁用 + 可取消（有 abort 链路的工具）；
+5. CTA 文案统一「动词 + 对象」：`扩图生成` / `精修` / `确认切分`（panel 按钮同规范）；
+6. 提示词是可选段：不需要提示词的产出型工具（如免费抠图若走 dock）省略 prompt 段，其余结构不变。
 
 ## 5. WorkbenchShell 架构
 
@@ -141,7 +169,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 
 - rail：不变（工具已在左栏）。
 - 右栏滚动区：渲染 select 注册的 `panel` —— 本期即「现状减 Toolbox」。编辑意图 chips 与覆盖率提示**留在 `RefineDock` 内不拆**（它们与生成动作强耦合，拆出无收益）。
-- dock：`dockPlacement: 'panel'`，`RefineDock` 原样挂在面板底部。
+- dock：**保留**（精修是产出型工具，§4.1 有无判据），`dockPlacement: 'panel'` —— 精修的操作焦点是提示词文本（就近原则），`RefineDock` 原样挂在面板底部。
 - 模式条：不变。
 
 ## 11. 文件级改动清单
@@ -191,6 +219,6 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 
 ## 14. 后续包
 
-1. `GridSliceWorkbench` 迁移到 Shell（验证契约复用）。
+1. `GridSliceWorkbench` 迁移到 Shell（验证契约复用，含 `dock: null` 的确定性变换形态：无 dock、主按钮在面板底部）。
 2. 能力包按注册表逐个点亮 rail 禁用项。
 3. 扩图 P2：方向快捷键、Alt 对称拖、手柄旁尺寸浮标、张数（等批量能力）。
