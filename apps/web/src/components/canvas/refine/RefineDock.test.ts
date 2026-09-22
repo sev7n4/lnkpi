@@ -132,3 +132,26 @@ describe('RefineDock', () => {
     expect(w.emitted('close')).toHaveLength(1)
   })
 })
+
+describe('RefineDock 扩图模式（Q3 衔接：CTA 语义与引导）', () => {
+  it('扩图模式下主按钮文案为「扩图生成」（不再沿用「精修」）', () => {
+    const w = mountDock({ mode: 'outpaint' })
+    expect(w.find('[data-testid="dock-run"]').text()).toBe('扩图生成')
+  })
+
+  it('已产生扩出时不显示引导文案', () => {
+    const w = mountDock({ mode: 'outpaint', outpaintReady: true })
+    expect(w.find('[data-testid="dock-outpaint-hint"]').exists()).toBe(false)
+  })
+
+  it('尚未扩出时显示「先拖动手柄」引导文案', () => {
+    const w = mountDock({ mode: 'outpaint', outpaintReady: false })
+    expect(w.find('[data-testid="dock-outpaint-hint"]').text()).toContain('先拖动')
+  })
+
+  it('普通精修模式不受 outpaintReady 影响', () => {
+    const w = mountDock({ mode: 'edit', outpaintReady: false })
+    expect(w.find('[data-testid="dock-run"]').text()).toBe('精修')
+    expect(w.find('[data-testid="dock-outpaint-hint"]').exists()).toBe(false)
+  })
+})

@@ -34,6 +34,8 @@ const props = withDefaults(defineProps<{
   sizeOverride: string | 'auto'
   /** 通道模式：edit 普通精修；outpaint 扩图（Task 7 接线）会隐藏尺寸选择器。 */
   mode?: RefineMode
+  /** 扩图模式：是否已产生真实扩出（四向扩展量不全为 0）。未扩出时给引导文案。 */
+  outpaintReady?: boolean
   /** 旧只读状态位的展示值，保留作模型 key 的兜底展示名。 */
   modelLabel?: string
   busy?: boolean
@@ -47,6 +49,7 @@ const props = withDefaults(defineProps<{
   refRoleHints?: string
 }>(), {
   busy: false, disabled: false, canApply: false, coverageKind: 'ok',
+  outpaintReady: true,
   activeEditIntentId: null, refRoleHints: '',
   mode: 'edit',
   modelKey: P1_IMAGE_EDIT_MODEL_KEY,
@@ -204,6 +207,9 @@ function toggleVoice() {
       />
 
       <p v-if="refRoleHints" class="refine-dock__hint">参考图：{{ refRoleHints }}</p>
+      <p v-if="mode === 'outpaint' && !outpaintReady" class="refine-dock__hint" data-testid="dock-outpaint-hint">
+        先拖动画布四周手柄向外扩出画布，扩出区域将由 AI 生成
+      </p>
       <p v-if="coverageKind === 'empty'" class="refine-dock__hint">请先圈选要改的区域</p>
       <p v-else-if="coverageKind === 'full'" class="refine-dock__hint refine-dock__hint--warn">
         这会改整张图，更像重新生成；可用底部生成栏
@@ -290,7 +296,7 @@ function toggleVoice() {
           <DockMicButton :listening="speech.listening.value" :disabled="runDisabled" @toggle="toggleVoice" />
           <DockCreditBadge :credits="creditValue" />
           <button type="button" class="refine-dock__primary" data-testid="dock-run" :disabled="runDisabled" @click="emit('run')">
-            精修
+            {{ mode === 'outpaint' ? '扩图生成' : '精修' }}
           </button>
           <!-- follow-up #2：置灰「抠图」占位按钮已删 —— 规格 §2.2 明确抠图归 M2 能力包（P1-8 不做假 UI）。
                底排“抠图/裁剪”等实体动作入口随 M2 规格回来，届时进工具箱能力组。 -->

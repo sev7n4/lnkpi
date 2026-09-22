@@ -162,3 +162,71 @@ describe('RefineOutpaintCanvas', () => {
     expect(w.find('[data-testid="outpaint-readout"]').text()).toContain('4:3')
   })
 })
+
+/**
+ * 回归（2026-09-22 用户报告）：「先向上扩，再向下扩，之前向上扩出来的蒙版看不到了」，
+ * 左右手柄 / 对角手柄同样症状。
+ *
+ * 根因：画布状态只有 (尺寸, anchor)，而 anchor 被「最后一次拖拽的手柄」整体覆盖，
+ * 原图在新画布中的偏移由 anchor 重新解算 → 先前扩出的边被吞掉。
+ * 正确语义：每条边独立累积，拖拽只移动手柄所在的那条边，对边固定。
+ */
+describe('RefineOutpaintCanvas 多边累积扩展', () => {
+  const offsetOf = (w: ReturnType<typeof mountCanvas>) => {
+    const el = w.find('.refine-outpaint__base').element as HTMLElement
+    return { left: el.style.left, top: el.style.top }
+  }
+
+  it('n 向上扩 100 后 s 向下扩 100：上方扩出区必须保留（基准偏移 y=100）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    await drag(w, 'n', { x: 200, y: 0 }, { x: 200, y: -100 })
+    expect(readoutDims(w)).toEqual({ w: 400, h: 400 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 0, y: 100, width: 400, height: 400 })
+
+    await drag(w, 's', { x: 200, y: 400 }, { x: 200, y: 500 })
+    expect(readoutDims(w)).toEqual({ w: 400, h: 500 })
+    // 关键：原图仍贴在新画布 y=100（上方 100px 扩出区未被吞），下方又多 100
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 0, y: 100, width: 400, height: 500 })
+    expect(offsetOf(w).top).toBe('100px')
+  })
+
+  it('e 向右扩 100 后 w 向左扩 100：右侧扩出区必须保留（基准偏移 x=100）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    await drag(w, 'e', { x: 400, y: 150 }, { x: 500, y: 150 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 0, y: 0, width: 500, height: 300 })
+
+    await drag(w, 'w', { x: 0, y: 150 }, { x: -100, y: 150 })
+    expect(readoutDims(w)).toEqual({ w: 600, h: 300 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 100, y: 0, width: 600, height: 300 })
+    expect(offsetOf(w).left).toBe('100px')
+  })
+
+  it('nw 向左上扩后 se 向右下扩：两个对角扩出区同时在（原图居中偏移 100,100）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    await drag(w, 'nw', { x: 0, y: 0 }, { x: -100, y: -100 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 100, y: 100, width: 500, height: 400 })
+
+    await drag(w, 'se', { x: 400, y: 300 }, { x: 500, y: 400 })
+    expect(readoutDims(w)).toEqual({ w: 600, h: 500 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 100, y: 100, width: 600, height: 500 })
+  })
+
+  it('向内拖拽只收缩该边，不越过原图边界（对边扩出区不受影响）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    await drag(w, 'e', { x: 400, y: 150 }, { x: 500, y: 150 }) // 右侧 +100
+    await drag(w, 'w', { x: 0, y: 150 }, { x: 50, y: 150 }) // 左侧内拖 50：左扩出量 0 → 停在原图左边界
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 0, y: 0, width: 500, height: 300 })
+  })
+
+  it('同一边连续两次拖拽按累计位移处理（第二次以上次结果为起点）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    await drag(w, 'e', { x: 400, y: 150 }, { x: 450, y: 150 })
+    await drag(w, 'e', { x: 450, y: 150 }, { x: 500, y: 150 })
+    expect(editor.refineOutpaintRect).toMatchObject({ x: 0, y: 0, width: 500, height: 300 })
+  })
+})

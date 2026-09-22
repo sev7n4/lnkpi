@@ -235,3 +235,35 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="compare-base-hatch"]')).toBeNull()
   })
 })
+
+describe('RefineSidePanel 扩图提交守卫（Q3：零扩展不得提交）', () => {
+  const runButton = () => q('[data-testid="dock-run"]') as HTMLButtonElement | null
+
+  it('零扩展（rect == 原图）时「扩图生成」禁用并给引导文案；真实扩出后启用', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    mountPanel({ width: 400, height: 300 })
+    // 尚无 rect → 禁用 + 引导
+    expect(runButton()?.disabled).toBe(true)
+    expect(q('[data-testid="dock-outpaint-hint"]')).not.toBeNull()
+    // rect == 原图本身（进入模式即有的初始态）→ 仍禁用（否则空蒙版提交白扣积分）
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 400, height: 300 })
+    await flushPromises()
+    expect(runButton()?.disabled).toBe(true)
+    // 真实扩出（向上扩 100）→ 启用、引导消失
+    editor.setRefineOutpaintRect({ x: 0, y: 100, width: 400, height: 400 })
+    await flushPromises()
+    expect(runButton()?.disabled).toBe(false)
+    expect(q('[data-testid="dock-outpaint-hint"]')).toBeNull()
+    expect(runButton()?.textContent).toContain('扩图生成')
+  })
+
+  it('仅向右/向下扩（x = y = 0）也算已扩出', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    mountPanel({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 500, height: 300 })
+    await flushPromises()
+    expect(runButton()?.disabled).toBe(false)
+  })
+})

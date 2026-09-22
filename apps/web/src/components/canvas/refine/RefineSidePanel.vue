@@ -34,6 +34,7 @@ import {
   resolvePointMaskRgba,
 } from './pointSegmentSession'
 import { computeOutpaintLayers } from './outpaintComposite'
+import { hasOutpaintExtension, type OutpaintRect } from './outpaintGeometry'
 import { renderOutpaintPngs } from './outpaintRender'
 import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 
@@ -124,10 +125,16 @@ const dockMode = computed<'edit' | 'outpaint'>(() => (editor.refineMode === 'out
 /** credits 按 shared 模型定价表动态计算（image2 = 10），模型不可识别时回落到默认估算。 */
 const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
-/** 扩图模式：仅需一个合法 rect 即可提交（无需圈选覆盖）；普通模式保持原 coverage 校验。 */
+/** 扩图模式是否已产生真实扩出（四向扩展量不全为 0）。 */
+const outpaintReady = computed(() => {
+  const rect = editor.refineOutpaintRect as OutpaintRect | null
+  if (!rect) return false
+  return hasOutpaintExtension({ width: Number(props.width) || 0, height: Number(props.height) || 0 }, rect)
+})
+/** 扩图模式：需要一个已真实扩出的 rect（零扩展提交 = 空蒙版白扣积分）；普通模式保持原 coverage 校验。 */
 const refineDisabled = computed(() => {
   if (busy.value) return true
-  if (editor.refineMode === 'outpaint') return !editor.refineOutpaintRect
+  if (editor.refineMode === 'outpaint') return !outpaintReady.value
   return coverageKind.value === 'empty'
 })
 const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
@@ -542,6 +549,7 @@ onBeforeUnmount(() => {
         :sizes="IMAGE2_EDIT_SIZES"
         :size-override="sizeOverride"
         :mode="dockMode"
+        :outpaint-ready="outpaintReady"
         :busy="busy"
         :disabled="refineDisabled"
         :can-apply="canApply"
