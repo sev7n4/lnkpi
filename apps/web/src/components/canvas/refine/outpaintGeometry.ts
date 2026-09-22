@@ -213,3 +213,105 @@ export function formatAspectLabel(width: number, height: number): string {
   const round1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
   return ratio >= 1 ? `${round1(ratio)}:1` : `1:${round1(1 / ratio)}`
 }
+
+/**
+ * 比例预设：返回「包含原图、面积最小、比例精确等于 ratio」的新画布矩形。
+ *
+ * 语义与拖拽不同：**替换**当前 rect，不做累积（§6.2）。ratio 为 null = 原图，
+ * 等价 initialOutpaintRect。扩展量在两轴对称均分（x = max(0, w - minW) / 2，
+ * minW = max(bw, OUTPAINT_MIN_EDGE)）：原图本身小于单边下限时，下限缺口整块落在
+ * 东 / 南侧（x = y = 0），只有超出下限的增量才均分——与逐边模型补缺口的取舍一致。
+ * 允许小数，对外落像素由 floorOutpaintRect 负责。
+ *
+ * 两轴下界 max(base, OUTPAINT_MIN_EDGE) 同时参与解算：先取宽度下界，若算出高度
+ * 不足高度下界，则以高度下界反解宽度——保证「该比例 + 包含原图 + 单边 ≥256」三条同时成立。
+ *
+ * 面积上限（§8）只在「最小包含矩形本身已在上限内」时有收缩空间；若最小包含矩形就超上限，
+ * **包含原图是硬不变量**，直接返回该矩形（极端比例原图，如 4000×100 选 9:16）。
+ */
+export function fitRectToAspect(base: Size, ratio: { w: number; h: number } | null): OutpaintRect {
+  const bw = Math.max(0, base.width)
+  const bh = Math.max(0, base.height)
+  if (!ratio || !(ratio.w > 0) || !(ratio.h > 0) || !(bw > 0) || !(bh > 0)) {
+    return initialOutpaintRect(base)
+  }
+  const target = ratio.w / ratio.h
+  const minW = Math.max(bw, OUTPAINT_MIN_EDGE)
+  const minH = Math.max(bh, OUTPAINT_MIN_EDGE)
+
+  let width = Math.max(minW, minH * target)
+  let height = width / target
+
+  const maxArea = OUTPAINT_MAX_AREA_RATIO * bw * bh
+  if (width * height > maxArea) {
+    const scale = Math.sqrt(maxArea / (width * height))
+    const candW = width * scale
+    const candH = height * scale
+    // 收缩后仍须包含原图，否则保持最小包含矩形（包含原图优先）
+    if (candW >= bw && candH >= bh) {
+      width = candW
+      height = candH
+    }
+  }
+
+  // 均分基准取 clamp 后的下界 minW / minH（而非裸 bw / bh）：原图不足单边下限时，
+  // 下限缺口整块落在东 / 南侧，只有超出下限的增量才在两轴均分。
+  return {
+    x: Math.max(0, width - minW) / 2,
+    y: Math.max(0, height - minH) / 2,
+    width,
+    height,
+  }
+}
+
+/**
+ * 画布尺寸数字输入：绝对值语义（不是增量），落像素为整数。
+ *
+ * clamp：`w ≥ max(baseW, 256)`、`h ≥ max(baseH, 256)`（扩图不裁剪 + 单边下限），
+ * 面积超 9 倍时两轴等比收缩（同样不低于上述下界）。扩展量在两轴**对称均分**，
+ * 奇数像素差多的 1px 给右侧 / 下方（§6.2）；原图本身小于 256 的那一轴，下限缺口
+ * 整块落在右侧 / 下方，不参与均分。
+ *
+ * 非法输入（NaN / ±Infinity）等价 initialOutpaintRect，绝不把 NaN 写进状态。
+ */
+export function resizeOutpaintAbsolute(base: Size, width: number, height: number): OutpaintRect {
+  const bw = Math.max(0, base.width)
+  const bh = Math.max(0, base.height)
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return initialOutpaintRect(base)
+  }
+  const minW = Math.max(bw, OUTPAINT_MIN_EDGE)
+  const minH = Math.max(bh, OUTPAINT_MIN_EDGE)
+
+  let w = Math.max(minW, Math.round(width))
+  let h = Math.max(minH, Math.round(height))
+
+  const maxArea = OUTPAINT_MAX_AREA_RATIO * bw * bh
+  if (maxArea > 0 && w * h > maxArea) {
+    const scale = Math.sqrt(maxArea / (w * h))
+    w = Math.max(minW, Math.floor(w * scale))
+    h = Math.max(minH, Math.floor(h * scale))
+  }
+
+  const west = Math.floor(Math.max(0, w - minW) / 2)
+  const north = Math.floor(Math.max(0, h - minH) / 2)
+  return { x: west, y: north, width: w, height: h }
+}
+
+/**
+ * 四向扩展量（读数用，只读）。调用方传 `floorOutpaintRect` 之后的矩形，
+ * 使读数与提交几何一致。四值恒 ≥ 0（扩图不裁剪，负向一律夹到 0）。
+ */
+export function outpaintExtensionAmounts(
+  base: Size,
+  rect: OutpaintRect,
+): { west: number; east: number; north: number; south: number } {
+  const bw = Math.max(0, base.width)
+  const bh = Math.max(0, base.height)
+  return {
+    west: Math.max(0, Math.round(rect.x)),
+    east: Math.max(0, Math.round(rect.width - rect.x - bw)),
+    north: Math.max(0, Math.round(rect.y)),
+    south: Math.max(0, Math.round(rect.height - rect.y - bh)),
+  }
+}
