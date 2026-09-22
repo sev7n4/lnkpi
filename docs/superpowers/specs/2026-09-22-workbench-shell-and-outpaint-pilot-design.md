@@ -153,6 +153,14 @@ components/canvas/workbench/
 
 ## 6. 扩图打样规格
 
+![扩图打样：工作台整体布局](assets/workbench-layout-outpaint-pilot.svg)
+
+*图 1 · 工作台整体布局：① 左 rail 工具入口 ② 固定对照区 ③ 注册表驱动的滚动参数面板 ④ 悬浮 dock ⑤ 8 手柄交互。*
+
+![扩图手柄交互细节](assets/outpaint-handle-interaction.svg)
+
+*图 2 · 手柄与拖拽反馈：角圆 / 边胶囊、拖拽时 3×3 网格 + 顶部尺寸胶囊、松手确定范围。*
+
 ### 6.1 画布交互（`RefineOutpaintCanvas.vue`）
 
 | 项 | 规格 |
@@ -342,6 +350,10 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 ### 14.5 对象级编辑能力域（刚需，独立立项，**与图层无关**）
 
 **结论先给**：「智能识别图中的帽子 / 文字 / 首饰 → 选中它 → 作为独立对象编辑（换色 / 去掉 / 替换文字）」**不属于图层能力范畴**，它是**对象级编辑（object-level editing）**。两者数据本质不同，只是表面上看都像「把图拆开」：
+
+![图层分层与对象级编辑的差异](assets/layer-vs-object-edit.svg)
+
+*图 3 · 两种编辑模型的差异：左 = 像素层树（几何变换）；右 = 单张整图 + 语义索引（掩码 + 指令交给模型重画）。*
 
 | 维度 | 图层分层（PS 式，§14.4 形态③） | 对象级编辑（本节） |
 |---|---|---|

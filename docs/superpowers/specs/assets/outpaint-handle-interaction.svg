@@ -1,0 +1,31 @@
+<svg viewBox="0 0 680 280" width="100%" role="img" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+<title>扩图手柄交互细节</title>
+<desc>角手柄为圆形、边手柄为胶囊形；拖拽过程中叠出 3×3 网格并在顶部显示实时尺寸胶囊；松手即确定扩展范围，可连续多次拖拽。</desc>
+<rect x="40" y="40" width="380" height="200" rx="12" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+<text x="60" y="62" font-size="14" font-weight="500" fill="#042C53" dominant-baseline="central">手柄形状 + 拖拽反馈</text>
+<rect x="250" y="50" width="120" height="24" rx="12" fill="#185FA5"/>
+<text x="310" y="62" font-size="12" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central">1430 × 858</text>
+<rect x="70" y="80" width="320" height="140" rx="4" fill="#FFFFFF" stroke="#378ADD" stroke-width="1" stroke-dasharray="5 4"/>
+<rect x="110" y="100" width="240" height="100" fill="#B5D4F4" stroke="#378ADD" stroke-width="0.5"/>
+<path d="M176.7 80v140M283.3 80v140" stroke="#85B7EB" stroke-width="0.5" stroke-dasharray="4 3" fill="none"/>
+<path d="M70 126.7h320M70 173.3h320" stroke="#85B7EB" stroke-width="0.5" stroke-dasharray="4 3" fill="none"/>
+<circle cx="70" cy="80" r="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<circle cx="390" cy="80" r="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<circle cx="70" cy="220" r="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<circle cx="390" cy="220" r="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<rect x="216" y="74" width="28" height="12" rx="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<rect x="216" y="214" width="28" height="12" rx="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<rect x="64" y="136" width="12" height="28" rx="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<rect x="384" y="136" width="12" height="28" rx="6" fill="#FFFFFF" stroke="#185FA5" stroke-width="1.5"/>
+<text x="70" y="250" font-size="12" fill="#185FA5" dominant-baseline="central">角 = 圆形 16px</text>
+<text x="196" y="250" font-size="12" fill="#185FA5" dominant-baseline="central">边 = 胶囊 32×16</text>
+<text x="340" y="250" font-size="12" fill="#185FA5" dominant-baseline="central">虚线 = 目标画布</text>
+<rect x="440" y="40" width="200" height="200" rx="12" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="0.5"/>
+<text x="456" y="62" font-size="14" font-weight="500" fill="#2C2C2A" dominant-baseline="central">交互规则</text>
+<text x="456" y="92" font-size="12" fill="#5F5E5A" dominant-baseline="central">松手 = 确定范围，不生成</text>
+<text x="456" y="114" font-size="12" fill="#5F5E5A" dominant-baseline="central">可多次拖拽 · 逐边累积</text>
+<text x="456" y="136" font-size="12" fill="#5F5E5A" dominant-baseline="central">四向扩展量各自独立</text>
+<text x="456" y="158" font-size="12" fill="#5F5E5A" dominant-baseline="central">单边最小 256px</text>
+<text x="456" y="180" font-size="12" fill="#5F5E5A" dominant-baseline="central">总面积 ≤ 原图 9 倍</text>
+<text x="456" y="202" font-size="12" fill="#5F5E5A" dominant-baseline="central">零扩展时 CTA 禁用</text>
+</svg>
