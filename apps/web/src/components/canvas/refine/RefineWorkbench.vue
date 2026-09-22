@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import WorkbenchShell from '@/components/canvas/workbench/WorkbenchShell.vue'
-import type { ImageVersionEntry } from '@lnkpi/shared'
 import type { RefineApplyPayload } from './compareViewModel'
 import RefineWorkViewport from './RefineWorkViewport.vue'
 import RefineSidePanel from './RefineSidePanel.vue'
@@ -11,8 +9,6 @@ import { useNaturalImageSize } from './useNaturalImageSize'
 const props = defineProps<{
   nodeId: string
   beforeUrl: string
-  versions: ImageVersionEntry[]
-  currentVersionId?: string
   sessionId: string
   generationRecordId?: string
   url: string
@@ -23,15 +19,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   apply: [payload: RefineApplyPayload]
-  revert: [payload: { versionId: string }]
   busy: [value: boolean]
 }>()
 
 const editor = useCanvasEditorStore()
-
-/** 节点已产出「处理后」版本（edit 来源）时，左栏对照两项才可点（spec P0-4）。
- *  仅依据已下发的 versions，不重复版本派生逻辑。 */
-const hasAfter = computed(() => props.versions.some((v) => v.source === 'edit'))
 
 /** 尺寸兜底（follow-up #4）：mediaInfo 缺宽高时探测图片自然尺寸，dock 才能显示 宽×高 · 比例 */
 const mediaSize = useNaturalImageSize({
@@ -69,7 +60,7 @@ function onClose() {
         :width="width"
         :height="height"
         :inset-right="insetRight"
-        :has-after="hasAfter"
+        :has-after="!!editor.currentRefineSessionResult"
       />
     </template>
 
@@ -77,8 +68,6 @@ function onClose() {
       <RefineSidePanel
         :node-id="nodeId"
         :before-url="beforeUrl"
-        :versions="versions"
-        :current-version-id="currentVersionId"
         :session-id="sessionId"
         :generation-record-id="generationRecordId"
         :width="mediaSize.width.value"
@@ -90,7 +79,6 @@ function onClose() {
         :floating-available="floatingAvailable"
         @close="emit('close')"
         @apply="emit('apply', $event)"
-        @revert="emit('revert', $event)"
         @busy="emit('busy', $event)"
         @update:collapsed="setCollapsed($event)"
         @update:panel-width="setPanelWidth($event)"

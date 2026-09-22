@@ -58,5 +58,7 @@ export function getWorkbenchTool(id: string | null | undefined): WorkbenchToolRe
 
 /** 精修工作区模式 → 一级工具 id。 */
 export function toolIdForRefineMode(mode: RefineMode): string {
-  return mode === 'outpaint' ? 'refine-outpaint' : 'refine-select'
+  if (mode === 'outpaint') return 'refine-outpaint'
+  if (mode === 'matting') return 'refine-matting'
+  return 'refine-select'
 }

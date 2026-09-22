@@ -48,8 +48,8 @@ export interface RefineSessionResult {
   createdAt: string
 }
 
-/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）。 */
-export type RefineMode = 'select' | 'outpaint'
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）。 */
+export type RefineMode = 'select' | 'outpaint' | 'matting'
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)

@@ -22,7 +22,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction, ImageVersionEntry, PlanSelectionGenerateResult } from '@lnkpi/shared'
-import { appendEditVersion, revertImageVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
+import { appendEditVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -834,16 +834,6 @@ const gridSliceDisabledTitle = computed(() => {
 const refineBeforeUrl = computed(() => {
   const data = refinePanelNode.value?.data as Record<string, unknown> | undefined
   return String(data?.url ?? canvasEditor.imageTarget?.url ?? '')
-})
-
-const refineVersions = computed((): ImageVersionEntry[] => {
-  const versions = refinePanelNode.value?.data?.imageVersions
-  return Array.isArray(versions) ? (versions as ImageVersionEntry[]) : []
-})
-
-const refineCurrentVersionId = computed(() => {
-  const id = refinePanelNode.value?.data?.currentVersionId
-  return typeof id === 'string' ? id : undefined
 })
 
 const refineGenerationRecordId = computed(() => {
@@ -3035,30 +3025,6 @@ function applyOutpaintCenterAnchor(
   patchNodeData(node.id, { nodeSize: newSize })
 }
 
-function handleRefineRevert(payload: { versionId: string }) {
-  const nodeId = canvasEditor.imageTarget?.nodeId
-  if (!nodeId) return
-  const node = findNodeById(nodeId)
-  if (!node) return
-  const next = revertImageVersion(
-    imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>),
-    payload.versionId,
-  )
-  patchNodeData(node.id, {
-    url: next.url,
-    currentVersionId: next.currentVersionId,
-    generationRecordId: next.generationRecordId,
-  })
-  persistUserEdit()
-  const target = canvasEditor.imageTarget
-  if (target) {
-    canvasEditor.openImageEditor({
-      ...target,
-      url: next.url,
-    })
-  }
-}
-
 function handleAgentOpenImageEditor(nodeId: string) {
   const url = String((findNodeById(nodeId)?.data as Record<string, unknown> | undefined)?.url ?? '').trim()
   if (!url) return
@@ -4085,15 +4051,12 @@ onUnmounted(() => {
           :node-id="refinePanelNode.id"
           :before-url="refineBeforeUrl"
           :url="refineBeforeUrl"
-          :versions="refineVersions"
-          :current-version-id="refineCurrentVersionId"
           :session-id="sessionId"
           :generation-record-id="refineGenerationRecordId"
           :width="refineMediaWidth"
           :height="refineMediaHeight"
           @close="closeRefineWorkbench"
           @apply="handleRefineApply"
-          @revert="handleRefineRevert"
           @busy="canvasEditor.setRefineBusy"
         />
         <GridSliceWorkbench
