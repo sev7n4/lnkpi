@@ -74,3 +74,42 @@ function anchorOffset(axis: AnchorAxis, canvasSize: number, baseSize: number): n
       return Math.round((canvasSize - baseSize) / 2)
   }
 }
+
+/** 常见比例（横向 + 纵向），按 2% 容差匹配，命中即返回紧凑标签。 */
+const COMMON_ASPECTS: [number, number][] = [
+  [1, 1],
+  [5, 4],
+  [4, 3],
+  [3, 2],
+  [16, 10],
+  [16, 9],
+  [2, 1],
+  [3, 1],
+  [4, 5],
+  [3, 4],
+  [2, 3],
+  [10, 16],
+  [9, 16],
+  [1, 2],
+  [1, 3],
+]
+
+function gcd(a: number, b: number): number {
+  return b === 0 ? a : gcd(b, a % b)
+}
+
+/** 读数用比例标签（规格 §3「宽×高·比例」）：优先常见比例，其次最简整数比，最后一位小数。 */
+export function formatAspectLabel(width: number, height: number): string {
+  if (!(width > 0) || !(height > 0)) return '—'
+  const ratio = width / height
+  for (const [a, b] of COMMON_ASPECTS) {
+    const target = a / b
+    if (Math.abs(ratio - target) / target <= 0.02) return `${a}:${b}`
+  }
+  const g = gcd(width, height)
+  const a = width / g
+  const b = height / g
+  if (a <= 40 && b <= 40) return `${a}:${b}`
+  const round1 = (n: number) => (Math.round(n * 10) / 10).toFixed(1)
+  return ratio >= 1 ? `${round1(ratio)}:1` : `1:${round1(1 / ratio)}`
+}

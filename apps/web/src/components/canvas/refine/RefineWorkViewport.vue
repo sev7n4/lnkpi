@@ -263,15 +263,15 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </div>
-      <!-- 扩图画布（Task 7）：扩图模式显示，v-show 切换 -->
+      <!-- 扩图画布（Task 7）：扩图模式显示，v-show 切换。
+           视口由画布自身测量——stage 在本模式下 display:none，其 clientWidth/Height 恒 0，
+           不能作为视口来源（见 fix/outpaint-canvas-visibility 回归测试）。 -->
       <RefineOutpaintCanvas
         v-show="editor.refineMode === 'outpaint'"
         :base-url="url"
         :base-width="imgW || props.width || 0"
         :base-height="imgH || props.height || 0"
         :busy="editor.refineBusy"
-        :viewport-width="stageW"
-        :viewport-height="stageH"
       />
     </div>
   </section>
