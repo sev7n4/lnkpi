@@ -97,6 +97,25 @@ pnpm --filter @lnkpi/agent test
 | CVM API（server / agent-runtime） | `deploy.yml` workflow on push to main |
 | Vercel 前端（web） | Vercel 监听 main push 自动部署 |
 
+## 规格书配图规范（强制，2026-09-22 生效）
+
+来源实践：WorkbenchShell + 扩图打样 spec。完整规范见 **`docs/superpowers/SPEC-CONVENTIONS.md`**。
+
+### 硬约束
+
+1. **图与文字同权**：涉及**前端 UI 布局、组件形状尺寸、架构槽位、交互流程、状态机、判据决策**的规格，必须配图；缺图视为规格不完整。
+2. **两分法**：能用文字结构（节点 + 关系 + 标签）表达的图 → **Mermaid 内嵌**在 spec 里；依赖真实空间/比例/形状的视觉稿 → **自绘 SVG** 放文档同目录 `assets/`，相对路径引用。
+3. **禁止贴截图**（png/jpg/gif）当设计稿；禁止把能内嵌的图导出成附件。
+4. **每张图必须**：有编号（图 1、图 2…连续唯一）、有图注（写清"说明了什么、怎么用"）、在正文被引用。
+5. **含图的文档必须有 §0 配图索引**，登记全部图号 / 形式 / 位置 / 验收用途。
+6. **提交前必跑**：`pnpm verify-spec-figures`（校验 R1–R8，退出码非 0 即不合格）。
+
+### 写作顺序
+
+先写判据正文 → 按判据决定图的有无 → 路由选图形式 → 编号 + §0 索引 → 图注 + 正文引用 → 跑校验 → 评审。
+
+> 已有同类规范的位置：本文档（工程流程）+ `SPEC-CONVENTIONS.md`（配图细则，含骨架模板与反模式清单）。
+
 ### 与 superpower skills 的协同
 
 | 阶段 | 用 superpower skill | 配套本规范 |

@@ -115,6 +115,8 @@ export interface WorkbenchToolRegistration {
 5. CTA 文案统一「动词 + 对象」：`扩图生成` / `精修` / `确认切分`（panel 按钮同规范）；
 6. 提示词是可选段：不需要提示词的产出型工具（如免费抠图若走 dock）省略 prompt 段，其余结构不变。
 
+**接入自检**：任何新工具接入前，按 图 4 的三问判据（粒度 → 产物类型 → 焦点落点）走一遍，答案直接决定注册契约字段。
+
 **图 4 · 新工具接入判据（三问定形：粒度 → 产物类型 → 焦点落点）**
 
 ```mermaid
@@ -191,7 +193,11 @@ components/canvas/workbench/
 - Shell 只管布局与折叠（复用 `useWorkbenchPanel` 的宽度 / 折叠 / 窄屏逻辑），不含业务状态。
 - `RefineSidePanel.vue` 瘦身为「右栏骨架 + select 模式编排」（Teleport、header、对照带、`<component :is>` 面板、dock 槽位）；扩图逻辑继续外移到 `OutpaintPanel` / `RefineOutpaintCanvas` / 悬浮 dock。
 
+槽位与注册表的关系见 图 5：Shell 只管槽位与布局，内容全部来自注册表，未注册的工具没有 UI。
+
 ## 6. 扩图打样规格
+
+三张图对应打样的三个验收面：布局基准见 图 1，手柄与拖拽反馈见 图 2，交互流程与守卫见 图 6。
 
 ![扩图打样：工作台整体布局](assets/workbench-layout-outpaint-pilot.svg)
 
@@ -430,6 +436,8 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 - 「**替换文字**」：图层做法 = 删文字层再打字（需原字体）；对象编辑做法 = OCR 出文本行 + 掩码 + 新文本 → **文字替换通道**（保持风格重绘）。
 
 **这条需求不但不需要图层，反而强化 §14.4 的裁决**：图层模型解决不了它——图层只能改已有像素，不能生成式改写。
+
+与图层模型的差异见 图 3；识别 → 索引 → 指令 → 生成的数据流见 图 7。
 
 #### 能力三件套
 
