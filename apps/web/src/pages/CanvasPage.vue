@@ -22,7 +22,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction, ImageVersionEntry, PlanSelectionGenerateResult } from '@lnkpi/shared'
-import { appendEditVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
+import { seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -38,7 +38,6 @@ import { useSelectionGenerate } from '@/composables/useSelectionGenerate'
 import { isFeatureOn } from '@/composables/useFeatureFlag'
 import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
-import { randomId } from '@/utils/randomId'
 import { studioApi } from '@/services/studio-api'
 import { canvasApi } from '@/services/canvas-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -69,9 +68,10 @@ import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDi
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
-import { decideAgentOpenWhileRefine, shouldApplyRefineToNode } from '@/utils/refineChrome'
-import { centerExpandPosition, containFitSize } from '@/utils/centerExpand'
+import { decideAgentOpenWhileRefine } from '@/utils/refineChrome'
+import { containFitSize } from '@/utils/centerExpand'
 import type { RefineApplyPayload } from '@/components/canvas/refine/compareViewModel'
+import { applyRefineAsChild } from '@/composables/useRefineApply'
 import { shouldHideCanvasChrome } from '@/utils/canvasChromeVisibility'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
@@ -2978,51 +2978,29 @@ function closeRefineWorkbench() {
 
 function handleRefineApply(payload: RefineApplyPayload) {
   const nodeId = canvasEditor.imageTarget?.nodeId
-  if (!nodeId) return
-  const node = findNodeById(nodeId)
+  const node = nodeId && findNodeById(nodeId)
   if (!node) return
-  const nodeUrl = String((node.data as Record<string, unknown> | undefined)?.url ?? '')
-  const sessionBeforeUrl = String(canvasEditor.imageTarget?.url ?? '')
-  if (!shouldApplyRefineToNode({ nodeUrl, sessionBeforeUrl })) return
-  const next = appendEditVersion(imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>), {
-    id: randomId(),
-    url: payload.url,
-    createdAt: new Date().toISOString(),
-    generationRecordId: payload.recordId,
-    editPrompt: payload.prompt,
+  const appliedKey = payload.recordId ?? `matting:${payload.url}`
+  const res = applyRefineAsChild({
+    sourceNode: { id: node.id, position: { ...node.position } },
+    result: {
+      url: payload.url,
+      prompt: payload.prompt,
+      recordId: payload.recordId,
+      appliedKey,
+      nodeSize: payload.metadata?.outpaintTo
+        ? containFitSize({ width: 280, height: 280 }, payload.metadata.outpaintTo)
+        : undefined,
+    },
+    addNode: (type, data, opts) =>
+      addNode(type, { prompt: '', imageModel: getProviderConfig('image').model, ...data } as never, opts),
+    addEdge,
+    findAppliedNode: (key) => nodes.value.find((n) => (n.data as Record<string, unknown>)?.appliedKey === key),
   })
-  patchNodeData(node.id, {
-    url: next.url,
-    currentVersionId: next.currentVersionId,
-    imageVersions: next.imageVersions,
-    generationRecordId: next.generationRecordId,
-    status: 'completed',
-  })
-  applyOutpaintCenterAnchor(node, payload.metadata)
-  persistUserEdit()
-}
-
-/**
- * T9（规格 §3.4）：扩图版本应用到节点时以原图中心锚定——节点按新画布尺寸居中放大
- * （position = oldCenter − newSize/2），与其他节点的重叠按画布既有 z 序处理，不做避让。
- * 普通精修版本无 metadata，尺寸不变、position 不动。
- * 节点显示尺寸取 data.nodeSize（此前应用链路写入）否则图片卡默认 280×280（neoNodeMeta），
- * 新尺寸按新画布等比 contain 进旧框，保证整张扩图画布在节点内完整可见。
- */
-function applyOutpaintCenterAnchor(
-  node: EditableFlowNode,
-  metadata: RefineApplyPayload['metadata'],
-) {
-  const { editMode, outpaintFrom, outpaintTo } = metadata ?? {}
-  if (editMode !== 'outpaint' || !outpaintFrom || !outpaintTo) return
-  const data = (node.data ?? {}) as Record<string, unknown>
-  const stored = data.nodeSize as { width: number; height: number } | undefined
-  const oldSize =
-    stored && stored.width > 0 && stored.height > 0 ? stored : { width: 280, height: 280 }
-  const newSize = containFitSize(oldSize, outpaintTo)
-  if (newSize.width === oldSize.width && newSize.height === oldSize.height) return
-  node.position = centerExpandPosition(node.position, oldSize, newSize)
-  patchNodeData(node.id, { nodeSize: newSize })
+  selectNodeIds([res.nodeId])
+  void persistUserEditAsync()
+  if (res.created) ElMessage.success('已应用到画布（下游新节点）')
+  else ElMessage.info('该结果已应用过，已为你定位节点')
 }
 
 function handleAgentOpenImageEditor(nodeId: string) {
