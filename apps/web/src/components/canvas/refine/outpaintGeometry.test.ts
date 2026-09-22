@@ -3,10 +3,13 @@ import {
   OUTPAINT_MIN_EDGE,
   OUTPAINT_MAX_AREA_RATIO,
   HANDLE_DIRS,
+  fitRectToAspect,
   floorOutpaintRect,
   formatAspectLabel,
   hasOutpaintExtension,
   initialOutpaintRect,
+  outpaintExtensionAmounts,
+  resizeOutpaintAbsolute,
   resizeOutpaintRect,
   type HandleDir,
   type OutpaintRect,
@@ -220,5 +223,180 @@ describe('hasOutpaintExtension（提交守卫：零扩展不得生成）', () =>
 
   it('原图尺寸未知时一律视为未扩出（无法判定就不放行）', () => {
     expect(hasOutpaintExtension({ width: 0, height: 0 }, { x: 0, y: 0, width: 400, height: 300 })).toBe(false)
+  })
+})
+
+describe('fitRectToAspect', () => {
+  const BASE = { width: 400, height: 300 }
+
+  it('1:1 → 以宽度为准的正方形（高度从 300 抬到 400）', () => {
+    expect(fitRectToAspect(BASE, { w: 1, h: 1 })).toEqual({ x: 0, y: 50, width: 400, height: 400 })
+  })
+
+  it('16:9 → 以宽度为准（高度 225 < 300，故改用高度为准）', () => {
+    const r = fitRectToAspect(BASE, { w: 16, h: 9 })
+    expect(r.width).toBeCloseTo(533.333, 3)
+    expect(r.height).toBeCloseTo(300, 3)
+    expect(r.x).toBeCloseTo(66.667, 3)
+    expect(r.y).toBeCloseTo(0, 3)
+  })
+
+  it('比例精确：width / height 恒等于目标比例', () => {
+    for (const ratio of [{ w: 1, h: 1 }, { w: 4, h: 3 }, { w: 3, h: 4 }, { w: 16, h: 9 }, { w: 9, h: 16 }]) {
+      const r = fitRectToAspect({ width: 512, height: 768 }, ratio)
+      expect(r.width / r.height).toBeCloseTo(ratio.w / ratio.h, 6)
+    }
+  })
+
+  it('恒包含原图且四向扩展量 ≥ 0', () => {
+    const r = fitRectToAspect(BASE, { w: 9, h: 16 })
+    expect(r.width).toBeGreaterThanOrEqual(BASE.width)
+    expect(r.height).toBeGreaterThanOrEqual(BASE.height)
+    expect(r.x).toBeGreaterThanOrEqual(0)
+    expect(r.y).toBeGreaterThanOrEqual(0)
+    const amounts = outpaintExtensionAmounts(BASE, r)
+    for (const v of Object.values(amounts)) expect(v).toBeGreaterThanOrEqual(0)
+  })
+
+  it('原图比例基准（尺寸小于下限）：画布至少抬到 256', () => {
+    const r = fitRectToAspect({ width: 100, height: 100 }, { w: 1, h: 1 })
+    expect(r).toEqual({ x: 0, y: 0, width: 256, height: 256 })
+  })
+
+  it('极端宽高比（4000×100）不得产出 NaN 或负偏移', () => {
+    const r = fitRectToAspect({ width: 4000, height: 100 }, { w: 9, h: 16 })
+    expect(Number.isFinite(r.width)).toBe(true)
+    expect(Number.isFinite(r.height)).toBe(true)
+    expect(r.x).toBeGreaterThanOrEqual(0)
+    expect(r.y).toBeGreaterThanOrEqual(0)
+    expect(r.width).toBeGreaterThanOrEqual(4000)
+    expect(r.height).toBeGreaterThanOrEqual(100)
+  })
+
+  it('ratio 为 null / 非法 / 原图尺寸非法 → 等价 initialOutpaintRect', () => {
+    expect(fitRectToAspect(BASE, null)).toEqual(initialOutpaintRect(BASE))
+    expect(fitRectToAspect(BASE, { w: 0, h: 0 })).toEqual(initialOutpaintRect(BASE))
+    expect(fitRectToAspect({ width: 0, height: 0 }, { w: 1, h: 1 })).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  })
+})
+
+describe('resizeOutpaintAbsolute', () => {
+  const BASE = { width: 400, height: 300 }
+
+  it('等比放大：扩展量在两轴对称均分', () => {
+    expect(resizeOutpaintAbsolute(BASE, 600, 500)).toEqual({ x: 100, y: 100, width: 600, height: 500 })
+  })
+
+  it('奇数像素差：多出的 1px 给右侧 / 下方', () => {
+    expect(resizeOutpaintAbsolute(BASE, 501, 300)).toEqual({ x: 50, y: 0, width: 501, height: 300 })
+    expect(resizeOutpaintAbsolute(BASE, 400, 301)).toEqual({ x: 0, y: 0, width: 400, height: 301 })
+  })
+
+  it('小于原图的输入被抬到原图尺寸（扩图不裁剪）', () => {
+    expect(resizeOutpaintAbsolute(BASE, 200, 200)).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+  })
+
+  it('零 / 负数 / 超大输入被 clamp，不产生负扩展量', () => {
+    expect(resizeOutpaintAbsolute(BASE, 0, -5)).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+    expect(resizeOutpaintAbsolute(BASE, -100, -100)).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+    const huge = resizeOutpaintAbsolute(BASE, 1e9, 1e9)
+    expect(huge.width).toBeLessThanOrEqual(1e9)
+    expect(huge.width * huge.height).toBeLessThanOrEqual(9 * 400 * 300)
+    expect(huge.x).toBeGreaterThanOrEqual(0)
+    expect(huge.y).toBeGreaterThanOrEqual(0)
+  })
+
+  it('小于 256 下限的原图：画布该轴抬到 256', () => {
+    expect(resizeOutpaintAbsolute({ width: 100, height: 100 }, 100, 100)).toEqual({
+      x: 0, y: 0, width: 256, height: 256,
+    })
+  })
+
+  it('面积超上限（9 倍）时等比收缩并保持包含原图', () => {
+    const r = resizeOutpaintAbsolute(BASE, 4000, 4000)
+    expect(r.width * r.height).toBeLessThanOrEqual(9 * 400 * 300)
+    expect(r.width).toBeGreaterThanOrEqual(400)
+    expect(r.height).toBeGreaterThanOrEqual(300)
+  })
+
+  it('非法输入（NaN / Infinity）→ 等价 initialOutpaintRect', () => {
+    expect(resizeOutpaintAbsolute(BASE, Number.NaN, 500)).toEqual(initialOutpaintRect(BASE))
+    expect(resizeOutpaintAbsolute(BASE, 500, Number.POSITIVE_INFINITY)).toEqual(initialOutpaintRect(BASE))
+  })
+})
+
+describe('outpaintExtensionAmounts', () => {
+  const BASE = { width: 400, height: 300 }
+
+  it('四向各自独立读数', () => {
+    expect(outpaintExtensionAmounts(BASE, { x: 30, y: 10, width: 500, height: 350 })).toEqual({
+      west: 30, east: 70, north: 10, south: 40,
+    })
+  })
+
+  it('未扩展时为全 0', () => {
+    expect(outpaintExtensionAmounts(BASE, initialOutpaintRect(BASE))).toEqual({
+      west: 0, east: 0, north: 0, south: 0,
+    })
+  })
+
+  it('负数偏移与小于原图的矩形被夹到 0（不出现负扩展量）', () => {
+    expect(outpaintExtensionAmounts(BASE, { x: -20, y: -5, width: 300, height: 200 })).toEqual({
+      west: 0, east: 0, north: 0, south: 0,
+    })
+  })
+})
+
+/**
+ * 视口钳制（2026-09-22 用户验收修订）：缩放锚定原图后，拖拽增量被钳制在视口可容纳的
+ * 画布尺寸内——拖出视口的手柄无法再被抓取，因此把「正在移动的边」的扩展量裁回 bounds。
+ */
+describe('resizeOutpaintRect bounds（视口钳制）', () => {
+  const BASE = { width: 400, height: 300 }
+
+  it('东向拖出 bounds：宽度钳制，x 与高度不变', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 2000, dy: 0 },
+      'e',
+      { width: 600, height: 800 },
+    )
+    expect(out.width).toBe(600)
+    expect(out.x).toBe(0)
+    expect(out.height).toBe(300)
+  })
+
+  it('西向拖出 bounds：从西侧裁（x 右移），高度不变', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: -2000, dy: 0 },
+      'w',
+      { width: 600, height: 800 },
+    )
+    expect(out.width).toBe(600)
+    expect(out.x).toBe(200)
+  })
+
+  it('bounds 容不下单边下限矩形时忽略 bounds（下限优先）', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 100, dy: 0 },
+      'e',
+      { width: 100, height: 100 },
+    )
+    expect(out.width).toBe(500)
+  })
+
+  it('未传 bounds 时行为与原版一致', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 200, dy: 0 },
+      'e',
+    )
+    expect(out.width).toBe(600)
   })
 })

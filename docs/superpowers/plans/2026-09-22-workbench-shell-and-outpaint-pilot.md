@@ -1317,6 +1317,7 @@ const sizeTooltip = computed(() => {
               :aria-expanded="sizeOpen"
               @click="sizeOpen = !sizeOpen"
             >
+```
 
 - `DockToolbarShell` 关闭头排 ×：
 
@@ -1518,7 +1519,6 @@ Expected: FAIL —— 组件文件不存在。
 ```vue
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ref as vueRef } from 'vue'
 import { IMAGE_EDIT_GATEWAY_MODEL_ID, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
 import { useClickOutside } from '@/composables/useClickOutside'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
@@ -1549,7 +1549,7 @@ const emit = defineEmits<{
 
 const promptOpen = ref(false)
 const modelOpen = ref(false)
-const rootRef = vueRef<HTMLElement | null>(null)
+const rootRef = ref<HTMLElement | null>(null)
 useClickOutside(rootRef, () => { modelOpen.value = false })
 
 const interactionDisabled = computed(() => props.busy)

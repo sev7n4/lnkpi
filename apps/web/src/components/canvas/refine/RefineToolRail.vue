@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import type { RefineMaskTool } from '@/stores/canvasEditor'
 import {
-  REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
+  REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   inputToolActive,
   type RefineFitOptionId, type RefineInputGroupId, type RefineToolCommand,
 } from './refineToolRailModel'
@@ -96,7 +96,7 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 </script>
 
 <template>
-  <nav ref="railRef" class="refine-rail" data-testid="refine-rail" aria-label="画布工具">
+  <nav ref="railRef" class="refine-rail neo-glass-lite" data-testid="refine-rail" aria-label="画布工具">
     <!-- 扩图模式入口（Task 7）：激活时高亮；busy 时冻结不可切换；扩图模式禁画笔/橡皮 -->
     <div class="refine-rail__slot">
       <button
@@ -304,6 +304,25 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
         <span class="refine-rail__name">重做</span>
       </button>
     </div>
+
+    <div class="refine-rail__hr" data-testid="rail-capability-hr" />
+
+    <!-- 能力区（§9）：Toolbox 能力组迁入左栏，全部禁用占位，M2 能力包逐个点亮 -->
+    <div v-for="item in REFINE_CAPABILITY_ITEMS" :key="item.id" class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :data-testid="`rail-capability-${item.id}`"
+        disabled
+        :title="item.hint"
+        :aria-label="item.label"
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path v-for="(d, i) in item.icon" :key="i" :d="d" />
+        </svg>
+        <span class="refine-rail__name">{{ item.label }}</span>
+      </button>
+    </div>
   </nav>
 </template>
 
@@ -311,21 +330,34 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 .refine-rail {
   /* 顶部让出 chrome 层「返回画布」的高度，避免盖住第一个入口（follow-up #1） */
   display: flex; width: 56px; flex: 0 0 56px; flex-direction: column;
-  align-items: center; justify-content: center; gap: 2px; padding: 60px 0 10px;
-  background: rgba(20, 20, 22, 0.72); border-right: 1px solid var(--neo-border);
+  align-items: center; justify-content: center; gap: 2px;
+  margin: 60px 0 12px; padding: 8px 0; border-radius: 16px;
 }
+/* 玻璃卡片容器由全局 .neo-glass-lite 提供边框/背景/阴影（与画布左栏 NodePanelDock 同款） */
 .refine-rail__slot { position: relative; }
 .refine-rail__btn {
   display: flex; width: 44px; flex-direction: column; align-items: center; gap: 2px;
-  padding: 6px 0 5px; border: none; border-radius: 10px; background: transparent;
+  padding: 1px 0; border: none; border-radius: 10px; background: transparent;
   color: var(--neo-text-muted); font-size: 10px; line-height: 1.1; cursor: pointer;
 }
-.refine-rail__btn:hover:not(:disabled) { background: var(--neo-hover-bg); color: var(--neo-text-secondary); }
+/* 高亮只发生在圆形底座上（对齐 NodePanelDock 的 rail-circle 范式），按钮本体保持透明 */
+.refine-rail__btn:hover:not(:disabled) { background: transparent; color: var(--neo-text-primary); }
 .refine-rail__btn:active:not(:disabled) { transform: scale(.94); }
 .refine-rail__btn:focus-visible { outline: 1.5px solid #4a9eff; outline-offset: 1px; }
-.refine-rail__btn.is-active { background: rgba(0, 89, 179, 0.18); color: #7cc0ff; }
 .refine-rail__btn:disabled { opacity: .38; cursor: not-allowed; }
-.refine-rail__glyph { font-size: 15px; line-height: 1; }
+.refine-rail__glyph {
+  display: flex; width: 30px; height: 30px; align-items: center; justify-content: center;
+  border: 1px solid var(--neo-border); border-radius: 50%; background: var(--neo-hover-bg);
+  font-size: 13px; line-height: 1; transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+.refine-rail__btn:hover:not(:disabled) .refine-rail__glyph {
+  border-color: var(--neo-border-strong); background: var(--neo-active-bg);
+}
+.refine-rail__btn.is-active { background: transparent; color: var(--neo-text-primary); }
+.refine-rail__btn.is-active .refine-rail__glyph {
+  border-color: color-mix(in srgb, var(--neo-hi-text) 30%, var(--neo-border));
+  background: var(--neo-hi-bg); color: var(--neo-hi-text); box-shadow: var(--neo-hi-shadow);
+}
 .refine-rail__name { font-size: 10px; white-space: nowrap; }
 .refine-rail__hr { width: 24px; height: 1px; margin: 6px 0 4px; background: var(--neo-border); }
 .refine-rail__fly {

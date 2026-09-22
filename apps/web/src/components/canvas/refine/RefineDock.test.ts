@@ -28,12 +28,11 @@ const mountDock = (props: Record<string, unknown> = {}) =>
   })
 
 describe('RefineDock', () => {
-  it('与图片节点 dock 同构：header 类型图标 + 「精修」 + 关闭', () => {
+  it('与图片节点 dock 同构：header 类型图标；§4.4 移除头排 ×（无层可退，退出职责归面板 header）', () => {
     const w = mountDock()
     expect(w.find('.bottom-toolbar-container').exists()).toBe(true)
     expect(w.find('.bottom-toolbar-type-icon').exists()).toBe(true)
-    expect(w.text()).toContain('精修')
-    expect(w.find('.bottom-toolbar-close').exists()).toBe(true)
+    expect(w.find('.bottom-toolbar-close').exists()).toBe(false)
   })
 
   it('参考条只有原图一个 chip，且不给上传入口（精修通道暂不接受参考图）', () => {
@@ -98,11 +97,20 @@ describe('RefineDock', () => {
     expect(w.emitted('run')).toHaveLength(1)
   })
 
-  it('精修按钮：可点时 emit run，busy 时禁用', async () => {
+  it('主 CTA：圆形箭头按钮，aria-label 为「精修」；可点时 emit run，busy 时禁用', async () => {
     const w = mountDock({ prompt: 'x' })
-    await w.find('[data-testid="dock-run"]').trigger('click')
+    const btn = w.find('[data-testid="dock-run"]')
+    expect(btn.classes()).toContain('dock-generate-btn')
+    expect(btn.attributes('aria-label')).toBe('精修')
+    expect(btn.attributes('title')).toBe('精修')
+    expect(btn.find('svg').exists()).toBe(true)
+    await btn.trigger('click')
     expect(w.emitted('run')).toHaveLength(1)
-    expect(mountDock({ prompt: 'x', busy: true }).find('[data-testid="dock-run"]').attributes('disabled')).toBeDefined()
+
+    const busy = mountDock({ prompt: 'x', busy: true }).find('[data-testid="dock-run"]')
+    expect(busy.attributes('disabled')).toBeDefined()
+    // 禁用态保形：仍有箭头图标（禁止退化为无图标白矩形）
+    expect(busy.find('svg').exists()).toBe(true)
   })
 
   it('应用到节点只在 canApply 时出现', () => {
@@ -126,17 +134,16 @@ describe('RefineDock', () => {
     expect(w.emitted('retry')).toHaveLength(1)
   })
 
-  it('关闭按钮 emit close', async () => {
-    const w = mountDock()
-    await w.find('.bottom-toolbar-close').trigger('click')
-    expect(w.emitted('close')).toHaveLength(1)
+  it('dock 内不再有「原图 尺寸 · 比例」静态徽标行（§4.3 内容归属）', () => {
+    const w = mountDock({ width: 1280, height: 720 })
+    expect(w.text()).not.toContain('1280×720')
   })
 })
 
 describe('RefineDock 扩图模式（Q3 衔接：CTA 语义与引导）', () => {
-  it('扩图模式下主按钮文案为「扩图生成」（不再沿用「精修」）', () => {
+  it('扩图模式下主 CTA 的 aria-label 为「扩图生成」（文案不再占用按钮内文）', () => {
     const w = mountDock({ mode: 'outpaint' })
-    expect(w.find('[data-testid="dock-run"]').text()).toBe('扩图生成')
+    expect(w.find('[data-testid="dock-run"]').attributes('aria-label')).toBe('扩图生成')
   })
 
   it('已产生扩出时不显示引导文案', () => {
@@ -151,7 +158,7 @@ describe('RefineDock 扩图模式（Q3 衔接：CTA 语义与引导）', () => {
 
   it('普通精修模式不受 outpaintReady 影响', () => {
     const w = mountDock({ mode: 'edit', outpaintReady: false })
-    expect(w.find('[data-testid="dock-run"]').text()).toBe('精修')
+    expect(w.find('[data-testid="dock-run"]').attributes('aria-label')).toBe('精修')
     expect(w.find('[data-testid="dock-outpaint-hint"]').exists()).toBe(false)
   })
 })

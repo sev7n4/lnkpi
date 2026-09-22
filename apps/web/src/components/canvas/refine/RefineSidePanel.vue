@@ -23,7 +23,9 @@ import { baseCanvasFromMetadata, type RefineApplyPayload, type RefineCompareMeta
 import CompareLightbox from './CompareLightbox.vue'
 import RefineCompareBand from './RefineCompareBand.vue'
 import RefineDock from './RefineDock.vue'
-import RefineToolbox from './RefineToolbox.vue'
+import RefineOutpaintDock from './RefineOutpaintDock.vue'
+import VersionStrip from './VersionStrip.vue'
+import { getWorkbenchTool, toolIdForRefineMode } from '@/components/canvas/workbench/workbenchToolRegistry'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
 import { parseFillHex } from './maskWand'
@@ -34,7 +36,7 @@ import {
   resolvePointMaskRgba,
 } from './pointSegmentSession'
 import { computeOutpaintLayers } from './outpaintComposite'
-import { hasOutpaintExtension, type OutpaintRect } from './outpaintGeometry'
+import { hasOutpaintExtension, floorOutpaintRect } from './outpaintGeometry'
 import { renderOutpaintPngs } from './outpaintRender'
 import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 
@@ -57,6 +59,8 @@ const props = defineProps<{
   isNarrow: boolean
   /** Shared right inset (px) — owned by useWorkbenchPanel, passed down to CompareLightbox. */
   insetRight: number
+  /** 悬浮 dock 是否可用（由 WorkbenchShell 依窄屏判定下发，§6.3）。 */
+  floatingAvailable?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -65,7 +69,7 @@ const emit = defineEmits<{
   revert: [payload: { versionId: string }]
   busy: [value: boolean]
   'update:collapsed': [value: boolean]
-  /** 面板宽度调整预留（M2/M3）：当前 resize handle 已移除，暂无生产者；保留 emit + @update:panel-width 接线 */
+  /** 面板宽度调整：生产者由 RefineWorkbench 经 @update:panel-width="setPanelWidth($event)" 接线（Shell 的 resize handle）；保留 emit 供对齐。 */
   'update:panel-width': [value: number]
 }>()
 
@@ -125,12 +129,34 @@ const dockMode = computed<'edit' | 'outpaint'>(() => (editor.refineMode === 'out
 /** credits 按 shared 模型定价表动态计算（image2 = 10），模型不可识别时回落到默认估算。 */
 const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
-/** 扩图模式是否已产生真实扩出（四向扩展量不全为 0）。 */
-const outpaintReady = computed(() => {
-  const rect = editor.refineOutpaintRect as OutpaintRect | null
-  if (!rect) return false
-  return hasOutpaintExtension({ width: Number(props.width) || 0, height: Number(props.height) || 0 }, rect)
+/** 当前激活的一级工具（注册表是唯一真相：未注册 → 无面板、无 dock）。 */
+const activeTool = computed(() => getWorkbenchTool(toolIdForRefineMode(editor.refineMode)))
+/** 扩图 dock 的落点：注册表声明 floating 且悬浮可用 → 悬浮；否则退化为面板底部。
+ *  显示门控（2026-09-22 用户验收修订）：产生真实扩出后才出现（CTA 此前本就禁用，无常驻价值），
+ *  且手柄拖拽进行中隐藏——常驻浮层会挡住画布拖拽操作。窄屏面板兜底落点不挡画布，不受门控。 */
+const outpaintDockFloating = computed(
+  () =>
+    activeTool.value?.dockPlacement === 'floating' &&
+    props.floatingAvailable !== false &&
+    outpaintCanRun.value &&
+    !editor.refineOutpaintDragging,
+)
+/** select 的 dock 落点：注册表声明 panel（产出型工具必有 dock，§4.2）。 */
+const selectDockInPanel = computed(
+  () => activeTool.value?.dockPlacement === 'panel' && !!activeTool.value.dock,
+)
+/** 扩图 dock 的面板兜底落点：注册表声明 floating 但悬浮不可用（窄屏，§6.3）。 */
+const outpaintDockInPanel = computed(
+  () => activeTool.value?.dockPlacement === 'floating' && !!activeTool.value.dock && props.floatingAvailable === false,
+)
+/** 扩图是否已真实扩出（CTA 守卫，§6.3）。 */
+const outpaintCanRun = computed(() => {
+  const base = editor.refineOutpaintBase
+  const rect = editor.refineOutpaintRect
+  return !!base && !!rect && hasOutpaintExtension(base, rect)
 })
+/** 扩图模式是否已产生真实扩出（复用 outpaintCanRun，单一判据）。 */
+const outpaintReady = computed(() => outpaintCanRun.value)
 /** 扩图模式：需要一个已真实扩出的 rect（零扩展提交 = 空蒙版白扣积分）；普通模式保持原 coverage 校验。 */
 const refineDisabled = computed(() => {
   if (busy.value) return true
@@ -231,6 +257,11 @@ function onSelectVersion(versionId: string) {
 function onRevert(versionId: string) {
   if (busy.value) return
   emit('revert', { versionId })
+}
+
+/** VersionStrip 的 revert 解包（emit 形如 { versionId }，本组件按 string 透传）。 */
+function onRevertVersion(payload: { versionId: string }) {
+  onRevert(payload.versionId)
 }
 
 function onBackOrCancel() {
@@ -397,17 +428,21 @@ async function loadBaseImage(url: string): Promise<HTMLImageElement | null> {
 }
 
 /**
- * 扩图提交链路（Task 7）：由 store 中的 clamp 后 rect 合成底图 + 蒙版两张 PNG，
- * persist 到服务端（失败回退 blob URL），再走 imageEdit（mode:'outpaint'、size:'auto'），
- * 并携带 outpaintFrom（原图尺寸）/ outpaintTo（新画布尺寸）几何字段（服务端 DTO 契约）。
+ * 扩图提交链路（Task 7 / Task 9）：基准取自 store 的 `refineOutpaintBase`，
+ * 几何经 `floorOutpaintRect` 落像素（§7：权威草稿含小数，提交侧统一 floor）。
+ * 合成底图 + 蒙版两张 PNG → persist 到服务端（失败回退 blob URL）→ imageEdit
+ * （mode:'outpaint'、size:'auto'），并携带 outpaintFrom（原图尺寸）/ outpaintTo（新画布尺寸）。
  * 空 prompt 时兜底英文文案。
  */
 async function runOutpaint() {
-  const rect = editor.refineOutpaintRect
-  if (!rect) return
-  const baseW = Number(props.width) || 0
-  const baseH = Number(props.height) || 0
+  const base = editor.refineOutpaintBase
+  const raw = editor.refineOutpaintRect
+  if (!base || !raw) return
+  const baseW = base.width
+  const baseH = base.height
   if (!baseW || !baseH) return
+  const rect = floorOutpaintRect(raw)          // §7：提交侧统一落像素
+  if (!hasOutpaintExtension({ width: baseW, height: baseH }, rect)) return
 
   errorMessage.value = ''
   abortController?.abort()
@@ -529,18 +564,28 @@ onBeforeUnmount(() => {
       />
 
       <div v-if="!collapsed" class="refine-side__body">
-        <RefineToolbox
-          :versions="versions"
-          :current-version-id="currentVersionId"
-          :busy="busy"
-          @apply-stain-preset="applyStainPreset"
-          @select-version="onSelectVersion"
-          @revert-version="onRevert"
-        />
+        <div class="refine-side__scroll" data-testid="workbench-panel-scroll">
+          <component
+            :is="activeTool.panel"
+            v-if="activeTool"
+            :busy="busy"
+            @apply-stain-preset="applyStainPreset"
+          />
+        </div>
+        <div class="refine-side__versions" data-testid="refine-version-strip">
+          <VersionStrip
+            :versions="versions"
+            :current-version-id="currentVersionId"
+            :disabled="busy"
+            @select="onSelectVersion"
+            @revert="onRevertVersion"
+          />
+        </div>
       </div>
 
+      <!-- select：panel 落点 dock（注册表声明 dockPlacement: 'panel'） -->
       <RefineDock
-        v-if="!collapsed"
+        v-if="!collapsed && selectDockInPanel"
         :prompt="prompt"
         :credits="credits"
         :before-url="beforeUrl"
@@ -565,12 +610,62 @@ onBeforeUnmount(() => {
         @run="runRefine"
         @apply="onApply"
         @retry="runRefine"
-        @close="onBackOrCancel"
         @select-edit-intent="applyEditIntent"
         @clear-edit-intent="clearEditIntent"
       />
+
+      <!-- 扩图窄屏兜底 dock：注册表声明 floating 但悬浮不可用（窄屏，§6.3）→ 面板底部常驻。
+           与悬浮 dock（③）互斥：悬浮可用时走 ③，否则落到此处（outpaintDockInPanel 收口）。 -->
+      <RefineOutpaintDock
+        v-if="!collapsed && outpaintDockInPanel"
+        size="md"
+        :prompt="prompt"
+        :model-key="modelKey"
+        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :credits="credits"
+        :can-run="outpaintCanRun"
+        :busy="busy"
+        :can-apply="canApply"
+        :error-message="errorMessage"
+        @update:prompt="prompt = $event"
+        @update:modelKey="modelKey = $event"
+        @run="runRefine"
+        @apply="onApply"
+        @retry="runRefine"
+        @exit="editor.setRefineMode('select')"
+        @cancel="onBackOrCancel"
+      />
     </aside>
   </Teleport>
+
+  <!-- 扩图悬浮 dock：视口底部居中、尊重右栏内缩（§6.3）；窄屏时改走面板底部（outpaintDockInPanel） -->
+  <Teleport v-if="!collapsed && outpaintDockFloating" to="body">
+    <div
+      class="refine-outpaint-floating"
+      data-testid="outpaint-dock-floating"
+      :style="{ right: `${insetRight}px` }"
+    >
+      <RefineOutpaintDock
+        size="lg"
+        :prompt="prompt"
+        :model-key="modelKey"
+        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :credits="credits"
+        :can-run="outpaintCanRun"
+        :busy="busy"
+        :can-apply="canApply"
+        :error-message="errorMessage"
+        @update:prompt="prompt = $event"
+        @update:modelKey="modelKey = $event"
+        @run="runRefine"
+        @apply="onApply"
+        @retry="runRefine"
+        @exit="editor.setRefineMode('select')"
+        @cancel="onBackOrCancel"
+      />
+    </div>
+  </Teleport>
+
 
   <CompareLightbox
     :open="editor.compareLightboxOpen"
@@ -641,12 +736,19 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.refine-side__body {
+.refine-side__body { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
+/* 唯一滚动区（§4.3 布局铁律：dock 与版本条是 flex 兄弟，绝不覆盖滚动区） */
+.refine-side__scroll { min-height: 0; flex: 1; overflow-y: auto; }
+.refine-side__versions { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--neo-border); }
+
+.refine-outpaint-floating {
+  position: fixed;
+  left: 56px;              /* 让出左栏 rail */
+  bottom: 16px;
+  z-index: 56;
   display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow: hidden;      /* 滚动在 .refine-toolbox__scroll 里，整栏只有一个滚动区 */
+  justify-content: center;
+  pointer-events: none;    /* 容器不吃事件，仅 dock 本身可点 */
 }
 
 .refine-side__icon-btn {

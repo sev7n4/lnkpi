@@ -1,5 +1,10 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+import {
+  hasOutpaintExtension,
+  initialOutpaintRect,
+  outpaintExtensionAmounts,
+} from '@/components/canvas/refine/outpaintGeometry'
 import { useCanvasEditorStore } from './canvasEditor'
 
 describe('canvasEditor refine target', () => {
@@ -168,5 +173,82 @@ describe('canvasEditor refine target', () => {
     expect('refineChrome' in editor).toBe(false)
     expect('refinePanelWidth' in editor).toBe(false)
     expect('refinePanelCollapsed' in editor).toBe(false)
+  })
+})
+
+describe('扩图基准与面板动作（§7）', () => {
+  const BASE = { width: 400, height: 300 }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'outpaint'
+    editor.setRefineOutpaintBase(BASE)
+    editor.setRefineOutpaintRect(initialOutpaintRect(BASE))
+  })
+
+  it('applyOutpaintAspectPreset(1:1) → 对称扩展，rect 可被 hasOutpaintExtension 识别', () => {
+    const editor = useCanvasEditorStore()
+    editor.applyOutpaintAspectPreset({ w: 1, h: 1 })
+    const rect = editor.refineOutpaintRect!
+    expect(rect.width).toBe(400)
+    expect(rect.height).toBe(400)
+    expect(hasOutpaintExtension(BASE, rect)).toBe(true)
+    expect(outpaintExtensionAmounts(BASE, rect)).toEqual({ west: 0, east: 0, north: 50, south: 50 })
+  })
+
+  it('applyOutpaintAspectPreset(null) → 等价 resetOutpaintRect', () => {
+    const editor = useCanvasEditorStore()
+    editor.applyOutpaintAspectPreset({ w: 9, h: 16 })
+    editor.applyOutpaintAspectPreset(null)
+    expect(editor.refineOutpaintRect).toEqual(initialOutpaintRect(BASE))
+  })
+
+  it('applyOutpaintSize(600, 500) → 绝对值语义 + 对称均分', () => {
+    const editor = useCanvasEditorStore()
+    editor.applyOutpaintSize(600, 500)
+    expect(editor.refineOutpaintRect).toEqual({ x: 100, y: 100, width: 600, height: 500 })
+  })
+
+  it('applyOutpaintSize 收到非法值 → 保持合法值（不写 NaN）', () => {
+    const editor = useCanvasEditorStore()
+    editor.applyOutpaintSize(600, 500)
+    editor.applyOutpaintSize(Number.NaN, 500)
+    expect(editor.refineOutpaintRect).toEqual(initialOutpaintRect(BASE))
+  })
+
+  it('resetOutpaintRect() → 恢复原图矩形', () => {
+    const editor = useCanvasEditorStore()
+    editor.applyOutpaintSize(600, 500)
+    editor.resetOutpaintRect()
+    expect(editor.refineOutpaintRect).toEqual(initialOutpaintRect(BASE))
+  })
+
+  it('基准缺失（未进入扩图）时三个动作均 no-op', () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineOutpaintBase(null)
+    editor.setRefineOutpaintRect(null)
+    editor.applyOutpaintAspectPreset({ w: 1, h: 1 })
+    editor.applyOutpaintSize(600, 500)
+    editor.resetOutpaintRect()
+    expect(editor.refineOutpaintRect).toBeNull()
+  })
+
+  it('busy 时三个动作均 no-op（不打断任务、不写坏 rect）', () => {
+    const editor = useCanvasEditorStore()
+    const before = editor.refineOutpaintRect
+    editor.setRefineBusy(true)
+    editor.applyOutpaintAspectPreset({ w: 1, h: 1 })
+    editor.applyOutpaintSize(600, 500)
+    editor.resetOutpaintRect()
+    expect(editor.refineOutpaintRect).toEqual(before)
+    editor.setRefineBusy(false)
+  })
+
+  it('setRefineMode("select") 同时清空 rect 与基准', () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('select')
+    expect(editor.refineOutpaintRect).toBeNull()
+    expect(editor.refineOutpaintBase).toBeNull()
   })
 })

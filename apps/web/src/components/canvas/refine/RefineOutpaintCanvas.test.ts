@@ -27,10 +27,11 @@ const drag = async (
   await flushPromises()
 }
 
+/** 底部读数条已移除（常驻读数在右栏 OutpaintPanel），落像素后的权威值在 store。 */
 const readoutDims = (w: ReturnType<typeof mountCanvas>) => {
-  const text = w.find('[data-testid="outpaint-readout"]').text()
-  const m = text.match(/(\d+)\s*×\s*(\d+)/)
-  return { w: Number(m?.[1]), h: Number(m?.[2]) }
+  void w
+  const rect = useCanvasEditorStore().refineOutpaintRect
+  return { w: Math.floor(rect?.width ?? 0), h: Math.floor(rect?.height ?? 0) }
 }
 
 /** 最小 ResizeObserver 替身：记录 observe 的元素，测试里手动触发回调（模拟浏览器布局变化）。 */
@@ -70,12 +71,34 @@ describe('RefineOutpaintCanvas', () => {
     ResizeObserverStub.callbacks.clear()
   })
 
-  it('渲染 8 个拖拽手柄与实时读数', () => {
+  it('渲染 8 个拖拽手柄，且不再有底部读数条', () => {
     const w = mountCanvas()
     for (const dir of HANDLES) {
       expect(w.find(`[data-testid="outpaint-handle-${dir}"]`).exists()).toBe(true)
     }
-    expect(w.find('[data-testid="outpaint-readout"]').text()).toContain('400 × 300')
+    expect(w.find('[data-testid="outpaint-readout"]').exists()).toBe(false)
+  })
+
+  it('进入扩图即把初始矩形写入 store（画布与面板同源）', () => {
+    mountCanvas()
+    expect(useCanvasEditorStore().refineOutpaintRect).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+    expect(useCanvasEditorStore().refineOutpaintBase).toEqual({ width: 400, height: 300 })
+  })
+
+  it('原图尺寸未知（0×0）时不写退化矩形：store 保持 null（守卫据此禁用 CTA）', () => {
+    mountCanvas({ baseWidth: 0, baseHeight: 0 })
+    expect(useCanvasEditorStore().refineOutpaintRect).toBeNull()
+    expect(useCanvasEditorStore().refineOutpaintBase).toEqual({ width: 0, height: 0 })
+  })
+
+  it('角手柄与边手柄带各自的形状类（角圆 / 边胶囊的样式挂点）', () => {
+    const w = mountCanvas()
+    for (const dir of ['nw', 'ne', 'se', 'sw']) {
+      expect(w.find(`[data-testid="outpaint-handle-${dir}"]`).classes()).toContain(`refine-outpaint__handle--${dir}`)
+    }
+    for (const dir of ['n', 'e', 's', 'w']) {
+      expect(w.find(`[data-testid="outpaint-handle-${dir}"]`).classes()).toContain(`refine-outpaint__handle--${dir}`)
+    }
   })
 
   it('斜纹扩出区底存在', () => {
@@ -108,6 +131,33 @@ describe('RefineOutpaintCanvas', () => {
     expect(editor.refineOutpaintRect!.width).toBe(650) // 400 + (350-100)
   })
 
+  it('store 侧改动（比例预设）即时反映到画布矩形', async () => {
+    const w = mountCanvas()
+    useCanvasEditorStore().applyOutpaintAspectPreset({ w: 1, h: 1 })
+    await flushPromises()
+    expect(readoutDims(w)).toEqual({ w: 400, h: 400 })
+  })
+
+  it('拖拽中显示 3×3 网格与顶部尺寸胶囊，松手后消失且范围保留', async () => {
+    const w = mountCanvas()
+    const handle = w.find('[data-testid="outpaint-handle-e"]')
+    handle.element.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
+    window.dispatchEvent(new window.MouseEvent('pointermove', { bubbles: true, clientX: 120, clientY: 0 }))
+    await flushPromises()
+
+    expect(w.find('[data-testid="outpaint-grid"]').exists()).toBe(true)
+    const badge = w.find('[data-testid="outpaint-drag-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toContain('520 × 300')
+
+    window.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }))
+    await flushPromises()
+    expect(w.find('[data-testid="outpaint-grid"]').exists()).toBe(false)
+    expect(w.find('[data-testid="outpaint-drag-badge"]').exists()).toBe(false)
+    // 松手 = 确定范围，不生成：rect 留在 store
+    expect(readoutDims(w)).toEqual({ w: 520, h: 300 })
+  })
+
   it('busy 时手柄 disabled（冻结）', () => {
     const w = mountCanvas({ busy: true })
     for (const dir of HANDLES) {
@@ -115,7 +165,7 @@ describe('RefineOutpaintCanvas', () => {
     }
   })
 
-  it('拖拽超出视口时视口自动缩放跟随（fitScale 缩小）', async () => {
+  it('缩放锚定原图：拖拽扩大画布时 fit 恒定（原图不缩小），画布被钳制在视口内', async () => {
     const w = mountCanvas()
     // 视口从组件自身容器测量（真实浏览器里即扩图画布占据的工作区）
     const root = w.find('[data-testid="refine-outpaint-canvas"]').element as HTMLElement
@@ -123,11 +173,28 @@ describe('RefineOutpaintCanvas', () => {
     ResizeObserverStub.callbacks.get(root)?.()
     await flushPromises()
     const fitBefore = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
-    // 初始 400×300 在 400×300 视口内留白后略缩小 → fit ≤ 1
+    // 原图 400×300 在 400×300 视口内按 60% 预留扩展空间 → fit < 1
     expect(fitBefore).toBeLessThanOrEqual(1)
     await drag(w, 'se', { x: 100, y: 100 }, { x: 2200, y: 2200 })
     const fitAfter = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
-    expect(fitAfter).toBeLessThan(fitBefore)
+    // 2026-09-22 用户验收修订：拖拽只扩蒙版，原图/缩放不得跟着变
+    expect(fitAfter).toBe(fitBefore)
+    // 画布被钳制在视口可容纳范围（拖出视口的手柄无法再抓取）
+    const { w: rw, h: rh } = readoutDims(w)
+    expect(rw * fitAfter).toBeLessThanOrEqual(400)
+    expect(rh * fitAfter).toBeLessThanOrEqual(300)
+  })
+
+  it('拖拽进行中 store.refineOutpaintDragging=true，松手复位（悬浮 dock 据此隐藏）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    const handle = w.find('[data-testid="outpaint-handle-e"]')
+    handle.element.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
+    await flushPromises()
+    expect(editor.refineOutpaintDragging).toBe(true)
+    window.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }))
+    await flushPromises()
+    expect(editor.refineOutpaintDragging).toBe(false)
   })
 
   it('回归：视口由组件自身容器测量，基图大于容器时自动缩小（不再依赖外部隐藏元素）', async () => {
@@ -156,10 +223,17 @@ describe('RefineOutpaintCanvas', () => {
     expect(readoutDims(w)).toEqual({ w: 1024, h: 768 })
   })
 
-  it('读数含新画布宽×高与比例（规格 §3「宽×高·比例」）', () => {
+  it('拖拽胶囊含新画布宽×高与比例（规格 §3「宽×高·比例」）', async () => {
     const w = mountCanvas()
-    expect(w.find('[data-testid="outpaint-readout"]').text()).toMatch(/400\s*×\s*300/)
-    expect(w.find('[data-testid="outpaint-readout"]').text()).toContain('4:3')
+    const handle = w.find('[data-testid="outpaint-handle-e"]')
+    handle.element.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
+    await flushPromises()
+    const badge = w.find('[data-testid="outpaint-drag-badge"]')
+    expect(badge.exists()).toBe(true)
+    expect(badge.text()).toMatch(/400\s*×\s*300/)
+    expect(badge.text()).toContain('4:3')
+    window.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }))
+    await flushPromises()
   })
 })
 
@@ -172,6 +246,19 @@ describe('RefineOutpaintCanvas', () => {
  * 正确语义：每条边独立累积，拖拽只移动手柄所在的那条边，对边固定。
  */
 describe('RefineOutpaintCanvas 多边累积扩展', () => {
+  // 权威草稿在 store：本组用例必须逐条重置 store，否则上一条拖动出的 rect 会被下一条继承。
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    useCanvasEditorStore().refineMode = 'outpaint'
+    vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    ResizeObserverStub.callbacks.clear()
+  })
+
   const offsetOf = (w: ReturnType<typeof mountCanvas>) => {
     const el = w.find('.refine-outpaint__base').element as HTMLElement
     return { left: el.style.left, top: el.style.top }
