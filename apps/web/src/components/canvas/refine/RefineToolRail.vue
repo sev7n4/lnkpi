@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import type { RefineMaskTool } from '@/stores/canvasEditor'
 import {
-  REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
+  REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   inputToolActive,
   type RefineFitOptionId, type RefineInputGroupId, type RefineToolCommand,
 } from './refineToolRailModel'
@@ -302,6 +302,25 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       >
         <span class="refine-rail__glyph">↷</span>
         <span class="refine-rail__name">重做</span>
+      </button>
+    </div>
+
+    <div class="refine-rail__hr" data-testid="rail-capability-hr" />
+
+    <!-- 能力区（§9）：Toolbox 能力组迁入左栏，全部禁用占位，M2 能力包逐个点亮 -->
+    <div v-for="item in REFINE_CAPABILITY_ITEMS" :key="item.id" class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :data-testid="`rail-capability-${item.id}`"
+        disabled
+        :title="item.hint"
+        :aria-label="item.label"
+      >
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <path v-for="(d, i) in item.icon" :key="i" :d="d" />
+        </svg>
+        <span class="refine-rail__name">{{ item.label }}</span>
       </button>
     </div>
   </nav>

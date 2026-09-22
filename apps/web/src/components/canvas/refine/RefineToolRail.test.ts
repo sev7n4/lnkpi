@@ -182,4 +182,31 @@ describe('RefineToolRail', () => {
     expect(store.refineMode).toBe('select')
     expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeUndefined()
   })
+
+  it('能力区：分隔线 + 10 项禁用图标（扩图不重复出现在能力区）', () => {
+    const w = mountRail()
+    expect(w.find('[data-testid="rail-capability-hr"]').exists()).toBe(true)
+    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(10)
+    expect(w.find('[data-testid="rail-capability-one-click-matting"]').attributes('disabled')).toBeDefined()
+    expect(w.find('[data-testid="rail-capability-one-click-matting"]').attributes('title')).toContain('即将上线')
+    expect(w.find('[data-testid="rail-capability-outpaint"]').exists()).toBe(false)
+  })
+
+  it('扩图仍是左栏唯一的激活项（能力区只为占位）', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    expect(store.refineMode).toBe('outpaint')
+    expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).toContain('is-active')
+
+    // 能力区是禁用占位：点击不改变模式，也不会成为激活项
+    const cap = w.find('[data-testid="rail-capability-inpaint"]')
+    const activeBefore = w.findAll('.refine-rail__btn.is-active').length
+    await cap.trigger('click')
+    expect(store.refineMode).toBe('outpaint')
+    expect(cap.classes()).not.toContain('is-active')
+    // 点击能力占位不新增任何激活项，且能力区自身永不参与激活态
+    expect(w.findAll('.refine-rail__btn.is-active').length).toBe(activeBefore)
+    expect(w.find('.refine-rail__btn.is-active[data-testid^="rail-capability-"]').exists()).toBe(false)
+  })
 })

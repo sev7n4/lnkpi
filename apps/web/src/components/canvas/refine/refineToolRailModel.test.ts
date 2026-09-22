@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import {
-  REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS,
+  REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS,
   compareModeLabel, groupForTool, inputToolActive, refineWorkspaceLabel, toolLabel, toolParamKind,
 } from './refineToolRailModel'
 import { useCanvasEditorStore, type RefineMaskTool } from '@/stores/canvasEditor'
@@ -94,5 +94,33 @@ describe('canvasEditor · 对照模式归属', () => {
     store.closeImageEditor()
     expect(store.refineCompareMode).toBe('split')
     expect(store.refineWipeRatio).toBe(0.5)
+  })
+})
+
+describe('REFINE_CAPABILITY_ITEMS（Toolbox 能力组迁入 rail）', () => {
+  it('4 组 11 项全部迁移，且去掉 outpaint（rail 已有独立扩图按钮）', () => {
+    const ids = REFINE_CAPABILITY_ITEMS.map((i) => i.id)
+    expect(ids).toEqual([
+      'one-click-matting', 'subject', 'erase-object',
+      'crop', 'grid-slice', 'rotate-flip',
+      'inpaint', 'erase-replace',
+      'upscale', 'enhance',
+    ])
+    expect(ids).not.toContain('outpaint')
+  })
+
+  it('全部禁用并带「即将上线」提示（点亮机制后续包翻 disabled）', () => {
+    for (const item of REFINE_CAPABILITY_ITEMS) {
+      expect(item.disabled).toBe(true)
+      expect(item.hint).toContain('待独立规格实现')
+      expect(item.icon.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('分组信息（组名 + 定价）随 item 保留，rail tooltip 可复用', () => {
+    const byId = Object.fromEntries(REFINE_CAPABILITY_ITEMS.map((i) => [i.id, i]))
+    expect(byId['one-click-matting']!.groupLabel).toBe('抠素材')
+    expect(byId['one-click-matting']!.price).toBe('免费')
+    expect(byId['inpaint']!.price).toBe('积分')
   })
 })
