@@ -109,6 +109,12 @@ export interface WorkbenchToolRegistration {
 - 禁用态：**同形同尺寸**，仅降透明度（≤45%）+ 灰底，**禁止退化为无图标矩形**（线上缺陷：disabled 态丢箭头变白块）。
 - 文案进 `aria-label` / `title`（「精修」「扩图生成」）；文字型胶囊按钮（「应用到节点」等）是**次级动作**，不得占据主 CTA 位。
 
+**内容归属：dock 只放「动作相关」内容，静态元信息一律不进 dock。**
+
+- 线上 `RefineDock` 底部的「原图 1024×1024 · 1:1」独立徽标行**移除**——原图尺寸是静态信息，与生成动作无关，白占一行高度。
+- 原图尺寸信息归位：作为尺寸选择器的 `title`/tooltip（悬浮可见），或在对照预览区 header 以弱化文本展示，二选一随实现定，dock 内不再出现。
+- 判据：删掉这条信息后用户是否会做出不同动作？不会 → 不属于 dock。扩图的目标画布尺寸不在此列（它是可操作参数，归 `OutpaintPanel`）。
+
 ## 5. WorkbenchShell 架构
 
 ```
@@ -202,7 +208,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 | `components/canvas/refine/RefineOutpaintCanvas.vue` | 修改：手柄形状 / 3×3 网格 / 顶部胶囊读数 / rect 状态源上移 store / 删底部读数条 |
 | `components/canvas/refine/outpaintGeometry.ts` | 修改：新增 §8 三个纯函数 |
 | `components/canvas/refine/RefineSidePanel.vue` | 修改：接 Shell / 按 mode 渲染面板与 dock 落点 / VersionStrip 直挂 |
-| `components/canvas/refine/RefineDock.vue` | 修改：按 §4.2 紧凑化（高度预算 / 圆形箭头 CTA 含禁用态保形 / flex 兄弟布局不遮挡滚动区） |
+| `components/canvas/refine/RefineDock.vue` | 修改：按 §4.2 紧凑化（高度预算 / 圆形箭头 CTA 含禁用态保形 / flex 兄弟布局不遮挡滚动区 / 移除「原图 尺寸·比例」静态徽标行） |
 | `components/canvas/refine/RefineToolRail.vue` + `refineToolRailModel.ts` | 修改：能力区 |
 | `components/canvas/refine/RefineToolbox.vue` | 删除（能力数据迁 rail 模型） |
 | `stores/canvasEditor.ts` | 修改：§7 |
@@ -228,7 +234,7 @@ outpaintExtensionAmounts(base: Size, rect: OutpaintRect): { west: number; east: 
 4. 改宽 / 高输入：同上。
 5. 未扩展时 CTA 禁用 + 引导文案；扩展后可生成；生成后对照带出现前后对照。
 6. `×` 退出扩图回 select；select 模式右栏无 Toolbox、能力图标在左栏且禁用。
-7. **dock 三查（select 与扩图都过）**：滚动区可滚到底、最后一条内容不被 dock 挡住；dock 默认态 ≤148px、prompt 聚焦展开 ≤224px；主 CTA 为圆形 `↑` 按钮，禁用态形状不变仅变灰。
+7. **dock 三查（select 与扩图都过）**：滚动区可滚到底、最后一条内容不被 dock 挡住；dock 默认态 ≤148px、prompt 聚焦展开 ≤224px；主 CTA 为圆形 `↑` 按钮，禁用态形状不变仅变灰；dock 内无「原图 尺寸·比例」静态徽标行。
 8. 窄屏 <640px：悬浮 dock 退化为面板底部。
 
 ## 13. 风险
