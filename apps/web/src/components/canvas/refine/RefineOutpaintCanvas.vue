@@ -91,16 +91,33 @@ onMounted(() => {
   }
 })
 
-/** 自动缩放跟随：画布超出可用视口时缩小（小图最多放大到 4 倍），手柄与读数不跑出屏幕（规格 §3）。 */
+/** 缩放锚定原图（2026-09-22 用户验收修订，替换原「拖拽时自动缩放跟随」）：
+ *  原图进入扩图模式即按可用区的 60% 定大小并保持不变——拖拽手柄只扩大蒙版区域，
+ *  原图不再跟着缩小（「原图不变、变的是扩展蒙版」）。60% 预留 = 蒙版有初始扩展空间，
+ *  配合 dragBounds 钳制保证手柄始终在视口内可抓取。 */
+const FIT_ANCHOR_RATIO = 0.6
 const fitScale = computed(() => {
   const vw = viewport.value.width
   const vh = viewport.value.height
-  if (!(vw > 1) || !(vh > 1) || !rect.value.width || !rect.value.height) return 1
+  const bw = base.value.width
+  const bh = base.value.height
+  if (!(vw > 1) || !(vh > 1) || !(bw > 0) || !(bh > 0)) return 1
   // 极小容器兜底：留白后可用区不足容器一半时按容器一半算
   const availW = Math.max(vw * 0.5, vw - FIT_PAD_X * 2)
   const availH = Math.max(vh * 0.5, vh - FIT_PAD_TOP - FIT_PAD_BOTTOM)
-  const s = Math.min(availW / rect.value.width, availH / rect.value.height)
+  const s = FIT_ANCHOR_RATIO * Math.min(availW / bw, availH / bh)
   return Math.min(MAX_FIT, Math.max(MIN_FIT, s))
+})
+
+/** 拖拽边界：锚定缩放下视口能容纳的最大画布（px）。视口未测量（jsdom / 挂载前）不设限。 */
+const dragBounds = computed<Size>(() => {
+  const vw = viewport.value.width
+  const vh = viewport.value.height
+  const s = fitScale.value
+  if (!(vw > 1) || !(vh > 1) || !(s > 0)) return { width: Infinity, height: Infinity }
+  const availW = Math.max(vw * 0.5, vw - FIT_PAD_X * 2)
+  const availH = Math.max(vh * 0.5, vh - FIT_PAD_TOP - FIT_PAD_BOTTOM)
+  return { width: Math.floor(availW / s), height: Math.floor(availH / s) }
 })
 
 const aspectLabel = computed(() => formatAspectLabel(viewRect.value.width, viewRect.value.height))
@@ -125,6 +142,7 @@ function onHandleDown(dir: HandleDir, event: PointerEvent) {
   if (!(base.value.width > 0) || !(base.value.height > 0)) return
   event.preventDefault()
   dragging.value = dir
+  editor.setRefineOutpaintDragging(true)
   lastX = event.clientX
   lastY = event.clientY
   window.addEventListener('pointermove', onDragMove)
@@ -143,11 +161,12 @@ function onDragMove(event: PointerEvent) {
   lastY = event.clientY
   if (delta.dx === 0 && delta.dy === 0) return
   // 逐帧增量写入 store：保留小数（对外落像素走 floorOutpaintRect），避免每帧取整漂移
-  editor.setRefineOutpaintRect(resizeOutpaintRect(base.value, rect.value, delta, dir))
+  editor.setRefineOutpaintRect(resizeOutpaintRect(base.value, rect.value, delta, dir, dragBounds.value))
 }
 
 function onDragUp() {
   dragging.value = null
+  editor.setRefineOutpaintDragging(false)
   window.removeEventListener('pointermove', onDragMove)
   window.removeEventListener('pointerup', onDragUp)
 }
@@ -158,6 +177,7 @@ onBeforeUnmount(() => {
   // 退出扩图模式即重置（规格 §6.1）；组件卸载时清掉 store 中的 rect 与基准。
   editor.setRefineOutpaintRect(null)
   editor.setRefineOutpaintBase(null)
+  editor.setRefineOutpaintDragging(false)
 })
 </script>
 

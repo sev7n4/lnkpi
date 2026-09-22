@@ -346,3 +346,57 @@ describe('outpaintExtensionAmounts', () => {
     })
   })
 })
+
+/**
+ * 视口钳制（2026-09-22 用户验收修订）：缩放锚定原图后，拖拽增量被钳制在视口可容纳的
+ * 画布尺寸内——拖出视口的手柄无法再被抓取，因此把「正在移动的边」的扩展量裁回 bounds。
+ */
+describe('resizeOutpaintRect bounds（视口钳制）', () => {
+  const BASE = { width: 400, height: 300 }
+
+  it('东向拖出 bounds：宽度钳制，x 与高度不变', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 2000, dy: 0 },
+      'e',
+      { width: 600, height: 800 },
+    )
+    expect(out.width).toBe(600)
+    expect(out.x).toBe(0)
+    expect(out.height).toBe(300)
+  })
+
+  it('西向拖出 bounds：从西侧裁（x 右移），高度不变', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: -2000, dy: 0 },
+      'w',
+      { width: 600, height: 800 },
+    )
+    expect(out.width).toBe(600)
+    expect(out.x).toBe(200)
+  })
+
+  it('bounds 容不下单边下限矩形时忽略 bounds（下限优先）', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 100, dy: 0 },
+      'e',
+      { width: 100, height: 100 },
+    )
+    expect(out.width).toBe(500)
+  })
+
+  it('未传 bounds 时行为与原版一致', () => {
+    const out = resizeOutpaintRect(
+      BASE,
+      { x: 0, y: 0, width: 400, height: 300 },
+      { dx: 200, dy: 0 },
+      'e',
+    )
+    expect(out.width).toBe(600)
+  })
+})

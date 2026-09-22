@@ -83,21 +83,36 @@ export function floorOutpaintRect(rect: OutpaintRect): OutpaintRect {
  *
  * 组件按 pointermove 逐帧增量调用（每帧以当前 rect 作 start）：手柄始终跟随指针，
  * 且中途不取整，避免逐帧 floor 累积出的漂移。返回值保留小数，落像素走 floorOutpaintRect。
+ *
+ * `bounds`（可选，2026-09-22 用户验收修订）：新画布尺寸上限（缩放锚定原图后，
+ * 视口能容纳的最大画布 px）。拖出视口的手柄无法再被抓取，因此拖拽增量被钳制在
+ * bounds 内——只裁「正在移动的边」的扩展量，对边固定语义不破；bounds 不足以容纳
+ * 单边下限矩形时该轴忽略 bounds（下限优先）。
  */
 export function resizeOutpaintRect(
   base: Size,
   start: OutpaintRect,
   delta: DragDelta,
   dir: HandleDir,
+  bounds?: Size,
 ): OutpaintRect {
   const moving = HANDLE_MOVING_EDGES[dir]
   const maxArea =
     OUTPAINT_MAX_AREA_RATIO * Math.max(0, base.width) * Math.max(0, base.height)
 
   const next = applyDragStep(base, start, delta, moving, 1)
-  if (next.width * next.height <= maxArea) return next
+  const result = next.width * next.height <= maxArea ? next : clampToAreaBudget(base, start, delta, moving, maxArea)
+  return bounds ? clampRectToBounds(base, result, bounds, moving) : result
+}
 
-  // 面积预算用尽：截断「本次拖拽幅度」到预算边界，而不是回头缩小已经扩出的边。
+/** 面积预算用尽：截断「本次拖拽幅度」到预算边界，而不是回头缩小已经扩出的边。 */
+function clampToAreaBudget(
+  base: Size,
+  start: OutpaintRect,
+  delta: DragDelta,
+  moving: MovingEdges,
+  maxArea: number,
+): OutpaintRect {
   // 语义上等于手柄停在预算边界上；反向拖拽可立即回退。
   let lo = 0
   let hi = 1
@@ -108,6 +123,43 @@ export function resizeOutpaintRect(
     else hi = mid
   }
   return applyDragStep(base, start, delta, moving, lo)
+}
+
+/** 视口钳制：只裁移动边的扩展量，把新画布尺寸压回 bounds；下限矩形放不下时忽略。 */
+function clampRectToBounds(base: Size, rect: OutpaintRect, bounds: Size, moving: MovingEdges): OutpaintRect {
+  const bw = Math.max(0, base.width)
+  const bh = Math.max(0, base.height)
+  const minW = Math.max(bw, OUTPAINT_MIN_EDGE)
+  const minH = Math.max(bh, OUTPAINT_MIN_EDGE)
+  const maxW = Number.isFinite(bounds.width) ? bounds.width : Infinity
+  const maxH = Number.isFinite(bounds.height) ? bounds.height : Infinity
+
+  let { x, y, width, height } = rect
+  if (maxW >= minW && width > maxW) {
+    const overflow = width - maxW
+    if (moving.west && x > 0) {
+      const trim = Math.min(overflow, x)
+      x -= trim
+      width -= trim
+    }
+    if (moving.east && width > maxW) {
+      const eastPad = Math.max(0, width - x - bw)
+      width -= Math.min(width - maxW, eastPad)
+    }
+  }
+  if (maxH >= minH && height > maxH) {
+    const overflow = height - maxH
+    if (moving.north && y > 0) {
+      const trim = Math.min(overflow, y)
+      y -= trim
+      height -= trim
+    }
+    if (moving.south && height > maxH) {
+      const southPad = Math.max(0, height - y - bh)
+      height -= Math.min(height - maxH, southPad)
+    }
+  }
+  return { x, y, width, height }
 }
 
 /** 把位移按系数 t 作用到「移动边」上并 clamp 到合法区间（面积上限由调用方处理）。 */

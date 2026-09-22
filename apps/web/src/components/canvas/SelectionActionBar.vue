@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
 import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.vue'
-import { buildSelectionTools, clampCounterScale, resolveBarPlacement, type SelectionToolDef } from './selectionToolModel'
+import { buildSelectionTools, exactCounterScale, resolveBarPlacement, type SelectionToolDef } from './selectionToolModel'
 
 /**
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
@@ -69,7 +69,7 @@ function updatePosition() {
   const abs = getAbsolutePosition(sizeNode, allNodes)
   const { w, h } = getNodeSize(sizeNode)
   const zoom = props.zoom ?? viewport.value.zoom
-  const cs = clampCounterScale(zoom)
+  const cs = exactCounterScale(zoom)
   // bar 屏幕尺寸 = 布局尺寸（节点坐标系）× zoom × counter-scale
   const barW = (barEl.value?.offsetWidth ?? 0) * zoom * cs
   const barH = (barEl.value?.offsetHeight ?? 0) * zoom * cs
@@ -142,7 +142,7 @@ const barStyle = computed(() => {
 })
 
 const counterScaleStyle = computed(() => ({
-  transform: `scale(${clampCounterScale(effectiveZoom.value)})`,
+  transform: `scale(${exactCounterScale(effectiveZoom.value)})`,
   transformOrigin: placement.value === 'top' ? '50% 100%' : '50% 0%',
 }))
 

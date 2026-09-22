@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { buildSelectionTools, clampCounterScale, resolveBarPlacement } from './selectionToolModel'
+import { buildSelectionTools, exactCounterScale, resolveBarPlacement } from './selectionToolModel'
 
-describe('clampCounterScale', () => {
-  it('clamps 1/zoom into [0.8, 1.2]', () => {
-    expect(clampCounterScale(0.2)).toBe(1.2)
-    expect(clampCounterScale(1)).toBe(1)
-    expect(clampCounterScale(4)).toBe(0.8)
+describe('exactCounterScale', () => {
+  it('returns the exact inverse of zoom（2026-09-22 修订：不再 clamp，屏幕尺寸恒定）', () => {
+    expect(exactCounterScale(0.2)).toBeCloseTo(5)
+    expect(exactCounterScale(1)).toBe(1)
+    expect(exactCounterScale(4)).toBeCloseTo(0.25)
   })
 
-  it('passes through mid-range zooms untouched', () => {
-    expect(clampCounterScale(0.9)).toBeCloseTo(1 / 0.9)
-    expect(clampCounterScale(1.1)).toBeCloseTo(1 / 1.1)
+  it('mid-range zooms pass through as 1/zoom', () => {
+    expect(exactCounterScale(0.9)).toBeCloseTo(1 / 0.9)
+    expect(exactCounterScale(1.1)).toBeCloseTo(1 / 1.1)
   })
 })
 

@@ -88,10 +88,11 @@ describe('SelectionActionBar', () => {
     wrapper.unmount()
   })
 
-  it('counter-scales the bar so it keeps constant on-screen size', async () => {
+  it('counter-scales the bar so it keeps constant on-screen size（2026-09-22 修订：精确 1/zoom，不再 clamp）', async () => {
     const wrapper = mountBar({ zoom: 0.4 })
     const inner = wrapper.get('[data-testid="bar-inner"]')
-    expect(inner.attributes('style')).toContain('scale(1.2)')
+    // zoom 0.4 → 精确反缩放 2.5，屏幕宽度恒等于 BAR_WIDTH_PX（与多选菜单等宽）
+    expect(inner.attributes('style')).toContain('scale(2.5)')
     wrapper.unmount()
   })
 })

@@ -68,6 +68,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineOutpaintRect = ref<OutpaintRect | null>(null)
   /** 扩图基准（原图尺寸）：进入扩图模式时由 RefineOutpaintCanvas 写入，供预设 / 尺寸输入 / 读数共用。 */
   const refineOutpaintBase = ref<Size | null>(null)
+  /** 扩图手柄拖拽进行中（2026-09-22 用户验收修订）：悬浮 dock 据此隐藏，不挡画布拖拽。 */
+  const refineOutpaintDragging = ref(false)
 
   function resetRefineChromeState() {
     compareLightboxOpen.value = false
@@ -87,6 +89,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMode.value = 'select'
     refineOutpaintRect.value = null
     refineOutpaintBase.value = null
+    refineOutpaintDragging.value = false
   }
 
   function openImageEditor(target: ImageEditTarget) {
@@ -161,6 +164,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     if (mode === 'select') {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
+      refineOutpaintDragging.value = false
     }
     refineMode.value = mode
   }
@@ -178,6 +182,11 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   /** 写入扩图基准（原图尺寸）。null = 退出扩图，后续三个面板动作随之 no-op。 */
   function setRefineOutpaintBase(size: Size | null) {
     refineOutpaintBase.value = size
+  }
+
+  /** 写入手柄拖拽进行中状态（onHandleDown 置 true / onDragUp 置 false）。 */
+  function setRefineOutpaintDragging(value: boolean) {
+    refineOutpaintDragging.value = value
   }
 
   /** 扩图面板动作的公共前置：busy 或基准缺失时不改状态。 */
@@ -231,6 +240,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMode,
     refineOutpaintRect,
     refineOutpaintBase,
+    refineOutpaintDragging,
     openImageEditor,
     closeImageEditor,
     setRefineBusy,
@@ -250,6 +260,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     toggleRefineMode,
     setRefineOutpaintRect,
     setRefineOutpaintBase,
+    setRefineOutpaintDragging,
     applyOutpaintAspectPreset,
     applyOutpaintSize,
     resetOutpaintRect,

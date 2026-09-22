@@ -163,13 +163,33 @@ onUnmounted(() => {
     <button
       type="button"
       class="toolbar-action"
+      :class="{ 'is-loading': loading }"
       :disabled="blocked"
       :title="triggerTitle"
+      :aria-label="triggerTitle"
       :aria-expanded="open"
       aria-haspopup="menu"
       @click.stop="toggle"
     >
-      {{ triggerLabel }}
+      <!-- 与 bar 内其他按钮统一为纯图标样式（2026-09-22 用户验收）；文字保留在 DOM/title，
+           loading 时恢复可见（「切分中」是必要的进行中反馈，图标无法表达） -->
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+      <span class="label">{{ triggerLabel }}</span>
     </button>
     <div
       v-if="open && !blocked"
@@ -242,14 +262,20 @@ onUnmounted(() => {
 
 <style scoped>
 .toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border-radius: 0.5rem;
-  padding: 0.25rem 0.625rem;
+  padding: 0.375rem 0.5rem;
   font-size: 11px;
   line-height: 1.25;
   color: var(--neo-text);
   transition: background 0.15s ease, opacity 0.15s ease;
   white-space: nowrap;
 }
+/* 纯图标样式与 bar 内其他按钮一致；loading 时文字恢复可见 */
+.toolbar-action .label { display: none; }
+.toolbar-action.is-loading .label { display: inline; }
 .toolbar-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--neo-text) 8%, transparent);
 }

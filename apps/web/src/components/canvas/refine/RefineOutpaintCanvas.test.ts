@@ -165,7 +165,7 @@ describe('RefineOutpaintCanvas', () => {
     }
   })
 
-  it('拖拽超出视口时视口自动缩放跟随（fitScale 缩小）', async () => {
+  it('缩放锚定原图：拖拽扩大画布时 fit 恒定（原图不缩小），画布被钳制在视口内', async () => {
     const w = mountCanvas()
     // 视口从组件自身容器测量（真实浏览器里即扩图画布占据的工作区）
     const root = w.find('[data-testid="refine-outpaint-canvas"]').element as HTMLElement
@@ -173,11 +173,28 @@ describe('RefineOutpaintCanvas', () => {
     ResizeObserverStub.callbacks.get(root)?.()
     await flushPromises()
     const fitBefore = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
-    // 初始 400×300 在 400×300 视口内留白后略缩小 → fit ≤ 1
+    // 原图 400×300 在 400×300 视口内按 60% 预留扩展空间 → fit < 1
     expect(fitBefore).toBeLessThanOrEqual(1)
     await drag(w, 'se', { x: 100, y: 100 }, { x: 2200, y: 2200 })
     const fitAfter = Number(w.find('[data-testid="refine-outpaint-canvas"]').attributes('data-fit'))
-    expect(fitAfter).toBeLessThan(fitBefore)
+    // 2026-09-22 用户验收修订：拖拽只扩蒙版，原图/缩放不得跟着变
+    expect(fitAfter).toBe(fitBefore)
+    // 画布被钳制在视口可容纳范围（拖出视口的手柄无法再抓取）
+    const { w: rw, h: rh } = readoutDims(w)
+    expect(rw * fitAfter).toBeLessThanOrEqual(400)
+    expect(rh * fitAfter).toBeLessThanOrEqual(300)
+  })
+
+  it('拖拽进行中 store.refineOutpaintDragging=true，松手复位（悬浮 dock 据此隐藏）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountCanvas()
+    const handle = w.find('[data-testid="outpaint-handle-e"]')
+    handle.element.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true, clientX: 0, clientY: 0 }))
+    await flushPromises()
+    expect(editor.refineOutpaintDragging).toBe(true)
+    window.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }))
+    await flushPromises()
+    expect(editor.refineOutpaintDragging).toBe(false)
   })
 
   it('回归：视口由组件自身容器测量，基图大于容器时自动缩小（不再依赖外部隐藏元素）', async () => {

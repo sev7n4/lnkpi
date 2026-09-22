@@ -127,12 +127,44 @@ describe('RefineSidePanel 三段式', () => {
     const editor = useCanvasEditorStore()
     editor.setRefineMode('outpaint')
     editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    // 显示门控：产生真实扩出后悬浮 dock 才出现（2026-09-22 用户验收修订）
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 600, height: 300 })
     mountPanel({ floatingAvailable: true })
     await flushPromises()
     expect(q('[data-testid="outpaint-panel"]')).not.toBeNull()
     expect(q('[data-testid="outpaint-dock-floating"]')).not.toBeNull()
     // 两个扩图落点互斥：悬浮可用时只有悬浮 dock（面板兜底不渲染）。
     expect(qa('[data-testid="outpaint-dock"]').length).toBe(1)
+  })
+
+  it('扩图门控：尚无真实扩出时悬浮 dock 不渲染（常驻会挡画布拖拽）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('outpaint')
+    editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 400, height: 300 })
+    mountPanel({ floatingAvailable: true })
+    await flushPromises()
+    expect(q('[data-testid="outpaint-dock-floating"]')).toBeNull()
+    // 一旦产生扩出即出现
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 500, height: 300 })
+    await flushPromises()
+    expect(q('[data-testid="outpaint-dock-floating"]')).not.toBeNull()
+  })
+
+  it('扩图门控：手柄拖拽进行中悬浮 dock 隐藏（不挡拖拽），松手恢复', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('outpaint')
+    editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 600, height: 300 })
+    mountPanel({ floatingAvailable: true })
+    await flushPromises()
+    expect(q('[data-testid="outpaint-dock-floating"]')).not.toBeNull()
+    editor.setRefineOutpaintDragging(true)
+    await flushPromises()
+    expect(q('[data-testid="outpaint-dock-floating"]')).toBeNull()
+    editor.setRefineOutpaintDragging(false)
+    await flushPromises()
+    expect(q('[data-testid="outpaint-dock-floating"]')).not.toBeNull()
   })
 
   it('窄屏：扩图 dock 退化为面板底部（不渲染悬浮层）', async () => {

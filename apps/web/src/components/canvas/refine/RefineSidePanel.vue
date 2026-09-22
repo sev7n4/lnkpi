@@ -131,9 +131,15 @@ const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estim
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
 /** 当前激活的一级工具（注册表是唯一真相：未注册 → 无面板、无 dock）。 */
 const activeTool = computed(() => getWorkbenchTool(toolIdForRefineMode(editor.refineMode)))
-/** 扩图 dock 的落点：注册表声明 floating 且悬浮可用 → 悬浮；否则退化为面板底部。 */
+/** 扩图 dock 的落点：注册表声明 floating 且悬浮可用 → 悬浮；否则退化为面板底部。
+ *  显示门控（2026-09-22 用户验收修订）：产生真实扩出后才出现（CTA 此前本就禁用，无常驻价值），
+ *  且手柄拖拽进行中隐藏——常驻浮层会挡住画布拖拽操作。窄屏面板兜底落点不挡画布，不受门控。 */
 const outpaintDockFloating = computed(
-  () => activeTool.value?.dockPlacement === 'floating' && props.floatingAvailable !== false,
+  () =>
+    activeTool.value?.dockPlacement === 'floating' &&
+    props.floatingAvailable !== false &&
+    outpaintCanRun.value &&
+    !editor.refineOutpaintDragging,
 )
 /** select 的 dock 落点：注册表声明 panel（产出型工具必有 dock，§4.2）。 */
 const selectDockInPanel = computed(
