@@ -1,9 +1,13 @@
 <script setup lang="ts">
-defineProps<{
+withDefaults(defineProps<{
   generating?: boolean
   disabled?: boolean
   title?: string
-}>()
+  /** 尺寸档位：sm 28（默认，横向底栏）/ md 32（panel 落点）/ lg 36（floating 落点）——§4.3 */
+  size?: 'sm' | 'md' | 'lg'
+  /** 主 CTA 文案（动词 + 对象，§4.2 不变量 5）；缺省沿用生成/取消生成 */
+  label?: string
+}>(), { size: 'sm' })
 
 const emit = defineEmits<{
   generate: []
@@ -14,10 +18,10 @@ const emit = defineEmits<{
   <button
     type="button"
     class="dock-generate-btn"
-    :class="{ 'is-generating': generating }"
+    :class="[`dock-generate-btn--${size}`, { 'is-generating': generating }]"
     :disabled="disabled"
     :title="title ?? (generating ? '点击取消生成' : '生成')"
-    :aria-label="generating ? '取消生成' : '生成'"
+    :aria-label="label ?? (generating ? '取消生成' : '生成')"
     @click.stop="emit('generate')"
   >
     <!-- Stop square while generating — clearer cancel affordance than a spinner-only control -->
@@ -93,4 +97,8 @@ const emit = defineEmits<{
 .dock-generate-btn.is-generating:hover:not(:disabled) {
   filter: brightness(1.15);
 }
+
+.dock-generate-btn--sm { width: 28px; height: 28px; }
+.dock-generate-btn--md { width: 32px; height: 32px; }
+.dock-generate-btn--lg { width: 36px; height: 36px; }
 </style>

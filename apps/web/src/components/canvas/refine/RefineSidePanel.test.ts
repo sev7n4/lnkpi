@@ -255,7 +255,7 @@ describe('RefineSidePanel 扩图提交守卫（Q3：零扩展不得提交）', (
     await flushPromises()
     expect(runButton()?.disabled).toBe(false)
     expect(q('[data-testid="dock-outpaint-hint"]')).toBeNull()
-    expect(runButton()?.textContent).toContain('扩图生成')
+    expect(runButton()?.getAttribute('aria-label')).toBe('扩图生成')
   })
 
   it('仅向右/向下扩（x = y = 0）也算已扩出', async () => {

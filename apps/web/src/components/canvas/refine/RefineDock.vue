@@ -16,6 +16,7 @@ import DockRefStrip from '@/components/canvas/dock-studio/shared/DockRefStrip.vu
 import DockPromptSection from '@/components/canvas/dock-studio/shared/DockPromptSection.vue'
 import DockMicButton from '@/components/canvas/dock-studio/shared/DockMicButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
+import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 
 type RefineMode = 'edit' | 'outpaint'
@@ -97,11 +98,11 @@ function aspectLabel(w: number, h: number): string {
   return rw > 64 || rh > 64 ? `${(w / h).toFixed(2)}:1` : `${rw}:${rh}`
 }
 
-const sizeLabel = computed(() => {
+/** 原图尺寸信息（§4.3 归位）：静态元信息只进 tooltip，不占 dock 一行高度。 */
+const sizeTooltip = computed(() => {
   const w = Number(props.width) || 0
   const h = Number(props.height) || 0
-  if (!w || !h) return '原始尺寸'
-  return `${w}×${h} · ${aspectLabel(w, h)}`
+  return w && h ? `输出尺寸跟随原图（原图 ${w}×${h} · ${aspectLabel(w, h)}）` : '输出尺寸跟随原图'
 })
 
 /** 尺寸选项 = ['auto', ...sizes] 去重（auto 既可能在 sizes 中也可能不在）。 */
@@ -160,7 +161,7 @@ function toggleVoice() {
 
 <template>
   <div class="refine-dock" data-testid="refine-dock">
-    <DockToolbarShell type="image" :show-close="true" @close="emit('close')">
+    <DockToolbarShell type="image" :show-close="false">
       <template #header-end>
         <div class="relative">
           <button
@@ -261,6 +262,7 @@ function toggleVoice() {
               type="button"
               class="refine-dock__select-trigger"
               data-testid="dock-size-select"
+              :title="sizeTooltip"
               :disabled="runDisabled"
               :aria-expanded="sizeOpen"
               @click="sizeOpen = !sizeOpen"
@@ -286,18 +288,18 @@ function toggleVoice() {
               </button>
             </div>
           </div>
-
-          <span class="refine-dock__chip refine-dock__chip--muted" title="输出尺寸跟随原图">
-            <span class="refine-dock__chip-k">原图</span>{{ sizeLabel }}
-          </span>
         </div>
 
         <div class="ml-auto flex items-center gap-2">
           <DockMicButton :listening="speech.listening.value" :disabled="runDisabled" @toggle="toggleVoice" />
           <DockCreditBadge :credits="creditValue" />
-          <button type="button" class="refine-dock__primary" data-testid="dock-run" :disabled="runDisabled" @click="emit('run')">
-            {{ mode === 'outpaint' ? '扩图生成' : '精修' }}
-          </button>
+          <DockGenerateButton
+            data-testid="dock-run"
+            size="md"
+            :label="mode === 'outpaint' ? '扩图生成' : '精修'"
+            :disabled="runDisabled"
+            @generate="emit('run')"
+          />
           <!-- follow-up #2：置灰「抠图」占位按钮已删 —— 规格 §2.2 明确抠图归 M2 能力包（P1-8 不做假 UI）。
                底排“抠图/裁剪”等实体动作入口随 M2 规格回来，届时进工具箱能力组。 -->
           <button v-if="canApply" type="button" class="refine-dock__ghost" data-testid="dock-apply" :disabled="busy" @click="emit('apply')">
@@ -310,6 +312,8 @@ function toggleVoice() {
 </template>
 
 <style scoped>
+.refine-dock { display: flex; flex-direction: column; gap: 8px; padding-bottom: 2px; }
+
 /* 精修右栏只有 400px，必须解除横版底栏的 600px 最小宽（styles/neo-node.css:1051） */
 .refine-dock :deep(.bottom-toolbar-container) { min-width: 0; width: 100%; }
 /* 横版底栏的 -32px/-40px 出血光晕在竖版里会溢出 */
@@ -355,20 +359,18 @@ function toggleVoice() {
 .refine-dock__select-item:hover { background: var(--neo-hover-bg, rgba(255, 255, 255, .06)); color: var(--neo-text-primary); }
 .refine-dock__select-item.is-active { background: var(--neo-hi-bg, #17181d); color: #fff; }
 .refine-dock__select-empty { margin: 0; padding: 6px 8px; color: var(--neo-text-muted); font-size: 11px; }
-.refine-dock__chip--muted { opacity: .8; }
 
-.refine-dock__hint { margin: 0 12px 6px; color: var(--neo-text-muted); font-size: 11px; }
+.refine-dock__hint { margin: 0 12px; color: var(--neo-text-muted); font-size: 11px; }
 .refine-dock__hint--warn { color: #e6a23c; }
 
-.refine-dock__error { display: flex; margin: 0 12px 6px; align-items: center; gap: 8px; color: #f56c6c; font-size: 11px; }
+.refine-dock__error { display: flex; margin: 0 12px; align-items: center; gap: 8px; color: #f56c6c; font-size: 11px; }
 .refine-dock__retry { border: 1px solid currentColor; border-radius: 6px; background: transparent; color: inherit; font-size: 11px; padding: 1px 6px; cursor: pointer; }
 
-.refine-dock__actions { flex-wrap: wrap; }
+.refine-dock__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 12px 10px; }
 
-.refine-dock__primary,
-.refine-dock__ghost { height: 28px; padding: 0 12px; border-radius: 8px; font-size: 12px; cursor: pointer; }
-.refine-dock__primary { border: none; background: var(--neo-hi-bg, #17181d); color: #fff; font-weight: 600; }
-.refine-dock__primary:disabled { opacity: .45; cursor: not-allowed; }
-.refine-dock__ghost { border: 1px solid var(--neo-border); background: transparent; color: var(--neo-text-secondary); }
+.refine-dock__ghost {
+  height: 28px; padding: 0 12px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  border: 1px solid var(--neo-border); background: transparent; color: var(--neo-text-secondary);
+}
 .refine-dock__ghost:disabled { opacity: .5; cursor: not-allowed; }
 </style>
