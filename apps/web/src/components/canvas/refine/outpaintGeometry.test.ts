@@ -2,8 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   OUTPAINT_MIN_EDGE,
   OUTPAINT_MAX_AREA_RATIO,
-  clampOutpaintCanvas,
+  HANDLE_DIRS,
+  floorOutpaintRect,
   formatAspectLabel,
+  hasOutpaintExtension,
+  initialOutpaintRect,
+  resizeOutpaintRect,
+  type HandleDir,
+  type OutpaintRect,
+  type Size,
 } from './outpaintGeometry'
 
 describe('outpaintGeometry 常量', () => {
@@ -11,160 +18,172 @@ describe('outpaintGeometry 常量', () => {
     expect(OUTPAINT_MIN_EDGE).toBe(256)
     expect(OUTPAINT_MAX_AREA_RATIO).toBe(9)
   })
-})
 
-describe('clampOutpaintCanvas 合法扩展', () => {
-  it('不触发 clamp 时原样返回新画布尺寸与 start 锚定', () => {
-    const r = clampOutpaintCanvas(
-      { width: 800, height: 600 },
-      { width: 1000, height: 800 },
-      { x: 'start', y: 'start' },
-    )
-    expect(r.width).toBe(1000)
-    expect(r.height).toBe(800)
-    // start 锚定：原图左上角贴新画布左上角
-    expect(r.x).toBe(0)
-    expect(r.y).toBe(0)
-  })
-
-  it('合法扩展面积不得超过原图 9 倍（此处 1000×800 < 9×800×600）', () => {
-    const base = { width: 800, height: 600 }
-    const r = clampOutpaintCanvas(
-      base,
-      { width: 1000, height: 800 },
-      { x: 'start', y: 'start' },
-    )
-    expect(r.width * r.height).toBeLessThanOrEqual(
-      OUTPAINT_MAX_AREA_RATIO * base.width * base.height,
-    )
+  it('8 个手柄方向齐全', () => {
+    expect(HANDLE_DIRS).toEqual(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'])
   })
 })
 
-describe('clampOutpaintCanvas 单边 < 256 下限 clamp', () => {
-  it('请求宽度低于下限时被拉回 max(原宽, 256)', () => {
-    // 原宽 800 → 下限取 800（原图本身更大），请求 100 被夹回 800
-    const r = clampOutpaintCanvas(
-      { width: 800, height: 600 },
-      { width: 100, height: 800 },
-      { x: 'start', y: 'start' },
-    )
-    expect(r.width).toBe(800)
-    expect(r.height).toBe(800)
-    expect(r.x).toBe(0)
-    expect(r.y).toBe(0)
+const BASE: Size = { width: 400, height: 300 }
+
+/** 以初始画布为起点拖一次。 */
+const dragOnce = (dir: HandleDir, dx: number, dy: number, base: Size = BASE): OutpaintRect =>
+  resizeOutpaintRect(base, initialOutpaintRect(base), { dx, dy }, dir)
+
+describe('initialOutpaintRect / floorOutpaintRect', () => {
+  it('初始画布等于原图本身（无扩出区）', () => {
+    expect(initialOutpaintRect(BASE)).toEqual({ x: 0, y: 0, width: 400, height: 300 })
   })
 
-  it('原图小于 256 的短边按 256 兜底', () => {
-    // 原图 300×200：高度下限取 256，请求 100 被夹回 256
-    const r = clampOutpaintCanvas(
-      { width: 300, height: 200 },
-      { width: 300, height: 100 },
-      { x: 'end', y: 'end' },
-    )
-    expect(r.width).toBe(300)
+  it('落像素向下取整，且仍完整包含原图', () => {
+    const r = floorOutpaintRect({ x: 10.7, y: 20.2, width: 500.9, height: 400.4 })
+    expect(r).toEqual({ x: 10, y: 20, width: 500, height: 400 })
+    expect(r.x + BASE.width).toBeLessThanOrEqual(r.width)
+  })
+})
+
+describe('resizeOutpaintRect 单边拖拽（只动该边，对边固定）', () => {
+  it('e 向右扩 100：原图贴左上不动', () => {
+    expect(dragOnce('e', 100, 0)).toEqual({ x: 0, y: 0, width: 500, height: 300 })
+  })
+
+  it('w 向左扩 100：画布向左长，原图右移 100', () => {
+    expect(dragOnce('w', -100, 0)).toEqual({ x: 100, y: 0, width: 500, height: 300 })
+  })
+
+  it('n 向上扩 100：画布向上长，原图下沉 100', () => {
+    expect(dragOnce('n', 0, -100)).toEqual({ x: 0, y: 100, width: 400, height: 400 })
+  })
+
+  it('s 向下扩 100：原图保持贴顶', () => {
+    expect(dragOnce('s', 0, 100)).toEqual({ x: 0, y: 0, width: 400, height: 400 })
+  })
+
+  it('角 se 同时扩右与下', () => {
+    expect(dragOnce('se', 100, 50)).toEqual({ x: 0, y: 0, width: 500, height: 350 })
+  })
+
+  it('角 nw 同时扩左与上', () => {
+    expect(dragOnce('nw', -100, -50)).toEqual({ x: 100, y: 50, width: 500, height: 350 })
+  })
+
+  it('边手柄不影响另一轴', () => {
+    // e 手柄只有横向位移，纵向位移被忽略
+    expect(dragOnce('e', 100, 80)).toEqual({ x: 0, y: 0, width: 500, height: 300 })
+    // n 手柄只有纵向位移
+    expect(dragOnce('n', 80, -100)).toEqual({ x: 0, y: 100, width: 400, height: 400 })
+  })
+})
+
+describe('resizeOutpaintRect 多边累积（2026-09-22 缺陷核心回归）', () => {
+  it('先向上扩 100、再向下扩 100：上下两侧扩出区同时保留', () => {
+    const up = dragOnce('n', 0, -100)
+    expect(up).toEqual({ x: 0, y: 100, width: 400, height: 400 })
+    const both = resizeOutpaintRect(BASE, up, { dx: 0, dy: 100 }, 's')
+    // 旧实现（尺寸 + anchor）在这里会丢掉上方扩出区，得到 { y: 0, height: 500 }
+    expect(both).toEqual({ x: 0, y: 100, width: 400, height: 500 })
+  })
+
+  it('先向右扩 100、再向左扩 100：左右两侧扩出区同时保留', () => {
+    const right = dragOnce('e', 100, 0)
+    const both = resizeOutpaintRect(BASE, right, { dx: -100, dy: 0 }, 'w')
+    expect(both).toEqual({ x: 100, y: 0, width: 600, height: 300 })
+  })
+
+  it('对角 nw → se：两个对角扩出区同时保留', () => {
+    const nw = dragOnce('nw', -100, -100)
+    const both = resizeOutpaintRect(BASE, nw, { dx: 100, dy: 100 }, 'se')
+    expect(both).toEqual({ x: 100, y: 100, width: 600, height: 500 })
+  })
+
+  it('四边依次各扩 100 → 原图居中，画布 600×500', () => {
+    let r = initialOutpaintRect(BASE)
+    r = resizeOutpaintRect(BASE, r, { dx: 100, dy: 0 }, 'e')
+    r = resizeOutpaintRect(BASE, r, { dx: -100, dy: 0 }, 'w')
+    r = resizeOutpaintRect(BASE, r, { dx: 0, dy: 100 }, 's')
+    r = resizeOutpaintRect(BASE, r, { dx: 0, dy: -100 }, 'n')
+    expect(r).toEqual({ x: 100, y: 100, width: 600, height: 500 })
+  })
+
+  it('同一侧连续两次拖拽按增量累积（第二帧以当前 rect 为基准，与单次等效）', () => {
+    const step = dragOnce('e', 60, 0)
+    const total = resizeOutpaintRect(BASE, step, { dx: 40, dy: 0 }, 'e')
+    expect(total).toEqual({ x: 0, y: 0, width: 500, height: 300 })
+  })
+
+  it('增量式拖拽保留小数不产生累计漂移（落像素后仍为整数目标）', () => {
+    let r = initialOutpaintRect(BASE)
+    for (let i = 0; i < 30; i += 1) {
+      r = resizeOutpaintRect(BASE, r, { dx: 0.5, dy: 0 }, 'e')
+    }
+    // 30 帧 × 0.5px = 15px；若每帧取整（旧实现）会把 0.5px 全部丢掉 → 仍是 400
+    expect(floorOutpaintRect(r).width).toBe(415)
+  })
+})
+
+describe('resizeOutpaintRect 向内拖拽不越过原图（扩图不裁剪）', () => {
+  it('w 向右内拖 50：左扩出量已为 0，停在原图左边界', () => {
+    expect(dragOnce('w', 50, 0)).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+  })
+
+  it('先右扩 100 再左扩出量 0 的内拖：右扩出区不受影响', () => {
+    const right = dragOnce('e', 100, 0)
+    const r = resizeOutpaintRect(BASE, right, { dx: 50, dy: 0 }, 'w')
+    expect(r).toEqual({ x: 0, y: 0, width: 500, height: 300 })
+  })
+
+  it('对角内拖只收缩已有扩出量，不改变另一轴', () => {
+    const nw = dragOnce('nw', -100, -100) // { x:100, y:100, 500×400 }
+    const r = resizeOutpaintRect(BASE, nw, { dx: 40, dy: 60 }, 'nw')
+    expect(r).toEqual({ x: 60, y: 40, width: 460, height: 340 })
+  })
+
+  it('任意拖拽结果都完整包含原图（四向扩展量恒 ≥ 0）', () => {
+    const dirs: HandleDir[] = [...HANDLE_DIRS]
+    for (const dir of dirs) {
+      for (const d of [-5000, -300, 0, 300, 5000]) {
+        const r = resizeOutpaintRect(BASE, initialOutpaintRect(BASE), { dx: d, dy: -d }, dir)
+        expect(r.x).toBeGreaterThanOrEqual(0)
+        expect(r.y).toBeGreaterThanOrEqual(0)
+        expect(r.x + BASE.width).toBeLessThanOrEqual(r.width + 1e-9)
+        expect(r.y + BASE.height).toBeLessThanOrEqual(r.height + 1e-9)
+      }
+    }
+  })
+})
+
+describe('resizeOutpaintRect 约束', () => {
+  it('单边下限 256：小图短边拖动后补到 256（只补移动边）', () => {
+    const small: Size = { width: 300, height: 200 }
+    const r = resizeOutpaintRect(small, initialOutpaintRect(small), { dx: 0, dy: 10 }, 's')
     expect(r.height).toBe(256)
-    // end 锚定：原图右下对齐新画布右下
-    expect(r.x).toBe(0) // 300 - 300
-    expect(r.y).toBe(56) // 256 - 200
+    expect(r.y).toBe(0) // 补在下边，原图贴顶
+    expect(r.width).toBe(300)
   })
-})
 
-describe('clampOutpaintCanvas 面积 > 9 倍 clamp', () => {
-  it('等比缩放到恰好 9 倍面积上限', () => {
-    // 原图 1000×1000（面积 1e6，上限 9e6）；请求 4000×4000（16e6）超上限
-    const base = { width: 1000, height: 1000 }
-    const r = clampOutpaintCanvas(
-      base,
-      { width: 4000, height: 4000 },
-      { x: 'center', y: 'center' },
+  it('面积上限 9 倍：截断拖拽幅度，而不是回头缩小已扩出的边', () => {
+    const right = dragOnce('e', 200, 0) // 600×300
+    expect(right.width).toBe(600)
+    const huge = resizeOutpaintRect(BASE, right, { dx: 0, dy: 100_000 }, 's')
+    // 右扩出区（200px）保持不变，高度停在面积预算边界 1_080_000 / 600 = 1800
+    expect(huge.width).toBe(600)
+    expect(huge.x).toBe(0)
+    expect(huge.height).toBeCloseTo(1800, 0)
+    expect(huge.width * huge.height).toBeLessThanOrEqual(
+      OUTPAINT_MAX_AREA_RATIO * BASE.width * BASE.height,
     )
-    expect(r.width).toBe(3000)
-    expect(r.height).toBe(3000)
-    expect(r.width * r.height).toBe(OUTPAINT_MAX_AREA_RATIO * base.width * base.height)
-    // 居中锚定
-    expect(r.x).toBe(1000) // (3000-1000)/2
-    expect(r.y).toBe(1000)
   })
 
-  it('非正方形超面积请求按比例缩小且不超过上限', () => {
-    const base = { width: 800, height: 600 } // 面积 480000，上限 4_320_000
-    const r = clampOutpaintCanvas(
-      base,
-      { width: 3000, height: 2000 }, // 面积 6_000_000 > 上限
-      { x: 'start', y: 'start' },
-    )
-    expect(r.width * r.height).toBeLessThanOrEqual(
-      OUTPAINT_MAX_AREA_RATIO * base.width * base.height,
-    )
-    expect(r.width).toBeLessThan(3000)
-    expect(r.height).toBeLessThan(2000)
-    expect(r.x).toBe(0)
-    expect(r.y).toBe(0)
-  })
-})
-
-describe('clampOutpaintCanvas 中心/角锚定坐标', () => {
-  // 原图 800×600，合法扩到 1200×1000（面积 1.2e6 ≤ 4.32e6）
-  const base = { width: 800, height: 600 }
-  const next = { width: 1200, height: 1000 }
-
-  it('start 锚定贴左上', () => {
-    const r = clampOutpaintCanvas(base, next, { x: 'start', y: 'start' })
-    expect(r.x).toBe(0)
-    expect(r.y).toBe(0)
+  it('面积预算用尽后反向拖拽可立即回退（无粘滞）', () => {
+    const right = dragOnce('e', 200, 0)
+    const huge = resizeOutpaintRect(BASE, right, { dx: 0, dy: 100_000 }, 's')
+    const back = resizeOutpaintRect(BASE, huge, { dx: 0, dy: -100 }, 's')
+    expect(back.height).toBeCloseTo(1700, 0)
   })
 
-  it('end 锚定贴右下', () => {
-    const r = clampOutpaintCanvas(base, next, { x: 'end', y: 'end' })
-    expect(r.x).toBe(400) // 1200 - 800
-    expect(r.y).toBe(400) // 1000 - 600
-  })
-
-  it('center 锚定居中', () => {
-    const r = clampOutpaintCanvas(base, next, { x: 'center', y: 'center' })
-    expect(r.x).toBe(200) // (1200 - 800) / 2
-    expect(r.y).toBe(200) // (1000 - 600) / 2
-  })
-
-  it('混合锚定 x=end y=center', () => {
-    const r = clampOutpaintCanvas(base, next, { x: 'end', y: 'center' })
-    expect(r.x).toBe(400)
-    expect(r.y).toBe(200)
-  })
-})
-
-describe('clampOutpaintCanvas 300×200 切 7×7 场景', () => {
-  it('原图 300×200 在 7 列网格下单格宽 42px，且原图完整落在扩后画布内', () => {
-    const base = { width: 300, height: 200 }
-    // 7 列网格铺在 300px 宽原图上：floor(300/7) = 42px 单格
-    expect(Math.floor(base.width / 7)).toBe(42)
-    // 合法居中扩图后，原图仍完整包含在新画布内（不裁剪）
-    const r = clampOutpaintCanvas(
-      base,
-      { width: 600, height: 400 },
-      { x: 'center', y: 'center' },
-    )
-    expect(r.width).toBe(600)
-    expect(r.height).toBe(400)
-    expect(r.x).toBe(150) // (600-300)/2
-    expect(r.y).toBe(100) // (400-200)/2
-    expect(r.x).toBeGreaterThanOrEqual(0)
-    expect(r.y).toBeGreaterThanOrEqual(0)
-    expect(r.x + base.width).toBeLessThanOrEqual(r.width)
-    expect(r.y + base.height).toBeLessThanOrEqual(r.height)
-  })
-})
-
-describe('clampOutpaintCanvas 不可行抛错', () => {
-  it('极小原图（50×50）使 256 下限面积超过 9 倍上限时抛错', () => {
-    // 50×50 面积 2500，9 倍上限 22500；256×256 下限面积 65536 > 22500 → 无解
-    expect(() =>
-      clampOutpaintCanvas(
-        { width: 50, height: 50 },
-        { width: 50, height: 50 },
-        { x: 'start', y: 'start' },
-      ),
-    ).toThrow()
+  it('面积上限内正常扩展不被截断', () => {
+    const r = dragOnce('se', 100, 100) // 500×400 = 200_000 ≤ 1_080_000
+    expect(r).toEqual({ x: 0, y: 0, width: 500, height: 400 })
   })
 })
 
@@ -184,5 +203,22 @@ describe('formatAspectLabel（读数「宽×高·比例」）', () => {
   it('非法尺寸返回占位符', () => {
     expect(formatAspectLabel(0, 100)).toBe('—')
     expect(formatAspectLabel(100, 0)).toBe('—')
+  })
+})
+
+describe('hasOutpaintExtension（提交守卫：零扩展不得生成）', () => {
+  it('rect 等于原图 → 未扩出', () => {
+    expect(hasOutpaintExtension(BASE, initialOutpaintRect(BASE))).toBe(false)
+  })
+
+  it('任一向扩展量 > 0 → 已扩出（含仅右/下扩 x=y=0 的情况）', () => {
+    expect(hasOutpaintExtension(BASE, { x: 10, y: 0, width: 400, height: 300 })).toBe(true)
+    expect(hasOutpaintExtension(BASE, { x: 0, y: 10, width: 400, height: 300 })).toBe(true)
+    expect(hasOutpaintExtension(BASE, { x: 0, y: 0, width: 500, height: 300 })).toBe(true)
+    expect(hasOutpaintExtension(BASE, { x: 0, y: 0, width: 400, height: 400 })).toBe(true)
+  })
+
+  it('原图尺寸未知时一律视为未扩出（无法判定就不放行）', () => {
+    expect(hasOutpaintExtension({ width: 0, height: 0 }, { x: 0, y: 0, width: 400, height: 300 })).toBe(false)
   })
 })
