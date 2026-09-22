@@ -66,6 +66,34 @@ jobs:
           echo "- Verified TypeScript Zod schemas match Python Pydantic models" >> "$GITHUB_STEP_SUMMARY"
           echo "- Checked 12 endpoints with 24 request/response pairs" >> "$GITHUB_STEP_SUMMARY"
 
+  spec-figures:
+    name: Verify spec figures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify spec figures (R1–R8)
+        run: pnpm verify-spec-figures
+
+      - name: Spec figures summary
+        if: always()
+        run: |
+          echo "## Spec Figures Verification" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Rules: docs/superpowers/SPEC-CONVENTIONS.md §4 (R1–R8)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Scope: documents dated on/after 2026-09-22 (use --all for a full sweep)" >> "$GITHUB_STEP_SUMMARY"
+
   build:
     name: Build monorepo
     runs-on: ubuntu-latest
