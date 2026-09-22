@@ -320,6 +320,14 @@ function toggleVoice() {
 /* 横版底栏的 -32px/-40px 出血光晕在竖版里会溢出 */
 .refine-dock :deep(.bottom-toolbar-container)::after { display: none; }
 
+/* 面板内落点：解除横版底栏输入区的 96px min-height（styles/neo-node.css:1258），
+   右栏 400px 宽下压到 ~44px（约两行），实测整卡 263px → 211px；横版底栏不经过本组件，不受影响 */
+.refine-dock :deep(.prompt-input-section),
+.refine-dock :deep(.input-field) {
+  min-height: 44px;
+  max-height: 120px;
+}
+
 .refine-dock__intent {
   display: inline-flex; height: 24px; align-items: center; gap: 4px; padding: 0 8px;
   border: 1px solid var(--neo-border); border-radius: 8px; background: transparent;
