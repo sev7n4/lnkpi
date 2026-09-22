@@ -4,7 +4,13 @@ import type { MediaInfo } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 import { clampWipeRatio, type CompareMode } from '@/utils/refineChrome'
-import type { OutpaintRect } from '@/components/canvas/refine/outpaintGeometry'
+import {
+  fitRectToAspect,
+  initialOutpaintRect,
+  resizeOutpaintAbsolute,
+  type OutpaintRect,
+  type Size,
+} from '@/components/canvas/refine/outpaintGeometry'
 
 export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
 export type RefineMaskOp = 'add' | 'subtract'
@@ -60,6 +66,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineMode = ref<RefineMode>('select')
   /** 扩图模式下当前 clamp 后的新画布矩形（base 贴位 + 扩出区）。null 表示未进入扩图或未产生合法 rect。 */
   const refineOutpaintRect = ref<OutpaintRect | null>(null)
+  /** 扩图基准（原图尺寸）：进入扩图模式时由 RefineOutpaintCanvas 写入，供预设 / 尺寸输入 / 读数共用。 */
+  const refineOutpaintBase = ref<Size | null>(null)
 
   function resetRefineChromeState() {
     compareLightboxOpen.value = false
@@ -78,6 +86,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskOp.value = 'add'
     refineMode.value = 'select'
     refineOutpaintRect.value = null
+    refineOutpaintBase.value = null
   }
 
   function openImageEditor(target: ImageEditTarget) {
@@ -149,7 +158,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   /** 进入 / 退出扩图模式。退出时重置扩图矩形（拖拽状态不进蒙版历史栈，退出即重置）。busy 时禁止切换。 */
   function setRefineMode(mode: RefineMode) {
     if (refineBusy.value) return
-    if (mode === 'select') refineOutpaintRect.value = null
+    if (mode === 'select') {
+      refineOutpaintRect.value = null
+      refineOutpaintBase.value = null
+    }
     refineMode.value = mode
   }
 
@@ -161,6 +173,35 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   /** 写入当前扩图矩形（由 RefineOutpaintCanvas 拖拽时实时调用）。 */
   function setRefineOutpaintRect(rect: OutpaintRect | null) {
     refineOutpaintRect.value = rect
+  }
+
+  /** 写入扩图基准（原图尺寸）。null = 退出扩图，后续三个面板动作随之 no-op。 */
+  function setRefineOutpaintBase(size: Size | null) {
+    refineOutpaintBase.value = size
+  }
+
+  /** 扩图面板动作的公共前置：busy 或基准缺失时不改状态。 */
+  function outpaintActionReady(): boolean {
+    const base = refineOutpaintBase.value
+    return !refineBusy.value && !!base && base.width > 0 && base.height > 0
+  }
+
+  /** 比例预设：以包含原图的最小该比例矩形重算画布（替换，非累积）。null = 恢复原图。 */
+  function applyOutpaintAspectPreset(ratio: { w: number; h: number } | null) {
+    if (!outpaintActionReady()) return
+    refineOutpaintRect.value = fitRectToAspect(refineOutpaintBase.value!, ratio)
+  }
+
+  /** 画布尺寸数字输入：绝对值语义，内部 clamp（单边 ≥256、面积 ≤9 倍、恒包含原图）。 */
+  function applyOutpaintSize(width: number, height: number) {
+    if (!outpaintActionReady()) return
+    refineOutpaintRect.value = resizeOutpaintAbsolute(refineOutpaintBase.value!, width, height)
+  }
+
+  /** 重置为原图矩形（等效「原图」比例预设）。 */
+  function resetOutpaintRect() {
+    if (!outpaintActionReady()) return
+    refineOutpaintRect.value = initialOutpaintRect(refineOutpaintBase.value!)
   }
 
   function openMediaPreview(target: MediaPreviewTarget) {
@@ -189,6 +230,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskOp,
     refineMode,
     refineOutpaintRect,
+    refineOutpaintBase,
     openImageEditor,
     closeImageEditor,
     setRefineBusy,
@@ -207,6 +249,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineMode,
     toggleRefineMode,
     setRefineOutpaintRect,
+    setRefineOutpaintBase,
+    applyOutpaintAspectPreset,
+    applyOutpaintSize,
+    resetOutpaintRect,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,
