@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { useWorkbenchPanel } from '@/components/canvas/workbench/useWorkbenchPanel'
+import WorkbenchShell from '@/components/canvas/workbench/WorkbenchShell.vue'
 import type { ImageVersionEntry } from '@lnkpi/shared'
 import type { RefineApplyPayload } from './compareViewModel'
 import RefineWorkViewport from './RefineWorkViewport.vue'
@@ -42,7 +42,7 @@ const mediaSize = useNaturalImageSize({
 
 /** Escape→close guard（分级，与对照同思路）：
  *  1) 扩图模式优先退出到 select（再按才继续）；2) 对照灯箱打开则先关；3) 关闭精修。
- *  busy 时 useWorkbenchPanel 已拦截 Esc，故此处无需再判。 */
+ *  busy 时 WorkbenchShell 的 useWorkbenchPanel 已拦截 Esc，故此处无需再判。 */
 function onClose() {
   if (editor.refineMode === 'outpaint') {
     editor.setRefineMode('select')
@@ -54,41 +54,47 @@ function onClose() {
   }
   emit('close')
 }
-
-const { panelWidth, collapsed, isNarrow, insetRight, setPanelWidth, setCollapsed } = useWorkbenchPanel({
-  defaultWidth: 400,
-  busy: () => editor.refineBusy,
-  onClose,
-})
 </script>
 
 <template>
-  <RefineWorkViewport
-    v-show="!editor.compareLightboxOpen"
-    :url="url"
-    :width="width"
-    :height="height"
-    :inset-right="insetRight"
-    :has-after="hasAfter"
-  />
-  <RefineSidePanel
-    :node-id="nodeId"
-    :before-url="beforeUrl"
-    :versions="versions"
-    :current-version-id="currentVersionId"
-    :session-id="sessionId"
-    :generation-record-id="generationRecordId"
-    :width="mediaSize.width.value"
-    :height="mediaSize.height.value"
-    :panel-width="panelWidth"
-    :collapsed="collapsed"
-    :is-narrow="isNarrow"
-    :inset-right="insetRight"
-    @close="emit('close')"
-    @apply="emit('apply', $event)"
-    @revert="emit('revert', $event)"
-    @busy="emit('busy', $event)"
-    @update:collapsed="setCollapsed($event)"
-    @update:panel-width="setPanelWidth($event)"
-  />
+  <WorkbenchShell
+    :default-width="400"
+    :busy="editor.refineBusy"
+    @close="onClose"
+  >
+    <template #viewport="{ insetRight }">
+      <RefineWorkViewport
+        v-show="!editor.compareLightboxOpen"
+        :url="url"
+        :width="width"
+        :height="height"
+        :inset-right="insetRight"
+        :has-after="hasAfter"
+      />
+    </template>
+
+    <template #panel="{ panelWidth, collapsed, isNarrow, insetRight, floatingAvailable, setCollapsed, setPanelWidth }">
+      <RefineSidePanel
+        :node-id="nodeId"
+        :before-url="beforeUrl"
+        :versions="versions"
+        :current-version-id="currentVersionId"
+        :session-id="sessionId"
+        :generation-record-id="generationRecordId"
+        :width="mediaSize.width.value"
+        :height="mediaSize.height.value"
+        :panel-width="panelWidth"
+        :collapsed="collapsed"
+        :is-narrow="isNarrow"
+        :inset-right="insetRight"
+        :floating-available="floatingAvailable"
+        @close="emit('close')"
+        @apply="emit('apply', $event)"
+        @revert="emit('revert', $event)"
+        @busy="emit('busy', $event)"
+        @update:collapsed="setCollapsed($event)"
+        @update:panel-width="setPanelWidth($event)"
+      />
+    </template>
+  </WorkbenchShell>
 </template>
