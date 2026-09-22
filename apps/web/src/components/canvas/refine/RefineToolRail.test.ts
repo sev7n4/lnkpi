@@ -183,6 +183,44 @@ describe('RefineToolRail', () => {
     expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeUndefined()
   })
 
+  it('抠图入口：点击进入 matting 模式，再点击回 select（toggle 语义对称扩图）', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    const btn = w.find('[data-testid="rail-mode-matting"]')
+    expect(btn.exists()).toBe(true)
+    expect(store.refineMode).toBe('select')
+    await btn.trigger('click')
+    expect(store.refineMode).toBe('matting')
+    expect(w.find('[data-testid="rail-mode-matting"]').classes()).toContain('is-active')
+    await w.find('[data-testid="rail-mode-matting"]').trigger('click')
+    expect(store.refineMode).toBe('select')
+  })
+
+  it('抠图与扩图互斥：激活 matting 后 rail-mode-outpaint 不带 is-active', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    await w.find('[data-testid="rail-mode-matting"]').trigger('click')
+    expect(store.refineMode).toBe('matting')
+    expect(w.find('[data-testid="rail-mode-matting"]').classes()).toContain('is-active')
+    expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).not.toContain('is-active')
+
+    // 反向：切回扩图后 matting 失去激活态
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    expect(store.refineMode).toBe('outpaint')
+    expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).toContain('is-active')
+    expect(w.find('[data-testid="rail-mode-matting"]').classes()).not.toContain('is-active')
+  })
+
+  it('抠图入口 aria-label / title 标注透明 PNG 用途；busy 时 disabled', () => {
+    const store = useCanvasEditorStore()
+    store.setRefineBusy(true)
+    const w = mountRail()
+    const btn = w.find('[data-testid="rail-mode-matting"]')
+    expect(btn.attributes('aria-label')).toBe('抠图（生成透明 PNG）')
+    expect(btn.attributes('title')).toBe('抠图（生成透明 PNG）')
+    expect(btn.attributes('disabled')).toBeDefined()
+  })
+
   it('能力区：分隔线 + 7 项禁用图标（matting 已迁出为 refine-matting 真模式，outpaint 不重复出现在能力区）', () => {
     const w = mountRail()
     expect(w.find('[data-testid="rail-capability-hr"]').exists()).toBe(true)

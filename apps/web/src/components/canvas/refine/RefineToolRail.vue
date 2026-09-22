@@ -35,6 +35,12 @@ function toggleOutpaint() {
   editor.toggleRefineMode()
 }
 
+/** 抠图模式入口（Task 10 修复轮）：toggle 语义与扩图对称，但不走 store 的 toggleRefineMode（那是扩图专用）。 */
+const mattingActive = computed(() => editor.refineMode === 'matting')
+function toggleMatting() {
+  editor.setRefineMode(mattingActive.value ? 'select' : 'matting')
+}
+
 /** 同一时刻只允许一个二级菜单展开 */
 type OpenMenu = { kind: 'input'; id: RefineInputGroupId } | { kind: 'view'; id: 'compare' | 'fit' } | null
 const openMenu = ref<OpenMenu>(null)
@@ -112,6 +118,24 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       >
         <span class="refine-rail__glyph">⤢</span>
         <span class="refine-rail__name">扩图</span>
+      </button>
+    </div>
+
+    <!-- 抠图模式入口：激活时高亮；busy 时冻结不可切换；与扩图互斥（setRefineMode 覆盖式切换） -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': mattingActive }"
+        data-testid="rail-mode-matting"
+        aria-label="抠图（生成透明 PNG）"
+        title="抠图（生成透明 PNG）"
+        :aria-pressed="mattingActive"
+        :disabled="editor.refineBusy"
+        @click="toggleMatting"
+      >
+        <span class="refine-rail__glyph">✦</span>
+        <span class="refine-rail__name">抠图</span>
       </button>
     </div>
 
