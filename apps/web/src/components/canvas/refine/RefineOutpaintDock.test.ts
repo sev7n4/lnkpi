@@ -25,7 +25,13 @@ describe('RefineOutpaintDock', () => {
     expect(w.findComponent({ name: 'DockCreditBadge' }).props('credits')).toBe(10)
     const cta = w.find('[data-testid="outpaint-dock-cta"]')
     expect(cta.classes()).toContain('dock-generate-btn')
+    expect(cta.classes()).toContain('dock-generate-btn--lg')
     expect(cta.attributes('aria-label')).toBe('扩图生成')
+  })
+
+  it('size=md：CTA 为 32px 档（panel 落点，§4.3）', () => {
+    const w = mountDock({ size: 'md' })
+    expect(w.find('[data-testid="outpaint-dock-cta"]').classes()).toContain('dock-generate-btn--md')
   })
 
   it('未扩出（canRun=false）：CTA 禁用 + 守卫 tooltip，仍保留箭头图标', () => {

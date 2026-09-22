@@ -143,6 +143,8 @@ describe('RefineSidePanel 三段式', () => {
     await flushPromises()
     expect(q('[data-testid="outpaint-dock-floating"]')).toBeNull()
     expect(q('[data-testid="outpaint-dock"]')).not.toBeNull()
+    // panel 落点 CTA 是 32px 档（§4.3：md 32）
+    expect(q('.outpaint-dock [class*="dock-generate-btn--md"]')).not.toBeNull()
     // 两个扩图落点互斥：窄屏只有面板底部 dock（悬浮层不渲染）。
     expect(qa('[data-testid="outpaint-dock"]').length).toBe(1)
   })

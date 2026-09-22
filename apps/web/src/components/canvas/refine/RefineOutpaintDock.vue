@@ -16,7 +16,9 @@ const props = withDefaults(defineProps<{
   busy?: boolean
   canApply?: boolean
   errorMessage?: string
-}>(), { busy: false, canApply: false, errorMessage: '' })
+  /** CTA 尺寸（§4.3）：floating 落点默认 lg=36，panel 落点由调用方传 md=32 */
+  size?: 'sm' | 'md' | 'lg'
+}>(), { busy: false, canApply: false, errorMessage: '', size: 'lg' })
 
 const emit = defineEmits<{
   'update:prompt': [value: string]
@@ -134,7 +136,7 @@ function selectModel(key: string) {
     <DockCreditBadge :credits="credits" />
     <DockGenerateButton
       data-testid="outpaint-dock-cta"
-      size="lg"
+      :size="size"
       label="扩图生成"
       :disabled="ctaDisabled"
       :generating="busy"

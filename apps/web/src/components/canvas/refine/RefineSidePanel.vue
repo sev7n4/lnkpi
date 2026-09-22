@@ -618,6 +618,7 @@ onBeforeUnmount(() => {
            与悬浮 dock（③）互斥：悬浮可用时走 ③，否则落到此处（outpaintDockInPanel 收口）。 -->
       <RefineOutpaintDock
         v-if="!collapsed && outpaintDockInPanel"
+        size="md"
         :prompt="prompt"
         :model-key="modelKey"
         :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
@@ -645,6 +646,7 @@ onBeforeUnmount(() => {
       :style="{ right: `${insetRight}px` }"
     >
       <RefineOutpaintDock
+        size="lg"
         :prompt="prompt"
         :model-key="modelKey"
         :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
