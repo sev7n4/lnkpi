@@ -181,7 +181,6 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
       refineOutpaintDragging.value = false
-      clearRefineSessionResults()
     }
     refineMode.value = mode
   }

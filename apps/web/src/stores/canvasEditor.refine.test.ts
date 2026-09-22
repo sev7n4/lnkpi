@@ -226,6 +226,32 @@ describe('refineSessionResults', () => {
     expect(editor.refineSessionResults).toEqual([])
     expect(editor.currentRefineSessionResult).toBeNull()
   })
+
+  it('模式切换保留会话结果（setRefineMode("select") 不清空，spec §2.4）', () => {
+    const editor = useCanvasEditorStore()
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.setRefineMode('outpaint')
+    editor.setRefineMode('select')
+    expect(editor.refineSessionResults.length).toBe(1)
+    expect(editor.currentRefineSessionResult?.url).toBe('u0')
+  })
+
+  it('换图清空：openImageEditor nodeId 变化时清空会话结果', () => {
+    const editor = useCanvasEditorStore()
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.openImageEditor({ nodeId: 'n2', url: 'https://cdn/b.png' })
+    expect(editor.refineSessionResults).toEqual([])
+    expect(editor.currentRefineSessionResult).toBeNull()
+  })
+
+  it('换图保留：openImageEditor nodeId 不变时保留会话结果', () => {
+    const editor = useCanvasEditorStore()
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
+    editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+    editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a2.png' })
+    expect(editor.refineSessionResults.length).toBe(1)
+  })
 })
 
 describe('扩图基准与面板动作（§7）', () => {
