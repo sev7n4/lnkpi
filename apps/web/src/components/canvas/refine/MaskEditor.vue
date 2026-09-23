@@ -5,8 +5,10 @@ import { isMaskDrawReady, isRealBitmapSize } from './maskCanvasReady'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { fillPolygonMask, isNearPolygonStart } from './maskPolygon'
 import { floodFillMask, invertMaskRgba, parseFillHex } from './maskWand'
+import { ellipseFromDrag } from './maskEllipse'
+import { shapeStyleForOp } from './maskShape'
 
-export type MaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
+export type MaskTool = 'brush' | 'eraser' | 'rect' | 'ellipse' | 'wand' | 'polygon' | 'point'
 export type MaskOp = 'add' | 'subtract'
 
 const props = withDefaults(
@@ -250,7 +252,7 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   ctx.lineWidth = Math.max(1, props.brushSize)
-  if (props.tool === 'eraser') {
+  if (props.tool === 'eraser' || props.maskOp === 'subtract') {
     ctx.globalCompositeOperation = 'destination-out'
     ctx.strokeStyle = 'rgba(0,0,0,1)'
     ctx.fillStyle = 'rgba(0,0,0,1)'
@@ -319,7 +321,7 @@ function onPointerDown(event: PointerEvent) {
   lastX = pt.x
   lastY = pt.y
   applyToolStyle(ctx)
-  if (props.tool === 'rect') {
+  if (props.tool === 'rect' || props.tool === 'ellipse') {
     pushMaskHistory(ctx)
     snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height)
     rectStart = pt
@@ -352,14 +354,21 @@ function onPointerMove(event: PointerEvent) {
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
   const pt = canvasPoint(event)
-  if (props.tool === 'rect' && rectStart && snapshot) {
+  if ((props.tool === 'rect' || props.tool === 'ellipse') && rectStart && snapshot) {
     ctx.putImageData(snapshot, 0, 0)
-    applyToolStyle(ctx)
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.fillStyle = props.color
-    const x = Math.min(rectStart.x, pt.x)
-    const y = Math.min(rectStart.y, pt.y)
-    ctx.fillRect(x, y, Math.abs(pt.x - rectStart.x), Math.abs(pt.y - rectStart.y))
+    const style = shapeStyleForOp(props.maskOp === 'subtract' ? 'subtract' : 'add', props.color)
+    ctx.globalCompositeOperation = style.composite
+    ctx.fillStyle = style.fill
+    if (props.tool === 'rect') {
+      const x = Math.min(rectStart.x, pt.x)
+      const y = Math.min(rectStart.y, pt.y)
+      ctx.fillRect(x, y, Math.abs(pt.x - rectStart.x), Math.abs(pt.y - rectStart.y))
+    } else {
+      const e = ellipseFromDrag({ start: rectStart, end: pt, shiftKey: event.shiftKey })
+      ctx.beginPath()
+      ctx.ellipse(e.cx, e.cy, e.rx, e.ry, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
     return
   }
   applyToolStyle(ctx)
