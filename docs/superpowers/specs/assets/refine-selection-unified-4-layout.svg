@@ -1,0 +1,204 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 700" width="1180" height="700" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect x="0" y="0" width="1180" height="700" fill="#f4f6f9"/>
+
+  <!-- 画布层 chrome：返回画布 -->
+  <rect x="20" y="10" width="112" height="28" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <path d="M34 24h12M38 20l-4 4 4 4" fill="none" stroke="#4d5666" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="52" y="28" fill="#4d5666" font-size="12">返回画布</text>
+
+  <!-- ================= 左栏 rail ================= -->
+  <rect x="20" y="48" width="56" height="540" rx="16" fill="#ffffff" stroke="#d7dce5"/>
+
+  <!-- 扩图（cy=76）：虚线外框 + 实线内框 -->
+  <circle cx="48" cy="76" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <rect x="40.5" y="70.5" width="15" height="11" rx="1.5" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-dasharray="2.6 2"/>
+  <rect x="44.4" y="73.4" width="7.2" height="5.2" rx="1" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <text x="48" y="102" fill="#4d5666" font-size="10" text-anchor="middle">扩图</text>
+
+  <!-- 抠图（cy=124）：剪刀 -->
+  <circle cx="48" cy="124" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <circle cx="44.4" cy="120" r="2.3" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <circle cx="44.4" cy="128" r="2.3" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <path d="M46.3 121.5L54 129.5" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M46.3 126.5L54 118.5" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="48" y="150" fill="#4d5666" font-size="10" text-anchor="middle">抠图</text>
+
+  <!-- 选区（cy=172，激活）：四角框线 -->
+  <circle cx="48" cy="172" r="15" fill="#e8f0fd" stroke="#1a6fd4"/>
+  <path d="M42 169.6V167.4A1.4 1.4 0 0 1 43.4 166H45.6" fill="none" stroke="#1a6fd4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M50.4 166H52.6A1.4 1.4 0 0 1 54 167.4V169.6" fill="none" stroke="#1a6fd4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M54 174.4V176.6A1.4 1.4 0 0 1 52.6 178H50.4" fill="none" stroke="#1a6fd4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M45.6 178H43.4A1.4 1.4 0 0 1 42 176.6V174.4" fill="none" stroke="#1a6fd4" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="198" fill="#1a6fd4" font-size="10" font-weight="600" text-anchor="middle">选区</text>
+
+  <line x1="36" y1="216" x2="60" y2="216" stroke="#d7dce5"/>
+
+  <!-- 对照（cy=240）：左右两屏 -->
+  <circle cx="48" cy="240" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <rect x="40.5" y="234.5" width="6.6" height="11" rx="1.2" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <rect x="48.9" y="234.5" width="6.6" height="11" rx="1.2" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <text x="48" y="266" fill="#4d5666" font-size="10" text-anchor="middle">对照</text>
+
+  <!-- 适配（cy=288）：外框 + 内图 -->
+  <circle cx="48" cy="288" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <rect x="40.5" y="282.5" width="15" height="11" rx="1.5" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <rect x="44" y="285" width="8" height="6" rx="1" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <text x="48" y="314" fill="#4d5666" font-size="10" text-anchor="middle">适配</text>
+
+  <!-- 细节放大（cy=336）：放大镜 -->
+  <circle cx="48" cy="336" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <circle cx="47" cy="335" r="4.6" fill="none" stroke="#4d5666" stroke-width="1.7"/>
+  <path d="M50.4 338.4L55 343" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="48" y="362" fill="#4d5666" font-size="10" text-anchor="middle">细节放大</text>
+
+  <line x1="36" y1="380" x2="60" y2="380" stroke="#d7dce5"/>
+
+  <!-- 撤销（cy=404） -->
+  <circle cx="48" cy="404" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <path d="M52.5 400.6A5.4 5.4 0 1 0 53 407.4" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M52.5 397V401.6H48" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="430" fill="#4d5666" font-size="10" text-anchor="middle">撤销</text>
+
+  <!-- 重做（cy=452） -->
+  <circle cx="48" cy="452" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
+  <path d="M43.5 448.6A5.4 5.4 0 1 1 43 455.4" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M43.5 445V449.6H48" fill="none" stroke="#4d5666" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="478" fill="#4d5666" font-size="10" text-anchor="middle">重做</text>
+
+  <line x1="36" y1="496" x2="60" y2="496" stroke="#d7dce5"/>
+
+  <!-- 能力区（禁用占位）· 裁剪（cy=520） -->
+  <circle cx="48" cy="520" r="15" fill="#f4f6f9" stroke="#e6eaf1"/>
+  <path d="M45.09 515.05V522.92H52.96" fill="none" stroke="#b6bec9" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M43.04 517.09H50.92V524.96" fill="none" stroke="#b6bec9" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="48" y="546" fill="#b6bec9" font-size="10" text-anchor="middle">裁剪</text>
+
+  <!-- 宫格切分（cy=566） -->
+  <circle cx="48" cy="566" r="15" fill="#f4f6f9" stroke="#e6eaf1"/>
+  <rect x="41.5" y="561" width="13" height="10" rx="1.2" fill="none" stroke="#b6bec9" stroke-width="1.7"/>
+  <path d="M45.8 561V571" fill="none" stroke="#b6bec9" stroke-width="1.7"/>
+  <path d="M50.2 561V571" fill="none" stroke="#b6bec9" stroke-width="1.7"/>
+  <path d="M41.5 564.4H54.5" fill="none" stroke="#b6bec9" stroke-width="1.7"/>
+  <text x="48" y="592" fill="#b6bec9" font-size="10" text-anchor="middle">宫格切分</text>
+
+  <!-- ================= 视口 ================= -->
+  <rect x="92" y="48" width="680" height="540" rx="10" fill="#0f1116" stroke="#d7dce5"/>
+  <rect x="196" y="152" width="472" height="332" rx="6" fill="#232833" stroke="#39414f"/>
+  <text x="432" y="322" fill="#8d95a5" font-size="12" text-anchor="middle">工作图（蒙版精修）</text>
+  <text x="432" y="74" fill="#8d95a5" font-size="11" text-anchor="middle">视口自面板顶部起算 · 原 32px 模式条已退役</text>
+
+  <circle cx="120" cy="104" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="120" y="108.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">1</text>
+  <circle cx="744" cy="104" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="744" y="108.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">2</text>
+
+  <!-- ================= 右栏面板 ================= -->
+  <rect x="788" y="48" width="368" height="540" rx="12" fill="#ffffff" stroke="#d7dce5"/>
+
+  <!-- 头部 48..92 -->
+  <path d="M788 60a12 12 0 0 1 12-12h344a12 12 0 0 1 12 12v32h-368z" fill="#fafbfd"/>
+  <line x1="788" y1="92" x2="1156" y2="92" stroke="#e3e7ee"/>
+  <rect x="804" y="60" width="20" height="20" rx="5" fill="#e8f0fd" stroke="#c9dcf8"/>
+  <text x="834" y="75" fill="#1f2530" font-size="13" font-weight="700">精修</text>
+  <path d="M1136 64l10 10M1146 64l-10 10" fill="none" stroke="#7c8595" stroke-width="1.6" stroke-linecap="round"/>
+
+  <!-- 对照带 92..196 -->
+  <text x="800" y="112" fill="#1f2530" font-size="12" font-weight="650">对照预览</text>
+  <text x="866" y="112" fill="#7c8595" font-size="10.5">固定 · 默认左右</text>
+  <rect x="1120" y="100" width="24" height="24" rx="7" fill="#ffffff" stroke="#d7dce5"/>
+  <path d="M1133 106v4M1128 111h4M1133 118v-4M1129 114h-4" fill="none" stroke="#4d5666" stroke-width="1.4" stroke-linecap="round"/>
+  <rect x="800" y="126" width="344" height="58" rx="10" fill="#fafbfd" stroke="#e3e7ee" stroke-dasharray="3 3"/>
+  <text x="972" y="159" fill="#7c8595" font-size="10.5" text-anchor="middle">Before ／ After · 待生成</text>
+  <line x1="788" y1="196" x2="1156" y2="196" stroke="#e3e7ee"/>
+
+  <!-- 选区面板（滚动区 196..500） -->
+  <text x="800" y="216" fill="#7c8595" font-size="10.5">选择方式（作用于所有工具）</text>
+  <rect x="800" y="222" width="344" height="30" rx="9" fill="#ffffff" stroke="#d7dce5"/>
+  <rect x="800.5" y="222.5" width="171" height="29" rx="8.5" fill="#e8f0fd" stroke="#1a6fd4"/>
+  <text x="886" y="241" fill="#1a6fd4" font-size="12" font-weight="600" text-anchor="middle">加选</text>
+  <text x="1058" y="241" fill="#4d5666" font-size="12" text-anchor="middle">减选</text>
+
+  <text x="800" y="276" fill="#7c8595" font-size="10.5">工具</text>
+  <text x="800" y="300" fill="#4d5666" font-size="11">智能选择</text>
+  <rect x="868" y="285" width="88" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="912" y="300" fill="#4d5666" font-size="11" text-anchor="middle">点选主体</text>
+  <rect x="962" y="285" width="64" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="994" y="300" fill="#4d5666" font-size="11" text-anchor="middle">魔棒</text>
+
+  <text x="800" y="332" fill="#4d5666" font-size="11">形状</text>
+  <rect x="868" y="317" width="62" height="22" rx="8" fill="#e8f0fd" stroke="#1a6fd4"/>
+  <text x="899" y="332" fill="#1a6fd4" font-size="11" font-weight="600" text-anchor="middle">矩形</text>
+  <rect x="936" y="317" width="62" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="967" y="332" fill="#4d5666" font-size="11" text-anchor="middle">椭圆</text>
+  <rect x="1004" y="317" width="76" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="1042" y="332" fill="#4d5666" font-size="11" text-anchor="middle">多边形</text>
+
+  <text x="800" y="364" fill="#4d5666" font-size="11">涂抹修边</text>
+  <rect x="868" y="349" width="62" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="899" y="364" fill="#4d5666" font-size="11" text-anchor="middle">画笔</text>
+  <rect x="936" y="349" width="62" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="967" y="364" fill="#4d5666" font-size="11" text-anchor="middle">橡皮</text>
+
+  <text x="800" y="392" fill="#7c8595" font-size="10.5">当前工具 · 矩形</text>
+  <rect x="800" y="398" width="344" height="28" rx="9" fill="#fafbfd" stroke="#e3e7ee"/>
+  <text x="812" y="416" fill="#7c8595" font-size="11">无参数</text>
+  <text x="800" y="442" fill="#7c8595" font-size="10.5">拖拽绘制矩形选区；按住 Shift 画正方形。</text>
+
+  <text x="800" y="470" fill="#7c8595" font-size="10.5">选区操作</text>
+  <rect x="800" y="476" width="166" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="883" y="491" fill="#4d5666" font-size="11" text-anchor="middle">反选</text>
+  <rect x="978" y="476" width="166" height="22" rx="8" fill="#ffffff" stroke="#d7dce5"/>
+  <text x="1061" y="491" fill="#4d5666" font-size="11" text-anchor="middle">清除选区</text>
+
+  <line x1="788" y1="500" x2="1156" y2="500" stroke="#e3e7ee"/>
+
+  <!-- dock 500..556 -->
+  <rect x="788" y="500" width="368" height="56" fill="#fafbfd"/>
+  <rect x="800" y="512" width="344" height="32" rx="11" fill="#e8f0fd" stroke="#c9dcf8"/>
+  <text x="972" y="533" fill="#1a6fd4" font-size="12" font-weight="600" text-anchor="middle">精修（生成到下游节点）</text>
+
+  <!-- 固定页脚 556..588 -->
+  <rect x="788" y="556" width="368" height="32" fill="#ffffff"/>
+  <line x1="788" y1="556" x2="1156" y2="556" stroke="#e3e7ee"/>
+  <rect x="800" y="563" width="26" height="18" rx="5" fill="#f4f6f9" stroke="#b6bec9"/>
+  <text x="813" y="576" fill="#4d5666" font-size="10" text-anchor="middle">Esc</text>
+  <text x="834" y="576" fill="#7c8595" font-size="11">关闭精修</text>
+
+  <!-- 面板标注 3/4/5/6 -->
+  <circle cx="1166" cy="130" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="1166" y="134.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">3</text>
+  <circle cx="774" cy="300" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="774" y="304.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">4</text>
+  <circle cx="1166" cy="524" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="1166" y="528.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">5</text>
+  <circle cx="1166" cy="572" r="12" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.4"/>
+  <text x="1166" y="576.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">6</text>
+
+  <!-- ================= 图例 ================= -->
+  <line x1="20" y1="616" x2="1160" y2="616" stroke="#d7dce5"/>
+  <text x="20" y="640" fill="#1f2530" font-size="12" font-weight="700">图例</text>
+
+  <circle cx="76" cy="636" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="76" y="640" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">1</text>
+  <text x="92" y="640" fill="#4d5666" font-size="11.5">左栏顶部模式区：扩图 / 抠图 / 选区 三枚并列；输入组与全部二级菜单已删除</text>
+
+  <circle cx="76" cy="660" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="76" y="664" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">2</text>
+  <text x="92" y="664" fill="#4d5666" font-size="11.5">视口自面板顶部起算；原 32px 模式条整条退役，垂直空间归还画布</text>
+
+  <circle cx="76" cy="684" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="76" y="688" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">3</text>
+  <text x="92" y="688" fill="#4d5666" font-size="11.5">对照带（固定，不随滚动）</text>
+
+  <circle cx="368" cy="636" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="368" y="640" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">4</text>
+  <text x="384" y="640" fill="#4d5666" font-size="11.5">选区面板占滚动区（分区详图见 图 5）</text>
+
+  <circle cx="368" cy="660" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="368" y="664" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">5</text>
+  <text x="384" y="664" fill="#4d5666" font-size="11.5">产出 dock（与抠图 / 扩图共用槽位与样式）</text>
+
+  <circle cx="368" cy="684" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="368" y="688" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">6</text>
+  <text x="384" y="688" fill="#4d5666" font-size="11.5">固定页脚，承接原模式条的 Esc 提示（文案三态）</text>
+</svg>
