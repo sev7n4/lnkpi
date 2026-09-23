@@ -1,13 +1,14 @@
 /**
  * v3 SB-D16 / §13.1 Feature Flag
  *
- * V1.2: 默认 on 配合内网直连 URL 验证（http://119.29.173.89:8888）
- *      V2 接远程 config 后改回 false（按 SB-D16 灰度计划）
+ * selection_batch_generate：**2026-09-23 拍板维持默认 on（转正）**。
+ * 原 SB-D16「默认 off 分阶梯灰度」已被此决定取代；线上关停走远程 kill switch
+ * 通道（V2 远程 config 落地前，紧急关停 = 改此处一行 + 发版）。
  * 灰度通过 setFlag() 在启动时配置；后续接 Vite env / 后台 config 时只改这一处。
  */
 
 const flags = new Map<string, boolean>([
-  ['selection_batch_generate', true], // SB-D16 默认 off (V1.2 临时 on)
+  ['selection_batch_generate', true], // SB-D16 默认 off → 2026-09-23 拍板维持 on（见文件头）
 ])
 
 export function isFeatureOn(key: string): boolean {
@@ -21,7 +22,7 @@ export function setFlag(key: string, on: boolean): void {
 /** 在测试中重置所有 flag（**仅** test 入口使用） */
 export function _resetFlagsForTest(): void {
   flags.clear()
-  flags.set('selection_batch_generate', true)  // V1.2 临时默认 on
+  flags.set('selection_batch_generate', true) // 2026-09-23 拍板维持默认 on
 }
 
 /**

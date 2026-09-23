@@ -12,6 +12,7 @@
 | v1 | 2026-09-17 | 初稿；与 Cursor 讨论记录 `docs/feature-bathtaskgeneration-discussion.md` 逐条对齐 |
 | v2 | 2026-09-18 | (1) C1 修正 `pending_confirm` 语义；(2) C2 增 §4.5 SSOT 依赖清单；(3) C3 拍板 24 上限真实理由 + 后续调参路径；(4) C4 加硬超时；(5) C5 明确「停止全部」积分语义与归类；(6) I2 增 §13 telemetry；(7) I3 增 SB-D16 feature flag |
 | v3 | 2026-09-18 | (1) C2-1 改 `Set<NodeId>` → `Map<NodeId, Promise>` 让 `Promise.allSettled` 能跑；(2) C2-2 全批 30min timer 与 loop 解耦（独立 `setTimeout`，不依赖 inFlight 状态）；(3) C2-3 改 in-flight 节点与其下游 `skip`（理由 `in_flight` / `upstream_in_flight`），**不**参与 Kahn，由用户下一批再跑；(4) C2-4 修 `settleTimeout._timer` undefined leak；(5) C2-5 补 `onNodeSettled` + `waitingMap` 初始化 + stop 路径的显式 `cancelGeneration`；(6) I2-1 进度 5 类别（done/failed/cancelled/timeout/skipped），insufficient_points 计入 failed，timeout 单列；(7) I2-2 `capHit` → `abortReason` 闭合（6 个值含 user_stopped/insufficient_points/node_timeout）；(8) I2-3 `pointsExhausted` 移除 node_settled 字段（仅 batch 级）；(9) I2-4 `creditCost` 加进 completed；(10) I2-5 stop 路径显式调 `cancelGeneration`；(11) I2-6 节点消失的下游走 `ok` 路径释放；(12) I2-7 §6.3 按钮位置措辞修正；(13) I2-8 i18n 推迟到 plan；(14) I2-9 dashboard/告警通道占位标 "plan 阶段定"；(15) M2-7 加 `selection_batch_plan_rejected` 事件 |
+| v4 | 2026-09-23 | I4-1 **SB-D16 转正**：V1.2 起 flag 临时 on（配合内网直连验证），经数日线上运行无故障，2026-09-23 拍板**维持默认 on**，「默认 off 分阶梯灰度」不再执行；紧急关停改走远程 kill switch 通道（V2 远程 config 落地前 = 改 flag 一行 + 发版）。§0.1 切片表与 SB-D16 行的「默认 off」表述以本行为准 |
 
 前置：  
 - [2026-08-08-agent-canvas-control-surface-design.md](./2026-08-08-agent-canvas-control-surface-design.md) §1.5（多选工具栏现有动作表）
@@ -43,7 +44,7 @@
 | **SB-D13** | 不持久化批次状态。刷新页面后未启动的**不会**偷偷开跑；已提交节点靠现网单节点轮询收口。 |
 | **SB-D14** | **24 上限的真实理由 = 异构 studio 单批扣分预算兜底**（C3 修正：见 §4.3 #6 + §10）。V1 拍 24；待 `selection_batch_completed` 遥测回灌后，按"p95 单批积分成本 < 用户单次扣分预算 30%"的指标重订。**不**与构图 dump 上限混为一谈。 |
 | **SB-D15** | **硬超时双闸**（C4 修正：见 §5.3 / §5.5）：(a) 单节点 `maxWaitPerNode = 600s`（与 Studio 单点超时同阶）；(b) 全批 `maxBatchDurationMs = 30min`。超时走与「停止全部」同路径，不写 errorMessage。 |
-| **SB-D16** | **Feature flag `feature.selection_batch_generate`**（I3：见 §13.1）：flag off 时**整按钮不渲染**（不是 disable）。上线默认 off → 按灰度阶梯开；保留**远程 kill switch** 通道（运营 0 代码关停）。 |
+| **SB-D16** | **Feature flag `feature.selection_batch_generate`**（I3：见 §13.1）：flag off 时**整按钮不渲染**（不是 disable）。~~上线默认 off → 按灰度阶梯开~~（**v4 转正**：2026-09-23 拍板默认 on，见修订表）；保留**远程 kill switch** 通道（运营 0 代码关停）。 |
 
 ### 0.1 切片
 

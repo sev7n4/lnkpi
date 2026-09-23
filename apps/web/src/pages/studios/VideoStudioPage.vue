@@ -60,7 +60,8 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
       <textarea v-model="prompt" class="input-field mb-3 min-h-[100px] w-full" placeholder="描述视频场景与运镜..." />
       <div class="mb-3 flex items-center gap-4">
         <label class="text-xs text-white/50">时长 {{ duration }}s</label>
-        <input v-model.number="duration" type="range" min="3" max="10" class="flex-1" />
+        <!-- 4–15 与 shared clampVideoDuration 默认界一致（旧值 3–10 会放出模型不支持的 3s 且截断 11–15s） -->
+        <input v-model.number="duration" type="range" min="4" max="15" step="1" class="flex-1" />
       </div>
       <div class="flex items-center justify-between gap-3">
         <ModelSelector v-model="model" type="video" />
