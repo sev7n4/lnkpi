@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import RefineToolRail from './RefineToolRail.vue'
@@ -222,5 +223,34 @@ describe('RefineToolRail', () => {
     for (const id of ['rail-mode-outpaint', 'rail-mode-matting', 'rail-mode-select']) {
       expect(w.find(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
     }
+  })
+
+  it('选区引导（2026-09-23）：抠图模式且无选区时选区入口带 is-hint 呼吸提示；圈选后消失', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountRail()
+    expect(w.find('[data-testid="rail-mode-select"]').classes()).not.toContain('is-hint')
+
+    await w.find('[data-testid="rail-mode-matting"]').trigger('click')
+    expect(editor.refineMode).toBe('matting')
+    const select = w.find('[data-testid="rail-mode-select"]')
+    expect(select.classes()).toContain('is-hint')
+    expect(select.attributes('title')).toContain('圈选')
+
+    // 圈选后（有蒙版句柄 + 覆盖 > 0）提示消失
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    editor.refineCoverage = 0.5
+    await nextTick()
+    expect(w.find('[data-testid="rail-mode-select"]').classes()).not.toContain('is-hint')
+
+    // 切回 select 模式也不提示
+    editor.registerRefineMask(null)
+    editor.refineCoverage = 0
+    await w.find('[data-testid="rail-mode-select"]').trigger('click')
+    expect(w.find('[data-testid="rail-mode-select"]').classes()).not.toContain('is-hint')
   })
 })

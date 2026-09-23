@@ -44,6 +44,12 @@ function pickSelect() {
   editor.setRefineMode('select') // 选区目标模式就是 select，恒幂等
 }
 
+/** 选区引导（2026-09-23 用户反馈）：抠图模式下无选区时，让「选区」入口呼吸提示——圈选后才能「用当前选区抠」。 */
+const selectNeedsAttention = computed(() => editor.refineMode === 'matting' && !editor.refineMaskAvailable)
+const selectTitle = computed(() =>
+  selectNeedsAttention.value ? '选区（先圈选区域，回到「抠图」即可按选区抠图）' : '选区（智能 / 形状 / 涂抹三类工具在右侧面板）',
+)
+
 /** 同一时刻只允许一个二级菜单展开 */
 type OpenMenu = { kind: 'view'; id: 'compare' | 'fit' } | null
 const openMenu = ref<OpenMenu>(null)
@@ -125,10 +131,10 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       <button
         type="button"
         class="refine-rail__btn"
-        :class="{ 'is-active': selectActive }"
+        :class="{ 'is-active': selectActive, 'is-hint': selectNeedsAttention }"
         data-testid="rail-mode-select"
         aria-label="选区"
-        title="选区（智能 / 形状 / 涂抹三类工具在右侧面板）"
+        :title="selectTitle"
         :aria-pressed="selectActive"
         :disabled="editor.refineBusy"
         @click="pickSelect"
@@ -327,6 +333,19 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 .refine-rail__btn.is-active .refine-rail__glyph {
   border-color: color-mix(in srgb, var(--neo-hi-text) 30%, var(--neo-border));
   background: var(--neo-hi-bg); color: var(--neo-hi-text); box-shadow: var(--neo-hi-shadow);
+}
+/* 选区引导呼吸（仅抠图模式且无选区）：强调色描边 + 柔和呼吸光环，圈选后自动消失 */
+.refine-rail__btn.is-hint .refine-rail__glyph {
+  border-color: var(--neo-accent-text);
+  color: var(--neo-text-primary);
+  animation: refine-rail-hint 1.8s ease-in-out infinite;
+}
+@keyframes refine-rail-hint {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--neo-accent-text) 0%, transparent); }
+  50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--neo-accent-text) 28%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .refine-rail__btn.is-hint .refine-rail__glyph { animation: none; }
 }
 .refine-rail__name { font-size: 10px; white-space: nowrap; }
 .refine-rail__hr { width: 24px; height: 1px; margin: 6px 0 4px; background: var(--neo-border); }
