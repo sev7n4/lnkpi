@@ -8,6 +8,23 @@ name: Deploy Agent Runtime to Tencent Cloud
 # - deploy.yml 的 paths 过滤器不包含 services/agent-runtime/**，导致 agent-runtime 改动不会自动部署
 # - enable_agent_runtime 参数默认 false，需要手动 workflow_dispatch
 # - 此 workflow 解决"遗忘部署 agent-runtime"的问题（PR #64 复测时发现）
+#
+# ⚠️ 写入范围收窄（2026-09-23 事故后，本仓库第二次改动此文件）：
+# 本 workflow 只允许写 ${DEPLOY_DIR}/services/agent-runtime/** 这一处。
+#
+# 背景：原实现把「整棵源码树」tar 覆盖到 /opt/lnkpi（且不同于 deploy.yml，这里没有 rm -rf，
+# 只覆盖同名文件）。当它从本仓库（lnkpi main，不含 B4 分流代码）执行时：
+#   - apps/server/src/agent/agent.service.ts 被换成无 PI_RUNTIME 的版本 → active 分流静默失效
+#   - deploy/launch-cvm-build.sh 的 B4 防呆守卫被回退 → 后续构建不再拦缺 B4 的源码树
+#   - deploy/deploy-remote-build.sh 的回滚保留策略（.last-api-image）被回退
+# 详见 docs/ops/POSTMORTEM-2026-09-23-deploy-overwrite.html
+#
+# 所有权边界（单一发布门 = pi-lnk master）：
+#   - services/agent-runtime/**            → 本 workflow 可直发
+#   - deploy/**（compose、守卫脚本等）      → pi-lnk 发布门独占
+#   - apps/server/**、packages/**          → pi-lnk 发布门独占
+# 若改动落在「发布门独占」区，必须走发布门（见 docs/ops/RUNBOOK-lnkpi-to-pi-lnk-sync.md）；
+# 否则本 workflow 会在 "Guard: release-gate invariants" 步骤直接失败并给出修复指引。
 
 on:
   push:
@@ -114,21 +131,65 @@ jobs:
             fi
           fi
 
-      - name: Sync source to CVM
+      - name: Sync agent-runtime source to CVM
         run: |
           set -euo pipefail
           DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
 
-          # 只同步 agent-runtime 需要的文件（apps/web/docs 等排除，减小传输量）
-          tar --exclude='.git' \
-              --exclude='node_modules' \
-              --exclude='apps/web' \
-              --exclude='**/dist' \
-              --exclude='.cursor' \
-              --exclude='docs' \
-              --exclude='**/__pycache__' \
+          # 白名单同步：只打包 services/agent-runtime —— 本 workflow 唯一有权写入的路径。
+          # 不再打包整棵树（原实现会覆盖 apps/server/**、packages/**、deploy/**）。
+          # 构建所需文件仅 services/agent-runtime/{pyproject.toml,app,skills}，
+          # 见 deploy/docker/Dockerfile.agent-runtime 的 COPY 指令。
+          tar --exclude='**/__pycache__' \
               --exclude='**/.venv' \
-              -czf - . | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && chmod +x ${DEPLOY_DIR}/deploy/enable-agent-runtime.sh && echo sync-done'"
+              --exclude='**/.pytest_cache' \
+              --exclude='*.pyc' \
+              -czf - services/agent-runtime | /tmp/lnkpi-ssh-retry.sh "sync-tar" ssh deploy-cvm "bash -lc 'mkdir -p ${DEPLOY_DIR} && if [[ -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/.env /tmp/lnkpi.env.bak; fi && tar -xzf - -C ${DEPLOY_DIR} && if [[ -f /tmp/lnkpi.env.bak ]]; then mv /tmp/lnkpi.env.bak ${DEPLOY_DIR}/.env; elif [[ ! -f ${DEPLOY_DIR}/.env ]]; then cp ${DEPLOY_DIR}/deploy/.env.production.example ${DEPLOY_DIR}/.env; fi && echo sync-done'"
+
+      - name: "Guard: release-gate invariants"
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="${{ env.DEPLOY_DIR }}"
+
+          # 本 workflow 只写 services/agent-runtime/**。以下三条是"发布门没被绕过"的不变量，
+          # 任何一条破了都说明有别的同步路径动了 /opt/lnkpi，属于事故级信号 —— 直接失败而非继续。
+          # ① 生产树必须仍带 B4 分流（否则 active 模式静默退化为老 runtime）
+          if ! ssh deploy-cvm "grep -q PI_RUNTIME '${DEPLOY_DIR}/apps/server/src/agent/agent.service.ts' && [[ -d '${DEPLOY_DIR}/apps/server/src/agent/pi-runtime' ]]"; then
+            echo "::error::生产树缺少 B4 分流代码（agent.service.ts 无 PI_RUNTIME 或 pi-runtime/ 目录不存在）"
+            echo "本 workflow 已收窄为只写 services/agent-runtime/**，出现此情况说明生产树被其他路径覆盖。"
+            echo "修复：从 pi-lnk master 触发一次发布门（deploy.yml）重新同步源码树。"
+            exit 1
+          fi
+          echo "OK  B4 分流代码在位"
+
+          # ② 发布门构建守卫必须在位（它是唯一拦住"用缺 B4 的源码树构建镜像"的硬门）
+          if ! ssh deploy-cvm "grep -q 'B4 防呆检查' '${DEPLOY_DIR}/deploy/launch-cvm-build.sh'"; then
+            echo "::error::deploy/launch-cvm-build.sh 的 B4 防呆守卫丢失"
+            echo "修复：走发布门（pi-lnk deploy.yml）重新同步 deploy/**。"
+            exit 1
+          fi
+          echo "OK  B4 构建守卫在位"
+
+          # ③ 发布门独占文件不得与 CVM 生产树漂移（本 workflow 不同步它们，只校验）
+          drift=0
+          for f in deploy/enable-agent-runtime.sh deploy/docker/Dockerfile.agent-runtime deploy/docker-compose.prod.yml; do
+            lh="$(sha256sum "$f" | awk '{print $1}')"
+            rh="$(ssh deploy-cvm "sha256sum '${DEPLOY_DIR}/$f'" 2>/dev/null | awk '{print $1}')"
+            if [[ -n "$lh" && "$lh" == "$rh" ]]; then
+              echo "OK   no drift: $f"
+            else
+              echo "DRIFT $f (lnkpi=${lh:0:12} cvm=${rh:0:12})"
+              drift=1
+            fi
+          done
+          if [[ "$drift" == "1" ]]; then
+            echo "::error::发布门独占文件在 lnkpi 与 CVM 生产树之间不一致"
+            echo "compose / enable-agent-runtime.sh / agent-runtime Dockerfile 由 pi-lnk 发布门独占，"
+            echo "本 workflow 不会同步它们（同步会绕过发布门）。"
+            echo "处理：按 docs/ops/RUNBOOK-lnkpi-to-pi-lnk-sync.md 走一次同步命令流 + 发布门，再重跑本 workflow。"
+            exit 1
+          fi
+          echo "✅ release-gate invariants OK"
 
       - name: Enable Agent Runtime on CVM
         run: |
