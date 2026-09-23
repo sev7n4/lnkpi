@@ -73,6 +73,21 @@ describe('RefineWorkbench 生产接线', () => {
     expect(w.emitted('close')).toHaveLength(1)
   })
 
+  it('Esc 分级退出：抠图模式先退回 select 且不关闭（回归：旧实现漏了抠图）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.refineMode = 'matting'
+    const w = mountWorkbench()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(editor.refineMode).toBe('select')
+    expect(w.emitted('close')).toBeUndefined()
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await flushPromises()
+    expect(w.emitted('close')).toHaveLength(1)
+  })
+
   it('Esc 在普通精修模式下直接关闭', async () => {
     const w = mountWorkbench()
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))

@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   CX_IMAGE_EDIT_ENABLED,
-  STAIN_PRESET_PROMPT,
   canOpenNodeImageEdit,
   canOpenRefineForNode,
   decideRefineDismiss,
 } from './refineSession'
 
 describe('refine session constants', () => {
-  it('exports stain preset prompt and feature flag', () => {
-    expect(STAIN_PRESET_PROMPT).toBe(
-      '去除选区内的污渍、瑕疵、多余物体，其余像素保持不变',
-    )
+  it('exports feature flag', () => {
     expect(CX_IMAGE_EDIT_ENABLED).toBe(true)
   })
 })

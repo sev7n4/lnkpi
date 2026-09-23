@@ -15,7 +15,7 @@ import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
-import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
+import { refineSelectionEscHint } from './refineSelectionModel'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
 import { baseCanvasFromMetadata, type RefineApplyPayload, type RefineCompareMetadata } from './compareViewModel'
 import CompareLightbox from './CompareLightbox.vue'
@@ -71,6 +71,10 @@ const emit = defineEmits<{
 }>()
 
 const editor = useCanvasEditorStore()
+/** 面板固定页脚（spec §4.5 表）：Esc 三态文案，对全部模式生效。 */
+const escHint = computed(() =>
+  refineSelectionEscHint({ refineMode: editor.refineMode, compareLightboxOpen: editor.compareLightboxOpen }),
+)
 const prompt = ref('')
 const activeGuideEditIntentId = ref<string | null>(null)
 const guideCapabilities =
@@ -221,11 +225,6 @@ function formatError(err: unknown, fallback: string): string {
   if (Array.isArray(msg) && msg[0]) return String(msg[0])
   if (typeof e.message === 'string' && e.message.trim()) return e.message
   return fallback
-}
-
-function applyStainPreset() {
-  activeGuideEditIntentId.value = null
-  prompt.value = STAIN_PRESET_PROMPT
 }
 
 function editIntentChipDisabled(intentId: string): boolean {
@@ -656,7 +655,6 @@ onBeforeUnmount(() => {
             v-if="activeTool"
             :busy="busy"
             v-bind="isMattingPanel ? { beforeUrl: props.beforeUrl, mattingUnavailable, maskAvailable, canApply } : {}"
-            @apply-stain-preset="applyStainPreset"
             @run-auto="runMattingAuto"
             @run-mask="runMattingMask"
             @apply="onApply"
@@ -732,6 +730,9 @@ onBeforeUnmount(() => {
         @exit="editor.setRefineMode('select')"
         @cancel="onBackOrCancel"
       />
+
+      <!-- 固定页脚（spec 图 6 ⑤）：Esc 三态，模式优先于对照 -->
+      <div class="refine-side__esc" data-testid="refine-panel-esc-hint">{{ escHint }}</div>
     </aside>
   </Teleport>
 
@@ -837,6 +838,8 @@ onBeforeUnmount(() => {
 /* 唯一滚动区（§4.3 布局铁律：dock 与版本条是 flex 兄弟，绝不覆盖滚动区） */
 .refine-side__scroll { min-height: 0; flex: 1; overflow-y: auto; }
 .refine-side__filmstrip { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--neo-border); }
+
+.refine-side__esc { flex: 0 0 auto; padding: 8px 14px; border-top: 1px solid var(--neo-border); color: var(--neo-text-muted); font-size: 11px; }
 
 .refine-outpaint-floating {
   position: fixed;

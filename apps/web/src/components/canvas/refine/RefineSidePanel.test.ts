@@ -203,6 +203,15 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="workbench-panel-scroll"]')!.getAttribute('style')).toBeNull()
   })
 
+  it('固定页脚显示 Esc 三态文案（模式优先于对照）', async () => {
+    const editor = useCanvasEditorStore()
+    mountPanel()
+    expect(q('[data-testid="refine-panel-esc-hint"]')?.textContent).toContain('关闭精修')
+    editor.refineMode = 'outpaint'
+    await flushPromises()
+    expect(q('[data-testid="refine-panel-esc-hint"]')?.textContent).toContain('回到选区')
+  })
+
   it('模型选择器渲染精修通道真实模型（来自 shared，不写死）', async () => {
     mountPanel()
     const trigger = q('[data-testid="dock-model-select"]')
