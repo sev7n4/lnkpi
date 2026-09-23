@@ -100,7 +100,7 @@ describe('RefineSidePanel 三段式', () => {
     mountPanel()
     expect(q('[data-testid="refine-toolbox"]')).toBeNull()
     expect(qa('[data-testid="workbench-panel-scroll"]').length).toBe(1)
-    expect(q('[data-testid="refine-select-panel"]')).not.toBeNull()
+    expect(q('[data-testid="refine-selection-panel"]')).not.toBeNull()
   })
 
   it('不再有旧的三排图标工具条', () => {
@@ -126,6 +126,16 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="refine-compare-band"]')).toBeNull()
     expect(q('[data-testid="refine-toolbox"]')).toBeNull()
     expect(q('[data-testid="refine-dock"]')).toBeNull()
+  })
+
+  it('折叠态不渲染 Esc 页脚', () => {
+    const w = mountPanel({ collapsed: true })
+    expect(w.find('[data-testid="refine-panel-esc-hint"]').exists()).toBe(false)
+  })
+
+  it('展开态渲染 Esc 页脚', () => {
+    const w = mountPanel()
+    expect(w.find('[data-testid="refine-panel-esc-hint"]').exists()).toBe(true)
   })
 
   it('右栏头部的收起钮仍在', () => {
@@ -201,6 +211,15 @@ describe('RefineSidePanel 三段式', () => {
   it('§4.3 高度预算：滚动槽无内联高度（像素预算 ≤148 / ≤224 由目视验收把关）', () => {
     mountPanel()
     expect(q('[data-testid="workbench-panel-scroll"]')!.getAttribute('style')).toBeNull()
+  })
+
+  it('固定页脚显示 Esc 三态文案（模式优先于对照）', async () => {
+    const editor = useCanvasEditorStore()
+    mountPanel()
+    expect(q('[data-testid="refine-panel-esc-hint"]')?.textContent).toContain('关闭精修')
+    editor.refineMode = 'outpaint'
+    await flushPromises()
+    expect(q('[data-testid="refine-panel-esc-hint"]')?.textContent).toContain('回到选区')
   })
 
   it('模型选择器渲染精修通道真实模型（来自 shared，不写死）', async () => {

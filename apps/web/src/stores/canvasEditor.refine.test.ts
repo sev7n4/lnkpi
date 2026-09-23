@@ -118,23 +118,24 @@ describe('canvasEditor refine target', () => {
     expect(editor.refineWandTolerance).toBe(24)
   })
 
-  it('tracks refineMaskOp from eraser/brush and keeps it when switching to wand/polygon', () => {
+  it('tracks refineMaskOp from eraser/brush and keeps it for wand/polygon/rect/point', () => {
     setActivePinia(createPinia())
     const editor = useCanvasEditorStore()
     expect(editor.refineMaskOp).toBe('add')
     editor.setRefineTool('eraser')
-    expect(editor.refineTool).toBe('eraser')
     expect(editor.refineMaskOp).toBe('subtract')
     editor.setRefineTool('wand')
-    expect(editor.refineTool).toBe('wand')
     expect(editor.refineMaskOp).toBe('subtract')
     editor.setRefineTool('polygon')
-    expect(editor.refineTool).toBe('polygon')
     expect(editor.refineMaskOp).toBe('subtract')
     editor.setRefineTool('brush')
     expect(editor.refineMaskOp).toBe('add')
+    // 规格修订：rect 不再硬编码 add——保持当前开关值
     editor.setRefineTool('rect')
     expect(editor.refineMaskOp).toBe('add')
+    editor.setRefineTool('eraser')
+    editor.setRefineTool('rect')
+    expect(editor.refineMaskOp).toBe('subtract') // 回归先红 ①：旧实现会把这里翻回 'add'
   })
 
   it('keeps refineMaskOp when switching to point', () => {

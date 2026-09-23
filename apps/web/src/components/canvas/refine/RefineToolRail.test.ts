@@ -12,49 +12,6 @@ const mountRail = (props: Record<string, unknown> = {}) =>
 describe('RefineToolRail', () => {
   beforeEach(() => { pinia = createPinia(); setActivePinia(pinia) })
 
-  it('渲染 3 个输入工具与 2 个查看工具', () => {
-    const w = mountRail()
-    for (const id of ['smart', 'marquee', 'paint']) {
-      expect(w.find(`[data-testid="rail-input-${id}"]`).exists()).toBe(true)
-    }
-    expect(w.find('[data-testid="rail-view-compare"]').exists()).toBe(true)
-    expect(w.find('[data-testid="rail-view-fit"]').exists()).toBe(true)
-    expect(w.find('[data-testid="refine-rail"]').attributes('aria-label')).toBe('画布工具')
-  })
-
-  it('子菜单默认关闭；点「涂抹」展开后 6 个工具都能点到', async () => {
-    const store = useCanvasEditorStore()
-    const w = mountRail()
-    expect(w.find('[data-testid="rail-variant-eraser"]').exists()).toBe(false)
-
-    await w.find('[data-testid="rail-input-paint"]').trigger('click')
-    expect(w.find('[data-testid="rail-variant-brush"]').exists()).toBe(true)
-    expect(w.find('[data-testid="rail-variant-eraser"]').exists()).toBe(true)
-
-    await w.find('[data-testid="rail-variant-eraser"]').trigger('click')
-    expect(store.refineTool).toBe('eraser')
-    expect(w.find('[data-testid="rail-variant-eraser"]').exists()).toBe(false)
-  })
-
-  it('「反选」只在智能选择组、「清除选区」只在涂抹组', async () => {
-    const w = mountRail()
-    await w.find('[data-testid="rail-input-smart"]').trigger('click')
-    expect(w.find('[data-testid="rail-command-invert"]').exists()).toBe(true)
-    expect(w.find('[data-testid="rail-command-clear"]').exists()).toBe(false)
-
-    await w.find('[data-testid="rail-input-paint"]').trigger('click')
-    expect(w.find('[data-testid="rail-command-clear"]').exists()).toBe(true)
-    expect(w.find('[data-testid="rail-command-invert"]').exists()).toBe(false)
-  })
-
-  it('当前工具高亮在它所属的输入组上', () => {
-    const store = useCanvasEditorStore()
-    store.setRefineTool('polygon')
-    const w = mountRail()
-    expect(w.find('[data-testid="rail-input-marquee"]').classes()).toContain('is-active')
-    expect(w.find('[data-testid="rail-input-smart"]').classes()).not.toContain('is-active')
-  })
-
   it('对照：默认左右对照；选滑竿后写入 store 并打开全屏对照', async () => {
     const store = useCanvasEditorStore()
     const w = mountRail()
@@ -128,16 +85,6 @@ describe('RefineToolRail', () => {
     expect(w2.emitted('redo')).toHaveLength(1)
   })
 
-  it('二级菜单工具项只留图标（follow-up #11/#12）：无文字、带 aria-label', async () => {
-    const w = mountRail()
-    await w.find('[data-testid="rail-input-paint"]').trigger('click')
-    const brush = w.find('[data-testid="rail-variant-brush"]')
-    expect(brush.exists()).toBe(true)
-    expect(brush.attributes('aria-label')).toBe('画笔')
-    expect(brush.text()).not.toContain('画笔')
-    expect(brush.find('svg').exists()).toBe(true)
-  })
-
   it('「查看」分组不再渲染文字标签（follow-up #5），只留发丝分隔线', () => {
     expect(mountRail().find('.refine-rail__seplabel').exists()).toBe(false)
   })
@@ -158,29 +105,6 @@ describe('RefineToolRail', () => {
     store.setRefineBusy(true)
     const w = mountRail()
     expect(w.find('[data-testid="rail-mode-outpaint"]').attributes('disabled')).toBeDefined()
-  })
-
-  it('扩图模式下画笔/橡皮变体 disabled', async () => {
-    const store = useCanvasEditorStore()
-    store.refineMode = 'outpaint'
-    const w = mountRail()
-    await w.find('[data-testid="rail-input-paint"]').trigger('click')
-    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeDefined()
-    expect(w.find('[data-testid="rail-variant-eraser"]').attributes('disabled')).toBeDefined()
-    // 矩形（marquee）等仍可用，仅画笔/橡皮被禁
-    await w.find('[data-testid="rail-input-marquee"]').trigger('click')
-    expect(w.find('[data-testid="rail-variant-rect"]').attributes('disabled')).toBeUndefined()
-  })
-
-  it('退出扩图模式后画笔/橡皮恢复可用', async () => {
-    const store = useCanvasEditorStore()
-    store.refineMode = 'outpaint'
-    const w = mountRail()
-    await w.find('[data-testid="rail-input-paint"]').trigger('click')
-    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeDefined()
-    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
-    expect(store.refineMode).toBe('select')
-    expect(w.find('[data-testid="rail-variant-brush"]').attributes('disabled')).toBeUndefined()
   })
 
   it('抠图入口：点击进入 matting 模式，再点击回 select（toggle 语义对称扩图）', async () => {
@@ -247,5 +171,56 @@ describe('RefineToolRail', () => {
     // 点击能力占位不新增任何激活项，且能力区自身永不参与激活态
     expect(w.findAll('.refine-rail__btn.is-active').length).toBe(activeBefore)
     expect(w.find('.refine-rail__btn.is-active[data-testid^="rail-capability-"]').exists()).toBe(false)
+  })
+
+  it('渲染三枚模式入口 + 两枚查看入口，不存在任何输入组与二级菜单', () => {
+    const w = mountRail()
+    for (const id of ['rail-mode-outpaint', 'rail-mode-matting', 'rail-mode-select']) {
+      expect(w.find(`[data-testid="${id}"]`).exists()).toBe(true)
+    }
+    expect(w.find('[data-testid="rail-view-compare"]').exists()).toBe(true)
+    expect(w.find('[data-testid="rail-view-fit"]').exists()).toBe(true)
+    for (const id of ['smart', 'marquee', 'paint']) {
+      expect(w.find(`[data-testid="rail-input-${id}"]`).exists()).toBe(false)
+    }
+    expect(w.find('[data-testid="rail-variant-eraser"]').exists()).toBe(false)
+    expect(w.find('[data-testid="rail-command-invert"]').exists()).toBe(false)
+  })
+
+  it('select 是基座模式：默认激活，点已激活的选区按钮无变化', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountRail()
+    expect(editor.refineMode).toBe('select')
+    expect(w.find('[data-testid="rail-mode-select"]').classes()).toContain('is-active')
+    await w.find('[data-testid="rail-mode-select"]').trigger('click')
+    expect(editor.refineMode).toBe('select')
+  })
+
+  it('三模式互斥：点扩图进 outpaint，点选区回 select', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountRail()
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    expect(editor.refineMode).toBe('outpaint')
+    expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).toContain('is-active')
+    expect(w.find('[data-testid="rail-mode-select"]').classes()).not.toContain('is-active')
+    await w.find('[data-testid="rail-mode-select"]').trigger('click')
+    expect(editor.refineMode).toBe('select')
+  })
+
+  it('再点已激活的扩图回 select（toggle 语义保留）', async () => {
+    const editor = useCanvasEditorStore()
+    const w = mountRail()
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    await w.find('[data-testid="rail-mode-outpaint"]').trigger('click')
+    expect(editor.refineMode).toBe('select')
+  })
+
+  it('busy 时三枚模式入口全部禁用', () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineBusy(true)
+    const w = mountRail()
+    for (const id of ['rail-mode-outpaint', 'rail-mode-matting', 'rail-mode-select']) {
+      expect(w.find(`[data-testid="${id}"]`).attributes('disabled')).toBeDefined()
+    }
   })
 })

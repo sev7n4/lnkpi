@@ -31,11 +31,11 @@ const mediaSize = useNaturalImageSize({
   height: () => props.height,
 })
 
-/** Escape→close guard（分级，与对照同思路）：
- *  1) 扩图模式优先退出到 select（再按才继续）；2) 对照灯箱打开则先关；3) 关闭精修。
+/** Escape→close guard（分级，spec 图 3 下半段）：
+ *  1) 非 select 模式（扩图 / 抠图）先回选区；2) 对照灯箱打开则先关；3) 关闭精修。
  *  busy 时 WorkbenchShell 的 useWorkbenchPanel 已拦截 Esc，故此处无需再判。 */
 function onClose() {
-  if (editor.refineMode === 'outpaint') {
+  if (editor.refineMode !== 'select') {
     editor.setRefineMode('select')
     return
   }
