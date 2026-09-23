@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
+import { TOOL_ICON_CROP, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
 import {
   REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   type RefineFitOptionId,
@@ -37,6 +37,11 @@ function toggleOutpaint() {
 const mattingActive = computed(() => editor.refineMode === 'matting')
 function toggleMatting() {
   editor.setRefineMode(mattingActive.value ? 'select' : 'matting')
+}
+
+const cropActive = computed(() => editor.refineMode === 'crop')
+function toggleCrop() {
+  editor.setRefineMode(cropActive.value ? 'select' : 'crop')
 }
 
 const selectActive = computed(() => editor.refineMode === 'select')
@@ -117,6 +122,26 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_MATTING" />
         </span>
         <span class="refine-rail__name">抠图</span>
+      </button>
+    </div>
+
+    <!-- 裁剪模式入口：激活时高亮；busy 时冻结不可切换；与扩图/抠图互斥（setRefineMode 覆盖式切换） -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': cropActive }"
+        data-testid="rail-mode-crop"
+        aria-label="裁剪"
+        title="裁剪（拖框 / 比例 / 旋转，纯本地免费）"
+        :aria-pressed="cropActive"
+        :disabled="editor.refineBusy"
+        @click="toggleCrop"
+      >
+        <span class="refine-rail__glyph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_CROP" />
+        </span>
+        <span class="refine-rail__name">裁剪</span>
       </button>
     </div>
 

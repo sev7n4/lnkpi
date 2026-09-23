@@ -16,3 +16,7 @@ export const TOOL_ICON_SELECT =
 /** 「扩图」模式入口：虚线外框 + 实线内框，表述「画布向外扩展」（spec §5.1） */
 export const TOOL_ICON_OUTPAINT =
   '<rect x="4" y="4" width="16" height="16" rx="1.5" stroke-dasharray="3 2.5" /><rect x="8.5" y="8.5" width="7" height="7" rx="1" />'
+
+/** 「裁剪」模式入口：经典 crop 标（两把 L 形尺） */
+export const TOOL_ICON_CROP =
+  '<path d="M6.5 2.5v13a2 2 0 0 0 2 2h13" /><path d="M17.5 21.5v-13a2 2 0 0 0-2-2h-13" />'

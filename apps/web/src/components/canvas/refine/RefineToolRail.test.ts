@@ -145,14 +145,24 @@ describe('RefineToolRail', () => {
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
-  it('能力区：分隔线 + 7 项禁用图标（matting 已迁出为 refine-matting 真模式，outpaint 不重复出现在能力区）', () => {
+  it('能力区：分隔线 + 6 项禁用图标（matting/crop 已迁出为真模式，outpaint 不重复出现在能力区）', () => {
     const w = mountRail()
     expect(w.find('[data-testid="rail-capability-hr"]').exists()).toBe(true)
-    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(7)
+    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(6)
     expect(w.find('[data-testid="rail-capability-one-click-matting"]').exists()).toBe(false)
-    expect(w.find('[data-testid="rail-capability-crop"]').attributes('disabled')).toBeDefined()
-    expect(w.find('[data-testid="rail-capability-crop"]').attributes('title')).toContain('即将上线')
+    expect(w.find('[data-testid="rail-capability-crop"]').exists()).toBe(false)
     expect(w.find('[data-testid="rail-capability-outpaint"]').exists()).toBe(false)
+  })
+
+  it('裁剪模式入口：点亮为真模式（rail-mode-crop），toggle 进 crop / 再点回 select', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    expect(w.find('[data-testid="rail-capability-crop"]').exists()).toBe(false)
+    await w.find('[data-testid="rail-mode-crop"]').trigger('click')
+    expect(store.refineMode).toBe('crop')
+    expect(w.find('[data-testid="rail-mode-crop"]').classes()).toContain('is-active')
+    await w.find('[data-testid="rail-mode-crop"]').trigger('click')
+    expect(store.refineMode).toBe('select')
   })
 
   it('扩图仍是左栏唯一的激活项（能力区只为占位）', async () => {

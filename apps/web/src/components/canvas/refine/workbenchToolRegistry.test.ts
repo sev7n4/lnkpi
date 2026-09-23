@@ -14,4 +14,12 @@ describe('workbenchToolRegistry', () => {
     const tool = getWorkbenchTool('refine-matting')
     expect(tool?.dock).toBeTruthy()
   })
+
+  it('refine-crop 已注册：确定性变换（dock: null）+ panel 落位', () => {
+    const tool = getWorkbenchTool('refine-crop')
+    expect(tool).not.toBeNull()
+    expect(tool?.panel).toBeTruthy()
+    expect(tool?.dock).toBeNull()
+    expect(tool?.dockPlacement).toBe('panel')
+  })
 })

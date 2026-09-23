@@ -14,6 +14,14 @@ import {
   type Size,
 } from '@/components/canvas/refine/outpaintGeometry'
 import { refineSelectionOpAfterToolPick } from '@/components/canvas/refine/refineSelectionModel'
+import {
+  clampCropRect,
+  clampFineRotation,
+  fitCropRect,
+  normalizeCropRotation,
+  type CropAspectId,
+  type CropRect,
+} from '@/components/canvas/refine/cropGeometry'
 
 export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point' | 'ellipse'
 export type RefineMaskOp = 'add' | 'subtract'
@@ -53,8 +61,8 @@ export interface RefineSessionResult {
   createdAt: string
 }
 
-/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）。 */
-export type RefineMode = 'select' | 'outpaint' | 'matting'
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪。 */
+export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop'
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
@@ -84,6 +92,15 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineOutpaintBase = ref<Size | null>(null)
   /** 扩图手柄拖拽进行中（2026-09-22 用户验收修订）：悬浮 dock 据此隐藏，不挡画布拖拽。 */
   const refineOutpaintDragging = ref(false)
+  /** 裁剪：90° 步进数（可负）+ −45..45 微调角，合成总旋转角。 */
+  const refineCropTurns = ref(0)
+  const refineCropFine = ref(0)
+  /** 裁剪比例预设。 */
+  const refineCropAspect = ref<CropAspectId>('free')
+  /** 裁剪基准（原图自然尺寸）：进入裁剪模式时由 CropCanvas 写入。 */
+  const refineCropBase = ref<Size | null>(null)
+  /** 裁剪框（旋转后包围盒坐标系，原图像素）。null = 未进入裁剪或基准未就绪。 */
+  const refineCropRect = ref<CropRect | null>(null)
   /** 精修会话生成结果（胶片条数据源）。 */
   const refineSessionResults = ref<RefineSessionResult[]>([])
   /** 当前选中的会话结果 id。 */
@@ -108,6 +125,11 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineOutpaintRect.value = null
     refineOutpaintBase.value = null
     refineOutpaintDragging.value = false
+    refineCropTurns.value = 0
+    refineCropFine.value = 0
+    refineCropAspect.value = 'free'
+    refineCropBase.value = null
+    refineCropRect.value = null
     refineSessionResults.value = []
     refineSessionCurrentId.value = null
   }
@@ -185,6 +207,11 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
       refineOutpaintDragging.value = false
+      refineCropTurns.value = 0
+      refineCropFine.value = 0
+      refineCropAspect.value = 'free'
+      refineCropBase.value = null
+      refineCropRect.value = null
     }
     refineMode.value = mode
   }
@@ -226,6 +253,59 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   function resetOutpaintRect() {
     if (!outpaintActionReady()) return
     refineOutpaintRect.value = initialOutpaintRect(refineOutpaintBase.value!)
+  }
+
+  // —— 裁剪（crop 模式）——
+
+  /** 总旋转角（90° 步进 + 微调，归一化 (-180, 180]）。 */
+  const refineCropRotationDeg = computed(() => normalizeCropRotation(refineCropTurns.value * 90 + refineCropFine.value))
+
+  /** 裁剪动作公共前置：busy 或基准缺失时不改状态。 */
+  function cropActionReady(): boolean {
+    const base = refineCropBase.value
+    return !refineBusy.value && !!base && base.width > 0 && base.height > 0
+  }
+
+  /** 写入裁剪基准（CropCanvas 进入模式时调用），并在无草稿时初始化为适配矩形。 */
+  function setRefineCropBase(size: Size | null) {
+    refineCropBase.value = size
+    if (size && size.width > 0 && size.height > 0 && !refineCropRect.value) {
+      refineCropRect.value = fitCropRect(size.width, size.height, refineCropRotationDeg.value, refineCropAspect.value)
+    }
+  }
+
+  /** 写入裁剪框（CropCanvas 拖拽实时调用；防御性再钳一次）。 */
+  function setRefineCropRect(rect: CropRect | null) {
+    const base = refineCropBase.value
+    refineCropRect.value =
+      base && rect
+        ? clampCropRect(rect, base.width, base.height, refineCropRotationDeg.value)
+        : rect
+  }
+
+  /** 旋转（步进 + 微调）：重算适配矩形（旧框在新角度下可能越界，统一回适配位）。 */
+  function applyCropRotation(turns: number, fine: number) {
+    if (!cropActionReady()) return
+    refineCropTurns.value = turns
+    refineCropFine.value = clampFineRotation(fine)
+    refineCropRect.value = fitCropRect(
+      refineCropBase.value!.width,
+      refineCropBase.value!.height,
+      refineCropRotationDeg.value,
+      refineCropAspect.value,
+    )
+  }
+
+  /** 比例预设：重算适配矩形（替换，非累积）。 */
+  function applyCropAspectPreset(aspect: CropAspectId) {
+    if (!cropActionReady()) return
+    refineCropAspect.value = aspect
+    refineCropRect.value = fitCropRect(
+      refineCropBase.value!.width,
+      refineCropBase.value!.height,
+      refineCropRotationDeg.value,
+      aspect,
+    )
   }
 
   /** 会话结果容量上限：挤旧策略（超出丢最旧）。 */
@@ -295,6 +375,12 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineOutpaintRect,
     refineOutpaintBase,
     refineOutpaintDragging,
+    refineCropTurns,
+    refineCropFine,
+    refineCropAspect,
+    refineCropBase,
+    refineCropRect,
+    refineCropRotationDeg,
     refineSessionResults,
     refineSessionCurrentId,
     currentRefineSessionResult,
@@ -323,6 +409,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     applyOutpaintAspectPreset,
     applyOutpaintSize,
     resetOutpaintRect,
+    setRefineCropBase,
+    setRefineCropRect,
+    applyCropRotation,
+    applyCropAspectPreset,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,
