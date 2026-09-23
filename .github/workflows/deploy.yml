@@ -1,5 +1,10 @@
 name: Deploy to Tencent Cloud
 
+# 部署所有权说明（2026-09-23）
+# 本仓库只负责画布前端自动发版（deploy-web，写 ${DEPLOY_DIR}/web/dist）。
+# API / agent-runtime 的部署由 pi-lnk 仓库（含 runtime 分流代码）统一执行，
+# 因为本仓库源码不含 B4 分流文件，直部署会整目录覆盖并删掉它们。
+
 on:
   push:
     branches: [main]
@@ -19,6 +24,11 @@ on:
         description: Branch to deploy
         required: true
         default: main
+      allow_api_deploy:
+        description: "已停用：API 部署所有权已移交 pi-lnk 仓库（本仓库源码不含 runtime 分流代码，直部署会覆盖生产分流）。仅紧急情况下显式开启"
+        required: false
+        default: false
+        type: boolean
       recover_only:
         description: Only recover CVM (cleanup + restart existing API)
         required: false
@@ -87,11 +97,12 @@ jobs:
               - 'deploy/enable-agent-runtime.sh'
 
   deploy-api:
-    name: Build API on CVM
+    name: Build API on CVM (disabled — owned by pi-lnk)
     needs: changes
     if: >-
       ${{
-        (needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch')
+        github.event_name == 'workflow_dispatch'
+        && github.event.inputs.allow_api_deploy == 'true'
         && github.event.inputs.recover_only != 'true'
         && github.event.inputs.deploy_web_only != 'true'
       }}
