@@ -22,6 +22,17 @@ describe('RefineSelectionPanel', () => {
     expect(w.find('[data-testid="refine-selection-command-clear"]').exists()).toBe(true)
   })
 
+  it('busy 时选择方式 / 工具 / 命令全部禁用', () => {
+    const w = mountPanel({ busy: true })
+    const nodes = [
+      ...w.findAll('[data-testid^="refine-selection-op-"]'),
+      ...w.findAll('[data-testid^="refine-selection-tool-"]'),
+      ...w.findAll('[data-testid^="refine-selection-command-"]'),
+    ]
+    expect(nodes.length).toBe(11) // 2 选择方式 + 7 工具 + 2 命令
+    for (const node of nodes) expect(node.attributes('disabled')).toBeDefined()
+  })
+
   it('点工具写 store，参数区随 param 三态切换', async () => {
     const editor = useCanvasEditorStore()
     const w = mountPanel()

@@ -128,6 +128,16 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="refine-dock"]')).toBeNull()
   })
 
+  it('折叠态不渲染 Esc 页脚', () => {
+    const w = mountPanel({ collapsed: true })
+    expect(w.find('[data-testid="refine-panel-esc-hint"]').exists()).toBe(false)
+  })
+
+  it('展开态渲染 Esc 页脚', () => {
+    const w = mountPanel()
+    expect(w.find('[data-testid="refine-panel-esc-hint"]').exists()).toBe(true)
+  })
+
   it('右栏头部的收起钮仍在', () => {
     mountPanel()
     expect(q('.refine-side__collapse')).not.toBeNull()

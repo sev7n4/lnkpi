@@ -252,15 +252,10 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   ctx.lineWidth = Math.max(1, props.brushSize)
-  if (props.tool === 'eraser' || props.maskOp === 'subtract') {
-    ctx.globalCompositeOperation = 'destination-out'
-    ctx.strokeStyle = 'rgba(0,0,0,1)'
-    ctx.fillStyle = 'rgba(0,0,0,1)'
-  } else {
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.strokeStyle = props.color
-    ctx.fillStyle = props.color
-  }
+  const style = shapeStyleForOp(props.tool === 'eraser' || props.maskOp === 'subtract' ? 'subtract' : 'add', props.color)
+  ctx.globalCompositeOperation = style.composite
+  ctx.strokeStyle = style.stroke
+  ctx.fillStyle = style.fill
 }
 
 function putRgba(ctx: CanvasRenderingContext2D, rgba: Uint8ClampedArray, width: number, height: number) {

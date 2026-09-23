@@ -1260,4 +1260,4 @@ env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u al
 
 - [x] **Step 6: 更新实现计划勾选状态**
 
-把本文件所有 `- [x]` 按完成情况改为 `- [x]`，与代码同一 commit 或单独 docs commit 均可。
+把本文件所有 `- [ ]` 按完成情况改为 `- [x]`，与代码同一 commit 或单独 docs commit 均可。

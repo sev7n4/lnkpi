@@ -119,6 +119,7 @@ describe('canvasEditor refine target', () => {
   })
 
   it('tracks refineMaskOp from eraser/brush and keeps it for wand/polygon/rect/point', () => {
+    setActivePinia(createPinia())
     const editor = useCanvasEditorStore()
     expect(editor.refineMaskOp).toBe('add')
     editor.setRefineTool('eraser')

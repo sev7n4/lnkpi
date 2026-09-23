@@ -338,14 +338,6 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 /* 底部两枚（对照 / 适配）向上弹，避免飞出视口下缘 */
 .refine-rail__fly--up { top: auto; bottom: -6px; }
 .refine-rail__fly-title { padding: 2px 6px 6px; color: var(--neo-text-muted); font-size: 10.5px; }
-.refine-rail__fly-icons { display: flex; align-items: center; gap: 4px; padding: 0 2px 2px; }
-.refine-rail__opt-icon {
-  display: flex; width: 32px; height: 32px; align-items: center; justify-content: center;
-  border: 1px solid transparent; border-radius: 9px; background: transparent;
-  color: var(--neo-text-secondary); cursor: pointer;
-}
-.refine-rail__opt-icon:hover { background: var(--neo-hover-bg); }
-.refine-rail__opt-icon.is-on { border-color: rgba(74, 158, 255, .5); background: rgba(0, 89, 179, .16); color: #7cc0ff; }
 .refine-rail__opt {
   display: flex; width: 100%; align-items: center; gap: 8px; padding: 6px;
   border: none; border-radius: 9px; background: transparent; color: inherit; text-align: left; cursor: pointer;
@@ -360,7 +352,5 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 .refine-rail__opt.is-on .refine-rail__radio { border-color: #4a9eff; background: radial-gradient(circle, #4a9eff 0 3.5px, transparent 4px); }
 .refine-rail__pin { margin-left: 5px; padding: 0 5px; border-radius: 5px; background: rgba(74, 158, 255, .2); color: #7cc0ff; font-size: 9.5px; font-weight: 500; }
 .refine-rail__fly-div { height: 1px; margin: 6px 4px; background: var(--neo-border); }
-.refine-rail__cmd { display: block; width: 100%; padding: 5px 6px; border: none; border-radius: 9px; background: transparent; color: var(--neo-text-secondary); font-size: 12px; text-align: left; cursor: pointer; }
-.refine-rail__cmd:hover { background: var(--neo-hover-bg); }
 .refine-rail__fly-note { padding: 2px 6px 0; color: var(--neo-text-muted); font-size: 10px; line-height: 1.5; }
 </style>

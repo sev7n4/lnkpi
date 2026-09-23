@@ -47,6 +47,7 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
           :class="{ 'is-on': editor.refineMaskOp === opt.op }"
           :data-testid="`refine-selection-op-${opt.op}`"
           :title="opt.hint"
+          :disabled="busy"
           :aria-pressed="editor.refineMaskOp === opt.op"
           @click="editor.refineMaskOp = opt.op"
         >
@@ -66,6 +67,7 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
           :class="{ 'is-on': editor.refineTool === tool }"
           :data-testid="`refine-selection-tool-${tool}`"
           :title="REFINE_TOOL_SPECS[tool].hint"
+          :disabled="busy"
           :aria-label="REFINE_TOOL_SPECS[tool].label"
           :aria-pressed="editor.refineTool === tool"
           @click="pickTool(tool)"
@@ -102,6 +104,7 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
         class="refine-selection-panel__cmd"
         :data-testid="`refine-selection-command-${cmd.id}`"
         :title="cmd.hint"
+        :disabled="busy"
         @click="runCommand(cmd.id)"
       >
         {{ cmd.label }}
@@ -119,6 +122,9 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
   flex: 1; padding: 6px 0; border: 1px solid var(--neo-border); border-radius: 9px;
   background: transparent; color: var(--neo-text-secondary); font-size: 12px; cursor: pointer;
 }
+.refine-selection-panel__op:disabled,
+.refine-selection-panel__tool:disabled,
+.refine-selection-panel__cmd:disabled { opacity: .45; cursor: not-allowed; }
 .refine-selection-panel__op.is-on {
   border-color: color-mix(in srgb, var(--neo-hi-text) 30%, var(--neo-border));
   background: var(--neo-hi-bg); color: var(--neo-hi-text);
@@ -129,7 +135,7 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
   border: 1px solid var(--neo-border); border-radius: 9px;
   background: transparent; color: var(--neo-text-secondary); font-size: 11.5px; cursor: pointer;
 }
-.refine-selection-panel__tool:hover { background: var(--neo-hover-bg); color: var(--neo-text-primary); }
+.refine-selection-panel__tool:hover:not(:disabled) { background: var(--neo-hover-bg); color: var(--neo-text-primary); }
 .refine-selection-panel__tool.is-on {
   border-color: color-mix(in srgb, var(--neo-hi-text) 30%, var(--neo-border));
   background: var(--neo-hi-bg); color: var(--neo-hi-text);
@@ -143,5 +149,5 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
   border-radius: 9px; background: transparent; color: var(--neo-text-primary);
   font-size: 12.5px; text-align: left; cursor: pointer;
 }
-.refine-selection-panel__cmd:hover { background: var(--neo-hover-bg); }
+.refine-selection-panel__cmd:hover:not(:disabled) { background: var(--neo-hover-bg); }
 </style>

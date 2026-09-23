@@ -732,7 +732,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- 固定页脚（spec 图 6 ⑤）：Esc 三态，模式优先于对照 -->
-      <div class="refine-side__esc" data-testid="refine-panel-esc-hint">{{ escHint }}</div>
+      <div v-if="!collapsed" class="refine-side__esc" data-testid="refine-panel-esc-hint">{{ escHint }}</div>
     </aside>
   </Teleport>
 
