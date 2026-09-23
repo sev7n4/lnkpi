@@ -100,7 +100,7 @@ describe('RefineSidePanel 三段式', () => {
     mountPanel()
     expect(q('[data-testid="refine-toolbox"]')).toBeNull()
     expect(qa('[data-testid="workbench-panel-scroll"]').length).toBe(1)
-    expect(q('[data-testid="refine-select-panel"]')).not.toBeNull()
+    expect(q('[data-testid="refine-selection-panel"]')).not.toBeNull()
   })
 
   it('不再有旧的三排图标工具条', () => {

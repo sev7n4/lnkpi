@@ -1,6 +1,6 @@
 import type { Component } from 'vue'
 import RefineDock from '@/components/canvas/refine/RefineDock.vue'
-import RefineSelectPanel from '@/components/canvas/refine/RefineSelectPanel.vue'
+import RefineSelectionPanel from '@/components/canvas/refine/RefineSelectionPanel.vue'
 import OutpaintPanel from '@/components/canvas/refine/OutpaintPanel.vue'
 import RefineOutpaintDock from '@/components/canvas/refine/RefineOutpaintDock.vue'
 import MattingPanel from '@/components/canvas/refine/MattingPanel.vue'
@@ -32,7 +32,7 @@ export interface WorkbenchToolRegistration {
 export const WORKBENCH_TOOL_REGISTRY: Record<string, WorkbenchToolRegistration> = {
   'refine-select': {
     id: 'refine-select',
-    panel: RefineSelectPanel,
+    panel: RefineSelectionPanel,
     dock: RefineDock,
     dockPlacement: 'panel',
   },
