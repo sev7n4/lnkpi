@@ -42,7 +42,7 @@ export function resolveBarPlacement(barBox: Box, viewportBox: Box): 'top' | 'bot
 export function buildSelectionTools(opts: { hasUrl: boolean }): SelectionToolDef[] {
   return [
     { id: 'refine', icon: 'refine', title: '精修', disabled: false, group: 'ai' },
-    { id: 'matting', icon: 'matting', title: '抠图', disabled: true, disabledReason: '抠图将在后续能力包点亮', group: 'ai' },
+    { id: 'matting', icon: 'matting', title: '抠图', disabled: false, group: 'ai' },
     { id: 'crop', icon: 'crop', title: '裁剪', disabled: true, disabledReason: '裁剪将在后续能力包点亮', group: 'ai' },
     { id: 'rotate', icon: 'rotate', title: '旋转/翻转', disabled: true, disabledReason: '旋转/翻转将在后续能力包点亮', group: 'ai' },
     { id: 'download', icon: 'download', title: '下载图片', disabled: !opts.hasUrl, group: 'file' },

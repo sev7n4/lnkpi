@@ -95,6 +95,10 @@ import {
 } from '../provider/provider-resolver.service'
 import { MediaProbeService } from '../media/media-probe.service'
 import {
+  parseJpegDimensions,
+  parsePngDimensions,
+} from '../media/media-probe.service'
+import {
   buildMediaInfoPayload,
   enrichVideoMediaInfoDimensions,
 } from '../media/build-media-info'
@@ -1598,6 +1602,68 @@ export class StudioService {
       }
       throw new BadGatewayException('云端点选失败')
     }
+  }
+
+  async mattingImage(userId: string, input: { imageUrl: string }): Promise<{ url: string }> {
+    const imageUrl = input.imageUrl?.trim()
+    if (!imageUrl) {
+      throw new BadRequestException('imageUrl 不能为空')
+    }
+    const endpoint = process.env.MATTING_SERVICE_URL?.trim()
+    if (!endpoint) {
+      throw new ServiceUnavailableException('抠图服务未启用')
+    }
+
+    let buffer: Buffer
+    try {
+      buffer = await readImageBuffer(imageUrl)
+    } catch {
+      throw new BadGatewayException('抠图服务暂时不可用')
+    }
+
+    const isPng =
+      buffer.length >= 8
+      && buffer[0] === 0x89
+      && buffer[1] === 0x50
+      && buffer[2] === 0x4e
+      && buffer[3] === 0x47
+    const isJpeg = buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xd8
+    const contentType = isPng ? 'image/png' : isJpeg ? 'image/jpeg' : 'application/octet-stream'
+    const dimensions = parsePngDimensions(buffer) ?? parseJpegDimensions(buffer)
+    if (!dimensions) {
+      throw new BadRequestException('不支持的图片格式')
+    }
+    if (buffer.byteLength > 20 * 1024 * 1024 || dimensions.width > 4096 || dimensions.height > 4096) {
+      throw new BadRequestException('图片过大（限 20MB / 4096px）')
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+    let png: Buffer
+    try {
+      const out = await fetch(`${endpoint.replace(/\/$/, '')}/matting`, {
+        method: 'POST',
+        body: new Uint8Array(buffer),
+        headers: { 'Content-Type': contentType },
+        signal: controller.signal,
+      })
+      if (!out.ok) {
+        throw new BadGatewayException('抠图服务暂时不可用')
+      }
+      png = Buffer.from(await out.arrayBuffer())
+    } catch (err) {
+      if (err instanceof BadGatewayException) {
+        throw err
+      }
+      throw new BadGatewayException('抠图服务暂时不可用')
+    } finally {
+      clearTimeout(timer)
+    }
+    if (png.subarray(1, 4).toString('ascii') !== 'PNG') {
+      throw new BadGatewayException('抠图服务暂时不可用')
+    }
+    const saved = await this.upload.saveUserFile(userId, png, 'matting.png', 'image/png')
+    return { url: saved.url }
   }
 
   async generateVideo(

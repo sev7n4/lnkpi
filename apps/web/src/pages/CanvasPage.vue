@@ -22,7 +22,7 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/minimap/dist/style.css'
 import type { Session, CanvasAction, ImageVersionEntry, PlanSelectionGenerateResult } from '@lnkpi/shared'
-import { appendEditVersion, revertImageVersion, seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
+import { seedImageVersions, planSelectionGenerate, SelectionBatchLimitError, SelectionBatchPendingConfirmError, getGroupChildIds, type GroupChildNode } from '@lnkpi/shared'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -38,7 +38,6 @@ import { useSelectionGenerate } from '@/composables/useSelectionGenerate'
 import { isFeatureOn } from '@/composables/useFeatureFlag'
 import { type CompositionRunGroup } from '@/composables/compositionRunGroup'
 import { createInitialSceneComposerNodeData } from '@/utils/sceneComposer'
-import { randomId } from '@/utils/randomId'
 import { studioApi } from '@/services/studio-api'
 import { canvasApi } from '@/services/canvas-api'
 import { resolveCompositionTracks, mergeCompositionTracks, compositionTracksToNodePatch } from '@/utils/compositionUpstream'
@@ -69,9 +68,10 @@ import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDi
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
 import { BYOK_FALLBACK_CONFIRM_MESSAGE } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
-import { decideAgentOpenWhileRefine, shouldApplyRefineToNode } from '@/utils/refineChrome'
-import { centerExpandPosition, containFitSize } from '@/utils/centerExpand'
+import { decideAgentOpenWhileRefine } from '@/utils/refineChrome'
+import { containFitSize } from '@/utils/centerExpand'
 import type { RefineApplyPayload } from '@/components/canvas/refine/compareViewModel'
+import { applyRefineAsChild } from '@/composables/useRefineApply'
 import { shouldHideCanvasChrome } from '@/utils/canvasChromeVisibility'
 import type { FallbackPendingRequest } from '@/composables/useNodeGeneration'
 import { createFallbackConfirmQueue, fallbackConfirmKey } from '@/composables/fallbackConfirmQueue'
@@ -749,6 +749,8 @@ const editorNode = computed((): EditableFlowNode | null => {
 
 const gridSliceBusy = ref(false)
 const gridSlicePanelNodeId = ref<string | null>(null)
+/** 浮层一键抠图进行中（防重入 + matting 按钮 loading） */
+const mattingBusy = ref(false)
 
 const gridSlicePanelNode = computed((): EditableFlowNode | null => {
   if (!gridSlicePanelNodeId.value) return null
@@ -834,16 +836,6 @@ const gridSliceDisabledTitle = computed(() => {
 const refineBeforeUrl = computed(() => {
   const data = refinePanelNode.value?.data as Record<string, unknown> | undefined
   return String(data?.url ?? canvasEditor.imageTarget?.url ?? '')
-})
-
-const refineVersions = computed((): ImageVersionEntry[] => {
-  const versions = refinePanelNode.value?.data?.imageVersions
-  return Array.isArray(versions) ? (versions as ImageVersionEntry[]) : []
-})
-
-const refineCurrentVersionId = computed(() => {
-  const id = refinePanelNode.value?.data?.currentVersionId
-  return typeof id === 'string' ? id : undefined
 })
 
 const refineGenerationRecordId = computed(() => {
@@ -2988,74 +2980,73 @@ function closeRefineWorkbench() {
 
 function handleRefineApply(payload: RefineApplyPayload) {
   const nodeId = canvasEditor.imageTarget?.nodeId
-  if (!nodeId) return
-  const node = findNodeById(nodeId)
-  if (!node) return
-  const nodeUrl = String((node.data as Record<string, unknown> | undefined)?.url ?? '')
-  const sessionBeforeUrl = String(canvasEditor.imageTarget?.url ?? '')
-  if (!shouldApplyRefineToNode({ nodeUrl, sessionBeforeUrl })) return
-  const next = appendEditVersion(imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>), {
-    id: randomId(),
-    url: payload.url,
-    createdAt: new Date().toISOString(),
-    generationRecordId: payload.recordId,
-    editPrompt: payload.prompt,
+  const node = nodeId && findNodeById(nodeId)
+  if (!node) {
+    ElMessage.warning('原图节点已不存在')
+    return
+  }
+  const appliedKey = payload.recordId ?? `matting:${payload.url}`
+  const res = applyRefineAsChild({
+    sourceNode: { id: node.id, position: { ...node.position } },
+    result: {
+      url: payload.url,
+      prompt: payload.prompt,
+      recordId: payload.recordId,
+      appliedKey,
+      nodeSize: payload.metadata?.outpaintTo
+        ? containFitSize({ width: 280, height: 280 }, payload.metadata.outpaintTo)
+        : undefined,
+    },
+    addNode: (type, data, opts) =>
+      addNode(type, { prompt: '', imageModel: getProviderConfig('image').model, ...data } as never, opts),
+    addEdge,
+    findAppliedNode: (key) => nodes.value.find((n) => (n.data as Record<string, unknown>)?.appliedKey === key),
   })
-  patchNodeData(node.id, {
-    url: next.url,
-    currentVersionId: next.currentVersionId,
-    imageVersions: next.imageVersions,
-    generationRecordId: next.generationRecordId,
-    status: 'completed',
-  })
-  applyOutpaintCenterAnchor(node, payload.metadata)
-  persistUserEdit()
+  selectNodeIds([res.nodeId])
+  void persistUserEditAsync()
+  if (res.created) ElMessage.success('已应用到画布（下游新节点）')
+  else ElMessage.info('该结果已应用过，已为你定位节点')
 }
 
 /**
- * T9（规格 §3.4）：扩图版本应用到节点时以原图中心锚定——节点按新画布尺寸居中放大
- * （position = oldCenter − newSize/2），与其他节点的重叠按画布既有 z 序处理，不做避让。
- * 普通精修版本无 metadata，尺寸不变、position 不动。
- * 节点显示尺寸取 data.nodeSize（此前应用链路写入）否则图片卡默认 280×280（neoNodeMeta），
- * 新尺寸按新画布等比 contain 进旧框，保证整张扩图画布在节点内完整可见。
+ * 浮层一键抠图（Task 9）：不进精修模式，直接调 studioApi.mattingImage 生成下游节点，
+ * 注入/幂等/toast 语义与 handleRefineApply（applyRefineAsChild）完全一致。
+ * 503 → 服务未启用；502/其余 → 服务暂时不可用（文案同精修面板 Task 7）。
  */
-function applyOutpaintCenterAnchor(
-  node: EditableFlowNode,
-  metadata: RefineApplyPayload['metadata'],
-) {
-  const { editMode, outpaintFrom, outpaintTo } = metadata ?? {}
-  if (editMode !== 'outpaint' || !outpaintFrom || !outpaintTo) return
+async function handleFloatingMatting(node: EditableFlowNode) {
   const data = (node.data ?? {}) as Record<string, unknown>
-  const stored = data.nodeSize as { width: number; height: number } | undefined
-  const oldSize =
-    stored && stored.width > 0 && stored.height > 0 ? stored : { width: 280, height: 280 }
-  const newSize = containFitSize(oldSize, outpaintTo)
-  if (newSize.width === oldSize.width && newSize.height === oldSize.height) return
-  node.position = centerExpandPosition(node.position, oldSize, newSize)
-  patchNodeData(node.id, { nodeSize: newSize })
-}
-
-function handleRefineRevert(payload: { versionId: string }) {
-  const nodeId = canvasEditor.imageTarget?.nodeId
-  if (!nodeId) return
-  const node = findNodeById(nodeId)
-  if (!node) return
-  const next = revertImageVersion(
-    imageVersionStateFromData((node.data ?? {}) as Record<string, unknown>),
-    payload.versionId,
-  )
-  patchNodeData(node.id, {
-    url: next.url,
-    currentVersionId: next.currentVersionId,
-    generationRecordId: next.generationRecordId,
-  })
-  persistUserEdit()
-  const target = canvasEditor.imageTarget
-  if (target) {
-    canvasEditor.openImageEditor({
-      ...target,
-      url: next.url,
+  const imageUrl = String(data.url ?? '').trim()
+  if (!imageUrl || mattingBusy.value) return
+  mattingBusy.value = true
+  try {
+    const { data: res } = await studioApi.mattingImage({ imageUrl })
+    const resultUrl = res.data.url
+    const applied = applyRefineAsChild({
+      sourceNode: { id: node.id, position: { ...node.position } },
+      result: {
+        url: resultUrl,
+        prompt: '抠图',
+        appliedKey: `matting:${resultUrl}`,
+      },
+      addNode: (type, childData, opts) =>
+        addNode(type, { prompt: '', imageModel: getProviderConfig('image').model, ...childData } as never, opts),
+      addEdge,
+      findAppliedNode: (key) => nodes.value.find((n) => (n.data as Record<string, unknown>)?.appliedKey === key),
     })
+    selectNodeIds([applied.nodeId])
+    void persistUserEditAsync()
+    if (applied.created) ElMessage.success('已应用到画布（下游新节点）')
+    else ElMessage.info('该结果已应用过，已为你定位节点')
+  } catch (err) {
+    const ax = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = ax.response?.status
+    if (status === 503) ElMessage.warning('抠图服务未启用')
+    else if (status === 400)
+      // 服务端对 >20MB / >4096px / 不支持格式返回 400，透传 message 而非「暂时不可用」。
+      ElMessage.warning(ax.response?.data?.message || '图片不符合要求（限 20MB / 4096px）')
+    else ElMessage.warning('抠图服务暂时不可用')
+  } finally {
+    mattingBusy.value = false
   }
 }
 
@@ -4034,7 +4025,9 @@ onUnmounted(() => {
             :grid-slice-disabled-title="gridSliceDisabledTitle"
             :grid-slice-image="gridSliceImageSize"
             :has-url="Boolean(selectionActionBarNode?.data?.url)"
+            :matting-busy="mattingBusy"
             @edit="openRefineForSelected"
+            @matting="selectionActionBarNode && handleFloatingMatting(selectionActionBarNode)"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
             @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"
@@ -4085,15 +4078,12 @@ onUnmounted(() => {
           :node-id="refinePanelNode.id"
           :before-url="refineBeforeUrl"
           :url="refineBeforeUrl"
-          :versions="refineVersions"
-          :current-version-id="refineCurrentVersionId"
           :session-id="sessionId"
           :generation-record-id="refineGenerationRecordId"
           :width="refineMediaWidth"
           :height="refineMediaHeight"
           @close="closeRefineWorkbench"
           @apply="handleRefineApply"
-          @revert="handleRefineRevert"
           @busy="canvasEditor.setRefineBusy"
         />
         <GridSliceWorkbench

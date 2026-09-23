@@ -8,7 +8,6 @@ import {
   IMAGE_EDIT_MODEL_PRICING,
   P1_IMAGE_EDIT_MODEL_KEY,
   resolveImageEditProfile,
-  type ImageVersionEntry,
 } from '@lnkpi/shared'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
@@ -18,13 +17,14 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
 import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'
 import { applyGuideEditIntent, editIntentDisabledReason } from './guideEditIntentApply'
-import { syncRefineUrls } from './syncRefineUrls'
 import { baseCanvasFromMetadata, type RefineApplyPayload, type RefineCompareMetadata } from './compareViewModel'
 import CompareLightbox from './CompareLightbox.vue'
 import RefineCompareBand from './RefineCompareBand.vue'
 import RefineDock from './RefineDock.vue'
 import RefineOutpaintDock from './RefineOutpaintDock.vue'
-import VersionStrip from './VersionStrip.vue'
+import MattingDock from './MattingDock.vue'
+import SessionFilmstrip from './SessionFilmstrip.vue'
+import { compositeMattingPng } from './mattingComposite'
 import { getWorkbenchTool, toolIdForRefineMode } from '@/components/canvas/workbench/workbenchToolRegistry'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
@@ -45,8 +45,6 @@ const REFINE_COLLAPSED_W = 44
 const props = defineProps<{
   nodeId: string
   beforeUrl: string
-  versions: ImageVersionEntry[]
-  currentVersionId?: string
   sessionId: string
   generationRecordId?: string
   width?: number
@@ -66,7 +64,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: []
   apply: [payload: RefineApplyPayload]
-  revert: [payload: { versionId: string }]
   busy: [value: boolean]
   'update:collapsed': [value: boolean]
   /** 面板宽度调整：生产者由 RefineWorkbench 经 @update:panel-width="setPanelWidth($event)" 接线（Shell 的 resize handle）；保留 emit 供对齐。 */
@@ -94,10 +91,24 @@ const activeRefRoleHints = computed(() => {
 })
 const busy = ref(false)
 const segmentBusy = ref(false)
-const afterUrl = ref(props.beforeUrl)
 const errorMessage = ref('')
 const compareBeforeUrl = ref(props.beforeUrl)
-const lastRecordId = ref<string | undefined>()
+/** 处理后结果 url：统一取自 store 当前会话结果（胶片条选中即切换，Task 7）。 */
+const afterUrl = computed(() => editor.currentRefineSessionResult?.url ?? undefined)
+/** matting 服务不可用（503）标记：禁用 run-auto 并提示。 */
+const mattingUnavailable = ref(false)
+/** 当前是否有可用于「选区抠图」的选区蒙版。 */
+const maskAvailable = computed(() => {
+  const mask = editor.getRefineMask()
+  const canvas = mask?.getCanvas()
+  return !!canvas && editor.refineCoverage > 0
+})
+/** 当前激活工具是否为 matting 面板（动态 panel 下发 5 props / 监听 3 events）。 */
+const isMattingPanel = computed(() => editor.refineMode === 'matting')
+/** matting dock：注册表声明 panel。 */
+const mattingDockInPanel = computed(
+  () => editor.refineMode === 'matting' && activeTool.value?.dockPlacement === 'panel' && !!activeTool.value.dock,
+)
 /** 当前「处理后」版本的对照元数据（Task 8）：扩图成功时快照，普通精修 / 换图时清空。 */
 const outpaintMeta = ref<RefineCompareMetadata | null>(null)
 const compareBaseCanvas = computed(() => baseCanvasFromMetadata(outpaintMeta.value))
@@ -141,9 +152,9 @@ const outpaintDockFloating = computed(
     outpaintCanRun.value &&
     !editor.refineOutpaintDragging,
 )
-/** select 的 dock 落点：注册表声明 panel（产出型工具必有 dock，§4.2）。 */
+/** 通用编辑 dock（select 等）落点：注册表声明 panel（产出型工具必有 dock，§4.2）。matting 走独立 MattingDock。 */
 const selectDockInPanel = computed(
-  () => activeTool.value?.dockPlacement === 'panel' && !!activeTool.value.dock,
+  () => editor.refineMode !== 'matting' && activeTool.value?.dockPlacement === 'panel' && !!activeTool.value.dock,
 )
 /** 扩图 dock 的面板兜底落点：注册表声明 floating 但悬浮不可用（窄屏，§6.3）。 */
 const outpaintDockInPanel = computed(
@@ -163,7 +174,7 @@ const refineDisabled = computed(() => {
   if (editor.refineMode === 'outpaint') return !outpaintReady.value
   return coverageKind.value === 'empty'
 })
-const canApply = computed(() => !!afterUrl.value && afterUrl.value !== props.beforeUrl)
+const canApply = computed(() => !!afterUrl.value)
 const backLabel = computed(() => (busy.value ? '取消精修' : '关闭'))
 const panelStyle = computed(() => {
   const width = props.collapsed
@@ -184,17 +195,10 @@ watch(busy, (value) => emit('busy', value), { immediate: true })
 watch(
   () => props.beforeUrl,
   (url) => {
-    const next = syncRefineUrls({
-      beforeUrl: url,
-      afterUrl: afterUrl.value,
-      compareBeforeUrl: compareBeforeUrl.value,
-    })
-    compareBeforeUrl.value = next.compareBeforeUrl
-    afterUrl.value = next.afterUrl
-    if (next.reset) {
-      lastRecordId.value = undefined
-      outpaintMeta.value = null
-    }
+    // afterUrl 现已由 store 当前会话结果派生（换图时 store 会清空结果），
+    // 这里只需同步对照基准图并清掉扩图元数据 / 点选兜底状态。
+    compareBeforeUrl.value = url
+    outpaintMeta.value = null
     resetPointFallbackState()
   },
 )
@@ -248,20 +252,9 @@ function clearEditIntent() {
   activeGuideEditIntentId.value = null
 }
 
-function onSelectVersion(versionId: string) {
-  if (busy.value) return
-  const version = props.versions.find((item) => item.id === versionId)
-  if (version) compareBeforeUrl.value = version.url
-}
-
-function onRevert(versionId: string) {
-  if (busy.value) return
-  emit('revert', { versionId })
-}
-
-/** VersionStrip 的 revert 解包（emit 形如 { versionId }，本组件按 string 透传）。 */
-function onRevertVersion(payload: { versionId: string }) {
-  onRevert(payload.versionId)
+/** 会话胶片条选中：切换 store 当前结果，afterUrl 随之派生切换。 */
+function onSelectSessionResult(id: string) {
+  editor.selectRefineSessionResult(id)
 }
 
 function onBackOrCancel() {
@@ -273,12 +266,15 @@ function onBackOrCancel() {
 }
 
 function onApply() {
-  if (!canApply.value) return
-  const payload: { url: string; prompt: string; recordId?: string } = {
-    url: afterUrl.value,
-    prompt: prompt.value,
+  const result = editor.currentRefineSessionResult
+  if (!result) return
+  const payload: RefineApplyPayload = {
+    url: result.url,
+    prompt: result.prompt,
   }
-  if (lastRecordId.value) payload.recordId = lastRecordId.value
+  if (result.recordId) payload.recordId = result.recordId
+  // 扩图结果的对照元数据随 payload 下传（CanvasPage 据 outpaintTo contain-fit 出 nodeSize）。
+  if (result.metadata) payload.metadata = result.metadata
   emit('apply', payload)
 }
 
@@ -396,14 +392,12 @@ async function runRefine() {
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
-        parentVersionId: props.currentVersionId,
       },
       signal,
     )
     const url = data.data.url
     if (url) {
-      afterUrl.value = url
-      lastRecordId.value = data.data.id
+      editor.pushRefineSessionResult({ url, recordId: data.data.id, prompt: prompt.value || '精修' })
     }
   } catch (err) {
     const message = formatError(err, '精修失败，请重试')
@@ -411,6 +405,93 @@ async function runRefine() {
   } finally {
     busy.value = false
     abortController = null
+  }
+}
+
+/** mask canvas 选区（alpha 或 luma）转 compositeMattingPng 所需的「红通道=选区强度」RGBA。 */
+function maskCanvasToCompositeRgba(data: Uint8ClampedArray): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(data.length)
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]!
+    const g = data[i + 1]!
+    const b = data[i + 2]!
+    const a = data[i + 3]!
+    const selected = a > 127 || 0.299 * r + 0.587 * g + 0.114 * b > 127
+    out[i] = selected ? 255 : 0
+    out[i + 1] = 0
+    out[i + 2] = 0
+    out[i + 3] = 255
+  }
+  return out
+}
+
+/**
+ * 一键抠图（matting-auto）：调 studioApi.mattingImage 由服务端 rembg 出透明 PNG。
+ * 503 → 服务未启用（标记 mattingUnavailable 禁用 CTA）；其余异常 → 服务暂时不可用。
+ * 任何异常都不让面板崩（Review Focus 3）。
+ */
+async function runMattingAuto() {
+  if (editor.refineMode !== 'matting') return
+  mattingUnavailable.value = false
+  busy.value = true
+  editor.setRefineBusy(true)
+  try {
+    const { data } = await studioApi.mattingImage({ imageUrl: props.beforeUrl })
+    const url = data.data.url
+    if (url) editor.pushRefineSessionResult({ url, prompt: '抠图' })
+  } catch (err) {
+    const ax = err as { response?: { status?: number; data?: { message?: string } } }
+    const status = ax.response?.status
+    if (status === 503) {
+      mattingUnavailable.value = true
+      ElMessage.warning('抠图服务未启用')
+    } else if (status === 400) {
+      // 服务端对 >20MB / >4096px / 不支持格式返回 400，透传 message 而非「暂时不可用」。
+      ElMessage.warning(ax.response?.data?.message || '图片不符合要求（限 20MB / 4096px）')
+    } else {
+      ElMessage.warning('抠图服务暂时不可用')
+    }
+  } finally {
+    busy.value = false
+    editor.setRefineBusy(false)
+  }
+}
+
+/**
+ * 选区抠图（matting-mask）：本地用当前蒙版 + 原图合成透明 PNG，不依赖 rembg。
+ * mask 取本地 canvas（与 onPointSelect 同源），转 RGBA 后 compositeMattingPng → persist → 入会话。
+ */
+async function runMattingMask() {
+  if (editor.refineMode !== 'matting') return
+  const mask = editor.getRefineMask()
+  const canvas = mask?.getCanvas()
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const maskRgba = maskCanvasToCompositeRgba(imageData.data)
+  busy.value = true
+  editor.setRefineBusy(true)
+  try {
+    const img = await loadWorkImage(props.beforeUrl)
+    const blob = await compositeMattingPng({ image: img, maskRgba })
+    const file = new File([blob], 'matting.png', { type: 'image/png' })
+    const fallbackUrl = URL.createObjectURL(file)
+    let url: string
+    try {
+      url = await persistMediaUrl(file, fallbackUrl)
+    } catch (e) {
+      URL.revokeObjectURL(fallbackUrl)
+      throw e
+    }
+    if (url !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
+    editor.pushRefineSessionResult({ url, prompt: '选区抠图' })
+  } catch (err) {
+    const message = formatError(err, '选区抠图失败，请重试')
+    if (message) ElMessage.error(message)
+  } finally {
+    busy.value = false
+    editor.setRefineBusy(false)
   }
 }
 
@@ -483,21 +564,26 @@ async function runOutpaint() {
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
-        parentVersionId: props.currentVersionId,
       },
       signal,
     )
     const url = data.data.url
     if (url) {
-      afterUrl.value = url
-      lastRecordId.value = data.data.id
       // Task 8：快照本次扩图的对照元数据（与服务端 metadata 契约同形），
-      // 对照带据此进入「基准画布」模式——以新画布为基准、Before 居中贴图。
-      outpaintMeta.value = {
+      // 对照带据此进入「基准画布」模式；同时随会话结果存储，apply 时随 payload 下传
+      // （CanvasPage 据 outpaintTo contain-fit 出下游节点 nodeSize）。
+      const meta: RefineCompareMetadata = {
         editMode: 'outpaint',
         outpaintFrom: { width: baseW, height: baseH },
         outpaintTo: { width: rect.width, height: rect.height },
       }
+      outpaintMeta.value = meta
+      editor.pushRefineSessionResult({
+        url,
+        recordId: data.data.id,
+        prompt: prompt.value || OUTPAINT_FALLBACK_PROMPT,
+        metadata: meta,
+      })
     }
   } catch (err) {
     const message = formatError(err, '扩图失败，请重试')
@@ -569,18 +655,21 @@ onBeforeUnmount(() => {
             :is="activeTool.panel"
             v-if="activeTool"
             :busy="busy"
+            v-bind="isMattingPanel ? { beforeUrl: props.beforeUrl, mattingUnavailable, maskAvailable, canApply } : {}"
             @apply-stain-preset="applyStainPreset"
+            @run-auto="runMattingAuto"
+            @run-mask="runMattingMask"
+            @apply="onApply"
           />
         </div>
-        <div class="refine-side__versions" data-testid="refine-version-strip">
-          <VersionStrip
-            :versions="versions"
-            :current-version-id="currentVersionId"
-            :disabled="busy"
-            @select="onSelectVersion"
-            @revert="onRevertVersion"
-          />
-        </div>
+        <!-- 会话胶片条（Task 7）：替换原 VersionStrip；选中切换 store 当前结果 → afterUrl 派生切换 -->
+        <SessionFilmstrip
+          class="refine-side__filmstrip"
+          :results="editor.refineSessionResults"
+          :current-id="editor.refineSessionCurrentId"
+          :disabled="busy"
+          @select="onSelectSessionResult"
+        />
       </div>
 
       <!-- select：panel 落点 dock（注册表声明 dockPlacement: 'panel'） -->
@@ -612,6 +701,14 @@ onBeforeUnmount(() => {
         @retry="runRefine"
         @select-edit-intent="applyEditIntent"
         @clear-edit-intent="clearEditIntent"
+      />
+
+      <!-- matting dock：注册表声明 panel；与 select 的 RefineDock 互斥（matting 走独立 dock）。 -->
+      <MattingDock
+        v-if="!collapsed && mattingDockInPanel"
+        :matting-unavailable="mattingUnavailable"
+        :busy="busy"
+        @run-auto="runMattingAuto"
       />
 
       <!-- 扩图窄屏兜底 dock：注册表声明 floating 但悬浮不可用（窄屏，§6.3）→ 面板底部常驻。
@@ -739,7 +836,7 @@ onBeforeUnmount(() => {
 .refine-side__body { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 /* 唯一滚动区（§4.3 布局铁律：dock 与版本条是 flex 兄弟，绝不覆盖滚动区） */
 .refine-side__scroll { min-height: 0; flex: 1; overflow-y: auto; }
-.refine-side__versions { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--neo-border); }
+.refine-side__filmstrip { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--neo-border); }
 
 .refine-outpaint-floating {
   position: fixed;

@@ -80,11 +80,29 @@ describe('SelectionActionBar', () => {
 
   it('renders disabled tool placeholders with explanatory titles', async () => {
     const wrapper = mountBar()
-    for (const id of ['matting', 'crop', 'rotate']) {
+    for (const id of ['crop', 'rotate']) {
       const btn = wrapper.get(`[data-action="${id}"]`)
       expect(btn.attributes('disabled')).toBeDefined()
       expect(String(btn.attributes('title'))).toContain('后续能力包点亮')
     }
+    wrapper.unmount()
+  })
+
+  it('点击 matting 工具 emit matting', async () => {
+    const wrapper = mountBar()
+    const matting = wrapper.get('[data-action="matting"]')
+    expect(matting.attributes('disabled')).toBeUndefined()
+    await matting.trigger('click')
+    expect(wrapper.emitted('matting')).toBeTruthy()
+    wrapper.unmount()
+  })
+
+  it('mattingBusy 时 matting 按钮禁用且不 emit', async () => {
+    const wrapper = mountBar({ mattingBusy: true })
+    const matting = wrapper.get('[data-action="matting"]')
+    expect(matting.attributes('disabled')).toBeDefined()
+    await matting.trigger('click')
+    expect(wrapper.emitted('matting')).toBeFalsy()
     wrapper.unmount()
   })
 

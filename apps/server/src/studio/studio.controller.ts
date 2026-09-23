@@ -305,6 +305,11 @@ class ImageSegmentDto {
   label?: 0 | 1
 }
 
+class ImageMattingDto {
+  @IsString()
+  imageUrl!: string
+}
+
 class ImageSliceDto {
   @IsString()
   @IsNotEmpty()
@@ -448,6 +453,16 @@ export class StudioController {
       y: dto.y,
       label: dto.label,
     })
+    return { code: 0, message: 'ok', data }
+  }
+
+  @Post('image/matting')
+  @UseGuards(AuthGuard)
+  async mattingImage(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ImageMattingDto,
+  ) {
+    const data = await this.studioService.mattingImage(req.user.sub, { imageUrl: dto.imageUrl })
     return { code: 0, message: 'ok', data }
   }
 

@@ -30,6 +30,7 @@ services:
     environment:
       PORT: "3001"
       DATABASE_URL: file:/app/apps/server/data/lnkpi.db
+      MATTING_SERVICE_URL: ${MATTING_SERVICE_URL:-http://lnkpi-matting:8000}
     ports:
       - "0.0.0.0:5100:3001"
     volumes:
@@ -84,6 +85,28 @@ services:
       retries: 3
       start_period: 25s
 
+  # 仅内网；勿映射端口到公网。模型预置在镜像层（isnet-general-use，~170MB）
+  matting:
+    image: ${LNKPI_MATTING_IMAGE:-lnkpi-matting:local}
+    build:
+      context: ./docker/matting
+    container_name: lnkpi-matting
+    restart: unless-stopped
+    mem_limit: 1g
+    # 无 ports：只通过 lnkpi-net 被 api 访问
+    networks:
+      - lnkpi
+    volumes:
+      - matting-models:/root/.u2net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # matting-models named volume 为空卷时会遮蔽镜像层预置模型（/root/.u2net），
+      # 首启需同步/下载模型（~170MB）才能通过 health，放宽 start_period 防反复重启。
+      start_period: 180s
+
 networks:
   lnkpi:
     name: lnkpi-net
@@ -92,3 +115,4 @@ volumes:
   lnkpi-data:
   lnkpi-uploads:
   lnkpi-checkpoints:
+  matting-models:

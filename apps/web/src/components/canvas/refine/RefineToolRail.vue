@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import type { RefineMaskTool } from '@/stores/canvasEditor'
+import { TOOL_ICON_MATTING } from '@/components/canvas/toolIcons'
 import {
   REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   inputToolActive,
@@ -33,6 +34,12 @@ const railRef = ref<HTMLElement | null>(null)
 const outpaintActive = computed(() => editor.refineMode === 'outpaint')
 function toggleOutpaint() {
   editor.toggleRefineMode()
+}
+
+/** 抠图模式入口（Task 10 修复轮）：toggle 语义与扩图对称，但不走 store 的 toggleRefineMode（那是扩图专用）。 */
+const mattingActive = computed(() => editor.refineMode === 'matting')
+function toggleMatting() {
+  editor.setRefineMode(mattingActive.value ? 'select' : 'matting')
 }
 
 /** 同一时刻只允许一个二级菜单展开 */
@@ -112,6 +119,26 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       >
         <span class="refine-rail__glyph">⤢</span>
         <span class="refine-rail__name">扩图</span>
+      </button>
+    </div>
+
+    <!-- 抠图模式入口：激活时高亮；busy 时冻结不可切换；与扩图互斥（setRefineMode 覆盖式切换） -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': mattingActive }"
+        data-testid="rail-mode-matting"
+        aria-label="抠图（生成透明 PNG）"
+        title="抠图（生成透明 PNG）"
+        :aria-pressed="mattingActive"
+        :disabled="editor.refineBusy"
+        @click="toggleMatting"
+      >
+        <span class="refine-rail__glyph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_MATTING" />
+        </span>
+        <span class="refine-rail__name">抠图</span>
       </button>
     </div>
 

@@ -116,6 +116,8 @@ export const studioApi = {
     ),
   segmentImage: (body: { imageUrl: string; x: number; y: number; label?: 0 | 1 }) =>
     api.post<{ data: { maskUrl: string } }>('/studio/image/segment', body),
+  mattingImage: (body: { imageUrl: string }, signal?: AbortSignal) =>
+    api.post<{ data: { url: string } }>('/studio/image/matting', body, { timeout: 45_000, signal }),
   imageSlice: async (
     body: { sourceUrl: string; cols: number; rows: number; sessionId: string },
     opts?: { timeout?: number },

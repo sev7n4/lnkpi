@@ -4,6 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
 import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.vue'
 import { buildSelectionTools, exactCounterScale, resolveBarPlacement, type SelectionToolDef } from './selectionToolModel'
+import { TOOL_ICON_MATTING } from './toolIcons'
 
 /**
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
@@ -26,6 +27,8 @@ const props = defineProps<{
   gridSliceImage?: { width: number; height: number } | null
   /** 文件组（下载/存库）是否可用：节点有可访问的 url 时为真 */
   hasUrl?: boolean
+  /** 浮层一键抠图进行中：matting 按钮禁用 + loading（CanvasPage 传入，防重入） */
+  mattingBusy?: boolean
   /** 视口缩放；不传时回退到组件自身 useVueFlow viewport（CanvasPage 无响应式 zoom 源） */
   zoom?: number
 }>()
@@ -36,6 +39,7 @@ const emit = defineEmits<{
   'open-custom': []
   download: []
   'save-asset': []
+  matting: []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
@@ -48,11 +52,18 @@ const BAR_GAP_PX = 8
  */
 const BAR_WIDTH_PX = 384
 
-const tools = computed(() => buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }))
+const tools = computed(() =>
+  buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }).map((tool) =>
+    tool.id === 'matting' && props.mattingBusy
+      ? { ...tool, disabled: true, disabledReason: '抠图进行中' }
+      : tool,
+  ),
+)
 
 function onToolClick(tool: SelectionToolDef) {
   if (tool.disabled) return
   if (tool.id === 'refine') emit('edit')
+  else if (tool.id === 'matting') emit('matting')
   else if (tool.id === 'download') emit('download')
   else if (tool.id === 'save-asset') emit('save-asset')
 }
@@ -151,7 +162,7 @@ const effectiveZoom = computed(() => props.zoom ?? viewport.value.zoom)
 
 const TOOL_ICONS: Record<string, string> = {
   refine: '<path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />',
-  matting: '<circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" /><path d="M20 4L8.12 15.88" /><path d="M14.47 14.48L20 20" /><path d="M8.12 8.12L12 12" />',
+  matting: TOOL_ICON_MATTING,
   crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" />',
   rotate: '<path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />',
@@ -194,7 +205,7 @@ const TOOL_ICONS: Record<string, string> = {
             <button
               type="button"
               class="toolbar-action"
-              :class="{ 'icon-only': tool.group === 'file' }"
+              :class="{ 'icon-only': tool.group === 'file', 'is-loading': tool.id === 'matting' && mattingBusy }"
               :data-action="tool.id"
               :title="tool.disabled ? (tool.disabledReason ?? tool.title) : tool.title"
               :aria-label="tool.title"
@@ -211,6 +222,7 @@ const TOOL_ICONS: Record<string, string> = {
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 aria-hidden="true"
+                :class="{ 'animate-spin': tool.id === 'matting' && mattingBusy }"
                 v-html="TOOL_ICONS[tool.icon]"
               />
               <span class="label">{{ tool.title }}</span>
@@ -241,6 +253,10 @@ const TOOL_ICONS: Record<string, string> = {
 .toolbar-action:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+/* 抠图进行中（与 GridSliceDropdown 的 is-loading 语义对齐）：按钮禁用 + 图标转圈 */
+.toolbar-action.is-loading {
+  opacity: 0.6;
 }
 /* 文件组：纯图标按钮，缩小左右内边距 */
 .toolbar-action.icon-only {

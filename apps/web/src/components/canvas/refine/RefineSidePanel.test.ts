@@ -5,6 +5,7 @@ import { IMAGE_EDIT_GATEWAY_MODEL_ID } from '@lnkpi/shared'
 import { studioApi } from '@/services/studio-api'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
+import { ElMessage } from 'element-plus'
 import { OUTPAINT_FALLBACK_PROMPT } from './outpaintFallback'
 import RefineSidePanel from './RefineSidePanel.vue'
 
@@ -12,12 +13,18 @@ vi.mock('@/services/studio-api', () => ({
   studioApi: {
     editImage: vi.fn(async () => ({ data: { data: { url: 'blob:after', id: 'rec1' } } })),
     segmentImage: vi.fn(async () => ({ data: { data: { maskUrl: 'blob:mask' } } })),
+    mattingImage: vi.fn(async () => ({ data: { data: { url: 'blob:mat' } } })),
   },
 }))
 
 vi.mock('@/composables/useMediaUpload', () => ({
   persistMediaUrl: vi.fn(async () => 'https://up/mask.png'),
 }))
+
+vi.mock('element-plus', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('element-plus')>()
+  return { ...actual, ElMessage: { warning: vi.fn(), error: vi.fn() } }
+})
 
 vi.mock('./outpaintRender', () => ({
   renderOutpaintPngs: vi.fn(async () => ({
@@ -27,7 +34,7 @@ vi.mock('./outpaintRender', () => ({
 }))
 
 const baseProps = {
-  nodeId: 'n1', beforeUrl: 'blob:before', versions: [], sessionId: 's1',
+  nodeId: 'n1', beforeUrl: 'blob:before', sessionId: 's1',
   panelWidth: 400, collapsed: false, isNarrow: false, insetRight: 400,
 }
 
@@ -42,11 +49,13 @@ let current: VueWrapper | null = null
 const mountPanel = (overrides: Record<string, unknown> = {}) => {
   current = mount(RefineSidePanel, {
     props: { ...baseProps, ...overrides },
+    attachTo: document.body,
     global: {
       plugins: [pinia],
       stubs: {
+        // Teleport 改为就地渲染，避免节点逃逸到 body 后无法随 unmount 清理（导致跨测试用例串味）。
+        Teleport: { template: '<div><slot /></div>' },
         GuidePickerPopover: { template: '<div />' },
-        VersionStrip: { name: 'VersionStrip', template: '<div />' },
       },
     },
   })
@@ -70,20 +79,21 @@ describe('RefineSidePanel 三段式', () => {
   afterEach(() => {
     current?.unmount()
     current = null
+    document.body.innerHTML = ''
     vi.clearAllMocks()
   })
 
-  it('段落顺序：head → 对照带 → 当前工具面板 → 版本条 → dock（§5 骨架）', () => {
+  it('段落顺序：head → 对照带 → 当前工具面板 → 会话胶片条 → dock（§5 骨架）', () => {
     mountPanel()
     const order = qa(
-      '.refine-side__head, [data-testid="refine-compare-band"], [data-testid="workbench-panel-scroll"], [data-testid="refine-version-strip"], [data-testid="refine-dock"]',
+      '.refine-side__head, [data-testid="refine-compare-band"], [data-testid="workbench-panel-scroll"], [data-testid="session-filmstrip"], [data-testid="refine-dock"]',
     ).map((el) => {
       const tid = el.getAttribute('data-testid')
       if (el.classList.contains('refine-side__head')) return 'head'
       if (tid === 'workbench-panel-scroll') return 'panel-scroll'
       return (tid ?? '').replace('refine-', '')
     })
-    expect(order).toEqual(['head', 'compare-band', 'panel-scroll', 'version-strip', 'dock'])
+    expect(order).toEqual(['head', 'compare-band', 'panel-scroll', 'session-filmstrip', 'dock'])
   })
 
   it('右栏不再有 Toolbox，滚动槽按注册表渲染当前工具面板', () => {
@@ -185,7 +195,7 @@ describe('RefineSidePanel 三段式', () => {
     mountPanel()
     const scroll = q('[data-testid="workbench-panel-scroll"]')!
     expect(scroll.querySelector('[data-testid="refine-dock"]')).toBeNull()
-    expect(q('.refine-side__versions')).not.toBeNull()
+    expect(q('.refine-side__filmstrip')).not.toBeNull()
   })
 
   it('§4.3 高度预算：滚动槽无内联高度（像素预算 ≤148 / ≤224 由目视验收把关）', () => {
@@ -224,6 +234,8 @@ describe('RefineSidePanel 三段式', () => {
     expect(body.model).toBe('image2')
     expect(body.size).toBe('auto')
     expect(body.mode).toBe('edit')
+    // 结果进入会话胶片条（afterUrl 由 store 当前结果派生）
+    expect(editor.refineSessionResults.length).toBe(1)
   })
 
   it('扩图提交：合成两张 PNG persist 后走 editImage（mode:outpaint / size:auto / outpaintFrom·To）', async () => {
@@ -249,6 +261,8 @@ describe('RefineSidePanel 三段式', () => {
     expect(body.maskUrl).toBe('https://up/mask.png')
     expect(body.outpaintFrom).toEqual({ width: 400, height: 300 })
     expect(body.outpaintTo).toEqual({ width: 800, height: 600 })
+    // 结果进入会话胶片条
+    expect(editor.refineSessionResults.length).toBe(1)
   })
 
   it('扩图空 prompt 时请求体 prompt=兜底英文', async () => {
@@ -313,6 +327,43 @@ describe('RefineSidePanel 三段式', () => {
     expect(q('[data-testid="compare-base-hatch"]')).toBeNull()
   })
 
+  it('扩图会话结果应用：apply payload 携带 metadata.outpaintTo（含落像素，CanvasPage 据此 contain-fit 出 nodeSize）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('outpaint')
+    editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0.4, y: 50.6, width: 400.2, height: 400.9 })
+    mountPanel()
+    await flushPromises()
+    await runOutpaintButton()!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    // 扩图结果入会话时快照了对照元数据（editMode / outpaintFrom / outpaintTo）
+    expect(editor.refineSessionResults[0]!.metadata).toEqual({
+      editMode: 'outpaint',
+      outpaintFrom: { width: 400, height: 300 },
+      outpaintTo: { width: 400, height: 400 },
+    })
+
+    const applyBtn = q('[data-testid="outpaint-dock-apply"]') as HTMLButtonElement | null
+    expect(applyBtn).not.toBeNull()
+    await applyBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const applies = current?.emitted('apply')
+    expect(applies).toBeTruthy()
+    const payload = (applies as unknown[][]).at(-1)![0] as {
+      url: string
+      metadata?: { editMode?: string; outpaintFrom?: { width: number; height: number }; outpaintTo?: { width: number; height: number } }
+    }
+    expect(payload.url).toBe('blob:after')
+    expect(payload.metadata).toEqual({
+      editMode: 'outpaint',
+      outpaintFrom: { width: 400, height: 300 },
+      outpaintTo: { width: 400, height: 400 },
+    })
+  })
+
   it('扩图提交的 outpaintTo 使用落像素后的 rect（不含小数）', async () => {
     const editor = useCanvasEditorStore()
     editor.setRefineMode('outpaint')
@@ -328,6 +379,19 @@ describe('RefineSidePanel 三段式', () => {
 })
 
 describe('RefineSidePanel 扩图提交守卫（Q3：零扩展不得提交）', () => {
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:fallback')
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    current?.unmount()
+    current = null
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
+  })
+
   it('零扩展（rect == 原图）时 CTA 禁用并给引导文案；真实扩出后启用', async () => {
     const editor = useCanvasEditorStore()
     editor.setRefineMode('outpaint')
@@ -353,5 +417,152 @@ describe('RefineSidePanel 扩图提交守卫（Q3：零扩展不得提交）', (
     editor.setRefineOutpaintRect({ x: 0, y: 0, width: 500, height: 300 })
     await flushPromises()
     expect(runOutpaintButton()!.disabled).toBe(false)
+  })
+})
+
+describe('RefineSidePanel matting 接线（Task 7）', () => {
+  beforeEach(() => {
+    pinia = createPinia()
+    setActivePinia(pinia)
+    if (!URL.createObjectURL) URL.createObjectURL = vi.fn(() => 'blob:fallback')
+    if (!URL.revokeObjectURL) URL.revokeObjectURL = vi.fn()
+  })
+  afterEach(() => {
+    current?.unmount()
+    current = null
+    document.body.innerHTML = ''
+    vi.clearAllMocks()
+  })
+
+  it('扩图生成成功后结果进会话胶片条且 after 切换', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('outpaint')
+    editor.setRefineOutpaintBase({ width: 400, height: 300 })
+    editor.setRefineOutpaintRect({ x: 0, y: 0, width: 800, height: 600 })
+    mountPanel()
+    const runBtn = runOutpaintButton()
+    await runBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await new Promise((r) => setTimeout(r, 1))
+    await flushPromises()
+
+    expect(editor.refineSessionResults.length).toBe(1)
+    // afterUrl 由 store 当前结果派生
+    expect(editor.refineSessionResults[0].url).toBe('blob:after')
+    // 胶片条渲染出该项
+    expect(q('[data-testid="filmstrip-item"]')).not.toBeNull()
+  })
+
+  it('matting 面板渲染 + run-auto 调 mattingImage + 结果入会话', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    mountPanel()
+    await flushPromises()
+    expect(q('[data-testid="matting-panel"]')).not.toBeNull()
+
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    expect(runAuto).not.toBeNull()
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect((studioApi.mattingImage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1)
+    expect((studioApi.mattingImage as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toEqual({
+      imageUrl: 'blob:before',
+    })
+    expect(editor.refineSessionResults.length).toBe(1)
+    expect(editor.refineSessionResults[0]!.url).toBe('blob:mat')
+    expect(editor.refineSessionResults[0]!.prompt).toBe('抠图')
+    expect(editor.currentRefineSessionResult?.url).toBe('blob:mat')
+  })
+
+  it('matting 503 时 toast 且不 push', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    ;(studioApi.mattingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      response: { status: 503 },
+    })
+    mountPanel()
+    await flushPromises()
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledWith('抠图服务未启用')
+    expect(editor.refineSessionResults.length).toBe(0)
+  })
+
+  it('matting 400 时透传服务端 message（I-1：图片超限不再误报「暂时不可用」）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    ;(studioApi.mattingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      response: { status: 400, data: { message: '图片过大（限 20MB / 4096px）' } },
+    })
+    mountPanel()
+    await flushPromises()
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledWith('图片过大（限 20MB / 4096px）')
+    expect(editor.refineSessionResults.length).toBe(0)
+  })
+
+  it('matting 400 无服务端 message 时兜底文案', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    ;(studioApi.mattingImage as ReturnType<typeof vi.fn>).mockRejectedValueOnce({
+      response: { status: 400, data: {} },
+    })
+    mountPanel()
+    await flushPromises()
+    const runAuto = q('[data-testid="matting-run-auto"]') as HTMLButtonElement | null
+    await runAuto!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledWith('图片不符合要求（限 20MB / 4096px）')
+    expect(editor.refineSessionResults.length).toBe(0)
+  })
+
+  it('不再渲染 VersionStrip、revert emit 移除', () => {
+    mountPanel()
+    expect(q('[data-testid="refine-version-strip"]')).toBeNull()
+    expect(q('[data-testid="session-filmstrip"]')).not.toBeNull()
+    // 当前没有 revert emit
+    expect(current?.emitted('revert')).toBeFalsy()
+  })
+
+  it('胶片条点击切换 afterUrl（apply payload 跟随）', async () => {
+    const editor = useCanvasEditorStore()
+    editor.setRefineMode('matting')
+    editor.pushRefineSessionResult({ url: 'blob:a', prompt: '抠图' })
+    editor.pushRefineSessionResult({ url: 'blob:b', prompt: '选区抠图' })
+    mountPanel()
+    await flushPromises()
+
+    const items = qa('[data-testid="filmstrip-item"]')
+    expect(items.length).toBe(2)
+    const secondId = editor.refineSessionResults[1]!.id
+    const second = items.find((el) => el.getAttribute('data-id') === secondId) as HTMLButtonElement
+    expect(second).toBeTruthy()
+    await second.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    expect(editor.refineSessionCurrentId).toBe(secondId)
+    expect(editor.currentRefineSessionResult?.url).toBe('blob:b')
+
+    const applyBtn = q('[data-testid="matting-apply"]') as HTMLButtonElement | null
+    expect(applyBtn).not.toBeNull()
+    await applyBtn!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+
+    const applies = current?.emitted('apply')
+    expect(applies).toBeTruthy()
+    // emitted('apply') 形如 [[payload], ...]：每个元素是当次 emit 的参数数组。
+    const payload = (applies as unknown[][]).at(-1)![0] as {
+      url: string
+      prompt: string
+      recordId?: string
+    }
+    expect(payload.url).toBe('blob:b')
+    expect(payload.prompt).toBe('选区抠图')
   })
 })

@@ -8,6 +8,8 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 let pinia: Pinia
 
 // 只验证生产接线：workbench → viewport → rail 的 hasAfter 透传。
+// 「处理后」是否存在现由 store 的当前会话结果（editor.currentRefineSessionResult）驱动，
+// 不再依赖已退役的 versions prop（Task 7 / VersionStrip 退役）。
 // 兄弟组件 RefineSidePanel 较重，按需替身；viewport 的 canvas 依赖（MaskEditor / ImageLoupe）换轻量替身。
 const mountWorkbench = (props: Record<string, unknown> = {}) =>
   mount(RefineWorkbench, {
@@ -15,7 +17,6 @@ const mountWorkbench = (props: Record<string, unknown> = {}) =>
       nodeId: 'n1',
       beforeUrl: 'blob:before',
       url: 'blob:before',
-      versions: [],
       sessionId: 's1',
       width: 100,
       height: 100,
@@ -38,22 +39,20 @@ const openCompareMenu = async (w: ReturnType<typeof mountWorkbench>) => {
 describe('RefineWorkbench 生产接线', () => {
   beforeEach(() => { pinia = createPinia(); setActivePinia(pinia) })
 
-  it('节点无「处理后」版本时，左栏对照两项置灰', async () => {
-    const w = mountWorkbench({
-      versions: [{ id: 'v1', url: 'blob:before', createdAt: '2026-01-01T00:00:00.000Z', source: 'generate' }],
-    })
+  it('节点无「处理后」会话结果时，左栏对照两项置灰', async () => {
+    const editor = useCanvasEditorStore()
+    editor.clearRefineSessionResults()
+    const w = mountWorkbench()
     await openCompareMenu(w)
     expect(w.find('[data-testid="rail-compare-option-split"]').attributes('disabled')).toBeDefined()
     expect(w.find('[data-testid="rail-compare-option-wipe"]').attributes('disabled')).toBeDefined()
   })
 
-  it('节点已有「处理后」版本时，左栏对照两项可用', async () => {
-    const w = mountWorkbench({
-      versions: [
-        { id: 'v1', url: 'blob:before', createdAt: '2026-01-01T00:00:00.000Z', source: 'generate' },
-        { id: 'v2', url: 'blob:after', createdAt: '2026-01-02T00:00:00.000Z', source: 'edit' },
-      ],
-    })
+  it('节点已有「处理后」会话结果时，左栏对照两项可用', async () => {
+    const editor = useCanvasEditorStore()
+    editor.clearRefineSessionResults()
+    editor.pushRefineSessionResult({ url: 'blob:after', prompt: '抠图' })
+    const w = mountWorkbench()
     await openCompareMenu(w)
     expect(w.find('[data-testid="rail-compare-option-split"]').attributes('disabled')).toBeUndefined()
     expect(w.find('[data-testid="rail-compare-option-wipe"]').attributes('disabled')).toBeUndefined()
