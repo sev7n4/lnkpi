@@ -12,8 +12,9 @@ import {
   type OutpaintRect,
   type Size,
 } from '@/components/canvas/refine/outpaintGeometry'
+import { refineSelectionOpAfterToolPick } from '@/components/canvas/refine/refineSelectionModel'
 
-export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point'
+export type RefineMaskTool = 'brush' | 'eraser' | 'rect' | 'wand' | 'polygon' | 'point' | 'ellipse'
 export type RefineMaskOp = 'add' | 'subtract'
 export type RefineLoupeShape = 'circle' | 'rect'
 
@@ -173,8 +174,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
 
   function setRefineTool(tool: RefineMaskTool) {
     refineTool.value = tool
-    if (tool === 'eraser') refineMaskOp.value = 'subtract'
-    else if (tool === 'brush' || tool === 'rect') refineMaskOp.value = 'add'
+    refineMaskOp.value = refineSelectionOpAfterToolPick(tool, refineMaskOp.value)
   }
 
   /** 进入 / 退出扩图模式。退出时重置扩图矩形（拖拽状态不进蒙版历史栈，退出即重置）。busy 时禁止切换。 */
@@ -186,11 +186,6 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineOutpaintDragging.value = false
     }
     refineMode.value = mode
-  }
-
-  /** 在 select / outpaint 之间切换（rail 扩图按钮用）。 */
-  function toggleRefineMode() {
-    setRefineMode(refineMode.value === 'outpaint' ? 'select' : 'outpaint')
   }
 
   /** 写入当前扩图矩形（由 RefineOutpaintCanvas 拖拽时实时调用）。 */
@@ -320,7 +315,6 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineWandTolerance,
     setRefineTool,
     setRefineMode,
-    toggleRefineMode,
     setRefineOutpaintRect,
     setRefineOutpaintBase,
     setRefineOutpaintDragging,
