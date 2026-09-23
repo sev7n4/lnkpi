@@ -34,7 +34,7 @@ export function normalizeCropRotation(deg: number): number {
   let d = deg % 360
   if (d <= -180) d += 360
   else if (d > 180) d -= 360
-  return d === -0 ? 0 : d
+  return d === 0 ? 0 : d // 消除 -0（esbuild 严格相等告警）
 }
 
 /** 总旋转角：90° 步进（turns，可负）+ 微调（fine，−45..45）。 */
