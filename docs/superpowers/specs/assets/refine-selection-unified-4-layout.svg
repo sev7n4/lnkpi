@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 700" width="1180" height="700" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
-  <rect x="0" y="0" width="1180" height="700" fill="#f4f6f9"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 790" width="1180" height="790" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect x="0" y="0" width="1180" height="790" fill="#f4f6f9"/>
 
   <!-- 画布层 chrome：返回画布 -->
   <rect x="20" y="10" width="112" height="28" rx="8" fill="#ffffff" stroke="#d7dce5"/>
@@ -7,7 +7,7 @@
   <text x="52" y="28" fill="#4d5666" font-size="12">返回画布</text>
 
   <!-- ================= 左栏 rail ================= -->
-  <rect x="20" y="48" width="56" height="540" rx="16" fill="#ffffff" stroke="#d7dce5"/>
+  <rect x="20" y="48" width="56" height="560" rx="16" fill="#ffffff" stroke="#d7dce5"/>
 
   <!-- 扩图（cy=76）：虚线外框 + 实线内框 -->
   <circle cx="48" cy="76" r="15" fill="#f4f6f9" stroke="#d7dce5"/>
@@ -82,7 +82,7 @@
   <text x="48" y="592" fill="#b6bec9" font-size="10" text-anchor="middle">宫格切分</text>
 
   <!-- ================= 视口 ================= -->
-  <rect x="92" y="48" width="680" height="540" rx="10" fill="#0f1116" stroke="#d7dce5"/>
+  <rect x="92" y="48" width="680" height="560" rx="10" fill="#0f1116" stroke="#d7dce5"/>
   <rect x="196" y="152" width="472" height="332" rx="6" fill="#232833" stroke="#39414f"/>
   <text x="432" y="322" fill="#8d95a5" font-size="12" text-anchor="middle">工作图（蒙版精修）</text>
   <text x="432" y="74" fill="#8d95a5" font-size="11" text-anchor="middle">视口自面板顶部起算 · 原 32px 模式条已退役</text>
@@ -93,7 +93,7 @@
   <text x="744" y="108.5" fill="#1a6fd4" font-size="12" font-weight="700" text-anchor="middle">2</text>
 
   <!-- ================= 右栏面板 ================= -->
-  <rect x="788" y="48" width="368" height="540" rx="12" fill="#ffffff" stroke="#d7dce5"/>
+  <rect x="788" y="48" width="368" height="560" rx="12" fill="#ffffff" stroke="#d7dce5"/>
 
   <!-- 头部 48..92 -->
   <path d="M788 60a12 12 0 0 1 12-12h344a12 12 0 0 1 12 12v32h-368z" fill="#fafbfd"/>
@@ -176,29 +176,29 @@
 
   <!-- ================= 图例 ================= -->
   <line x1="20" y1="616" x2="1160" y2="616" stroke="#d7dce5"/>
-  <text x="20" y="640" fill="#1f2530" font-size="12" font-weight="700">图例</text>
+  <text x="20" y="644" fill="#1f2530" font-size="12" font-weight="700">图例</text>
 
-  <circle cx="76" cy="636" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="76" y="640" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">1</text>
-  <text x="92" y="640" fill="#4d5666" font-size="11.5">左栏顶部模式区：扩图 / 抠图 / 选区 三枚并列；输入组与全部二级菜单已删除</text>
+  <circle cx="100" cy="640" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="644" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">1</text>
+  <text x="116" y="644" fill="#4d5666" font-size="11.5">左栏顶部模式区：扩图 / 抠图 / 选区 三枚并列；输入组与全部二级菜单已删除</text>
 
-  <circle cx="76" cy="660" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="76" y="664" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">2</text>
-  <text x="92" y="664" fill="#4d5666" font-size="11.5">视口自面板顶部起算；原 32px 模式条整条退役，垂直空间归还画布</text>
+  <circle cx="100" cy="664" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="668" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">2</text>
+  <text x="116" y="668" fill="#4d5666" font-size="11.5">视口自面板顶部起算；原 32px 模式条整条退役，垂直空间归还画布</text>
 
-  <circle cx="76" cy="684" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="76" y="688" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">3</text>
-  <text x="92" y="688" fill="#4d5666" font-size="11.5">对照带（固定，不随滚动）</text>
+  <circle cx="100" cy="688" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="692" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">3</text>
+  <text x="116" y="692" fill="#4d5666" font-size="11.5">对照带：固定，不随滚动（沿用现状）</text>
 
-  <circle cx="368" cy="636" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="368" y="640" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">4</text>
-  <text x="384" y="640" fill="#4d5666" font-size="11.5">选区面板占滚动区（分区详图见 图 5）</text>
+  <circle cx="100" cy="712" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="716" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">4</text>
+  <text x="116" y="716" fill="#4d5666" font-size="11.5">选区面板占滚动区（分区详图见 图 5）</text>
 
-  <circle cx="368" cy="660" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="368" y="664" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">5</text>
-  <text x="384" y="664" fill="#4d5666" font-size="11.5">产出 dock（与抠图 / 扩图共用槽位与样式）</text>
+  <circle cx="100" cy="736" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="740" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">5</text>
+  <text x="116" y="740" fill="#4d5666" font-size="11.5">产出 dock：与抠图 / 扩图共用槽位与样式</text>
 
-  <circle cx="368" cy="684" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="368" y="688" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">6</text>
-  <text x="384" y="688" fill="#4d5666" font-size="11.5">固定页脚，承接原模式条的 Esc 提示（文案三态）</text>
+  <circle cx="100" cy="760" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="764" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">6</text>
+  <text x="116" y="764" fill="#4d5666" font-size="11.5">固定页脚：承接原模式条的 Esc 提示（文案三态）</text>
 </svg>

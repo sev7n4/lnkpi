@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 1000" width="760" height="1000" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
-  <rect x="0" y="0" width="760" height="1000" fill="#f4f6f9"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 1050" width="760" height="1050" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect x="0" y="0" width="760" height="1050" fill="#f4f6f9"/>
 
   <!-- ============ 面板外框 ============ -->
   <rect x="40" y="40" width="600" height="830" rx="14" fill="#ffffff" stroke="#d7dce5"/>
@@ -150,25 +150,25 @@
 
   <!-- ============ 图例 ============ -->
   <line x1="40" y1="898" x2="720" y2="898" stroke="#d7dce5"/>
-  <text x="40" y="922" fill="#1f2530" font-size="12" font-weight="700">图例</text>
+  <text x="40" y="926" fill="#1f2530" font-size="12" font-weight="700">图例</text>
 
-  <circle cx="104" cy="918" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="104" y="922" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">1</text>
-  <text x="120" y="922" fill="#4d5666" font-size="11.5">选择方式：加选 / 减选，作用于全部工具（本期新增的全局开关）</text>
+  <circle cx="100" cy="922" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="926" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">1</text>
+  <text x="116" y="926" fill="#4d5666" font-size="11.5">选择方式：加选 / 减选，作用于全部 7 个工具（本期新增的全局开关）</text>
 
-  <circle cx="104" cy="942" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="104" y="946" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">2</text>
-  <text x="120" y="946" fill="#4d5666" font-size="11.5">工具：三组共 7 枚（椭圆为新增），替代原 rail 的三个二级菜单</text>
+  <circle cx="100" cy="946" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="950" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">2</text>
+  <text x="116" y="950" fill="#4d5666" font-size="11.5">工具：三组共 7 枚（椭圆为新增），替代原 rail 的三个二级菜单</text>
 
-  <circle cx="104" cy="966" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="104" y="970" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">3</text>
-  <text x="120" y="970" fill="#4d5666" font-size="11.5">参数：固定位置，标题随工具变；控件按 3 种形态之一渲染</text>
+  <circle cx="100" cy="970" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="974" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">3</text>
+  <text x="116" y="974" fill="#4d5666" font-size="11.5">参数：固定位置，标题随工具变；控件按 3 种形态之一渲染</text>
 
-  <circle cx="470" cy="918" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="470" y="922" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">4</text>
-  <text x="486" y="922" fill="#4d5666" font-size="11.5">选区操作：反选 / 清除选区（原散在两个二级菜单）</text>
+  <circle cx="100" cy="994" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="998" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">4</text>
+  <text x="116" y="998" fill="#4d5666" font-size="11.5">选区操作：反选 / 清除选区（原散在两个二级菜单里，现集中）</text>
 
-  <circle cx="470" cy="942" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
-  <text x="470" y="946" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">5</text>
-  <text x="486" y="946" fill="#4d5666" font-size="11.5">固定页脚：Esc 提示，三态文案（关闭精修 / 回到选区 / 回到工作图）</text>
+  <circle cx="100" cy="1018" r="9" fill="#ffffff" stroke="#1a6fd4" stroke-width="1.2"/>
+  <text x="100" y="1022" fill="#1a6fd4" font-size="10.5" font-weight="700" text-anchor="middle">5</text>
+  <text x="116" y="1022" fill="#4d5666" font-size="11.5">固定页脚：Esc 提示，三态文案（关闭精修 / 回到选区 / 回到工作图）</text>
 </svg>
