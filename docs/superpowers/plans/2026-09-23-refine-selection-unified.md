@@ -1,6 +1,6 @@
 # 精修「选区」统一 实现计划
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** 按规格把精修左栏「选区」收敛为一个模式入口（三合一），工具/参数/命令全部迁入右栏面板，顶部模式条退役，补椭圆工具与作用于全部工具的加/减选开关。
 
@@ -54,7 +54,7 @@
   - `refineSelectionOpAfterToolPick(tool: RefineMaskTool, current: RefineMaskOp): RefineMaskOp`
   - `refineSelectionEscHint(input: { refineMode: RefineMode; compareLightboxOpen: boolean }): string`
 
-- [ ] **Step 1: 先改 store 回归测试（此刻必须红）**
+- [x] **Step 1: 先改 store 回归测试（此刻必须红）**
 
 在 `apps/web/src/stores/canvasEditor.refine.test.ts` 找到 `it('tracks refineMaskOp from eraser/brush and keeps it when switching to wand/polygon', ...)`（约 :121-137），整块替换为：
 
@@ -79,12 +79,12 @@
   })
 ```
 
-- [ ] **Step 2: 跑它，确认在旧实现上失败**
+- [x] **Step 2: 跑它，确认在旧实现上失败**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/stores/canvasEditor.refine.test.ts`
 Expected: FAIL，失败点是 `expect(editor.refineMaskOp).toBe('subtract')` 实际为 `'add'`。**必须看到这个红**；若误绿，停下来查是否改错了用例。
 
-- [ ] **Step 3: 写模型层测试（此刻红：模块不存在）**
+- [x] **Step 3: 写模型层测试（此刻红：模块不存在）**
 
 创建 `apps/web/src/components/canvas/refine/refineSelectionModel.test.ts`：
 
@@ -156,12 +156,12 @@ describe('refineSelectionModel', () => {
 })
 ```
 
-- [ ] **Step 4: 跑模型测试确认红**
+- [x] **Step 4: 跑模型测试确认红**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/refineSelectionModel.test.ts`
 Expected: FAIL（`Cannot find module './refineSelectionModel'`）。
 
-- [ ] **Step 5: 实现 `refineSelectionModel.ts`**
+- [x] **Step 5: 实现 `refineSelectionModel.ts`**
 
 创建 `apps/web/src/components/canvas/refine/refineSelectionModel.ts`：
 
@@ -236,7 +236,7 @@ export function refineSelectionEscHint(input: { refineMode: RefineMode; compareL
 }
 ```
 
-- [ ] **Step 6: 改 store：类型 + setRefineTool + 删 toggleRefineMode**
+- [x] **Step 6: 改 store：类型 + setRefineTool + 删 toggleRefineMode**
 
 `apps/web/src/stores/canvasEditor.ts` 三处：
 
@@ -269,12 +269,12 @@ python3 -c "import subprocess; out = subprocess.run(['rg', '-n', 'toggleRefineMo
 
 Expected: 仅 `stores/canvasEditor.ts` 与 `components/canvas/refine/RefineToolRail.vue`（Task 6 会改掉后者）。**若出现第三处消费者，停下来回报，不得硬删。**
 
-- [ ] **Step 7: 跑 store + 模型测试确认全绿**
+- [x] **Step 7: 跑 store + 模型测试确认全绿**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/stores/canvasEditor.refine.test.ts src/components/canvas/refine/refineSelectionModel.test.ts`
 Expected: PASS（Step 1 的回归断言转绿）。
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/refineSelectionModel.ts apps/web/src/components/canvas/refine/refineSelectionModel.test.ts apps/web/src/stores/canvasEditor.ts apps/web/src/stores/canvasEditor.refine.test.ts
@@ -292,7 +292,7 @@ git commit -m "feat(refine): 选区模型层 + store 补椭圆与 op 联动（re
 **Interfaces:**
 - Produces: `ellipseFromDrag(input: { start: {x,y}; end: {x,y}; shiftKey?: boolean }): { cx: number; cy: number; rx: number; ry: number }`（Task 4 的 MaskEditor 消费）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 创建 `maskEllipse.test.ts`：
 
@@ -323,12 +323,12 @@ describe('ellipseFromDrag', () => {
 })
 ```
 
-- [ ] **Step 2: 跑确认红**
+- [x] **Step 2: 跑确认红**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/maskEllipse.test.ts`
 Expected: FAIL（module not found）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 创建 `maskEllipse.ts`：
 
@@ -360,12 +360,12 @@ export function ellipseFromDrag(input: EllipseDragInput): EllipseShape {
 }
 ```
 
-- [ ] **Step 4: 跑确认绿**
+- [x] **Step 4: 跑确认绿**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/maskEllipse.test.ts`
 Expected: PASS。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/maskEllipse.ts apps/web/src/components/canvas/refine/maskEllipse.test.ts
@@ -383,7 +383,7 @@ git commit -m "feat(refine): 椭圆拖拽几何纯函数 ellipseFromDrag（Shift
 **Interfaces:**
 - Produces: `shapeStyleForOp(op: 'add' | 'subtract', color: string): { composite: GlobalCompositeOperation; fill: string; stroke: string }`（Task 4 消费）
 
-- [ ] **Step 1: 旧实现的事实证据（回归先红 ② 的「红」）**
+- [x] **Step 1: 旧实现的事实证据（回归先红 ② 的「红」）**
 
 旧实现里形状分支**没有函数**、内联硬编码在 MaskEditor（`ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = props.color`，MaskEditor.vue:358-359）。跑：
 
@@ -393,7 +393,7 @@ git show origin/main:apps/web/src/components/canvas/refine/MaskEditor.vue | sed 
 
 Expected: 输出确认旧形状分支无视 `maskOp`、恒 `source-over`。把这段输出记入 commit message 之外的本任务记录（测试文件顶部注释）。
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 创建 `maskShape.test.ts`：
 
@@ -420,12 +420,12 @@ describe('shapeStyleForOp（回归先红 ②：旧实现形状分支恒 source-o
 })
 ```
 
-- [ ] **Step 3: 跑确认红**
+- [x] **Step 3: 跑确认红**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/maskShape.test.ts`
 Expected: FAIL（module not found）。
 
-- [ ] **Step 4: 实现**
+- [x] **Step 4: 实现**
 
 创建 `maskShape.ts`：
 
@@ -447,12 +447,12 @@ export function shapeStyleForOp(op: MaskShapeOp, color: string): MaskShapeStyle 
 }
 ```
 
-- [ ] **Step 5: 跑确认绿**
+- [x] **Step 5: 跑确认绿**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/maskShape.test.ts`
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/maskShape.ts apps/web/src/components/canvas/refine/maskShape.test.ts
@@ -470,7 +470,7 @@ git commit -m "feat(refine): 形状绘制样式纯函数 shapeStyleForOp（subtr
 - Consumes: `ellipseFromDrag`（Task 2）、`shapeStyleForOp`（Task 3）、store 已有 `'ellipse'` 类型（Task 1）
 - Produces: MaskEditor 新接受 `tool="ellipse"`（props 无变化，`tool` 类型放宽）；无新 emit/props。**不要**新增对 `refineOutpaintRect` 的任何读写（规格 §4.0 约束）。
 
-- [ ] **Step 1: 类型与 import**
+- [x] **Step 1: 类型与 import**
 
 ```ts
 // :9
@@ -484,7 +484,7 @@ import { ellipseFromDrag } from './maskEllipse'
 import { shapeStyleForOp } from './maskShape'
 ```
 
-- [ ] **Step 2: applyToolStyle 让画笔尊重 maskOp（橡皮恒为挖洞快捷形态）**
+- [x] **Step 2: applyToolStyle 让画笔尊重 maskOp（橡皮恒为挖洞快捷形态）**
 
 ```ts
 function applyToolStyle(ctx: CanvasRenderingContext2D) {
@@ -503,7 +503,7 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
 }
 ```
 
-- [ ] **Step 3: onPointerDown 的矩形分支扩为 rect|ellipse**
+- [x] **Step 3: onPointerDown 的矩形分支扩为 rect|ellipse**
 
 把 `if (props.tool === 'rect') { ... }`（约 :322-327）替换为：
 
@@ -516,7 +516,7 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
   }
 ```
 
-- [ ] **Step 4: onPointerMove 的形状分支：椭圆走 ellipseFromDrag + ctx.ellipse，样式走 shapeStyleForOp**
+- [x] **Step 4: onPointerMove 的形状分支：椭圆走 ellipseFromDrag + ctx.ellipse，样式走 shapeStyleForOp**
 
 把 `if (props.tool === 'rect' && rectStart && snapshot) { ... }`（约 :355-364）替换为：
 
@@ -542,12 +542,12 @@ function applyToolStyle(ctx: CanvasRenderingContext2D) {
 
 注意：`onPointerMove(event: PointerEvent)` 已持有原始事件，`event.shiftKey` 直接可用。
 
-- [ ] **Step 5: 跑既有 refine 相关测试防回归（MaskEditor 无单测，靠周边绿）**
+- [x] **Step 5: 跑既有 refine 相关测试防回归（MaskEditor 无单测，靠周边绿）**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine src/stores/canvasEditor.refine.test.ts`
 Expected: 全 PASS（此时 rail/viewport 旧测试仍引用旧结构，若 `RefineWorkViewport.test.ts` 因本任务无关原因挂掉，核对是否本任务引入；不是则留到 Task 7 处理）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/MaskEditor.vue
@@ -568,13 +568,13 @@ git commit -m "feat(refine): MaskEditor 支持椭圆拖拽绘制；形状与画�
 - Consumes: Task 1 的 `REFINE_SELECTION_GROUPS / REFINE_TOOL_SPECS / REFINE_SELECTION_COMMANDS / REFINE_MASK_OP_OPTIONS / refineToolParamKind`；store 的 `setRefineTool / getRefineMask / setRefineWandTolerance / refineMaskOp / refineBrushSize / refineBrushColor / refineWandTolerance / refineTool`
 - Produces: 组件 `RefineSelectionPanel`，props `busy?: boolean`，**emits 无**；testid 契约（规格 §5.3 表）：`refine-selection-op-add / -subtract`、`refine-selection-tool-<tool>`（7 枚）、`refine-selection-param-brush / -wand / -none`、`refine-selection-param-hint`、`refine-selection-command-invert / -clear`
 
-- [ ] **Step 1: git mv 保留历史**
+- [x] **Step 1: git mv 保留历史**
 
 ```bash
 git mv apps/web/src/components/canvas/refine/RefineSelectPanel.vue apps/web/src/components/canvas/refine/RefineSelectionPanel.vue
 ```
 
-- [ ] **Step 2: 整文件重写 `RefineSelectionPanel.vue`**
+- [x] **Step 2: 整文件重写 `RefineSelectionPanel.vue`**
 
 ```vue
 <script setup lang="ts">
@@ -726,7 +726,7 @@ function onWandTolerance(e: Event) { editor.setRefineWandTolerance(Number((e.tar
 </style>
 ```
 
-- [ ] **Step 3: 注册表换组件**
+- [x] **Step 3: 注册表换组件**
 
 `workbenchToolRegistry.ts`：
 
@@ -737,7 +737,7 @@ import RefineSelectionPanel from '@/components/canvas/refine/RefineSelectionPane
     panel: RefineSelectionPanel,
 ```
 
-- [ ] **Step 4: 写面板测试**
+- [x] **Step 4: 写面板测试**
 
 创建 `RefineSelectionPanel.test.ts`：
 
@@ -823,16 +823,16 @@ describe('RefineSelectionPanel', () => {
 })
 ```
 
-- [ ] **Step 5: 更新 RefineSidePanel.test.ts:103 的旧 testid**
+- [x] **Step 5: 更新 RefineSidePanel.test.ts:103 的旧 testid**
 
 `expect(q('[data-testid="refine-select-panel"]')).not.toBeNull()` → `expect(q('[data-testid="refine-selection-panel"]')).not.toBeNull()`
 
-- [ ] **Step 6: 跑测试确认绿**
+- [x] **Step 6: 跑测试确认绿**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/RefineSelectionPanel.test.ts src/components/canvas/refine/RefineSidePanel.test.ts src/components/canvas/workbench/workbenchToolRegistry.test.ts`
 Expected: PASS。若 `workbenchToolRegistry.test.ts` 或 `RefineSidePanel.test.ts` 还有引用旧组件名/旧 testid 的断言（vitest 会直接报编译错），按同样方式改名——组件只此一个，无其他消费者。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/RefineSelectionPanel.vue apps/web/src/components/canvas/refine/RefineSelectionPanel.test.ts apps/web/src/components/canvas/workbench/workbenchToolRegistry.ts apps/web/src/components/canvas/refine/RefineSidePanel.test.ts
@@ -852,7 +852,7 @@ git commit -m "feat(refine): 右栏「选区」面板重写（选择方式/工�
 - Consumes: Task 1 的 `refineSelectionOpAfterToolPick`（不直接用，rail 不再 pickTool）；store `setRefineMode`
 - Produces: testid `rail-mode-select`；`OpenMenu` 类型收敛为 `{ kind: 'view'; id: 'compare' | 'fit' } | null`；扩图/选区图标改 SVG（`TOOL_ICON_OUTPAINT` / `TOOL_ICON_SELECT`）
 
-- [ ] **Step 1: toolIcons.ts 追加（与 TOOL_ICON_MATTING 同款：内联 SVG 片段 + v-html）**
+- [x] **Step 1: toolIcons.ts 追加（与 TOOL_ICON_MATTING 同款：内联 SVG 片段 + v-html）**
 
 ```ts
 /** 「选区」模式入口：四角框线（marquee corner brackets），表述「框出一片区域」（spec §5.1） */
@@ -864,7 +864,7 @@ export const TOOL_ICON_OUTPAINT =
   '<rect x="4" y="4" width="16" height="16" rx="1.5" stroke-dasharray="3 2.5" /><rect x="8.5" y="8.5" width="7" height="7" rx="1" />'
 ```
 
-- [ ] **Step 2: RefineToolRail.vue script 段改写**
+- [x] **Step 2: RefineToolRail.vue script 段改写**
 
 import 区改为：
 
@@ -904,7 +904,7 @@ function pickSelect() {
 type OpenMenu = { kind: 'view'; id: 'compare' | 'fit' } | null
 ```
 
-- [ ] **Step 3: template 改写**
+- [x] **Step 3: template 改写**
 
 扩图按钮 glyph 改 SVG（替换 `<span class="refine-rail__glyph">⤢</span>`）：
 
@@ -950,7 +950,7 @@ type OpenMenu = { kind: 'view'; id: 'compare' | 'fit' } | null
 
 其余（查看组 / 细节放大 / 撤销重做 / 能力区）不动。确认没有残留 `REFINE_INPUT_GROUPS` / `inputToolActive` / `rail-input-` / `rail-variant-` / `rail-command-` 字样。
 
-- [ ] **Step 4: 改测试**
+- [x] **Step 4: 改测试**
 
 `RefineToolRail.test.ts`：
 
@@ -1011,12 +1011,12 @@ type OpenMenu = { kind: 'view'; id: 'compare' | 'fit' } | null
   })
 ```
 
-- [ ] **Step 5: 跑测试**
+- [x] **Step 5: 跑测试**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/RefineToolRail.test.ts`
 Expected: PASS。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/toolIcons.ts apps/web/src/components/canvas/refine/RefineToolRail.vue apps/web/src/components/canvas/refine/RefineToolRail.test.ts
@@ -1037,25 +1037,25 @@ git commit -m "feat(refine): rail 输入组三合一为「选区」模式入口�
 **Interfaces:**
 - Produces: `refineToolRailModel.ts` 只保留 `REFINE_VIEW_TOOLS / REFINE_COMPARE_OPTIONS / REFINE_FIT_OPTIONS（含类型）/ REFINE_ZOOM_ACTIONS（含类型）/ REFINE_CAPABILITY_GROUPS / REFINE_CAPABILITY_ITEMS / compareModeLabel`（规格 §5.1 保留项清单）
 
-- [ ] **Step 1: 瘦身模型文件**
+- [x] **Step 1: 瘦身模型文件**
 
 删除：`REFINE_INPUT_GROUPS`、`RefineInputGroupId`、`RefineInputGroup`、`RefineToolVariant`、`RefineToolCommand`、`RefineToolParamKind`（已迁至 refineSelectionModel）、`GROUP_OF_TOOL`、`LABEL_OF_TOOL`、`PARAM_OF_TOOL`、`groupForTool`、`toolLabel`、`inputToolActive`、`toolParamKind`、`refineWorkspaceLabel`，以及文件顶部不再使用的 `import type { RefineMaskTool }`。保留项一字不动。
 
-- [ ] **Step 2: 瘦身模型测试**
+- [x] **Step 2: 瘦身模型测试**
 
 `refineToolRailModel.test.ts`：删除引用已删导出的用例与 import（`groupForTool` / `inputToolActive` / `toolParamKind` / `toolLabel` / `refineWorkspaceLabel`，即 :5 的部分 import 与 :21-64 里对应 `it` 块）；保留 `compareModeLabel`、`REFINE_FIT_OPTIONS`、`REFINE_ZOOM_ACTIONS`、能力区等用例。
 
-- [ ] **Step 3: viewport 删模式条**
+- [x] **Step 3: viewport 删模式条**
 
 `RefineWorkViewport.vue`：删 `import RefineModeBar from './RefineModeBar.vue'`（:7）与 `<RefineModeBar />`（:231）。
 
-- [ ] **Step 4: 删模式条文件**
+- [x] **Step 4: 删模式条文件**
 
 ```bash
 git rm apps/web/src/components/canvas/refine/RefineModeBar.vue apps/web/src/components/canvas/refine/RefineModeBar.test.ts
 ```
 
-- [ ] **Step 5: 改 viewport 测试**
+- [x] **Step 5: 改 viewport 测试**
 
 `RefineWorkViewport.test.ts` :25-29 的用例 `左栏工具条与模式条都在视口内` 整块替换为：
 
@@ -1067,7 +1067,7 @@ git rm apps/web/src/components/canvas/refine/RefineModeBar.vue apps/web/src/comp
   })
 ```
 
-- [ ] **Step 6: 全仓确认无残留引用后跑测试**
+- [x] **Step 6: 全仓确认无残留引用后跑测试**
 
 ```bash
 python3 -c "import subprocess; print(subprocess.run(['rg', '-n', 'RefineModeBar|refine-modebar|modebar-', 'apps/web/src'], capture_output=True, text=True).stdout)"
@@ -1077,7 +1077,7 @@ Expected: 仅 `RefineWorkViewport.test.ts` 里那条「不存在」断言。有�
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine`
 Expected: 全 PASS。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A apps/web/src/components/canvas/refine/refineToolRailModel.ts apps/web/src/components/canvas/refine/refineToolRailModel.test.ts apps/web/src/components/canvas/refine/RefineWorkViewport.vue apps/web/src/components/canvas/refine/RefineWorkViewport.test.ts
@@ -1099,7 +1099,7 @@ git commit -m "feat(refine): 模式条整条退役——RefineModeBar 删除，r
 - Consumes: Task 1 的 `refineSelectionEscHint`
 - Produces: testid `refine-panel-esc-hint`（面板固定页脚，全模式生效）
 
-- [ ] **Step 1: 先写失败的 Esc 回归测试（回归先红 ③）**
+- [x] **Step 1: 先写失败的 Esc 回归测试（回归先红 ③）**
 
 `RefineWorkbench.test.ts` 在「Esc 分级退出：扩图模式…」用例后新增：
 
@@ -1123,7 +1123,7 @@ git commit -m "feat(refine): 模式条整条退役——RefineModeBar 删除，r
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine/RefineWorkbench.test.ts`
 Expected: 新用例 FAIL（旧 `onClose` 只处理 outpaint，matting 直接落到 emit('close')）。**必须看到红。**
 
-- [ ] **Step 2: 修 RefineWorkbench.vue 的 Esc 链**
+- [x] **Step 2: 修 RefineWorkbench.vue 的 Esc 链**
 
 ```ts
 /** Escape→close guard（分级，spec 图 3 下半段）：
@@ -1144,7 +1144,7 @@ function onClose() {
 
 Run 同上测试 → PASS。
 
-- [ ] **Step 3: RefineSidePanel 删预设链路 + 加固定页脚**
+- [x] **Step 3: RefineSidePanel 删预设链路 + 加固定页脚**
 
 1. 删 `import { STAIN_PRESET_PROMPT } from '@/utils/refineSession'`（:18）。
 2. 删 `applyStainPreset()` 函数（:226-229）。
@@ -1178,14 +1178,14 @@ export const STAIN_PRESET_PROMPT =
   '去除选区内的污渍、瑕疵、多余物体，其余像素保持不变'
 ```
 
-- [ ] **Step 4: 全仓确认无残留**
+- [x] **Step 4: 全仓确认无残留**
 
 ```bash
 python3 -c "import subprocess; print(subprocess.run(['rg', '-n', 'STAIN_PRESET_PROMPT|applyStainPreset|refine-select-preset-stain', 'apps/web/src'], capture_output=True, text=True).stdout)"
 ```
 Expected: 空输出。有命中则逐一清掉。
 
-- [ ] **Step 5: 跑相关测试**
+- [x] **Step 5: 跑相关测试**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine src/utils 2>/dev/null || pnpm --filter @lnkpi/web exec vitest run src/components/canvas/refine`
 Expected: 全 PASS。若 `RefineSidePanel.test.ts` 有断言 `refine-select-preset-stain` 的用例，删除该用例；可补一条：
@@ -1203,7 +1203,7 @@ Expected: 全 PASS。若 `RefineSidePanel.test.ts` 有断言 `refine-select-pres
 
 （`mountRefineSidePanel` / `q` 用该测试文件里已有的挂载辅助与查询函数名；若命名不同以现名为准，断言逻辑不变。）
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/canvas/refine/RefineSidePanel.vue apps/web/src/components/canvas/refine/RefineSidePanel.test.ts apps/web/src/utils/refineSession.ts apps/web/src/components/canvas/refine/RefineWorkbench.vue apps/web/src/components/canvas/refine/RefineWorkbench.test.ts
@@ -1217,17 +1217,17 @@ git commit -m "feat(refine): Esc 分级补抠图、面板固定页脚三态文�
 **Files:**
 - 无新增源码；临时 harness 页测完即删
 
-- [ ] **Step 1: web 全量单测**
+- [x] **Step 1: web 全量单测**
 
 Run: `pnpm --filter @lnkpi/web exec vitest run`
 Expected: 全 PASS，无失败。
 
-- [ ] **Step 2: 类型 + 构建**
+- [x] **Step 2: 类型 + 构建**
 
 Run: `pnpm --filter @lnkpi/web build`
 Expected: `vue-tsc -b && vite build` 成功。随后 `git checkout -- apps/web/vite.config.js` 还原被重新生成的产物文件。
 
-- [ ] **Step 3: 回归先红三条总核对**
+- [x] **Step 3: 回归先红三条总核对**
 
 逐条确认（已有 commit 记录即为证）：
 
@@ -1239,7 +1239,7 @@ git log --oneline origin/main..HEAD
 2. 形状 subtract 用 destination-out（Task 3 Step 1 留了旧实现事实证据 + Task 3 Step 3 红过）；
 3. Esc 抠图先回 select（Task 8 Step 1 红过）。
 
-- [ ] **Step 4: 真实浏览器验证——椭圆与面板布局**
+- [x] **Step 4: 真实浏览器验证——椭圆与面板布局**
 
 按项目范式（jsdom 布局盲区）：`pnpm --filter @lnkpi/web exec vite --port 5199` 起本地 dev；在 `apps/web` 下建临时 harness 页（`src/__harness__/refine-selection.html` + 对应临时路由/入口，挂真实 `RefineSelectionPanel` 与真实 `MaskEditor`，画布尺寸给足真实 `clientWidth`——可用 `Object.defineProperty` 之外的真实布局容器），用 agent-browser 量取：
 
@@ -1249,7 +1249,7 @@ git log --oneline origin/main..HEAD
 
 测完删除 harness 文件并确认 `git status` 干净。
 
-- [ ] **Step 5: 推分支开 PR**
+- [x] **Step 5: 推分支开 PR**
 
 ```bash
 env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u all_proxy git push -u origin feature/refine-selection-unified
@@ -1258,6 +1258,6 @@ env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy -u ALL_PROXY -u al
 
 等待 CI 6 项全绿后回报，等用户验收（不自行合并）。
 
-- [ ] **Step 6: 更新实现计划勾选状态**
+- [x] **Step 6: 更新实现计划勾选状态**
 
-把本文件所有 `- [ ]` 按完成情况改为 `- [x]`，与代码同一 commit 或单独 docs commit 均可。
+把本文件所有 `- [x]` 按完成情况改为 `- [x]`，与代码同一 commit 或单独 docs commit 均可。
