@@ -35,4 +35,20 @@ describe('MattingPanel', () => {
     expect(w.emitted('run-mask')).toHaveLength(1)
     expect(w.emitted('apply')).toHaveLength(1)
   })
+
+  it('无选区时：显示常驻引导行，run-mask 仍可点击上抛（引导交给父级，不再哑禁用）', async () => {
+    const w = mount(MattingPanel, { props: { ...baseProps, maskAvailable: false } })
+    expect(w.find('[data-testid="matting-mask-hint"]').exists()).toBe(true)
+    const btn = w.find('[data-testid="matting-run-mask"]')
+    expect((btn.element as HTMLButtonElement).disabled).toBe(false)
+    expect(btn.attributes('title')).toContain('还没有选区')
+    await btn.trigger('click')
+    expect(w.emitted('run-mask')).toHaveLength(1)
+  })
+
+  it('有选区时不显示引导行，title 为默认文案', () => {
+    const w = mount(MattingPanel, { props: { ...baseProps, maskAvailable: true } })
+    expect(w.find('[data-testid="matting-mask-hint"]').exists()).toBe(false)
+    expect(w.find('[data-testid="matting-run-mask"]').attributes('title')).toBe('用当前选区抠')
+  })
 })

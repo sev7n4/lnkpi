@@ -27,7 +27,11 @@ const emit = defineEmits<{
 
 const runAutoDisabled = computed(() => props.busy || props.mattingUnavailable)
 const runAutoTitle = computed(() => (props.mattingUnavailable ? '抠图服务未启用' : '一键抠图'))
-const runMaskDisabled = computed(() => props.busy || !props.maskAvailable)
+/** 无选区时保持可点（点击后由父级引导去圈选），只挡 busy；title 说明原因。 */
+const runMaskDisabled = computed(() => props.busy)
+const runMaskTitle = computed(() =>
+  props.maskAvailable ? '用当前选区抠' : '还没有选区：点击后将引导你在画布上圈选区域',
+)
 const applyDisabled = computed(() => props.busy || !props.canApply)
 </script>
 
@@ -38,6 +42,11 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
     </div>
 
     <div class="matting-actions">
+      <!-- 无选区时的常驻引导（用户反馈 2026-09-23：默认不知道要先圈选） -->
+      <p v-if="!maskAvailable" class="matting-actions__hint" data-testid="matting-mask-hint">
+        还没有选区 — 在画布上圈出要抠的部分，或先「一键抠图」
+      </p>
+
       <button
         type="button"
         class="matting-actions__btn matting-actions__primary"
@@ -53,7 +62,7 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
         class="matting-actions__btn"
         data-testid="matting-run-mask"
         :disabled="runMaskDisabled"
-        title="用当前选区抠"
+        :title="runMaskTitle"
         @click="emit('run-mask')"
       >用当前选区抠</button>
 
@@ -96,6 +105,15 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
 }
 
 .matting-actions { display: flex; flex-direction: column; gap: 8px; }
+.matting-actions__hint {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--neo-hover-bg);
+  color: var(--neo-text-secondary);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
 .matting-actions__btn {
   display: block;
   width: 100%;
@@ -110,8 +128,10 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
 }
 .matting-actions__btn:hover:not(:disabled) { background: var(--neo-hover-bg); }
 .matting-actions__primary {
-  border-color: color-mix(in srgb, var(--neo-hi-text, #4a9eff) 50%, var(--neo-border));
-  color: var(--neo-hi-text, #7cc0ff);
+  /* 注意：不能用 --neo-hi-text——它是「白色高亮底上的深色文字」（深色主题下近黑），
+     放在透明深色底上文字会隐形（2026-09-23 用户实测）。文字/描边统一用品牌强调色。 */
+  border-color: color-mix(in srgb, var(--neo-accent-text, #a89dff) 55%, var(--neo-border));
+  color: var(--neo-accent-text, #a89dff);
 }
 .matting-actions__btn:disabled { opacity: .5; cursor: not-allowed; }
 </style>

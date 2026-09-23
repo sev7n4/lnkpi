@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   hasOutpaintExtension,
   initialOutpaintRect,
@@ -235,6 +235,19 @@ describe('refineSessionResults', () => {
     editor.setRefineMode('select')
     expect(editor.refineSessionResults.length).toBe(1)
     expect(editor.currentRefineSessionResult?.url).toBe('u0')
+  })
+
+  it('明文 HTTP（crypto.randomUUID 不可用）时 push 仍写入且 id 非空（randomId 降级）', () => {
+    vi.stubGlobal('crypto', { getRandomValues: () => new Uint8Array(1) })
+    try {
+      const editor = useCanvasEditorStore()
+      editor.pushRefineSessionResult({ url: 'u0', prompt: '' })
+      expect(editor.refineSessionResults.length).toBe(1)
+      expect(editor.refineSessionResults[0]!.id).toBeTruthy()
+      expect(editor.currentRefineSessionResult?.url).toBe('u0')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('换图清空：openImageEditor nodeId 变化时清空会话结果', () => {
