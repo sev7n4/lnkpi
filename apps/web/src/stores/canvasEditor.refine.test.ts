@@ -237,6 +237,25 @@ describe('refineSessionResults', () => {
     expect(editor.currentRefineSessionResult?.url).toBe('u0')
   })
 
+  it('refineMaskAvailable：无句柄或零覆盖为 false，有句柄且覆盖 > 0 才为 true', () => {
+    const editor = useCanvasEditorStore()
+    expect(editor.refineMaskAvailable).toBe(false)
+
+    editor.registerRefineMask({
+      exportPng: async () => new Blob(),
+      clear: () => {},
+      getCanvas: () => document.createElement('canvas'),
+      invert: () => {},
+    })
+    expect(editor.refineMaskAvailable).toBe(false) // 有句柄但零覆盖
+
+    editor.refineCoverage = 0.4
+    expect(editor.refineMaskAvailable).toBe(true)
+
+    editor.registerRefineMask(null)
+    expect(editor.refineMaskAvailable).toBe(false)
+  })
+
   it('明文 HTTP（crypto.randomUUID 不可用）时 push 仍写入且 id 非空（randomId 降级）', () => {
     vi.stubGlobal('crypto', { getRandomValues: () => new Uint8Array(1) })
     try {

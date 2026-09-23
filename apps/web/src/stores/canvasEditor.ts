@@ -149,6 +149,9 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     return refineMask.value
   }
 
+  /** 当前是否已有可用选区蒙版（有画布句柄且覆盖 > 0）：选区引导高亮 / 面板守卫的单一判据。 */
+  const refineMaskAvailable = computed(() => !!refineMask.value?.getCanvas() && refineCoverage.value > 0)
+
   function setRefineLoupe(on: boolean) {
     refineLoupeOn.value = on
   }
@@ -309,6 +312,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineWipeRatio,
     registerRefineMask,
     getRefineMask,
+    refineMaskAvailable,
     setRefineLoupe,
     setRefineLoupeShape,
     setRefineLoupeZoom,

@@ -101,12 +101,8 @@ const compareBeforeUrl = ref(props.beforeUrl)
 const afterUrl = computed(() => editor.currentRefineSessionResult?.url ?? undefined)
 /** matting 服务不可用（503）标记：禁用 run-auto 并提示。 */
 const mattingUnavailable = ref(false)
-/** 当前是否有可用于「选区抠图」的选区蒙版。 */
-const maskAvailable = computed(() => {
-  const mask = editor.getRefineMask()
-  const canvas = mask?.getCanvas()
-  return !!canvas && editor.refineCoverage > 0
-})
+/** 当前是否有可用于「选区抠图」的选区蒙版（判据收敛到 store 的 refineMaskAvailable，rail 引导共用）。 */
+const maskAvailable = computed(() => editor.refineMaskAvailable)
 /** 当前激活工具是否为 matting 面板（动态 panel 下发 5 props / 监听 3 events）。 */
 const isMattingPanel = computed(() => editor.refineMode === 'matting')
 /** matting dock：注册表声明 panel。 */
