@@ -31,7 +31,7 @@ function onSelect(id: string) {
       :title="r.prompt || r.id"
       @click="onSelect(r.id)"
     >
-      <img class="filmstrip-thumb" :src="r.url" :alt="r.prompt || r.id" draggable="false" />
+      <img class="filmstrip-thumb neo-checkerboard" :src="r.url" :alt="r.prompt || r.id" draggable="false" />
     </button>
   </div>
 </template>

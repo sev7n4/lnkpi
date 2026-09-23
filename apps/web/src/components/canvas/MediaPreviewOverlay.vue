@@ -155,7 +155,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown, true))
           v-if="target.kind === 'image'"
           :src="target.url"
           :alt="target.label ?? ''"
-          class="preview-media select-none"
+          class="preview-media neo-checkerboard select-none"
           draggable="false"
         >
         <video

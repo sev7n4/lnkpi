@@ -456,6 +456,14 @@
   overflow: hidden;
 }
 
+/* 透明区棋盘格底：抠图 PNG 等含 alpha 媒体的可视辨识（2026-09-24 用户反馈透明区透出深底像黑背景）。
+   不透明媒体会完全盖住棋盘格，因此对普通图片零视觉影响。 */
+.neo-checkerboard {
+  background-image: repeating-conic-gradient(var(--neo-checker-a) 0% 25%, var(--neo-checker-b) 0% 50%);
+  background-size: 16px 16px;
+  background-position: 0 0;
+}
+
 .neo-gen-preview img,
 .neo-gen-preview video {
   display: block;

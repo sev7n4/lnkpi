@@ -120,7 +120,7 @@ function openMediaInspector(e: Event) {
     >
       <div
         v-if="data.url"
-        class="neo-gen-preview"
+        class="neo-gen-preview neo-checkerboard"
         title="双击预览大图"
         @dblclick.stop="openPreview"
       >
