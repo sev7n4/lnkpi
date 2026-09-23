@@ -90,9 +90,9 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
   border-radius: 12px;
   overflow: hidden;
 }
-/* 棋盘格透明底：CSS conic-gradient 8px 格（视觉辨识透明区） */
+/* 棋盘格透明底：统一走全局 token（--neo-checker-a/b），与节点卡 / 胶片条 / 大图预览一致 */
 .matting-preview.checkerboard {
-  background-image: repeating-conic-gradient(var(--neo-border) 0% 25%, transparent 0% 50%);
+  background-image: repeating-conic-gradient(var(--neo-checker-a) 0% 25%, var(--neo-checker-b) 0% 50%);
   background-size: 16px 16px;
   background-position: 0 0;
 }

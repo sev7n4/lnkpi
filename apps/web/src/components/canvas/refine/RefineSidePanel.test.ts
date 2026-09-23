@@ -493,7 +493,7 @@ describe('RefineSidePanel matting 接线（Task 7）', () => {
     expect(editor.currentRefineSessionResult?.url).toBe('blob:mat')
   })
 
-  it('run-mask 无选区时：按钮可点，toast 引导并自动切回 select 模式，不产生结果', async () => {
+  it('run-mask 无选区时：按钮可点，toast 引导并自动切回 select 模式，不产生结果；出现「返回抠图」CTA', async () => {
     const editor = useCanvasEditorStore()
     editor.setRefineMode('matting')
     mountPanel()
@@ -507,6 +507,14 @@ describe('RefineSidePanel matting 接线（Task 7）', () => {
     expect(ElMessage.info).toHaveBeenCalled()
     expect(editor.refineMode).toBe('select')
     expect(editor.refineSessionResults.length).toBe(0)
+
+    // 引导回程：select 模式下出现「返回抠图」CTA，点击回到 matting 并消失
+    const back = q('[data-testid="refine-return-matting"]') as HTMLButtonElement | null
+    expect(back).not.toBeNull()
+    await back!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(editor.refineMode).toBe('matting')
+    expect(q('[data-testid="refine-return-matting"]')).toBeNull()
   })
 
   it('matting 503 时 toast 且不 push', async () => {

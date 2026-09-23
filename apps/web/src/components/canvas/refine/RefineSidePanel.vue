@@ -101,6 +101,19 @@ const compareBeforeUrl = ref(props.beforeUrl)
 const afterUrl = computed(() => editor.currentRefineSessionResult?.url ?? undefined)
 /** matting 服务不可用（503）标记：禁用 run-auto 并提示。 */
 const mattingUnavailable = ref(false)
+/** 用户在抠图模式点「用当前选区抠」被引导切到选区后置位；在选区面板显示「返回抠图」CTA，回到 matting 即清除。 */
+const mattingReturnPending = ref(false)
+const showMattingReturn = computed(() => editor.refineMode === 'select' && mattingReturnPending.value)
+function returnToMatting() {
+  mattingReturnPending.value = false
+  editor.setRefineMode('matting')
+}
+watch(
+  () => editor.refineMode,
+  (mode) => {
+    if (mode === 'matting') mattingReturnPending.value = false
+  },
+)
 /** 当前是否有可用于「选区抠图」的选区蒙版（判据收敛到 store 的 refineMaskAvailable，rail 引导共用）。 */
 const maskAvailable = computed(() => editor.refineMaskAvailable)
 /** 当前激活工具是否为 matting 面板（动态 panel 下发 5 props / 监听 3 events）。 */
@@ -463,6 +476,7 @@ async function runMattingMask() {
   // 无选区守卫（2026-09-23 体验反馈）：不再无声禁用，点击即引导切到「选区」模式圈选。
   if (!canvas || editor.refineCoverage <= 0) {
     ElMessage.info('请先圈选区域：已切到「选区」模式，圈选后点左侧「抠图」返回')
+    mattingReturnPending.value = true
     editor.setRefineMode('select')
     return
   }
@@ -661,6 +675,16 @@ onBeforeUnmount(() => {
             @apply="onApply"
           />
         </div>
+        <!-- 选区引导回程 CTA（2026-09-24 用户反馈：被引导来圈选后找不到回去的入口） -->
+        <button
+          v-if="showMattingReturn"
+          type="button"
+          class="refine-side__matting-return"
+          data-testid="refine-return-matting"
+          @click="returnToMatting"
+        >
+          ← 返回抠图（用当前选区抠）
+        </button>
         <!-- 会话胶片条（Task 7）：替换原 VersionStrip；选中切换 store 当前结果 → afterUrl 派生切换 -->
         <SessionFilmstrip
           class="refine-side__filmstrip"
@@ -838,6 +862,19 @@ onBeforeUnmount(() => {
 .refine-side__body { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }
 /* 唯一滚动区（§4.3 布局铁律：dock 与版本条是 flex 兄弟，绝不覆盖滚动区） */
 .refine-side__scroll { min-height: 0; flex: 1; overflow-y: auto; }
+.refine-side__matting-return {
+  flex: 0 0 auto;
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--neo-accent-text) 55%, var(--neo-border));
+  border-radius: 10px;
+  background: var(--neo-accent-soft, rgba(109, 93, 252, 0.16));
+  color: var(--neo-accent-text);
+  font-size: 12px;
+  text-align: center;
+  cursor: pointer;
+}
+.refine-side__matting-return:hover { filter: brightness(1.1); }
 .refine-side__filmstrip { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid var(--neo-border); }
 
 .refine-side__esc { flex: 0 0 auto; padding: 8px 14px; border-top: 1px solid var(--neo-border); color: var(--neo-text-muted); font-size: 11px; }
