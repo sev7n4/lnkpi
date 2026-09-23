@@ -9,7 +9,7 @@ name: Deploy Agent Runtime to Tencent Cloud
 # - enable_agent_runtime 参数默认 false，需要手动 workflow_dispatch
 # - 此 workflow 解决"遗忘部署 agent-runtime"的问题（PR #64 复测时发现）
 #
-# ⚠️ 写入范围收窄（2026-09-23 事故后，本仓库第二次改动此文件）：
+# ⚠️ 写入范围收窄（2026-09-23 事故后）：
 # 本 workflow 只允许写 ${DEPLOY_DIR}/services/agent-runtime/** 这一处。
 #
 # 背景：原实现把「整棵源码树」tar 覆盖到 /opt/lnkpi（且不同于 deploy.yml，这里没有 rm -rf，
