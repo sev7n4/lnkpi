@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Local automated verification for Refine edit-intent templates (Catalog Fill).
 # Covers: catalog E1–E8 assets, fill/submit gates, picker disable, popover Esc.
+# 2026-09-23：picker 迁至 dock-studio 后重写 check 3)（原断言在新实现上恒 0 命中），并去掉 ripgrep 依赖。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
@@ -92,17 +93,32 @@ else
   record 0 "web vitest apply/disable/popover"
 fi
 
-# 3) Source wiring smoke (grep RefineSidePanel)
+# 3) Source wiring smoke — 2026-09-23 语义迁移后的现状断言。
+#    迁移前：picker 内嵌在 RefineSidePanel，面板自带污渍/替换预设，断言 mode="edit_intent" 等 4 串。
+#    迁移后：picker 移到 dock-studio/shared，由 RefineSidePanel 把 edit intent 下传 RefineDock 渲染；
+#    污渍/替换预设链路已下线（见 #404）。原断言在新实现上恒为 0 命中，故按现状重写。
+#    同时原实现依赖 ripgrep（`rg` 缺失时该 check 必然 FAIL），改为 grep -F 固定串、断言全用 ASCII 标识符。
 PANEL="$ROOT/apps/web/src/components/canvas/refine/RefineSidePanel.vue"
-if rg -q 'mode="edit_intent"' "$PANEL" \
-  && rg -q '去除污渍瑕疵' "$PANEL" \
-  && rg -q '替换选区内容' "$PANEL" \
-  && rg -q 'GuidePickerPopover' "$PANEL" \
-  && ! rg -q 'v-for="intent in editIntents"' "$PANEL"
+DOCK="$ROOT/apps/web/src/components/canvas/refine/RefineDock.vue"
+PICKER="$ROOT/apps/web/src/components/canvas/dock-studio/shared/GuidePickerPopover.vue"
+WIRING_OK=0
+if grep -qF 'applyGuideEditIntent' "$PANEL" \
+  && grep -qF 'activeGuideEditIntentId' "$PANEL" \
+  && grep -qF '@select-edit-intent="applyEditIntent"' "$PANEL" \
+  && grep -qF '@clear-edit-intent="clearEditIntent"' "$PANEL" \
+  && grep -qF 'editIntentDisabledReason' "$PANEL" \
+  && grep -qF 'GuidePickerPopover' "$DOCK" \
+  && ! grep -qF 'GuidePickerPopover' "$PANEL" \
+  && ! grep -qF 'v-for="intent in editIntents"' "$PANEL" \
+  && ! grep -qF 'applyStainPreset' "$PANEL"
 then
-  record 1 "RefineSidePanel wiring (picker + stain/replace, no flat E chips)"
+  WIRING_OK=1
+fi
+if [[ "$WIRING_OK" == "1" && -f "$PICKER" ]]
+then
+  record 1 "RefineSidePanel wiring (intent 下传 RefineDock 渲染 picker；预设链路已下线；无 flat E chips)"
 else
-  record 0 "RefineSidePanel wiring (picker + stain/replace, no flat E chips)"
+  record 0 "RefineSidePanel wiring (intent 下传 RefineDock 渲染 picker；预设链路已下线；无 flat E chips)"
 fi
 
 echo
