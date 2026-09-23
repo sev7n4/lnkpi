@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef } from 'vue'
 import type { MediaInfo } from '@lnkpi/shared'
+import { randomId } from '@lnkpi/shared'
 import { clampLoupeZoom } from '@/components/canvas/refine/refineWorkLayout'
 import { clampWandTolerance } from '@/components/canvas/refine/maskWand'
 import type { RefineCompareMetadata } from '@/components/canvas/refine/compareViewModel'
@@ -234,7 +235,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   function pushRefineSessionResult(r: Omit<RefineSessionResult, 'id' | 'createdAt'> & { id?: string }) {
     const entry: RefineSessionResult = {
       ...r,
-      id: r.id ?? crypto.randomUUID(),
+      // 明文 HTTP（非安全上下文）下 crypto.randomUUID 不存在，统一走 shared 的降级实现。
+      id: r.id ?? randomId(),
       createdAt: new Date().toISOString(),
     }
     refineSessionResults.value.push(entry)

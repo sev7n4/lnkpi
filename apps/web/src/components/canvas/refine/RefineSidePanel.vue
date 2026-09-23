@@ -464,7 +464,12 @@ async function runMattingMask() {
   if (editor.refineMode !== 'matting') return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
-  if (!canvas) return
+  // 无选区守卫（2026-09-23 体验反馈）：不再无声禁用，点击即引导切到「选区」模式圈选。
+  if (!canvas || editor.refineCoverage <= 0) {
+    ElMessage.info('请先圈选区域：已切到「选区」模式，圈选后点左侧「抠图」返回')
+    editor.setRefineMode('select')
+    return
+  }
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
