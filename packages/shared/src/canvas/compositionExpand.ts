@@ -3,9 +3,9 @@ import type { CompositionIR } from './compositionIr'
 import {
   I0_SKELETON_PROMPT,
   LOOK_SKELETON_PROMPT,
-  P_SKELETON_PROMPT,
   SCENE_SKELETON_PROMPT,
   WHITE_SKELETON_PROMPT,
+  pSkeletonPrompt,
   renderCompositionCopy,
 } from './compositionCopy'
 import { buildWorkflowDocument, type WorkflowDocument } from './workflowExchange'
@@ -201,7 +201,7 @@ export function expandComposition(
     }
 
     if (wantVideo) {
-      appendVideo(drafts, copy, [identityAnchor, ...garmentRefs.map((_, i) => lookId(i))])
+      appendVideo(drafts, copy, [identityAnchor, ...garmentRefs.map((_, i) => lookId(i))], garmentRefs.length)
     }
     return toWorkflow(drafts)
   }
@@ -281,8 +281,10 @@ function appendVideo(
   drafts: DraftNode[],
   copy: NonNullable<CompositionIR['copy']>,
   imageKeys: string[],
+  lookCount?: number,
 ): void {
-  const pPrompt = copy.pSlots?.p || slot(copy, 'p') || P_SKELETON_PROMPT
+  const pPrompt =
+    copy.pSlots?.p || slot(copy, 'p') || pSkeletonPrompt(lookCount)
   drafts.push({
     id: 'text-p',
     type: 'text',

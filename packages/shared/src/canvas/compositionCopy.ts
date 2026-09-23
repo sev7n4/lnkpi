@@ -7,9 +7,25 @@ export const I0_SKELETON_PROMPT =
 export const LOOK_SKELETON_PROMPT =
   '在身份锚点上换上对应服装，锁脸锁体，保持体型与发型，输出商业造型图。'
 
-/** P clauses: 同一人 + 两套造型顺序 + lookbook（非剧情片）. */
+/** P clauses: 同一人 + N 套造型顺序 + lookbook（非剧情片）. */
 export const P_SKELETON_PROMPT =
   '同一人按两套造型顺序切换的 lookbook，非剧情片。'
+
+const CN_COUNTS = ['零', '一', '两', '三', '四', '五', '六', '七', '八', '九', '十']
+
+function cnCount(n: number): string {
+  return n >= 0 && n <= 10 ? CN_COUNTS[n]! : String(n)
+}
+
+/**
+ * P 骨架按造型套数渲染（land-production-gaps P1：禁止 4 套时仍写「两套」）。
+ * lookCount 缺省时回退到金标双套常量（非换装链路沿用旧文案）。
+ */
+export function pSkeletonPrompt(lookCount?: number): string {
+  return lookCount == null
+    ? P_SKELETON_PROMPT
+    : `同一人按${cnCount(lookCount)}套造型顺序切换的 lookbook，非剧情片。`
+}
 
 /** Product white-bg: 产品白底, not 模特三视图 / 锁脸 / 禁止换装. */
 export const WHITE_SKELETON_PROMPT =
@@ -19,7 +35,7 @@ export const SCENE_SKELETON_PROMPT =
   '将产品放入使用场景中合理摆放，保持产品外观，输出场景图。'
 
 const I0_CLAUSES = [/白底/, /三视图|多视图/, /锁脸/, /禁止换装/]
-const P_CLAUSES = [/同一人/, /两套造型|造型顺序/, /lookbook/]
+const P_CLAUSES = [/同一人/, /套造型|造型顺序/, /lookbook/]
 const WHITE_CLAUSES = [/产品/, /白底/]
 const SCENE_CLAUSES = [/场景/]
 
@@ -88,7 +104,11 @@ export function renderCompositionCopy(ir: CompositionIR): CompositionIR {
 
   if (wantVideo) {
     const providedP = filled(pSlots.p) ? pSlots.p : promptSlots.p
-    pSlots.p = pickPrompt(providedP, P_SKELETON_PROMPT, P_CLAUSES)
+    pSlots.p = pickPrompt(
+      providedP,
+      tryOn ? pSkeletonPrompt(garmentRefs.length) : P_SKELETON_PROMPT,
+      P_CLAUSES,
+    )
     titles.p = pickTitle(titles.p, '换装分镜')
     titles.v = pickTitle(titles.v, '成片')
   }
