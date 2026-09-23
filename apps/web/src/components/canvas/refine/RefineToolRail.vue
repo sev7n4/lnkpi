@@ -80,7 +80,7 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
 
 <template>
   <nav ref="railRef" class="refine-rail neo-glass-lite" data-testid="refine-rail" aria-label="画布工具">
-    <!-- 扩图模式入口（Task 7）：激活时高亮；busy 时冻结不可切换；扩图模式禁画笔/橡皮 -->
+    <!-- 扩图模式入口（Task 7）：激活时高亮；busy 时冻结不可切换；画笔/橡皮在右侧面板 -->
     <div class="refine-rail__slot">
       <button
         type="button"

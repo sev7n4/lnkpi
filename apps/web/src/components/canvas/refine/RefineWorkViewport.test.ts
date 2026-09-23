@@ -22,10 +22,10 @@ const mountViewport = () =>
 describe('RefineWorkViewport 布局', () => {
   beforeEach(() => { setActivePinia(pinia) })
 
-  it('左栏工具条与模式条都在视口内', () => {
+  it('左栏工具条在视口内；模式条已退役（spec §4.5 / 图 5 ②）', () => {
     const w = mountViewport()
     expect(w.find('.refine-work__rail [data-testid="refine-rail"]').exists()).toBe(true)
-    expect(w.find('.refine-work__col [data-testid="refine-modebar"]').exists()).toBe(true)
+    expect(w.find('[data-testid="refine-modebar"]').exists()).toBe(false)
   })
 
   it('不再有自身 header bar（工作图 / 适应窗口 / 1:1 三件套已移走）', () => {

@@ -4,7 +4,6 @@ import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { panFromDrag, panZoomFromWheel } from './compareLightboxTransform'
 import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
-import RefineModeBar from './RefineModeBar.vue'
 import RefineToolRail from './RefineToolRail.vue'
 import RefineOutpaintCanvas from './RefineOutpaintCanvas.vue'
 import { dispatchRefinePointSelect } from './maskRemote'
@@ -228,7 +227,6 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="refine-work__col">
-      <RefineModeBar />
       <!-- 普通工作图（蒙版精修）：非扩图模式显示 -->
       <div
         v-show="editor.refineMode !== 'outpaint'"
