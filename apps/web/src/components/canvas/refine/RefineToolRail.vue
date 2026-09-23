@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import type { RefineMaskTool } from '@/stores/canvasEditor'
+import { TOOL_ICON_MATTING } from '@/components/canvas/toolIcons'
 import {
   REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_INPUT_GROUPS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   inputToolActive,
@@ -134,7 +135,9 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
         :disabled="editor.refineBusy"
         @click="toggleMatting"
       >
-        <span class="refine-rail__glyph">✦</span>
+        <span class="refine-rail__glyph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_MATTING" />
+        </span>
         <span class="refine-rail__name">抠图</span>
       </button>
     </div>
