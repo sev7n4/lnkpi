@@ -107,3 +107,40 @@ it('gold 2 expands product white then scene, no P/V/i0 turnaround', () => {
     ]),
   )
 })
+
+// 2026-09-24 land-production-gaps P1：P 骨架不得写死「两套」，须随 garmentRefs.length 渲染
+function irWithLooks(n: number, copy: Record<string, unknown> = {}) {
+  return compositionIrSchema.parse({
+    version: '1',
+    primitives: {
+      identityRef: 'I1',
+      garmentRefs: Array.from({ length: n }, (_, i) => `I${i + 2}`),
+      otherRefs: [],
+      wantVideo: true,
+      sequence: [],
+    },
+    copy,
+  })
+}
+
+it('P skeleton counts garment sets dynamically: 4 looks → 四套, never 两套', () => {
+  const dump = expandComposition(renderCompositionCopy(irWithLooks(4)))
+  const p = dump.graph.nodes.find((n) => n.id === 'text-p')!
+  expect(String(p.data.prompt)).toContain('四套造型')
+  expect(String(p.data.prompt)).not.toContain('两套')
+  expect(String(p.data.prompt)).toMatch(/lookbook/)
+  expect(dump.graph.nodes.filter((n) => n.id.startsWith('image-look-'))).toHaveLength(4)
+})
+
+it('P skeleton keeps 两套 wording for the canonical 2-look template', () => {
+  const dump = expandComposition(renderCompositionCopy(irWithLooks(2)))
+  const p = dump.graph.nodes.find((n) => n.id === 'text-p')!
+  expect(String(p.data.prompt)).toContain('两套造型')
+})
+
+it('user-provided P naming a non-two count passes clause validation', () => {
+  const provided = '同一人按四套造型顺序切换的 lookbook，非剧情片。'
+  const dump = expandComposition(renderCompositionCopy(irWithLooks(4, { pSlots: { p: provided } })))
+  const p = dump.graph.nodes.find((n) => n.id === 'text-p')!
+  expect(String(p.data.prompt)).toBe(provided)
+})
