@@ -105,3 +105,9 @@ lnkpi/
     ├── NEOWOW_RESEARCH.md          # 竞品深度调研
     └── PRODUCT_CAPABILITY_MAP.md   # 能力对标路线图
 ```
+
+## License
+
+本项目基于 [MIT License](./LICENSE) 开源。
+
+Copyright (c) 2026 sev7n4

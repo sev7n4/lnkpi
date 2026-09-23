@@ -2,6 +2,7 @@
   "name": "lnkpi",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "超创平台 - AI 无限画布创作工作流平台",
   "scripts": {
     "dev": "pnpm --parallel -r dev",
