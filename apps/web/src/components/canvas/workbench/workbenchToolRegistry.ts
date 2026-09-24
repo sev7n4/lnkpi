@@ -6,6 +6,7 @@ import RefineOutpaintDock from '@/components/canvas/refine/RefineOutpaintDock.vu
 import MattingPanel from '@/components/canvas/refine/MattingPanel.vue'
 import MattingDock from '@/components/canvas/refine/MattingDock.vue'
 import CropToolPanel from '@/components/canvas/refine/CropToolPanel.vue'
+import InpaintPanel from '@/components/canvas/refine/InpaintPanel.vue'
 import type { RefineMode } from '@/stores/canvasEditor'
 
 /** 左栏图标描述（一级工具的 railItems；本期 select 的图标仍由 RefineToolRail 现行实现承担）。 */
@@ -55,6 +56,12 @@ export const WORKBENCH_TOOL_REGISTRY: Record<string, WorkbenchToolRegistration> 
     dock: null, // 确定性变换：动作按钮归面板底部，无独立 dock
     dockPlacement: 'panel',
   },
+  'refine-inpaint': {
+    id: 'refine-inpaint',
+    panel: InpaintPanel,
+    dock: RefineDock, // prompt + 生成 dock 与 select 共用（复用 RefineSidePanel 的 runRefine 链路）
+    dockPlacement: 'panel',
+  },
 }
 
 /** 查注册项；未注册返回 null（调用方据此不渲染面板 / dock）。 */
@@ -68,5 +75,6 @@ export function toolIdForRefineMode(mode: RefineMode): string {
   if (mode === 'outpaint') return 'refine-outpaint'
   if (mode === 'matting') return 'refine-matting'
   if (mode === 'crop') return 'refine-crop'
+  if (mode === 'inpaint') return 'refine-inpaint'
   return 'refine-select'
 }

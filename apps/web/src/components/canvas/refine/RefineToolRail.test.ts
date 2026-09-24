@@ -146,11 +146,26 @@ describe('RefineToolRail', () => {
     expect(btn.attributes('disabled')).toBeDefined()
   })
 
-  it('能力区：分隔线 + 6 项禁用图标（matting/crop 已迁出为真模式，outpaint 不重复出现在能力区）', () => {
+  it('局部重绘入口：点击进入 inpaint 模式且默认画笔，再点击回 select（toggle 语义对称扩图）', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountRail()
+    const btn = w.find('[data-testid="rail-mode-inpaint"]')
+    expect(btn.exists()).toBe(true)
+    store.setRefineTool('eraser')
+    await btn.trigger('click')
+    expect(store.refineMode).toBe('inpaint')
+    expect(store.refineTool).toBe('brush') // 进模式默认画笔
+    expect(w.find('[data-testid="rail-mode-inpaint"]').classes()).toContain('is-active')
+    await w.find('[data-testid="rail-mode-inpaint"]').trigger('click')
+    expect(store.refineMode).toBe('select')
+  })
+
+  it('能力区：分隔线 + 5 项禁用图标（matting/crop/inpaint 已迁出为真模式，outpaint 不重复出现在能力区）', () => {
     const w = mountRail()
     expect(w.find('[data-testid="rail-capability-hr"]').exists()).toBe(true)
-    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(6)
+    expect(w.findAll('button[data-testid^="rail-capability-"]').length).toBe(5)
     expect(w.find('[data-testid="rail-capability-one-click-matting"]').exists()).toBe(false)
+    expect(w.find('[data-testid="rail-capability-inpaint"]').exists()).toBe(false)
     expect(w.find('[data-testid="rail-capability-crop"]').exists()).toBe(false)
     expect(w.find('[data-testid="rail-capability-outpaint"]').exists()).toBe(false)
   })
@@ -173,20 +188,20 @@ describe('RefineToolRail', () => {
     expect(store.refineMode).toBe('outpaint')
     expect(w.find('[data-testid="rail-mode-outpaint"]').classes()).toContain('is-active')
 
-    // 能力区是禁用占位：点击不改变模式，也不会成为激活项
-    const cap = w.find('[data-testid="rail-capability-inpaint"]')
+    // 能力区是禁用占位：inpaint/crop 等已迁出为真模式，能力区无此入口；
+    // 剩余占位永不成为激活项
+    expect(w.find('[data-testid="rail-capability-inpaint"]').exists()).toBe(false)
     const activeBefore = w.findAll('.refine-rail__btn.is-active').length
-    await cap.trigger('click')
+    await w.find('[data-testid="rail-capability-erase-replace"]').trigger('click')
     expect(store.refineMode).toBe('outpaint')
-    expect(cap.classes()).not.toContain('is-active')
     // 点击能力占位不新增任何激活项，且能力区自身永不参与激活态
     expect(w.findAll('.refine-rail__btn.is-active').length).toBe(activeBefore)
     expect(w.find('.refine-rail__btn.is-active[data-testid^="rail-capability-"]').exists()).toBe(false)
   })
 
-  it('渲染三枚模式入口 + 两枚查看入口，不存在任何输入组与二级菜单', () => {
+  it('渲染四枚模式入口 + 两枚查看入口，不存在任何输入组与二级菜单', () => {
     const w = mountRail()
-    for (const id of ['rail-mode-outpaint', 'rail-mode-matting', 'rail-mode-select']) {
+    for (const id of ['rail-mode-outpaint', 'rail-mode-matting', 'rail-mode-crop', 'rail-mode-inpaint', 'rail-mode-select']) {
       expect(w.find(`[data-testid="${id}"]`).exists()).toBe(true)
     }
     expect(w.find('[data-testid="rail-view-compare"]').exists()).toBe(true)

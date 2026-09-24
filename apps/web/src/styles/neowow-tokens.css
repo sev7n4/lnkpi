@@ -101,9 +101,10 @@
   --neo-hi-text: #17181d;
   --neo-hi-shadow: 0 2px 10px rgba(0, 0, 0, 0.32), 0 0 14px rgba(255, 255, 255, 0.22);
 
-  /* ---- 透明区棋盘格（.neo-checkerboard，深浅两块交替） ---- */
-  --neo-checker-a: #26262e;
-  --neo-checker-b: #141419;
+  /* ---- 透明区棋盘格（.neo-checkerboard）----
+     2026-09-24 用户拍板：抠图透明区用白底棋盘格（深色主题不再用深灰块，避免「黑背景」观感） */
+  --neo-checker-a: #ffffff;
+  --neo-checker-b: #e2e4ea;
 
   /* ---- Agent 对话气泡（与用户/助手差异化；避免纯白底吞没白图引用） ---- */
   --agent-user-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.06) 100%);

@@ -30,14 +30,20 @@ describe('resolveBarPlacement', () => {
 describe('buildSelectionTools', () => {
   it('orders ai tools before file tools with 精修 enabled', () => {
     const tools = buildSelectionTools({ hasUrl: true })
-    expect(tools.map((t) => t.id)).toEqual(['refine', 'matting', 'crop', 'rotate', 'download', 'save-asset'])
-    expect(tools.map((t) => t.group)).toEqual(['ai', 'ai', 'ai', 'ai', 'file', 'file'])
+    expect(tools.map((t) => t.id)).toEqual([
+      'refine', 'matting', 'outpaint', 'crop', 'inpaint', 'rotate', 'download', 'save-asset',
+    ])
+    expect(tools.map((t) => t.group)).toEqual([
+      'ai', 'ai', 'ai', 'ai', 'ai', 'ai', 'file', 'file',
+    ])
     expect(tools.find((t) => t.id === 'refine')).toMatchObject({ title: '精修', disabled: false })
   })
 
-  it('crop 已点亮（节点直裁）；rotate 仍为禁用占位', () => {
+  it('crop/outpaint/inpaint 已点亮；rotate 仍为禁用占位', () => {
     const tools = buildSelectionTools({ hasUrl: true })
     expect(tools.find((t) => t.id === 'crop')?.disabled).toBe(false)
+    expect(tools.find((t) => t.id === 'outpaint')?.disabled).toBe(false)
+    expect(tools.find((t) => t.id === 'inpaint')?.disabled).toBe(false)
     const rotate = tools.find((t) => t.id === 'rotate')!
     expect(rotate.disabled).toBe(true)
     expect(rotate.disabledReason).toContain('后续能力包点亮')

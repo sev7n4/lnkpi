@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import GridSliceDropdown from './GridSliceDropdown.vue'
 
 async function openMenu(props: Record<string, unknown> = {}) {
@@ -8,13 +8,7 @@ async function openMenu(props: Record<string, unknown> = {}) {
   return wrapper
 }
 
-async function showCustomPanel(wrapper: VueWrapper) {
-  const toggle = wrapper.get('[data-testid="custom-toggle"]')
-  await toggle.trigger('pointerenter', { pointerType: 'mouse' })
-  return toggle
-}
-
-describe('GridSliceDropdown (dual-panel picker)', () => {
+describe('GridSliceDropdown (dual-panel picker, 2026-09-24 复刻竞品常显双面板)', () => {
   it('renders 宫格切分 trigger and left preset list, without the old dense matrix', async () => {
     const wrapper = await openMenu()
     expect(wrapper.get('button').text()).toContain('宫格切分')
@@ -30,16 +24,12 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
       '25宫格 (5×5)',
     ])
     expect(wrapper.get('[data-testid="custom-toggle"]').text()).toContain('自定义')
-    // 右面板默认不出现；旧密集格阵与「精确输入…」已删除
-    expect(wrapper.find('[data-panel="custom"]').exists()).toBe(false)
-    expect(wrapper.find('[data-cell]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('精确输入')
     wrapper.unmount()
   })
 
-  it('hovering 自定义 opens the right panel with 7×7 matrix, title and readout', async () => {
+  it('custom panel is always visible with the 7×7 matrix, title and readout（选自定义不再看不到宫格）', async () => {
     const wrapper = await openMenu()
-    await showCustomPanel(wrapper)
     const panel = wrapper.get('[data-panel="custom"]')
     expect(panel.text()).toContain('自定义宫格')
     expect(wrapper.findAll('[data-cell]')).toHaveLength(49)
@@ -50,7 +40,6 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
 
   it('hovering cells updates the live readout and highlights the cols×rows region', async () => {
     const wrapper = await openMenu()
-    await showCustomPanel(wrapper)
     await wrapper.get('[data-cell="3-2"]').trigger('pointerenter', { pointerType: 'mouse' })
     expect(wrapper.get('[data-testid="readout"]').text()).toContain('3 x 2')
     expect(wrapper.findAll('[data-cell][data-active="true"]')).toHaveLength(6)
@@ -67,7 +56,6 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
 
   it('clicking a custom cell emits slice(cols, rows)', async () => {
     const wrapper = await openMenu()
-    await showCustomPanel(wrapper)
     await wrapper.get('[data-cell="3-2"]').trigger('pointerenter', { pointerType: 'mouse' })
     await wrapper.get('[data-cell="3-2"]').trigger('click')
     expect(wrapper.emitted('slice')).toEqual([[3, 2]])
@@ -76,7 +64,6 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
 
   it('touch: first tap highlights, second tap on same cell slices', async () => {
     const wrapper = await openMenu()
-    await showCustomPanel(wrapper)
     const cell = wrapper.get('[data-cell="2-2"]')
     await cell.trigger('click') // touch 无 hover，第一次点选
     expect(wrapper.emitted('slice')).toBeUndefined()
@@ -88,7 +75,6 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
 
   it('「预览切分效果…」 emits open-custom (降级入口进既有工作台)', async () => {
     const wrapper = await openMenu()
-    await showCustomPanel(wrapper)
     await wrapper.get('[data-testid="preview-entry"]').trigger('click')
     expect(wrapper.emitted('open-custom')).toHaveLength(1)
     wrapper.unmount()
@@ -101,7 +87,6 @@ describe('GridSliceDropdown (dual-panel picker)', () => {
     expect(preset25.attributes('title')).toContain('64')
     expect(wrapper.get('[data-preset="4"]').attributes('disabled')).toBeUndefined()
 
-    await showCustomPanel(wrapper)
     expect(wrapper.get('[data-cell="7-7"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-cell="7-7"]').attributes('title')).toContain('64')
     expect(wrapper.get('[data-cell="2-2"]').attributes('disabled')).toBeUndefined()

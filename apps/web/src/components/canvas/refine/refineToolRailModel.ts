@@ -56,7 +56,8 @@ interface RefineCapabilityGroup {
 /** 能力组占位（迁自原 RefineToolbox 的 CAPABILITY_GROUPS，§9）。outpaint 已由左栏独立按钮承担，不再列入。
  *  matting（抠素材）已从占位移除：它已注册为精修工作台的独立模式（refine-matting，见 workbenchToolRegistry），
  *  由 rail 的能力组形态（禁用占位）改为可点亮的真模式入口，故不再作为待实现占位展示。
- *  crop（裁剪）同 matting 路径点亮为独立模式（refine-crop，2026-09-24 image-editor-unified 批次 A）。 */
+ *  crop（裁剪）同 matting 路径点亮为独立模式（refine-crop，2026-09-24 image-editor-unified 批次 A）。
+ *  inpaint（局部重绘）同路径点亮为独立模式（refine-inpaint，2026-09-24 快捷工具链批次）。 */
 export const REFINE_CAPABILITY_GROUPS: RefineCapabilityGroup[] = [
   {
     id: 'compose', label: '构图', price: '免费',
@@ -68,7 +69,6 @@ export const REFINE_CAPABILITY_GROUPS: RefineCapabilityGroup[] = [
   {
     id: 'content', label: '改内容', price: '积分',
     items: [
-      { id: 'inpaint', label: '局部重绘', icon: ['M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z', 'M14.8 6.6l2.6 2.6'] },
       { id: 'erase-replace', label: '消除替换', icon: ['M7 8h10l4 4-4 4H7l-4-4z', 'M9.5 11.5h5'] },
     ],
   },

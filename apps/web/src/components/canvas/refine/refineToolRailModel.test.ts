@@ -53,16 +53,17 @@ describe('canvasEditor · 对照模式归属', () => {
 })
 
 describe('REFINE_CAPABILITY_ITEMS（Toolbox 能力组迁入 rail）', () => {
-  it('3 组 6 项，且去掉 outpaint 与 matting/crop（matting/crop 已注册为真模式，outpaint 由左栏独立按钮承担）', () => {
+  it('3 组 5 项，且去掉 outpaint/matting/crop/inpaint（均已注册为真模式或由左栏独立按钮承担）', () => {
     const ids = REFINE_CAPABILITY_ITEMS.map((i) => i.id)
     expect(ids).toEqual([
       'grid-slice', 'rotate-flip',
-      'inpaint', 'erase-replace',
+      'erase-replace',
       'upscale', 'enhance',
     ])
     expect(ids).not.toContain('outpaint')
     expect(ids).not.toContain('one-click-matting')
     expect(ids).not.toContain('crop')
+    expect(ids).not.toContain('inpaint')
   })
 
   it('全部禁用并带「即将上线」提示（点亮机制后续包翻 disabled）', () => {
@@ -77,6 +78,6 @@ describe('REFINE_CAPABILITY_ITEMS（Toolbox 能力组迁入 rail）', () => {
     const byId = Object.fromEntries(REFINE_CAPABILITY_ITEMS.map((i) => [i.id, i]))
     expect(byId['grid-slice']!.groupLabel).toBe('构图')
     expect(byId['grid-slice']!.price).toBe('免费')
-    expect(byId['inpaint']!.price).toBe('积分')
+    expect(byId['erase-replace']!.price).toBe('积分')
   })
 })

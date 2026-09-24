@@ -61,8 +61,8 @@ export interface RefineSessionResult {
   createdAt: string
 }
 
-/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪。 */
-export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop'
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪；inpaint 局部重绘（画笔蒙版 + prompt 直出）。 */
+export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop' | 'inpaint'
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
