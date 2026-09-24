@@ -6,15 +6,17 @@
  * θ=0 时退化为普通 drawImage 九参裁剪。
  */
 import type { CropRect } from './cropGeometry'
+import { sameOriginApiMediaUrl } from '@/services/media-url'
 
-/** 加载原图像素源（crossOrigin anonymous，与 matting/outpaint 同款）。 */
+/** 加载原图像素源（crossOrigin anonymous，与 matting/outpaint 同款）。
+ *  URL 先同源化折叠：数据中的绝对 /api/uploads/ 地址跨域无 CORS 头会加载失败。 */
 export function loadCropSourceImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error('原图加载失败'))
-    img.src = url
+    img.src = sameOriginApiMediaUrl(url)
   })
 }
 

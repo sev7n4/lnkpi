@@ -46,9 +46,10 @@ describe('MattingPanel', () => {
     expect(w.emitted('run-mask')).toHaveLength(1)
   })
 
-  it('有选区时不显示引导行，title 为默认文案', () => {
+  it('有选区时不显示引导行，按钮文案「选区抠图」且 title 为默认文案', () => {
     const w = mount(MattingPanel, { props: { ...baseProps, maskAvailable: true } })
     expect(w.find('[data-testid="matting-mask-hint"]').exists()).toBe(false)
-    expect(w.find('[data-testid="matting-run-mask"]').attributes('title')).toBe('用当前选区抠')
+    expect(w.find('[data-testid="matting-run-mask"]').text()).toBe('选区抠图')
+    expect(w.find('[data-testid="matting-run-mask"]').attributes('title')).toBe('按当前选区抠图，生成透明 PNG')
   })
 })

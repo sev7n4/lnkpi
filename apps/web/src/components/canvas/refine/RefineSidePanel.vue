@@ -10,6 +10,7 @@ import {
   resolveImageEditProfile,
 } from '@lnkpi/shared'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
+import { sameOriginApiMediaUrl } from '@/services/media-url'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { estimateImageCredits } from '@/constants/credits'
 import { studioApi } from '@/services/studio-api'
@@ -101,19 +102,13 @@ const compareBeforeUrl = ref(props.beforeUrl)
 const afterUrl = computed(() => editor.currentRefineSessionResult?.url ?? undefined)
 /** matting 服务不可用（503）标记：禁用 run-auto 并提示。 */
 const mattingUnavailable = ref(false)
-/** 用户在抠图模式点「用当前选区抠」被引导切到选区后置位；在选区面板显示「返回抠图」CTA，回到 matting 即清除。 */
-const mattingReturnPending = ref(false)
+/** 选区抠图引导标记：已提升到 store（refineMattingReturnPending）——rail「选取抠图」入口与本面板双侧读写。 */
+const mattingReturnPending = computed(() => editor.refineMattingReturnPending)
 const showMattingReturn = computed(() => editor.refineMode === 'select' && mattingReturnPending.value)
 function returnToMatting() {
-  mattingReturnPending.value = false
+  editor.setRefineMattingReturnPending(false)
   editor.setRefineMode('matting')
 }
-watch(
-  () => editor.refineMode,
-  (mode) => {
-    if (mode === 'matting') mattingReturnPending.value = false
-  },
-)
 /** 当前是否有可用于「选区抠图」的选区蒙版（判据收敛到 store 的 refineMaskAvailable，rail 引导共用）。 */
 const maskAvailable = computed(() => editor.refineMaskAvailable)
 /** 当前激活工具是否为 matting 面板（动态 panel 下发 5 props / 监听 3 events）。 */
@@ -140,7 +135,7 @@ function resetPointFallbackState() {
 async function loadWorkImage(url: string): Promise<HTMLImageElement> {
   const img = new Image()
   img.crossOrigin = 'anonymous'
-  img.src = url
+  img.src = sameOriginApiMediaUrl(url)
   await img.decode()
   return img
 }
@@ -473,10 +468,11 @@ async function runMattingMask() {
   if (editor.refineMode !== 'matting') return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
-  // 无选区守卫（2026-09-23 体验反馈）：不再无声禁用，点击即引导切到「选区」模式圈选。
+  // 无选区守卫（2026-09-24 流程拍板）：点「选区抠图」无选区 → 跳「选区」面板（默认矩形）圈选，
+  // 置引导标记让选区面板出现「返回抠图」CTA；回到抠图面板再点「选区抠图」执行。
   if (!canvas || editor.refineCoverage <= 0) {
-    ElMessage.info('请先圈选区域：已切到「选区」模式，圈选后点左侧「抠图」返回')
-    mattingReturnPending.value = true
+    ElMessage.info('还没有选区：已切到「选区」面板（默认矩形），圈选后回到「抠图」点「选区抠图」执行')
+    editor.setRefineMattingReturnPending(true)
     editor.setRefineMode('select')
     return
   }
@@ -516,7 +512,7 @@ async function loadBaseImage(url: string): Promise<HTMLImageElement | null> {
     img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => resolve(null)
-    img.src = url
+    img.src = sameOriginApiMediaUrl(url)
     // jsdom 等无 onload 环境：已 complete 则返回，否则兜底 null。
     setTimeout(() => resolve(img.complete ? img : null), 0)
   })
@@ -683,7 +679,7 @@ onBeforeUnmount(() => {
           data-testid="refine-return-matting"
           @click="returnToMatting"
         >
-          ← 返回抠图（用当前选区抠）
+          ← 返回抠图（执行选区抠图）
         </button>
         <!-- 会话胶片条（Task 7）：替换原 VersionStrip；选中切换 store 当前结果 → afterUrl 派生切换 -->
         <SessionFilmstrip

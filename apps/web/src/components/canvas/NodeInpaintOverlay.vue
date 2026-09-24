@@ -32,6 +32,9 @@ const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 const TOOLBAR_GAP_PX = 8
 const TOOLBAR_ESTIMATED_H = 40
 const PROMPT_GAP_PX = 8
+/** prompt 卡估高（屏幕 px）与底部生成 dock 预留高度：用于「下沿放不下 → 整卡翻上沿」判定。 */
+const CARD_ESTIMATED_H = 180
+const DOCK_RESERVE_PX = 330
 const HISTORY_MAX = 10
 
 const abs = ref<{ x: number; y: number } | null>(null)
@@ -46,6 +49,7 @@ const loadToken = ref(0)
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const toolbarAbove = ref(true)
+const cardAbove = ref(false)
 
 const canConfirm = computed(
   () => !props.busy && !!natural.value && coverage.value > 0 && prompt.value.trim().length > 0,
@@ -61,7 +65,7 @@ const transformStyle = computed(() => ({
   transformOrigin: '0 0',
 }))
 
-/** 工具卡贴节点上沿（空间不足翻下沿）；prompt 卡固定下沿 */
+/** 工具卡贴节点上沿（prompt 卡翻上沿时让位翻下沿；节点贴顶时翻下沿）；prompt 卡位置见下 */
 const toolbarStyle = computed(() => {
   if (!abs.value) return { display: 'none' }
   const gap = TOOLBAR_GAP_PX / viewport.value.zoom
@@ -72,13 +76,21 @@ const toolbarStyle = computed(() => {
   }
 })
 
+/** prompt 卡默认下沿（工具条翻下时顺延错开，避免同位重叠）；下沿空间不足（含底部 dock 预留）翻上沿。
+ *  2026-09-24 用户反馈：卡体对齐竞品——与节点同宽（下限 320），大输入区。 */
 const promptCardStyle = computed(() => {
   if (!abs.value) return { display: 'none' }
   const gap = PROMPT_GAP_PX / viewport.value.zoom
+  const toolbarBelowOffset = toolbarAbove.value
+    ? 0
+    : (TOOLBAR_ESTIMATED_H + PROMPT_GAP_PX) / viewport.value.zoom
   return {
     left: `${abs.value.x + box.value.w / 2}px`,
-    top: `${abs.value.y + box.value.h + gap}px`,
-    transform: 'translate(-50%, 0)',
+    top: cardAbove.value
+      ? `${abs.value.y - gap}px`
+      : `${abs.value.y + box.value.h + gap + toolbarBelowOffset}px`,
+    width: `${Math.max(box.value.w, 320)}px`,
+    transform: cardAbove.value ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
   }
 })
 
@@ -113,7 +125,14 @@ function updateGeometry() {
   box.value = { w, h }
   const zoom = viewport.value.zoom
   const topScreen = viewport.value.y + position.y * zoom
-  toolbarAbove.value = topScreen - TOOLBAR_GAP_PX - TOOLBAR_ESTIMATED_H > 0
+  const bottomScreen = topScreen + h * zoom
+  // prompt 卡：下方空间不足（含底部生成 dock 预留）且上方有足够空间才翻上沿；
+  // 节点贴顶时保持下沿（部分被 dock 遮挡，用户平移画布即可），避免卡片大部分落到视口外。
+  const belowAvail = window.innerHeight - DOCK_RESERVE_PX - bottomScreen
+  cardAbove.value =
+    belowAvail < CARD_ESTIMATED_H && topScreen - PROMPT_GAP_PX > CARD_ESTIMATED_H * 0.6
+  toolbarAbove.value =
+    !cardAbove.value && topScreen - TOOLBAR_GAP_PX - TOOLBAR_ESTIMATED_H > 0
 }
 
 // —— 蒙版绘制（画笔 / 橡皮 + 撤销重做） ——
@@ -428,10 +447,10 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 下沿 prompt 卡：textarea + 确认（无张数/比例/分辨率） -->
+      <!-- 下沿 prompt 卡（竞品尺寸）：大输入区 + 底部右侧确认（无张数/比例/分辨率） -->
       <div v-if="abs && natural" class="pointer-events-auto absolute" :style="promptCardStyle">
         <div
-          class="neo-chrome flex items-end gap-1 rounded-xl px-1.5 py-1.5"
+          class="neo-chrome flex flex-col gap-1.5 rounded-xl px-2 py-2"
           data-testid="node-inpaint-card"
           @pointerdown.stop
           @mousedown.stop
@@ -440,24 +459,26 @@ onUnmounted(() => {
           <textarea
             v-model="prompt"
             class="node-inpaint-prompt"
-            rows="1"
+            rows="4"
             placeholder="描述重绘内容，如：眼珠换成绿色，发蓝光"
             data-testid="node-inpaint-prompt"
             @keydown.enter.exact.prevent="onConfirm"
           />
-          <button
-            type="button"
-            class="node-inpaint-confirm"
-            data-testid="node-inpaint-confirm"
-            :disabled="!canConfirm"
-            :title="
-              !natural ? '原图加载失败，请重试'
-                : coverage <= 0 ? '请先在图上涂抹要重绘的区域'
-                  : !prompt.trim() ? '请输入重绘描述'
-                    : '生成重绘（下游新节点）'
-            "
-            @click="onConfirm"
-          >{{ busy ? '重绘中…' : '确认' }}</button>
+          <div class="flex items-center justify-end">
+            <button
+              type="button"
+              class="node-inpaint-confirm"
+              data-testid="node-inpaint-confirm"
+              :disabled="!canConfirm"
+              :title="
+                !natural ? '原图加载失败，请重试'
+                  : coverage <= 0 ? '请先在图上涂抹要重绘的区域'
+                    : !prompt.trim() ? '请输入重绘描述'
+                      : '生成重绘（下游新节点）'
+              "
+              @click="onConfirm"
+            >{{ busy ? '重绘中…' : '确认' }}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -510,15 +531,15 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .node-inpaint-prompt {
-  width: 240px;
-  max-height: 72px;
-  padding: 0.35rem 0.5rem;
+  width: 100%;
+  min-height: 96px;
+  padding: 0.45rem 0.55rem;
   border: none;
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--neo-text) 6%, transparent);
   color: var(--neo-text);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
   resize: none;
 }
 .node-inpaint-prompt:focus {
@@ -528,11 +549,11 @@ onUnmounted(() => {
   color: color-mix(in srgb, var(--neo-text) 45%, transparent);
 }
 .node-inpaint-confirm {
-  padding: 0.4rem 0.85rem;
+  padding: 0.5rem 1.1rem;
   border-radius: 0.6rem;
   background: #fff;
   color: #111;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;

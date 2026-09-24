@@ -122,7 +122,7 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       </button>
     </div>
 
-    <!-- 抠图模式入口：激活时高亮；busy 时冻结不可切换；与扩图互斥（setRefineMode 覆盖式切换） -->
+    <!-- 一键抠图模式入口（rail 只此一个抠图入口；一键 / 选区抠图双动作在右侧抠图面板内） -->
     <div class="refine-rail__slot">
       <button
         type="button"

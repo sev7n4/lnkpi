@@ -1,3 +1,5 @@
+import { sameOriginApiMediaUrl } from '@/services/media-url'
+
 export function mergeMaskRgba(opts: {
   width: number
   height: number
@@ -49,7 +51,9 @@ export async function loadMaskRgbaFromUrl(
   width: number,
   height: number,
 ): Promise<Uint8ClampedArray> {
-  const img = await createImageBitmap(await (await fetch(url)).blob())
+  const img = await createImageBitmap(
+    await (await fetch(sameOriginApiMediaUrl(url))).blob(),
+  )
   const c = document.createElement('canvas')
   c.width = width
   c.height = height

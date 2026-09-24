@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { studioApi } from '@/services/studio-api'
+import { sameOriginApiMediaUrl } from '@/services/media-url'
 import { isMaskDrawReady, isRealBitmapSize } from './maskCanvasReady'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { fillPolygonMask, isNearPolygonStart } from './maskPolygon'
@@ -176,7 +177,7 @@ function loadImageRgba(width: number, height: number) {
       imageRgba = null
     }
   }
-  img.src = props.url
+  img.src = sameOriginApiMediaUrl(props.url)
 }
 
 async function resolveBitmapSize() {
