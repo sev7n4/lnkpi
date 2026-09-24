@@ -35,13 +35,12 @@ describe('buildSelectionTools', () => {
     expect(tools.find((t) => t.id === 'refine')).toMatchObject({ title: '精修', disabled: false })
   })
 
-  it('marks crop/rotate as disabled placeholders with future reasons', () => {
+  it('crop 已点亮（节点直裁）；rotate 仍为禁用占位', () => {
     const tools = buildSelectionTools({ hasUrl: true })
-    for (const id of ['crop', 'rotate']) {
-      const tool = tools.find((t) => t.id === id)!
-      expect(tool.disabled).toBe(true)
-      expect(tool.disabledReason).toContain('后续能力包点亮')
-    }
+    expect(tools.find((t) => t.id === 'crop')?.disabled).toBe(false)
+    const rotate = tools.find((t) => t.id === 'rotate')!
+    expect(rotate.disabled).toBe(true)
+    expect(rotate.disabledReason).toContain('后续能力包点亮')
   })
 
   it('matting 工具已点亮（非 disabled）', () => {
