@@ -61,8 +61,8 @@ export interface RefineSessionResult {
   createdAt: string
 }
 
-/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪。 */
-export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop'
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪；inpaint 局部重绘（画笔蒙版 + prompt 直出）。 */
+export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop' | 'inpaint'
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
@@ -84,6 +84,9 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineMaskMenuOpen = ref(false)
   const refineWandTolerance = ref(24)
   const refineMaskOp = ref<RefineMaskOp>('add')
+  /** 选区抠图引导（2026-09-24）：rail「选取抠图」/ 抠图面板「用当前选区抠」切到选区后置位，
+   *  选区面板显示「返回抠图」CTA；回到 matting 模式即清除。放 store 以便 rail 与面板双侧读写。 */
+  const refineMattingReturnPending = ref(false)
   /** 工作区模式：select 普通精修 / outpaint 扩图（Task 7）。 */
   const refineMode = ref<RefineMode>('select')
   /** 扩图模式下当前 clamp 后的新画布矩形（base 贴位 + 扩出区）。null 表示未进入扩图或未产生合法 rect。 */
@@ -110,7 +113,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     compareLightboxOpen.value = false
     refineCompareMode.value = 'split'
     refineWipeRatio.value = 0.5
-    refineTool.value = 'brush'
+    refineTool.value = 'rect' // 2026-09-24 用户拍板：选区默认矩形框
     refineBrushSize.value = 24
     refineCoverage.value = 0
     refineMask.value = null
@@ -203,9 +206,14 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskOp.value = refineSelectionOpAfterToolPick(tool, refineMaskOp.value)
   }
 
+  function setRefineMattingReturnPending(v: boolean) {
+    refineMattingReturnPending.value = v
+  }
+
   /** 进入 / 退出扩图模式。退出时重置扩图矩形（拖拽状态不进蒙版历史栈，退出即重置）。busy 时禁止切换。 */
   function setRefineMode(mode: RefineMode) {
     if (refineBusy.value) return
+    if (mode === 'matting') refineMattingReturnPending.value = false
     if (mode === 'select') {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
@@ -215,6 +223,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineCropAspect.value = 'free'
       refineCropBase.value = null
       refineCropRect.value = null
+      // 2026-09-24 用户拍板：进选区默认矩形框（此前默认画笔）
+      if (refineMode.value !== 'select') setRefineTool('rect')
     }
     refineMode.value = mode
   }
@@ -374,6 +384,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineMaskMenuOpen,
     refineWandTolerance,
     refineMaskOp,
+    refineMattingReturnPending,
     refineMode,
     refineOutpaintRect,
     refineOutpaintBase,
@@ -405,6 +416,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineBrushColor,
     setRefineMaskMenuOpen,
     setRefineWandTolerance,
+    setRefineMattingReturnPending,
     setRefineTool,
     setRefineMode,
     setRefineOutpaintRect,

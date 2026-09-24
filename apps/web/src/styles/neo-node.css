@@ -460,7 +460,7 @@
    不透明媒体会完全盖住棋盘格，因此对普通图片零视觉影响。 */
 .neo-checkerboard {
   background-image: repeating-conic-gradient(var(--neo-checker-a) 0% 25%, var(--neo-checker-b) 0% 50%);
-  background-size: 16px 16px;
+  background-size: 24px 24px;
   background-position: 0 0;
 }
 

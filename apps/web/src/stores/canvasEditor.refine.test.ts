@@ -51,7 +51,7 @@ describe('canvasEditor refine target', () => {
     editor.refineCoverage = 0.4
     editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
     editor.closeImageEditor()
-    expect(editor.refineTool).toBe('brush')
+    expect(editor.refineTool).toBe('rect')
     expect(editor.refineBrushSize).toBe(24)
     expect(editor.refineCoverage).toBe(0)
   })
@@ -114,7 +114,7 @@ describe('canvasEditor refine target', () => {
     editor.setRefineWandTolerance(40)
     editor.openImageEditor({ nodeId: 'n1', url: 'https://cdn/a.png' })
     editor.closeImageEditor()
-    expect(editor.refineTool).toBe('brush')
+    expect(editor.refineTool).toBe('rect')
     expect(editor.refineWandTolerance).toBe(24)
   })
 
@@ -155,7 +155,7 @@ describe('canvasEditor refine target', () => {
     editor.setRefineTool('eraser')
     editor.setRefineTool('polygon')
     editor.closeImageEditor()
-    expect(editor.refineTool).toBe('brush')
+    expect(editor.refineTool).toBe('rect')
     expect(editor.refineMaskOp).toBe('add')
   })
 

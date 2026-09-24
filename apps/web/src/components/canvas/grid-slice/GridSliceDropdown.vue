@@ -34,7 +34,6 @@ const emit = defineEmits<{
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
 const placement = ref<'bottom' | 'top'>('bottom')
-const showCustom = ref(false)
 const hover = ref<{ cols: number; rows: number } | null>(null)
 const lastTapped = ref<string | null>(null)
 
@@ -87,7 +86,6 @@ function updatePlacement() {
 function close() {
   open.value = false
   // 重置选择态，避免重开后残留高亮 / 触摸两次点选跨次不一致
-  showCustom.value = false
   hover.value = null
   lastTapped.value = null
 }
@@ -106,8 +104,8 @@ function pickPreset(n: number) {
 }
 
 function openCustomPanel() {
-  if (blocked.value) return
-  showCustom.value = true
+  // 双面板常显（2026-09-24 用户反馈「选自定义看不到宫格」）：右面板随菜单常驻，
+  // 此入口仅作视觉锚点，不再承担展开职责。
 }
 
 function onCellEnter(cols: number, rows: number, pointerType: string) {
@@ -218,15 +216,14 @@ onUnmounted(() => {
           class="grid-slice-item custom"
           role="menuitem"
           data-testid="custom-toggle"
-          :data-active="showCustom ? 'true' : 'false'"
-          @pointerenter="openCustomPanel"
+          :data-active="'true'"
           @click="openCustomPanel"
         >
           自定义 ›
         </button>
       </div>
-      <!-- 右面板：hover 自定义后出现的 7×7 格阵 + 实时读数 -->
-      <div v-if="showCustom" class="grid-slice-panel grid-slice-panel-custom" data-panel="custom">
+      <!-- 右面板：自定义 7×7 格阵 + 实时读数（常显，竞品同款双面板） -->
+      <div class="grid-slice-panel grid-slice-panel-custom" data-panel="custom">
         <div class="grid-slice-panel-head">
           <span class="grid-slice-panel-title">自定义宫格</span>
           <span class="grid-slice-readout" data-testid="readout">{{ readout }}</span>
@@ -273,8 +270,8 @@ onUnmounted(() => {
   transition: background 0.15s ease, opacity 0.15s ease;
   white-space: nowrap;
 }
-/* 纯图标样式与 bar 内其他按钮一致；loading 时文字恢复可见 */
-.toolbar-action .label { display: none; }
+/* 图标 + 文字常显（2026-09-24 用户要求：上沿菜单按钮统一图标+文字）；loading 时文案换为进度提示 */
+.toolbar-action .label { display: inline; }
 .toolbar-action.is-loading .label { display: inline; }
 .toolbar-action:hover:not(:disabled) {
   background: color-mix(in srgb, var(--neo-text) 8%, transparent);
@@ -314,19 +311,25 @@ onUnmounted(() => {
 .grid-slice-readout {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
-  color: var(--neo-accent, #5b8def);
+  color: var(--neo-text);
+  opacity: 0.75;
 }
+/* 竞品同款中性灰格子（2026-09-24 用户反馈：紫色高亮 + 描边空格与整体不符）：
+   填充式灰块、无描边；hover 区域提亮，不再使用 accent 紫 */
 .grid-cell {
   width: 22px;
   height: 22px;
-  border-radius: 4px;
-  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
-  background: transparent;
+  border-radius: 5px;
+  border: none;
+  background: color-mix(in srgb, var(--neo-text) 15%, transparent);
   padding: 0;
+  transition: background 0.12s ease;
 }
 .grid-cell[data-active='true'] {
-  background: color-mix(in srgb, var(--neo-accent, #5b8def) 28%, transparent);
-  border-color: var(--neo-accent, #5b8def);
+  background: color-mix(in srgb, var(--neo-text) 42%, transparent);
+}
+.grid-cell:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--neo-text) 42%, transparent);
 }
 .grid-cell:disabled {
   cursor: not-allowed;
@@ -356,7 +359,7 @@ onUnmounted(() => {
   padding-top: 0.4rem;
 }
 .grid-slice-item.custom[data-active='true'] {
-  background: color-mix(in srgb, var(--neo-accent, #5b8def) 14%, transparent);
+  background: color-mix(in srgb, var(--neo-text) 10%, transparent);
 }
 .grid-slice-item.preview {
   margin-top: 0.4rem;

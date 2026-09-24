@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { TOOL_ICON_CROP, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
+import { TOOL_ICON_CROP, TOOL_ICON_INPAINT, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
 import {
   REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   type RefineFitOptionId,
@@ -42,6 +42,17 @@ function toggleMatting() {
 const cropActive = computed(() => editor.refineMode === 'crop')
 function toggleCrop() {
   editor.setRefineMode(cropActive.value ? 'select' : 'crop')
+}
+
+/** 局部重绘模式入口：进模式默认画笔（画笔优先的精修子模式） */
+const inpaintActive = computed(() => editor.refineMode === 'inpaint')
+function toggleInpaint() {
+  if (inpaintActive.value) {
+    editor.setRefineMode('select')
+    return
+  }
+  editor.setRefineMode('inpaint')
+  editor.setRefineTool('brush')
 }
 
 const selectActive = computed(() => editor.refineMode === 'select')
@@ -111,7 +122,7 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
       </button>
     </div>
 
-    <!-- 抠图模式入口：激活时高亮；busy 时冻结不可切换；与扩图互斥（setRefineMode 覆盖式切换） -->
+    <!-- 一键抠图模式入口（rail 只此一个抠图入口；一键 / 选区抠图双动作在右侧抠图面板内） -->
     <div class="refine-rail__slot">
       <button
         type="button"
@@ -148,6 +159,26 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_CROP" />
         </span>
         <span class="refine-rail__name">裁剪</span>
+      </button>
+    </div>
+
+    <!-- 局部重绘模式入口：激活时高亮；busy 时冻结不可切换；画笔/橡皮在右侧面板 -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': inpaintActive }"
+        data-testid="rail-mode-inpaint"
+        aria-label="局部重绘"
+        title="局部重绘（画笔涂抹区域 + 描述改动，只重画圈出的部分）"
+        :aria-pressed="inpaintActive"
+        :disabled="editor.refineBusy"
+        @click="toggleInpaint"
+      >
+        <span class="refine-rail__glyph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_INPAINT" />
+        </span>
+        <span class="refine-rail__name">局部重绘</span>
       </button>
     </div>
 

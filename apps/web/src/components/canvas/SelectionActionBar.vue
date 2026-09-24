@@ -4,7 +4,7 @@ import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
 import GridSliceDropdown from '@/components/canvas/grid-slice/GridSliceDropdown.vue'
 import { buildSelectionTools, exactCounterScale, resolveBarPlacement, type SelectionToolDef } from './selectionToolModel'
-import { TOOL_ICON_MATTING } from './toolIcons'
+import { TOOL_ICON_INPAINT, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT } from './toolIcons'
 
 /**
  * 挂载方式：节点坐标系（与 NodeEditorToolbarOverlay 同模式）。
@@ -41,17 +41,14 @@ const emit = defineEmits<{
   'save-asset': []
   matting: []
   crop: []
+  outpaint: []
+  inpaint: []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 
 /** bar 与节点边缘的屏幕间距（px） */
 const BAR_GAP_PX = 8
-/**
- * bar 固定宽度（px）：与 MultiSelectToolbar（框选多节点菜单）的自然宽度 383px 对齐。
- * 固定宽度后按钮用 space-around 铺满，命中目标比 max-content 时的紧凑排布更大。
- */
-const BAR_WIDTH_PX = 384
 
 const tools = computed(() =>
   buildSelectionTools({ hasUrl: Boolean(props.hasUrl) }).map((tool) =>
@@ -66,6 +63,8 @@ function onToolClick(tool: SelectionToolDef) {
   if (tool.id === 'refine') emit('edit')
   else if (tool.id === 'matting') emit('matting')
   else if (tool.id === 'crop') emit('crop')
+  else if (tool.id === 'outpaint') emit('outpaint')
+  else if (tool.id === 'inpaint') emit('inpaint')
   else if (tool.id === 'download') emit('download')
   else if (tool.id === 'save-asset') emit('save-asset')
 }
@@ -146,10 +145,11 @@ const transformStyle = computed(() => ({
 
 const barStyle = computed(() => {
   if (!flowPos.value) return { display: 'none' }
+  // max-content 宽（2026-09-24 图标+短文案后 384px 固定宽装不下）；translate(-50%) 居中不受影响
   return {
     left: `${flowPos.value.x}px`,
     top: `${flowPos.value.y}px`,
-    width: `${BAR_WIDTH_PX}px`,
+    width: 'max-content',
     transform: placement.value === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
   }
 })
@@ -165,7 +165,9 @@ const effectiveZoom = computed(() => props.zoom ?? viewport.value.zoom)
 const TOOL_ICONS: Record<string, string> = {
   refine: '<path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />',
   matting: TOOL_ICON_MATTING,
+  outpaint: TOOL_ICON_OUTPAINT,
   crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" />',
+  inpaint: TOOL_ICON_INPAINT,
   rotate: '<path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />',
   'save-asset': '<rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 8v8" /><path d="M8 12h8" />',
@@ -227,7 +229,8 @@ const TOOL_ICONS: Record<string, string> = {
                 :class="{ 'animate-spin': tool.id === 'matting' && mattingBusy }"
                 v-html="TOOL_ICONS[tool.icon]"
               />
-              <span class="label">{{ tool.title }}</span>
+              <!-- 图标 + 短文案（2026-09-24 用户要求，两字优先） -->
+              <span class="label">{{ tool.label }}</span>
             </button>
           </template>
         </div>
@@ -264,9 +267,8 @@ const TOOL_ICONS: Record<string, string> = {
 .toolbar-action.icon-only {
   padding: 0.375rem 0.4rem;
 }
-/* 与 MultiSelectToolbar（纯图标按钮排布）对齐：文字标签不占宽度，
-   仅保留在 DOM / title 中（无障碍 + 测试可见性），按钮在固定 384px 内 space-around 铺开 */
+/* 图标 + 短文案（2026-09-24 用户要求）；file 组按钮同样带文案，仅收窄内边距 */
 .label {
-  display: none;
+  display: inline;
 }
 </style>

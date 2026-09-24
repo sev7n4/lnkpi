@@ -30,7 +30,7 @@ const runAutoTitle = computed(() => (props.mattingUnavailable ? '抠图服务未
 /** 无选区时保持可点（点击后由父级引导去圈选），只挡 busy；title 说明原因。 */
 const runMaskDisabled = computed(() => props.busy)
 const runMaskTitle = computed(() =>
-  props.maskAvailable ? '用当前选区抠' : '还没有选区：点击后将引导你在画布上圈选区域',
+  props.maskAvailable ? '按当前选区抠图，生成透明 PNG' : '还没有选区：点击后将先跳到「选区」面板圈选（默认矩形），选好回到本面板执行',
 )
 const applyDisabled = computed(() => props.busy || !props.canApply)
 </script>
@@ -42,9 +42,9 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
     </div>
 
     <div class="matting-actions">
-      <!-- 无选区时的常驻引导（用户反馈 2026-09-23：默认不知道要先圈选） -->
+      <!-- 无选区时的常驻引导（用户反馈 2026-09-23：默认不知道要先圈选；2026-09-24 流程改为「选区抠图」按钮引导） -->
       <p v-if="!maskAvailable" class="matting-actions__hint" data-testid="matting-mask-hint">
-        还没有选区 — 在画布上圈出要抠的部分，或先「一键抠图」
+        还没有选区 — 点「选区抠图」先去圈选（默认矩形），或直接「一键抠图」
       </p>
 
       <button
@@ -64,7 +64,7 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
         :disabled="runMaskDisabled"
         :title="runMaskTitle"
         @click="emit('run-mask')"
-      >用当前选区抠</button>
+      >选区抠图</button>
 
       <button
         type="button"
@@ -93,7 +93,7 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
 /* 棋盘格透明底：统一走全局 token（--neo-checker-a/b），与节点卡 / 胶片条 / 大图预览一致 */
 .matting-preview.checkerboard {
   background-image: repeating-conic-gradient(var(--neo-checker-a) 0% 25%, var(--neo-checker-b) 0% 50%);
-  background-size: 16px 16px;
+  background-size: 24px 24px;
   background-position: 0 0;
 }
 .matting-preview__img {

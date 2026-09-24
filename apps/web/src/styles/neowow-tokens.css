@@ -34,6 +34,9 @@
   --neo-text-secondary: rgba(244, 244, 248, 0.62);
   --neo-text-muted: rgba(244, 244, 248, 0.4);
   --neo-text-invert: #16161c;
+  /* 兼容别名：部分组件（宫格下拉 / 节点 overlay 等）按 --neo-text 消费，
+     缺定义会让 color-mix(var(--neo-text)…) 整条声明失效 → 背景透明不可见（2026-09-24） */
+  --neo-text: var(--neo-text-primary);
 
   /* ---- 浮动 chrome（画布上的悬浮按钮 / pill） ---- */
   --neo-chrome-bg: rgba(22, 22, 28, 0.88);
@@ -101,9 +104,11 @@
   --neo-hi-text: #17181d;
   --neo-hi-shadow: 0 2px 10px rgba(0, 0, 0, 0.32), 0 0 14px rgba(255, 255, 255, 0.22);
 
-  /* ---- 透明区棋盘格（.neo-checkerboard，深浅两块交替） ---- */
-  --neo-checker-a: #26262e;
-  --neo-checker-b: #141419;
+  /* ---- 透明区棋盘格（.neo-checkerboard）----
+     2026-09-24 二次拍板：参考竞品用深色大格子（黑/深灰相间），透明区一眼可辨；
+     格子尺寸由 .neo-checkerboard 的 background-size 统一控制（24px） */
+  --neo-checker-a: #101013;
+  --neo-checker-b: #2e2e35;
 
   /* ---- Agent 对话气泡（与用户/助手差异化；避免纯白底吞没白图引用） ---- */
   --agent-user-bg: linear-gradient(160deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.06) 100%);
@@ -135,6 +140,7 @@
   --neo-text-secondary: rgba(23, 25, 35, 0.64);
   --neo-text-muted: rgba(23, 25, 35, 0.42);
   --neo-text-invert: #ffffff;
+  --neo-text: var(--neo-text-primary);
 
   --neo-chrome-bg: rgba(255, 255, 255, 0.9);
   --neo-chrome-shadow: 0 8px 24px rgba(23, 25, 35, 0.12);

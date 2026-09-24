@@ -1,4 +1,5 @@
 import { maskCoverageRatio } from '@/utils/maskCoverage'
+import { sameOriginApiMediaUrl } from '@/services/media-url'
 
 function pixelLuma(r: number, g: number, b: number): number {
   return 0.299 * r + 0.587 * g + 0.114 * b
@@ -72,6 +73,6 @@ export function loadImageElement(url: string): Promise<HTMLImageElement> {
     img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error('image load failed'))
-    img.src = url
+    img.src = sameOriginApiMediaUrl(url)
   })
 }

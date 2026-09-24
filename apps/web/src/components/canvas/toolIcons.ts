@@ -20,3 +20,7 @@ export const TOOL_ICON_OUTPAINT =
 /** 「裁剪」模式入口：经典 crop 标（两把 L 形尺） */
 export const TOOL_ICON_CROP =
   '<path d="M6.5 2.5v13a2 2 0 0 0 2 2h13" /><path d="M17.5 21.5v-13a2 2 0 0 0-2-2h-13" />'
+
+/** 「局部重绘」入口：画笔（笔杆 + 笔头斜切），与 rail 能力区占位图标同形 */
+export const TOOL_ICON_INPAINT =
+  '<path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" /><path d="M14.8 6.6l2.6 2.6" />'
