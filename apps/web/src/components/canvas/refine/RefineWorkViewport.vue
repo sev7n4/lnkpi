@@ -6,6 +6,7 @@ import MaskEditor from './MaskEditor.vue'
 import ImageLoupe from './ImageLoupe.vue'
 import RefineToolRail from './RefineToolRail.vue'
 import RefineOutpaintCanvas from './RefineOutpaintCanvas.vue'
+import CropCanvas from './CropCanvas.vue'
 import { dispatchRefinePointSelect } from './maskRemote'
 import { containRect, oneToOneScaleOf } from './refineWorkLayout'
 
@@ -227,9 +228,9 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="refine-work__col">
-      <!-- 普通工作图（蒙版精修）：非扩图模式显示 -->
+      <!-- 普通工作图（蒙版精修）：扩图 / 裁剪专属画布模式下隐藏 -->
       <div
-        v-show="editor.refineMode !== 'outpaint'"
+        v-show="editor.refineMode !== 'outpaint' && editor.refineMode !== 'crop'"
         ref="stageRef"
         class="refine-work__stage"
         :class="{ 'is-pan': spaceDown }"
@@ -266,6 +267,14 @@ onBeforeUnmount(() => {
            不能作为视口来源（见 fix/outpaint-canvas-visibility 回归测试）。 -->
       <RefineOutpaintCanvas
         v-show="editor.refineMode === 'outpaint'"
+        :base-url="url"
+        :base-width="imgW || props.width || 0"
+        :base-height="imgH || props.height || 0"
+        :busy="editor.refineBusy"
+      />
+      <!-- 裁剪画布：crop 模式显示；与扩图画布同样由组件自测视口（stage 此时 display:none） -->
+      <CropCanvas
+        v-show="editor.refineMode === 'crop'"
         :base-url="url"
         :base-width="imgW || props.width || 0"
         :base-height="imgH || props.height || 0"

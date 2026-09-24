@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import RefineWorkViewport from './RefineWorkViewport.vue'
+import { useCanvasEditorStore } from '@/stores/canvasEditor'
 
 /** 单一 pinia 实例：mount 的 plugins 与 setActivePinia 共用，避免「两个互不相通的 store」计划缺陷（R8）。 */
 const pinia = createPinia()
@@ -67,5 +68,37 @@ describe('RefineWorkViewport 布局', () => {
     expect(canvas.exists()).toBe(true)
     expect(canvas.props('viewportWidth')).toBeUndefined()
     expect(canvas.props('viewportHeight')).toBeUndefined()
+  })
+
+  it('裁剪：crop 模式下 stage 隐藏、CropCanvas 显示；select 模式反之', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountViewport()
+    expect(w.find('.refine-work__stage').isVisible()).toBe(true)
+    expect(w.find('[data-testid="crop-canvas"]').exists()).toBe(true)
+    expect(w.find('[data-testid="crop-canvas"]').isVisible()).toBe(false)
+
+    store.setRefineMode('crop')
+    await w.vm.$nextTick()
+    // isVisible() 在 jsdom 对祖先链的判断有怪癖，这里直接断言 v-show 的内联 display
+    const stageStyle = w.find('.refine-work__stage').attributes('style') ?? ''
+    const cropStyle = w.find('[data-testid="crop-canvas"]').attributes('style') ?? ''
+    expect(stageStyle).toContain('display: none')
+    expect(cropStyle).not.toContain('display: none')
+
+    store.setRefineMode('select')
+    await w.vm.$nextTick()
+    const stageStyleBack = w.find('.refine-work__stage').attributes('style') ?? ''
+    const cropStyleBack = w.find('[data-testid="crop-canvas"]').attributes('style') ?? ''
+    expect(stageStyleBack).not.toContain('display: none')
+    expect(cropStyleBack).toContain('display: none')
+  })
+
+  it('裁剪：进入 crop 模式写入基准并初始化全图裁剪框', async () => {
+    const store = useCanvasEditorStore()
+    const w = mountViewport()
+    store.setRefineMode('crop')
+    await w.vm.$nextTick()
+    expect(store.refineCropBase).toEqual({ width: 100, height: 100 })
+    expect(store.refineCropRect).toEqual({ x: 0, y: 0, width: 100, height: 100 })
   })
 })

@@ -80,11 +80,18 @@ describe('SelectionActionBar', () => {
 
   it('renders disabled tool placeholders with explanatory titles', async () => {
     const wrapper = mountBar()
-    for (const id of ['crop', 'rotate']) {
-      const btn = wrapper.get(`[data-action="${id}"]`)
-      expect(btn.attributes('disabled')).toBeDefined()
-      expect(String(btn.attributes('title'))).toContain('后续能力包点亮')
-    }
+    const rotate = wrapper.get('[data-action="rotate"]')
+    expect(rotate.attributes('disabled')).toBeDefined()
+    expect(String(rotate.attributes('title'))).toContain('后续能力包点亮')
+    wrapper.unmount()
+  })
+
+  it('点击 crop 工具 emit crop（节点直裁入口）', async () => {
+    const wrapper = mountBar()
+    const crop = wrapper.get('[data-action="crop"]')
+    expect(crop.attributes('disabled')).toBeUndefined()
+    await crop.trigger('click')
+    expect(wrapper.emitted('crop')).toBeTruthy()
     wrapper.unmount()
   })
 

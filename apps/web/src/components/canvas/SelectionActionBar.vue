@@ -40,6 +40,7 @@ const emit = defineEmits<{
   download: []
   'save-asset': []
   matting: []
+  crop: []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
@@ -64,6 +65,7 @@ function onToolClick(tool: SelectionToolDef) {
   if (tool.disabled) return
   if (tool.id === 'refine') emit('edit')
   else if (tool.id === 'matting') emit('matting')
+  else if (tool.id === 'crop') emit('crop')
   else if (tool.id === 'download') emit('download')
   else if (tool.id === 'save-asset') emit('save-asset')
 }
