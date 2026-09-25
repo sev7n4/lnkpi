@@ -206,8 +206,14 @@ describe('NodeInpaintOverlay（节点直出局部重绘 · 芯片化）', () => 
     await nextTick()
     await wrapper.get('[data-testid="node-inpaint-prompt"]').setValue('重绘')
     await wrapper.get('[data-testid="node-inpaint-confirm"]').trigger('click')
-    // 蒙版 buffer 中应有白色像素（fillRect 落过）
-    expect(buffer.some((v) => v === 255)).toBe(true)
+    // 断言读 emit 出的 maskCanvas 本体：CI 有真实 2d context（fakeCtx 不会被触达，
+    // 本地 buffer 恒 0）；本地 jsdom 走 fakeCtx 共享缓冲且 paintElementEditMask 起手
+    // clearRect——两种环境下读该 canvas 的像素都反映 confirm 时的实际蒙版
+    const payload = wrapper.emitted('confirm')![0]![0] as { maskCanvas: HTMLCanvasElement }
+    const mctx = payload.maskCanvas.getContext('2d')
+    expect(mctx).toBeTruthy()
+    const pixels = mctx!.getImageData(0, 0, payload.maskCanvas.width, payload.maskCanvas.height).data
+    expect(Array.from(pixels).some((v) => v === 255)).toBe(true)
     wrapper.unmount()
   })
 
