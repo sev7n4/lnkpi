@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { maskCoverageMessage } from '@/utils/maskCoverage'
+import ElementChipRow from './ElementChipRow.vue'
 
 /**
- * 局部重绘面板（refine-inpaint 模式，2026-09-24 用户拍板补设计）：
- * 按其他产出型工具规范注册（workbenchToolRegistry → rail 模式入口 + panel + RefineDock）。
- * 与 select 模式共享蒙版通道（MaskEditor 在 inpaint 模式常显，RefineWorkViewport v-show），
- * 面板收敛为「画笔优先」：画笔/橡皮 + 大小 + 清空 + 覆盖读数；
- * prompt / 模型 / 尺寸 / 生成 / 应用归 RefineDock（注册表 dock: RefineDock, panel 落点）。
- * 进模式时默认画笔（由 RefineToolRail 的 toggleInpaint 置位）。
+ * 局部重绘面板（refine-inpaint 模式，2026-09-25 芯片化重做）：
+ * 画笔涂抹松手自动成芯片（MaskEditor emitStrokes → store.addInpaintStrokeChip）；
+ * 芯片条（ElementChipRow）：缩略 hover 放大、对象名、替换图（+ 本地/资产库）、
+ * 修改内容、× 删除（同步擦主蒙版）；撤销 = 移除最后一枚（rail ⌘Z 已分流）。
+ * prompt / 模型 / 尺寸 / 生成（含积分显示）归 RefineDock；生成蒙版 = 芯片碎片合并。
  */
 const props = defineProps<{
   busy?: boolean
@@ -18,16 +18,22 @@ const props = defineProps<{
 const editor = useCanvasEditorStore()
 
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))
+const items = computed(() => editor.refineElementItems)
 
 const coverageText = computed(() => {
   if (props.busy) return '生成中…'
-  if (coverageKind.value === 'empty') return '尚未涂抹：在图上刷出要重绘的区域'
+  if (items.value.some((it) => it.recognizing)) return '替换图上传中…'
+  if (items.value.length) return `已圈出 ${items.value.length} 处重绘区域，在下方输入描述后生成`
+  if (coverageKind.value === 'empty') return '尚未涂抹：在图上刷出要重绘的区域，松手即成一处编辑'
   if (coverageKind.value === 'full') return '全图蒙版：将重绘整张图'
   return '已圈出重绘区域，在下方输入描述后生成'
 })
 
-function pickTool(tool: 'brush' | 'eraser') {
-  editor.setRefineTool(tool)
+const highlightedId = ref<string | null>(null)
+
+function onRemove(id: string) {
+  editor.removeInpaintChip(id)
+  if (highlightedId.value === id) highlightedId.value = null
 }
 </script>
 
@@ -35,70 +41,69 @@ function pickTool(tool: 'brush' | 'eraser') {
   <div class="inpaint-panel" data-testid="inpaint-panel">
     <div class="inpaint-panel__head">
       <span class="inpaint-panel__title">局部重绘</span>
-      <span class="inpaint-panel__sub">涂抹区域 · 描述改动 · 只重画圈出的部分</span>
+      <span class="inpaint-panel__sub">涂抹区域 · 松手成一处编辑 · 只重画圈出的部分</span>
     </div>
 
-    <!-- 工具行：画笔 / 橡皮（与 store.refineTool 共享，MaskEditor 实时生效） -->
+    <!-- 工具行：画笔 + 大小（芯片化后橡皮/清空由芯片 × / 撤销承担） -->
     <div class="inpaint-panel__tools">
       <button
         type="button"
-        class="inpaint-panel__tool"
-        :class="{ 'is-on': editor.refineTool === 'brush' }"
+        class="inpaint-panel__tool is-on"
         data-testid="inpaint-tool-brush"
         :disabled="busy"
-        @click="pickTool('brush')"
+        @click="editor.setRefineTool('brush')"
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" /><path d="M14.8 6.6l2.6 2.6" />
         </svg>
         画笔
       </button>
-      <button
-        type="button"
-        class="inpaint-panel__tool"
-        :class="{ 'is-on': editor.refineTool === 'eraser' }"
-        data-testid="inpaint-tool-eraser"
-        :disabled="busy"
-        @click="pickTool('eraser')"
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20 20H8.5l-4.2-4.2a1.5 1.5 0 0 1 0-2.1L13.7 4.3a1.5 1.5 0 0 1 2.1 0l4.9 4.9a1.5 1.5 0 0 1 0 2.1L13 19" />
-        </svg>
-        橡皮
-      </button>
-      <button
-        type="button"
-        class="inpaint-panel__tool"
-        data-testid="inpaint-clear"
-        :disabled="busy"
-        @click="editor.getRefineMask()?.clear()"
-      >
-        清空
-      </button>
+      <label class="inpaint-panel__size">
+        <input
+          v-model.number="editor.refineBrushSize"
+          type="range"
+          min="4"
+          max="120"
+          step="1"
+          data-testid="inpaint-brush-size"
+          :disabled="busy"
+        >
+        <b>{{ editor.refineBrushSize }}</b>
+      </label>
     </div>
 
-    <!-- 笔刷大小 -->
-    <label class="inpaint-panel__size">
-      <span>笔刷大小</span>
-      <input
-        v-model.number="editor.refineBrushSize"
-        type="range"
-        min="4"
-        max="120"
-        step="1"
-        data-testid="inpaint-brush-size"
+    <!-- 芯片条 -->
+    <div v-if="items.length" class="inpaint-panel__list" data-testid="inpaint-chips">
+      <ElementChipRow
+        v-for="item in items"
+        :key="item.id"
+        :item="item"
+        :highlighted="highlightedId === item.id"
+        name-placeholder="区域名（可选）"
+        @update:name="editor.updateRefineElementItem(item.id, { name: $event })"
+        @update:modify="editor.updateRefineElementItem(item.id, { modify: $event })"
+        @update:ref-url="editor.updateRefineElementItem(item.id, { refUrl: $event })"
+        @remove="onRemove(item.id)"
+        @highlight="highlightedId = $event ? item.id : null"
+      />
+      <button
+        type="button"
+        class="inpaint-panel__undo"
+        data-testid="inpaint-undo-chip"
         :disabled="busy"
-      >
-      <b>{{ editor.refineBrushSize }}</b>
-    </label>
-
-    <!-- 覆盖读数 + 引导 -->
-    <div class="inpaint-panel__coverage" :class="{ 'is-empty': coverageKind === 'empty' }" data-testid="inpaint-coverage">
+        title="撤销最后一处（⌘Z 同效）"
+        @click="editor.undoInpaintChip()"
+      >↺ 撤销上一处</button>
+    </div>
+    <div v-else class="inpaint-panel__coverage" :class="{ 'is-empty': coverageKind === 'empty' }" data-testid="inpaint-coverage">
+      {{ coverageText }}
+    </div>
+    <div v-if="items.length" class="inpaint-panel__coverage" data-testid="inpaint-coverage-brief">
       {{ coverageText }}
     </div>
 
     <div class="inpaint-panel__hint">
-      撤销 / 重做在左栏工具条（⌘Z / ⇧⌘Z）；需要智能点选或形状选区时切到「选区」模式，蒙版会带回来。
+      撤销 = 移除最后一处（⌘Z）；替换图「+」可上传本地或从资产库选图，生成时把该区域替换成图里的内容并自然融入。
     </div>
   </div>
 </template>
@@ -127,6 +132,7 @@ function pickTool(tool: 'brush' | 'eraser') {
 .inpaint-panel__tools {
   display: flex;
   gap: 0.35rem;
+  align-items: center;
 }
 .inpaint-panel__tool {
   display: inline-flex;
@@ -156,6 +162,7 @@ function pickTool(tool: 'brush' | 'eraser') {
 }
 .inpaint-panel__size {
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 0.5rem;
   font-size: 11.5px;
@@ -172,6 +179,23 @@ function pickTool(tool: 'brush' | 'eraser') {
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
+.inpaint-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.inpaint-panel__undo {
+  align-self: flex-end;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.45rem;
+  color: var(--neo-text-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.inpaint-panel__undo:hover:not(:disabled) { background: color-mix(in srgb, var(--neo-text) 8%, transparent); }
+.inpaint-panel__undo:disabled { cursor: not-allowed; opacity: 0.5; }
 .inpaint-panel__coverage {
   padding: 0.45rem 0.6rem;
   border-radius: 0.5rem;

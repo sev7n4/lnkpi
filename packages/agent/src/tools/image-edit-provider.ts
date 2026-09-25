@@ -5,6 +5,8 @@ export interface ImageEditInput {
   userPrompt: string
   imageUrl: string
   maskUrl: string
+  /** 替换参考图：追加进 image_urls（蒙版作用于首图）。 */
+  referenceImageUrls?: string[]
   modelId?: string
   pollIntervalMs?: number
   maxPollMs?: number
@@ -26,6 +28,7 @@ export class ApimartImageEditProvider implements ImageEditProvider {
       userPrompt: input.userPrompt,
       imageUrl: input.imageUrl,
       maskUrl: input.maskUrl,
+      referenceImageUrls: input.referenceImageUrls,
     })
     const body: Record<string, unknown> = { ...built.body }
     if (input.modelId) body.model = input.modelId

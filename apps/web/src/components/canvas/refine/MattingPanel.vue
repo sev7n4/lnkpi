@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 
 /**
  * 精修（matting）模式的右栏面板（注册表 refine-matting 的 panel）。
@@ -47,24 +48,28 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
         还没有选区 — 直接在图上涂抹或框选，然后点「选区抠图」；或用「一键抠图」全图自动抠
       </p>
 
-      <button
-        type="button"
-        class="matting-actions__btn matting-actions__primary"
-        data-testid="matting-run-auto"
-        :disabled="runAutoDisabled"
-        :title="runAutoTitle"
-        aria-label="一键抠图"
-        @click="emit('run-auto')"
-      >一键抠图</button>
+      <div class="matting-actions__row">
+        <button
+          type="button"
+          class="matting-actions__btn matting-actions__primary"
+          data-testid="matting-run-auto"
+          :disabled="runAutoDisabled"
+          :title="runAutoTitle"
+          aria-label="一键抠图"
+          @click="emit('run-auto')"
+        >一键抠图</button>
 
-      <button
-        type="button"
-        class="matting-actions__btn"
-        data-testid="matting-run-mask"
-        :disabled="runMaskDisabled"
-        :title="runMaskTitle"
-        @click="emit('run-mask')"
-      >选区抠图</button>
+        <button
+          type="button"
+          class="matting-actions__btn"
+          data-testid="matting-run-mask"
+          :disabled="runMaskDisabled"
+          :title="runMaskTitle"
+          @click="emit('run-mask')"
+        >选区抠图</button>
+
+        <DockCreditBadge :credits="0" />
+      </div>
 
       <button
         type="button"
@@ -105,6 +110,7 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
 }
 
 .matting-actions { display: flex; flex-direction: column; gap: 8px; }
+.matting-actions__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .matting-actions__hint {
   margin: 0;
   padding: 6px 8px;

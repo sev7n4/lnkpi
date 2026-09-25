@@ -24,6 +24,8 @@ const props = withDefaults(
     color?: string
     wandTolerance?: number
     maskOp?: MaskOp
+    /** 开启后：画笔（add）笔画松手时 emit 笔画增量快照（inpaint 芯片化用）。 */
+    emitStrokes?: boolean
   }>(),
   {
     tool: 'brush',
@@ -33,6 +35,7 @@ const props = withDefaults(
     color: '#ffffff',
     wandTolerance: 24,
     maskOp: 'add',
+    emitStrokes: false,
   },
 )
 
@@ -41,6 +44,8 @@ const emit = defineEmits<{
   pointSelect: [payload: { x: number; y: number }]
   /** 撤销 / 重做栈深变化（rail 的撤销重做按钮据此置灰） */
   history: [payload: { undo: number; redo: number }]
+  /** 一次画笔（add）笔画完成（emitStrokes 开启时）；payload 为该笔画增量位图 */
+  strokeCommit: [piece: HTMLCanvasElement]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -58,6 +63,28 @@ let sizeToken = 0
 let imageRgba: Uint8ClampedArray | null = null
 let polygonPoints: Array<{ x: number; y: number }> = []
 const polygonPreview = ref<Array<{ x: number; y: number }> | null>(null)
+
+/** 当前笔画的增量快照层（emitStrokes 开启时与主蒙版同步绘制，松手 emit 后清空） */
+let strokeCanvas: HTMLCanvasElement | null = null
+
+function beginStrokeLayer(canvas: HTMLCanvasElement, x: number, y: number) {
+  if (!props.emitStrokes || props.tool !== 'brush' || props.maskOp === 'subtract') return
+  const layer = document.createElement('canvas')
+  layer.width = canvas.width
+  layer.height = canvas.height
+  const sctx = layer.getContext('2d')
+  if (!sctx) return
+  strokeCanvas = layer
+  applyToolStyle(sctx)
+  paintDot(sctx, x, y)
+}
+
+function endStrokeLayer() {
+  if (!strokeCanvas) return
+  const layer = strokeCanvas
+  strokeCanvas = null
+  emit('strokeCommit', layer)
+}
 
 /** 蒙版历史栈：每次「落笔生效」前压栈，供 rail 撤销 / 重做（follow-up 需求 #13） */
 const MASK_HISTORY_LIMIT = 30
@@ -325,6 +352,7 @@ function onPointerDown(event: PointerEvent) {
   }
   pushMaskHistory(ctx)
   paintDot(ctx, pt.x, pt.y)
+  beginStrokeLayer(canvas, pt.x, pt.y)
 }
 
 function onDblClick(event: MouseEvent) {
@@ -369,6 +397,13 @@ function onPointerMove(event: PointerEvent) {
   }
   applyToolStyle(ctx)
   paintStroke(ctx, lastX, lastY, pt.x, pt.y)
+  if (strokeCanvas) {
+    const sctx = strokeCanvas.getContext('2d')
+    if (sctx) {
+      applyToolStyle(sctx)
+      paintStroke(sctx, lastX, lastY, pt.x, pt.y)
+    }
+  }
   lastX = pt.x
   lastY = pt.y
 }
@@ -378,6 +413,7 @@ function onPointerUp(event: PointerEvent) {
   drawing = false
   rectStart = null
   snapshot = null
+  endStrokeLayer()
   try {
     canvasRef.value?.releasePointerCapture(event.pointerId)
   } catch {

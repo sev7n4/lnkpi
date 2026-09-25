@@ -26,6 +26,17 @@ describe('combineElementEditPrompt', () => {
       ]),
     ).toBe('耳朵')
   })
+
+  it('带替换图的项追加对象替换语义段（2026-09-25「+」上传替换对象）', () => {
+    const out = combineElementEditPrompt([
+      { name: 'logo', modify: '替换', refUrl: 'https://cdn/x.png' },
+      { name: '眼睛', modify: '发光' },
+    ])
+    expect(out).toContain('把该区域替换为参考图中的对象')
+    expect(out).toContain('；眼睛 发光')
+    // 无 refUrl 的项不追加
+    expect(out.startsWith('logo 替换（把该区域替换为参考图中的对象')).toBe(true)
+  })
 })
 
 describe('pointRectAt（焦点点击默认框）', () => {

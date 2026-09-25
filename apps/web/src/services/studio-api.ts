@@ -101,6 +101,8 @@ export const studioApi = {
       size?: string
       /** 通道模式：inpaint 蒙版选区精修/局部重绘 / outpaint 扩图（服务端白名单校验）。 */
       mode?: 'inpaint' | 'outpaint'
+      /** 替换参考图（元素编辑/重绘「+」上传）：追加进 image_urls 供模型做对象替换。 */
+      referenceImageUrls?: string[]
       /** 扩图起止边（Task 7 接线）：原图尺寸 / 新画布尺寸，对象契约对齐服务端 DTO。 */
       outpaintFrom?: { width: number; height: number }
       outpaintTo?: { width: number; height: number }

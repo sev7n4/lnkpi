@@ -287,6 +287,12 @@ function toggleCollapsed() {
 }
 
 async function onPointSelect({ x, y }: { x: number; y: number }) {
+  // 元素编辑模式：本组件的 handler 是单槽持有者（父 mounted 晚于子面板会覆盖其注册），
+  // 焦点点选在此转发给元素编辑识别（2026-09-25 修复精修入口焦点识别失效）。
+  if (editor.refineMode === 'element') {
+    void editor.recognizeElementAtPoint({ x, y })
+    return
+  }
   if (busy.value || segmentBusy.value) return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
@@ -362,8 +368,18 @@ async function runRefine() {
       return
     }
   }
+  // inpaint 芯片化（2026-09-25）：有芯片时生成蒙版 = 芯片碎片合并（与芯片条删除/替换图语义一致）
+  let chipMask: HTMLCanvasElement | null = null
+  let chipRefs: string[] = []
+  if (editor.refineMode === 'inpaint' && editor.refineElementItems.length > 0) {
+    chipMask = editor.refineElementMaskCanvas
+    if (!chipMask) return
+    chipRefs = editor.refineElementItems
+      .map((it) => it.refUrl?.trim())
+      .filter((u): u is string => !!u)
+  }
   const mask = editor.getRefineMask()
-  const canvas = mask?.getCanvas()
+  const canvas = (chipMask ?? mask?.getCanvas()) as HTMLCanvasElement | null
   if (!mask || !canvas) return
 
   errorMessage.value = ''
@@ -373,7 +389,9 @@ async function runRefine() {
   busy.value = true
 
   try {
-    const blob = await (mask.exportPng?.() ?? exportMaskPng(canvas))
+    const blob = chipMask
+      ? await exportMaskPng(canvas)
+      : await (mask.exportPng?.() ?? exportMaskPng(canvas))
     const file = new File([blob], 'mask.png', { type: 'image/png' })
     const fallbackUrl = URL.createObjectURL(file)
     let maskUrl: string
@@ -393,6 +411,7 @@ async function runRefine() {
         model: modelKey.value,
         size: sizeOverride.value,
         mode: dockMode.value,
+        referenceImageUrls: chipRefs.length ? chipRefs : undefined,
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
@@ -402,6 +421,7 @@ async function runRefine() {
     const url = data.data.url
     if (url) {
       editor.pushRefineSessionResult({ url, recordId: data.data.id, prompt: prompt.value || '精修' })
+      if (chipMask) editor.clearRefineElementItems()
     }
   } catch (err) {
     const message = formatError(err, '精修失败，请重试')

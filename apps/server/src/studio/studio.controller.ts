@@ -272,6 +272,11 @@ class ImageEditDto extends CanvasScopeFields {
   mode?: 'inpaint' | 'outpaint'
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  referenceImageUrls?: string[]
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => ImageEditDimsDto)
   outpaintFrom?: { width: number; height: number }
@@ -450,6 +455,7 @@ export class StudioController {
         model: dto.model,
         size: dto.size,
         mode: dto.mode,
+        referenceImageUrls: dto.referenceImageUrls,
         sessionId: dto.sessionId,
         nodeId: dto.nodeId,
         parentRecordId: dto.parentRecordId,

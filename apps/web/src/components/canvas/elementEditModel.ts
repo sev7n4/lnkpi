@@ -27,6 +27,10 @@ export interface ElementEditItem {
   shape: ElementEditShape
   /** 焦点识别进行中（芯片条转圈，生成禁用） */
   recognizing?: boolean
+  /** 选区缩略图（原图裁剪 dataURL） */
+  thumb?: string
+  /** 替换图（本地/资产库）：生成时作为参考图传给模型做对象替换 */
+  refUrl?: string | null
 }
 
 /**
@@ -47,10 +51,22 @@ export function pointRectAt(
   }
 }
 
-/** combined prompt：「眼睛 改成蓝色发光；鼻子 增加闭环」——空段去重后以「；」连接。 */
-export function combineElementEditPrompt(items: { name: string; modify: string }[]): string {
+/**
+ * combined prompt：「眼睛 改成蓝色发光；鼻子 增加闭环」——空段去重后以「；」连接。
+ * 带 refUrl 的项（替换图）追加对象替换语义：把该区域替换为参考图内容并自然融入原图。
+ */
+export function combineElementEditPrompt(
+  items: { name: string; modify: string; refUrl?: string | null }[],
+): string {
   return items
-    .map((it) => `${it.name.trim()} ${it.modify.trim()}`.trim())
+    .map((it) => {
+      const seg = `${it.name.trim()} ${it.modify.trim()}`.trim()
+      if (!seg) return ''
+      if (it.refUrl) {
+        return `${seg}（把该区域替换为参考图中的对象，保持与原图一致的光照、透视与色调，自然融入）`
+      }
+      return seg
+    })
     .filter((seg) => seg.length > 0)
     .filter((seg, i, arr) => arr.indexOf(seg) === i)
     .join('；')

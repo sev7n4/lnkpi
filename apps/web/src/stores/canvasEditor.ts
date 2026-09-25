@@ -65,6 +65,8 @@ export interface RefineElementItem {
   piece: HTMLCanvasElement
   /** 焦点识别进行中 */
   recognizing?: boolean
+  /** 替换图（本地/资产库上传）：生成时作为参考图传给模型做对象替换，自然融入原图 */
+  refUrl?: string | null
 }
 
 /** 加载同源化后的图片（sameOriginApiMediaUrl 折叠外部地址 → 代理/相对路径，canvas 不污染）。 */
@@ -252,11 +254,51 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     return item
   }
 
-  function updateRefineElementItem(id: string, patch: { name?: string; modify?: string }) {
+  function updateRefineElementItem(id: string, patch: { name?: string; modify?: string; refUrl?: string | null }) {
     const item = refineElementItems.value.find((it) => it.id === id)
     if (!item) return
     if (patch.name !== undefined) item.name = patch.name
     if (patch.modify !== undefined) item.modify = patch.modify
+    if (patch.refUrl !== undefined) item.refUrl = patch.refUrl
+  }
+
+  /** 删除指定芯片（碎片随之移除，累积蒙版重建；识别中的芯片先不删——由调用方中断）。 */
+  function removeRefineElementItem(id: string) {
+    const idx = refineElementItems.value.findIndex((it) => it.id === id)
+    if (idx === -1) return
+    refineElementItems.value.splice(idx, 1)
+    rebuildElementMask()
+  }
+
+  /** inpaint 芯片化：删除芯片时同步把该碎片区域从 MaskEditor 主蒙版擦除（视觉一致）。 */
+  function erasePieceFromMainMask(piece: HTMLCanvasElement) {
+    const mask = refineMask.value?.getCanvas()
+    const mctx = mask?.getContext('2d')
+    if (!mask || !mctx) return
+    mctx.globalCompositeOperation = 'destination-out'
+    mctx.drawImage(piece, 0, 0)
+    mctx.globalCompositeOperation = 'source-over'
+  }
+
+  /** inpaint 芯片化（2026-09-25）：一次画笔笔画松手 → 自动登记芯片。 */
+  function addInpaintStrokeChip(piece: HTMLCanvasElement): RefineElementItem | null {
+    if (refineBusy.value) return null
+    return addRefineElementItem(piece, '重绘区域', '')
+  }
+
+  /** inpaint 芯片化：撤销最后一枚芯片（并从主蒙版擦除该笔画区域）。 */
+  function undoInpaintChip() {
+    const last = refineElementItems.value[refineElementItems.value.length - 1]
+    if (!last) return
+    removeInpaintChip(last.id)
+  }
+
+  /** inpaint 芯片化：删除指定芯片（芯片条 × 按钮；并从主蒙版擦除该笔画区域）。 */
+  function removeInpaintChip(id: string) {
+    const item = refineElementItems.value.find((it) => it.id === id)
+    const piece = item?.piece
+    removeRefineElementItem(id)
+    if (piece) erasePieceFromMainMask(piece)
   }
 
   /** 撤销最后一枚芯片（碎片随之移除，累积蒙版重建）。 */
@@ -373,11 +415,12 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   function setRefineMode(mode: RefineMode) {
     if (refineBusy.value) return
     if (mode === 'matting') refineMattingReturnPending.value = false
-    if (mode === 'element') {
-      // 元素编辑：清掉旧芯片草稿（列表属会话态，进模式重来）；默认焦点选择工具
+    if (mode === 'element' || mode === 'inpaint') {
+      // 元素编辑 / 重绘（芯片化）：清掉旧芯片草稿（列表属会话态，进模式重来）；
+      // element 默认焦点选择工具，inpaint 默认画笔
       refineElementItems.value = []
       refineElementMaskCanvas.value = null
-      setRefineTool('point')
+      setRefineTool(mode === 'element' ? 'point' : 'brush')
     }
     if (mode === 'select') {
       refineOutpaintRect.value = null
@@ -579,6 +622,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineElementMaskCanvas,
     addRefineElementItem,
     updateRefineElementItem,
+    removeRefineElementItem,
+    addInpaintStrokeChip,
+    undoInpaintChip,
+    removeInpaintChip,
     removeLastRefineElementItem,
     recognizeElementAtPoint,
     clearRefineElementItems,

@@ -139,8 +139,23 @@ function onMaskHistory(depth: { undo: number; redo: number }) {
   maskCanUndo.value = depth.undo > 0
   maskCanRedo.value = depth.redo > 0
 }
-function runUndo() { maskRef.value?.undo() }
-function runRedo() { maskRef.value?.redo() }
+function runUndo() {
+  // inpaint 芯片化（2026-09-25）：有芯片时撤销=移除最后一枚芯片（与芯片条语义一致）
+  if (editor.refineMode === 'inpaint' && editor.refineElementItems.length > 0) {
+    editor.undoInpaintChip()
+    return
+  }
+  maskRef.value?.undo()
+}
+function runRedo() {
+  if (editor.refineMode === 'inpaint' && editor.refineElementItems.length > 0) return
+  maskRef.value?.redo()
+}
+/** inpaint 笔画松手 → 自动成芯片（2026-09-25 用户拍板） */
+function onStrokeCommit(piece: HTMLCanvasElement) {
+  if (editor.refineMode !== 'inpaint') return
+  editor.addInpaintStrokeChip(piece)
+}
 function isEditableTarget(target: EventTarget | null): boolean {
   const tag = (target as HTMLElement | null)?.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
@@ -253,10 +268,12 @@ onBeforeUnmount(() => {
                 :color="editor.refineBrushColor"
                 :wand-tolerance="editor.refineWandTolerance"
                 :mask-op="editor.refineMaskOp"
+                :emit-strokes="editor.refineMode === 'inpaint'"
                 :disabled="editor.refineBusy || spaceDown"
                 @coverage="(p) => { editor.refineCoverage = p.ratio }"
                 @point-select="dispatchRefinePointSelect"
                 @history="onMaskHistory"
+                @stroke-commit="onStrokeCommit"
               />
             </ImageLoupe>
           </div>

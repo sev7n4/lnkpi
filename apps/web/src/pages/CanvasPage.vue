@@ -142,6 +142,8 @@ import NodeCropOverlay from '@/components/canvas/NodeCropOverlay.vue'
 import NodeOutpaintOverlay from '@/components/canvas/NodeOutpaintOverlay.vue'
 import NodeInpaintOverlay from '@/components/canvas/NodeInpaintOverlay.vue'
 import NodeElementEditOverlay from '@/components/canvas/NodeElementEditOverlay.vue'
+import AnnotateOverlay from '@/components/canvas/AnnotateOverlay.vue'
+import { drawAnnotates, type AnnotateShape } from '@/components/canvas/annotateModel'
 import { combineElementEditPrompt, paintElementEditMask, type ElementEditItem } from '@/components/canvas/elementEditModel'
 import { displayRectToPixelRect } from '@/components/canvas/nodeCropModel'
 import { loadCropSourceImage, renderCropBlob } from '@/components/canvas/refine/cropExport'
@@ -790,7 +792,8 @@ const dockCollapsedByOverlay = computed(
     !!nodeCropNodeId.value ||
     !!nodeOutpaintNodeId.value ||
     !!nodeInpaintNodeId.value ||
-    !!nodeElementEditNodeId.value,
+    !!nodeElementEditNodeId.value ||
+    !!nodeAnnotateNodeId.value,
 )
 
 const gridSlicePanelNode = computed((): EditableFlowNode | null => {
@@ -3116,6 +3119,7 @@ function handleFloatingCropStart(node: EditableFlowNode) {
   nodeOutpaintNodeId.value = null
   nodeInpaintNodeId.value = null
   nodeElementEditNodeId.value = null
+  nodeAnnotateNodeId.value = null
   nodeCropNodeId.value = node.id
 }
 
@@ -3193,6 +3197,7 @@ function handleFloatingOutpaintStart(node: EditableFlowNode) {
   nodeCropNodeId.value = null
   nodeInpaintNodeId.value = null
   nodeElementEditNodeId.value = null
+  nodeAnnotateNodeId.value = null
   nodeOutpaintNodeId.value = node.id
 }
 
@@ -3313,6 +3318,7 @@ function handleFloatingInpaintStart(node: EditableFlowNode) {
   nodeCropNodeId.value = null
   nodeOutpaintNodeId.value = null
   nodeElementEditNodeId.value = null
+  nodeAnnotateNodeId.value = null
   nodeInpaintNodeId.value = node.id
 }
 
@@ -3330,6 +3336,7 @@ const nodeElementEditUrl = computed(() => String((nodeElementEditNode.value?.dat
 function closeNodeElementEdit() {
   if (nodeElementEditBusy.value) return
   nodeElementEditNodeId.value = null
+  nodeAnnotateNodeId.value = null
 }
 
 function handleFloatingElementEditStart(node: EditableFlowNode) {
@@ -3375,6 +3382,9 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
       throw e
     }
     if (maskUrl !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
+    const refUrls = payload.items
+      .map((it) => it.refUrl?.trim())
+      .filter((u): u is string => !!u)
     const { data } = await studioApi.editImage(
       {
         prompt: combineElementEditPrompt(payload.items) || '元素编辑',
@@ -3383,6 +3393,7 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
         model: P1_IMAGE_EDIT_MODEL_KEY,
         size: 'auto',
         mode: 'inpaint',
+        referenceImageUrls: refUrls.length ? refUrls : undefined,
         nodeId: node.id,
       },
     )
@@ -3395,11 +3406,90 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
       successText: `已完成 ${payload.items.length} 处元素编辑（下游新节点）`,
     })
     nodeElementEditNodeId.value = null
+    nodeAnnotateNodeId.value = null
   } catch (err) {
     const message = apiErrorMessage(err, '元素编辑失败，请重试')
     ElMessage.error(message)
   } finally {
     nodeElementEditBusy.value = false
+  }
+}
+
+// —— 节点直出标注（复刻竞品工具条 + 直线箭头/马赛克/水印/签名，2026-09-25） ——
+
+const nodeAnnotateNodeId = ref<string | null>(null)
+const nodeAnnotateBusy = ref(false)
+
+const nodeAnnotateNode = computed((): EditableFlowNode | null => {
+  if (!nodeAnnotateNodeId.value) return null
+  const node = findNodeById(nodeAnnotateNodeId.value)
+  if (!node || !String((node.data as Record<string, unknown> | undefined)?.url ?? '').trim()) return null
+  return node as EditableFlowNode
+})
+
+const nodeAnnotateUrl = computed(() => String((nodeAnnotateNode.value?.data as Record<string, unknown> | undefined)?.url ?? ''))
+
+function handleFloatingAnnotateStart(node: EditableFlowNode) {
+  if (nodeAnnotateBusy.value) return
+  if (refinePanelNode.value || gridSlicePanelNode.value) {
+    ElMessage.warning('请先退出当前工作台')
+    return
+  }
+  nodeCropNodeId.value = null
+  nodeOutpaintNodeId.value = null
+  nodeInpaintNodeId.value = null
+  nodeElementEditNodeId.value = null
+  nodeAnnotateNodeId.value = node.id
+}
+
+function closeNodeAnnotate() {
+  if (nodeAnnotateBusy.value) return
+  nodeAnnotateNodeId.value = null
+}
+
+/**
+ * 标注确认：drawAnnotates 烧录原图（马赛克像素化 + 矢量叠加）→ PNG → persist →
+ * 下游新节点（纯本地处理，免费不消耗积分）。
+ */
+async function handleNodeAnnotateConfirm(payload: { ops: AnnotateShape[] }) {
+  const node = nodeAnnotateNode.value
+  if (!node || nodeAnnotateBusy.value) return
+  const imageUrl = nodeAnnotateUrl.value
+  if (!imageUrl) return
+  if (!payload.ops.length) return
+  nodeAnnotateBusy.value = true
+  try {
+    const img = await loadCropSourceImage(imageUrl)
+    const naturalW = img.naturalWidth
+    const naturalH = img.naturalHeight
+    if (!(naturalW > 0) || !(naturalH > 0)) throw new Error('原图加载失败')
+    const { w: boxW, h: boxH } = getNodeSize(node as FlowNode)
+    const canvas = document.createElement('canvas')
+    drawAnnotates(canvas, payload.ops, img, naturalW, naturalH, boxW, boxH)
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('标注导出失败'))), 'image/png')
+    })
+    const file = new File([blob], 'annotate.png', { type: 'image/png' })
+    const fallbackUrl = URL.createObjectURL(file)
+    let url: string
+    try {
+      url = await persistMediaUrl(file, fallbackUrl)
+    } catch (e) {
+      URL.revokeObjectURL(fallbackUrl)
+      throw e
+    }
+    if (url !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
+    applyGeneratedEditChild(node, {
+      url,
+      prompt: '标注',
+      successText: '标注已保存（下游新节点，免费）',
+    })
+    nodeAnnotateNodeId.value = null
+  } catch (err) {
+    const message = apiErrorMessage(err, '标注保存失败，请重试')
+    ElMessage.error(message)
+  } finally {
+    nodeAnnotateBusy.value = false
   }
 }
 
@@ -4452,6 +4542,7 @@ onUnmounted(() => {
             @outpaint="selectionActionBarNode && handleFloatingOutpaintStart(selectionActionBarNode)"
             @inpaint="selectionActionBarNode && handleFloatingInpaintStart(selectionActionBarNode)"
             @element-edit="selectionActionBarNode && handleFloatingElementEditStart(selectionActionBarNode)"
+            @annotate="selectionActionBarNode && handleFloatingAnnotateStart(selectionActionBarNode)"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
             @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"
@@ -4488,6 +4579,15 @@ onUnmounted(() => {
             :busy="nodeElementEditBusy"
             @confirm="handleNodeElementEditConfirm"
             @cancel="closeNodeElementEdit"
+          />
+
+          <AnnotateOverlay
+            v-if="nodeAnnotateNode"
+            :node="nodeAnnotateNode as FlowNode"
+            :url="nodeAnnotateUrl"
+            :busy="nodeAnnotateBusy"
+            @confirm="handleNodeAnnotateConfirm"
+            @cancel="closeNodeAnnotate"
           />
 
           <MultiSelectConnectOverlay

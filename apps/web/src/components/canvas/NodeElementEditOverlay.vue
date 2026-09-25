@@ -13,6 +13,8 @@ import {
   type ElementEditItem,
   type ElementEditShape,
 } from './elementEditModel'
+import ElementChipRow from './refine/ElementChipRow.vue'
+import { CANVAS_GENERATE_CREDITS } from '@lnkpi/shared'
 
 /**
  * 节点直出元素编辑（2026-09-25 用户需求重做版）：
@@ -53,8 +55,6 @@ const brushSize = ref(24)
 const items = ref<ElementEditItem[]>([])
 /** 当前高亮项 id（定位循环用） */
 const highlightedId = ref<string | null>(null)
-/** 修改输入展开的芯片 id */
-const modifyOpenId = ref<string | null>(null)
 /** 定位循环游标 */
 let locateCursor = -1
 /** 焦点识别请求（撤销/退出时中断） */
@@ -294,7 +294,6 @@ async function recognizeAt(p: { x: number; y: number }) {
       target.shape = { kind: 'rect', rect: pixelToDisplayRect(b) }
       refreshThumb(target)
     }
-    modifyOpenId.value = target.id
   } catch (err) {
     if (signal.aborted) return
     const target = items.value.find((it) => it.id === item.id)
@@ -319,7 +318,6 @@ function undoLast() {
   }
   items.value.pop()
   if (highlightedId.value === last.id) highlightedId.value = null
-  if (modifyOpenId.value === last.id) modifyOpenId.value = null
 }
 
 /** 定位：循环高亮芯片，便于确认每个选区位置 */
@@ -329,8 +327,7 @@ function locateNext() {
   highlightedId.value = items.value[locateCursor]!.id
 }
 
-/** 选区快照缩略图：从原图 bbox 裁剪出 dataURL */
-const thumbCache = ref<Record<string, string>>({})
+/** 选区快照缩略图：从原图 bbox 裁剪出 dataURL，直接写入芯片（ElementChipRow 展示/hover 预览） */
 async function refreshThumb(item: ElementEditItem) {
   const n = natural.value
   if (!n) return
@@ -347,10 +344,22 @@ async function refreshThumb(item: ElementEditItem) {
     const ctx = c.getContext('2d')
     if (!ctx) return
     ctx.drawImage(img, bbox.x * sx, bbox.y * sy, w, h, 0, 0, w, h)
-    thumbCache.value = { ...thumbCache.value, [item.id]: c.toDataURL('image/png') }
+    item.thumb = c.toDataURL('image/png')
   } catch {
     /* 快照失败留空 */
   }
+}
+
+/** 删除指定芯片（× 按钮） */
+function removeChip(id: string) {
+  const idx = items.value.findIndex((it) => it.id === id)
+  if (idx === -1) return
+  const [removed] = items.value.splice(idx, 1)
+  if (removed?.recognizing) {
+    recognizeAbort?.abort()
+    recognizeAbort = null
+  }
+  if (highlightedId.value === id) highlightedId.value = null
 }
 
 function onCancel() {
@@ -368,8 +377,6 @@ watch(
     tool.value = 'point'
     items.value = []
     highlightedId.value = null
-    modifyOpenId.value = null
-    thumbCache.value = {}
     void loadNatural()
   },
   { immediate: true },
@@ -581,54 +588,17 @@ onUnmounted(() => {
             <span class="text-[11px]" style="color: var(--neo-text-muted)" data-testid="node-element-count">{{ items.length }}处</span>
           </div>
           <div v-if="items.length" class="node-element-list">
-            <div
+            <ElementChipRow
               v-for="item in items"
               :key="item.id"
-              class="node-element-chip"
-              :class="{ 'is-hl': highlightedId === item.id }"
-              :data-testid="`node-element-chip-${item.id}`"
-              @mouseenter="highlightedId = item.id"
-              @mouseleave="highlightedId = null"
-            >
-              <span
-                v-if="thumbCache[item.id]"
-                class="node-element-thumb"
-                :style="{ backgroundImage: `url(${thumbCache[item.id]})` }"
-              />
-              <span v-else class="node-element-thumb node-element-thumb--empty" />
-              <!-- ① 对象名：识别结果，可二次编辑 -->
-              <input
-                v-model="item.name"
-                class="node-element-chip__name"
-                :data-testid="`node-element-name-${item.id}`"
-                placeholder="对象名"
-                :disabled="item.recognizing"
-                @focus="highlightedId = item.id"
-              >
-              <!-- ② 修改内容：点击【修改】图标展开 -->
-              <button
-                type="button"
-                class="node-element-chip__modify-btn"
-                :class="{ 'is-on': modifyOpenId === item.id }"
-                :data-testid="`node-element-modify-toggle-${item.id}`"
-                :title="modifyOpenId === item.id ? '收起修改输入' : '填写修改内容'"
-                @click="modifyOpenId = modifyOpenId === item.id ? null : item.id"
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" />
-                </svg>
-                <span>修改</span>
-              </button>
-              <span v-if="item.recognizing" class="node-element-chip__spin" data-testid="node-element-recognizing" aria-label="识别中" />
-            </div>
-            <input
-              v-if="modifyOpenId"
-              v-model="items.find((it) => it.id === modifyOpenId)!.modify"
-              class="node-element-chip__modify"
-              :data-testid="`node-element-modify-${modifyOpenId}`"
-              placeholder="想改成什么样？如：换成蓝色发光"
-              @keydown.enter.prevent="modifyOpenId = null"
-            >
+              :item="item"
+              :highlighted="highlightedId === item.id"
+              @update:name="item.name = $event"
+              @update:modify="item.modify = $event"
+              @update:ref-url="item.refUrl = $event"
+              @remove="removeChip(item.id)"
+              @highlight="highlightedId = $event ? item.id : null"
+            />
           </div>
           <div v-else class="px-1 py-1 text-[11px]" style="color: var(--neo-text-muted)">
             {{ tool === 'point' ? '点击图中的元素（如眼睛、项链），自动识别对象' : '拖框或涂抹圈出元素；多轮点选可累积多处' }}
@@ -647,7 +617,7 @@ onUnmounted(() => {
               :disabled="!canGenerate"
               :title="canGenerate ? '按编辑内容一次性生成（下游新节点）' : '为至少一处元素填写修改内容'"
               @click="emit('confirm', { items: [...items] })"
-            >{{ busy ? '生成中…' : `⚡ 生成${items.length ? `（${items.length}处）` : ''}` }}</button>
+            >{{ busy ? '生成中…' : `⚡ 生成${items.length ? `（${items.length}处）` : ''} · ${CANVAS_GENERATE_CREDITS}积分` }}</button>
           </div>
         </div>
       </div>

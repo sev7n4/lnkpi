@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { loadCropSourceImage, renderCropBlob } from './cropExport'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import {
   CROP_FINE_MAX,
   CROP_FINE_MIN,
@@ -187,6 +188,7 @@ const canApply = computed(() => !!editor.currentRefineSessionResult && !busy.val
         :disabled="!canApply"
         @click="emit('apply')"
       >应用到画布</button>
+      <DockCreditBadge :credits="0" />
     </div>
   </section>
 </template>

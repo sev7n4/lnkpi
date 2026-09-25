@@ -1,18 +1,20 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, onUnmounted, ref } from 'vue'
+import { computed, markRaw, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { studioApi } from '@/services/studio-api'
-import { registerRefinePointSelectHandler } from './maskRemote'
 import { combineElementEditPrompt } from '@/components/canvas/elementEditModel'
-import { P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
+import ElementChipRow from './ElementChipRow.vue'
+import { CANVAS_GENERATE_CREDITS, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
 
 /**
  * 元素编辑面板（精修右栏，element 模式，2026-09-25 重做版）：
  *  - 焦点选择（默认）：直接点图上元素 → element-recognize（SAM 分割 + 识图命名）→ 芯片自动入列；
+ *    （点选分派由 RefineSidePanel.onPointSelect 转发——单槽 handler 时序修复）
  *  - 矩形/画笔：画选区 →「+ 添加当前选区」→ 以选区中心再识别命名；
- *  - 芯片条：缩略图 + 可二次编辑对象名 + 【修改】展开修改内容输入；撤销移除最后一枚；
- *  -【⚡生成】累积蒙版 + combined prompt → image/edit mode:'inpaint' 单次生成 → 会话胶片条。
+ *  - 芯片条（ElementChipRow）：缩略 hover 放大、对象名可编辑、【修改】输入、
+ *    「+」替换图（本地/资产库，对象替换）、× 删除；撤销移除最后一枚；
+ *  -【⚡生成】累积蒙版 + combined prompt + 替换参考图 → image/edit mode:'inpaint' → 会话胶片条。
  */
 const editor = useCanvasEditorStore()
 
@@ -22,14 +24,14 @@ const emit = defineEmits<{
 
 const busy = ref(false)
 const errorMessage = ref('')
-/** 修改输入展开的芯片 id */
-const modifyOpenId = ref<string | null>(null)
 
 const items = computed(() => editor.refineElementItems)
 const canAdd = computed(() => editor.refineMaskAvailable && !busy.value)
 const canGenerate = computed(
   () => !busy.value && items.value.length > 0 && items.value.every((it) => !it.recognizing) && items.value.some((it) => it.modify.trim().length > 0) && !!editor.refineElementMaskCanvas,
 )
+
+const highlightedId = ref<string | null>(null)
 
 const tool = computed(() => editor.refineTool)
 function pickTool(t: 'point' | 'rect' | 'brush') {
@@ -59,12 +61,6 @@ function pieceBBox(piece: HTMLCanvasElement): { x: number; y: number; width: num
   }
   if (maxX < 0) return null
   return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
-}
-
-/** 焦点识别回调：MaskEditor point 工具点击（位图坐标）→ store 编排识别 + 蒙版回填。 */
-function onPointSelect(pt: { x: number; y: number }) {
-  if (editor.refineMode !== 'element' || busy.value) return
-  void editor.recognizeElementAtPoint(pt)
 }
 
 /** 当前选区加入（矩形/画笔路径）：登记芯片 → 以选区中心点识别命名。 */
@@ -163,6 +159,9 @@ async function generate() {
     }
     if (maskUrl !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
     const prompt = combineElementEditPrompt(items.value) || '元素编辑'
+    const refUrls = items.value
+      .map((it) => it.refUrl?.trim())
+      .filter((u): u is string => !!u)
     const { data } = await studioApi.editImage({
       prompt,
       imageUrl: editor.imageTarget?.url ?? '',
@@ -170,6 +169,7 @@ async function generate() {
       model: P1_IMAGE_EDIT_MODEL_KEY,
       size: 'auto',
       mode: 'inpaint',
+      referenceImageUrls: refUrls.length ? refUrls : undefined,
       nodeId: editor.imageTarget?.nodeId,
     })
     const url = data.data.url
@@ -186,9 +186,6 @@ async function generate() {
     emit('busy', false)
   }
 }
-
-onMounted(() => registerRefinePointSelectHandler(onPointSelect))
-onUnmounted(() => registerRefinePointSelectHandler(null))
 </script>
 
 <template>
@@ -230,49 +227,17 @@ onUnmounted(() => registerRefinePointSelectHandler(null))
     >+ 添加当前选区</button>
 
     <div v-if="items.length" class="element-panel__list" data-testid="element-items">
-      <template v-for="item in items" :key="item.id">
-        <div class="element-panel__row" :class="{ 'is-busy': item.recognizing }">
-          <span
-            v-if="item.thumb"
-            class="element-panel__thumb"
-            :style="{ backgroundImage: `url(${item.thumb})` }"
-          />
-          <span v-else class="element-panel__thumb element-panel__thumb--empty" />
-          <!-- ① 对象名：识别结果，可二次编辑 -->
-          <input
-            :value="item.name"
-            class="element-panel__row-name"
-            :data-testid="`element-name-${item.id}`"
-            placeholder="对象名"
-            :disabled="item.recognizing"
-            @input="editor.updateRefineElementItem(item.id, { name: ($event.target as HTMLInputElement).value })"
-          >
-          <!-- ② 修改内容：点击【修改】图标展开 -->
-          <button
-            type="button"
-            class="element-panel__row-modify-btn"
-            :class="{ 'is-on': modifyOpenId === item.id }"
-            :data-testid="`element-modify-toggle-${item.id}`"
-            :title="modifyOpenId === item.id ? '收起修改输入' : '填写修改内容'"
-            @click="modifyOpenId = modifyOpenId === item.id ? null : item.id"
-          >
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" />
-            </svg>
-            修改
-          </button>
-          <span v-if="item.recognizing" class="element-panel__spin" aria-label="识别中" />
-        </div>
-        <input
-          v-if="modifyOpenId === item.id"
-          :value="item.modify"
-          class="element-panel__row-modify"
-          :data-testid="`element-modify-${item.id}`"
-          placeholder="想改成什么样？如：换成蓝色发光"
-          @input="editor.updateRefineElementItem(item.id, { modify: ($event.target as HTMLInputElement).value })"
-          @keydown.enter.prevent="modifyOpenId = null"
-        >
-      </template>
+      <ElementChipRow
+        v-for="item in items"
+        :key="item.id"
+        :item="item"
+        :highlighted="highlightedId === item.id"
+        @update:name="editor.updateRefineElementItem(item.id, { name: $event })"
+        @update:modify="editor.updateRefineElementItem(item.id, { modify: $event })"
+        @update:ref-url="editor.updateRefineElementItem(item.id, { refUrl: $event })"
+        @remove="editor.removeRefineElementItem(item.id)"
+        @highlight="highlightedId = $event ? item.id : null"
+      />
       <button
         type="button"
         class="element-panel__clear"
@@ -295,7 +260,7 @@ onUnmounted(() => registerRefinePointSelectHandler(null))
       :disabled="!canGenerate"
       :title="canGenerate ? '按编辑内容一次性生成' : '为至少一处元素填写修改内容'"
       @click="generate"
-    >{{ busy ? '生成中…' : `⚡ 生成${items.length ? `（${items.length} 处）` : ''}` }}</button>
+    >{{ busy ? '生成中…' : `⚡ 生成${items.length ? `（${items.length}处）` : ''} · ${CANVAS_GENERATE_CREDITS}积分` }}</button>
   </section>
 </template>
 

@@ -44,6 +44,7 @@ const emit = defineEmits<{
   outpaint: []
   inpaint: []
   'element-edit': []
+  annotate: []
 }>()
 
 const { viewport, nodes: flowNodes, findNode } = useVueFlow()
@@ -67,6 +68,7 @@ function onToolClick(tool: SelectionToolDef) {
   else if (tool.id === 'outpaint') emit('outpaint')
   else if (tool.id === 'inpaint') emit('inpaint')
   else if (tool.id === 'element-edit') emit('element-edit')
+  else if (tool.id === 'annotate') emit('annotate')
   else if (tool.id === 'download') emit('download')
   else if (tool.id === 'save-asset') emit('save-asset')
 }
@@ -171,6 +173,7 @@ const TOOL_ICONS: Record<string, string> = {
   crop: '<path d="M6 2v14a2 2 0 0 0 2 2h14" /><path d="M18 22V8a2 2 0 0 0-2-2H2" />',
   inpaint: TOOL_ICON_INPAINT,
   element: TOOL_ICON_ELEMENT,
+  annotate: '<path d="M12 20h9" /><path d="M5 17 17.5 4.5a2.12 2.12 0 0 1 3 3L8 20l-4 1 1-4Z" /><path d="M13 6.5l3.5 3.5" />',
   rotate: '<path d="M23 4v6h-6" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />',
   'save-asset': '<rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 8v8" /><path d="M8 12h8" />',

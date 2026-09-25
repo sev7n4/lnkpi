@@ -345,7 +345,7 @@ onUnmounted(() => {
             :disabled="!canConfirm"
             :title="natural ? '应用裁剪（下游新节点）' : '原图加载失败，请重试'"
             @click="onConfirm"
-          >{{ busy ? '裁剪中…' : '确认' }}</button>
+          >{{ busy ? '裁剪中…' : '确认 · 免费' }}</button>
         </div>
       </div>
     </div>

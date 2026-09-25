@@ -1330,6 +1330,8 @@ export class StudioService {
       model?: string
       size?: string
       mode?: 'inpaint' | 'outpaint'
+      /** 替换参考图（元素编辑/重绘「+」上传，对象替换）：追加进 image_urls。 */
+      referenceImageUrls?: string[]
       outpaintFrom?: { width: number; height: number }
       outpaintTo?: { width: number; height: number }
       sessionId?: string
@@ -1385,6 +1387,7 @@ export class StudioService {
       userPrompt: input.prompt,
       imageUrl: input.imageUrl,
       maskUrl: input.maskUrl,
+      referenceImageUrls: input.referenceImageUrls,
       sizeOverride: input.size,
     })
     const outpaintMeta =
@@ -1471,9 +1474,11 @@ export class StudioService {
         )
         throwCancelledException(cost)
       }
-      const inlined = await inlineUpstreamReferenceImages([input.imageUrl, input.maskUrl])
+      const refUrls = (input.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean)
+      const inlined = await inlineUpstreamReferenceImages([input.imageUrl, input.maskUrl, ...refUrls])
       const inlinedImage = inlined[0] ?? input.imageUrl
       const inlinedMask = inlined[1] ?? input.maskUrl
+      const inlinedRefs = refUrls.length ? inlined.slice(2).map((u, i) => u ?? refUrls[i]!) : []
       if (cancel?.isCancelled()) {
         await this.points.refund(
           userId,
@@ -1493,6 +1498,7 @@ export class StudioService {
         userPrompt: input.prompt,
         imageUrl: inlinedImage,
         maskUrl: inlinedMask,
+        referenceImageUrls: inlinedRefs,
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(
