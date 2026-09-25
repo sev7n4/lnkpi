@@ -120,7 +120,9 @@ export function moveDisplayCropRect(rect: CropRect, dx: number, dy: number, boxW
 
 /**
  * 8 手柄拖拽调整（display 坐标，θ=0 直卡）：dir 决定动哪条边/角；
- * lockRatio（数值，null = 自由）以拖拽主轴为驱动；单边下限 NODE_CROP_MIN_DISPLAY；结果钳进卡内。
+ * lockRatio（数值，null = 自由）只约束角手柄——边中点手柄（n/s/w/e 单字符）
+ * 恒定只动对应一条边，不联动另一轴（2026-09-25 用户拍板：拖上下左右不许带动其他方向）；
+ * 单边下限 NODE_CROP_MIN_DISPLAY；结果钳进卡内。
  */
 export function resizeDisplayCropRect(
   rect: CropRect,
@@ -136,6 +138,8 @@ export function resizeDisplayCropRect(
   const moveRight = dir.includes('e')
   const moveTop = dir.includes('n')
   const moveBottom = dir.includes('s')
+  const isEdgeHandle = dir.length === 1
+  const effectiveLock = isEdgeHandle ? null : lockRatio
 
   let nx = x
   let ny = y
@@ -159,12 +163,12 @@ export function resizeDisplayCropRect(
     nh = Math.max(NODE_CROP_MIN_DISPLAY, height + dy)
   }
 
-  if (lockRatio != null && lockRatio > 0) {
+  if (effectiveLock != null && effectiveLock > 0) {
     if (moveTop || moveBottom) {
-      nw = Math.max(NODE_CROP_MIN_DISPLAY, nh * lockRatio)
+      nw = Math.max(NODE_CROP_MIN_DISPLAY, nh * effectiveLock)
       if (moveLeft) nx = x + width - nw
     } else {
-      nh = Math.max(NODE_CROP_MIN_DISPLAY, nw / lockRatio)
+      nh = Math.max(NODE_CROP_MIN_DISPLAY, nw / effectiveLock)
       if (moveTop) ny = y + height - nh
     }
   }

@@ -141,6 +141,8 @@ import SelectionActionBar from '@/components/canvas/SelectionActionBar.vue'
 import NodeCropOverlay from '@/components/canvas/NodeCropOverlay.vue'
 import NodeOutpaintOverlay from '@/components/canvas/NodeOutpaintOverlay.vue'
 import NodeInpaintOverlay from '@/components/canvas/NodeInpaintOverlay.vue'
+import NodeElementEditOverlay from '@/components/canvas/NodeElementEditOverlay.vue'
+import { combineElementEditPrompt, paintElementEditMask, type ElementEditItem } from '@/components/canvas/elementEditModel'
 import { displayRectToPixelRect } from '@/components/canvas/nodeCropModel'
 import { loadCropSourceImage, renderCropBlob } from '@/components/canvas/refine/cropExport'
 import { exportMaskPng } from '@/components/canvas/refine/maskExport'
@@ -774,6 +776,19 @@ const nodeOutpaintBusy = ref(false)
 /** 节点直出局部重绘：正在重绘的节点 id + 生成进行中 */
 const nodeInpaintNodeId = ref<string | null>(null)
 const nodeInpaintBusy = ref(false)
+/** 节点直出元素编辑：正在编辑的节点 id + 生成进行中（多选区局部编辑，复刻竞品） */
+const nodeElementEditNodeId = ref<string | null>(null)
+const nodeElementEditBusy = ref(false)
+
+/** 节点 overlay / 选中快捷菜单激活时隐藏底部提示词 dock（避免干扰快捷菜单操作，2026-09-25 用户拍板） */
+const dockSuppressedByOverlay = computed(
+  () =>
+    !!selectionActionBarNode.value ||
+    !!nodeCropNodeId.value ||
+    !!nodeOutpaintNodeId.value ||
+    !!nodeInpaintNodeId.value ||
+    !!nodeElementEditNodeId.value,
+)
 
 const gridSlicePanelNode = computed((): EditableFlowNode | null => {
   if (!gridSlicePanelNodeId.value) return null
@@ -799,7 +814,7 @@ const canvasChromeHidden = computed(() =>
 /** 单选 + 可操作图像节点时显示选中浮层（多选不出现；节点直裁/扩图/重绘进行中让位） */
 const selectionActionBarNode = computed((): EditableFlowNode | null => {
   if (refinePanelNode.value || gridSlicePanelNode.value) return null
-  if (nodeCropNodeId.value || nodeOutpaintNodeId.value || nodeInpaintNodeId.value) return null
+  if (nodeCropNodeId.value || nodeOutpaintNodeId.value || nodeInpaintNodeId.value || nodeElementEditNodeId.value) return null
   if (multiSelectedIds.value.length !== 1) return null
   const node = findNodeById(multiSelectedIds.value[0])
   if (!node) return null
@@ -3097,6 +3112,7 @@ function handleFloatingCropStart(node: EditableFlowNode) {
   }
   nodeOutpaintNodeId.value = null
   nodeInpaintNodeId.value = null
+  nodeElementEditNodeId.value = null
   nodeCropNodeId.value = node.id
 }
 
@@ -3173,6 +3189,7 @@ function handleFloatingOutpaintStart(node: EditableFlowNode) {
   }
   nodeCropNodeId.value = null
   nodeInpaintNodeId.value = null
+  nodeElementEditNodeId.value = null
   nodeOutpaintNodeId.value = node.id
 }
 
@@ -3292,7 +3309,95 @@ function handleFloatingInpaintStart(node: EditableFlowNode) {
   }
   nodeCropNodeId.value = null
   nodeOutpaintNodeId.value = null
+  nodeElementEditNodeId.value = null
   nodeInpaintNodeId.value = node.id
+}
+
+// —— 节点直出元素编辑（多选区局部编辑，复刻竞品） ——
+
+const nodeElementEditNode = computed((): EditableFlowNode | null => {
+  if (!nodeElementEditNodeId.value) return null
+  const node = findNodeById(nodeElementEditNodeId.value)
+  if (!node || !String((node.data as Record<string, unknown> | undefined)?.url ?? '').trim()) return null
+  return node as EditableFlowNode
+})
+
+const nodeElementEditUrl = computed(() => String((nodeElementEditNode.value?.data as Record<string, unknown> | undefined)?.url ?? ''))
+
+function closeNodeElementEdit() {
+  if (nodeElementEditBusy.value) return
+  nodeElementEditNodeId.value = null
+}
+
+function handleFloatingElementEditStart(node: EditableFlowNode) {
+  if (nodeElementEditBusy.value) return
+  if (refinePanelNode.value || gridSlicePanelNode.value) {
+    ElMessage.warning('请先退出当前工作台')
+    return
+  }
+  nodeCropNodeId.value = null
+  nodeOutpaintNodeId.value = null
+  nodeInpaintNodeId.value = null
+  nodeElementEditNodeId.value = node.id
+}
+
+/**
+ * 元素编辑确认：多选区合成整图蒙版（paintElementEditMask）→ exportMaskPng → persist →
+ * image/edit mode:'inpaint'（combined prompt，size 'auto'，单次一张）→ 下游新节点。
+ * 需要原图自然尺寸：由节点 url 加载探测（蒙版按原图分辨率建立）。
+ */
+async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] }) {
+  const node = nodeElementEditNode.value
+  if (!node || nodeElementEditBusy.value) return
+  const imageUrl = nodeElementEditUrl.value
+  if (!imageUrl) return
+  if (!payload.items.length) return
+  nodeElementEditBusy.value = true
+  try {
+    const img = await loadCropSourceImage(imageUrl)
+    const naturalW = img.naturalWidth
+    const naturalH = img.naturalHeight
+    if (!(naturalW > 0) || !(naturalH > 0)) throw new Error('原图加载失败')
+    // 节点卡显示尺寸：与 overlay 的 cover 坐标系一致
+    const { w: boxW, h: boxH } = getNodeSize(node as FlowNode)
+    const maskCanvas = paintElementEditMask(payload.items, naturalW, naturalH, boxW, boxH)
+    const blob = await exportMaskPng(maskCanvas)
+    const file = new File([blob], 'mask.png', { type: 'image/png' })
+    const fallbackUrl = URL.createObjectURL(file)
+    let maskUrl: string
+    try {
+      maskUrl = await persistMediaUrl(file, fallbackUrl)
+    } catch (e) {
+      URL.revokeObjectURL(fallbackUrl)
+      throw e
+    }
+    if (maskUrl !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
+    const { data } = await studioApi.editImage(
+      {
+        prompt: combineElementEditPrompt(payload.items) || '元素编辑',
+        imageUrl,
+        maskUrl,
+        model: P1_IMAGE_EDIT_MODEL_KEY,
+        size: 'auto',
+        mode: 'inpaint',
+        nodeId: node.id,
+      },
+    )
+    const url = data.data.url
+    if (!url) throw new Error('元素编辑结果为空')
+    applyGeneratedEditChild(node, {
+      url,
+      recordId: data.data.id,
+      prompt: payload.items.map((it) => `${it.name} ${it.desc}`.trim()).join('；'),
+      successText: `已完成 ${payload.items.length} 处元素编辑（下游新节点）`,
+    })
+    nodeElementEditNodeId.value = null
+  } catch (err) {
+    const message = apiErrorMessage(err, '元素编辑失败，请重试')
+    ElMessage.error(message)
+  } finally {
+    nodeElementEditBusy.value = false
+  }
 }
 
 /**
@@ -3324,7 +3429,7 @@ async function handleNodeInpaintConfirm(payload: { prompt: string; maskCanvas: H
         maskUrl,
         model: P1_IMAGE_EDIT_MODEL_KEY,
         size: 'auto',
-        mode: 'edit',
+        mode: 'inpaint',
         nodeId: node.id,
       },
     )
@@ -3364,11 +3469,12 @@ watch(
   },
 )
 
-// 节点直裁/扩图/重绘让位：选中集变化 / 精修打开 → 收掉覆盖层（confirm 成功路径已先行 close）
+// 节点直裁/扩图/重绘/元素编辑让位：选中集变化 / 精修打开 → 收掉覆盖层（confirm 成功路径已先行 close）
 watch(multiSelectedIds, () => {
   if (nodeCropNodeId.value) closeNodeCrop()
   if (nodeOutpaintNodeId.value) closeNodeOutpaint()
   if (nodeInpaintNodeId.value) closeNodeInpaint()
+  if (nodeElementEditNodeId.value) closeNodeElementEdit()
 })
 watch(
   () => canvasEditor.imageTarget?.nodeId,
@@ -4342,6 +4448,7 @@ onUnmounted(() => {
             @crop="selectionActionBarNode && handleFloatingCropStart(selectionActionBarNode)"
             @outpaint="selectionActionBarNode && handleFloatingOutpaintStart(selectionActionBarNode)"
             @inpaint="selectionActionBarNode && handleFloatingInpaintStart(selectionActionBarNode)"
+            @element-edit="selectionActionBarNode && handleFloatingElementEditStart(selectionActionBarNode)"
             @slice="handleGridSliceSlice"
             @open-custom="handleGridSliceOpenCustom"
             @download="selectionActionBarNode && downloadNodeImage(selectionActionBarNode.id)"
@@ -4370,6 +4477,14 @@ onUnmounted(() => {
             :busy="nodeInpaintBusy"
             @confirm="handleNodeInpaintConfirm"
             @cancel="closeNodeInpaint"
+          />
+          <NodeElementEditOverlay
+            v-if="nodeElementEditNode"
+            :node="nodeElementEditNode as FlowNode"
+            :url="nodeElementEditUrl"
+            :busy="nodeElementEditBusy"
+            @confirm="handleNodeElementEditConfirm"
+            @cancel="closeNodeElementEdit"
           />
 
           <MultiSelectConnectOverlay
@@ -4434,7 +4549,7 @@ onUnmounted(() => {
           @close="closeGridSliceWorkbench"
         />
         <DockStudioToolbar
-          v-if="!refinePanelNode && !gridSlicePanelNode"
+          v-if="!refinePanelNode && !gridSlicePanelNode && !dockSuppressedByOverlay"
           :node="editorNode"
           :upstream="editorUpstream"
           :refs="selectedRefs"

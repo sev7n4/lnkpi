@@ -19,7 +19,7 @@ import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBa
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import GuidePickerPopover from '@/components/canvas/dock-studio/shared/GuidePickerPopover.vue'
 
-type RefineMode = 'edit' | 'outpaint'
+type RefineMode = 'inpaint' | 'outpaint'
 
 const props = withDefaults(defineProps<{
   prompt: string
@@ -33,7 +33,7 @@ const props = withDefaults(defineProps<{
   availableModelKeys: readonly string[]
   /** 当前尺寸覆盖（'auto' 表示跟随原图）。扩图模式下由父层传 'auto' 并隐藏选择器。 */
   sizeOverride: string | 'auto'
-  /** 通道模式：edit 普通精修；outpaint 扩图（Task 7 接线）会隐藏尺寸选择器。 */
+  /** 通道模式：inpaint 蒙版精修/局部重绘；outpaint 扩图会隐藏尺寸选择器。 */
   mode?: RefineMode
   /** 扩图模式：是否已产生真实扩出（四向扩展量不全为 0）。未扩出时给引导文案。 */
   outpaintReady?: boolean
@@ -52,7 +52,7 @@ const props = withDefaults(defineProps<{
   busy: false, disabled: false, canApply: false, coverageKind: 'ok',
   outpaintReady: true,
   activeEditIntentId: null, refRoleHints: '',
-  mode: 'edit',
+  mode: 'inpaint',
   modelKey: P1_IMAGE_EDIT_MODEL_KEY,
   sizes: () => IMAGE2_EDIT_SIZES,
   availableModelKeys: () => IMAGE_EDIT_MODEL_KEYS,

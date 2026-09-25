@@ -49,6 +49,7 @@ export function buildSelectionTools(opts: { hasUrl: boolean }): SelectionToolDef
     { id: 'outpaint', icon: 'outpaint', title: '扩图', label: '扩图', disabled: false, group: 'ai' },
     { id: 'crop', icon: 'crop', title: '裁剪', label: '裁剪', disabled: false, group: 'ai' },
     { id: 'inpaint', icon: 'inpaint', title: '局部重绘', label: '重绘', disabled: false, group: 'ai' },
+    { id: 'element-edit', icon: 'element', title: '元素编辑', label: '元素', disabled: false, group: 'ai' },
     { id: 'rotate', icon: 'rotate', title: '旋转/翻转', label: '旋转', disabled: true, disabledReason: '旋转/翻转将在后续能力包点亮', group: 'ai' },
     { id: 'download', icon: 'download', title: '下载图片', label: '下载', disabled: !opts.hasUrl, group: 'file' },
     { id: 'save-asset', icon: 'save-asset', title: '存入资产库', label: '存图', disabled: !opts.hasUrl, group: 'file' },

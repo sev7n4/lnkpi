@@ -252,7 +252,7 @@ describe('RefineSidePanel 三段式', () => {
     const body = call[0]
     expect(body.model).toBe('image2')
     expect(body.size).toBe('auto')
-    expect(body.mode).toBe('edit')
+    expect(body.mode).toBe('inpaint')
     // 结果进入会话胶片条（afterUrl 由 store 当前结果派生）
     expect(editor.refineSessionResults.length).toBe(1)
   })

@@ -144,7 +144,8 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
 const modelKey = ref<string>(P1_IMAGE_EDIT_MODEL_KEY)
 const sizeOverride = ref<string | 'auto'>('auto')
 /** dock 的 mode：扩图模式下传 'outpaint' 以隐藏尺寸选择器（Task 7 接线）。 */
-const dockMode = computed<'edit' | 'outpaint'>(() => (editor.refineMode === 'outpaint' ? 'outpaint' : 'edit'))
+/** server @IsIn(['inpaint','outpaint'])：蒙版选区精修 = inpaint；扩图 = outpaint。 */
+const dockMode = computed<'inpaint' | 'outpaint'>(() => (editor.refineMode === 'outpaint' ? 'outpaint' : 'inpaint'))
 /** credits 按 shared 模型定价表动态计算（image2 = 10），模型不可识别时回落到默认估算。 */
 const credits = computed(() => IMAGE_EDIT_MODEL_PRICING[modelKey.value] ?? estimateImageCredits(1))
 const coverageKind = computed(() => maskCoverageMessage(editor.refineCoverage))

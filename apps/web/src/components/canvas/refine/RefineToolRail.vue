@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { TOOL_ICON_CROP, TOOL_ICON_INPAINT, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
+import { TOOL_ICON_CROP, TOOL_ICON_ELEMENT, TOOL_ICON_INPAINT, TOOL_ICON_MATTING, TOOL_ICON_OUTPAINT, TOOL_ICON_SELECT } from '@/components/canvas/toolIcons'
 import {
   REFINE_CAPABILITY_ITEMS, REFINE_COMPARE_OPTIONS, REFINE_FIT_OPTIONS, REFINE_VIEW_TOOLS, REFINE_ZOOM_ACTIONS,
   type RefineFitOptionId,
@@ -53,6 +53,12 @@ function toggleInpaint() {
   }
   editor.setRefineMode('inpaint')
   editor.setRefineTool('brush')
+}
+
+/** 元素编辑模式入口：多选区局部编辑（选区 → 面板添加 → 生成） */
+const elementActive = computed(() => editor.refineMode === 'element')
+function toggleElement() {
+  editor.setRefineMode(elementActive.value ? 'select' : 'element')
 }
 
 const selectActive = computed(() => editor.refineMode === 'select')
@@ -179,6 +185,26 @@ const isViewOpen = (id: 'compare' | 'fit') => openMenu.value?.kind === 'view' &&
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_INPAINT" />
         </span>
         <span class="refine-rail__name">局部重绘</span>
+      </button>
+    </div>
+
+    <!-- 元素编辑模式入口：多选区局部编辑（圈选 → 配名称/描述 → 生成） -->
+    <div class="refine-rail__slot">
+      <button
+        type="button"
+        class="refine-rail__btn"
+        :class="{ 'is-active': elementActive }"
+        data-testid="rail-mode-element"
+        aria-label="元素编辑"
+        title="元素编辑（圈选多处元素分别描述，一次生成）"
+        :aria-pressed="elementActive"
+        :disabled="editor.refineBusy"
+        @click="toggleElement"
+      >
+        <span class="refine-rail__glyph">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" v-html="TOOL_ICON_ELEMENT" />
+        </span>
+        <span class="refine-rail__name">元素编辑</span>
       </button>
     </div>
 

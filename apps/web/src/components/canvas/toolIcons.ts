@@ -24,3 +24,7 @@ export const TOOL_ICON_CROP =
 /** 「局部重绘」入口：画笔（笔杆 + 笔头斜切），与 rail 能力区占位图标同形 */
 export const TOOL_ICON_INPAINT =
   '<path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" /><path d="M14.8 6.6l2.6 2.6" />'
+
+/** 「元素编辑」入口：定位靶心 + 选区角（多选区局部编辑） */
+export const TOOL_ICON_ELEMENT =
+  '<circle cx="12" cy="12" r="3.2" /><circle cx="12" cy="12" r="8" stroke-dasharray="3 2.5" /><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" />'

@@ -188,16 +188,22 @@ describe('resizeCropRect', () => {
     expect(out.height).toBe(120)
   })
 
-  it('比例锁定 1:1：东手柄拖宽 → 高同步（以宽为驱动）', () => {
+  it('比例锁定 1:1：东边手柄只动宽不联动高；se 角手柄仍等比（2026-09-25 同步直裁语义）', () => {
     const out = resizeCropRect({ x: 0, y: 0, width: 100, height: 100 }, 'e', 40, 0, 400, 300, 0, '1:1')
     expect(out.width).toBe(140)
-    expect(out.height).toBeCloseTo(140, 6)
+    expect(out.height).toBeCloseTo(100, 6)
+    const corner = resizeCropRect({ x: 0, y: 0, width: 100, height: 100 }, 'se', 40, 40, 400, 300, 0, '1:1')
+    expect(corner.width).toBe(140)
+    expect(corner.height).toBeCloseTo(140, 6)
   })
 
-  it('比例锁定 16:9：北手柄拖高 → 宽同步（以高为驱动）', () => {
+  it('比例锁定 16:9：北边手柄只动高不联动宽；se 角手柄仍等比', () => {
     const out = resizeCropRect({ x: 100, y: 100, width: 160, height: 90 }, 'n', 0, -9, 400, 300, 0, '16:9')
     expect(out.height).toBe(99)
-    expect(out.width).toBeCloseTo(99 * (16 / 9), 6)
+    expect(out.width).toBe(160)
+    const corner = resizeCropRect({ x: 100, y: 100, width: 160, height: 90 }, 'se', 16, 9, 400, 300, 0, '16:9')
+    expect(corner.height).toBe(99)
+    expect(corner.width).toBeCloseTo(99 * (16 / 9), 6)
   })
 
   it('角手柄 se：宽高同步变化并钳制', () => {
