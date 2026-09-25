@@ -12,7 +12,7 @@ describe('annotateModel', () => {
     expect(nextAnnotateId()).not.toBe(nextAnnotateId())
   })
 
-  it('drawAnnotates：jsdom 无 2d context 时不抛错（浏览器环境才真正绘制）', () => {
+  it('drawAnnotates：无 2d context（jsdom）不抛错；有 ctx（CI canvas mock）时 source 用 canvas 也安全', () => {
     const canvas = document.createElement('canvas')
     const ops: AnnotateShape[] = [
       { kind: 'stroke', stroke: { points: [{ x: 1, y: 1 }], size: 4, color: '#ff0000' } },
@@ -22,7 +22,10 @@ describe('annotateModel', () => {
       { kind: 'mosaic', rect: { x: 0, y: 0, width: 8, height: 8 }, block: 8 },
       { kind: 'watermark', x: 10, y: 10, text: '水印', size: 16, color: '#ffffff', opacity: 0.5, tiled: true },
     ]
-    const img = document.createElement('img')
-    expect(() => drawAnnotates(canvas, ops, img, 100, 100, 200, 200)).not.toThrow()
+    // source 用 1×1 canvas（合法 CanvasImageSource；未加载的 <img> 在 CI canvas mock 下 drawImage 会抛错）
+    const source = document.createElement('canvas')
+    source.width = 1
+    source.height = 1
+    expect(() => drawAnnotates(canvas, ops, source, 100, 100, 200, 200)).not.toThrow()
   })
 })
