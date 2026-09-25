@@ -63,19 +63,20 @@ describe('SelectionActionBar', () => {
   it('renders exactly the expected action buttons (no extra/missing)', async () => {
     const wrapper = mountBar()
     const actions = wrapper.findAll('.toolbar-action')
-    // 8 个工具按钮 + 宫格下拉入口（同 class）
-    expect(actions).toHaveLength(9)
+    // 9 个工具按钮 + 宫格下拉入口（同 class）
+    expect(actions).toHaveLength(10)
     const byId = Object.fromEntries(
       actions.filter((b) => b.attributes('data-action')).map((b) => [b.attributes('data-action'), b.text().trim()]),
     )
     expect(Object.keys(byId).sort()).toEqual([
-      'crop', 'download', 'inpaint', 'matting', 'outpaint', 'refine', 'rotate', 'save-asset',
+      'crop', 'download', 'element-edit', 'inpaint', 'matting', 'outpaint', 'refine', 'rotate', 'save-asset',
     ])
     expect(byId['refine']).toBe('精修')
     expect(byId['matting']).toBe('抠图')
     expect(byId['outpaint']).toBe('扩图')
     expect(byId['crop']).toBe('裁剪')
     expect(byId['inpaint']).toBe('重绘')
+    expect(byId['element-edit']).toBe('元素')
     expect(byId['rotate']).toBe('旋转')
     expect(byId['download']).toBe('下载')
     expect(byId['save-asset']).toBe('存图')
@@ -109,6 +110,10 @@ describe('SelectionActionBar', () => {
     expect(inpaint.attributes('disabled')).toBeUndefined()
     await inpaint.trigger('click')
     expect(wrapper.emitted('inpaint')).toBeTruthy()
+    const element = wrapper.get('[data-action="element-edit"]')
+    expect(element.attributes('disabled')).toBeUndefined()
+    await element.trigger('click')
+    expect(wrapper.emitted('element-edit')).toBeTruthy()
     wrapper.unmount()
   })
 

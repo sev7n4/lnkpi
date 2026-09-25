@@ -236,8 +236,10 @@ export function resizeCropRect(
     nh = Math.max(CROP_MIN_SIZE, height + dy)
   }
 
-  // 比例锁定：以拖拽主轴为驱动重算另一维（角手柄以宽为驱动，n/s 以高为驱动）
-  if (aspect !== 'free') {
+  // 比例锁定：以拖拽主轴为驱动重算另一维（角手柄以宽为驱动，n/s 以高为驱动）。
+  // 边中点手柄（n/s/w/e 单字符）恒定只动对应一条边，不联动另一轴（与节点直裁同语义）。
+  const isEdgeHandle = dir.length === 1
+  if (aspect !== 'free' && !isEdgeHandle) {
     const ratio = CROP_ASPECT_RATIOS[aspect].w / CROP_ASPECT_RATIOS[aspect].h
     if (moveTop || moveBottom) {
       nw = Math.max(CROP_MIN_SIZE, nh * ratio)

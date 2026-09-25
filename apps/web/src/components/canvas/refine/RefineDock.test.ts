@@ -19,7 +19,7 @@ const mountDock = (props: Record<string, unknown> = {}) =>
       availableModelKeys: IMAGE_EDIT_MODEL_KEYS,
       sizes: IMAGE2_EDIT_SIZES,
       sizeOverride: 'auto',
-      mode: 'edit',
+      mode: 'inpaint',
       width: 1280,
       height: 720,
       ...props,
@@ -157,7 +157,7 @@ describe('RefineDock 扩图模式（Q3 衔接：CTA 语义与引导）', () => {
   })
 
   it('普通精修模式不受 outpaintReady 影响', () => {
-    const w = mountDock({ mode: 'edit', outpaintReady: false })
+    const w = mountDock({ mode: 'inpaint', outpaintReady: false })
     expect(w.find('[data-testid="dock-run"]').attributes('aria-label')).toBe('精修')
     expect(w.find('[data-testid="dock-outpaint-hint"]').exists()).toBe(false)
   })

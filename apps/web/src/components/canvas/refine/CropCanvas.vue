@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
-import { HANDLE_DIRS, type HandleDir, type Size } from './outpaintGeometry'
+import type { HandleDir, Size } from './outpaintGeometry'
 import {
   formatCropReadout,
   moveCropRect,
@@ -192,10 +192,20 @@ function stopDrag() {
         <span class="crop-canvas__line crop-canvas__line--h1" />
         <span class="crop-canvas__line crop-canvas__line--h2" />
         <span class="crop-canvas__readout" data-testid="crop-readout">{{ readout }}</span>
+        <!-- 四角 L 形白括号手柄（与节点直裁同款竞品样式） -->
         <span
-          v-for="dir in HANDLE_DIRS"
-          :key="dir"
-          class="crop-canvas__handle"
+          v-for="dir in (['nw', 'ne', 'sw', 'se'] as const)"
+          :key="`corner-${dir}`"
+          class="crop-canvas__handle crop-canvas__handle--corner"
+          :class="`crop-canvas__handle--${dir}`"
+          :data-testid="`crop-handle-${dir}`"
+          @pointerdown="onDragStart(dir, $event)"
+        />
+        <!-- 四边中点白色小手柄 -->
+        <span
+          v-for="dir in (['n', 's', 'w', 'e'] as const)"
+          :key="`edge-${dir}`"
+          class="crop-canvas__handle crop-canvas__handle--edge"
           :class="`crop-canvas__handle--${dir}`"
           :data-testid="`crop-handle-${dir}`"
           @pointerdown="onDragStart(dir, $event)"
@@ -239,13 +249,13 @@ function stopDrag() {
 
 .crop-canvas__line {
   position: absolute;
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.55);
   pointer-events: none;
 }
-.crop-canvas__line--v1 { top: 33.33%; bottom: 33.33%; left: 33.33%; width: 1px; }
-.crop-canvas__line--v2 { top: 33.33%; bottom: 33.33%; right: 33.33%; width: 1px; }
-.crop-canvas__line--h1 { left: 33.33%; right: 33.33%; top: 33.33%; height: 1px; }
-.crop-canvas__line--h2 { left: 33.33%; right: 33.33%; bottom: 33.33%; height: 1px; }
+.crop-canvas__line--v1 { top: 0; bottom: 0; left: 33.333%; width: 1px; }
+.crop-canvas__line--v2 { top: 0; bottom: 0; left: 66.667%; width: 1px; }
+.crop-canvas__line--h1 { left: 0; right: 0; top: 33.333%; height: 1px; }
+.crop-canvas__line--h2 { left: 0; right: 0; top: 66.667%; height: 1px; }
 
 .crop-canvas__readout {
   position: absolute;
@@ -260,20 +270,61 @@ function stopDrag() {
   pointer-events: none;
 }
 
+/* 手柄：与节点直裁（NodeCropOverlay）竞品同款——四角 L 形粗白括号 + 四边中点白条 */
 .crop-canvas__handle {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 2px solid #fff;
-  background: transparent;
   touch-action: none;
 }
-.crop-canvas__handle--nw { top: -7px; left: -7px; cursor: nwse-resize; }
-.crop-canvas__handle--n { top: -7px; left: 50%; margin-left: -7px; cursor: ns-resize; }
-.crop-canvas__handle--ne { top: -7px; right: -7px; cursor: nesw-resize; }
-.crop-canvas__handle--e { top: 50%; right: -7px; margin-top: -7px; cursor: ew-resize; }
-.crop-canvas__handle--se { right: -7px; bottom: -7px; cursor: nwse-resize; }
-.crop-canvas__handle--s { bottom: -7px; left: 50%; margin-left: -7px; cursor: ns-resize; }
-.crop-canvas__handle--sw { bottom: -7px; left: -7px; cursor: nesw-resize; }
-.crop-canvas__handle--w { top: 50%; left: -7px; margin-top: -7px; cursor: ew-resize; }
+.crop-canvas__handle--corner {
+  width: 24px;
+  height: 24px;
+}
+.crop-canvas__handle--corner::before,
+.crop-canvas__handle--corner::after {
+  content: '';
+  position: absolute;
+  background: #fff;
+  border-radius: 2px;
+}
+.crop-canvas__handle--corner::before {
+  width: 24px;
+  height: 4.5px;
+}
+.crop-canvas__handle--corner::after {
+  width: 4.5px;
+  height: 24px;
+}
+.crop-canvas__handle--nw { top: -4px; left: -4px; cursor: nwse-resize; }
+.crop-canvas__handle--nw::before { left: 0; top: 0; }
+.crop-canvas__handle--nw::after { left: 0; top: 0; }
+.crop-canvas__handle--ne { top: -4px; right: -4px; cursor: nesw-resize; }
+.crop-canvas__handle--ne::before { right: 0; top: 0; }
+.crop-canvas__handle--ne::after { right: 0; top: 0; }
+.crop-canvas__handle--sw { bottom: -4px; left: -4px; cursor: nesw-resize; }
+.crop-canvas__handle--sw::before { left: 0; bottom: 0; }
+.crop-canvas__handle--sw::after { left: 0; bottom: 0; }
+.crop-canvas__handle--se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+.crop-canvas__handle--se::before { right: 0; bottom: 0; }
+.crop-canvas__handle--se::after { right: 0; bottom: 0; }
+
+.crop-canvas__handle--edge {
+  background: #fff;
+  border-radius: 2px;
+}
+.crop-canvas__handle--n,
+.crop-canvas__handle--s {
+  width: 30px;
+  height: 6px;
+  cursor: ns-resize;
+}
+.crop-canvas__handle--n { top: -3px; left: 50%; margin-left: -15px; }
+.crop-canvas__handle--s { bottom: -3px; left: 50%; margin-left: -15px; }
+.crop-canvas__handle--w,
+.crop-canvas__handle--e {
+  width: 6px;
+  height: 30px;
+  cursor: ew-resize;
+}
+.crop-canvas__handle--w { top: 50%; left: -3px; margin-top: -15px; }
+.crop-canvas__handle--e { top: 50%; right: -3px; margin-top: -15px; }
 </style>

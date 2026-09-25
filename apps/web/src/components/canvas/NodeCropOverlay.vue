@@ -383,10 +383,10 @@ onUnmounted(() => {
   padding: 0;
   touch-action: none;
 }
-/* 四角：L 形白括号（微出血到框外，竞品同款粗直角） */
+/* 四角：L 形白括号（微出血到框外，竞品同款粗直角；加大版便于观察与命中） */
 .node-crop-handle--corner {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   background: transparent;
 }
 .node-crop-handle--corner::before,
@@ -397,47 +397,47 @@ onUnmounted(() => {
   border-radius: 2px;
 }
 .node-crop-handle--corner::before {
-  width: 18px;
-  height: 3.5px;
+  width: 24px;
+  height: 4.5px;
 }
 .node-crop-handle--corner::after {
-  width: 3.5px;
-  height: 18px;
+  width: 4.5px;
+  height: 24px;
 }
-.node-crop-handle--nw { left: -3px; top: -3px; cursor: nwse-resize; }
+.node-crop-handle--nw { left: -4px; top: -4px; cursor: nwse-resize; }
 .node-crop-handle--nw::before { left: 0; top: 0; }
 .node-crop-handle--nw::after { left: 0; top: 0; }
-.node-crop-handle--ne { right: -3px; top: -3px; cursor: nesw-resize; }
+.node-crop-handle--ne { right: -4px; top: -4px; cursor: nesw-resize; }
 .node-crop-handle--ne::before { right: 0; top: 0; }
 .node-crop-handle--ne::after { right: 0; top: 0; }
-.node-crop-handle--sw { left: -3px; bottom: -3px; cursor: nesw-resize; }
+.node-crop-handle--sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
 .node-crop-handle--sw::before { left: 0; bottom: 0; }
 .node-crop-handle--sw::after { left: 0; bottom: 0; }
-.node-crop-handle--se { right: -3px; bottom: -3px; cursor: nwse-resize; }
+.node-crop-handle--se { right: -4px; bottom: -4px; cursor: nwse-resize; }
 .node-crop-handle--se::before { right: 0; bottom: 0; }
 .node-crop-handle--se::after { right: 0; bottom: 0; }
 
-/* 四边中点：白色小条 */
+/* 四边中点：白色小条（加大版） */
 .node-crop-handle--edge {
   background: #fff;
   border-radius: 2px;
 }
 .node-crop-handle--n,
 .node-crop-handle--s {
-  width: 22px;
-  height: 5px;
+  width: 30px;
+  height: 6px;
   cursor: ns-resize;
 }
-.node-crop-handle--n { left: 50%; top: -2.5px; transform: translateX(-50%); }
-.node-crop-handle--s { left: 50%; bottom: -2.5px; transform: translateX(-50%); }
+.node-crop-handle--n { left: 50%; top: -3px; transform: translateX(-50%); }
+.node-crop-handle--s { left: 50%; bottom: -3px; transform: translateX(-50%); }
 .node-crop-handle--w,
 .node-crop-handle--e {
-  width: 5px;
-  height: 22px;
+  width: 6px;
+  height: 30px;
   cursor: ew-resize;
 }
-.node-crop-handle--w { top: 50%; left: -2.5px; transform: translateY(-50%); }
-.node-crop-handle--e { top: 50%; right: -2.5px; transform: translateY(-50%); }
+.node-crop-handle--w { top: 50%; left: -3px; transform: translateY(-50%); }
+.node-crop-handle--e { top: 50%; right: -3px; transform: translateY(-50%); }
 
 /* 确认卡 */
 .node-crop-card__btn {

@@ -61,8 +61,17 @@ export interface RefineSessionResult {
   createdAt: string
 }
 
-/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪；inpaint 局部重绘（画笔蒙版 + prompt 直出）。 */
-export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop' | 'inpaint'
+/** 精修工作区模式：select 普通蒙版精修；outpaint 扩图（Task 7）；matting 抠图（Task 7）；crop 裁剪；inpaint 局部重绘（画笔蒙版 + prompt 直出）；element 元素编辑（多选区累积蒙版）。 */
+export type RefineMode = 'select' | 'outpaint' | 'matting' | 'crop' | 'inpaint' | 'element'
+
+/** 元素编辑编辑项（精修侧）：元数据 + 蒙版快照缩略图。 */
+export interface RefineElementItem {
+  id: string
+  name: string
+  desc: string
+  /** 该项并入时的蒙版快照（dataURL，缩略展示） */
+  thumb: string
+}
 
 export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const imageTarget = ref<ImageEditTarget | null>(null)
@@ -177,6 +186,50 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   /** 当前是否已有可用选区蒙版（有画布句柄且覆盖 > 0）：选区引导高亮 / 面板守卫的单一判据。 */
   const refineMaskAvailable = computed(() => !!refineMask.value?.getCanvas() && refineCoverage.value > 0)
 
+  // —— 元素编辑（element 模式）：累积蒙版 + 编辑项元数据列表 ——
+
+  const refineElementItems = ref<RefineElementItem[]>([])
+  /** 累积蒙版（原图尺寸位图，白色 = 全部编辑区）；列表清空时一并清空 */
+  const refineElementMaskCanvas = shallowRef<HTMLCanvasElement | null>(null)
+
+  /** 把当前选区蒙版（调用方传入的位图副本）并入累积蒙版并登记一项；返回是否成功。 */
+  function addRefineElementItem(name: string, desc: string, piece: HTMLCanvasElement): boolean {
+    if (refineBusy.value) return false
+    const acc = refineElementMaskCanvas.value
+    if (acc && (acc.width !== piece.width || acc.height !== piece.height)) {
+      // 尺寸不一致（换图后残留）：重置累积蒙版
+      refineElementMaskCanvas.value = null
+    }
+    const target = refineElementMaskCanvas.value ?? document.createElement('canvas')
+    if (!refineElementMaskCanvas.value) {
+      target.width = piece.width
+      target.height = piece.height
+    }
+    const ctx = target.getContext('2d')
+    if (!ctx) return false
+    ctx.drawImage(piece, 0, 0)
+    refineElementMaskCanvas.value = target
+    let thumb = ''
+    try {
+      thumb = piece.toDataURL('image/png')
+    } catch {
+      thumb = ''
+    }
+    refineElementItems.value.push({
+      id: `re-${Date.now().toString(36)}-${refineElementItems.value.length + 1}`,
+      name,
+      desc,
+      thumb,
+    })
+    return true
+  }
+
+  /** 清空元素编辑（列表 + 累积蒙版）。 */
+  function clearRefineElementItems() {
+    refineElementItems.value = []
+    refineElementMaskCanvas.value = null
+  }
+
   function setRefineLoupe(on: boolean) {
     refineLoupeOn.value = on
   }
@@ -214,6 +267,12 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   function setRefineMode(mode: RefineMode) {
     if (refineBusy.value) return
     if (mode === 'matting') refineMattingReturnPending.value = false
+    if (mode === 'element') {
+      // 元素编辑：清掉旧列表草稿（列表属会话态，进模式重来）
+      refineElementItems.value = []
+      // 进模式默认矩形选区工具（与选区模式一致）
+      setRefineTool('rect')
+    }
     if (mode === 'select') {
       refineOutpaintRect.value = null
       refineOutpaintBase.value = null
@@ -410,6 +469,10 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     registerRefineMask,
     getRefineMask,
     refineMaskAvailable,
+    refineElementItems,
+    refineElementMaskCanvas,
+    addRefineElementItem,
+    clearRefineElementItems,
     setRefineLoupe,
     setRefineLoupeShape,
     setRefineLoupeZoom,

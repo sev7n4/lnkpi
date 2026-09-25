@@ -30,11 +30,32 @@ export async function readImageBuffer(url: string): Promise<Buffer> {
   if (upload) {
     return readFile(join(UPLOADS_ROOT, upload.userId, upload.fileName))
   }
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`参考图下载失败 (${res.status}): ${url}`)
+  // 出站链路（代理/DNS）偶发瞬断表现为裸「fetch failed」：网络层错误带退避重试（上限 3 次）
+  // 并在最终失败时透出底层 cause 便于诊断。HTTP 状态错误（404/403 等）不重试——语义确定，
+  // 重试只会白等（视频预检拒绝路径会调到这里，重试会把 5s 测试/响应预算吃穿）。
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 300 * attempt))
+    }
+    let res: Response
+    try {
+      res = await fetch(url)
+    } catch (err) {
+      lastErr = err
+      continue
+    }
+    if (!res.ok) {
+      throw new Error(`参考图下载失败 (${res.status}): ${url}`)
+    }
+    try {
+      return Buffer.from(await res.arrayBuffer())
+    } catch (err) {
+      lastErr = err
+    }
   }
-  return Buffer.from(await res.arrayBuffer())
+  const cause = lastErr instanceof Error ? [lastErr.message, (lastErr as { cause?: { code?: string; message?: string } }).cause?.code, (lastErr as { cause?: { code?: string; message?: string } }).cause?.message].filter(Boolean).join(' | ') : String(lastErr)
+  throw new Error(`参考图下载失败（重试 3 次仍失败）: ${url} — ${cause}`)
 }
 
 export async function downscaleImageBuffer(

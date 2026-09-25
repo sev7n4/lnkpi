@@ -131,18 +131,22 @@ describe('resizeDisplayCropRect', () => {
     expect(r.x).toBe(50 + 100 - NODE_CROP_MIN_DISPLAY)
   })
 
-  it('比例锁定：n 手柄拖高驱动等比宽（左锚定，与 refine 裁剪同语义）', () => {
+  it('比例锁定：n 边手柄只动上边，不联动宽（2026-09-25 拍板：边手柄单轴）', () => {
     const r = resizeDisplayCropRect({ x: 0, y: 0, width: 200, height: 100 }, 'n', 0, 20, BOX, BOX, 2)
-    // 高 100-20=80 → 宽 160，左边固定
+    // 高 100-20=80，宽保持 200 不变，左边固定
     expect(r.height).toBeCloseTo(80)
-    expect(r.width).toBeCloseTo(160)
+    expect(r.width).toBeCloseTo(200)
     expect(r.x).toBe(0)
   })
 
-  it('比例锁定：e 手柄拖宽驱动等比高', () => {
+  it('比例锁定：e 边手柄只动右边，不联动高（角手柄仍等比）', () => {
     const r = resizeDisplayCropRect({ x: 0, y: 0, width: 100, height: 50 }, 'e', 40, 0, BOX, BOX, 2)
     expect(r.width).toBeCloseTo(140)
-    expect(r.height).toBeCloseTo(70)
+    expect(r.height).toBeCloseTo(50)
+    // 角手柄（se）保持等比：宽 140 → 高 70（2:1，dy 随 dx 联动）
+    const corner = resizeDisplayCropRect({ x: 0, y: 0, width: 100, height: 50 }, 'se', 40, 20, BOX, BOX, 2)
+    expect(corner.width).toBeCloseTo(140)
+    expect(corner.height).toBeCloseTo(70)
   })
 
   it('自由比例不锁', () => {

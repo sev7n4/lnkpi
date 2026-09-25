@@ -99,8 +99,8 @@ export const studioApi = {
       model?: string
       /** 输出尺寸档位（白名单：IMAGE2_EDIT_SIZES），'auto' 跟随原图。 */
       size?: string
-      /** 通道模式：edit 普通精修 / outpaint 扩图（Task 7 接线）。 */
-      mode?: 'edit' | 'outpaint'
+      /** 通道模式：inpaint 蒙版选区精修/局部重绘 / outpaint 扩图（服务端白名单校验）。 */
+      mode?: 'inpaint' | 'outpaint'
       /** 扩图起止边（Task 7 接线）：原图尺寸 / 新画布尺寸，对象契约对齐服务端 DTO。 */
       outpaintFrom?: { width: number; height: number }
       outpaintTo?: { width: number; height: number }
