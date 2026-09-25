@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { sameOriginApiMediaUrl } from './media-url'
 
 /**
- * 媒体 URL 同源化：数据中存在 http://<api-host>/api/uploads/... 绝对地址，
- * 跨域页面下 canvas 加载（crossOrigin）因无 CORS 头失败。折叠为相对路径修复。
+ * 媒体 URL 同源化：canvas 像素读取（crossOrigin）要求同源。
+ * 1) /api/uploads/ 绝对地址 → 折叠为同源相对路径；
+ * 2) 外部生成图（无 CORS 头）→ 折叠为同源代理 /api/media/proxy?url=...。
  */
 describe('sameOriginApiMediaUrl', () => {
   it('把任意 host 的 /api/uploads/ 绝对地址折叠为同源相对路径', () => {
@@ -28,17 +29,22 @@ describe('sameOriginApiMediaUrl', () => {
     )
   })
 
-  it('非本产品媒体（外部 URL / blob / data）原样返回', () => {
-    expect(sameOriginApiMediaUrl('https://cos.example.com/bucket/a.png')).toBe(
-      'https://cos.example.com/bucket/a.png',
+  it('外部生成图地址折叠为同源代理路径（2026-09-25 CORS 修复）', () => {
+    const src = 'https://platform-outputs.agnes-ai.space/images/t2i/task_X/output.png'
+    expect(sameOriginApiMediaUrl(src)).toBe(`/api/media/proxy?url=${encodeURIComponent(src)}`)
+    expect(sameOriginApiMediaUrl('https://cos-platform-outputs.agnes-ai.cn/a/b.png?sig=1')).toBe(
+      `/api/media/proxy?url=${encodeURIComponent('https://cos-platform-outputs.agnes-ai.cn/a/b.png?sig=1')}`,
     )
+  })
+
+  it('blob / data / 非 http(s) 协议原样返回', () => {
     expect(sameOriginApiMediaUrl('blob:http://localhost:5173/abc')).toBe(
       'blob:http://localhost:5173/abc',
     )
     expect(sameOriginApiMediaUrl('data:image/png;base64,xxx')).toBe('data:image/png;base64,xxx')
   })
 
-  it('空串与非本产品路径原样返回', () => {
+  it('空串与非媒体路径原样返回', () => {
     expect(sameOriginApiMediaUrl('')).toBe('')
     expect(sameOriginApiMediaUrl('/other/path.png')).toBe('/other/path.png')
   })

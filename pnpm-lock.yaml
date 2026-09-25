@@ -53,6 +53,9 @@ importers:
       class-validator:
         specifier: ^0.14.1
         version: 0.14.4
+      express:
+        specifier: ^4.22.1
+        version: 4.22.1
       multer:
         specifier: ^2.2.0
         version: 2.2.0
