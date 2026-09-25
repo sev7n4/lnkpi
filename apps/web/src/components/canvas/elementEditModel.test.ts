@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   combineElementEditPrompt,
+  combineInpaintPrompt,
   coverDisplayMapper,
   elementEditShapeBBox,
   pointRectAt,
@@ -100,5 +101,22 @@ describe('ElementEditItem 形状契约', () => {
       { id: 'b', name: '鼻子', modify: '闭环', shape: { kind: 'strokes', strokes: [{ size: 6, points: [{ x: 1, y: 1 }] }] } },
     ]
     expect(items).toHaveLength(2)
+  })
+})
+
+describe('combineInpaintPrompt（快捷重绘全局 prompt 组合）', () => {
+  it('全局描述 + 各芯片「区域名 修改内容」以「；」连接', () => {
+    expect(
+      combineInpaintPrompt('整体更亮', [
+        { name: '区域', modify: '换成蓝色' },
+        { name: 'logo', modify: '换成乔丹 logo' },
+      ]),
+    ).toBe('整体更亮；区域 换成蓝色；logo 换成乔丹 logo')
+  })
+
+  it('带替换图的芯片追加对象替换语义；空全局描述只留芯片段', () => {
+    expect(
+      combineInpaintPrompt('', [{ name: '', modify: '换成新图案', refUrl: 'blob:ref' }]),
+    ).toContain('选区 换成新图案（把该区域替换为参考图中的对象')
   })
 })

@@ -44,11 +44,12 @@ function onRemove(id: string) {
       <span class="inpaint-panel__sub">涂抹区域 · 松手成一处编辑 · 只重画圈出的部分</span>
     </div>
 
-    <!-- 工具行：画笔 + 大小（芯片化后橡皮/清空由芯片 × / 撤销承担） -->
+    <!-- 工具行：画笔 / 矩形 + 大小（矩形/画笔松手都成芯片；芯片化后橡皮/清空由芯片 × / 撤销承担） -->
     <div class="inpaint-panel__tools">
       <button
         type="button"
-        class="inpaint-panel__tool is-on"
+        class="inpaint-panel__tool"
+        :class="{ 'is-on': editor.refineTool === 'brush' }"
         data-testid="inpaint-tool-brush"
         :disabled="busy"
         @click="editor.setRefineTool('brush')"
@@ -57,6 +58,20 @@ function onRemove(id: string) {
           <path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" /><path d="M14.8 6.6l2.6 2.6" />
         </svg>
         画笔
+      </button>
+      <button
+        type="button"
+        class="inpaint-panel__tool"
+        :class="{ 'is-on': editor.refineTool === 'rect' }"
+        data-testid="inpaint-tool-rect"
+        :disabled="busy"
+        title="拖框圈出区域，松手成芯片，可 8 手柄调整"
+        @click="editor.setRefineTool('rect')"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8" /><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8" /><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16" /><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16" />
+        </svg>
+        矩形
       </button>
       <label class="inpaint-panel__size">
         <input

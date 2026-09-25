@@ -351,6 +351,20 @@ export function resizeOutpaintAbsolute(base: Size, width: number, height: number
 }
 
 /**
+ * 目标尺寸输入解析（2026-09-25 用户需求：扩图/裁剪支持填写目标尺寸如 1024x768）。
+ * 接受「1024x768」「1024×768」「1024*768」「1024 X 768」（不区分大小写，允许空格）。
+ * 非法（缺一侧、非正整数）返回 null。
+ */
+export function parseSizeInput(raw: string): { width: number; height: number } | null {
+  const m = raw.trim().match(/^(\d+)\s*[x×*]\s*(\d+)$/i)
+  if (!m) return null
+  const width = Number(m[1])
+  const height = Number(m[2])
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return null
+  return { width, height }
+}
+
+/**
  * 四向扩展量（读数用，只读）。调用方传 `floorOutpaintRect` 之后的矩形，
  * 使读数与提交几何一致。四值恒 ≥ 0（扩图不裁剪，负向一律夹到 0）。
  */

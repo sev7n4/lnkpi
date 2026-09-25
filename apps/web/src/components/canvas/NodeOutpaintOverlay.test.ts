@@ -75,8 +75,7 @@ describe('NodeOutpaintOverlay（节点直出扩图）', () => {
     wrapper.unmount()
   })
 
-  it('比例下拉 7 项；点 1:1 重配为包含原图的最小 1:1 画布', async () => {
-    const wrapper = await mountReady()
+  it('比例下拉 7 项；点 1:1 重配为包含原图的最小 1:1 画布', async () => {    const wrapper = await mountReady()
     await wrapper.get('[data-testid="node-outpaint-aspect-trigger"]').trigger('click')
     const menu = wrapper.get('[data-testid="node-outpaint-aspect-menu"]')
     expect(menu.findAll('[data-aspect]')).toHaveLength(7)
@@ -114,6 +113,21 @@ describe('NodeOutpaintOverlay（节点直出扩图）', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
     expect(wrapper.emitted('cancel')).toHaveLength(2)
+    wrapper.unmount()
+  })
+
+  it('目标尺寸输入：合法值按 resizeOutpaintAbsolute 重配画布并提示实际尺寸；非法值提示格式', async () => {
+    const wrapper = await mountReady()
+    await wrapper.get('[data-testid="node-outpaint-aspect-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="node-outpaint-size-input"]').setValue('1024x768')
+    await wrapper.get('[data-testid="node-outpaint-size-apply"]').trigger('click')
+    const hint = wrapper.get('[data-testid="node-outpaint-size-hint"]')
+    // base 400×200：面积上限 9 倍生效 → 979×734（resizeOutpaintAbsolute 语义）
+    expect(hint.text()).toMatch(/已按 979×734 设置/)
+
+    await wrapper.get('[data-testid="node-outpaint-size-input"]').setValue('abc')
+    await wrapper.get('[data-testid="node-outpaint-size-apply"]').trigger('click')
+    expect(wrapper.get('[data-testid="node-outpaint-size-hint"]').text()).toBe('格式：宽x高，如 1024x768')
     wrapper.unmount()
   })
 })

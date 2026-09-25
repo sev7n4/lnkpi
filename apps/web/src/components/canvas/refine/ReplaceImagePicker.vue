@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { assetsApi, type UserAssetItem } from '@/services/assets-api'
@@ -10,6 +10,8 @@ import { sameOriginApiMediaUrl } from '@/services/media-url'
  * 「+」入口 → 本地上传（persistMediaUrl 落库）或从资产库选一张图，
  * 作为该编辑项的替换对象参考图（生成时随 image/edit 传给模型做对象替换）。
  * 已选时显示小缩略，可 x 移除。
+ * 弹层 Teleport 到 body（fixed，2026-09-25 用户反馈遮挡修复）：不受侧栏滚动容器 /
+ * 浮层层叠裁剪；资产库网格全量加载、内部滚动（此前 slice 12 张不可滚，用户反馈）。
  */
 defineProps<{
   modelValue?: string | null
@@ -21,8 +23,34 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
+const popRef = ref<HTMLElement | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const uploading = ref(false)
+/** 弹层 fixed 定位（屏幕坐标）；below = 向下弹 */
+const popPos = ref<{ left: number; top: number; below: boolean } | null>(null)
+
+function placePop() {
+  const el = rootRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  const W = 216
+  const H = 300
+  const below = r.bottom + 8 + H <= window.innerHeight || r.top - 8 - H < 0
+  popPos.value = {
+    left: Math.min(Math.max(8, r.right - W), window.innerWidth - W - 8),
+    top: below ? r.bottom + 6 : Math.max(8, r.top - 6 - H),
+    below,
+  }
+}
+
+async function toggleOpen() {
+  open.value = !open.value
+  if (open.value) {
+    await nextTick()
+    placePop()
+    void loadAssets()
+  }
+}
 
 // —— 资产库（我的图片） ——
 const assets = ref<UserAssetItem[]>([])
@@ -47,13 +75,11 @@ watch(open, (v) => {
   if (v) void loadAssets()
 })
 
-function toggleOpen() {
-  open.value = !open.value
-}
-
 function onOutsidePointerDown(e: PointerEvent) {
   if (!open.value) return
-  if (rootRef.value && e.target instanceof Node && rootRef.value.contains(e.target)) return
+  const t = e.target as Node
+  if (rootRef.value && rootRef.value.contains(t)) return
+  if (popRef.value && popRef.value.contains(t)) return
   open.value = false
 }
 onMounted(() => window.addEventListener('pointerdown', onOutsidePointerDown, true))
@@ -138,29 +164,40 @@ function thumbUrl(url: string): string {
 
     <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange">
 
-    <!-- 弹层：本地上传 / 资产库 -->
-    <div v-if="open" class="rip__pop" data-testid="rip-pop" @pointerdown.stop @click.stop>
-      <button type="button" class="rip__pop-item" data-testid="rip-local" @click="pickLocal">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M12 16V4m0 0-4 4m4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
-        </svg>
-        上传本地图片
-      </button>
-      <div class="rip__pop-label">{{ assetsLoading ? '资产库加载中…' : '从资产库选择' }}</div>
-      <div class="rip__pop-grid">
-        <button
-          v-for="a in assets.slice(0, 12)"
-          :key="a.id"
-          type="button"
-          class="rip__pop-cell"
-          :title="a.label || '资产图片'"
-          @click="pickAsset(a)"
-        >
-          <img :src="thumbUrl(a.url)" :alt="a.label || '资产图片'" loading="lazy">
+    <!-- 弹层：本地上传 / 资产库（Teleport 到 body，全量资产可滚动） -->
+    <Teleport to="body">
+      <div
+        v-if="open && popPos"
+        ref="popRef"
+        class="rip__pop"
+        :class="{ 'is-above': !popPos.below }"
+        :style="{ left: `${popPos.left}px`, top: `${popPos.top}px` }"
+        data-testid="rip-pop"
+        @pointerdown.stop
+        @click.stop
+      >
+        <button type="button" class="rip__pop-item" data-testid="rip-local" @click="pickLocal">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 16V4m0 0-4 4m4-4 4 4" /><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+          </svg>
+          上传本地图片
         </button>
+        <div class="rip__pop-label">{{ assetsLoading ? '资产库加载中…' : '从资产库选择' }}</div>
+        <div class="rip__pop-grid">
+          <button
+            v-for="a in assets"
+            :key="a.id"
+            type="button"
+            class="rip__pop-cell"
+            :title="a.label || '资产图片'"
+            @click="pickAsset(a)"
+          >
+            <img :src="thumbUrl(a.url)" :alt="a.label || '资产图片'" loading="lazy">
+          </button>
+        </div>
+        <p v-if="!assetsLoading && !assets.length" class="rip__pop-empty">资产库暂无图片</p>
       </div>
-      <p v-if="!assetsLoading && !assets.length" class="rip__pop-empty">资产库暂无图片</p>
-    </div>
+    </Teleport>
   </span>
 </template>
 
@@ -227,11 +264,9 @@ function thumbUrl(url: string): string {
 }
 
 .rip__pop {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
-  z-index: 30;
-  width: 196px;
+  position: fixed;
+  z-index: 4000;
+  width: 216px;
   padding: 8px;
   border-radius: 10px;
   background: var(--neo-hi, #1c1c1e);
@@ -261,8 +296,9 @@ function thumbUrl(url: string): string {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
-  max-height: 128px;
+  max-height: 220px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .rip__pop-cell {
   aspect-ratio: 1;

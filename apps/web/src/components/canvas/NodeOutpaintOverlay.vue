@@ -8,11 +8,14 @@ import {
   floorOutpaintRect,
   hasOutpaintExtension,
   initialOutpaintRect,
+  parseSizeInput,
+  resizeOutpaintAbsolute,
   resizeOutpaintRect,
   type HandleDir,
   type OutpaintRect,
   type Size,
 } from './refine/outpaintGeometry'
+import { CANVAS_TOOL_CREDITS } from '@lnkpi/shared'
 
 /**
  * 节点直出扩图（轻量复刻竞品，2026-09-24 用户拍板）：
@@ -130,6 +133,27 @@ function applyAspect(id: string) {
   if (opt.ratio === undefined) return // 自定义：保留当前框
   // null（原图比例）= 重置回原图；其余 = 包含原图的最小该比例画布
   rect.value = fitRectToAspect(b, opt.ratio)
+}
+
+// —— 目标尺寸输入（2026-09-25：扩图支持填写目标尺寸如 1024x768） ——
+const sizeDraft = ref('')
+const sizeHint = ref('')
+
+function applyTargetSize() {
+  const b = base.value
+  const parsed = parseSizeInput(sizeDraft.value)
+  if (!b) return
+  if (!parsed) {
+    sizeHint.value = '格式：宽x高，如 1024x768'
+    return
+  }
+  rect.value = resizeOutpaintAbsolute(b, parsed.width, parsed.height)
+  aspect.value = 'custom'
+  const applied = rect.value!
+  sizeHint.value =
+    applied.width === parsed.width && applied.height === parsed.height
+      ? `已按 ${parsed.width}×${parsed.height} 设置画布`
+      : `目标尺寸超出限制，已按 ${applied.width}×${applied.height} 设置`
 }
 
 async function loadNatural() {
@@ -338,6 +362,25 @@ onUnmounted(() => {
                 :data-aspect="opt.id"
                 @click="applyAspect(opt.id)"
               >{{ opt.label }}</button>
+              <div class="node-outpaint-menu__size" @pointerdown.stop>
+                <span>目标尺寸</span>
+                <input
+                  v-model="sizeDraft"
+                  type="text"
+                  class="node-outpaint-menu__size-input"
+                  placeholder="1024x768"
+                  data-testid="node-outpaint-size-input"
+                  aria-label="扩图目标尺寸，如 1024x768"
+                  @keydown.enter.prevent="applyTargetSize"
+                >
+                <button
+                  type="button"
+                  class="node-outpaint-menu__size-apply"
+                  data-testid="node-outpaint-size-apply"
+                  @click="applyTargetSize"
+                >应用</button>
+              </div>
+              <p v-if="sizeHint" class="node-outpaint-menu__size-hint" data-testid="node-outpaint-size-hint">{{ sizeHint }}</p>
             </div>
           </div>
           <button
@@ -345,9 +388,9 @@ onUnmounted(() => {
             class="node-outpaint-card__primary"
             data-testid="node-outpaint-confirm"
             :disabled="!canConfirm"
-            :title="canConfirm ? '生成扩图（下游新节点）' : '先拖动手柄向外扩展画布'"
+            :title="canConfirm ? `生成扩图（消耗 ${CANVAS_TOOL_CREDITS.outpaint} 积分）` : '先拖动手柄向外扩展画布'"
             @click="onConfirm"
-          >{{ busy ? '扩图中…' : '确认' }}</button>
+          >{{ busy ? '扩图中…' : `确认 · ⚡${CANVAS_TOOL_CREDITS.outpaint}积分` }}</button>
         </div>
       </div>
     </div>
@@ -502,5 +545,46 @@ onUnmounted(() => {
 }
 .node-outpaint-menu__item.is-on {
   color: var(--neo-accent-text, #a89dff);
+}
+
+/* 目标尺寸输入行 */
+.node-outpaint-menu__size {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 4px 6px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--neo-text) 12%, transparent);
+  font-size: 10.5px;
+  color: var(--neo-text-muted);
+  white-space: nowrap;
+}
+.node-outpaint-menu__size-input {
+  width: 76px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neo-text);
+  font-size: 11px;
+}
+.node-outpaint-menu__size-input:focus {
+  outline: 1px solid color-mix(in srgb, var(--neo-text) 32%, transparent);
+}
+.node-outpaint-menu__size-apply {
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neo-text);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.node-outpaint-menu__size-apply:hover { background: color-mix(in srgb, var(--neo-text) 8%, transparent); }
+.node-outpaint-menu__size-hint {
+  margin: 0;
+  padding: 0 6px 2px;
+  font-size: 10px;
+  color: var(--neo-text-muted);
 }
 </style>

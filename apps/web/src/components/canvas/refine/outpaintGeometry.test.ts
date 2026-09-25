@@ -9,6 +9,7 @@ import {
   hasOutpaintExtension,
   initialOutpaintRect,
   outpaintExtensionAmounts,
+  parseSizeInput,
   resizeOutpaintAbsolute,
   resizeOutpaintRect,
   type HandleDir,
@@ -398,5 +399,23 @@ describe('resizeOutpaintRect bounds（视口钳制）', () => {
       'e',
     )
     expect(out.width).toBe(600)
+  })
+})
+
+describe('parseSizeInput（目标尺寸输入解析）', () => {
+  it('接受 x / × / * 与空格，不区分大小写', () => {
+    expect(parseSizeInput('1024x768')).toEqual({ width: 1024, height: 768 })
+    expect(parseSizeInput('1024 X 768')).toEqual({ width: 1024, height: 768 })
+    expect(parseSizeInput('1024×768')).toEqual({ width: 1024, height: 768 })
+    expect(parseSizeInput('1024*768')).toEqual({ width: 1024, height: 768 })
+  })
+
+  it('非法输入返回 null', () => {
+    expect(parseSizeInput('1024')).toBeNull()
+    expect(parseSizeInput('1024x')).toBeNull()
+    expect(parseSizeInput('0x100')).toBeNull()
+    expect(parseSizeInput('-5x100')).toBeNull()
+    expect(parseSizeInput('abc')).toBeNull()
+    expect(parseSizeInput('')).toBeNull()
   })
 })

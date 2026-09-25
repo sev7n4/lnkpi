@@ -14,6 +14,7 @@ import {
   type ElementEditShape,
 } from './elementEditModel'
 import ElementChipRow from './refine/ElementChipRow.vue'
+import RectHandleFrame from './RectHandleFrame.vue'
 import { CANVAS_GENERATE_CREDITS } from '@lnkpi/shared'
 
 /**
@@ -198,6 +199,12 @@ function onStagePointerDown(event: PointerEvent) {
   if (!pt) return
   event.stopPropagation()
   const p = clampPoint(pt)
+  // 命中已有矩形芯片：选中它（8 手柄调整 / 拖动），不落新选区
+  const hit = hitRectItem(p)
+  if (hit) {
+    highlightedId.value = hit.id
+    return
+  }
   if (tool.value === 'point') {
     void recognizeAt(p)
     return
@@ -210,6 +217,38 @@ function onStagePointerDown(event: PointerEvent) {
   }
   window.addEventListener('pointermove', onStagePointerMove)
   window.addEventListener('pointerup', onStagePointerUp)
+}
+
+/** 命中检测：点落在某个矩形芯片内 → 返回该项（后画的在上，倒序优先） */
+function hitRectItem(p: { x: number; y: number }): ElementEditItem | null {
+  for (let i = items.value.length - 1; i >= 0; i -= 1) {
+    const it = items.value[i]!
+    if (it.shape.kind !== 'rect' || it.recognizing) continue
+    const r = it.shape.rect
+    if (r.width > 2 && r.height > 2 && p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height) {
+      return it
+    }
+  }
+  return null
+}
+
+/** 选中（高亮）中的矩形芯片：8 手柄调整 / 拖动 */
+const selectedRectItem = computed(() => {
+  const it = items.value.find((i) => i.id === highlightedId.value)
+  if (!it || it.shape.kind !== 'rect' || it.recognizing) return null
+  return it
+})
+
+/** 手柄拖拽中更新矩形（display 坐标），松手刷新缩略图 */
+function onSelectedRectUpdate(rect: CropRect) {
+  const it = selectedRectItem.value
+  if (!it || it.shape.kind !== 'rect') return
+  it.shape.rect = rect
+}
+
+function onSelectedRectDragEnd() {
+  const it = selectedRectItem.value
+  if (it) refreshThumb(it)
 }
 
 function onStagePointerMove(event: PointerEvent) {
@@ -435,6 +474,15 @@ onUnmounted(() => {
             />
           </svg>
         </template>
+        <!-- 选中矩形芯片：8 手柄（边+顶点）调整 + 拖动（2026-09-25 统一能力） -->
+        <RectHandleFrame
+          v-if="selectedRectItem && selectedRectItem.shape.kind === 'rect'"
+          :rect="selectedRectItem.shape.rect"
+          :bounds="{ w: box.w, h: box.h }"
+          :scale="viewport.zoom"
+          @update:rect="onSelectedRectUpdate"
+          @drag-end="onSelectedRectDragEnd"
+        />
         <!-- 拖拽中矩形 / 笔画 -->
         <div
           v-if="drawingRect"

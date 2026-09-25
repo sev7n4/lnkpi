@@ -3497,7 +3497,7 @@ async function handleNodeAnnotateConfirm(payload: { ops: AnnotateShape[] }) {
  * 节点直出局部重绘确认：蒙版 canvas → exportMaskPng → persist →
  * image/edit mode:'edit'（size 'auto'，单次一张）→ 下游新节点。
  */
-async function handleNodeInpaintConfirm(payload: { prompt: string; maskCanvas: HTMLCanvasElement }) {
+async function handleNodeInpaintConfirm(payload: { prompt: string; maskCanvas: HTMLCanvasElement; refUrls?: string[] }) {
   const node = nodeInpaintNode.value
   if (!node || nodeInpaintBusy.value) return
   const imageUrl = nodeInpaintUrl.value
@@ -3523,6 +3523,7 @@ async function handleNodeInpaintConfirm(payload: { prompt: string; maskCanvas: H
         model: P1_IMAGE_EDIT_MODEL_KEY,
         size: 'auto',
         mode: 'inpaint',
+        referenceImageUrls: payload.refUrls?.length ? payload.refUrls : undefined,
         nodeId: node.id,
       },
     )

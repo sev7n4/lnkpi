@@ -32,9 +32,30 @@ const emit = defineEmits<{
 
 const modifyOpen = ref(false)
 const previewOpen = ref(false)
+/** hover 预览浮层的屏幕坐标（Teleport 到 body 的 fixed 定位：不受滚动容器裁剪/遮挡） */
+const previewPos = ref<{ left: number; top: number; above: boolean } | null>(null)
 
 function thumbSrc(): string {
   return props.item.thumb ?? ''
+}
+
+function openPreview(e: MouseEvent) {
+  const el = e.currentTarget as HTMLElement | null
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  const W = 176
+  const H = 200
+  const above = r.bottom + 8 + H > window.innerHeight
+  previewPos.value = {
+    left: Math.min(Math.max(8, r.left), window.innerWidth - W - 8),
+    top: above ? r.top - 8 : r.bottom + 8,
+    above,
+  }
+  previewOpen.value = true
+}
+
+function closePreview() {
+  previewOpen.value = false
 }
 </script>
 
@@ -42,8 +63,8 @@ function thumbSrc(): string {
   <div class="ecr" :class="{ 'is-hl': highlighted, 'is-busy': item.recognizing }" :data-testid="`ecr-${item.id}`">
     <span
       class="ecr__thumbwrap"
-      @mouseenter="previewOpen = true"
-      @mouseleave="previewOpen = false"
+      @mouseenter="openPreview"
+      @mouseleave="closePreview"
     >
       <span
         v-if="item.thumb"
@@ -51,11 +72,20 @@ function thumbSrc(): string {
         :style="{ backgroundImage: `url(${thumbSrc()})` }"
       />
       <span v-else class="ecr__thumb ecr__thumb--empty" />
-      <!-- hover 放大预览 -->
-      <span v-if="previewOpen && item.thumb" class="ecr__preview" data-testid="ecr-preview">
+    </span>
+
+    <!-- hover 放大预览：Teleport 到 body（fixed），不被侧栏滚动容器 / 浮层层级遮挡 -->
+    <Teleport to="body">
+      <span
+        v-if="previewOpen && item.thumb && previewPos"
+        class="ecr__preview"
+        :class="{ 'is-above': previewPos.above }"
+        :style="{ left: `${previewPos.left}px`, top: `${previewPos.top}px` }"
+        data-testid="ecr-preview"
+      >
         <img :src="thumbSrc()" alt="选区预览">
       </span>
-    </span>
+    </Teleport>
 
     <input
       :value="item.name"
@@ -144,17 +174,18 @@ function thumbSrc(): string {
   background-size: 8px 8px;
 }
 .ecr__preview {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: 40;
-  width: 168px;
+  position: fixed;
+  z-index: 4000;
+  width: 176px;
   padding: 4px;
   border-radius: 8px;
   background: var(--neo-hi, #1c1c1e);
   border: 1px solid color-mix(in srgb, var(--neo-text) 14%, transparent);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   pointer-events: none;
+}
+.ecr__preview.is-above {
+  transform: translateY(-100%);
 }
 .ecr__preview img {
   display: block;

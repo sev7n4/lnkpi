@@ -72,6 +72,30 @@ export function combineElementEditPrompt(
     .join('；')
 }
 
+/**
+ * 快捷重绘 prompt 组合：全局描述 + 各芯片「区域名 修改内容」以「；」连接；
+ * 带替换图的芯片追加对象替换语义（与 combineElementEditPrompt 同款）。
+ */
+export function combineInpaintPrompt(
+  globalPrompt: string,
+  items: { name: string; modify: string; refUrl?: string | null }[],
+): string {
+  const segs: string[] = []
+  const g = globalPrompt.trim()
+  if (g) segs.push(g)
+  for (const it of items) {
+    const m = it.modify.trim()
+    if (!m) continue
+    const seg = `${it.name.trim() || '选区'} ${m}`.trim()
+    if (it.refUrl) {
+      segs.push(`${seg}（把该区域替换为参考图中的对象，保持与原图一致的光照、透视与色调，自然融入）`)
+    } else {
+      segs.push(seg)
+    }
+  }
+  return segs.filter((seg, i, arr) => arr.indexOf(seg) === i).join('；')
+}
+
 /** 简单递增 id（同帧多项不冲突即可；无需 uuid） */
 let elementEditSeq = 0
 export function nextElementEditId(): string {

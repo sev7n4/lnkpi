@@ -45,7 +45,8 @@ export function resolveBarPlacement(barBox: Box, viewportBox: Box): 'top' | 'bot
 export function buildSelectionTools(opts: { hasUrl: boolean }): SelectionToolDef[] {
   return [
     { id: 'refine', icon: 'refine', title: '精修', label: '精修', disabled: false, group: 'ai' },
-    { id: 'matting', icon: 'matting', title: '抠图', label: '抠图', disabled: false, group: 'ai' },
+    // 一键抠图点击即执行（无二次确认），按钮自证免费（2026-09-25 积分标注原则）
+    { id: 'matting', icon: 'matting', title: '抠图（免费）', label: '抠图', disabled: false, group: 'ai' },
     { id: 'outpaint', icon: 'outpaint', title: '扩图', label: '扩图', disabled: false, group: 'ai' },
     { id: 'crop', icon: 'crop', title: '裁剪', label: '裁剪', disabled: false, group: 'ai' },
     { id: 'inpaint', icon: 'inpaint', title: '局部重绘', label: '重绘', disabled: false, group: 'ai' },

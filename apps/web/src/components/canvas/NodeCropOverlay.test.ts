@@ -150,4 +150,20 @@ describe('NodeCropOverlay', () => {
     expect(card.style.transform).toContain('translate(-50%, -100%)')
     wrapper.unmount()
   })
+
+  it('目标尺寸输入：合法值锁定自定义宽高比（触发器显示 W×H）；非法值提示格式', async () => {
+    const wrapper = await mountReady()
+    await wrapper.get('[data-testid="node-crop-aspect-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="node-crop-size-input"]').setValue('1024x768')
+    await wrapper.get('[data-testid="node-crop-size-apply"]').trigger('click')
+    // 应用后菜单收起，触发器 label 显示目标尺寸
+    expect(wrapper.find('[data-testid="node-crop-aspect-menu"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="node-crop-aspect-trigger"]').text()).toContain('1024×768')
+
+    await wrapper.get('[data-testid="node-crop-aspect-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="node-crop-size-input"]').setValue('abc')
+    await wrapper.get('[data-testid="node-crop-size-apply"]').trigger('click')
+    expect(wrapper.get('[data-testid="node-crop-size-hint"]').text()).toBe('格式：宽x高，如 1024x768')
+    wrapper.unmount()
+  })
 })

@@ -20,6 +20,7 @@ import {
   clampCropRect,
   clampFineRotation,
   fitCropRect,
+  fitCropRectWithRatio,
   normalizeCropRotation,
   type CropAspectId,
   type CropRect,
@@ -131,6 +132,8 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   const refineCropFine = ref(0)
   /** 裁剪比例预设。 */
   const refineCropAspect = ref<CropAspectId>('free')
+  /** 裁剪自定义比例（2026-09-25 目标尺寸输入 W×H → 宽高比）；预设拾取时清空。 */
+  const refineCropCustomRatio = ref<number | null>(null)
   /** 裁剪基准（原图自然尺寸）：进入裁剪模式时由 CropCanvas 写入。 */
   const refineCropBase = ref<Size | null>(null)
   /** 裁剪框（旋转后包围盒坐标系，原图像素）。null = 未进入裁剪或基准未就绪。 */
@@ -162,6 +165,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineCropTurns.value = 0
     refineCropFine.value = 0
     refineCropAspect.value = 'free'
+    refineCropCustomRatio.value = null
     refineCropBase.value = null
     refineCropRect.value = null
     refineSessionResults.value = []
@@ -429,6 +433,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
       refineCropTurns.value = 0
       refineCropFine.value = 0
       refineCropAspect.value = 'free'
+      refineCropCustomRatio.value = null
       refineCropBase.value = null
       refineCropRect.value = null
       // 2026-09-24 用户拍板：进选区默认矩形框（此前默认画笔）
@@ -521,11 +526,29 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
   function applyCropAspectPreset(aspect: CropAspectId) {
     if (!cropActionReady()) return
     refineCropAspect.value = aspect
+    refineCropCustomRatio.value = null
     refineCropRect.value = fitCropRect(
       refineCropBase.value!.width,
       refineCropBase.value!.height,
       refineCropRotationDeg.value,
       aspect,
+    )
+  }
+
+  /**
+   * 目标尺寸（2026-09-25：填写如 1024x768 → 锁定该宽高比）：重算适配矩形。
+   * 非法输入（非正数）不改状态。
+   */
+  function applyCropCustomRatio(width: number, height: number) {
+    if (!cropActionReady()) return
+    if (!(width > 0) || !(height > 0)) return
+    refineCropAspect.value = 'free'
+    refineCropCustomRatio.value = width / height
+    refineCropRect.value = fitCropRectWithRatio(
+      refineCropBase.value!.width,
+      refineCropBase.value!.height,
+      refineCropRotationDeg.value,
+      width / height,
     )
   }
 
@@ -600,6 +623,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     refineCropTurns,
     refineCropFine,
     refineCropAspect,
+    refineCropCustomRatio,
     refineCropBase,
     refineCropRect,
     refineCropRotationDeg,
@@ -648,6 +672,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
     setRefineCropRect,
     applyCropRotation,
     applyCropAspectPreset,
+    applyCropCustomRatio,
     previewTarget,
     openMediaPreview,
     closeMediaPreview,
