@@ -12,6 +12,7 @@ import {
   resizeDisplayCropRect,
   type NodeCropAspectId,
 } from './nodeCropModel'
+import { parseSizeInput } from './refine/outpaintGeometry'
 
 /**
  * 节点直裁覆盖层（竞品交互，2026-09-24 用户拍板）：
@@ -47,11 +48,15 @@ const menuOpen = ref(false)
 const placement = ref<'top' | 'bottom'>('top')
 const loadToken = ref(0)
 
-const currentLabel = computed(
-  () => NODE_CROP_ASPECT_OPTIONS.find((o) => o.id === aspect.value)?.label ?? '原图比例',
-)
+const currentLabel = computed(() => {
+  if (aspect.value === 'free' && customSize.value) return `${customSize.value.width}×${customSize.value.height}`
+  return NODE_CROP_ASPECT_OPTIONS.find((o) => o.id === aspect.value)?.label ?? '原图比例'
+})
+/** 目标尺寸（2026-09-25：填写如 1024x768 → 锁定该宽高比），仅自定义比例态生效 */
+const customSize = ref<{ width: number; height: number } | null>(null)
 const lockRatio = computed(() => {
   const n = natural.value
+  if (aspect.value === 'free' && customSize.value) return customSize.value.width / customSize.value.height
   return nodeCropLockRatio(aspect.value, n?.w ?? 0, n?.h ?? 0)
 })
 /** 原图未就绪（加载失败 / 尺寸无效）时禁确认 */
@@ -60,10 +65,27 @@ const canConfirm = computed(() => !props.busy && !!natural.value)
 function applyAspect(id: NodeCropAspectId) {
   aspect.value = id
   menuOpen.value = false
-  const n = natural.value
-  const ratio = nodeCropLockRatio(id, n?.w ?? 0, n?.h ?? 0)
+  if (id !== 'free') customSize.value = null
+  const ratio = lockRatio.value
   // 自由比例保留当前框；锁定比例重配为卡内最大居中框（竞品同款）
   if (ratio != null) rect.value = fitDisplayCropRect(box.value.w, box.value.h, ratio)
+}
+
+// —— 目标尺寸输入（锁定裁剪宽高比，输出即该比例） ——
+const sizeDraft = ref('')
+const sizeHint = ref('')
+
+function applyTargetSize() {
+  const parsed = parseSizeInput(sizeDraft.value)
+  if (!parsed) {
+    sizeHint.value = '格式：宽x高，如 1024x768'
+    return
+  }
+  customSize.value = parsed
+  aspect.value = 'free'
+  menuOpen.value = false
+  rect.value = fitDisplayCropRect(box.value.w, box.value.h, parsed.width / parsed.height)
+  sizeHint.value = ''
 }
 
 async function loadNatural() {
@@ -336,6 +358,25 @@ onUnmounted(() => {
                 :data-aspect="opt.id"
                 @click="applyAspect(opt.id)"
               >{{ opt.label }}</button>
+              <div class="node-crop-menu__size" @pointerdown.stop>
+                <span>目标尺寸</span>
+                <input
+                  v-model="sizeDraft"
+                  type="text"
+                  class="node-crop-menu__size-input"
+                  placeholder="1024x768"
+                  data-testid="node-crop-size-input"
+                  aria-label="裁剪目标尺寸，如 1024x768"
+                  @keydown.enter.prevent="applyTargetSize"
+                >
+                <button
+                  type="button"
+                  class="node-crop-menu__size-apply"
+                  data-testid="node-crop-size-apply"
+                  @click="applyTargetSize"
+                >应用</button>
+              </div>
+              <p v-if="sizeHint" class="node-crop-menu__size-hint" data-testid="node-crop-size-hint">{{ sizeHint }}</p>
             </div>
           </div>
           <button
@@ -345,7 +386,7 @@ onUnmounted(() => {
             :disabled="!canConfirm"
             :title="natural ? '应用裁剪（下游新节点）' : '原图加载失败，请重试'"
             @click="onConfirm"
-          >{{ busy ? '裁剪中…' : '确认' }}</button>
+          >{{ busy ? '裁剪中…' : '确认 · 免费' }}</button>
         </div>
       </div>
     </div>
@@ -503,5 +544,46 @@ onUnmounted(() => {
 }
 .node-crop-menu__item.is-on {
   color: var(--neo-accent-text, #a89dff);
+}
+
+/* 目标尺寸输入行（锁定裁剪宽高比） */
+.node-crop-menu__size {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 4px 6px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--neo-text) 12%, transparent);
+  font-size: 10.5px;
+  color: var(--neo-text-muted);
+  white-space: nowrap;
+}
+.node-crop-menu__size-input {
+  width: 76px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neo-text);
+  font-size: 11px;
+}
+.node-crop-menu__size-input:focus {
+  outline: 1px solid color-mix(in srgb, var(--neo-text) 32%, transparent);
+}
+.node-crop-menu__size-apply {
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--neo-text) 18%, transparent);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--neo-text);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.node-crop-menu__size-apply:hover { background: color-mix(in srgb, var(--neo-text) 8%, transparent); }
+.node-crop-menu__size-hint {
+  margin: 0;
+  padding: 0 6px 2px;
+  font-size: 10px;
+  color: var(--neo-text-muted);
 }
 </style>

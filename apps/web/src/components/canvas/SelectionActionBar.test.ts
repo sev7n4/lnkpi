@@ -63,20 +63,21 @@ describe('SelectionActionBar', () => {
   it('renders exactly the expected action buttons (no extra/missing)', async () => {
     const wrapper = mountBar()
     const actions = wrapper.findAll('.toolbar-action')
-    // 9 个工具按钮 + 宫格下拉入口（同 class）
-    expect(actions).toHaveLength(10)
+    // 10 个工具按钮 + 宫格下拉入口（同 class）
+    expect(actions).toHaveLength(11)
     const byId = Object.fromEntries(
       actions.filter((b) => b.attributes('data-action')).map((b) => [b.attributes('data-action'), b.text().trim()]),
     )
     expect(Object.keys(byId).sort()).toEqual([
-      'crop', 'download', 'element-edit', 'inpaint', 'matting', 'outpaint', 'refine', 'rotate', 'save-asset',
+      'annotate', 'crop', 'download', 'element-edit', 'inpaint', 'matting', 'outpaint', 'refine', 'rotate', 'save-asset',
     ])
     expect(byId['refine']).toBe('精修')
     expect(byId['matting']).toBe('抠图')
     expect(byId['outpaint']).toBe('扩图')
     expect(byId['crop']).toBe('裁剪')
     expect(byId['inpaint']).toBe('重绘')
-    expect(byId['element-edit']).toBe('元素')
+    expect(byId['element-edit']).toBe('元素编辑')
+    expect(byId['annotate']).toBe('标注')
     expect(byId['rotate']).toBe('旋转')
     expect(byId['download']).toBe('下载')
     expect(byId['save-asset']).toBe('存图')

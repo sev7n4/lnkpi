@@ -8,6 +8,7 @@ import { fillPolygonMask, isNearPolygonStart } from './maskPolygon'
 import { floodFillMask, invertMaskRgba, parseFillHex } from './maskWand'
 import { ellipseFromDrag } from './maskEllipse'
 import { shapeStyleForOp } from './maskShape'
+import RectHandleFrame from '../RectHandleFrame.vue'
 
 export type MaskTool = 'brush' | 'eraser' | 'rect' | 'ellipse' | 'wand' | 'polygon' | 'point'
 export type MaskOp = 'add' | 'subtract'
@@ -24,6 +25,8 @@ const props = withDefaults(
     color?: string
     wandTolerance?: number
     maskOp?: MaskOp
+    /** 开启后：画笔（add）笔画松手时 emit 笔画增量快照（inpaint 芯片化用）。 */
+    emitStrokes?: boolean
   }>(),
   {
     tool: 'brush',
@@ -33,6 +36,7 @@ const props = withDefaults(
     color: '#ffffff',
     wandTolerance: 24,
     maskOp: 'add',
+    emitStrokes: false,
   },
 )
 
@@ -41,6 +45,8 @@ const emit = defineEmits<{
   pointSelect: [payload: { x: number; y: number }]
   /** 撤销 / 重做栈深变化（rail 的撤销重做按钮据此置灰） */
   history: [payload: { undo: number; redo: number }]
+  /** 一次画笔（add）笔画完成（emitStrokes 开启时）；payload 为该笔画增量位图 */
+  strokeCommit: [piece: HTMLCanvasElement]
 }>()
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -58,6 +64,75 @@ let sizeToken = 0
 let imageRgba: Uint8ClampedArray | null = null
 let polygonPoints: Array<{ x: number; y: number }> = []
 const polygonPreview = ref<Array<{ x: number; y: number }> | null>(null)
+
+/**
+ * 矩形手柄调整态（2026-09-25 统一能力：矩形框选后 8 手柄调整 + 移动）：
+ * rect 工具松手后矩形保持可调——before = 落矩形前的整幅位图快照，
+ * 调整时 putImageData 还原 + fillRect 重画新矩形（加/减选语义不变）。
+ * 任何新操作（画/撤销/清空/反选/换工具）都会清掉调整态。
+ * 坐标：手柄层工作在显示 CSS 像素空间（rectCss），k = canvas 像素 / CSS 像素换算，
+ * scale = 屏幕 px / CSS px（祖先 transform，如精修视口缩放）。
+ */
+const adjust = ref<{
+  rectCss: { x: number; y: number; width: number; height: number }
+  boundsCss: { w: number; h: number }
+  k: number
+  scale: number
+  before: ImageData
+} | null>(null)
+/** 拖拽中的矩形实时值（canvas 像素坐标） */
+let liveRect: { x: number; y: number; width: number; height: number } | null = null
+
+function clearAdjust() {
+  adjust.value = null
+  liveRect = null
+}
+
+function refillAdjustRect() {
+  const canvas = canvasRef.value
+  const ctx = canvas?.getContext('2d')
+  const a = adjust.value
+  if (!canvas || !ctx || !a) return
+  ctx.putImageData(a.before, 0, 0)
+  const style = shapeStyleForOp(props.maskOp === 'subtract' ? 'subtract' : 'add', props.color)
+  ctx.globalCompositeOperation = style.composite
+  ctx.fillStyle = style.fill
+  ctx.fillRect(a.rectCss.x * a.k, a.rectCss.y * a.k, a.rectCss.width * a.k, a.rectCss.height * a.k)
+  ctx.globalCompositeOperation = 'source-over'
+  emitCoverage()
+}
+
+function onAdjustRect(rectCss: { x: number; y: number; width: number; height: number }) {
+  if (!adjust.value) return
+  adjust.value = { ...adjust.value, rectCss }
+  refillAdjustRect()
+}
+
+/** 当前笔画的增量快照层（emitStrokes 开启时与主蒙版同步绘制，松手 emit 后清空） */
+let strokeCanvas: HTMLCanvasElement | null = null
+
+function beginStrokeLayer(canvas: HTMLCanvasElement, x: number, y: number) {
+  if (!props.emitStrokes || props.maskOp === 'subtract') return
+  const layer = document.createElement('canvas')
+  layer.width = canvas.width
+  layer.height = canvas.height
+  const sctx = layer.getContext('2d')
+  if (!sctx) return
+  strokeCanvas = layer
+  applyToolStyle(sctx)
+  if (props.tool === 'rect') {
+    // 矩形芯片：layer 起始为空框，pointermove 中同步 fillRect
+    return
+  }
+  paintDot(sctx, x, y)
+}
+
+function endStrokeLayer() {
+  if (!strokeCanvas) return
+  const layer = strokeCanvas
+  strokeCanvas = null
+  emit('strokeCommit', layer)
+}
 
 /** 蒙版历史栈：每次「落笔生效」前压栈，供 rail 撤销 / 重做（follow-up 需求 #13） */
 const MASK_HISTORY_LIMIT = 30
@@ -82,6 +157,7 @@ function undoMask() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx || !maskUndoStack.length) return
+  clearAdjust()
   cancelPolygonDraft()
   maskRedoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
   ctx.putImageData(maskUndoStack.pop()!, 0, 0)
@@ -93,6 +169,7 @@ function redoMask() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx || !maskRedoStack.length) return
+  clearAdjust()
   cancelPolygonDraft()
   maskUndoStack.push(ctx.getImageData(0, 0, canvas.width, canvas.height))
   ctx.putImageData(maskRedoStack.pop()!, 0, 0)
@@ -137,6 +214,7 @@ function clearCanvas() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
+  clearAdjust()
   pushMaskHistory(ctx)
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   emitCoverage()
@@ -268,6 +346,7 @@ function invertCanvas() {
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
+  clearAdjust()
   pushMaskHistory(ctx)
   const mask = ctx.getImageData(0, 0, canvas.width, canvas.height)
   putRgba(ctx, invertMaskRgba(mask.data), canvas.width, canvas.height)
@@ -276,6 +355,7 @@ function invertCanvas() {
 
 function onPointerDown(event: PointerEvent) {
   if (!drawReady.value) return
+  clearAdjust()
   const canvas = canvasRef.value
   const ctx = canvas?.getContext('2d')
   if (!canvas || !ctx) return
@@ -321,10 +401,12 @@ function onPointerDown(event: PointerEvent) {
     pushMaskHistory(ctx)
     snapshot = ctx.getImageData(0, 0, canvas.width, canvas.height)
     rectStart = pt
+    beginStrokeLayer(canvas, pt.x, pt.y)
     return
   }
   pushMaskHistory(ctx)
   paintDot(ctx, pt.x, pt.y)
+  beginStrokeLayer(canvas, pt.x, pt.y)
 }
 
 function onDblClick(event: MouseEvent) {
@@ -358,7 +440,17 @@ function onPointerMove(event: PointerEvent) {
     if (props.tool === 'rect') {
       const x = Math.min(rectStart.x, pt.x)
       const y = Math.min(rectStart.y, pt.y)
-      ctx.fillRect(x, y, Math.abs(pt.x - rectStart.x), Math.abs(pt.y - rectStart.y))
+      liveRect = { x, y, width: Math.abs(pt.x - rectStart.x), height: Math.abs(pt.y - rectStart.y) }
+      ctx.fillRect(liveRect.x, liveRect.y, liveRect.width, liveRect.height)
+      if (strokeCanvas) {
+        // 芯片化（emitStrokes）：矩形 piece 层与主蒙版预览同步（layer 只含当前矩形）
+        const sctx = strokeCanvas.getContext('2d')
+        if (sctx) {
+          applyToolStyle(sctx)
+          sctx.clearRect(0, 0, strokeCanvas.width, strokeCanvas.height)
+          sctx.fillRect(liveRect.x, liveRect.y, liveRect.width, liveRect.height)
+        }
+      }
     } else {
       const e = ellipseFromDrag({ start: rectStart, end: pt, shiftKey: event.shiftKey })
       ctx.beginPath()
@@ -369,6 +461,13 @@ function onPointerMove(event: PointerEvent) {
   }
   applyToolStyle(ctx)
   paintStroke(ctx, lastX, lastY, pt.x, pt.y)
+  if (strokeCanvas) {
+    const sctx = strokeCanvas.getContext('2d')
+    if (sctx) {
+      applyToolStyle(sctx)
+      paintStroke(sctx, lastX, lastY, pt.x, pt.y)
+    }
+  }
   lastX = pt.x
   lastY = pt.y
 }
@@ -377,7 +476,30 @@ function onPointerUp(event: PointerEvent) {
   if (!drawing) return
   drawing = false
   rectStart = null
+  // 矩形松手 → 进入手柄调整态（保留落矩形前快照，调整时还原+重画）；
+  // 芯片化模式（emitStrokes，精修重绘）矩形直接成芯片，不进调整态
+  if (props.tool === 'rect' && !props.emitStrokes && liveRect && liveRect.width >= 4 && liveRect.height >= 4 && snapshot) {
+    const canvas = canvasRef.value
+    if (canvas) {
+      const cssWidth = canvas.clientWidth || canvas.offsetWidth
+      const cssHeight = canvas.clientHeight || canvas.offsetHeight
+      if (cssWidth > 0 && cssHeight > 0) {
+        const k = canvas.width / cssWidth
+        const boundingWidth = canvas.getBoundingClientRect().width
+        adjust.value = {
+          rectCss: { x: liveRect.x / k, y: liveRect.y / k, width: liveRect.width / k, height: liveRect.height / k },
+          boundsCss: { w: cssWidth, h: cssHeight },
+          k,
+          scale: boundingWidth > 0 ? boundingWidth / cssWidth : 1,
+          before: snapshot,
+        }
+        liveRect = null
+        snapshot = null
+      }
+    }
+  }
   snapshot = null
+  endStrokeLayer()
   try {
     canvasRef.value?.releasePointerCapture(event.pointerId)
   } catch {
@@ -394,6 +516,7 @@ watch(
   () => props.tool,
   () => {
     cancelPolygonDraft()
+    clearAdjust()
   },
 )
 
@@ -465,6 +588,18 @@ defineExpose({
         vector-effect="non-scaling-stroke"
       />
     </svg>
+    <!-- 矩形手柄调整层：rect 松手后 8 手柄（边+顶点）调整 + 移动（2026-09-25 统一能力） -->
+    <div v-if="adjust" class="mask-editor__adjust">
+      <RectHandleFrame
+        :rect="adjust.rectCss"
+        :bounds="adjust.boundsCss"
+        :scale="adjust.scale"
+        :min="4"
+        data-testid="mask-adjust-frame"
+        @update:rect="onAdjustRect"
+        @drag-end="refillAdjustRect"
+      />
+    </div>
   </div>
 </template>
 
@@ -509,6 +644,15 @@ defineExpose({
   height: 100%;
   pointer-events: none;
   opacity: 0.9;
+}
+
+.mask-editor__adjust {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mask-editor__adjust > * {
+  pointer-events: auto;
 }
 
 .mask-editor--node {

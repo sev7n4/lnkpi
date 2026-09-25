@@ -272,6 +272,11 @@ class ImageEditDto extends CanvasScopeFields {
   mode?: 'inpaint' | 'outpaint'
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  referenceImageUrls?: string[]
+
+  @IsOptional()
   @ValidateNested()
   @Type(() => ImageEditDimsDto)
   outpaintFrom?: { width: number; height: number }
@@ -308,6 +313,25 @@ class ImageSegmentDto {
 class ImageMattingDto {
   @IsString()
   imageUrl!: string
+}
+
+class ElementRecognizeDto {
+  @IsString()
+  imageUrl!: string
+
+  @IsNumber()
+  x!: number
+
+  @IsNumber()
+  y!: number
+
+  @IsOptional()
+  @IsIn([0, 1])
+  label?: 0 | 1
+
+  @IsOptional()
+  @IsString()
+  model?: string
 }
 
 class ImageSliceDto {
@@ -431,6 +455,7 @@ export class StudioController {
         model: dto.model,
         size: dto.size,
         mode: dto.mode,
+        referenceImageUrls: dto.referenceImageUrls,
         sessionId: dto.sessionId,
         nodeId: dto.nodeId,
         parentRecordId: dto.parentRecordId,
@@ -463,6 +488,23 @@ export class StudioController {
     @Body() dto: ImageMattingDto,
   ) {
     const data = await this.studioService.mattingImage(req.user.sub, { imageUrl: dto.imageUrl })
+    return { code: 0, message: 'ok', data }
+  }
+
+  /** 元素编辑焦点识别：点选 → SAM 分割对象蒙版 + 识图命名（元素编辑链路专用）。 */
+  @Post('element-recognize')
+  @UseGuards(AuthGuard)
+  async elementRecognize(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ElementRecognizeDto,
+  ) {
+    const data = await this.studioService.elementRecognize(req.user.sub, {
+      imageUrl: dto.imageUrl,
+      x: dto.x,
+      y: dto.y,
+      label: dto.label,
+      model: dto.model,
+    })
     return { code: 0, message: 'ok', data }
   }
 

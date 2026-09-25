@@ -287,6 +287,12 @@ function toggleCollapsed() {
 }
 
 async function onPointSelect({ x, y }: { x: number; y: number }) {
+  // 元素编辑模式：本组件的 handler 是单槽持有者（父 mounted 晚于子面板会覆盖其注册），
+  // 焦点点选在此转发给元素编辑识别（2026-09-25 修复精修入口焦点识别失效）。
+  if (editor.refineMode === 'element') {
+    void editor.recognizeElementAtPoint({ x, y })
+    return
+  }
   if (busy.value || segmentBusy.value) return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
@@ -362,8 +368,18 @@ async function runRefine() {
       return
     }
   }
+  // inpaint 芯片化（2026-09-25）：有芯片时生成蒙版 = 芯片碎片合并（与芯片条删除/替换图语义一致）
+  let chipMask: HTMLCanvasElement | null = null
+  let chipRefs: string[] = []
+  if (editor.refineMode === 'inpaint' && editor.refineElementItems.length > 0) {
+    chipMask = editor.refineElementMaskCanvas
+    if (!chipMask) return
+    chipRefs = editor.refineElementItems
+      .map((it) => it.refUrl?.trim())
+      .filter((u): u is string => !!u)
+  }
   const mask = editor.getRefineMask()
-  const canvas = mask?.getCanvas()
+  const canvas = (chipMask ?? mask?.getCanvas()) as HTMLCanvasElement | null
   if (!mask || !canvas) return
 
   errorMessage.value = ''
@@ -373,7 +389,9 @@ async function runRefine() {
   busy.value = true
 
   try {
-    const blob = await (mask.exportPng?.() ?? exportMaskPng(canvas))
+    const blob = chipMask
+      ? await exportMaskPng(canvas)
+      : await (mask.exportPng?.() ?? exportMaskPng(canvas))
     const file = new File([blob], 'mask.png', { type: 'image/png' })
     const fallbackUrl = URL.createObjectURL(file)
     let maskUrl: string
@@ -393,6 +411,7 @@ async function runRefine() {
         model: modelKey.value,
         size: sizeOverride.value,
         mode: dockMode.value,
+        referenceImageUrls: chipRefs.length ? chipRefs : undefined,
         sessionId: props.sessionId,
         nodeId: props.nodeId,
         parentRecordId: props.generationRecordId,
@@ -402,6 +421,7 @@ async function runRefine() {
     const url = data.data.url
     if (url) {
       editor.pushRefineSessionResult({ url, recordId: data.data.id, prompt: prompt.value || '精修' })
+      if (chipMask) editor.clearRefineElementItems()
     }
   } catch (err) {
     const message = formatError(err, '精修失败，请重试')
@@ -461,20 +481,24 @@ async function runMattingAuto() {
   }
 }
 
+/** 元素编辑面板 busy 上抛：与精修全局 busy 同步（生成中锁 rail/画布切换）。 */
+function onElementPanelBusy(value: boolean) {
+  editor.setRefineBusy(value)
+  busy.value = value
+}
+
 /**
  * 选区抠图（matting-mask）：本地用当前蒙版 + 原图合成透明 PNG，不依赖 rembg。
  * mask 取本地 canvas（与 onPointSelect 同源），转 RGBA 后 compositeMattingPng → persist → 入会话。
+ * 2026-09-25 修正：无选区时不再跳「选区」面板（matting 模式下蒙版画布本就可用，
+ * 跳转造成「只选区不抠图」的流程断点）——就地提示先在图上直接涂抹/框选。
  */
 async function runMattingMask() {
   if (editor.refineMode !== 'matting') return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
-  // 无选区守卫（2026-09-24 流程拍板）：点「选区抠图」无选区 → 跳「选区」面板（默认矩形）圈选，
-  // 置引导标记让选区面板出现「返回抠图」CTA；回到抠图面板再点「选区抠图」执行。
   if (!canvas || editor.refineCoverage <= 0) {
-    ElMessage.info('还没有选区：已切到「选区」面板（默认矩形），圈选后回到「抠图」点「选区抠图」执行')
-    editor.setRefineMattingReturnPending(true)
-    editor.setRefineMode('select')
+    ElMessage.info('还没有选区：直接在图上涂抹或框选（左侧 rail 可换矩形/画笔），再点「选区抠图」')
     return
   }
   const ctx = canvas.getContext('2d')
@@ -497,6 +521,7 @@ async function runMattingMask() {
     }
     if (url !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
     editor.pushRefineSessionResult({ url, prompt: '选区抠图' })
+    ElMessage.success('选区抠图完成，已加入下方会话胶片条，点「应用到画布」即生效')
   } catch (err) {
     const message = formatError(err, '选区抠图失败，请重试')
     if (message) ElMessage.error(message)
@@ -670,6 +695,7 @@ onBeforeUnmount(() => {
             @run-auto="runMattingAuto"
             @run-mask="runMattingMask"
             @apply="onApply"
+            @busy="onElementPanelBusy"
           />
         </div>
         <!-- 选区引导回程 CTA（2026-09-24 用户反馈：被引导来圈选后找不到回去的入口） -->

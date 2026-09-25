@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 
 /**
  * 精修（matting）模式的右栏面板（注册表 refine-matting 的 panel）。
@@ -27,10 +28,10 @@ const emit = defineEmits<{
 
 const runAutoDisabled = computed(() => props.busy || props.mattingUnavailable)
 const runAutoTitle = computed(() => (props.mattingUnavailable ? '抠图服务未启用' : '一键抠图'))
-/** 无选区时保持可点（点击后由父级引导去圈选），只挡 busy；title 说明原因。 */
+/** 无选区时保持可点（点击后就地提示先在图上圈选），只挡 busy；title 说明原因。 */
 const runMaskDisabled = computed(() => props.busy)
 const runMaskTitle = computed(() =>
-  props.maskAvailable ? '按当前选区抠图，生成透明 PNG' : '还没有选区：点击后将先跳到「选区」面板圈选（默认矩形），选好回到本面板执行',
+  props.maskAvailable ? '按当前选区抠图，生成透明 PNG' : '还没有选区：直接在图上涂抹或框选（左侧 rail 可换工具），再点本按钮执行',
 )
 const applyDisabled = computed(() => props.busy || !props.canApply)
 </script>
@@ -42,29 +43,33 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
     </div>
 
     <div class="matting-actions">
-      <!-- 无选区时的常驻引导（用户反馈 2026-09-23：默认不知道要先圈选；2026-09-24 流程改为「选区抠图」按钮引导） -->
+      <!-- 无选区时的常驻引导（2026-09-25 修正：抠图模式下可直接在图上圈选，不再跳选区面板） -->
       <p v-if="!maskAvailable" class="matting-actions__hint" data-testid="matting-mask-hint">
-        还没有选区 — 点「选区抠图」先去圈选（默认矩形），或直接「一键抠图」
+        还没有选区 — 直接在图上涂抹或框选，然后点「选区抠图」；或用「一键抠图」全图自动抠
       </p>
 
-      <button
-        type="button"
-        class="matting-actions__btn matting-actions__primary"
-        data-testid="matting-run-auto"
-        :disabled="runAutoDisabled"
-        :title="runAutoTitle"
-        aria-label="一键抠图"
-        @click="emit('run-auto')"
-      >一键抠图</button>
+      <div class="matting-actions__row">
+        <button
+          type="button"
+          class="matting-actions__btn matting-actions__primary"
+          data-testid="matting-run-auto"
+          :disabled="runAutoDisabled"
+          :title="runAutoTitle"
+          aria-label="一键抠图"
+          @click="emit('run-auto')"
+        >一键抠图</button>
 
-      <button
-        type="button"
-        class="matting-actions__btn"
-        data-testid="matting-run-mask"
-        :disabled="runMaskDisabled"
-        :title="runMaskTitle"
-        @click="emit('run-mask')"
-      >选区抠图</button>
+        <button
+          type="button"
+          class="matting-actions__btn"
+          data-testid="matting-run-mask"
+          :disabled="runMaskDisabled"
+          :title="runMaskTitle"
+          @click="emit('run-mask')"
+        >选区抠图</button>
+
+        <DockCreditBadge :credits="0" />
+      </div>
 
       <button
         type="button"
@@ -105,6 +110,7 @@ const applyDisabled = computed(() => props.busy || !props.canApply)
 }
 
 .matting-actions { display: flex; flex-direction: column; gap: 8px; }
+.matting-actions__row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .matting-actions__hint {
   margin: 0;
   padding: 6px 8px;

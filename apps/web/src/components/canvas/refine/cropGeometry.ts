@@ -106,7 +106,21 @@ export function fitCropRect(
   const inscribed = largestUprightRect(imgWidth, imgHeight, thetaDeg)
   if (aspect === 'free') return inscribed
   const ratio = CROP_ASPECT_RATIOS[aspect]
-  const ratioValue = ratio.w / ratio.h
+  return fitCropRectWithRatio(imgWidth, imgHeight, thetaDeg, ratio.w / ratio.h)
+}
+
+/**
+ * 自定义宽高比适配（2026-09-25 目标尺寸输入：W×H → 比例）：
+ * fitCropRect 的比例参数化版本，非 free 预设内部也走这里。
+ */
+export function fitCropRectWithRatio(
+  imgWidth: number,
+  imgHeight: number,
+  thetaDeg: number,
+  ratioValue: number,
+): CropRect {
+  const inscribed = largestUprightRect(imgWidth, imgHeight, thetaDeg)
+  if (!(ratioValue > 0) || !Number.isFinite(ratioValue)) return inscribed
   // 内接矩形里装下最大比例矩形：按短约束缩放
   let w = inscribed.width
   let h = w / ratioValue

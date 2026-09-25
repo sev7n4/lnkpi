@@ -3,9 +3,9 @@ import type { CropRect } from './refine/cropGeometry'
 /**
  * 元素编辑（多选区局部编辑，复刻竞品 2026-09-25）纯函数模型，web 本地、无框架依赖。
  *
- * 一条编辑项 = 一个选区形状（矩形或一笔画笔笔画序列，display 节点坐标）+
- * 元素名 + 改动描述。生成时全部项合并为一张整图蒙版（白色 = 编辑区）+
- * combined prompt（「元素名 描述」以「；」连接），走 image/edit mode:'inpaint' 单次生成。
+ * 一条编辑项 = 一个选区形状（矩形 / 焦点点位默认框 / 画笔笔画，display 节点坐标）+
+ * 识别对象名 + 修改内容。生成时全部项合并为一张整图蒙版（白色 = 编辑区）+
+ * combined prompt（「对象名 修改内容」以「；」连接），走 image/edit mode:'inpaint' 单次生成。
  */
 
 /** 笔画：一次按住拖出的完整折线（display 坐标点列 + 笔刷显示直径） */
@@ -20,23 +20,80 @@ export type ElementEditShape =
 
 export interface ElementEditItem {
   id: string
+  /** 识别出的对象名（焦点点击自动识别；框选/画笔默认「选区」），芯片上可二次编辑 */
   name: string
-  desc: string
+  /** 想要的修改内容（芯片条【修改】输入） */
+  modify: string
   shape: ElementEditShape
+  /** 焦点识别进行中（芯片条转圈，生成禁用） */
+  recognizing?: boolean
+  /** 选区缩略图（原图裁剪 dataURL） */
+  thumb?: string
+  /** 替换图（本地/资产库）：生成时作为参考图传给模型做对象替换 */
+  refUrl?: string | null
 }
 
-/** 元素名预置下拉（竞品同款：常用部位快选；可自由输入） */
-export const ELEMENT_EDIT_NAME_OPTIONS = [
-  '眼睛', '鼻子', '耳朵', '嘴巴', '头发', '表情', '服装', '配饰', '背景', '其他',
-] as const
+/**
+ * 焦点选择（point）点击处的默认选区框（display 坐标）：
+ * 以点击点为中心、边长 = 节点短边 18%（下限 48、上限 140）。识别成功后会被 bbox 覆写。
+ */
+export function pointRectAt(
+  p: { x: number; y: number },
+  boxW: number,
+  boxH: number,
+): CropRect {
+  const side = Math.min(140, Math.max(48, Math.min(boxW, boxH) * 0.18))
+  return {
+    x: Math.max(0, Math.min(boxW - side, p.x - side / 2)),
+    y: Math.max(0, Math.min(boxH - side, p.y - side / 2)),
+    width: side,
+    height: side,
+  }
+}
 
-/** combined prompt：「眼睛 换成蓝色发光；鼻子 增加闭环」——空段去重后以「；」连接。 */
-export function combineElementEditPrompt(items: { name: string; desc: string }[]): string {
+/**
+ * combined prompt：「眼睛 改成蓝色发光；鼻子 增加闭环」——空段去重后以「；」连接。
+ * 带 refUrl 的项（替换图）追加对象替换语义：把该区域替换为参考图内容并自然融入原图。
+ */
+export function combineElementEditPrompt(
+  items: { name: string; modify: string; refUrl?: string | null }[],
+): string {
   return items
-    .map((it) => `${it.name.trim()} ${it.desc.trim()}`.trim())
+    .map((it) => {
+      const seg = `${it.name.trim()} ${it.modify.trim()}`.trim()
+      if (!seg) return ''
+      if (it.refUrl) {
+        return `${seg}（把该区域替换为参考图中的对象，保持与原图一致的光照、透视与色调，自然融入）`
+      }
+      return seg
+    })
     .filter((seg) => seg.length > 0)
     .filter((seg, i, arr) => arr.indexOf(seg) === i)
     .join('；')
+}
+
+/**
+ * 快捷重绘 prompt 组合：全局描述 + 各芯片「区域名 修改内容」以「；」连接；
+ * 带替换图的芯片追加对象替换语义（与 combineElementEditPrompt 同款）。
+ */
+export function combineInpaintPrompt(
+  globalPrompt: string,
+  items: { name: string; modify: string; refUrl?: string | null }[],
+): string {
+  const segs: string[] = []
+  const g = globalPrompt.trim()
+  if (g) segs.push(g)
+  for (const it of items) {
+    const m = it.modify.trim()
+    if (!m) continue
+    const seg = `${it.name.trim() || '选区'} ${m}`.trim()
+    if (it.refUrl) {
+      segs.push(`${seg}（把该区域替换为参考图中的对象，保持与原图一致的光照、透视与色调，自然融入）`)
+    } else {
+      segs.push(seg)
+    }
+  }
+  return segs.filter((seg, i, arr) => arr.indexOf(seg) === i).join('；')
 }
 
 /** 简单递增 id（同帧多项不冲突即可；无需 uuid） */

@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useCanvasEditorStore } from '@/stores/canvasEditor'
 import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { loadCropSourceImage, renderCropBlob } from './cropExport'
+import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
 import {
   CROP_FINE_MAX,
   CROP_FINE_MIN,
@@ -11,6 +12,7 @@ import {
   formatCropReadout,
   type CropAspectId,
 } from './cropGeometry'
+import { parseSizeInput } from './outpaintGeometry'
 
 /**
  * 裁剪模式右栏面板（注册表 refine-crop 的 panel）。
@@ -48,6 +50,22 @@ const ASPECT_PRESETS: { id: CropAspectId; label: string }[] = [
 function pickPreset(id: CropAspectId) {
   if (busy.value) return
   editor.applyCropAspectPreset(id)
+}
+
+// —— 目标尺寸输入（2026-09-25：填写如 1024x768 → 锁定该宽高比） ——
+const sizeDraft = ref('')
+const sizeHint = ref('')
+const isCustomRatio = computed(() => editor.refineCropAspect === 'free' && editor.refineCropCustomRatio != null)
+
+function applyTargetSize() {
+  if (busy.value) return
+  const parsed = parseSizeInput(sizeDraft.value)
+  if (!parsed) {
+    sizeHint.value = '格式：宽x高，如 1024x768'
+    return
+  }
+  editor.applyCropCustomRatio(parsed.width, parsed.height)
+  sizeHint.value = ''
 }
 
 function rotateStep(step: 1 | -1) {
@@ -122,12 +140,34 @@ const canApply = computed(() => !!editor.currentRefineSessionResult && !busy.val
           :key="preset.id"
           type="button"
           class="crop-panel__chip"
-          :class="{ 'is-on': aspect === preset.id }"
+          :class="{ 'is-on': aspect === preset.id && !isCustomRatio }"
           :data-testid="`crop-aspect-${preset.id.replace(':', '-')}`"
           :disabled="busy"
           @click="pickPreset(preset.id)"
         >{{ preset.label }}</button>
       </div>
+      <div class="crop-panel__size">
+        <span>目标尺寸</span>
+        <input
+          v-model="sizeDraft"
+          type="text"
+          class="crop-panel__size-input"
+          placeholder="1024x768"
+          data-testid="crop-size-input"
+          aria-label="裁剪目标尺寸，如 1024x768"
+          :disabled="busy"
+          @keydown.enter.prevent="applyTargetSize"
+        >
+        <button
+          type="button"
+          class="crop-panel__chip"
+          data-testid="crop-size-apply"
+          :disabled="busy"
+          @click="applyTargetSize"
+        >应用</button>
+        <b v-if="isCustomRatio" data-testid="crop-size-custom">自定义比例</b>
+      </div>
+      <p v-if="sizeHint" class="crop-panel__size-hint" data-testid="crop-size-hint">{{ sizeHint }}</p>
 
       <div class="crop-panel__label">旋转</div>
       <div class="crop-panel__row">
@@ -187,6 +227,7 @@ const canApply = computed(() => !!editor.currentRefineSessionResult && !busy.val
         :disabled="!canApply"
         @click="emit('apply')"
       >应用到画布</button>
+      <DockCreditBadge :credits="0" />
     </div>
   </section>
 </template>
@@ -203,6 +244,20 @@ const canApply = computed(() => !!editor.currentRefineSessionResult && !busy.val
 
 .crop-panel__label { color: var(--neo-text-muted); font-size: 11px; }
 .crop-panel__chips, .crop-panel__row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.crop-panel__size { display: flex; align-items: center; gap: 6px; color: var(--neo-text-muted); font-size: 11px; }
+.crop-panel__size-input {
+  width: 84px;
+  padding: 4px 8px;
+  border: 1px solid var(--neo-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--neo-text-primary);
+  font-size: 11.5px;
+}
+.crop-panel__size-input:focus { outline: 1px solid color-mix(in srgb, var(--neo-accent-text, #a89dff) 55%, var(--neo-border)); }
+.crop-panel__size b { color: var(--neo-accent-text, #a89dff); font-size: 10.5px; font-weight: 600; }
+.crop-panel__size-hint { margin: 0; color: #f56c6c; font-size: 10.5px; }
 
 .crop-panel__chip {
   padding: 5px 10px;

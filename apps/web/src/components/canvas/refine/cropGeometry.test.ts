@@ -3,6 +3,7 @@ import {
   CROP_MIN_SIZE,
   clampCropRect,
   fitCropRect,
+  fitCropRectWithRatio,
   formatCropReadout,
   largestUprightRect,
   moveCropRect,
@@ -217,5 +218,21 @@ describe('resizeCropRect', () => {
 describe('formatCropReadout', () => {
   it('整数读数', () => {
     expect(formatCropReadout({ x: 0, y: 0, width: 399.4, height: 299.6 })).toBe('399 × 300')
+  })
+})
+
+describe('fitCropRectWithRatio（目标尺寸 → 自定义比例适配）', () => {
+  it('θ=0：内接矩形里装下最大 4:3 比例矩形', () => {
+    const r = fitCropRectWithRatio(400, 300, 0, 4 / 3)
+    expect(r).toEqual({ x: 0, y: 0, width: 400, height: 300 })
+    const r2 = fitCropRectWithRatio(800, 300, 0, 4 / 3)
+    expect(r2.height).toBe(300)
+    expect(r2.width).toBe(400)
+    expect(r2.x).toBe(200)
+  })
+
+  it('非法比例回落到内接矩形', () => {
+    const r = fitCropRectWithRatio(400, 300, 0, 0)
+    expect(r).toEqual({ x: 0, y: 0, width: 400, height: 300 })
   })
 })
