@@ -76,7 +76,7 @@ describe('SelectionActionBar', () => {
     expect(byId['outpaint']).toBe('扩图')
     expect(byId['crop']).toBe('裁剪')
     expect(byId['inpaint']).toBe('重绘')
-    expect(byId['element-edit']).toBe('元素')
+    expect(byId['element-edit']).toBe('元素编辑')
     expect(byId['rotate']).toBe('旋转')
     expect(byId['download']).toBe('下载')
     expect(byId['save-asset']).toBe('存图')

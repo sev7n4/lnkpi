@@ -310,6 +310,25 @@ class ImageMattingDto {
   imageUrl!: string
 }
 
+class ElementRecognizeDto {
+  @IsString()
+  imageUrl!: string
+
+  @IsNumber()
+  x!: number
+
+  @IsNumber()
+  y!: number
+
+  @IsOptional()
+  @IsIn([0, 1])
+  label?: 0 | 1
+
+  @IsOptional()
+  @IsString()
+  model?: string
+}
+
 class ImageSliceDto {
   @IsString()
   @IsNotEmpty()
@@ -463,6 +482,23 @@ export class StudioController {
     @Body() dto: ImageMattingDto,
   ) {
     const data = await this.studioService.mattingImage(req.user.sub, { imageUrl: dto.imageUrl })
+    return { code: 0, message: 'ok', data }
+  }
+
+  /** 元素编辑焦点识别：点选 → SAM 分割对象蒙版 + 识图命名（元素编辑链路专用）。 */
+  @Post('element-recognize')
+  @UseGuards(AuthGuard)
+  async elementRecognize(
+    @Req() req: { user: { sub: string } },
+    @Body() dto: ElementRecognizeDto,
+  ) {
+    const data = await this.studioService.elementRecognize(req.user.sub, {
+      imageUrl: dto.imageUrl,
+      x: dto.x,
+      y: dto.y,
+      label: dto.label,
+      model: dto.model,
+    })
     return { code: 0, message: 'ok', data }
   }
 

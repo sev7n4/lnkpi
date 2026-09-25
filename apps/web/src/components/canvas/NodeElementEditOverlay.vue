@@ -4,23 +4,25 @@ import { useVueFlow } from '@vue-flow/core'
 import { getAbsolutePosition, getNodeSize, type FlowNode } from '@/composables/useCanvasGrouping'
 import { loadCropSourceImage } from './refine/cropExport'
 import type { CropRect } from './refine/cropGeometry'
+import { studioApi } from '@/services/studio-api'
 import {
-  ELEMENT_EDIT_NAME_OPTIONS,
+  coverDisplayMapper,
   elementEditShapeBBox,
   nextElementEditId,
+  pointRectAt,
   type ElementEditItem,
   type ElementEditShape,
 } from './elementEditModel'
 
 /**
- * 节点直出元素编辑（多选区局部编辑，复刻竞品 2026-09-25 用户需求）：
+ * 节点直出元素编辑（2026-09-25 用户需求重做版）：
  * 单击图片节点 → 浮层「元素编辑」→
- *  - 上沿工具条：[✕ 元素编辑] [📍定位] [⬚选区] [✏️画笔] [↺撤销]
- *  - 图上多选区：矩形拖框 / 画笔涂抹，每次绘制产生一个「草稿项」；
- *  - 右侧编辑卡（贴选区）：选区快照 + 元素名下拉 + 改动描述 +【添加】；
- *  - 底部「编辑内容 N处」卡：列表 + [取消] [⚡生成]。
- * 确认时上抛 { items }（display 坐标形状），宿主 paintElementEditMask 合成整图蒙版
- * → exportMaskPng → persist → image/edit mode:'inpaint' 单次生成 → 下游新节点。
+ *  - 上沿工具条：[✕ 元素编辑] [📍定位] [◎焦点] [⬚选区] [✏️画笔] [↺撤销]；
+ *  - 焦点选择（核心）：点击图上元素 → 调 /studio/element-recognize（SAM 分割 + 识图命名）
+ *    → 结果以小芯片条嵌入底部「编辑内容」卡（缩略图 + 可二次编辑对象名 + 【修改】输入）；
+ *  - 矩形/画笔：直接成芯片（名默认「选区」），同样在芯片条内补修改内容；
+ *  - 多轮点击多芯片累积，【⚡生成】一次完成多组修改 → image/edit mode:'inpaint' 下游新节点；
+ *  - 撤销：移除最后一枚芯片（识别中芯片先中断请求）。
  */
 const props = defineProps<{
   node: { id: string; type?: string | null; data?: Record<string, unknown> }
@@ -37,27 +39,26 @@ const { viewport, nodes: flowNodes, findNode } = useVueFlow()
 
 const TOOLBAR_GAP_PX = 8
 const TOOLBAR_ESTIMATED_H = 40
-const SIDE_CARD_W = 260
 
 const abs = ref<{ x: number; y: number } | null>(null)
 const box = ref<{ w: number; h: number }>({ w: 0, h: 0 })
 const natural = ref<{ w: number; h: number } | null>(null)
 const loadToken = ref(0)
 
-type Tool = 'locate' | 'rect' | 'brush'
-const tool = ref<Tool>('rect')
+type Tool = 'locate' | 'point' | 'rect' | 'brush'
+const tool = ref<Tool>('point')
 const brushSize = ref(24)
 
-/** 已确认的编辑项 */
+/** 芯片（编辑项）；recognizing 的芯片由识别请求回填 */
 const items = ref<ElementEditItem[]>([])
-/** 草稿项（画完未【添加】；右侧卡在编辑它） */
-const pending = ref<ElementEditItem | null>(null)
-const pendingName = ref(ELEMENT_EDIT_NAME_OPTIONS[0] as string)
-const pendingDesc = ref('')
 /** 当前高亮项 id（定位循环用） */
 const highlightedId = ref<string | null>(null)
+/** 修改输入展开的芯片 id */
+const modifyOpenId = ref<string | null>(null)
 /** 定位循环游标 */
 let locateCursor = -1
+/** 焦点识别请求（撤销/退出时中断） */
+let recognizeAbort: AbortController | null = null
 
 /** 矩形拖拽中 */
 const drawingRect = ref<CropRect | null>(null)
@@ -65,12 +66,12 @@ const drawingRect = ref<CropRect | null>(null)
 const liveStroke = ref<{ points: { x: number; y: number }[]; size: number } | null>(null)
 let dragStart: { x: number; y: number } | null = null
 
-const nameMenuOpen = ref(false)
 const toolbarAbove = ref(true)
-const sideCardAbove = ref(false)
 
-const canAddPending = computed(() => !!pending.value && (pendingDesc.value.trim().length > 0 || pendingName.value.trim().length > 0))
-const canGenerate = computed(() => !props.busy && items.value.length > 0)
+const canGenerate = computed(
+  () => !props.busy && items.value.length > 0 && items.value.every((it) => !it.recognizing) && items.value.some((it) => it.modify.trim().length > 0),
+)
+const undoDisabled = computed(() => props.busy || items.value.length === 0)
 
 // —— 几何 ——
 const stageStyle = computed(() => {
@@ -91,41 +92,18 @@ const toolbarStyle = computed(() => {
   }
 })
 
-/** 右侧编辑卡：贴当前草稿选区右侧（空间不足翻左侧），无草稿时贴节点右侧居中 */
-const sideCardStyle = computed(() => {
-  if (!abs.value) return { display: 'none' }
-  const zoom = viewport.value.zoom
-  const gap = 10 / zoom
-  const bbox = pending.value ? elementEditShapeBBox(pending.value.shape) : null
-  const anchorRight = bbox ? bbox.x + bbox.width : box.value.w
-  const anchorCY = bbox ? bbox.y + bbox.height / 2 : box.value.h / 2
-  const cardW = SIDE_CARD_W / zoom
-  const rightSpace = box.value.w - anchorRight
-  const flip = rightSpace < cardW + gap
-  const left = flip ? anchorRight - bboxWidth(bbox) - gap - cardW : anchorRight + gap
-  return {
-    left: `${abs.value.x + left}px`,
-    top: `${abs.value.y + Math.min(Math.max(0, anchorCY - 70 / zoom), Math.max(0, box.value.h - 150 / zoom))}px`,
-    width: `${cardW}px`,
-  }
-})
-
-function bboxWidth(bbox: CropRect | null): number {
-  return bbox?.width ?? 0
-}
-
-/** 底部「编辑内容」卡：与 prompt 卡同位规则（下沿优先，空间不足翻上沿） */
+/** 底部「编辑内容」卡（芯片条）：下沿优先，空间不足翻上沿 */
 const bottomCardStyle = computed(() => {
   if (!abs.value) return { display: 'none' }
   const gap = TOOLBAR_GAP_PX / viewport.value.zoom
   const toolbarBelowOffset = toolbarAbove.value ? 0 : (TOOLBAR_ESTIMATED_H + TOOLBAR_GAP_PX) / viewport.value.zoom
   return {
     left: `${abs.value.x + box.value.w / 2}px`,
-    top: sideCardAbove.value
-      ? `${abs.value.y - gap}px`
-      : `${abs.value.y + box.value.h + gap + toolbarBelowOffset}px`,
-    width: `${Math.max(box.value.w, 320)}px`,
-    transform: sideCardAbove.value ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+    top: toolbarAbove.value
+      ? `${abs.value.y + box.value.h + gap + toolbarBelowOffset}px`
+      : `${abs.value.y - gap}px`,
+    width: `${Math.max(box.value.w, 340)}px`,
+    transform: toolbarAbove.value ? 'translate(-50%, 0)' : 'translate(-50%, -100%)',
   }
 })
 
@@ -133,9 +111,9 @@ const counterScaleStyle = computed(() => ({
   transform: `scale(${1 / viewport.value.zoom})`,
   transformOrigin: toolbarAbove.value ? '50% 100%' : '50% 0%',
 }))
-const counterScaleStyleBelow = computed(() => ({
+const counterScaleStyleCard = computed(() => ({
   transform: `scale(${1 / viewport.value.zoom})`,
-  transformOrigin: sideCardAbove.value ? '50% 100%' : '50% 0%',
+  transformOrigin: toolbarAbove.value ? '50% 0%' : '50% 100%',
 }))
 
 async function loadNatural() {
@@ -163,13 +141,16 @@ function updateGeometry() {
   const zoom = viewport.value.zoom
   const topScreen = viewport.value.y + position.y * zoom
   const bottomScreen = topScreen + h * zoom
-  const CARD_H = 210
+  const CARD_H = 220
+  toolbarAbove.value = topScreen - TOOLBAR_GAP_PX - TOOLBAR_ESTIMATED_H > 0
   const belowAvail = window.innerHeight - 260 - bottomScreen
-  sideCardAbove.value = belowAvail < CARD_H && topScreen - TOOLBAR_GAP_PX > CARD_H * 0.6
-  toolbarAbove.value = !sideCardAbove.value && topScreen - TOOLBAR_GAP_PX - TOOLBAR_ESTIMATED_H > 0
+  if (!toolbarAbove.value && belowAvail < CARD_H) {
+    // 上沿放不下工具条、下沿也放不下卡（罕见）：工具条仍在下沿，卡翻上沿
+    toolbarAbove.value = true
+  }
 }
 
-// —— 绘制（矩形 / 笔画） ——
+// —— 绘制（焦点 / 矩形 / 笔画） ——
 
 function stagePoint(event: PointerEvent): { x: number; y: number } | null {
   const el = stageEl()
@@ -194,12 +175,33 @@ function clampPoint(p: { x: number; y: number }): { x: number; y: number } {
   }
 }
 
+/** display→pixel 逆映射（bbox 回填 display 坐标用），与 coverDisplayMapper 同一套数学 */
+function pixelToDisplayRect(bbox: { x: number; y: number; width: number; height: number }): CropRect {
+  const n = natural.value
+  if (!n) return { x: 0, y: 0, width: 0, height: 0 }
+  const scale = Math.max(box.value.w / n.w, box.value.h / n.h)
+  const offsetX = (box.value.w - n.w * scale) / 2
+  const offsetY = (box.value.h - n.h * scale) / 2
+  const x0 = bbox.x * scale + offsetX
+  const y0 = bbox.y * scale + offsetY
+  return {
+    x: Math.max(0, x0),
+    y: Math.max(0, y0),
+    width: Math.min(box.value.w - Math.max(0, x0), bbox.width * scale),
+    height: Math.min(box.value.h - Math.max(0, y0), bbox.height * scale),
+  }
+}
+
 function onStagePointerDown(event: PointerEvent) {
   if (props.busy || !natural.value) return
   const pt = stagePoint(event)
   if (!pt) return
   event.stopPropagation()
   const p = clampPoint(pt)
+  if (tool.value === 'point') {
+    void recognizeAt(p)
+    return
+  }
   if (tool.value === 'brush') {
     liveStroke.value = { points: [p], size: brushSize.value }
   } else {
@@ -233,7 +235,7 @@ function onStagePointerUp() {
   window.removeEventListener('pointerup', onStagePointerUp)
   if (tool.value === 'brush' && liveStroke.value) {
     if (liveStroke.value.points.length > 0) {
-      startPending({ kind: 'strokes', strokes: [liveStroke.value] })
+      pushChip({ kind: 'strokes', strokes: [liveStroke.value] }, '选区')
     }
     liveStroke.value = null
     return
@@ -241,63 +243,93 @@ function onStagePointerUp() {
   if (drawingRect.value && dragStart) {
     const r = drawingRect.value
     if (r.width >= 8 && r.height >= 8) {
-      startPending({ kind: 'rect', rect: r })
+      pushChip({ kind: 'rect', rect: r }, '选区')
     }
   }
   drawingRect.value = null
   dragStart = null
 }
 
-/** 画完 → 草稿项 + 右侧卡聚焦编辑 */
-function startPending(shape: ElementEditShape) {
-  pending.value = { id: nextElementEditId(), name: '', desc: '', shape }
-  pendingName.value = ELEMENT_EDIT_NAME_OPTIONS[0] as string
-  pendingDesc.value = ''
+/** 矩形/画笔完成 → 直接成芯片（名默认「选区」，芯片条内补修改内容） */
+function pushChip(shape: ElementEditShape, name: string) {
+  const item: ElementEditItem = { id: nextElementEditId(), name, modify: '', shape }
+  items.value.push(item)
+  highlightedId.value = item.id
+  refreshThumb(item)
 }
 
-function addPending() {
-  if (!pending.value || !canAddPending.value) return
+/** 焦点识别：成芯片（转圈）→ element-recognize（SAM 分割 + 识图命名）→ 回填名与精确框 */
+async function recognizeAt(p: { x: number; y: number }) {
+  const n = natural.value
+  if (!n) return
+  const mapper = coverDisplayMapper(n.w, n.h, box.value.w, box.value.h)
   const item: ElementEditItem = {
-    ...pending.value,
-    name: pendingName.value.trim() || (ELEMENT_EDIT_NAME_OPTIONS[0] as string),
-    desc: pendingDesc.value.trim(),
+    id: nextElementEditId(),
+    name: '',
+    modify: '',
+    shape: { kind: 'rect', rect: pointRectAt(p, box.value.w, box.value.h) },
+    recognizing: true,
   }
   items.value.push(item)
-  pending.value = null
-  pendingDesc.value = ''
   highlightedId.value = item.id
+  refreshThumb(item)
+  recognizeAbort?.abort()
+  recognizeAbort = new AbortController()
+  const signal = recognizeAbort.signal
+  try {
+    const { data } = await studioApi.recognizeElement(
+      {
+        imageUrl: props.url,
+        x: Math.round(mapper.toPixelX(p.x)),
+        y: Math.round(mapper.toPixelY(p.y)),
+      },
+      signal,
+    )
+    const target = items.value.find((it) => it.id === item.id)
+    if (!target) return
+    target.recognizing = false
+    target.name = data.data.name || '未识别对象'
+    const b = data.data.bbox
+    if (b && b.width > 0 && b.height > 0) {
+      target.shape = { kind: 'rect', rect: pixelToDisplayRect(b) }
+      refreshThumb(target)
+    }
+    modifyOpenId.value = target.id
+  } catch (err) {
+    if (signal.aborted) return
+    const target = items.value.find((it) => it.id === item.id)
+    if (target) {
+      target.recognizing = false
+      target.name = '未识别对象'
+    }
+    const message = err instanceof Error && err.message ? err.message : '对象识别失败，请重试或改用框选'
+    console.warn('[element-recognize]', message)
+  } finally {
+    if (recognizeAbort?.signal === signal) recognizeAbort = null
+  }
 }
 
-function removePending() {
-  pending.value = null
-}
-
-/** 撤销：优先丢弃草稿，否则移除最后一项 */
+/** 撤销：移除最后一枚芯片（识别中先中断请求） */
 function undoLast() {
-  if (pending.value) {
-    pending.value = null
-    return
+  const last = items.value[items.value.length - 1]
+  if (!last) return
+  if (last.recognizing) {
+    recognizeAbort?.abort()
+    recognizeAbort = null
   }
   items.value.pop()
+  if (highlightedId.value === last.id) highlightedId.value = null
+  if (modifyOpenId.value === last.id) modifyOpenId.value = null
 }
 
-/** 定位：循环高亮列表项（含草稿），便于确认每个选区位置 */
+/** 定位：循环高亮芯片，便于确认每个选区位置 */
 function locateNext() {
-  const all = [...items.value.map((it) => it.id), ...(pending.value ? [pending.value.id] : [])]
-  if (!all.length) return
-  locateCursor = (locateCursor + 1) % all.length
-  highlightedId.value = all[locateCursor]!
+  if (!items.value.length) return
+  locateCursor = (locateCursor + 1) % items.value.length
+  highlightedId.value = items.value[locateCursor]!.id
 }
 
-function editItem(item: ElementEditItem) {
-  // 点列表项 → 转为草稿重新编辑（从列表移除，确认后回填）
-  items.value = items.value.filter((it) => it.id !== item.id)
-  pending.value = item
-  pendingName.value = item.name || (ELEMENT_EDIT_NAME_OPTIONS[0] as string)
-  pendingDesc.value = item.desc
-}
-
-/** 选区快照缩略图（草稿 / 列表项通用）：从原图 bbox 裁剪出 dataURL */
+/** 选区快照缩略图：从原图 bbox 裁剪出 dataURL */
 const thumbCache = ref<Record<string, string>>({})
 async function refreshThumb(item: ElementEditItem) {
   const n = natural.value
@@ -305,38 +337,23 @@ async function refreshThumb(item: ElementEditItem) {
   try {
     const img = await loadCropSourceImage(props.url)
     const bbox = elementEditShapeBBox(item.shape)
-    const mapper = {
-      sx: n.w / Math.max(1, box.value.w),
-      sy: n.h / Math.max(1, box.value.h),
-    }
+    const sx = n.w / Math.max(1, box.value.w)
+    const sy = n.h / Math.max(1, box.value.h)
     const c = document.createElement('canvas')
-    const w = Math.max(8, Math.round(bbox.width * mapper.sx))
-    const h = Math.max(8, Math.round(bbox.height * mapper.sy))
+    const w = Math.max(8, Math.round(bbox.width * sx))
+    const h = Math.max(8, Math.round(bbox.height * sy))
     c.width = w
     c.height = h
     const ctx = c.getContext('2d')
     if (!ctx) return
-    ctx.drawImage(img, bbox.x * mapper.sx, bbox.y * mapper.sy, w, h, 0, 0, w, h)
+    ctx.drawImage(img, bbox.x * sx, bbox.y * sy, w, h, 0, 0, w, h)
     thumbCache.value = { ...thumbCache.value, [item.id]: c.toDataURL('image/png') }
   } catch {
     /* 快照失败留空 */
   }
 }
 
-watch(pending, (p) => {
-  if (p) void refreshThumb(p)
-})
-watch(items, (list) => {
-  for (const it of list) {
-    if (!thumbCache.value[it.id]) void refreshThumb(it)
-  }
-}, { deep: true })
-
 function onCancel() {
-  if (nameMenuOpen.value) {
-    nameMenuOpen.value = false
-    return
-  }
   emit('cancel')
 }
 
@@ -348,10 +365,10 @@ watch(
   () => props.node.id,
   () => {
     updateGeometry()
-    tool.value = 'rect'
+    tool.value = 'point'
     items.value = []
-    pending.value = null
     highlightedId.value = null
+    modifyOpenId.value = null
     thumbCache.value = {}
     void loadNatural()
   },
@@ -365,6 +382,7 @@ watch(flowNodes, updateGeometry, { deep: true })
 onMounted(() => window.addEventListener('keydown', onKeydown))
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
+  recognizeAbort?.abort()
   onStagePointerUp()
 })
 </script>
@@ -372,23 +390,23 @@ onUnmounted(() => {
 <template>
   <div class="pointer-events-none absolute inset-0 z-[46] overflow-visible" data-testid="node-element-overlay">
     <div class="origin-top-left" :style="transformStyle">
-      <!-- 选区层：节点卡上直接框选 / 涂抹 -->
+      <!-- 选区层：节点卡上点选 / 框选 / 涂抹 -->
       <div
         v-if="abs && natural"
         ref="stageRef"
         class="pointer-events-auto absolute overflow-hidden rounded-lg"
+        :class="tool === 'point' ? 'is-point' : ''"
         :style="stageStyle"
         data-testid="node-element-stage"
         @pointerdown="onStagePointerDown"
         @mousedown.stop
         @click.stop
       >
-        <!-- 已确认项形状 -->
         <template v-for="item in items" :key="item.id">
           <div
             v-if="item.shape.kind === 'rect'"
             class="node-element-shape"
-            :class="{ 'is-hl': highlightedId === item.id }"
+            :class="{ 'is-hl': highlightedId === item.id, 'is-busy': item.recognizing }"
             :style="{
               left: `${item.shape.rect.x}px`,
               top: `${item.shape.rect.y}px`,
@@ -410,33 +428,7 @@ onUnmounted(() => {
             />
           </svg>
         </template>
-        <!-- 草稿形状 -->
-        <template v-if="pending">
-          <div
-            v-if="pending.shape.kind === 'rect'"
-            class="node-element-shape is-pending"
-            :style="{
-              left: `${pending.shape.rect.x}px`,
-              top: `${pending.shape.rect.y}px`,
-              width: `${pending.shape.rect.width}px`,
-              height: `${pending.shape.rect.height}px`,
-            }"
-          />
-          <svg v-else class="node-element-svg" :style="{ left: 0, top: 0, width: `${box.w}px`, height: `${box.h}px` }" :viewBox="`0 0 ${box.w} ${box.h}`">
-            <polyline
-              v-for="(st, i) in pending.shape.strokes"
-              :key="i"
-              :points="st.points.map((p) => `${p.x},${p.y}`).join(' ')"
-              fill="none"
-              stroke="#a89dff"
-              :stroke-width="st.size"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              style="opacity: 0.75"
-            />
-          </svg>
-        </template>
-        <!-- 拖拽中矩形 -->
+        <!-- 拖拽中矩形 / 笔画 -->
         <div
           v-if="drawingRect"
           class="node-element-shape is-pending"
@@ -447,9 +439,25 @@ onUnmounted(() => {
             height: `${drawingRect.height}px`,
           }"
         />
+        <svg
+          v-if="liveStroke"
+          class="node-element-svg"
+          :style="{ left: 0, top: 0, width: `${box.w}px`, height: `${box.h}px` }"
+          :viewBox="`0 0 ${box.w} ${box.h}`"
+        >
+          <polyline
+            :points="liveStroke.points.map((p) => `${p.x},${p.y}`).join(' ')"
+            fill="none"
+            stroke="#a89dff"
+            :stroke-width="liveStroke.size"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            style="opacity: 0.75"
+          />
+        </svg>
       </div>
 
-      <!-- 上沿工具条：[✕ 元素编辑] [定位] [选区] [画笔] [撤销] -->
+      <!-- 上沿工具条：[✕ 元素编辑] [定位] [焦点] [选区] [画笔] [撤销] -->
       <div v-if="abs && natural" class="pointer-events-auto absolute" :style="toolbarStyle">
         <div
           class="neo-chrome flex items-center gap-0.5 rounded-xl px-1 py-1"
@@ -476,10 +484,10 @@ onUnmounted(() => {
           <button
             type="button"
             class="node-element-btn"
-            :class="{ 'is-on': tool === 'locate' }"
             data-testid="node-element-locate"
             title="定位（循环查看各选区）"
             aria-label="定位选区"
+            :disabled="!items.length"
             @click="locateNext"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -489,9 +497,22 @@ onUnmounted(() => {
           <button
             type="button"
             class="node-element-btn"
+            :class="{ 'is-on': tool === 'point' }"
+            data-testid="node-element-point"
+            title="焦点选择：点击元素，自动识别对象"
+            aria-label="焦点选择"
+            @click="tool = 'point'"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="node-element-btn"
             :class="{ 'is-on': tool === 'rect' }"
             data-testid="node-element-rect"
-            title="选区（拖框圈出元素）"
+            title="矩形选区（拖框圈出元素）"
             aria-label="矩形选区"
             @click="tool = 'rect'"
           >
@@ -528,9 +549,9 @@ onUnmounted(() => {
             type="button"
             class="node-element-btn"
             data-testid="node-element-undo"
-            title="撤销（丢弃草稿 / 移除最后一项）"
+            title="撤销（移除最后一枚芯片）"
             aria-label="撤销"
-            :disabled="!pending && !items.length"
+            :disabled="undoDisabled"
             @click="undoLast"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -540,88 +561,11 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- 右侧编辑卡：选区快照 + 元素名下拉 + 描述 + 添加 -->
-      <div v-if="abs && natural && pending" class="pointer-events-auto absolute" :style="sideCardStyle">
-        <div
-          class="neo-chrome flex flex-col gap-1.5 rounded-xl px-2 py-2"
-          :style="counterScaleStyleBelow"
-          data-testid="node-element-side-card"
-          @pointerdown.stop
-          @mousedown.stop
-          @click.stop
-        >
-          <div class="flex items-center gap-1.5">
-            <span
-              v-if="thumbCache[pending.id]"
-              class="node-element-thumb"
-              :style="{ backgroundImage: `url(${thumbCache[pending.id]})` }"
-              data-testid="node-element-thumb"
-            />
-            <span v-else class="node-element-thumb node-element-thumb--empty" />
-            <div class="relative min-w-0 flex-1">
-              <button
-                type="button"
-                class="node-element-name"
-                data-testid="node-element-name"
-                :aria-expanded="nameMenuOpen"
-                @click="nameMenuOpen = !nameMenuOpen"
-              >
-                <span class="truncate">{{ pendingName || '元素' }}</span>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
-                  <path d="m6 9 6 6 6-6" />
-                </svg>
-              </button>
-              <div
-                v-if="nameMenuOpen"
-                class="neo-chrome node-element-name-menu absolute left-0 top-full z-[3] mt-1 rounded-xl p-1"
-                role="menu"
-                data-testid="node-element-name-menu"
-                @click.stop
-              >
-                <button
-                  v-for="opt in ELEMENT_EDIT_NAME_OPTIONS"
-                  :key="opt"
-                  type="button"
-                  role="menuitem"
-                  class="node-element-name-item"
-                  :class="{ 'is-on': pendingName === opt }"
-                  @click="pendingName = opt; nameMenuOpen = false"
-                >{{ opt }}</button>
-              </div>
-            </div>
-          </div>
-          <input
-            v-model="pendingDesc"
-            class="node-element-desc"
-            placeholder="描述改动，如：增加耳钉"
-            data-testid="node-element-desc"
-            @keydown.enter.prevent="addPending"
-          >
-          <div class="flex items-center justify-end gap-1.5">
-            <button
-              type="button"
-              class="node-element-ghost"
-              data-testid="node-element-discard"
-              title="丢弃该选区"
-              @click="removePending"
-            >✕</button>
-            <button
-              type="button"
-              class="node-element-add"
-              data-testid="node-element-add"
-              :disabled="!canAddPending"
-              title="加入编辑内容"
-              @click="addPending"
-            >添加</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- 底部「编辑内容」卡：列表 + 取消/生成 -->
+      <!-- 底部「编辑内容」卡：芯片条（缩略图 + 可编辑对象名 + 修改）+ 取消/生成 -->
       <div v-if="abs && natural" class="pointer-events-auto absolute" :style="bottomCardStyle">
         <div
           class="neo-chrome flex flex-col gap-1.5 rounded-xl px-2 py-2"
-          :style="counterScaleStyleBelow"
+          :style="counterScaleStyleCard"
           data-testid="node-element-card"
           @pointerdown.stop
           @mousedown.stop
@@ -637,27 +581,57 @@ onUnmounted(() => {
             <span class="text-[11px]" style="color: var(--neo-text-muted)" data-testid="node-element-count">{{ items.length }}处</span>
           </div>
           <div v-if="items.length" class="node-element-list">
-            <button
+            <div
               v-for="item in items"
               :key="item.id"
-              type="button"
-              class="node-element-row"
-              :data-testid="`node-element-row-${item.id}`"
-              :title="`${item.name} ${item.desc}（点击重新编辑）`"
-              @click="editItem(item)"
+              class="node-element-chip"
+              :class="{ 'is-hl': highlightedId === item.id }"
+              :data-testid="`node-element-chip-${item.id}`"
+              @mouseenter="highlightedId = item.id"
+              @mouseleave="highlightedId = null"
             >
               <span
                 v-if="thumbCache[item.id]"
-                class="node-element-thumb node-element-thumb--sm"
+                class="node-element-thumb"
                 :style="{ backgroundImage: `url(${thumbCache[item.id]})` }"
               />
-              <span v-else class="node-element-thumb node-element-thumb--sm node-element-thumb--empty" />
-              <b class="node-element-row__name">{{ item.name }}</b>
-              <span class="node-element-row__desc">{{ item.desc || '—' }}</span>
-            </button>
+              <span v-else class="node-element-thumb node-element-thumb--empty" />
+              <!-- ① 对象名：识别结果，可二次编辑 -->
+              <input
+                v-model="item.name"
+                class="node-element-chip__name"
+                :data-testid="`node-element-name-${item.id}`"
+                placeholder="对象名"
+                :disabled="item.recognizing"
+                @focus="highlightedId = item.id"
+              >
+              <!-- ② 修改内容：点击【修改】图标展开 -->
+              <button
+                type="button"
+                class="node-element-chip__modify-btn"
+                :class="{ 'is-on': modifyOpenId === item.id }"
+                :data-testid="`node-element-modify-toggle-${item.id}`"
+                :title="modifyOpenId === item.id ? '收起修改输入' : '填写修改内容'"
+                @click="modifyOpenId = modifyOpenId === item.id ? null : item.id"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 19.5l3.8-.7L19.2 8.4a1.7 1.7 0 0 0 0-2.4l-1.2-1.2a1.7 1.7 0 0 0-2.4 0L5.7 15.2z" />
+                </svg>
+                <span>修改</span>
+              </button>
+              <span v-if="item.recognizing" class="node-element-chip__spin" data-testid="node-element-recognizing" aria-label="识别中" />
+            </div>
+            <input
+              v-if="modifyOpenId"
+              v-model="items.find((it) => it.id === modifyOpenId)!.modify"
+              class="node-element-chip__modify"
+              :data-testid="`node-element-modify-${modifyOpenId}`"
+              placeholder="想改成什么样？如：换成蓝色发光"
+              @keydown.enter.prevent="modifyOpenId = null"
+            >
           </div>
           <div v-else class="px-1 py-1 text-[11px]" style="color: var(--neo-text-muted)">
-            用「选区」拖框或「画笔」涂抹，为每个元素添加改动描述
+            {{ tool === 'point' ? '点击图中的元素（如眼睛、项链），自动识别对象' : '拖框或涂抹圈出元素；多轮点选可累积多处' }}
           </div>
           <div class="flex items-center justify-end gap-1.5">
             <button
@@ -671,9 +645,9 @@ onUnmounted(() => {
               class="node-element-generate"
               data-testid="node-element-generate"
               :disabled="!canGenerate"
-              :title="items.length ? '按编辑内容一次性生成（下游新节点）' : '先添加至少一处编辑'"
+              :title="canGenerate ? '按编辑内容一次性生成（下游新节点）' : '为至少一处元素填写修改内容'"
               @click="emit('confirm', { items: [...items] })"
-            >{{ busy ? '生成中…' : '⚡ 生成' }}</button>
+            >{{ busy ? '生成中…' : `⚡ 生成${items.length ? `（${items.length}处）` : ''}` }}</button>
           </div>
         </div>
       </div>
@@ -694,6 +668,10 @@ onUnmounted(() => {
   border-color: #a89dff;
   background: rgba(168, 157, 255, 0.18);
 }
+.node-element-shape.is-busy {
+  border-style: dashed;
+  border-color: #a89dff;
+}
 .node-element-shape.is-pending {
   border-style: dashed;
   border-color: #a89dff;
@@ -702,6 +680,10 @@ onUnmounted(() => {
   position: absolute;
   pointer-events: none;
   overflow: visible;
+}
+.node-element-stage.is-point,
+div.is-point {
+  cursor: crosshair;
 }
 
 .node-element-btn {
@@ -743,141 +725,102 @@ onUnmounted(() => {
 }
 
 .node-element-thumb {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   border-radius: 6px;
   background-color: color-mix(in srgb, var(--neo-text) 8%, transparent);
   background-size: cover;
   background-position: center;
-}
-.node-element-thumb--sm {
-  width: 26px;
-  height: 26px;
-  flex-basis: 26px;
 }
 .node-element-thumb--empty {
   background-image: linear-gradient(45deg, color-mix(in srgb, var(--neo-text) 6%, transparent) 25%, transparent 25%, transparent 75%, color-mix(in srgb, var(--neo-text) 6%, transparent) 75%);
   background-size: 8px 8px;
 }
 
-.node-element-name {
-  display: inline-flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--neo-text) 8%, transparent);
-  color: var(--neo-text);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.node-element-name-menu {
-  min-width: 96px;
-  background: var(--neo-chrome-bg);
-  box-shadow: var(--neo-chrome-shadow);
-  max-height: 220px;
-  overflow-y: auto;
-}
-.node-element-name-item {
-  display: block;
-  width: 100%;
-  padding: 0.32rem 0.6rem;
-  text-align: left;
-  font-size: 11.5px;
-  color: var(--neo-text);
-  white-space: nowrap;
-  border-radius: 0.4rem;
-}
-.node-element-name-item:hover {
-  background: color-mix(in srgb, var(--neo-text) 8%, transparent);
-}
-.node-element-name-item.is-on {
-  color: var(--neo-accent-text, #a89dff);
-}
-
-.node-element-desc {
-  width: 100%;
-  padding: 0.4rem 0.5rem;
-  border: none;
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--neo-text) 6%, transparent);
-  color: var(--neo-text);
-  font-size: 12.5px;
-  line-height: 1.4;
-}
-.node-element-desc:focus {
-  outline: 1px solid color-mix(in srgb, var(--neo-text) 30%, transparent);
-}
-.node-element-desc::placeholder {
-  color: color-mix(in srgb, var(--neo-text) 45%, transparent);
-}
-
-.node-element-ghost {
-  padding: 0.4rem 0.55rem;
-  border-radius: 0.5rem;
-  color: var(--neo-text-muted);
-  font-size: 12px;
-  cursor: pointer;
-}
-.node-element-ghost:hover {
-  background: color-mix(in srgb, var(--neo-text) 8%, transparent);
-}
-.node-element-add {
-  padding: 0.42rem 0.95rem;
-  border-radius: 0.55rem;
-  background: #fff;
-  color: #111;
-  font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: opacity 0.15s ease;
-}
-.node-element-add:hover:not(:disabled) {
-  opacity: 0.88;
-}
-.node-element-add:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .node-element-list {
   display: flex;
-  max-height: 132px;
+  max-height: 168px;
   flex-direction: column;
   gap: 2px;
   overflow-y: auto;
 }
-.node-element-row {
+.node-element-chip {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.4rem;
-  border-radius: 0.5rem;
-  text-align: left;
-  cursor: pointer;
+  gap: 0.45rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 0.55rem;
   color: var(--neo-text);
 }
-.node-element-row:hover {
-  background: color-mix(in srgb, var(--neo-text) 7%, transparent);
+.node-element-chip.is-hl {
+  background: color-mix(in srgb, var(--neo-accent-text, #a89dff) 12%, transparent);
 }
-.node-element-row__name {
-  flex: 0 0 auto;
+.node-element-chip__name {
+  min-width: 0;
+  flex: 1;
+  padding: 0.22rem 0.4rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--neo-text);
   font-size: 12px;
   font-weight: 600;
 }
-.node-element-row__desc {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  font-size: 12px;
+.node-element-chip__name:hover {
+  background: color-mix(in srgb, var(--neo-text) 7%, transparent);
+}
+.node-element-chip__name:focus {
+  outline: 1px solid color-mix(in srgb, var(--neo-text) 30%, transparent);
+  background: color-mix(in srgb, var(--neo-text) 6%, transparent);
+}
+.node-element-chip__name:disabled {
   color: var(--neo-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.node-element-chip__modify-btn {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.24rem 0.45rem;
+  border-radius: 0.45rem;
+  color: var(--neo-text-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.node-element-chip__modify-btn:hover,
+.node-element-chip__modify-btn.is-on {
+  background: color-mix(in srgb, var(--neo-text) 10%, transparent);
+  color: var(--neo-text);
+}
+.node-element-chip__modify {
+  width: 100%;
+  margin-left: 38px;
+  width: calc(100% - 40px);
+  padding: 0.32rem 0.45rem;
+  border: none;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--neo-text) 6%, transparent);
+  color: var(--neo-text);
+  font-size: 12px;
+}
+.node-element-chip__modify:focus {
+  outline: 1px solid color-mix(in srgb, var(--neo-text) 30%, transparent);
+}
+.node-element-chip__modify::placeholder {
+  color: color-mix(in srgb, var(--neo-text) 45%, transparent);
+}
+.node-element-chip__spin {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--neo-text) 25%, transparent);
+  border-top-color: var(--neo-accent-text, #a89dff);
+  animation: node-element-spin 0.8s linear infinite;
+}
+@keyframes node-element-spin {
+  to { transform: rotate(360deg); }
 }
 
 .node-element-cancelbtn {

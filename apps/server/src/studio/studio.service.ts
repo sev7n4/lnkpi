@@ -105,12 +105,19 @@ import {
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 import { downscaleOversizedReferenceImages } from '../media/upstream-ref-downscale'
 import {
+  computeMaskBBox,
+  cropImageToDataUrl,
+  normalizeMaskPng,
+  parseElementName,
+} from './element-recognize.util'
+import {
   assertSameDimensions,
   compositeUnmaskedPixels,
   MaskDimensionMismatchError,
   readImageBuffer,
 } from '../media/composite-unmasked'
 import { UploadService } from '../upload/upload.service'
+import sharp from 'sharp'
 import { hasCompositionPBlock } from './video-generation-request.util'
 
 const AUDIO_PLACEHOLDER = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3'
@@ -1664,6 +1671,116 @@ export class StudioService {
     }
     const saved = await this.upload.saveUserFile(userId, png, 'matting.png', 'image/png')
     return { url: saved.url }
+  }
+
+  /**
+   * 元素编辑焦点识别（2026-09-25 用户需求）：点击图上一点 → SAM 点分割出对象精确蒙版 →
+   * 裁剪对象局部给识图模型命名。返回 { name, maskUrl（同源落盘）, bbox（原图像素） }。
+   * 蒙版供前端并入元素编辑累积层；命名展示在编辑内容小芯片条（可二次编辑）。
+   * 不计费（与 vision QA 同级的轻量调用）。
+   */
+  async elementRecognize(
+    userId: string,
+    input: { imageUrl: string; x: number; y: number; label?: 0 | 1; model?: string },
+  ): Promise<{
+    name: string
+    maskUrl: string
+    bbox: { x: number; y: number; width: number; height: number }
+  }> {
+    const imageUrl = input.imageUrl?.trim()
+    if (!imageUrl) {
+      throw new BadRequestException('imageUrl 不能为空')
+    }
+    if (!Number.isFinite(input.x) || input.x < 0 || !Number.isFinite(input.y) || input.y < 0) {
+      throw new BadRequestException('点坐标无效')
+    }
+    if (!allowSegmentRate(userId)) {
+      throw new HttpException('识别过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
+    }
+    const apiKey = process.env.FAL_KEY?.trim()
+    if (!apiKey) {
+      throw new ServiceUnavailableException('对象识别服务未配置')
+    }
+
+    const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
+    const publicUrl = inlinedUrl ?? imageUrl
+
+    let segmentMaskUrl: string
+    try {
+      const out = await createSegmentProvider({ apiKey }).segment({
+        imageUrl: publicUrl,
+        x: input.x,
+        y: input.y,
+        label: input.label ?? 1,
+      })
+      segmentMaskUrl = out.maskUrl
+    } catch (err) {
+      if (err instanceof BadRequestException || err instanceof HttpException) throw err
+      throw new BadGatewayException('对象识别（分割）失败，请重试')
+    }
+
+    const [imgBuf, maskBuf] = await Promise.all([
+      readImageBuffer(imageUrl).catch(() => null),
+      readImageBuffer(segmentMaskUrl).catch(() => null),
+    ])
+    if (!imgBuf || !maskBuf) {
+      throw new BadGatewayException('对象识别失败：素材读取失败，请重试')
+    }
+    const imgMeta = await sharp(imgBuf).metadata()
+    const imgWidth = imgMeta.width ?? 0
+    const imgHeight = imgMeta.height ?? 0
+    if (!imgWidth || !imgHeight) {
+      throw new BadRequestException('不支持的图片格式')
+    }
+
+    const bbox = await computeMaskBBox(maskBuf, imgWidth, imgHeight)
+    if (!bbox) {
+      throw new BadRequestException('未识别到对象，请换一处点击，或改用框选/画笔')
+    }
+
+    const maskPng = await normalizeMaskPng(maskBuf, imgWidth, imgHeight)
+    const saved = await this.upload.saveUserFile(userId, maskPng, 'element-mask.png', 'image/png')
+    const name = await this.recognizeElementName(userId, imgBuf, bbox, input.model)
+    return { name, maskUrl: saved.url, bbox }
+  }
+
+  /** 识图命名：用户当前文本模型 → 平台默认文本模型，取第一个可识图的；都没有则给出可操作错误。 */
+  private async recognizeElementName(
+    userId: string,
+    imgBuf: Buffer,
+    bbox: { x: number; y: number; width: number; height: number },
+    model?: string,
+  ): Promise<string> {
+    const candidates: ResolvedGenerationProvider[] = []
+    for (const candidate of [model, undefined]) {
+      try {
+        candidates.push(await this.resolver.resolveForGeneration(userId, candidate, 'text'))
+      } catch {
+        /* 该通道解析失败 → 看下一个候选 */
+      }
+    }
+    const vision = candidates.find(
+      (r) =>
+        r.credentials.apiKey?.trim() &&
+        r.credentials.baseUrl?.trim() &&
+        supportsVisionTextModel(r.modelName),
+    )
+    if (!vision) {
+      throw new BadRequestException(
+        '当前模型不支持识图——请把文本模型切换为可识图模型（DeepSeek Flash / Gemini / GPT-4o）后重试',
+      )
+    }
+    const dataUrl = await cropImageToDataUrl(imgBuf, bbox)
+    const provider = providerContextFromResolved(vision.channelId, vision)
+    const { text } = await this.runVisionQaInternal(userId, {
+      systemPrompt: '你是图像对象识别助手。只输出 JSON，不要输出任何其他内容。',
+      userContent:
+        '这是图中某个被选中对象的局部截图。判断它是什么对象或部位（例如：眼睛、鼻子、耳朵、项链、帽子、杯子）。' +
+        '只输出 JSON：{"name":"<不超过6个字的中文对象名>"}',
+      imageUrls: [dataUrl],
+      provider,
+    })
+    return parseElementName(text) ?? '未识别对象'
   }
 
   async generateVideo(

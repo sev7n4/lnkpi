@@ -116,6 +116,14 @@ export const studioApi = {
     ),
   segmentImage: (body: { imageUrl: string; x: number; y: number; label?: 0 | 1 }) =>
     api.post<{ data: { maskUrl: string } }>('/studio/image/segment', body),
+  /** 元素编辑焦点识别：点选 → SAM 对象蒙版 + 识图命名（bbox 为原图像素）。 */
+  recognizeElement: (
+    body: { imageUrl: string; x: number; y: number; label?: 0 | 1; model?: string },
+    signal?: AbortSignal,
+  ) =>
+    api.post<{
+      data: { name: string; maskUrl: string; bbox: { x: number; y: number; width: number; height: number } }
+    }>('/studio/element-recognize', body, { timeout: 60_000, signal }),
   mattingImage: (body: { imageUrl: string }, signal?: AbortSignal) =>
     api.post<{ data: { url: string } }>('/studio/image/matting', body, { timeout: 45_000, signal }),
   imageSlice: async (

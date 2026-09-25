@@ -461,20 +461,24 @@ async function runMattingAuto() {
   }
 }
 
+/** 元素编辑面板 busy 上抛：与精修全局 busy 同步（生成中锁 rail/画布切换）。 */
+function onElementPanelBusy(value: boolean) {
+  editor.setRefineBusy(value)
+  busy.value = value
+}
+
 /**
  * 选区抠图（matting-mask）：本地用当前蒙版 + 原图合成透明 PNG，不依赖 rembg。
  * mask 取本地 canvas（与 onPointSelect 同源），转 RGBA 后 compositeMattingPng → persist → 入会话。
+ * 2026-09-25 修正：无选区时不再跳「选区」面板（matting 模式下蒙版画布本就可用，
+ * 跳转造成「只选区不抠图」的流程断点）——就地提示先在图上直接涂抹/框选。
  */
 async function runMattingMask() {
   if (editor.refineMode !== 'matting') return
   const mask = editor.getRefineMask()
   const canvas = mask?.getCanvas()
-  // 无选区守卫（2026-09-24 流程拍板）：点「选区抠图」无选区 → 跳「选区」面板（默认矩形）圈选，
-  // 置引导标记让选区面板出现「返回抠图」CTA；回到抠图面板再点「选区抠图」执行。
   if (!canvas || editor.refineCoverage <= 0) {
-    ElMessage.info('还没有选区：已切到「选区」面板（默认矩形），圈选后回到「抠图」点「选区抠图」执行')
-    editor.setRefineMattingReturnPending(true)
-    editor.setRefineMode('select')
+    ElMessage.info('还没有选区：直接在图上涂抹或框选（左侧 rail 可换矩形/画笔），再点「选区抠图」')
     return
   }
   const ctx = canvas.getContext('2d')
@@ -497,6 +501,7 @@ async function runMattingMask() {
     }
     if (url !== fallbackUrl) URL.revokeObjectURL(fallbackUrl)
     editor.pushRefineSessionResult({ url, prompt: '选区抠图' })
+    ElMessage.success('选区抠图完成，已加入下方会话胶片条，点「应用到画布」即生效')
   } catch (err) {
     const message = formatError(err, '选区抠图失败，请重试')
     if (message) ElMessage.error(message)
@@ -670,6 +675,7 @@ onBeforeUnmount(() => {
             @run-auto="runMattingAuto"
             @run-mask="runMattingMask"
             @apply="onApply"
+            @busy="onElementPanelBusy"
           />
         </div>
         <!-- 选区引导回程 CTA（2026-09-24 用户反馈：被引导来圈选后找不到回去的入口） -->

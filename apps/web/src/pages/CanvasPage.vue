@@ -780,10 +780,13 @@ const nodeInpaintBusy = ref(false)
 const nodeElementEditNodeId = ref<string | null>(null)
 const nodeElementEditBusy = ref(false)
 
-/** 节点 overlay / 选中快捷菜单激活时隐藏底部提示词 dock（避免干扰快捷菜单操作，2026-09-25 用户拍板） */
-const dockSuppressedByOverlay = computed(
+/**
+ * 底部 dock 收缩（2026-09-25 用户拍板）：单击图片节点 dock 正常弹出（与快捷菜单并存）；
+ * 用户点快捷菜单进入任一编辑浮层（裁剪/扩图/重绘/元素编辑）时 dock 自动收缩为底部热区
+ * （悬停展开、划走收回），不再整块隐藏——保留提示词等原有能力。
+ */
+const dockCollapsedByOverlay = computed(
   () =>
-    !!selectionActionBarNode.value ||
     !!nodeCropNodeId.value ||
     !!nodeOutpaintNodeId.value ||
     !!nodeInpaintNodeId.value ||
@@ -3388,7 +3391,7 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
     applyGeneratedEditChild(node, {
       url,
       recordId: data.data.id,
-      prompt: payload.items.map((it) => `${it.name} ${it.desc}`.trim()).join('；'),
+      prompt: payload.items.map((it) => `${it.name} ${it.modify}`.trim()).join('；'),
       successText: `已完成 ${payload.items.length} 处元素编辑（下游新节点）`,
     })
     nodeElementEditNodeId.value = null
@@ -4549,7 +4552,8 @@ onUnmounted(() => {
           @close="closeGridSliceWorkbench"
         />
         <DockStudioToolbar
-          v-if="!refinePanelNode && !gridSlicePanelNode && !dockSuppressedByOverlay"
+          v-if="!refinePanelNode && !gridSlicePanelNode"
+          :collapsed="dockCollapsedByOverlay"
           :node="editorNode"
           :upstream="editorUpstream"
           :refs="selectedRefs"
