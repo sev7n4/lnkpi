@@ -4,7 +4,7 @@ import { api } from './api'
 
 type Deferred = {
   config: AxiosRequestConfig
-  reject: (reason: AxiosError) => void
+  reject: (status?: number) => void
   resolve: (value: AxiosResponse) => void
 }
 
@@ -23,7 +23,7 @@ function installDeferredAdapter(): Deferred[] {
     new Promise<AxiosResponse>((resolve, reject) => {
       deferreds.push({
         config: config as AxiosRequestConfig,
-        reject: (reason: AxiosError, status = 401) =>
+        reject: (status = 401) =>
           reject(
             new AxiosError(
               status === 401 ? 'Unauthorized' : 'Server error',
@@ -55,7 +55,7 @@ describe('api response interceptor (401 handling)', () => {
 
     const pending = api.get('/studio/generations/x').catch((e) => e)
     const deferred = await waitForAdapter(deferreds)
-    deferred.reject(deferred.config)
+    deferred.reject()
 
     await pending
     expect(localStorage.getItem('token')).toBeNull()
@@ -70,7 +70,7 @@ describe('api response interceptor (401 handling)', () => {
     // Simulate the user re-logging in while the stale request is still in flight.
     localStorage.setItem('token', 'fresh-token')
 
-    deferred.reject(deferred.config)
+    deferred.reject()
     await pending
 
     // The stale 401 must NOT erase the just-logged-in token.
@@ -84,7 +84,7 @@ describe('api response interceptor (401 handling)', () => {
     const deferred = await waitForAdapter(deferreds)
     localStorage.setItem('token', 'fresh-token')
 
-    deferred.reject(deferred.config)
+    deferred.reject()
     await pending
 
     expect(localStorage.getItem('token')).toBe('fresh-token')
@@ -97,7 +97,7 @@ describe('api response interceptor (401 handling)', () => {
     const pending = api.get('/studio/generations/x').catch((e) => e)
     pending.catch(() => undefined)
     const deferred = await waitForAdapter(deferreds)
-    deferred.reject(deferred.config, 500)
+    deferred.reject(500)
     await pending
 
     expect(localStorage.getItem('token')).toBe('token-a')
