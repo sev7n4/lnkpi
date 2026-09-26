@@ -3,6 +3,7 @@ import {
   formatDiagnosticCopy,
   redactProviderSnippet,
   mapMessageToErrorCode,
+  translateUpstreamFailure,
 } from './generationDiagnostics'
 
 describe('redactProviderSnippet', () => {
@@ -40,5 +41,37 @@ describe('mapMessageToErrorCode', () => {
     expect(mapMessageToErrorCode('积分不足')).toBe('insufficient_points')
     expect(mapMessageToErrorCode('timeout of 90000ms exceeded')).toBe('upstream_timeout')
     expect(mapMessageToErrorCode('weird')).toBe('unknown')
+  })
+})
+
+describe('translateUpstreamFailure', () => {
+  it('translates real-world upstream failures (2026-09-26 incidents)', () => {
+    expect(
+      translateUpstreamFailure(
+        'Segment API 403: {"detail":"User is locked. Reason: TOP_UP."}',
+      ),
+    ).toBe('上游生成服务账户已被锁定（欠费），请联系管理员充值后重试')
+    expect(
+      translateUpstreamFailure(
+        'Image edit API 402: {"error":{"message":"[token_id=90701] insufficient balance (current: 0.013570 USD, required: 0.050000 USD)"}}',
+      ),
+    ).toBe('上游生成服务余额不足，请联系管理员充值后重试')
+    expect(translateUpstreamFailure('fetch failed')).toBe(
+      '无法连接上游生成服务（网络异常），请稍后重试',
+    )
+  })
+
+  it('translates auth and rate-limit failures', () => {
+    expect(translateUpstreamFailure('Image API 401: unauthorized')).toBe(
+      '上游生成服务鉴权失败，请检查服务配置',
+    )
+    expect(translateUpstreamFailure('Image API 429: too many requests')).toBe(
+      '上游生成服务限流，请稍后重试',
+    )
+  })
+
+  it('returns undefined for ordinary errors so callers keep their fallback copy', () => {
+    expect(translateUpstreamFailure('Image edit API returned no urls')).toBeUndefined()
+    expect(translateUpstreamFailure('')).toBeUndefined()
   })
 })

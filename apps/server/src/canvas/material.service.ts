@@ -30,6 +30,7 @@ import {
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
   resolveVideoModelProfile,
+  translateUpstreamFailure,
   type ErrorCode,
   type GenerationDiagnostic,
   type GenerationRefPayload,
@@ -244,7 +245,8 @@ function applyFailureDiagnosticMeta(
 ): Record<string, unknown> {
   const errMsg = errMessage(err)
   const errorCode = overrides.errorCode ?? mapMessageToErrorCode(errMsg)
-  const userMessage = overrides.userMessage ?? userMessageForCode(errorCode, errMsg)
+  const userMessage =
+    overrides.userMessage ?? translateUpstreamFailure(errMsg) ?? userMessageForCode(errorCode, errMsg)
   return {
     ...existingMeta,
     errorCode,

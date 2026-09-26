@@ -49,6 +49,7 @@ import {
   resolvePlatformImageProviderOpts,
   resolvePublicMediaUrls,
   resolveVideoModelProfile,
+  translateUpstreamFailure,
   type ErrorCode,
   type GenerationRefPayload,
   type GenerationDiagnostic,
@@ -315,7 +316,8 @@ function applyFailureDiagnosticMeta(
 ): Record<string, unknown> {
   const errMsg = errMessage(err)
   const errorCode = overrides.errorCode ?? mapMessageToErrorCode(errMsg)
-  const userMessage = overrides.userMessage ?? userMessageForCode(errorCode, errMsg)
+  const userMessage =
+    overrides.userMessage ?? translateUpstreamFailure(errMsg) ?? userMessageForCode(errorCode, errMsg)
   return {
     ...existingMeta,
     errorCode,
@@ -1619,7 +1621,9 @@ export class StudioService {
       ) {
         throw err
       }
-      throw new BadGatewayException('云端点选失败')
+      throw new BadGatewayException(
+        translateUpstreamFailure(errMessage(err)) ?? '云端点选失败',
+      )
     }
   }
 
@@ -1728,7 +1732,9 @@ export class StudioService {
       segmentMaskUrl = out.maskUrl
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof HttpException) throw err
-      throw new BadGatewayException('对象识别（分割）失败，请重试')
+      throw new BadGatewayException(
+        translateUpstreamFailure(errMessage(err)) ?? '对象识别（分割）失败，请重试',
+      )
     }
 
     const [imgBuf, maskBuf] = await Promise.all([
