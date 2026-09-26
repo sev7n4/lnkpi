@@ -16,7 +16,8 @@ import { useModelProviderSettings } from '@/composables/useModelProviderSettings
  * 元素编辑面板（精修右栏，element 模式，2026-09-25 重做版）：
  *  - 焦点选择（默认）：直接点图上元素 → element-recognize（SAM 分割 + 识图命名）→ 芯片自动入列；
  *    （点选分派由 RefineSidePanel.onPointSelect 转发——单槽 handler 时序修复）
- *  - 矩形/画笔：画选区 →「+ 添加当前选区」→ 以选区中心再识别命名；
+ *  - 矩形/画笔：画选区 →「+ 添加当前选区」→ box prompt 识别命名；
+ *    矩形按框精修边界（SAM 蒙版替换），画笔保留涂抹选区只命名；
  *  - 芯片条（ElementChipRow）：缩略 hover 放大、对象名可编辑、【修改】输入、
  *    「+」替换图（本地/资产库，对象替换）、× 删除；撤销移除最后一枚；
  *  -【⚡生成】累积蒙版 + combined prompt + 替换参考图 → image/edit mode:'inpaint' → 会话胶片条。
@@ -81,6 +82,9 @@ function pieceBBox(piece: HTMLCanvasElement): { x: number; y: number; width: num
 }
 
 /** 当前选区加入（矩形/画笔路径）：登记芯片 → 以选区中心点识别命名。 */
+/** 当前选区加入（矩形/画笔路径，2026-09-26 统一）：
+ * 矩形 = box prompt 识别命名 + SAM 按框精修边界（蒙版替换矩形，用户意图是「框内对象」）；
+ * 画笔 = 涂抹即选区（保留用户 piece 不被覆盖），仅按 bbox 调识别命名。 */
 async function addCurrentSelection() {
   const handle = editor.getRefineMask()
   const src = handle?.getCanvas()
@@ -92,19 +96,24 @@ async function addCurrentSelection() {
   if (!ctx) return
   ctx.drawImage(src, 0, 0)
   handle?.clear()
+  const toolNow = editor.refineTool
   const item = editor.addRefineElementItem(copy, '选区', '')
   if (!item) return
-  // 以选区中心点识别命名（SAM 对中心点所在对象分割，多数情况与框选意图一致）
   const bbox = pieceBBox(copy)
-  if (bbox) {
-    item.recognizing = true
-    try {
-      const { data } = await studioApi.recognizeElement({
-        imageUrl: editor.imageTarget?.url ?? '',
-        x: Math.round(bbox.x + bbox.width / 2),
-        y: Math.round(bbox.y + bbox.height / 2),
-      })
-      item.name = data.data.name || '选区'
+  if (!bbox) return
+  item.recognizing = true
+  try {
+    const { data } = await studioApi.recognizeElement({
+      imageUrl: editor.imageTarget?.url ?? '',
+      box: {
+        x1: bbox.x,
+        y1: bbox.y,
+        x2: bbox.x + bbox.width,
+        y2: bbox.y + bbox.height,
+      },
+    })
+    item.name = data.data.name || '选区'
+    if (toolNow === 'rect') {
       const maskImg = await loadImage(data.data.maskUrl)
       if (maskImg && item.piece.width === src.width && item.piece.height === src.height) {
         const sam = document.createElement('canvas')
@@ -135,11 +144,11 @@ async function addCurrentSelection() {
           }
         }
       }
-    } catch {
-      item.name = item.name === '选区' ? '选区' : item.name
-    } finally {
-      item.recognizing = false
     }
+  } catch {
+    item.name = item.name === '选区' ? '选区' : item.name
+  } finally {
+    item.recognizing = false
   }
 }
 

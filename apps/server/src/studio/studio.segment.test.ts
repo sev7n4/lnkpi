@@ -259,12 +259,81 @@ describe('StudioService.segmentImage (internal MobileSAM)', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     const body = JSON.parse(fakeFetch.mock.calls[0][1].body)
-    expect(body.x).toBe(10)
-    expect(body.y).toBe(20)
-    expect(body.label).toBe(1)
+    expect(body.points).toEqual([{ x: 10, y: 20, label: 1 }])
     expect(body.image).toBeTruthy()
     expect(saveUserFile).toHaveBeenCalledWith('u1', PNG_BYTES, 'segment.png', 'image/png')
     expect(segment).not.toHaveBeenCalled()
+  })
+
+  it('passes box prompt through to internal service', async () => {
+    const out = await svc.segmentImage('u1', {
+      imageUrl: 'https://a.png',
+      box: { x1: 50, y1: 30, x2: 10, y2: 60 },
+    })
+
+    expect(out).toEqual({ maskUrl: 'http://host/api/uploads/u1/segment.png' })
+    const body = JSON.parse(fakeFetch.mock.calls[0][1].body)
+    // 框坐标归一化（min/max 交换）
+    expect(body.box).toEqual([10, 30, 50, 60])
+    expect(segment).not.toHaveBeenCalled()
+  })
+
+  it('passes multi points with negative label and dilate to internal service', async () => {
+    const out = await svc.segmentImage('u1', {
+      imageUrl: 'https://a.png',
+      points: [
+        { x: 10, y: 10, label: 1 },
+        { x: 20, y: 20, label: 0 },
+      ],
+      dilate: 999,
+    })
+
+    expect(out).toEqual({ maskUrl: 'http://host/api/uploads/u1/segment.png' })
+    const body = JSON.parse(fakeFetch.mock.calls[0][1].body)
+    expect(body.points).toEqual([
+      { x: 10, y: 10, label: 1 },
+      { x: 20, y: 20, label: 0 },
+    ])
+    // dilate 限幅 ±64
+    expect(body.dilate).toBe(64)
+  })
+
+  it('rejects when no valid prompt provided', async () => {
+    await expect(
+      svc.segmentImage('u1', { imageUrl: 'https://a.png', points: [] }),
+    ).rejects.toBeInstanceOf(BadRequestException)
+  })
+
+  it('fal fallback uses box center when only box prompt given', async () => {
+    fakeFetch.mockRejectedValue(new Error('internal down'))
+    segment.mockResolvedValue({ maskUrl: 'https://fal-m' })
+
+    const out = await svc.segmentImage('u1', {
+      imageUrl: 'https://a.png',
+      box: { x1: 0, y1: 0, x2: 100, y2: 60 },
+    })
+
+    expect(out).toEqual({ maskUrl: 'https://fal-m' })
+    expect(segment).toHaveBeenCalledWith(
+      expect.objectContaining({ x: 50, y: 30, label: 1 }),
+    )
+  })
+
+  it('fal fallback skips negative points and uses first positive point', async () => {
+    fakeFetch.mockRejectedValue(new Error('internal down'))
+    segment.mockResolvedValue({ maskUrl: 'https://fal-m' })
+
+    await svc.segmentImage('u1', {
+      imageUrl: 'https://a.png',
+      points: [
+        { x: 5, y: 5, label: 0 },
+        { x: 30, y: 40, label: 1 },
+      ],
+    })
+
+    expect(segment).toHaveBeenCalledWith(
+      expect.objectContaining({ x: 30, y: 40, label: 1 }),
+    )
   })
 
   it('falls back to fal when internal service errors', async () => {
