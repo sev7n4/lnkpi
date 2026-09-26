@@ -17,6 +17,13 @@ import { UploadService } from '../upload/upload.service'
 import { inlineUpstreamReferenceImages } from '../media/upstream-ref-inline'
 import { readImageBuffer } from '../media/composite-unmasked'
 import {
+  computeMaskBBox,
+  cropImageToDataUrl,
+  normalizeMaskPng,
+  parseElementName,
+} from './element-recognize.util'
+import { sharpMeta } from './studio.segment.mocks'
+import {
   StudioService,
   allowSegmentRate,
   resetSegmentRateLimitForTests,
@@ -34,6 +41,13 @@ vi.mock('@lnkpi/agent', async (importOriginal) => {
 vi.mock('../media/upstream-ref-inline', () => ({
   inlineUpstreamReferenceImages: vi.fn(async (urls: string[]) => urls),
 }))
+vi.mock('./element-recognize.util', () => ({
+  computeMaskBBox: vi.fn(),
+  cropImageToDataUrl: vi.fn(),
+  normalizeMaskPng: vi.fn(),
+  parseElementName: vi.fn(),
+}))
+vi.mock('sharp', () => ({ default: () => ({ metadata: sharpMeta }) }))
 vi.mock('../media/composite-unmasked', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../media/composite-unmasked')>()
   return { ...actual, readImageBuffer: vi.fn() }
@@ -283,5 +297,127 @@ describe('StudioService.segmentImage (internal MobileSAM)', () => {
 
     expect(out).toEqual({ maskUrl: 'http://host/api/uploads/u1/segment.png' })
     expect(segment).not.toHaveBeenCalled()
+  })
+})
+
+describe('StudioService.elementRecognize (naming degrade)', () => {
+  const savedEnv = {
+    seg: process.env.LNKPI_SEGMENT_SERVICE_URL,
+    naming: process.env.LNKPI_VISION_NAMING_MODEL,
+    fal: process.env.FAL_KEY,
+  }
+  const saveUserFile = vi.fn()
+  const resolveForGeneration = vi.fn()
+  const readImageBufferMock = readImageBuffer as unknown as ReturnType<typeof vi.fn>
+  const bbox = { x: 10, y: 10, width: 40, height: 40 }
+  const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a])
+  const fakeFetch = vi.fn()
+  let svc: StudioService
+
+  const visionResolved = (modelName: string) => ({
+    channelId: 'platform',
+    modelName,
+    apiFormat: 'openai' as const,
+    credentials: { apiKey: 'k', baseUrl: 'https://x/v1' },
+    source: 'platform' as const,
+  })
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    resetSegmentRateLimitForTests()
+    delete process.env.FAL_KEY
+    delete process.env.LNKPI_VISION_NAMING_MODEL
+    process.env.LNKPI_SEGMENT_SERVICE_URL = 'http://lnkpi-segment:8000'
+    saveUserFile.mockResolvedValue({ url: 'http://host/api/uploads/u1/element-mask.png' })
+    readImageBufferMock.mockResolvedValue(PNG_BYTES)
+    sharpMeta.mockResolvedValue({ width: 200, height: 160 })
+    vi.mocked(computeMaskBBox).mockResolvedValue(bbox)
+    vi.mocked(normalizeMaskPng).mockResolvedValue(PNG_BYTES)
+    vi.mocked(cropImageToDataUrl).mockResolvedValue('data:image/png;base64,xxx')
+    vi.mocked(parseElementName).mockImplementation((t: string) => {
+      try {
+        return (JSON.parse(t) as { name?: string }).name ?? null
+      } catch {
+        return null
+      }
+    })
+    vi.stubGlobal('fetch', fakeFetch)
+    fakeFetch.mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () =>
+        PNG_BYTES.buffer.slice(PNG_BYTES.byteOffset, PNG_BYTES.byteOffset + PNG_BYTES.byteLength),
+    })
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        StudioService,
+        { provide: PointsService, useValue: { consume: vi.fn(), refund: vi.fn() } },
+        { provide: PrismaService, useValue: {} },
+        { provide: ProviderResolverService, useValue: { resolveForGeneration } },
+        { provide: MediaProbeService, useValue: {} },
+        { provide: UploadService, useValue: { saveUserFile } },
+      ],
+    }).compile()
+    svc = moduleRef.get(StudioService)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    for (const [k, v] of [
+      ['LNKPI_SEGMENT_SERVICE_URL', savedEnv.seg],
+      ['LNKPI_VISION_NAMING_MODEL', savedEnv.naming],
+      ['FAL_KEY', savedEnv.fal],
+    ] as const) {
+      if (v === undefined) delete process.env[k]
+      else process.env[k] = v
+    }
+  })
+
+  it('returns recognized name when naming succeeds', async () => {
+    resolveForGeneration.mockResolvedValue(visionResolved('agnes-2.0-flash'))
+    vi.spyOn(svc, 'runVisionQaInternal').mockResolvedValue({
+      text: '{"name":"锤子"}',
+      visionUsed: true,
+    })
+
+    const out = await svc.elementRecognize('u1', { imageUrl: 'https://a.png', x: 30, y: 30 })
+
+    expect(out.name).toBe('锤子')
+    expect(out.maskUrl).toBe('http://host/api/uploads/u1/element-mask.png')
+    expect(out.bbox).toEqual(bbox)
+  })
+
+  it('degrades to 选区 when naming call fails (mask still returned)', async () => {
+    resolveForGeneration.mockResolvedValue(visionResolved('agnes-2.0-flash'))
+    vi.spyOn(svc, 'runVisionQaInternal').mockRejectedValue(new Error('vision down'))
+
+    const out = await svc.elementRecognize('u1', { imageUrl: 'https://a.png', x: 30, y: 30 })
+
+    expect(out.name).toBe('选区')
+    expect(out.maskUrl).toBe('http://host/api/uploads/u1/element-mask.png')
+  })
+
+  it('degrades to 选区 when no vision-capable model (no 400)', async () => {
+    resolveForGeneration.mockResolvedValue(visionResolved('text-embedding-3'))
+
+    const out = await svc.elementRecognize('u1', { imageUrl: 'https://a.png', x: 30, y: 30 })
+
+    expect(out.name).toBe('选区')
+    expect(out.maskUrl).toBe('http://host/api/uploads/u1/element-mask.png')
+  })
+
+  it('uses LNKPI_VISION_NAMING_MODEL as naming fallback candidate', async () => {
+    process.env.LNKPI_VISION_NAMING_MODEL = 'gemini-2.0-flash'
+    resolveForGeneration
+      .mockResolvedValueOnce(visionResolved('text-embedding-3'))
+      .mockResolvedValueOnce(visionResolved('gemini-2.0-flash'))
+    vi.spyOn(svc, 'runVisionQaInternal').mockResolvedValue({
+      text: '{"name":"盾牌"}',
+      visionUsed: true,
+    })
+
+    const out = await svc.elementRecognize('u1', { imageUrl: 'https://a.png', x: 30, y: 30 })
+
+    expect(out.name).toBe('盾牌')
+    expect(resolveForGeneration).toHaveBeenCalledWith('u1', 'gemini-2.0-flash', 'text')
   })
 })
