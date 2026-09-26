@@ -179,6 +179,24 @@ describe('ProviderResolverService', () => {
     expect(result.credentials.baseUrl).toBe('https://fresh.example.com/v1')
   })
 
+  it('defaults empty platform text modelName to OPENAI_CHAT_MODEL', async () => {
+    const saved = process.env.OPENAI_CHAT_MODEL
+    process.env.OPENAI_CHAT_MODEL = 'agnes-2.0-flash'
+    try {
+      const result = await resolver.resolveForGeneration('u1', undefined, 'text')
+      expect(result.channelId).toBe('platform')
+      expect(result.modelName).toBe('agnes-2.0-flash')
+    } finally {
+      if (saved === undefined) delete process.env.OPENAI_CHAT_MODEL
+      else process.env.OPENAI_CHAT_MODEL = saved
+    }
+  })
+
+  it('keeps empty platform image modelName as-is (no chat default)', async () => {
+    const result = await resolver.resolveForGeneration('u1', undefined, 'image')
+    expect(result.modelName).toBe('')
+  })
+
   it('treats legacy bare model keys as platform', async () => {
     const result = await resolver.resolveForGeneration('u1', 'agnes-image-2.1-flash', 'image')
     expect(result.channelId).toBe('platform')

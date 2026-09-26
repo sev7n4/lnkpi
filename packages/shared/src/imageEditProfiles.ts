@@ -4,12 +4,12 @@ import type { GuideCapabilities } from './imagePromptingGuide/types'
 export const P1_IMAGE_EDIT_MODEL_KEY = 'image2'
 export const IMAGE_EDIT_GATEWAY_MODEL_ID = 'gpt-image-2-official'
 
-export type ImageEditWire = 'apimart_mask'
+export type ImageEditWire = 'apimart_mask' | 'openai_sync'
 
 export interface ImageEditModelProfile {
   editWire: ImageEditWire
   gatewayModelId: string
-  responseMode: 'async_task'
+  responseMode: 'async_task' | 'sync_url'
   size: 'auto' | string
   pollIntervalMs: number
   maxPollMs: number
@@ -35,6 +35,20 @@ const IMAGE2_EDIT_PROFILE: ImageEditModelProfile = {
   pollIntervalMs: 8000,
   maxPollMs: 360000,
   capabilities: defaultGuideCapabilities(),
+}
+
+/**
+ * BYOK 渠道编辑档位：走 OpenAI 兼容同步 images API（image+mask 参数）。
+ * gatewayModelId 由服务端用渠道解码出的 modelName 填充；蒙版外像素由
+ * compositeUnmaskedPixels 本地合成兜底（上游蒙版语义不保证）。
+ */
+export const BYOK_IMAGE_EDIT_PROFILE: ImageEditModelProfile = {
+  editWire: 'openai_sync',
+  gatewayModelId: '',
+  responseMode: 'sync_url',
+  size: 'auto',
+  pollIntervalMs: 8000,
+  maxPollMs: 360000,
 }
 
 /** 未知 key 抛错；服务端据此返回 400。 */

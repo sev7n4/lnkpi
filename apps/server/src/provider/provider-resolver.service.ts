@@ -38,7 +38,12 @@ export class ProviderResolverService {
   ): Promise<ResolvedGenerationProvider> {
     const decoded = modelValue ? decodeChannelModel(modelValue) : null
     const channelId = decoded?.channelId ?? PLATFORM_CHANNEL_ID
-    const modelName = decoded?.modelName ?? (modelValue ?? '')
+    let modelName = decoded?.modelName ?? (modelValue ?? '')
+    // 平台文本通道缺省 modelName 时中心化回落 OPENAI_CHAT_MODEL，
+    // 避免各调用点拿到空串（曾导致识图白名单 supportsVisionTextModel('') 恒 false）。
+    if (channelId === PLATFORM_CHANNEL_ID && modality === 'text' && !modelName.trim()) {
+      modelName = process.env.OPENAI_CHAT_MODEL?.trim() || modelName
+    }
 
     if (channelId === PLATFORM_CHANNEL_ID) {
       const channel = await this.prisma.providerChannel.findUnique({

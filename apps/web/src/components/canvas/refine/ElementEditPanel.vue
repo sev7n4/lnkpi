@@ -5,7 +5,12 @@ import { persistMediaUrl } from '@/composables/useMediaUpload'
 import { studioApi } from '@/services/studio-api'
 import { combineElementEditPrompt } from '@/components/canvas/elementEditModel'
 import ElementChipRow from './ElementChipRow.vue'
-import { CANVAS_GENERATE_CREDITS, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
+import {
+  CANVAS_GENERATE_CREDITS,
+  decodeChannelModel,
+  P1_IMAGE_EDIT_MODEL_KEY,
+} from '@lnkpi/shared'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 
 /**
  * 元素编辑面板（精修右栏，element 模式，2026-09-25 重做版）：
@@ -17,6 +22,18 @@ import { CANVAS_GENERATE_CREDITS, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
  *  -【⚡生成】累积蒙版 + combined prompt + 替换参考图 → image/edit mode:'inpaint' → 会话胶片条。
  */
 const editor = useCanvasEditorStore()
+const { getConfig } = useModelProviderSettings()
+
+/**
+ * 元素编辑生成模型：dock 选中的 BYOK 渠道（channelId::modelName）优先——
+ * 生成是用户归属成本，用户插了自己的 key 就不该烧平台 apimart；
+ * 平台目录/未配置时回落白名单 image2。服务端按 decodeChannelModel 分流。
+ */
+const editModel = computed(() => {
+  const dockModel = getConfig('image').model
+  const decoded = dockModel ? decodeChannelModel(dockModel) : null
+  return decoded && decoded.channelId !== 'platform' ? dockModel : P1_IMAGE_EDIT_MODEL_KEY
+})
 
 const emit = defineEmits<{
   busy: [value: boolean]
@@ -166,7 +183,7 @@ async function generate() {
       prompt,
       imageUrl: editor.imageTarget?.url ?? '',
       maskUrl,
-      model: P1_IMAGE_EDIT_MODEL_KEY,
+      model: editModel.value,
       size: 'auto',
       mode: 'inpaint',
       referenceImageUrls: refUrls.length ? refUrls : undefined,

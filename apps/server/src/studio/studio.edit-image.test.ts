@@ -44,6 +44,14 @@ const platformResolved = {
   source: 'platform' as const,
 }
 
+const byokResolved = {
+  channelId: 'ch-1',
+  modelName: 'agnes-image-2.0-flash',
+  apiFormat: 'openai' as const,
+  credentials: { apiKey: 'user-key', baseUrl: 'https://apihub.example.com/v1' },
+  source: 'user' as const,
+}
+
 describe('StudioService.editImage', () => {
   let svc: StudioService
   let resolveForGeneration: ReturnType<typeof vi.fn>
@@ -160,6 +168,46 @@ describe('StudioService.editImage', () => {
     expect(imageEdit).toHaveBeenCalledWith(
       expect.objectContaining({ userPrompt: '去除污渍' }),
     )
+  })
+
+  it('routes channel-encoded model to sync wire with pixel size fallback', async () => {
+    resolveForGeneration.mockResolvedValueOnce(byokResolved)
+    await svc.editImage('u1', { ...input, model: 'ch-1::agnes-image-2.0-flash', size: 'auto' })
+
+    expect(resolveForGeneration).toHaveBeenCalledWith(
+      'u1',
+      'ch-1::agnes-image-2.0-flash',
+      'image',
+    )
+    expect(createImageEditProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        apiKey: 'user-key',
+        baseUrl: 'https://apihub.example.com/v1',
+        wire: 'openai_sync',
+      }),
+    )
+    expect(imageEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'agnes-image-2.0-flash', size: '64x64' }),
+    )
+  })
+
+  it('rejects non-openai BYOK channels with 400 and refunds', async () => {
+    resolveForGeneration.mockResolvedValueOnce({ ...byokResolved, apiFormat: 'gemini' })
+
+    await expect(svc.editImage('u1', { ...input, model: 'ch-1::m' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    )
+    expect(pointsRefund).toHaveBeenCalled()
+    expect(imageEdit).not.toHaveBeenCalled()
+  })
+
+  it('refunds when channel resolution fails', async () => {
+    resolveForGeneration.mockRejectedValueOnce(new Error('channel not found'))
+
+    await expect(
+      svc.editImage('u1', { ...input, model: 'ch-missing::m' }),
+    ).rejects.toThrow('channel not found')
+    expect(pointsRefund).toHaveBeenCalled()
   })
 
   it('refunds points and marks record failed when provider throws', async () => {
