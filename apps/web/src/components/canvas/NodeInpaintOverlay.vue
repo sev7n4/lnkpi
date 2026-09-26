@@ -399,7 +399,7 @@ onUnmounted(() => {
             <polyline
               v-for="(st, i) in item.shape.strokes"
               :key="i"
-              :points="st.points.map((p: { x: number; y: number }) => `${p.x},${p.y}`).join(' ')"
+              :points="st.points.map((p) => `${p.x},${p.y}`).join(' ')"
               fill="none"
               :stroke="highlightedId === item.id ? '#a89dff' : '#ffffff'"
               :stroke-width="st.size"
