@@ -241,15 +241,27 @@ class ImageVariationDto extends CanvasScopeFields {
   model?: string
 }
 
-class ImageEditDimsDto {
+/**
+ * 扩图起止尺寸。宽容校验（2026-09-26 线上故障）：
+ * 旧前端 bundle 在扩图链路发过 `outpaintTo: { width, height: null }`（NaN 经
+ * JSON.stringify 变 null / undefined 丢 key），严格 IsNumber 直接 400
+ * 「must be a number conforming to the specified constraints」，用户侧表现为
+ * 重绘/扩图/元素编辑全部不可用。改为宽容：缺失/ null 放行（service 兜底回
+ * baseDims），数字字符串由 @Type(() => Number) 收敛，其余非法值依旧拒绝。
+ */
+export class ImageEditDimsDto {
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  width!: number
+  width?: number
 
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber()
-  height!: number
+  height?: number
 }
 
-class ImageEditDto extends CanvasScopeFields {
+export class ImageEditDto extends CanvasScopeFields {
   @IsString()
   prompt!: string
 
