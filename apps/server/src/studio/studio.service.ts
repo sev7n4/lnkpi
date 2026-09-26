@@ -1390,14 +1390,20 @@ export class StudioService {
       referenceImageUrls: input.referenceImageUrls,
       sizeOverride: input.size,
     })
+    // 扩图尺寸兜底（2026-09-26 线上故障）：DTO 已放行缺失/null 字段，这里把
+    // 非有限正数的整体尺寸对象回落为原图尺寸，绝不让 null/NaN 进 metadata。
+    const saneDims = (d?: { width: number; height: number }) =>
+      d && Number.isFinite(d.width) && d.width > 0 && Number.isFinite(d.height) && d.height > 0
+        ? { width: d.width, height: d.height }
+        : undefined
     const outpaintMeta =
       editMode === 'outpaint'
         ? {
-            outpaintFrom: input.outpaintFrom ?? {
+            outpaintFrom: saneDims(input.outpaintFrom) ?? {
               width: baseDims.width,
               height: baseDims.height,
             },
-            outpaintTo: input.outpaintTo ?? {
+            outpaintTo: saneDims(input.outpaintTo) ?? {
               width: baseDims.width,
               height: baseDims.height,
             },
