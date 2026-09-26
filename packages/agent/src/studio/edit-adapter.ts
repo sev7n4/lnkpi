@@ -54,3 +54,32 @@ export function buildImageEditRequest(input: {
     },
   }
 }
+
+/**
+ * BYOK 同步编辑（openai_sync wire）请求体：OpenAI 兼容 images API，
+ * image+mask 走 JSON data URL（agnes i2i 实测 200，size 需显式像素值，
+ * 'auto' 会 500）。参考图走 agnes extra_body（与 image-provider 同款 wire）。
+ */
+export function buildSyncImageEditRequestBody(input: {
+  model: string
+  userPrompt: string
+  imageUrl: string
+  maskUrl: string
+  referenceImageUrls?: string[]
+  size?: string
+}): Record<string, unknown> {
+  const prompt = buildEditPrompt(input.userPrompt)
+  const refs = (input.referenceImageUrls ?? []).map((u) => u.trim()).filter(Boolean)
+  const body: Record<string, unknown> = {
+    model: input.model,
+    prompt,
+    image: input.imageUrl,
+    mask: input.maskUrl,
+    n: 1,
+  }
+  if (input.size) body.size = input.size
+  if (refs.length > 0) {
+    body.extra_body = { image: refs, response_format: 'url' }
+  }
+  return body
+}

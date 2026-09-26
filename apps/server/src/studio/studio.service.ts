@@ -40,9 +40,11 @@ import {
   evaluateMediaRefPreflight,
   mapMessageToErrorCode,
   P1_IMAGE_EDIT_MODEL_KEY,
+  BYOK_IMAGE_EDIT_PROFILE,
   IMAGE_EDIT_MODEL_PRICING,
   IMAGE_EDIT_MODEL_KEYS,
   resolveImageEditProfile,
+  decodeChannelModel,
   redactProviderSnippet,
   resolveImageSize,
   resolveModelKey,
@@ -1348,13 +1350,19 @@ export class StudioService {
 
     const editModelKey = input.model ?? P1_IMAGE_EDIT_MODEL_KEY
     const editMode: 'inpaint' | 'outpaint' = input.mode ?? 'inpaint'
+    // BYOK 渠道模型（channelId::modelName）→ 同步编辑 wire；平台白名单 key → apimart 异步协议
+    const byokChannel = decodeChannelModel(editModelKey)
     let profile: ReturnType<typeof resolveImageEditProfile>
-    try {
-      profile = resolveImageEditProfile(editModelKey)
-    } catch {
-      throw new BadRequestException(
-        `未知的精修模型：${input.model ?? '(默认)'}；仅支持 ${IMAGE_EDIT_MODEL_KEYS.join(', ')}`,
-      )
+    if (byokChannel) {
+      profile = { ...BYOK_IMAGE_EDIT_PROFILE, gatewayModelId: byokChannel.modelName }
+    } else {
+      try {
+        profile = resolveImageEditProfile(editModelKey)
+      } catch {
+        throw new BadRequestException(
+          `未知的精修模型：${input.model ?? '(默认)'}；仅支持 ${IMAGE_EDIT_MODEL_KEYS.join(', ')}`,
+        )
+      }
     }
     const cost = IMAGE_EDIT_MODEL_PRICING[editModelKey] ?? 10
 
@@ -1380,18 +1388,53 @@ export class StudioService {
       chargeReason,
       consumeMeta('image', { model: editModelKey, generationId: null }),
     )
-    const resolved = await this.resolver.resolveForGeneration(
-      userId,
-      editModelKey,
-      'image',
-    )
-    const built = buildImageEditRequest({
-      userPrompt: input.prompt,
-      imageUrl: input.imageUrl,
-      maskUrl: input.maskUrl,
-      referenceImageUrls: input.referenceImageUrls,
-      sizeOverride: input.size,
-    })
+    let resolved
+    try {
+      resolved = await this.resolver.resolveForGeneration(userId, editModelKey, 'image')
+    } catch (err) {
+      // 渠道解析失败（如 BYOK 渠道不存在）：先退积分再抛
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-失败退款`,
+        refundMeta('image', 'failed_refund', { model: editModelKey, generationId: null }),
+      )
+      throw err
+    }
+    if (byokChannel && resolved.apiFormat !== 'openai') {
+      await this.points.refund(
+        userId,
+        cost,
+        `${chargeReason}-失败退款`,
+        refundMeta('image', 'failed_refund', { model: editModelKey, generationId: null }),
+      )
+      throw new BadRequestException('该渠道的 API 格式暂不支持图像编辑')
+    }
+    // BYOK 同步 wire 需要显式像素尺寸（部分上游 'auto' 会 500），缺省跟随原图
+    const byokSize = byokChannel
+      ? input.size && input.size !== 'auto'
+        ? input.size
+        : `${baseDims.width}x${baseDims.height}`
+      : undefined
+    const built = byokChannel
+      ? {
+          prompt: '',
+          body: {},
+          meta: {
+            editMode: 'inpaint' as const,
+            modelKey: editModelKey,
+            gatewayModelId: byokChannel.modelName,
+            editWire: profile.editWire,
+            size: byokSize ?? 'auto',
+          },
+        }
+      : buildImageEditRequest({
+          userPrompt: input.prompt,
+          imageUrl: input.imageUrl,
+          maskUrl: input.maskUrl,
+          referenceImageUrls: input.referenceImageUrls,
+          sizeOverride: input.size,
+        })
     // 扩图尺寸兜底（2026-09-26 线上故障）：DTO 已放行缺失/null 字段，这里把
     // 非有限正数的整体尺寸对象回落为原图尺寸，绝不让 null/NaN 进 metadata。
     const saneDims = (d?: { width: number; height: number }) =>
@@ -1502,11 +1545,15 @@ export class StudioService {
       if (resolved.source === 'user' && !resolved.credentials.apiKey) {
         throw new Error('missing api key')
       }
-      const { url: upstreamUrl } = await createImageEditProvider(providerOpts(resolved)).edit({
+      const { url: upstreamUrl } = await createImageEditProvider({
+        ...providerOpts(resolved),
+        wire: profile.editWire,
+      }).edit({
         userPrompt: input.prompt,
         imageUrl: inlinedImage,
         maskUrl: inlinedMask,
         referenceImageUrls: inlinedRefs,
+        ...(byokChannel ? { modelId: byokChannel.modelName, size: byokSize } : {}),
       })
       if (cancel?.isCancelled()) {
         await this.points.refund(
@@ -1829,11 +1876,17 @@ export class StudioService {
 
     const maskPng = await normalizeMaskPng(maskBuf, imgWidth, imgHeight)
     const saved = await this.upload.saveUserFile(userId, maskPng, 'element-mask.png', 'image/png')
-    const name = await this.recognizeElementName(userId, imgBuf, bbox, input.model)
+    // 命名是装饰性步骤（蒙版/bbox 才是必需品）：失败降级为「选区」，绝不阻断元素编辑主流程。
+    let name = '选区'
+    try {
+      name = await this.recognizeElementName(userId, imgBuf, bbox, input.model)
+    } catch {
+      /* 识图模型不可用/调用失败 → 保持默认名 */
+    }
     return { name, maskUrl: saved.url, bbox }
   }
 
-  /** 识图命名：用户当前文本模型 → 平台默认文本模型，取第一个可识图的；都没有则给出可操作错误。 */
+  /** 识图命名：传入模型 → LNKPI_VISION_NAMING_MODEL → 平台默认文本模型，取第一个可识图的。 */
   private async recognizeElementName(
     userId: string,
     imgBuf: Buffer,
@@ -1841,7 +1894,9 @@ export class StudioService {
     model?: string,
   ): Promise<string> {
     const candidates: ResolvedGenerationProvider[] = []
-    for (const candidate of [model, undefined]) {
+    const namingFallback =
+      process.env.LNKPI_VISION_NAMING_MODEL?.trim() || process.env.OPENAI_CHAT_MODEL?.trim() || undefined
+    for (const candidate of [model, namingFallback]) {
       try {
         candidates.push(await this.resolver.resolveForGeneration(userId, candidate, 'text'))
       } catch {
