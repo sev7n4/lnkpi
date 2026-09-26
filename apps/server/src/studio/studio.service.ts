@@ -1580,6 +1580,51 @@ export class StudioService {
     }
   }
 
+  /**
+   * 内网 MobileSAM 分割（2026-09-26 自建链路）：配置 LNKPI_SEGMENT_SERVICE_URL 即优先走自建
+   * （点提示 → mask PNG 同源落盘），失败/未配置返回 null，调用方回落 fal。
+   * 与 mattingImage 同款模式：api 侧下载图片（代理感知）→ base64 POST → 收 PNG → saveUserFile。
+   */
+  private async segmentViaInternalService(
+    userId: string,
+    imageUrl: string,
+    x: number,
+    y: number,
+    label: 0 | 1,
+  ): Promise<{ maskUrl: string } | null> {
+    const endpoint = process.env.LNKPI_SEGMENT_SERVICE_URL?.trim()
+    if (!endpoint) return null
+
+    let buffer: Buffer
+    try {
+      buffer = await readImageBuffer(imageUrl)
+    } catch {
+      return null
+    }
+    if (buffer.byteLength > 20 * 1024 * 1024) return null
+
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+    let png: Buffer
+    try {
+      const res = await fetch(`${endpoint.replace(/\/$/, '')}/segment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: buffer.toString('base64'), x, y, label }),
+        signal: controller.signal,
+      })
+      if (!res.ok) return null
+      png = Buffer.from(await res.arrayBuffer())
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+    if (png.subarray(1, 4).toString('ascii') !== 'PNG') return null
+    const saved = await this.upload.saveUserFile(userId, png, 'segment.png', 'image/png')
+    return { maskUrl: saved.url }
+  }
+
   async segmentImage(
     userId: string,
     input: { imageUrl: string; x: number; y: number; label?: 0 | 1 },
@@ -1598,13 +1643,27 @@ export class StudioService {
       throw new HttpException('点选过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
     }
 
+    const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
+    const publicUrl = inlinedUrl ?? imageUrl
+
+    // 内网 MobileSAM 优先（未配置/失败返回 null → 回落 fal）
+    try {
+      const internal = await this.segmentViaInternalService(
+        userId,
+        publicUrl,
+        input.x,
+        input.y,
+        input.label ?? 1,
+      )
+      if (internal) return internal
+    } catch {
+      // 落盘等异常也回落 fal
+    }
+
     const apiKey = process.env.FAL_KEY?.trim()
     if (!apiKey) {
       throw new ServiceUnavailableException('点选暂不可用')
     }
-
-    const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
-    const publicUrl = inlinedUrl ?? imageUrl
 
     try {
       return await createSegmentProvider({ apiKey }).segment({
@@ -1714,22 +1773,34 @@ export class StudioService {
       throw new HttpException('识别过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
     }
     const apiKey = process.env.FAL_KEY?.trim()
-    if (!apiKey) {
-      throw new ServiceUnavailableException('对象识别服务未配置')
-    }
 
     const [inlinedUrl] = await inlineUpstreamReferenceImages([imageUrl])
     const publicUrl = inlinedUrl ?? imageUrl
 
     let segmentMaskUrl: string
     try {
-      const out = await createSegmentProvider({ apiKey }).segment({
-        imageUrl: publicUrl,
-        x: input.x,
-        y: input.y,
-        label: input.label ?? 1,
-      })
-      segmentMaskUrl = out.maskUrl
+      // 内网 MobileSAM 优先（未配置/失败返回 null → 回落 fal）
+      const internal = await this.segmentViaInternalService(
+        userId,
+        publicUrl,
+        input.x,
+        input.y,
+        input.label ?? 1,
+      )
+      if (internal) {
+        segmentMaskUrl = internal.maskUrl
+      } else {
+        if (!apiKey) {
+          throw new ServiceUnavailableException('对象识别服务未配置')
+        }
+        const out = await createSegmentProvider({ apiKey }).segment({
+          imageUrl: publicUrl,
+          x: input.x,
+          y: input.y,
+          label: input.label ?? 1,
+        })
+        segmentMaskUrl = out.maskUrl
+      }
     } catch (err) {
       if (err instanceof BadRequestException || err instanceof HttpException) throw err
       throw new BadGatewayException(
