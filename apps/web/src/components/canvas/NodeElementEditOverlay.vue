@@ -8,6 +8,7 @@ import { studioApi } from '@/services/studio-api'
 import {
   coverDisplayMapper,
   elementEditShapeBBox,
+  maskTintDataUrl,
   nextElementEditId,
   pointRectAt,
   type ElementEditItem,
@@ -18,12 +19,14 @@ import RectHandleFrame from './RectHandleFrame.vue'
 import { CANVAS_GENERATE_CREDITS } from '@lnkpi/shared'
 
 /**
- * 节点直出元素编辑（2026-09-25 用户需求重做版）：
+ * 节点直出元素编辑（2026-09-25 初版 / 2026-09-26 选区统一改版）：
  * 单击图片节点 → 浮层「元素编辑」→
- *  - 上沿工具条：[✕ 元素编辑] [📍定位] [◎焦点] [⬚选区] [✏️画笔] [↺撤销]；
- *  - 焦点选择（核心）：点击图上元素 → 调 /studio/element-recognize（SAM 分割 + 识图命名）
- *    → 结果以小芯片条嵌入底部「编辑内容」卡（缩略图 + 可二次编辑对象名 + 【修改】输入）；
- *  - 矩形/画笔：直接成芯片（名默认「选区」），同样在芯片条内补修改内容；
+ *  - 上沿工具条：[✕ 元素编辑] [📍定位] [◎焦点] [⬚选区] [✏️画笔] [−缩/+扩] [↺撤销]；
+ *  - 焦点选择（核心）：点击图上元素 → element-recognize（SAM 分割 + 识图命名）
+ *    → 以**真实蒙版着色**呈现在图上（主题色半透明），不是外接矩形；
+ *    点击落在已有蒙版内 = 加正点重识别，右键 = 加负点（减选），工具条 −/+ 扩缩选区；
+ *  - 矩形：拖框 → box prompt 识别（SAM 按框精修出对象蒙版）+ 命名，失败保留矩形兜底；
+ *  - 画笔：涂抹即选区（不被 SAM 覆盖），仅按其 bbox 调识别命名；
  *  - 多轮点击多芯片累积，【⚡生成】一次完成多组修改 → image/edit mode:'inpaint' 下游新节点；
  *  - 撤销：移除最后一枚芯片（识别中芯片先中断请求）。
  */
@@ -206,6 +209,18 @@ function onStagePointerDown(event: PointerEvent) {
     return
   }
   if (tool.value === 'point') {
+    // 命中已有蒙版芯片：加正点重识别（左键=加选）；未命中 → 新芯片
+    const maskHit = hitMaskItem(p)
+    if (maskHit && natural.value) {
+      highlightedId.value = maskHit.id
+      const mapper = coverDisplayMapper(natural.value.w, natural.value.h, box.value.w, box.value.h)
+      maskHit.promptPoints = [
+        ...(maskHit.promptPoints ?? []),
+        { x: Math.round(mapper.toPixelX(p.x)), y: Math.round(mapper.toPixelY(p.y)), label: 1 },
+      ]
+      void reRecognize(maskHit)
+      return
+    }
     void recognizeAt(p)
     return
   }
@@ -230,6 +245,38 @@ function hitRectItem(p: { x: number; y: number }): ElementEditItem | null {
     }
   }
   return null
+}
+
+/** 命中检测：点落在某个蒙版芯片 bbox 内 → 返回该项（加/减点精修用，倒序优先） */
+function hitMaskItem(p: { x: number; y: number }): ElementEditItem | null {
+  for (let i = items.value.length - 1; i >= 0; i -= 1) {
+    const it = items.value[i]!
+    if (it.shape.kind !== 'mask' || it.recognizing) continue
+    const r = it.shape.bbox
+    if (r.width > 2 && r.height > 2 && p.x >= r.x && p.x <= r.x + r.width && p.y >= r.y && p.y <= r.y + r.height) {
+      return it
+    }
+  }
+  return null
+}
+
+/** 右键（contextmenu）：对光标下的蒙版芯片加负点（减选），阻止系统菜单 */
+function onStageContextMenu(event: MouseEvent) {
+  if (tool.value !== 'point' || !natural.value) return
+  const pt = stagePoint(event as unknown as PointerEvent)
+  if (!pt) return
+  event.preventDefault()
+  event.stopPropagation()
+  const p = clampPoint(pt)
+  const maskHit = hitMaskItem(p)
+  if (!maskHit) return
+  highlightedId.value = maskHit.id
+  const mapper = coverDisplayMapper(natural.value.w, natural.value.h, box.value.w, box.value.h)
+  maskHit.promptPoints = [
+    ...(maskHit.promptPoints ?? []),
+    { x: Math.round(mapper.toPixelX(p.x)), y: Math.round(mapper.toPixelY(p.y)), label: 0 },
+  ]
+  void reRecognize(maskHit)
 }
 
 /** 选中（高亮）中的矩形芯片：8 手柄调整 / 拖动 */
@@ -274,7 +321,8 @@ function onStagePointerUp() {
   window.removeEventListener('pointerup', onStagePointerUp)
   if (tool.value === 'brush' && liveStroke.value) {
     if (liveStroke.value.points.length > 0) {
-      pushChip({ kind: 'strokes', strokes: [liveStroke.value] }, '选区')
+      const item = pushChip({ kind: 'strokes', strokes: [liveStroke.value] }, '选区')
+      void nameSelectionItem(item)
     }
     liveStroke.value = null
     return
@@ -282,22 +330,133 @@ function onStagePointerUp() {
   if (drawingRect.value && dragStart) {
     const r = drawingRect.value
     if (r.width >= 8 && r.height >= 8) {
-      pushChip({ kind: 'rect', rect: r }, '选区')
+      void recognizeBox(r)
     }
   }
   drawingRect.value = null
   dragStart = null
 }
 
+/** 矩形完成 → box prompt 识别（SAM 按框精修出对象蒙版）+ 命名；失败保留矩形兜底 */
+async function recognizeBox(r: CropRect) {
+  const n = natural.value
+  if (!n) return
+  const item: ElementEditItem = {
+    id: nextElementEditId(),
+    name: '',
+    modify: '',
+    shape: { kind: 'rect', rect: r },
+    recognizing: true,
+  }
+  items.value.push(item)
+  highlightedId.value = item.id
+  refreshThumb(item)
+  const mapper = coverDisplayMapper(n.w, n.h, box.value.w, box.value.h)
+  recognizeAbort?.abort()
+  recognizeAbort = new AbortController()
+  const signal = recognizeAbort.signal
+  try {
+    const { data } = await studioApi.recognizeElement(
+      {
+        imageUrl: props.url,
+        box: {
+          x1: Math.round(mapper.toPixelX(r.x)),
+          y1: Math.round(mapper.toPixelY(r.y)),
+          x2: Math.round(mapper.toPixelX(r.x + r.width)),
+          y2: Math.round(mapper.toPixelY(r.y + r.height)),
+        },
+      },
+      signal,
+    )
+    if (signal.aborted) return
+    const target = items.value.find((it) => it.id === item.id)
+    if (!target) return
+    target.recognizing = false
+    target.name = data.data.name || '选区'
+    const b = data.data.bbox
+    if (b && b.width > 0 && b.height > 0) {
+      target.shape = { kind: 'mask', maskUrl: data.data.maskUrl, bbox: pixelToDisplayRect(b) }
+      target.promptPoints = [
+        {
+          x: Math.round((b.x + b.width / 2)),
+          y: Math.round((b.y + b.height / 2)),
+          label: 1,
+        },
+      ]
+      target.dilate = 0
+      refreshThumb(target)
+      void applyMaskTint(target, data.data.maskUrl)
+    }
+  } catch (err) {
+    if (signal.aborted) return
+    const target = items.value.find((it) => it.id === item.id)
+    if (target) {
+      target.recognizing = false
+      target.name = '选区'
+    }
+    console.warn('[element-recognize:box]', err instanceof Error ? err.message : err)
+  } finally {
+    if (recognizeAbort?.signal === signal) recognizeAbort = null
+  }
+}
+
+/** 画笔完成 → 保留用户涂抹选区，仅按其 bbox 调识别命名（不再被 SAM 整对象蒙版替换）。 */
+async function nameSelectionItem(item: ElementEditItem) {
+  const n = natural.value
+  if (!n) return
+  const bbox = elementEditShapeBBox(item.shape)
+  if (!(bbox.width > 0) || !(bbox.height > 0)) return
+  const mapper = coverDisplayMapper(n.w, n.h, box.value.w, box.value.h)
+  item.recognizing = true
+  try {
+    const { data } = await studioApi.recognizeElement({
+      imageUrl: props.url,
+      box: {
+        x1: Math.round(mapper.toPixelX(bbox.x)),
+        y1: Math.round(mapper.toPixelY(bbox.y)),
+        x2: Math.round(mapper.toPixelX(bbox.x + bbox.width)),
+        y2: Math.round(mapper.toPixelY(bbox.y + bbox.height)),
+      },
+    })
+    const target = items.value.find((it) => it.id === item.id)
+    if (target) target.name = data.data.name || '选区'
+  } catch {
+    /* 命名失败保留「选区」 */
+  } finally {
+    const target = items.value.find((it) => it.id === item.id)
+    if (target) target.recognizing = false
+  }
+}
+
+/** 选区粒度微调步长（原图像素） */
+const DILATE_STEP_PX = 8
+
+/** 当前高亮的蒙版芯片（扩缩按钮启用条件） */
+const highlightedMaskItem = computed(() => {
+  const it = items.value.find((i) => i.id === highlightedId.value)
+  return it && it.shape.kind === 'mask' ? it : null
+})
+
+/** 扩大/缩小选中蒙版选区（形态学缩放，服务端 dilate 参数），重跑识别 */
+function adjustDilate(delta: number) {
+  const it = highlightedMaskItem.value
+  if (!it || it.recognizing) return
+  const next = Math.max(-64, Math.min(64, (it.dilate ?? 0) + delta))
+  if (next === (it.dilate ?? 0)) return
+  it.dilate = next
+  void reRecognize(it)
+}
+
 /** 矩形/画笔完成 → 直接成芯片（名默认「选区」，芯片条内补修改内容） */
-function pushChip(shape: ElementEditShape, name: string) {
+function pushChip(shape: ElementEditShape, name: string): ElementEditItem {
   const item: ElementEditItem = { id: nextElementEditId(), name, modify: '', shape }
   items.value.push(item)
   highlightedId.value = item.id
   refreshThumb(item)
+  return item
 }
 
-/** 焦点识别：成芯片（转圈）→ element-recognize（SAM 分割 + 识图命名）→ 回填名与精确框 */
+/** 焦点识别：成芯片（转圈）→ element-recognize（SAM 分割 + 识图命名）→ 蒙版着色呈现 + 回填名 */
 async function recognizeAt(p: { x: number; y: number }) {
   const n = natural.value
   if (!n) return
@@ -308,42 +467,66 @@ async function recognizeAt(p: { x: number; y: number }) {
     modify: '',
     shape: { kind: 'rect', rect: pointRectAt(p, box.value.w, box.value.h) },
     recognizing: true,
+    promptPoints: [
+      { x: Math.round(mapper.toPixelX(p.x)), y: Math.round(mapper.toPixelY(p.y)), label: 1 },
+    ],
+    dilate: 0,
   }
   items.value.push(item)
   highlightedId.value = item.id
   refreshThumb(item)
+  await reRecognize(item)
+}
+
+/** 用芯片累计的点提示/扩缩重跑识别（加点、减点、扩缩粒度共用）。 */
+async function reRecognize(item: ElementEditItem) {
+  const points = item.promptPoints ?? []
+  if (!points.length || !natural.value) return
   recognizeAbort?.abort()
   recognizeAbort = new AbortController()
   const signal = recognizeAbort.signal
+  item.recognizing = true
   try {
     const { data } = await studioApi.recognizeElement(
       {
         imageUrl: props.url,
-        x: Math.round(mapper.toPixelX(p.x)),
-        y: Math.round(mapper.toPixelY(p.y)),
+        points,
+        ...(item.dilate ? { dilate: item.dilate } : {}),
       },
       signal,
     )
+    if (signal.aborted) return
     const target = items.value.find((it) => it.id === item.id)
     if (!target) return
     target.recognizing = false
     target.name = data.data.name || '未识别对象'
     const b = data.data.bbox
     if (b && b.width > 0 && b.height > 0) {
-      target.shape = { kind: 'rect', rect: pixelToDisplayRect(b) }
+      target.shape = { kind: 'mask', maskUrl: data.data.maskUrl, bbox: pixelToDisplayRect(b) }
       refreshThumb(target)
+      void applyMaskTint(target, data.data.maskUrl)
     }
   } catch (err) {
     if (signal.aborted) return
     const target = items.value.find((it) => it.id === item.id)
     if (target) {
       target.recognizing = false
-      target.name = '未识别对象'
+      if (!target.name) target.name = '未识别对象'
     }
     const message = err instanceof Error && err.message ? err.message : '对象识别失败，请重试或改用框选'
     console.warn('[element-recognize]', message)
   } finally {
     if (recognizeAbort?.signal === signal) recognizeAbort = null
+  }
+}
+
+/** 蒙版着色叠加（主题色半透明），display 层直观呈现精细选区。 */
+async function applyMaskTint(item: ElementEditItem, maskUrl: string) {
+  const tint = await maskTintDataUrl(maskUrl)
+  if (!tint) return
+  const target = items.value.find((it) => it.id === item.id)
+  if (target && target.shape.kind === 'mask' && target.shape.maskUrl === maskUrl) {
+    target.tintUrl = tint
   }
 }
 
@@ -445,6 +628,7 @@ onUnmounted(() => {
         :style="stageStyle"
         data-testid="node-element-stage"
         @pointerdown="onStagePointerDown"
+        @contextmenu="onStageContextMenu"
         @mousedown.stop
         @click.stop
       >
@@ -459,6 +643,15 @@ onUnmounted(() => {
               width: `${item.shape.rect.width}px`,
               height: `${item.shape.rect.height}px`,
             }"
+          />
+          <img
+            v-else-if="item.shape.kind === 'mask'"
+            :src="item.tintUrl || ''"
+            class="node-element-mask-img"
+            :class="{ 'is-hl': highlightedId === item.id, 'is-busy': item.recognizing }"
+            :style="{ width: `${box.w}px`, height: `${box.h}px` }"
+            alt=""
+            draggable="false"
           />
           <svg v-else class="node-element-svg" :style="{ left: 0, top: 0, width: `${box.w}px`, height: `${box.h}px` }" :viewBox="`0 0 ${box.w} ${box.h}`">
             <polyline
@@ -600,6 +793,35 @@ onUnmounted(() => {
             title="笔刷大小"
             aria-label="笔刷大小"
           >
+          <template v-if="highlightedMaskItem">
+            <span class="node-element-divider" aria-hidden="true" />
+            <button
+              type="button"
+              class="node-element-btn"
+              data-testid="node-element-shrink"
+              title="缩小选区"
+              aria-label="缩小选区"
+              :disabled="highlightedMaskItem.recognizing"
+              @click="adjustDilate(-DILATE_STEP_PX)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="6" /><path d="M8.5 11h5M16.5 16.5 21 21" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="node-element-btn"
+              data-testid="node-element-expand"
+              title="扩大选区"
+              aria-label="扩大选区"
+              :disabled="highlightedMaskItem.recognizing"
+              @click="adjustDilate(DILATE_STEP_PX)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="6" /><path d="M11 8.5v5M8.5 11h5M16.5 16.5 21 21" />
+              </svg>
+            </button>
+          </template>
           <button
             type="button"
             class="node-element-btn"
@@ -740,6 +962,23 @@ div.is-point {
   accent-color: #fff;
   margin: 0 0.35rem;
   cursor: pointer;
+}
+.node-element-mask-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  object-fit: cover;
+  pointer-events: none;
+  user-select: none;
+}
+.node-element-mask-img.is-hl {
+  outline: 1.5px solid #a89dff;
+  outline-offset: -1.5px;
+  border-radius: 8px;
+}
+.node-element-mask-img.is-busy {
+  opacity: 0.5;
+  animation: node-element-pulse 1.1s ease-in-out infinite;
 }
 
 .node-element-thumb {

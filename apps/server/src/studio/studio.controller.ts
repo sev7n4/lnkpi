@@ -1,6 +1,6 @@
 import { BadRequestException, Body, Controller, ForbiddenException, Get, Inject, NotFoundException, Param, Post, Query, Req, UseGuards } from '@nestjs/common'
 import { Type } from 'class-transformer'
-import { IsArray, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator'
+import { IsArray, ArrayMaxSize, IsBoolean, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from 'class-validator'
 import { AuthGuard } from '../auth/auth.guard'
 import { MediaProbeService } from '../media/media-probe.service'
 import { createCancelFlag } from '../points/charge-session'
@@ -307,10 +307,7 @@ export class ImageEditDto extends CanvasScopeFields {
   parentVersionId?: string
 }
 
-class ImageSegmentDto {
-  @IsString()
-  imageUrl!: string
-
+class SegmentPointDto {
   @IsNumber()
   x!: number
 
@@ -320,6 +317,57 @@ class ImageSegmentDto {
   @IsOptional()
   @IsIn([0, 1])
   label?: 0 | 1
+}
+
+class SegmentBoxDto {
+  @IsNumber()
+  x1!: number
+
+  @IsNumber()
+  y1!: number
+
+  @IsNumber()
+  x2!: number
+
+  @IsNumber()
+  y2!: number
+}
+
+/** 分割提示公共字段：旧单点 x/y 与新 points/box/dilate 并存，向后兼容。 */
+class SegmentPromptFields {
+  @IsOptional()
+  @IsNumber()
+  x?: number
+
+  @IsOptional()
+  @IsNumber()
+  y?: number
+
+  @IsOptional()
+  @IsIn([0, 1])
+  label?: 0 | 1
+
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => SegmentPointDto)
+  @ArrayMaxSize(16)
+  points?: SegmentPointDto[]
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => SegmentBoxDto)
+  box?: SegmentBoxDto
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-64)
+  @Max(64)
+  dilate?: number
+}
+
+class ImageSegmentDto extends SegmentPromptFields {
+  @IsString()
+  imageUrl!: string
 }
 
 class ImageMattingDto {
@@ -327,19 +375,9 @@ class ImageMattingDto {
   imageUrl!: string
 }
 
-class ElementRecognizeDto {
+class ElementRecognizeDto extends SegmentPromptFields {
   @IsString()
   imageUrl!: string
-
-  @IsNumber()
-  x!: number
-
-  @IsNumber()
-  y!: number
-
-  @IsOptional()
-  @IsIn([0, 1])
-  label?: 0 | 1
 
   @IsOptional()
   @IsString()
@@ -489,6 +527,9 @@ export class StudioController {
       x: dto.x,
       y: dto.y,
       label: dto.label,
+      points: dto.points,
+      box: dto.box,
+      dilate: dto.dilate,
     })
     return { code: 0, message: 'ok', data }
   }
@@ -515,6 +556,9 @@ export class StudioController {
       x: dto.x,
       y: dto.y,
       label: dto.label,
+      points: dto.points,
+      box: dto.box,
+      dilate: dto.dilate,
       model: dto.model,
     })
     return { code: 0, message: 'ok', data }

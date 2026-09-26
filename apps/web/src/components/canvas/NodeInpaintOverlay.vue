@@ -390,7 +390,12 @@ onUnmounted(() => {
               height: `${item.shape.rect.height}px`,
             }"
           />
-          <svg v-else class="node-inpaint-svg" :style="{ left: 0, top: 0, width: `${box.w}px`, height: `${box.h}px` }" :viewBox="`0 0 ${box.w} ${box.h}`">
+          <svg
+            v-else-if="item.shape.kind === 'strokes'"
+            class="node-inpaint-svg"
+            :style="{ left: 0, top: 0, width: `${box.w}px`, height: `${box.h}px` }"
+            :viewBox="`0 0 ${box.w} ${box.h}`"
+          >
             <polyline
               v-for="(st, i) in item.shape.strokes"
               :key="i"

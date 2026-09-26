@@ -118,9 +118,18 @@ export const studioApi = {
     ),
   segmentImage: (body: { imageUrl: string; x: number; y: number; label?: 0 | 1 }) =>
     api.post<{ data: { maskUrl: string } }>('/studio/image/segment', body),
-  /** 元素编辑焦点识别：点选 → SAM 对象蒙版 + 识图命名（bbox 为原图像素）。 */
+  /** 元素编辑焦点识别：点/多点/框提示 → SAM 对象蒙版 + 识图命名（bbox 为原图像素）。 */
   recognizeElement: (
-    body: { imageUrl: string; x: number; y: number; label?: 0 | 1; model?: string },
+    body: {
+      imageUrl: string
+      x?: number
+      y?: number
+      label?: 0 | 1
+      points?: { x: number; y: number; label?: 0 | 1 }[]
+      box?: { x1: number; y1: number; x2: number; y2: number }
+      dilate?: number
+      model?: string
+    },
     signal?: AbortSignal,
   ) =>
     api.post<{

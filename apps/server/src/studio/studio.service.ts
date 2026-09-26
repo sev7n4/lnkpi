@@ -346,6 +346,70 @@ function throwGenerationFailure(opts: {
 
 type CancelFlag = { isCancelled(): boolean }
 
+/** 分割提示（2026-09-26 元素编辑选区统一）：点（可多，label 0/1）/ 框 / 扩缩像素，可组合。 */
+export type SegmentPromptPoint = { x: number; y: number; label?: 0 | 1 }
+export type SegmentPromptBox = { x1: number; y1: number; x2: number; y2: number }
+export type SegmentPrompt = {
+  points?: SegmentPromptPoint[]
+  box?: SegmentPromptBox
+  dilate?: number
+}
+
+/** 归一化分割提示：box / points / 旧 x,y 单点 三选一（或组合），均无则 400。 */
+function normalizeSegmentPrompt(input: {
+  x?: number
+  y?: number
+  label?: 0 | 1
+  points?: SegmentPromptPoint[]
+  box?: SegmentPromptBox
+  dilate?: number
+}): SegmentPrompt {
+  const points = (input.points ?? [])
+    .filter((p) => Number.isFinite(p?.x) && Number.isFinite(p?.y) && p.x >= 0 && p.y >= 0)
+    .slice(0, 16)
+    .map((p) => ({ x: p.x, y: p.y, label: p.label === 0 ? 0 : 1 as 0 | 1 }))
+  let box: SegmentPromptBox | undefined
+  const b = input.box
+  if (
+    b
+    && [b.x1, b.y1, b.x2, b.y2].every((v) => Number.isFinite(v) && v >= 0)
+    && b.x1 !== b.x2
+    && b.y1 !== b.y2
+  ) {
+    box = {
+      x1: Math.min(b.x1, b.x2),
+      y1: Math.min(b.y1, b.y2),
+      x2: Math.max(b.x1, b.x2),
+      y2: Math.max(b.y1, b.y2),
+    }
+  }
+  if (!box && points.length === 0) {
+    if (Number.isFinite(input.x) && input.x! >= 0 && Number.isFinite(input.y) && input.y! >= 0) {
+      points.push({ x: input.x!, y: input.y!, label: input.label === 0 ? 0 : 1 })
+    } else {
+      throw new BadRequestException('选区提示无效（需要点或框）')
+    }
+  }
+  const dilate = Number.isFinite(input.dilate)
+    ? Math.max(-64, Math.min(64, Math.round(input.dilate!)))
+    : 0
+  return { points, box, ...(dilate ? { dilate } : {}) }
+}
+
+/** fal 回落只支持单点：取首个正点，无则框中心点，再无则任意点。 */
+function promptFallbackPoint(prompt: SegmentPrompt): SegmentPromptPoint {
+  const positive = prompt.points?.find((p) => p.label !== 0)
+  if (positive) return positive
+  if (prompt.box) {
+    return {
+      x: Math.round((prompt.box.x1 + prompt.box.x2) / 2),
+      y: Math.round((prompt.box.y1 + prompt.box.y2) / 2),
+      label: 1,
+    }
+  }
+  return prompt.points?.[0] ?? { x: 0, y: 0, label: 1 }
+}
+
 export type CanvasGenerationScope = {
   sessionId?: string
   nodeId?: string
@@ -1635,9 +1699,7 @@ export class StudioService {
   private async segmentViaInternalService(
     userId: string,
     imageUrl: string,
-    x: number,
-    y: number,
-    label: 0 | 1,
+    prompt: SegmentPrompt,
   ): Promise<{ maskUrl: string } | null> {
     const endpoint = process.env.LNKPI_SEGMENT_SERVICE_URL?.trim()
     if (!endpoint) return null
@@ -1654,10 +1716,16 @@ export class StudioService {
     const timer = setTimeout(() => controller.abort(), 30_000)
     let png: Buffer
     try {
+      const body: Record<string, unknown> = { image: buffer.toString('base64') }
+      if (prompt.points?.length) body.points = prompt.points
+      if (prompt.box) {
+        body.box = [prompt.box.x1, prompt.box.y1, prompt.box.x2, prompt.box.y2]
+      }
+      if (prompt.dilate) body.dilate = prompt.dilate
       const res = await fetch(`${endpoint.replace(/\/$/, '')}/segment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: buffer.toString('base64'), x, y, label }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       })
       if (!res.ok) return null
@@ -1674,18 +1742,21 @@ export class StudioService {
 
   async segmentImage(
     userId: string,
-    input: { imageUrl: string; x: number; y: number; label?: 0 | 1 },
+    input: {
+      imageUrl: string
+      x?: number
+      y?: number
+      label?: 0 | 1
+      points?: SegmentPromptPoint[]
+      box?: SegmentPromptBox
+      dilate?: number
+    },
   ): Promise<{ maskUrl: string }> {
     const imageUrl = input.imageUrl?.trim()
     if (!imageUrl) {
       throw new BadRequestException('imageUrl 不能为空')
     }
-    if (!Number.isFinite(input.x) || input.x < 0) {
-      throw new BadRequestException('x 无效')
-    }
-    if (!Number.isFinite(input.y) || input.y < 0) {
-      throw new BadRequestException('y 无效')
-    }
+    const prompt = normalizeSegmentPrompt(input)
     if (!allowSegmentRate(userId)) {
       throw new HttpException('点选过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
     }
@@ -1695,13 +1766,7 @@ export class StudioService {
 
     // 内网 MobileSAM 优先（未配置/失败返回 null → 回落 fal）
     try {
-      const internal = await this.segmentViaInternalService(
-        userId,
-        publicUrl,
-        input.x,
-        input.y,
-        input.label ?? 1,
-      )
+      const internal = await this.segmentViaInternalService(userId, publicUrl, prompt)
       if (internal) return internal
     } catch {
       // 落盘等异常也回落 fal
@@ -1712,12 +1777,14 @@ export class StudioService {
       throw new ServiceUnavailableException('点选暂不可用')
     }
 
+    // fal 回落仅支持单点：取首个正点，否则框中心点
+    const fallbackPoint = promptFallbackPoint(prompt)
     try {
       return await createSegmentProvider({ apiKey }).segment({
         imageUrl: publicUrl,
-        x: input.x,
-        y: input.y,
-        label: input.label ?? 1,
+        x: fallbackPoint.x,
+        y: fallbackPoint.y,
+        label: fallbackPoint.label ?? 1,
       })
     } catch (err) {
       if (
@@ -1803,7 +1870,16 @@ export class StudioService {
    */
   async elementRecognize(
     userId: string,
-    input: { imageUrl: string; x: number; y: number; label?: 0 | 1; model?: string },
+    input: {
+      imageUrl: string
+      x?: number
+      y?: number
+      label?: 0 | 1
+      points?: SegmentPromptPoint[]
+      box?: SegmentPromptBox
+      dilate?: number
+      model?: string
+    },
   ): Promise<{
     name: string
     maskUrl: string
@@ -1813,9 +1889,7 @@ export class StudioService {
     if (!imageUrl) {
       throw new BadRequestException('imageUrl 不能为空')
     }
-    if (!Number.isFinite(input.x) || input.x < 0 || !Number.isFinite(input.y) || input.y < 0) {
-      throw new BadRequestException('点坐标无效')
-    }
+    const prompt = normalizeSegmentPrompt(input)
     if (!allowSegmentRate(userId)) {
       throw new HttpException('识别过于频繁，请稍后再试', HttpStatus.TOO_MANY_REQUESTS)
     }
@@ -1827,24 +1901,20 @@ export class StudioService {
     let segmentMaskUrl: string
     try {
       // 内网 MobileSAM 优先（未配置/失败返回 null → 回落 fal）
-      const internal = await this.segmentViaInternalService(
-        userId,
-        publicUrl,
-        input.x,
-        input.y,
-        input.label ?? 1,
-      )
+      const internal = await this.segmentViaInternalService(userId, publicUrl, prompt)
       if (internal) {
         segmentMaskUrl = internal.maskUrl
       } else {
         if (!apiKey) {
           throw new ServiceUnavailableException('对象识别服务未配置')
         }
+        // fal 回落仅支持单点：取首个正点，否则框中心点
+        const fallbackPoint = promptFallbackPoint(prompt)
         const out = await createSegmentProvider({ apiKey }).segment({
           imageUrl: publicUrl,
-          x: input.x,
-          y: input.y,
-          label: input.label ?? 1,
+          x: fallbackPoint.x,
+          y: fallbackPoint.y,
+          label: fallbackPoint.label ?? 1,
         })
         segmentMaskUrl = out.maskUrl
       }

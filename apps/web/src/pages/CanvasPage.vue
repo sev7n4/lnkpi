@@ -144,7 +144,7 @@ import NodeInpaintOverlay from '@/components/canvas/NodeInpaintOverlay.vue'
 import NodeElementEditOverlay from '@/components/canvas/NodeElementEditOverlay.vue'
 import AnnotateOverlay from '@/components/canvas/AnnotateOverlay.vue'
 import { drawAnnotates, type AnnotateShape } from '@/components/canvas/annotateModel'
-import { combineElementEditPrompt, paintElementEditMask, type ElementEditItem } from '@/components/canvas/elementEditModel'
+import { combineElementEditPrompt, paintElementEditMask, preloadElementMaskImages, type ElementEditItem } from '@/components/canvas/elementEditModel'
 import { displayRectToPixelRect } from '@/components/canvas/nodeCropModel'
 import { loadCropSourceImage, renderCropBlob } from '@/components/canvas/refine/cropExport'
 import { exportMaskPng } from '@/components/canvas/refine/maskExport'
@@ -3370,7 +3370,8 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
     if (!(naturalW > 0) || !(naturalH > 0)) throw new Error('原图加载失败')
     // 节点卡显示尺寸：与 overlay 的 cover 坐标系一致
     const { w: boxW, h: boxH } = getNodeSize(node as FlowNode)
-    const maskCanvas = paintElementEditMask(payload.items, naturalW, naturalH, boxW, boxH)
+    const maskImages = await preloadElementMaskImages(payload.items)
+    const maskCanvas = paintElementEditMask(payload.items, naturalW, naturalH, boxW, boxH, maskImages)
     const blob = await exportMaskPng(maskCanvas)
     const file = new File([blob], 'mask.png', { type: 'image/png' })
     const fallbackUrl = URL.createObjectURL(file)

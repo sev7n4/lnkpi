@@ -81,6 +81,15 @@ describe('elementEditShapeBBox', () => {
     expect(bbox.width).toBeCloseTo(22)
     expect(bbox.height).toBeCloseTo(22)
   })
+
+  it('mask 返回其 display bbox 副本', () => {
+    const bbox = elementEditShapeBBox({
+      kind: 'mask',
+      maskUrl: 'https://m.png',
+      bbox: { x: 5, y: 6, width: 30, height: 40 },
+    })
+    expect(bbox).toEqual({ x: 5, y: 6, width: 30, height: 40 })
+  })
 })
 
 describe('coverDisplayMapper', () => {
@@ -101,6 +110,21 @@ describe('ElementEditItem 形状契约', () => {
       { id: 'b', name: '鼻子', modify: '闭环', shape: { kind: 'strokes', strokes: [{ size: 6, points: [{ x: 1, y: 1 }] }] } },
     ]
     expect(items).toHaveLength(2)
+  })
+
+  it('mask 项携带识别提示状态（点提示/扩缩/着色层）', () => {
+    const item: ElementEditItem = {
+      id: 'm1',
+      name: '头发',
+      modify: '改蓝色',
+      shape: { kind: 'mask', maskUrl: 'https://m.png', bbox: { x: 0, y: 0, width: 10, height: 10 } },
+      promptPoints: [{ x: 100, y: 120, label: 1 }, { x: 50, y: 50, label: 0 }],
+      dilate: 8,
+      tintUrl: 'data:image/png;base64,xxx',
+    }
+    expect(item.shape.kind).toBe('mask')
+    expect(item.promptPoints).toHaveLength(2)
+    expect(item.dilate).toBe(8)
   })
 })
 

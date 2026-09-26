@@ -17,6 +17,7 @@ export interface ElementEditStroke {
 export type ElementEditShape =
   | { kind: 'rect'; rect: CropRect }
   | { kind: 'strokes'; strokes: ElementEditStroke[] }
+  | { kind: 'mask'; maskUrl: string; bbox: CropRect }
 
 export interface ElementEditItem {
   id: string
@@ -31,6 +32,12 @@ export interface ElementEditItem {
   thumb?: string
   /** 替换图（本地/资产库）：生成时作为参考图传给模型做对象替换 */
   refUrl?: string | null
+  /** 累计点提示（原图像素坐标，label 1=正点 0=负点），mask 类选区用于加/减点重识别 */
+  promptPoints?: { x: number; y: number; label: 0 | 1 }[]
+  /** 选区扩缩像素（原图像素，正=扩大 负=缩小），mask 类选区用于粒度微调 */
+  dilate?: number
+  /** mask 着色叠加 dataURL（display 展示层，与底图同 object-fit: cover 对齐） */
+  tintUrl?: string
 }
 
 /**
@@ -106,6 +113,7 @@ export function nextElementEditId(): string {
 /** 形状在 display 坐标系的包围盒（缩略图快照 / 命中定位用）。 */
 export function elementEditShapeBBox(shape: ElementEditShape): CropRect {
   if (shape.kind === 'rect') return { ...shape.rect }
+  if (shape.kind === 'mask') return { ...shape.bbox }
   const xs: number[] = []
   const ys: number[] = []
   for (const st of shape.strokes) {
@@ -160,6 +168,7 @@ export function paintElementEditMask(
   naturalH: number,
   boxW: number,
   boxH: number,
+  maskImages?: Map<string, HTMLImageElement>,
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(naturalW))
@@ -173,6 +182,11 @@ export function paintElementEditMask(
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
   for (const item of items) {
+    if (item.shape.kind === 'mask') {
+      const img = maskImages?.get(item.shape.maskUrl)
+      if (img) drawMaskImageOnto(ctx, img, canvas.width, canvas.height)
+      continue
+    }
     if (item.shape.kind === 'rect') {
       const r = item.shape.rect
       const x0 = mapper.toPixelX(r.x)
@@ -200,4 +214,107 @@ export function paintElementEditMask(
     }
   }
   return canvas
+}
+
+/** 把 SAM 蒙版图（黑底白形）按亮度二值化后画到目标蒙版画布（白色不透明=编辑区，其余透明）。 */
+function drawMaskImageOnto(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  w: number,
+  h: number,
+): void {
+  const tmp = document.createElement('canvas')
+  tmp.width = w
+  tmp.height = h
+  const tctx = tmp.getContext('2d')
+  if (!tctx) return
+  tctx.drawImage(img, 0, 0, w, h)
+  const d = tctx.getImageData(0, 0, w, h)
+  const px = d.data
+  for (let i = 0; i < px.length; i += 4) {
+    const hit = px[i + 3]! > 127 || 0.299 * px[i]! + 0.587 * px[i + 1]! + 0.114 * px[i + 2]! > 127
+    if (hit) {
+      px[i] = 255
+      px[i + 1] = 255
+      px[i + 2] = 255
+      px[i + 3] = 255
+    } else {
+      px[i + 3] = 0
+    }
+  }
+  tctx.putImageData(d, 0, 0)
+  ctx.drawImage(tmp, 0, 0)
+}
+
+/** 预载全部 mask 类选区的蒙版图（生成前调用，失败项跳过）。 */
+export async function preloadElementMaskImages(
+  items: ElementEditItem[],
+): Promise<Map<string, HTMLImageElement>> {
+  const map = new Map<string, HTMLImageElement>()
+  const urls = [...new Set(
+    items.filter((it) => it.shape.kind === 'mask').map((it) => (it.shape as { maskUrl: string }).maskUrl),
+  )]
+  await Promise.all(
+    urls.map(
+      (url) =>
+        new Promise<void>((resolve) => {
+          const img = new Image()
+          img.crossOrigin = 'anonymous'
+          img.onload = () => {
+            map.set(url, img)
+            resolve()
+          }
+          img.onerror = () => resolve()
+          img.src = url
+        }),
+    ),
+  )
+  return map
+}
+
+/** 蒙版着色叠加（display 展示层）：白色区域渲染为主题色半透明，用于在节点卡上直观呈现精细选区。 */
+export async function maskTintDataUrl(maskUrl: string, rgb = '168,157,255'): Promise<string | null> {
+  const img = await new Promise<HTMLImageElement | null>((resolve) => {
+    const i = new Image()
+    i.crossOrigin = 'anonymous'
+    i.onload = () => resolve(i)
+    i.onerror = () => resolve(null)
+    i.src = maskUrl
+  })
+  if (!img || !(img.naturalWidth > 0)) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = img.naturalWidth
+  canvas.height = img.naturalHeight
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+  ctx.drawImage(img, 0, 0)
+  const d = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const px = d.data
+  for (let i = 0; i < px.length; i += 4) {
+    const hit = px[i + 3]! > 127 || 0.299 * px[i]! + 0.587 * px[i + 1]! + 0.114 * px[i + 2]! > 127
+    if (hit) {
+      px[i] = 255
+      px[i + 1] = 255
+      px[i + 2] = 255
+      px[i + 3] = 255
+    } else {
+      px[i + 3] = 0
+    }
+  }
+  ctx.putImageData(d, 0, 0)
+  // 二次上色：在已有 alpha 形状上叠主题色
+  const colored = document.createElement('canvas')
+  colored.width = canvas.width
+  colored.height = canvas.height
+  const cctx = colored.getContext('2d')
+  if (!cctx) return null
+  cctx.drawImage(canvas, 0, 0)
+  cctx.globalCompositeOperation = 'source-in'
+  cctx.fillStyle = `rgba(${rgb},0.47)`
+  cctx.fillRect(0, 0, colored.width, colored.height)
+  try {
+    return colored.toDataURL('image/png')
+  } catch {
+    return null
+  }
 }
