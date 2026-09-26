@@ -107,7 +107,9 @@ export class CaptchaService implements OnModuleInit {
     const dir = join(__dirname, '..', '..', 'assets', 'captcha')
     if (!existsSync(dir)) return []
     return readdirSync(dir)
-      .filter((f) => /\.(jpe?g|png|webp)$/i.test(f))
+      // 过滤 macOS AppleDouble 元数据（._xxx.jpg）等隐藏文件：
+      // 手动 tar 同步会把 xattr 编码成 ._ 文件，163 字节非图像内容会让 sharp 崩溃
+      .filter((f) => !f.startsWith('.') && /\.(jpe?g|png|webp)$/i.test(f))
       .sort()
       .slice(0, MAX_POOL)
       .map((f) => readFileSync(join(dir, f)))
@@ -119,11 +121,21 @@ export class CaptchaService implements OnModuleInit {
       this.pool = []
       return
     }
-    this.pool = await Promise.all(
-      files.map((buf) =>
-        sharp(buf).resize(WIDTH, HEIGHT, { fit: 'cover' }).ensureAlpha().png().toBuffer(),
-      ),
+    // 单文件解码失败只跳过该背景图，不阻断启动（pool 为空时 pickBg 有 SVG 兜底）
+    const results = await Promise.all(
+      files.map(async (buf) => {
+        try {
+          return await sharp(buf)
+            .resize(WIDTH, HEIGHT, { fit: 'cover' })
+            .ensureAlpha()
+            .png()
+            .toBuffer()
+        } catch {
+          return null
+        }
+      }),
     )
+    this.pool = results.filter((buf): buf is Buffer => buf !== null)
   }
 
   private pickBg(): Buffer {
