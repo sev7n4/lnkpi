@@ -1829,11 +1829,17 @@ export class StudioService {
 
     const maskPng = await normalizeMaskPng(maskBuf, imgWidth, imgHeight)
     const saved = await this.upload.saveUserFile(userId, maskPng, 'element-mask.png', 'image/png')
-    const name = await this.recognizeElementName(userId, imgBuf, bbox, input.model)
+    // 命名是装饰性步骤（蒙版/bbox 才是必需品）：失败降级为「选区」，绝不阻断元素编辑主流程。
+    let name = '选区'
+    try {
+      name = await this.recognizeElementName(userId, imgBuf, bbox, input.model)
+    } catch {
+      /* 识图模型不可用/调用失败 → 保持默认名 */
+    }
     return { name, maskUrl: saved.url, bbox }
   }
 
-  /** 识图命名：用户当前文本模型 → 平台默认文本模型，取第一个可识图的；都没有则给出可操作错误。 */
+  /** 识图命名：传入模型 → LNKPI_VISION_NAMING_MODEL → 平台默认文本模型，取第一个可识图的。 */
   private async recognizeElementName(
     userId: string,
     imgBuf: Buffer,
@@ -1841,7 +1847,9 @@ export class StudioService {
     model?: string,
   ): Promise<string> {
     const candidates: ResolvedGenerationProvider[] = []
-    for (const candidate of [model, undefined]) {
+    const namingFallback =
+      process.env.LNKPI_VISION_NAMING_MODEL?.trim() || process.env.OPENAI_CHAT_MODEL?.trim() || undefined
+    for (const candidate of [model, namingFallback]) {
       try {
         candidates.push(await this.resolver.resolveForGeneration(userId, candidate, 'text'))
       } catch {
