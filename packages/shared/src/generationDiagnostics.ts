@@ -98,3 +98,33 @@ export function mapMessageToErrorCode(message: string): ErrorCode {
 
   return 'unknown'
 }
+
+/**
+ * 把上游 provider 的常见「账户/网络」失败翻译成用户能看懂的中文提示。
+ * 未命中返回 undefined，调用方回落到原有文案。
+ * 已知线上实例（2026-09-26）：
+ * - fal.ai 欠费锁定：`Segment API 403: {"detail":"User is locked. Reason: TOP_UP."}`
+ * - apimart 欠费：`Image edit API 402: ... insufficient balance (current: 0.013570 USD, required: 0.050000 USD)`
+ * - CVM DNS 污染：`fetch failed`（undici UND_ERR_CONNECT_TIMEOUT）
+ */
+export function translateUpstreamFailure(message: string): string | undefined {
+  const text = message.trim()
+  if (!text) return undefined
+
+  if (/\b402\b/.test(text) || /insufficient balance|余额不足|欠费/i.test(text)) {
+    return '上游生成服务余额不足，请联系管理员充值后重试'
+  }
+  if (/\b403\b/.test(text) && /locked|top_up/i.test(text)) {
+    return '上游生成服务账户已被锁定（欠费），请联系管理员充值后重试'
+  }
+  if (/\b401\b/.test(text) || /unauthorized|invalid api key/i.test(text)) {
+    return '上游生成服务鉴权失败，请检查服务配置'
+  }
+  if (/fetch failed|UND_ERR_CONNECT_TIMEOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(text)) {
+    return '无法连接上游生成服务（网络异常），请稍后重试'
+  }
+  if (/\b429\b/.test(text) || /rate limit|too many requests/i.test(text)) {
+    return '上游生成服务限流，请稍后重试'
+  }
+  return undefined
+}
