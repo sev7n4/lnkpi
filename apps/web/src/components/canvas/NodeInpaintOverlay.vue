@@ -29,6 +29,8 @@ const props = defineProps<{
   /** 节点原图 url（蒙版按其自然尺寸建立） */
   url: string
   busy?: boolean
+  /** 本次生成实际生效的模型展示名（跟随画布 dock 选中的图像模型） */
+  modelLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -524,6 +526,12 @@ onUnmounted(() => {
               <path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-3" />
             </svg>
           </button>
+          <span
+            v-if="props.modelLabel"
+            class="node-inpaint-model"
+            data-testid="node-inpaint-model"
+            :title="`本次生成模型：${props.modelLabel}（跟随画布 dock 选中的图像模型）`"
+          >{{ props.modelLabel }}</span>
         </div>
       </div>
 
@@ -687,5 +695,17 @@ onUnmounted(() => {
 .node-inpaint-confirm:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.node-inpaint-model {
+  max-width: 120px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.3rem;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--neo-text-muted);
 }
 </style>

@@ -1,3 +1,4 @@
+import { decodeChannelModel, modelOptionName } from './providerChannels'
 import { defaultGuideCapabilities } from './imagePromptingGuide/resolveGuideRequest'
 import type { GuideCapabilities } from './imagePromptingGuide/types'
 
@@ -58,4 +59,23 @@ export function resolveImageEditProfile(modelKey?: string): ImageEditModelProfil
     throw new Error(`unknown image edit model: ${key}`)
   }
   return IMAGE2_EDIT_PROFILE
+}
+
+/**
+ * 图像编辑生成用模型：dock 选中的 BYOK 渠道优先——用户插了自己的 key 就不该烧平台积分；
+ * 平台渠道 / 未配置 / 不可解析时回落平台白名单 image2。
+ * 单一真源：精修与快捷（元素编辑 / 重绘 / 扩图）四条链路共用，勿在组件里重写判定。
+ */
+export function resolveImageEditModelKey(dockModel?: string | null): string {
+  const raw = dockModel?.trim()
+  if (!raw) return P1_IMAGE_EDIT_MODEL_KEY
+  const decoded = decodeChannelModel(raw)
+  if (decoded && decoded.channelId !== 'platform') return raw
+  return P1_IMAGE_EDIT_MODEL_KEY
+}
+
+/** 编辑模型展示名：平台默认走网关展示 id，BYOK 渠道显示其 modelName（不带 channelId:: 前缀）。 */
+export function imageEditModelLabel(modelKey: string): string {
+  if (!modelKey || modelKey === P1_IMAGE_EDIT_MODEL_KEY) return IMAGE_EDIT_GATEWAY_MODEL_ID
+  return modelOptionName(modelKey)
 }

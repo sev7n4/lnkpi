@@ -66,7 +66,7 @@ import CanvasBottomLeftControls from '@/components/canvas/CanvasBottomLeftContro
 import ProviderConfigDialog from '@/components/canvas/ProviderConfigDialog.vue'
 import ByokFallbackConfirmDialog from '@/components/canvas/ByokFallbackConfirmDialog.vue'
 import { useProviderBootstrap } from '@/composables/useProviderBootstrap'
-import { BYOK_FALLBACK_CONFIRM_MESSAGE, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
+import { BYOK_FALLBACK_CONFIRM_MESSAGE, imageEditModelLabel, resolveImageEditModelKey } from '@lnkpi/shared'
 import { CX_IMAGE_EDIT_ENABLED, canOpenRefineForNode, decideRefineDismiss } from '@/utils/refineSession'
 import { decideAgentOpenWhileRefine } from '@/utils/refineChrome'
 import { containFitSize } from '@/utils/centerExpand'
@@ -425,6 +425,17 @@ const workflowImportInputRef = ref<HTMLInputElement | null>(null)
 const pendingMediaPos = ref<{ x: number; y: number } | null>(null)
 
 const { getConfig: getProviderConfig } = useModelProviderSettings()
+
+/**
+ * 快捷编辑链路（元素编辑 / 重绘 / 扩图）的生成模型：跟随画布 dock 选中的图像模型——
+ * BYOK 渠道优先（用户插了自己的 key 就不该烧平台积分），平台/未配置回落 image2。
+ * 与精修链路共用 shared 的 resolveImageEditModelKey，勿在组件里重写判定。
+ */
+const editModelKey = computed(() => resolveImageEditModelKey(getProviderConfig('image').model))
+
+/** 快捷浮层上展示的生效模型名（避免「我选了 BYOK、实际烧平台」的错觉）。 */
+const editModelLabel = computed(() => imageEditModelLabel(editModelKey.value))
+
 const { preferences, load: loadProviderBootstrap } = useProviderBootstrap()
 
 const fallbackDialog = ref<{
@@ -3267,7 +3278,7 @@ async function handleNodeOutpaintConfirm(pixelRect: OutpaintRect) {
         prompt: OUTPAINT_FALLBACK_PROMPT,
         imageUrl: persistedBase,
         maskUrl: persistedMask,
-        model: P1_IMAGE_EDIT_MODEL_KEY,
+        model: editModelKey.value,
         size: 'auto',
         mode: 'outpaint',
         outpaintFrom: base,
@@ -3391,7 +3402,7 @@ async function handleNodeElementEditConfirm(payload: { items: ElementEditItem[] 
         prompt: combineElementEditPrompt(payload.items) || '元素编辑',
         imageUrl,
         maskUrl,
-        model: P1_IMAGE_EDIT_MODEL_KEY,
+        model: editModelKey.value,
         size: 'auto',
         mode: 'inpaint',
         referenceImageUrls: refUrls.length ? refUrls : undefined,
@@ -3521,7 +3532,7 @@ async function handleNodeInpaintConfirm(payload: { prompt: string; maskCanvas: H
         prompt: payload.prompt,
         imageUrl,
         maskUrl,
-        model: P1_IMAGE_EDIT_MODEL_KEY,
+        model: editModelKey.value,
         size: 'auto',
         mode: 'inpaint',
         referenceImageUrls: payload.refUrls?.length ? payload.refUrls : undefined,
@@ -4563,6 +4574,7 @@ onUnmounted(() => {
             :node="nodeOutpaintNode as FlowNode"
             :url="nodeOutpaintUrl"
             :busy="nodeOutpaintBusy"
+            :model-label="editModelLabel"
             @confirm="handleNodeOutpaintConfirm"
             @cancel="closeNodeOutpaint"
           />
@@ -4571,6 +4583,7 @@ onUnmounted(() => {
             :node="nodeInpaintNode as FlowNode"
             :url="nodeInpaintUrl"
             :busy="nodeInpaintBusy"
+            :model-label="editModelLabel"
             @confirm="handleNodeInpaintConfirm"
             @cancel="closeNodeInpaint"
           />
@@ -4579,6 +4592,7 @@ onUnmounted(() => {
             :node="nodeElementEditNode as FlowNode"
             :url="nodeElementEditUrl"
             :busy="nodeElementEditBusy"
+            :model-label="editModelLabel"
             @confirm="handleNodeElementEditConfirm"
             @cancel="closeNodeElementEdit"
           />

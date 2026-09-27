@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { IMAGE_EDIT_GATEWAY_MODEL_ID, P1_IMAGE_EDIT_MODEL_KEY } from '@lnkpi/shared'
+import { imageEditModelLabel } from '@lnkpi/shared'
 import { useClickOutside } from '@/composables/useClickOutside'
 import DockGenerateButton from '@/components/canvas/dock-studio/shared/DockGenerateButton.vue'
 import DockCreditBadge from '@/components/canvas/dock-studio/shared/DockCreditBadge.vue'
@@ -40,9 +40,7 @@ const interactionDisabled = computed(() => props.busy)
 const ctaDisabled = computed(() => props.busy || !props.canRun)
 const guardText = computed(() => (props.busy ? '生成中…' : '先拖动画布四周手柄扩展'))
 
-const modelLabel = computed(() =>
-  props.modelKey === P1_IMAGE_EDIT_MODEL_KEY ? IMAGE_EDIT_GATEWAY_MODEL_ID : props.modelKey,
-)
+const modelLabel = computed(() => imageEditModelLabel(props.modelKey))
 
 function onExit() {
   if (props.busy) emit('cancel')
@@ -92,7 +90,7 @@ function selectModel(key: string) {
           :data-model-key="k"
           @click="selectModel(k)"
         >
-          {{ k === P1_IMAGE_EDIT_MODEL_KEY ? IMAGE_EDIT_GATEWAY_MODEL_ID : k }}
+          {{ imageEditModelLabel(k) }}
         </button>
       </div>
     </div>

@@ -5,6 +5,8 @@ import {
   IMAGE_EDIT_MODEL_PRICING,
   IMAGE2_EDIT_SIZES,
   P1_IMAGE_EDIT_MODEL_KEY,
+  imageEditModelLabel,
+  resolveImageEditModelKey,
   resolveImageEditProfile,
 } from './imageEditProfiles'
 
@@ -40,5 +42,29 @@ describe('imageEditProfiles 白名单与定价', () => {
   })
   it('size 档位表本期仅 auto', () => {
     expect(IMAGE2_EDIT_SIZES).toEqual(['auto'])
+  })
+})
+
+describe('resolveImageEditModelKey（dock 选中的模型 → 编辑链路用模型）', () => {
+  it('BYOK 渠道原样透传（用户插了自己的 key 不该烧平台积分）', () => {
+    expect(resolveImageEditModelKey('byok-chan::gpt-image-1')).toBe('byok-chan::gpt-image-1')
+  })
+  it('平台渠道回落 image2', () => {
+    expect(resolveImageEditModelKey('platform::agnes-image-2.1-flash')).toBe('image2')
+  })
+  it('空值 / 无法解析的裸 key 回落 image2', () => {
+    expect(resolveImageEditModelKey('')).toBe('image2')
+    expect(resolveImageEditModelKey(null)).toBe('image2')
+    expect(resolveImageEditModelKey(undefined)).toBe('image2')
+    expect(resolveImageEditModelKey('gpt-image-1')).toBe('image2')
+  })
+})
+
+describe('imageEditModelLabel', () => {
+  it('平台默认显示网关 id', () => {
+    expect(imageEditModelLabel('image2')).toBe(IMAGE_EDIT_GATEWAY_MODEL_ID)
+  })
+  it('BYOK 渠道只显示 modelName（不带 channelId:: 前缀）', () => {
+    expect(imageEditModelLabel('byok-chan::gpt-image-1')).toBe('gpt-image-1')
   })
 })
