@@ -68,7 +68,9 @@ function pieceBBox(piece: HTMLCanvasElement): { x: number; y: number; width: num
   for (let i = 0; i < piece.width * piece.height; i += 1) {
     const a = d[i * 4 + 3]!
     const r = d[i * 4]!
-    const hit = a > 127 || r > 127
+    const g = d[i * 4 + 1]!
+    const b = d[i * 4 + 2]!
+    const hit = isMaskPixelHit(r, g, b, a)
     if (!hit) continue
     const x = i % piece.width
     const y = Math.floor(i / piece.width)
