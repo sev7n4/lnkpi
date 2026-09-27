@@ -9,8 +9,18 @@ export interface ElementBBox {
 }
 
 /**
+ * 蒙版像素是否属于对象区：必须「不透明 **且** 亮」。
+ * 自建 MobileSAM 导出的是 L 模式（无 alpha）黑底白形 PNG，`ensureAlpha()` 会把它补成 alpha=255
+ * 全不透明；若用 `alpha>127 || 亮度>127` 判定会整图命中 → bbox 恒为原图尺寸（命中/命名裁剪全失真）。
+ */
+export function isMaskPixelHit(r: number, g: number, b: number, a: number): boolean {
+  if (a <= 127) return false
+  return 0.299 * r + 0.587 * g + 0.114 * b > 127
+}
+
+/**
  * 从分割蒙版 PNG 计算对象边界框。蒙版与原图尺寸不一致时先对齐到原图尺寸。
- * 判定：alpha > 127 或亮度 > 127（SAM 蒙版为白对象/黑底，某些输出带 alpha）。
+ * 判定：不透明且亮（SAM 蒙版为白对象/黑底；L 模式无 alpha 时按亮度判定）。
  * 返回 null = 蒙版为空（未识别到对象）。
  */
 export async function computeMaskBBox(
@@ -35,7 +45,7 @@ export async function computeMaskBBox(
     const r = data[i * 4]!
     const g = data[i * 4 + 1]!
     const b = data[i * 4 + 2]!
-    const hit = a > 127 || 0.299 * r + 0.587 * g + 0.114 * b > 127
+    const hit = isMaskPixelHit(r, g, b, a)
     if (!hit) continue
     const x = i % info.width
     const y = Math.floor(i / info.width)
