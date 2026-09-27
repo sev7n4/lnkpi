@@ -6,6 +6,7 @@ import {
   IMAGE_EDIT_MODEL_KEYS,
   IMAGE_EDIT_MODEL_PRICING,
   P1_IMAGE_EDIT_MODEL_KEY,
+  imageEditModelLabel,
   resolveImageEditProfile,
 } from '@lnkpi/shared'
 import type { NodeRef } from '@/composables/useNodeRefs'
@@ -112,8 +113,9 @@ const sizeOptions = computed(() => Array.from(new Set(['auto', ...props.sizes]))
 const creditValue = computed(() => IMAGE_EDIT_MODEL_PRICING[props.modelKey] ?? props.credits)
 
 function modelLabelFor(key: string): string {
+  // 平台默认走网关展示 id；BYOK 渠道只显示 modelName（不带 channelId:: 前缀）
   if (key === P1_IMAGE_EDIT_MODEL_KEY) return IMAGE_EDIT_GATEWAY_MODEL_ID
-  return props.modelLabel || key
+  return props.modelLabel || imageEditModelLabel(key)
 }
 
 const currentModelLabel = computed(() => modelLabelFor(props.modelKey))

@@ -34,6 +34,8 @@ const props = defineProps<{
   /** 节点原图 url（加载自然尺寸作为扩图基准） */
   url: string
   busy?: boolean
+  /** 本次生成实际生效的模型展示名（跟随画布 dock 选中的图像模型） */
+  modelLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -325,6 +327,12 @@ onUnmounted(() => {
             </svg>
           </button>
           <span class="node-outpaint-card__divider" aria-hidden="true" />
+          <span
+            v-if="props.modelLabel"
+            class="node-outpaint-card__model"
+            data-testid="node-outpaint-model"
+            :title="`本次生成模型：${props.modelLabel}（跟随画布 dock 选中的图像模型）`"
+          >{{ props.modelLabel }}</span>
           <div class="relative">
             <button
               type="button"
@@ -585,6 +593,18 @@ onUnmounted(() => {
   margin: 0;
   padding: 0 6px 2px;
   font-size: 10px;
+  color: var(--neo-text-muted);
+}
+
+.node-outpaint-card__model {
+  max-width: 120px;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 0.3rem;
+  font-size: 11px;
+  line-height: 1.4;
   color: var(--neo-text-muted);
 }
 </style>

@@ -7,8 +7,7 @@ import { combineElementEditPrompt, isMaskPixelHit } from '@/components/canvas/el
 import ElementChipRow from './ElementChipRow.vue'
 import {
   CANVAS_GENERATE_CREDITS,
-  decodeChannelModel,
-  P1_IMAGE_EDIT_MODEL_KEY,
+  resolveImageEditModelKey,
 } from '@lnkpi/shared'
 import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 
@@ -30,11 +29,7 @@ const { getConfig } = useModelProviderSettings()
  * 生成是用户归属成本，用户插了自己的 key 就不该烧平台 apimart；
  * 平台目录/未配置时回落白名单 image2。服务端按 decodeChannelModel 分流。
  */
-const editModel = computed(() => {
-  const dockModel = getConfig('image').model
-  const decoded = dockModel ? decodeChannelModel(dockModel) : null
-  return decoded && decoded.channelId !== 'platform' ? dockModel : P1_IMAGE_EDIT_MODEL_KEY
-})
+const editModel = computed(() => resolveImageEditModelKey(getConfig('image').model))
 
 const emit = defineEmits<{
   busy: [value: boolean]

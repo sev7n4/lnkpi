@@ -6,7 +6,7 @@ import {
   IMAGE2_EDIT_SIZES,
   IMAGE_EDIT_MODEL_KEYS,
   IMAGE_EDIT_MODEL_PRICING,
-  P1_IMAGE_EDIT_MODEL_KEY,
+  resolveImageEditModelKey,
   resolveImageEditProfile,
 } from '@lnkpi/shared'
 import DockTypeIcon from '@/components/canvas/dock-studio/shared/DockTypeIcon.vue'
@@ -27,6 +27,7 @@ import MattingDock from './MattingDock.vue'
 import SessionFilmstrip from './SessionFilmstrip.vue'
 import { compositeMattingPng } from './mattingComposite'
 import { isMaskPixelHit } from '@/components/canvas/elementEditModel'
+import { useModelProviderSettings } from '@/composables/useModelProviderSettings'
 import { getWorkbenchTool, toolIdForRefineMode } from '@/components/canvas/workbench/workbenchToolRegistry'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
@@ -142,7 +143,26 @@ async function loadWorkImage(url: string): Promise<HTMLImageElement> {
 }
 
 /** 精修通道模型 / 尺寸改为受控选择器（M2 T4）。默认值取 shared 白名单与定价表，不写死。 */
-const modelKey = ref<string>(P1_IMAGE_EDIT_MODEL_KEY)
+const { getConfig } = useModelProviderSettings()
+/**
+ * 默认跟随画布 dock 选中的图像模型：BYOK 渠道优先（用户插了自己的 key 就不该烧平台积分），
+ * 平台渠道回落 image2。面板内仍可手动切换（用户显式选择优先于默认值）。
+ */
+const dockEditModelKey = computed(() => resolveImageEditModelKey(getConfig('image').model))
+const modelKey = ref<string>(dockEditModelKey.value)
+/** 可选模型 = 平台白名单 + dock 当前渠道（去重）。 */
+const editModelOptions = computed(() =>
+  Array.from(new Set<string>([...IMAGE_EDIT_MODEL_KEYS, dockEditModelKey.value])),
+)
+/** 面板内未手动改过时，dock 换模型要跟着变（用户手动选过则保留其选择）。 */
+const modelPinnedByUser = ref(false)
+watch(dockEditModelKey, (next) => {
+  if (!modelPinnedByUser.value) modelKey.value = next
+})
+function onModelKeyUpdate(next: string) {
+  modelPinnedByUser.value = true
+  modelKey.value = next
+}
 const sizeOverride = ref<string | 'auto'>('auto')
 /** dock 的 mode：扩图模式下传 'outpaint' 以隐藏尺寸选择器（Task 7 接线）。 */
 /** server @IsIn(['inpaint','outpaint'])：蒙版选区精修 = inpaint；扩图 = outpaint。 */
@@ -726,7 +746,7 @@ onBeforeUnmount(() => {
         :credits="credits"
         :before-url="beforeUrl"
         :model-key="modelKey"
-        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :available-model-keys="editModelOptions"
         :sizes="IMAGE2_EDIT_SIZES"
         :size-override="sizeOverride"
         :mode="dockMode"
@@ -741,7 +761,7 @@ onBeforeUnmount(() => {
         :active-edit-intent-id="activeGuideEditIntentId"
         :ref-role-hints="activeRefRoleHints"
         @update:prompt="prompt = $event"
-        @update:model-key="modelKey = $event"
+        @update:model-key="onModelKeyUpdate"
         @update:size-override="sizeOverride = $event"
         @run="runRefine"
         @apply="onApply"
@@ -765,14 +785,14 @@ onBeforeUnmount(() => {
         size="md"
         :prompt="prompt"
         :model-key="modelKey"
-        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :available-model-keys="editModelOptions"
         :credits="credits"
         :can-run="outpaintCanRun"
         :busy="busy"
         :can-apply="canApply"
         :error-message="errorMessage"
         @update:prompt="prompt = $event"
-        @update:modelKey="modelKey = $event"
+        @update:modelKey="onModelKeyUpdate"
         @run="runRefine"
         @apply="onApply"
         @retry="runRefine"
@@ -796,14 +816,14 @@ onBeforeUnmount(() => {
         size="lg"
         :prompt="prompt"
         :model-key="modelKey"
-        :available-model-keys="IMAGE_EDIT_MODEL_KEYS"
+        :available-model-keys="editModelOptions"
         :credits="credits"
         :can-run="outpaintCanRun"
         :busy="busy"
         :can-apply="canApply"
         :error-message="errorMessage"
         @update:prompt="prompt = $event"
-        @update:modelKey="modelKey = $event"
+        @update:modelKey="onModelKeyUpdate"
         @run="runRefine"
         @apply="onApply"
         @retry="runRefine"
