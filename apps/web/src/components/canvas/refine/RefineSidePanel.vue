@@ -26,6 +26,7 @@ import RefineOutpaintDock from './RefineOutpaintDock.vue'
 import MattingDock from './MattingDock.vue'
 import SessionFilmstrip from './SessionFilmstrip.vue'
 import { compositeMattingPng } from './mattingComposite'
+import { isMaskPixelHit } from '@/components/canvas/elementEditModel'
 import { getWorkbenchTool, toolIdForRefineMode } from '@/components/canvas/workbench/workbenchToolRegistry'
 import { countMaskPixelsFromImageData, exportMaskPng } from './maskExport'
 import { loadMaskRgbaFromUrl, mergeMaskRgba, registerRefinePointSelectHandler } from './maskRemote'
@@ -440,7 +441,7 @@ function maskCanvasToCompositeRgba(data: Uint8ClampedArray): Uint8ClampedArray {
     const g = data[i + 1]!
     const b = data[i + 2]!
     const a = data[i + 3]!
-    const selected = a > 127 || 0.299 * r + 0.587 * g + 0.114 * b > 127
+    const selected = isMaskPixelHit(r, g, b, a)
     out[i] = selected ? 255 : 0
     out[i + 1] = 0
     out[i + 2] = 0

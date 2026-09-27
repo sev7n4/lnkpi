@@ -16,6 +16,7 @@ import {
   type Size,
 } from '@/components/canvas/refine/outpaintGeometry'
 import { refineSelectionOpAfterToolPick } from '@/components/canvas/refine/refineSelectionModel'
+import { isMaskPixelHit } from '@/components/canvas/elementEditModel'
 import {
   clampCropRect,
   clampFineRotation,
@@ -355,7 +356,7 @@ export const useCanvasEditorStore = defineStore('canvasEditor', () => {
           const d = sctx.getImageData(0, 0, sam.width, sam.height)
           const px = d.data
           for (let i = 0; i < px.length; i += 4) {
-            const hit = px[i + 3]! > 127 || 0.299 * px[i]! + 0.587 * px[i + 1]! + 0.114 * px[i + 2]! > 127
+            const hit = isMaskPixelHit(px[i]!, px[i + 1]!, px[i + 2]!, px[i + 3]!)
             if (hit) {
               px[i] = 255
               px[i + 1] = 255
