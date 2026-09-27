@@ -4,6 +4,7 @@ import {
   combineInpaintPrompt,
   coverDisplayMapper,
   elementEditShapeBBox,
+  isMaskPixelHit,
   pointRectAt,
   type ElementEditItem,
 } from './elementEditModel'
@@ -142,5 +143,17 @@ describe('combineInpaintPrompt（快捷重绘全局 prompt 组合）', () => {
     expect(
       combineInpaintPrompt('', [{ name: '', modify: '换成新图案', refUrl: 'blob:ref' }]),
     ).toContain('选区 换成新图案（把该区域替换为参考图中的对象')
+  })
+})
+
+describe('isMaskPixelHit（蒙版二值化判定）', () => {
+  it('L 模式蒙版（alpha 恒 255）按亮度判定——黑底不命中，否则整卡被主题色铺满', () => {
+    expect(isMaskPixelHit(0, 0, 0, 255)).toBe(false)
+    expect(isMaskPixelHit(255, 255, 255, 255)).toBe(true)
+  })
+
+  it('带真 alpha 的蒙版透明处不命中（即使像素为白）', () => {
+    expect(isMaskPixelHit(255, 255, 255, 0)).toBe(false)
+    expect(isMaskPixelHit(255, 255, 255, 128)).toBe(true)
   })
 })

@@ -216,6 +216,16 @@ export function paintElementEditMask(
   return canvas
 }
 
+/**
+ * SAM 蒙版像素是否属于对象区：必须「不透明 **且** 亮」。
+ * MobileSAM 导出的是 L 模式（无 alpha 通道）黑底白形 PNG，canvas 会补成 alpha=255 全不透明；
+ * 若用 `alpha>127 || 亮度>127` 判定会整图命中 → 整张节点卡被主题色铺满。带真 alpha 的蒙版同样成立。
+ */
+export function isMaskPixelHit(r: number, g: number, b: number, a: number): boolean {
+  if (a <= 127) return false
+  return 0.299 * r + 0.587 * g + 0.114 * b > 127
+}
+
 /** 把 SAM 蒙版图（黑底白形）按亮度二值化后画到目标蒙版画布（白色不透明=编辑区，其余透明）。 */
 function drawMaskImageOnto(
   ctx: CanvasRenderingContext2D,
@@ -232,7 +242,7 @@ function drawMaskImageOnto(
   const d = tctx.getImageData(0, 0, w, h)
   const px = d.data
   for (let i = 0; i < px.length; i += 4) {
-    const hit = px[i + 3]! > 127 || 0.299 * px[i]! + 0.587 * px[i + 1]! + 0.114 * px[i + 2]! > 127
+    const hit = isMaskPixelHit(px[i]!, px[i + 1]!, px[i + 2]!, px[i + 3]!)
     if (hit) {
       px[i] = 255
       px[i + 1] = 255
@@ -291,7 +301,7 @@ export async function maskTintDataUrl(maskUrl: string, rgb = '168,157,255'): Pro
   const d = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const px = d.data
   for (let i = 0; i < px.length; i += 4) {
-    const hit = px[i + 3]! > 127 || 0.299 * px[i]! + 0.587 * px[i + 1]! + 0.114 * px[i + 2]! > 127
+    const hit = isMaskPixelHit(px[i]!, px[i + 1]!, px[i + 2]!, px[i + 3]!)
     if (hit) {
       px[i] = 255
       px[i + 1] = 255
