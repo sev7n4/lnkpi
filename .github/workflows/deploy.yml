@@ -341,13 +341,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy-web:
-    name: Deploy web to CVM
+    name: Deploy web to CVM (disabled — owned by pi-lnk since 2026-09-28)
     needs: changes
-    if: >-
-      ${{
-        needs.changes.outputs.web == 'true'
-        || github.event_name == 'workflow_dispatch'
-      }}
+    if: false  # 2026-09-28: pi-lnk 已接管前端发布门，本仓库不再 deploy-web，避免把 lnkpi 自己的 dist 推上去覆盖 pi-lnk 推的。需要紧急回退时改回原 if 条件：${{ needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: production
